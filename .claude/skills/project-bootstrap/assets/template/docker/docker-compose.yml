@@ -1,0 +1,15 @@
+services:
+  {{project_name}}-core:
+    build:
+      context: ../core
+      dockerfile: ../docker/Dockerfile.core
+    ports:
+      - "${CORE_HOST_PORT:-{{core_port}}}:{{core_port}}"
+  {{project_name}}-portal:
+    build:
+      context: ../portal
+      dockerfile: ../docker/Dockerfile.portal
+    ports:
+      - "${PORTAL_HOST_PORT:-{{portal_port}}}:80"
+    depends_on:
+      - {{project_name}}-core

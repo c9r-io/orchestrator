@@ -1,0 +1,34 @@
+---
+description: Rust coding conventions for service development
+globs: core/**/*.rs
+alwaysApply: false
+---
+
+# Rust Conventions (Service Development)
+
+Apply these rules if the backend is Rust under `core/`.
+
+## Structure
+
+- Keep HTTP/gRPC handlers thin.
+- Put business logic in `service/` with dependency injection via traits.
+- Keep domain models in `domain/` with validation and invariants.
+- Repositories provide persistence behind mockable traits.
+
+## Error Handling
+
+- Use typed errors for business logic (`thiserror`), and attach context at boundaries (`anyhow` or `eyre`).
+- Do not swallow errors (`ok()`/`unwrap()` in production paths).
+- Prefer returning `Result<T, E>` from functions instead of side effects.
+
+## Async
+
+- Avoid `tokio::spawn` unless you can explain lifecycle and error handling.
+- Prefer explicit timeouts at network boundaries.
+
+## Testing
+
+- Unit tests should not require Docker.
+- Mock repositories with `mockall` and mock HTTP dependencies with `wiremock`.
+- Integration/E2E tests can use docker-compose, but keep them separate from unit tests.
+

@@ -1,0 +1,48 @@
+---
+description: Testing workflow and conventions (platform)
+alwaysApply: true
+---
+
+# Testing Conventions
+
+## TDD Loop (Preferred)
+
+1. RED: write a failing test for the next behavior.
+2. GREEN: implement the smallest change to pass.
+3. REFACTOR: improve design while keeping tests green.
+
+## Test Pyramid (Platform Guidance)
+
+- Unit tests: most of the coverage; fast; no Docker.
+- Integration tests: limited; validate boundaries (DB, external APIs) when needed.
+- E2E tests: few; validate critical user journeys.
+- Performance tests: targeted benchmarks for latency/throughput regressions.
+
+## Practical Rules
+
+- Every feature plan must include: test plan + acceptance criteria.
+- After implementation, generate QA docs under `docs/qa/` and treat them as the reproducible acceptance spec.
+- Failures discovered in QA become tickets under `docs/ticket/` with steps + evidence + expected/actual.
+
+## Coverage Targets (Guidance, Not Law)
+
+- Aim for high coverage in business logic (80%+).
+- Prefer meaningful assertions over chasing percentages.
+
+## Suggested Commands (Project-Specific)
+
+The exact commands depend on the generated project. Common patterns:
+
+```bash
+# Unit tests
+cargo test
+npm test
+
+# Coverage (if configured)
+cargo llvm-cov --html
+npm run test -- --coverage
+
+# E2E (if configured)
+npx playwright test
+```
+
