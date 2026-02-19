@@ -43,6 +43,10 @@ pub enum Commands {
     #[command(subcommand)]
     Config(ConfigCommands),
 
+    /// Manage resources
+    #[command(subcommand)]
+    Edit(EditCommands),
+
     /// Manage database
     #[command(subcommand)]
     Db(DbCommands),
@@ -189,6 +193,16 @@ pub enum WorkspaceCommands {
 }
 
 #[derive(Subcommand, Debug, Clone)]
+pub enum EditCommands {
+    /// Export a resource for editing
+    Export {
+        /// Resource selector (kind/name, e.g., workspace/default, agent/opencode)
+        #[arg(value_name = "RESOURCE")]
+        selector: String,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
 pub enum ConfigCommands {
     /// Get current configuration
     #[command(alias = "get")]
@@ -306,6 +320,30 @@ mod tests {
                 assert!(!dry_run);
             }
             _ => panic!("expected apply command"),
+        }
+    }
+
+    #[test]
+    fn parse_edit_export_command() {
+        let cli = Cli::parse_from(["orchestrator", "edit", "export", "workspace/default"]);
+
+        match cli.command {
+            Commands::Edit(EditCommands::Export { selector }) => {
+                assert_eq!(selector, "workspace/default");
+            }
+            _ => panic!("expected edit export command"),
+        }
+    }
+
+    #[test]
+    fn parse_edit_export_with_agent_selector() {
+        let cli = Cli::parse_from(["orchestrator", "edit", "export", "agent/opencode"]);
+
+        match cli.command {
+            Commands::Edit(EditCommands::Export { selector }) => {
+                assert_eq!(selector, "agent/opencode");
+            }
+            _ => panic!("expected edit export command"),
         }
     }
 }

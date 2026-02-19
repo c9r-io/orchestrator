@@ -566,115 +566,21 @@ Wave 3 (edit + final integration):
 
 ---
 
-- [ ] 8. **Implement apply multi-document support**
+- [x] 8. **Implement apply multi-document support** (COMPLETED IN T6)
 
-  **What to do**:
-  - Parse YAML with --- separators
-  - Process each document sequentially
-  - Aggregate results
-  - Output line for each resource
-
-  **Must NOT do**:
-  - Don't fail entire file on one document error
-
-  **Recommended Agent Profile**:
-  > **Category**: `quick`
-  > - Reason: Extension of apply logic
-
-  **Parallelization**:
-  - **Can Run In Parallel**: YES (Wave 2, with T6-T7, T9)
-  - **Parallel Group**: Wave 2
-  - **Blocks**: None
-  - **Blocked By**: T7
-
-  **References**:
-  - serde_yaml multi-document parsing
-
-  **Acceptance Criteria**:
-  - [ ] File with --- applies all resources
-  - [ ] Each resource gets separate output line
-
-  **QA Scenarios**:
-  ```
-  Scenario: multi-document YAML applies all resources
-    Tool: Bash
-    Preconditions: None
-    Steps:
-      1. cat > /tmp/multi.yaml << 'EOF'
-  apiVersion: orchestrator.dev/v1
-  kind: Workspace
-  metadata:
-    name: ws-multi
-  spec:
-    root_path: /tmp/ws
-    qa_targets: []
-    ticket_dir: docs/ticket
-  ---
-  apiVersion: orchestrator.dev/v1
-  kind: Agent
-  metadata:
-    name: agent-multi
-  spec:
-    templates:
-      qa: echo test
-  EOF
-      2. cd orchestrator && ./scripts/orchestrator.sh apply -f /tmp/multi.yaml
-    Expected Result: stdout contains both "workspace/ws-multi" and "agent/agent-multi"
-    Evidence: .sisyphus/evidence/task-8-multi.{ext}
-  ```
-
-  **Commit**: YES
-  - Message: `feat(cli): add multi-document YAML support`
-  - Files: `src-tauri/src/cli_handler.rs`
+  Multi-document YAML support was already implemented in T6 with serde_yaml::Deserializer.
+  Test `multi_document_apply_dry_run_parses_all_documents` passes.
 
 ---
 
-- [ ] 9. **Integrate apply into CLI**
+- [x] 9. **Integrate apply into CLI** (COMPLETED IN T6)
 
-  **What to do**:
-  - Add Apply variant to cli.rs Commands enum
-  - Add -f (file) and --dry-run flags
-  - Wire up handler in cli_handler.rs
-
-  **Must NOT do**:
-  - Don't add new functionality (T6-T8 have it)
-
-  **Recommended Agent Profile**>
-  > **Category**: `quick`
-  > - Reason: Wiring existing logic into CLI
-
-  **Parallelization**:
-  - **Can Run In Parallel**: YES (Wave 2, with T6-T8)
-  - **Parallel Group**: Wave 2
-  - **Blocks**: T13
-  - **Blocked By**: T6
-
-  **References**:
-  - `cli.rs:24-41` - Commands enum pattern
-  - `cli_handler.rs:15-25` - dispatch pattern
-
-  **Acceptance Criteria**:
-  - [ ] `./orchestrator.sh apply -f file.yaml` works
-  - [ ] `--dry-run` flag recognized
-
-  **QA Scenarios**:
-  ```
-  Scenario: apply command is registered
-    Tool: Bash
-    Preconditions: None
-    Steps:
-      1. cd orchestrator && ./scripts/orchestrator.sh apply --help
-    Expected Result: Shows apply usage
-    Evidence: .sisyphus/evidence/task-9-help.{ext}
-  ```
-
-  **Commit**: YES
-  - Message: `feat(cli): wire apply into CLI`
-  - Files: `src-tauri/src/cli.rs`
+  Apply command already added to cli.rs in T6 with -f/--file and --dry-run flags.
+  Command dispatch wired in cli_handler.rs.
 
 ---
 
-- [ ] 10. **Implement edit export to YAML**
+- [x] 10. **Implement edit export to YAML**
 
   **What to do**:
   - Parse resource selector (e.g., "workspace/default")

@@ -1,0 +1,54 @@
+
+running 49 tests
+test cli::tests::parse_edit_export_with_agent_selector ... ok
+test cli::tests::parse_apply_file_and_dry_run_flags ... ok
+test cli::tests::parse_edit_export_command ... ok
+test cli::tests::parse_apply_defaults_dry_run_to_false ... ok
+test cli_handler::tests::apply_dry_run_does_not_persist_created_resource ... ok
+test cli_handler::tests::apply_dry_run_returns_one_on_invalid_resource ... ok
+test cli_handler::tests::edit_export_returns_error_for_missing_resource ... ok
+test cli_handler::tests::parse_resource_selector_agent_opencode ... ok
+test cli_handler::tests::parse_resource_selector_rejects_missing_kind ... ok
+test cli_handler::tests::parse_resource_selector_rejects_missing_name ... ok
+test cli_handler::tests::parse_resource_selector_rejects_no_separator ... ok
+test cli_handler::tests::parse_resource_selector_with_slash_in_name_uses_first_slash_only ... ok
+test cli_types::tests::invalid_apiversion ... ok
+test cli_types::tests::parse_agent_group_yaml ... ok
+test cli_handler::tests::parse_resource_selector_workspace_default ... ok
+test cli_handler::tests::multi_document_apply_dry_run_parses_all_documents ... ok
+test cli_types::tests::parse_agent_yaml ... ok
+test cli_types::tests::parse_workspace_yaml ... ok
+test cli_types::tests::parse_workflow_yaml ... ok
+test cli_types::tests::resource_with_annotations ... ok
+test prehook_tests::normalize_rel_path_for_match_strips_noise_and_blocks_parent_segments ... ok
+test prehook_tests::parse_ticket_preview_and_active_status_rules_work ... ok
+test cli_handler::tests::edit_export_returns_temp_file_path ... ok
+test prehook_tests::validate_step_prehook_accepts_valid_cel ... ok
+test prehook_tests::validate_step_prehook_rejects_empty_expression ... ok
+test prehook_tests::simulate_prehook_uses_runtime_evaluator ... ok
+test prehook_tests::finalize_rules_mark_unresolved_on_fix_failure ... ok
+test prehook_tests::finalize_rules_mark_verified_after_clean_retest ... ok
+test prehook_tests::simulate_prehook_rejects_invalid_expression ... ok
+test prehook_tests::validate_step_prehook_rejects_invalid_cel_expression ... ok
+test cli_handler::tests::apply_create_non_dry_run_creates_resource ... ok
+test resource::tests::resource_dispatch_maps_workspace_manifest ... ok
+test resource::tests::resource_dispatch_rejects_mismatched_spec_kind ... ok
+test resource::tests::resource_to_yaml ... ok
+test cli_handler::tests::apply_persist_non_dry_run_writes_new_config_version ... ok
+test resource::tests::resource_trait_to_yaml_serializes_manifest_shape ... ok
+test resource::tests::resource_trait_validate_rejects_empty_name ... ok
+test resource::tests::agent_group_resource_roundtrip ... ok
+test resource::tests::apply_result_configured_when_resource_changes ... ok
+test resource::tests::apply_result_created_when_missing ... ok
+test resource::tests::agent_resource_apply ... ok
+test resource::tests::apply_result_unchanged_for_identical_resource ... ok
+test cli_handler::tests::apply_update_non_dry_run_updates_existing_resource ... ok
+test resource::tests::workflow_resource_roundtrip ... ok
+test resource::tests::resource_trait_get_from_reads_existing_config ... ok
+test resource::tests::workspace_resource_apply ... ok
+test test_utils::tests::test_state_cleanup ... ok
+test test_utils::tests::test_state_compiles ... ok
+test test_utils::tests::test_state_creates_workspace ... ok
+
+test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+

@@ -1,5 +1,6 @@
 use crate::cli::{
-    Cli, Commands, ConfigCommands, DbCommands, OutputFormat, TaskCommands, WorkspaceCommands,
+    Cli, Commands, ConfigCommands, DbCommands, EditCommands, OutputFormat, TaskCommands,
+    WorkspaceCommands,
 };
 use crate::cli_types::OrchestratorResource;
 use crate::resource::{
@@ -26,6 +27,7 @@ impl CliHandler {
             Commands::Task(cmd) => self.handle_task(cmd),
             Commands::Workspace(cmd) => self.handle_workspace(cmd),
             Commands::Config(cmd) => self.handle_config(cmd),
+            Commands::Edit(cmd) => self.handle_edit(cmd),
             Commands::Db(cmd) => self.handle_db(cmd),
             Commands::Daemon => {
                 println!("Starting daemon mode (UI)... use --cli flag for CLI mode");
@@ -304,6 +306,21 @@ impl CliHandler {
         }
     }
 
+    fn handle_edit(&self, cmd: &EditCommands) -> Result<i32> {
+        match cmd {
+            EditCommands::Export { selector } => {
+                let (kind_str, name) = parse_resource_selector(selector)?;
+                let active = crate::read_active_config(&self.state)?;
+                let resource = RegisteredResource::get_from(&active.config, name)
+                    .with_context(|| format!("resource not found: {}/{}", kind_str, name))?;
+                let yaml = resource.to_yaml()?;
+                let temp_file = write_to_temp_file(&yaml)?;
+                println!("{}", temp_file.display());
+                Ok(0)
+            }
+        }
+    }
+
     fn handle_db(&self, cmd: &DbCommands) -> Result<i32> {
         match cmd {
             DbCommands::Reset { force } => {
@@ -562,6 +579,35 @@ fn kind_as_str(kind: crate::cli_types::ResourceKind) -> &'static str {
     }
 }
 
+fn parse_resource_selector(selector: &str) -> Result<(&str, &str)> {
+    let parts: Vec<&str> = selector.splitn(2, '/').collect();
+    match parts.as_slice() {
+        [kind, name] => {
+            if kind.trim().is_empty() || name.trim().is_empty() {
+                anyhow::bail!(
+                    "invalid resource selector format: expected kind/name, got '{}'",
+                    selector
+                );
+            }
+            Ok((kind, name))
+        }
+        _ => anyhow::bail!(
+            "invalid resource selector format: expected kind/name, got '{}'",
+            selector
+        ),
+    }
+}
+
+fn write_to_temp_file(content: &str) -> Result<std::path::PathBuf> {
+    let temp_dir = std::env::temp_dir();
+    let uuid = uuid::Uuid::new_v4();
+    let filename = format!("orchestrator-edit-{}.yaml", uuid);
+    let temp_file = temp_dir.join(&filename);
+    std::fs::write(&temp_file, content)
+        .with_context(|| format!("failed to write temp file: {}", temp_file.display()))?;
+    Ok(temp_file)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -581,6 +627,87 @@ mod tests {
         let root = temp_root.join(root_path);
         std::fs::create_dir_all(root.join("docs/qa")).expect("qa dir should be creatable");
         std::fs::create_dir_all(root.join("docs/ticket")).expect("ticket dir should be creatable");
+    }
+
+    #[test]
+    fn parse_resource_selector_workspace_default() {
+        let (kind, name) =
+            parse_resource_selector("workspace/default").expect("parsing should succeed");
+        assert_eq!(kind, "workspace");
+        assert_eq!(name, "default");
+    }
+
+    #[test]
+    fn parse_resource_selector_agent_opencode() {
+        let (kind, name) =
+            parse_resource_selector("agent/opencode").expect("parsing should succeed");
+        assert_eq!(kind, "agent");
+        assert_eq!(name, "opencode");
+    }
+
+    #[test]
+    fn parse_resource_selector_with_slash_in_name_uses_first_slash_only() {
+        let (kind, name) =
+            parse_resource_selector("workflow/my/workflow").expect("parsing should succeed");
+        assert_eq!(kind, "workflow");
+        assert_eq!(name, "my/workflow");
+    }
+
+    #[test]
+    fn parse_resource_selector_rejects_missing_kind() {
+        let err = parse_resource_selector("/name").expect_err("should reject missing kind");
+        assert!(err.to_string().contains("invalid resource selector"));
+    }
+
+    #[test]
+    fn parse_resource_selector_rejects_missing_name() {
+        let err = parse_resource_selector("workspace/").expect_err("should reject missing name");
+        assert!(err.to_string().contains("invalid resource selector"));
+    }
+
+    #[test]
+    fn parse_resource_selector_rejects_no_separator() {
+        let err = parse_resource_selector("workspace-default")
+            .expect_err("should reject missing separator");
+        assert!(err.to_string().contains("invalid resource selector"));
+    }
+
+    #[test]
+    fn edit_export_returns_temp_file_path() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state.clone());
+
+        let cli = Cli {
+            command: Commands::Edit(EditCommands::Export {
+                selector: "workspace/default".to_string(),
+            }),
+            config: None,
+            verbose: false,
+        };
+
+        let code = handler.execute(&cli).expect("edit export should succeed");
+        assert_eq!(code, 0);
+    }
+
+    #[test]
+    fn edit_export_returns_error_for_missing_resource() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state.clone());
+
+        let cli = Cli {
+            command: Commands::Edit(EditCommands::Export {
+                selector: "workspace/nonexistent".to_string(),
+            }),
+            config: None,
+            verbose: false,
+        };
+
+        let result = handler.execute(&cli);
+        assert!(result.is_err());
+        let err_msg = format!("{:?}", result);
+        assert!(err_msg.contains("not found"));
     }
 
     #[test]
