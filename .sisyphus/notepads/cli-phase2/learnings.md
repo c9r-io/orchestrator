@@ -23,3 +23,9 @@
 - Implemented `CliHandler::handle_apply` to parse YAML streams with `serde_yaml::Deserializer`, skip null docs, validate `apiVersion`, dispatch to `RegisteredResource`, run `resource.validate()`, and print kubectl-style dry-run messages without persistence.
 - Used kind-specific `Resource::get_from` checks (`WorkspaceResource`, `AgentResource`, `AgentGroupResource`, `WorkflowResource`) against active config to classify each manifest as `created` vs `configured` during dry-run preview.
 - Added CLI handler tests for `apply_dry_run` exit behavior and non-persistence guarantees, plus `multi_document` coverage proving `---` manifests are parsed and processed document-by-document.
+- Implemented real apply persistence path in : clone active config, validate and merge each manifest via , print kubectl-style , and call  only when  is false and no validation errors occurred.
+- Added  helper that uses kind-specific  existence checks to classify each resource as  or  while still invoking merge logic for deterministic in-memory state updates across multi-document apply runs.
+- Added non-dry-run CLI tests , , and ; tests pre-create workspace dirs to satisfy config validation and verify dry-run does not bump config version while non-dry-run does.
+- Task7 correction: handle_apply now clones active config, applies validated manifests, prints workspace/agent style created/configured messages, and persists merged config only in non-dry-run mode after all documents pass validation.
+- Task7 correction: apply_resource checks existence via per-kind get_from before merge, then returns Created vs Configured classification while still calling merge logic on the working config.
+- Task7 correction: added apply_create/apply_update/apply_persist tests covering create flow, update flow, and persistence version behavior (dry-run no version bump, non-dry-run version bump).

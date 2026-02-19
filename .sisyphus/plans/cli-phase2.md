@@ -499,7 +499,7 @@ Wave 3 (edit + final integration):
 
 ---
 
-- [ ] 7. **Implement apply create-or-update logic**
+- [x] 7. **Implement apply create-or-update logic**
 
   **What to do**:
   - Check if resource exists in current config

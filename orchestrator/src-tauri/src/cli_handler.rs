@@ -3,8 +3,8 @@ use crate::cli::{
 };
 use crate::cli_types::OrchestratorResource;
 use crate::resource::{
-    dispatch_resource, AgentGroupResource, AgentResource, RegisteredResource, Resource,
-    WorkflowResource, WorkspaceResource,
+    dispatch_resource, AgentGroupResource, AgentResource, ApplyResult, RegisteredResource,
+    Resource, WorkflowResource, WorkspaceResource,
 };
 use crate::InnerState;
 use anyhow::{Context, Result};
@@ -38,9 +38,13 @@ impl CliHandler {
         let content = std::fs::read_to_string(file)
             .with_context(|| format!("failed to read manifest file: {}", file))?;
         let resources = Self::parse_resources_from_yaml(&content)?;
-        let active = crate::read_active_config(&self.state)?;
+        let mut merged_config = {
+            let active = crate::read_active_config(&self.state)?;
+            active.config.clone()
+        };
 
         let mut has_errors = false;
+        let mut applied_results = Vec::new();
         for (index, manifest) in resources.into_iter().enumerate() {
             let resource = match manifest.validate_version() {
                 Ok(()) => manifest,
@@ -71,10 +75,11 @@ impl CliHandler {
                 continue;
             }
 
-            let action = if self.resource_exists(&active.config, &registered) {
-                "configured"
-            } else {
-                "created"
+            let result = self.apply_resource(&mut merged_config, &registered);
+            applied_results.push(result);
+            let action = match result {
+                ApplyResult::Created => "created",
+                ApplyResult::Configured | ApplyResult::Unchanged => "configured",
             };
 
             if dry_run {
@@ -86,7 +91,7 @@ impl CliHandler {
                 );
             } else {
                 println!(
-                    "{}/{} would be {}",
+                    "{}/{} {}",
                     kind_as_str(registered.kind()),
                     registered.name(),
                     action
@@ -97,6 +102,13 @@ impl CliHandler {
         if has_errors {
             return Ok(1);
         }
+
+        if !dry_run && !applied_results.is_empty() {
+            let merged_yaml = serde_yaml::to_string(&merged_config)
+                .context("failed to serialize applied configuration")?;
+            crate::persist_config_and_reload(&self.state, merged_config, merged_yaml, "cli")?;
+        }
+
         Ok(0)
     }
 
@@ -197,9 +209,9 @@ impl CliHandler {
             }
             TaskCommands::Logs {
                 task_id,
-                follow,
+                follow: _,
                 tail: _,
-                timestamps,
+                timestamps: _,
             } => {
                 let logs = crate::stream_task_logs_impl(&self.state, task_id, 300)?;
                 for chunk in logs {
@@ -319,12 +331,12 @@ impl CliHandler {
         Ok(resources)
     }
 
-    fn resource_exists(
+    fn apply_resource(
         &self,
-        config: &crate::OrchestratorConfig,
+        config: &mut crate::OrchestratorConfig,
         resource: &RegisteredResource,
-    ) -> bool {
-        match resource {
+    ) -> ApplyResult {
+        let existed = match resource {
             RegisteredResource::Workspace(current) => {
                 WorkspaceResource::get_from(config, current.name()).is_some()
             }
@@ -337,6 +349,13 @@ impl CliHandler {
             RegisteredResource::Workflow(current) => {
                 WorkflowResource::get_from(config, current.name()).is_some()
             }
+        };
+
+        let _ = resource.apply(config);
+        if existed {
+            ApplyResult::Configured
+        } else {
+            ApplyResult::Created
         }
     }
 
@@ -344,7 +363,7 @@ impl CliHandler {
         &self,
         tasks: &[crate::TaskSummary],
         format: OutputFormat,
-        verbose: bool,
+        _verbose: bool,
     ) -> Result<i32> {
         match format {
             OutputFormat::Json => {
@@ -552,6 +571,18 @@ mod tests {
         std::fs::write(path, content).expect("manifest should be writable");
     }
 
+    fn workspace_manifest_yaml(name: &str, root_path: &str) -> String {
+        format!(
+            "apiVersion: orchestrator.dev/v1\nkind: Workspace\nmetadata:\n  name: {name}\nspec:\n  root_path: {root_path}\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n"
+        )
+    }
+
+    fn ensure_workspace_structure(temp_root: &std::path::Path, root_path: &str) {
+        let root = temp_root.join(root_path);
+        std::fs::create_dir_all(root.join("docs/qa")).expect("qa dir should be creatable");
+        std::fs::create_dir_all(root.join("docs/ticket")).expect("ticket dir should be creatable");
+    }
+
     #[test]
     fn apply_dry_run_does_not_persist_created_resource() {
         let mut fixture = TestState::new();
@@ -680,5 +711,149 @@ spec:
         let active = crate::read_active_config(&state).expect("config should be readable");
         assert!(!active.config.workspaces.contains_key("dry-run-multi"));
         assert!(active.config.workspaces.contains_key("default"));
+    }
+
+    #[test]
+    fn apply_create_non_dry_run_creates_resource() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state.clone());
+        let manifest_path = fixture.temp_root().join("apply-create.yaml");
+
+        ensure_workspace_structure(fixture.temp_root(), "workspace/apply-create");
+
+        write_manifest(
+            &manifest_path,
+            &workspace_manifest_yaml("apply-create", "workspace/apply-create"),
+        );
+
+        let cli = Cli {
+            command: Commands::Apply {
+                file: manifest_path.display().to_string(),
+                dry_run: false,
+            },
+            config: None,
+            verbose: false,
+        };
+
+        let code = handler.execute(&cli).expect("apply create should succeed");
+        assert_eq!(code, 0);
+
+        let active = crate::read_active_config(&state).expect("config should be readable");
+        let workspace = active
+            .config
+            .workspaces
+            .get("apply-create")
+            .expect("workspace should be created");
+        assert_eq!(workspace.root_path, "workspace/apply-create");
+    }
+
+    #[test]
+    fn apply_update_non_dry_run_updates_existing_resource() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state.clone());
+        let manifest_path = fixture.temp_root().join("apply-update.yaml");
+
+        ensure_workspace_structure(fixture.temp_root(), "workspace/apply-update-v1");
+        ensure_workspace_structure(fixture.temp_root(), "workspace/apply-update-v2");
+
+        write_manifest(
+            &manifest_path,
+            &workspace_manifest_yaml("apply-update", "workspace/apply-update-v1"),
+        );
+
+        let first_apply = Cli {
+            command: Commands::Apply {
+                file: manifest_path.display().to_string(),
+                dry_run: false,
+            },
+            config: None,
+            verbose: false,
+        };
+        assert_eq!(handler.execute(&first_apply).expect("first apply"), 0);
+
+        write_manifest(
+            &manifest_path,
+            &workspace_manifest_yaml("apply-update", "workspace/apply-update-v2"),
+        );
+        let second_apply = Cli {
+            command: Commands::Apply {
+                file: manifest_path.display().to_string(),
+                dry_run: false,
+            },
+            config: None,
+            verbose: false,
+        };
+        assert_eq!(handler.execute(&second_apply).expect("second apply"), 0);
+
+        let active = crate::read_active_config(&state).expect("config should be readable");
+        let workspace = active
+            .config
+            .workspaces
+            .get("apply-update")
+            .expect("workspace should be updated");
+        assert_eq!(workspace.root_path, "workspace/apply-update-v2");
+    }
+
+    #[test]
+    fn apply_persist_non_dry_run_writes_new_config_version() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state.clone());
+        let dry_manifest_path = fixture.temp_root().join("apply-persist-dry.yaml");
+        let apply_manifest_path = fixture.temp_root().join("apply-persist.yaml");
+
+        ensure_workspace_structure(fixture.temp_root(), "workspace/apply-persist-dry");
+        ensure_workspace_structure(fixture.temp_root(), "workspace/apply-persist");
+
+        let baseline_version = crate::load_config_overview(&state)
+            .expect("baseline overview should be readable")
+            .version;
+
+        write_manifest(
+            &dry_manifest_path,
+            &workspace_manifest_yaml("apply-persist-dry", "workspace/apply-persist-dry"),
+        );
+        let dry_run_cli = Cli {
+            command: Commands::Apply {
+                file: dry_manifest_path.display().to_string(),
+                dry_run: true,
+            },
+            config: None,
+            verbose: false,
+        };
+        assert_eq!(
+            handler
+                .execute(&dry_run_cli)
+                .expect("dry run should succeed"),
+            0
+        );
+        let version_after_dry_run = crate::load_config_overview(&state)
+            .expect("overview after dry run should be readable")
+            .version;
+        assert_eq!(version_after_dry_run, baseline_version);
+
+        write_manifest(
+            &apply_manifest_path,
+            &workspace_manifest_yaml("apply-persist", "workspace/apply-persist"),
+        );
+        let apply_cli = Cli {
+            command: Commands::Apply {
+                file: apply_manifest_path.display().to_string(),
+                dry_run: false,
+            },
+            config: None,
+            verbose: false,
+        };
+        assert_eq!(
+            handler.execute(&apply_cli).expect("apply should succeed"),
+            0
+        );
+
+        let version_after_apply = crate::load_config_overview(&state)
+            .expect("overview after apply should be readable")
+            .version;
+        assert_eq!(version_after_apply, baseline_version + 1);
     }
 }
