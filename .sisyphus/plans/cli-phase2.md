@@ -625,7 +625,7 @@ Wave 3 (edit + final integration):
 
 ---
 
-- [ ] 11. **Implement edit validation + re-open loop**
+- [x] 11. **Implement edit validation + re-open loop**
 
   **What to do**:
   - Spawn $EDITOR on temp file

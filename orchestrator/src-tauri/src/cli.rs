@@ -200,6 +200,13 @@ pub enum EditCommands {
         #[arg(value_name = "RESOURCE")]
         selector: String,
     },
+
+    /// Open a resource in $EDITOR and apply validated changes
+    Open {
+        /// Resource selector (kind/name, e.g., workspace/default, agent/opencode)
+        #[arg(value_name = "RESOURCE")]
+        selector: String,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -258,6 +265,7 @@ pub enum OutputFormat {
 
 /// Legacy CLI options for backward compatibility
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct LegacyCliOptions {
     pub cli: bool,
     pub show_help: bool,
@@ -344,6 +352,18 @@ mod tests {
                 assert_eq!(selector, "agent/opencode");
             }
             _ => panic!("expected edit export command"),
+        }
+    }
+
+    #[test]
+    fn parse_edit_open_command() {
+        let cli = Cli::parse_from(["orchestrator", "edit", "open", "workspace/default"]);
+
+        match cli.command {
+            Commands::Edit(EditCommands::Open { selector }) => {
+                assert_eq!(selector, "workspace/default");
+            }
+            _ => panic!("expected edit open command"),
         }
     }
 }

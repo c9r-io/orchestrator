@@ -10,6 +10,7 @@ use crate::resource::{
 use crate::InnerState;
 use anyhow::{Context, Result};
 use serde::Deserialize;
+use std::process::{Command, ExitStatus};
 use std::sync::Arc;
 
 pub struct CliHandler {
@@ -318,7 +319,97 @@ impl CliHandler {
                 println!("{}", temp_file.display());
                 Ok(0)
             }
+            EditCommands::Open { selector } => self.edit_open(selector),
         }
+    }
+
+    fn edit_open(&self, selector: &str) -> Result<i32> {
+        let (kind_str, name) = parse_resource_selector(selector)?;
+        let (resource, mut merged_config) = {
+            let active = crate::read_active_config(&self.state)?;
+            let resource = RegisteredResource::get_from(&active.config, name)
+                .with_context(|| format!("resource not found: {}/{}", kind_str, name))?;
+            (resource, active.config.clone())
+        };
+
+        let yaml = resource.to_yaml()?;
+        let temp_file = write_to_temp_file(&yaml)?;
+        let _temp_guard = TempFileGuard::new(temp_file.clone());
+
+        let editor = std::env::var("EDITOR").context("$EDITOR is not set")?;
+        loop {
+            let status = self.run_editor(&editor, &temp_file)?;
+            if is_ctrl_c_exit(&status) {
+                eprintln!("Edit aborted by Ctrl+C");
+                return Ok(130);
+            }
+
+            if !status.success() {
+                anyhow::bail!("editor exited with non-zero status: {}", status);
+            }
+
+            let edited = std::fs::read_to_string(&temp_file)
+                .with_context(|| format!("failed to read temp file: {}", temp_file.display()))?;
+            if edited.trim().is_empty() {
+                eprintln!("Edit aborted: empty file");
+                return Ok(1);
+            }
+
+            let manifest: OrchestratorResource = match serde_yaml::from_str(&edited) {
+                Ok(resource) => resource,
+                Err(error) => {
+                    eprintln!("Edited manifest is invalid YAML: {}", error);
+                    continue;
+                }
+            };
+
+            if let Err(error) = manifest.validate_version() {
+                eprintln!("Edited manifest has invalid apiVersion: {}", error);
+                continue;
+            }
+
+            let registered = match dispatch_resource(manifest) {
+                Ok(resource) => resource,
+                Err(error) => {
+                    eprintln!("Edited manifest has invalid kind/spec: {}", error);
+                    continue;
+                }
+            };
+
+            if let Err(error) = registered.validate() {
+                eprintln!(
+                    "{} / {} invalid: {}",
+                    kind_as_str(registered.kind()),
+                    registered.name(),
+                    error
+                );
+                continue;
+            }
+
+            let result = self.apply_resource(&mut merged_config, &registered);
+            let merged_yaml = serde_yaml::to_string(&merged_config)
+                .context("failed to serialize edited configuration")?;
+            crate::persist_config_and_reload(&self.state, merged_config, merged_yaml, "cli")?;
+
+            let action = match result {
+                ApplyResult::Created => "created",
+                ApplyResult::Configured | ApplyResult::Unchanged => "configured",
+            };
+            println!(
+                "{}/{} {}",
+                kind_as_str(registered.kind()),
+                registered.name(),
+                action
+            );
+            return Ok(0);
+        }
+    }
+
+    fn run_editor(&self, editor: &str, temp_file: &std::path::Path) -> Result<ExitStatus> {
+        Command::new(editor)
+            .arg(temp_file)
+            .status()
+            .with_context(|| format!("failed to start editor command: {}", editor))
     }
 
     fn handle_db(&self, cmd: &DbCommands) -> Result<i32> {
@@ -608,10 +699,45 @@ fn write_to_temp_file(content: &str) -> Result<std::path::PathBuf> {
     Ok(temp_file)
 }
 
+struct TempFileGuard {
+    path: std::path::PathBuf,
+}
+
+impl TempFileGuard {
+    fn new(path: std::path::PathBuf) -> Self {
+        Self { path }
+    }
+}
+
+impl Drop for TempFileGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+fn is_ctrl_c_exit(status: &ExitStatus) -> bool {
+    if status.code() == Some(130) {
+        return true;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        return status.signal() == Some(2);
+    }
+
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_utils::TestState;
+    use std::os::unix::fs::PermissionsExt;
+    use std::sync::{Mutex, OnceLock};
 
     fn write_manifest(path: &std::path::Path, content: &str) {
         std::fs::write(path, content).expect("manifest should be writable");
@@ -627,6 +753,39 @@ mod tests {
         let root = temp_root.join(root_path);
         std::fs::create_dir_all(root.join("docs/qa")).expect("qa dir should be creatable");
         std::fs::create_dir_all(root.join("docs/ticket")).expect("ticket dir should be creatable");
+    }
+
+    fn editor_env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn with_editor_env<T>(editor: Option<&str>, f: impl FnOnce() -> T) -> T {
+        let _guard = editor_env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let previous = std::env::var("EDITOR").ok();
+
+        match editor {
+            Some(value) => std::env::set_var("EDITOR", value),
+            None => std::env::remove_var("EDITOR"),
+        }
+
+        let result = f();
+
+        match previous {
+            Some(value) => std::env::set_var("EDITOR", value),
+            None => std::env::remove_var("EDITOR"),
+        }
+
+        result
+    }
+
+    fn write_mock_editor_script(path: &std::path::Path, body: &str) {
+        let script = format!("#!/bin/sh\nset -eu\n{}\n", body);
+        std::fs::write(path, script).expect("mock editor script should be writable");
+        let perms = std::fs::Permissions::from_mode(0o755);
+        std::fs::set_permissions(path, perms).expect("mock editor script should be executable");
     }
 
     #[test]
@@ -708,6 +867,177 @@ mod tests {
         assert!(result.is_err());
         let err_msg = format!("{:?}", result);
         assert!(err_msg.contains("not found"));
+    }
+
+    #[test]
+    fn edit_open_requires_editor_env() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state.clone());
+
+        let cli = Cli {
+            command: Commands::Edit(EditCommands::Open {
+                selector: "workspace/default".to_string(),
+            }),
+            config: None,
+            verbose: false,
+        };
+
+        let result = with_editor_env(None, || handler.execute(&cli));
+        assert!(result.is_err());
+        let err_text = format!(
+            "{:#}",
+            result.expect_err("should fail when EDITOR is unset")
+        );
+        assert!(err_text.contains("$EDITOR is not set"));
+    }
+
+    #[test]
+    fn edit_open_applies_valid_edit() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state.clone());
+        let editor_path = fixture.temp_root().join("mock-editor-valid.sh");
+
+        ensure_workspace_structure(fixture.temp_root(), "workspace/default-updated");
+
+        write_mock_editor_script(
+            &editor_path,
+            r#"cat <<'YAML' > "$1"
+apiVersion: orchestrator.dev/v1
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: workspace/default-updated
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+YAML"#,
+        );
+
+        let cli = Cli {
+            command: Commands::Edit(EditCommands::Open {
+                selector: "workspace/default".to_string(),
+            }),
+            config: None,
+            verbose: false,
+        };
+
+        let code = with_editor_env(Some(&editor_path.display().to_string()), || {
+            handler.execute(&cli).expect("edit open should succeed")
+        });
+        assert_eq!(code, 0);
+
+        let active = crate::read_active_config(&state).expect("config should be readable");
+        let workspace = active
+            .config
+            .workspaces
+            .get("default")
+            .expect("workspace should exist");
+        assert_eq!(workspace.root_path, "workspace/default-updated");
+    }
+
+    #[test]
+    fn edit_validation_reopens_until_manifest_is_valid() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state.clone());
+        let editor_path = fixture.temp_root().join("mock-editor-reopen.sh");
+        let count_file = fixture.temp_root().join("mock-editor-count.txt");
+
+        ensure_workspace_structure(fixture.temp_root(), "workspace/default-reopened");
+
+        write_mock_editor_script(
+            &editor_path,
+            &format!(
+                r#"count_file="{}"
+count=0
+if [ -f "$count_file" ]; then
+  count=$(cat "$count_file")
+fi
+count=$((count + 1))
+printf "%s" "$count" > "$count_file"
+
+if [ "$count" -eq 1 ]; then
+  cat <<'YAML' > "$1"
+apiVersion: orchestrator.dev/v1
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: ""
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+YAML
+else
+  cat <<'YAML' > "$1"
+apiVersion: orchestrator.dev/v1
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: workspace/default-reopened
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+YAML
+fi"#,
+                count_file.display()
+            ),
+        );
+
+        let cli = Cli {
+            command: Commands::Edit(EditCommands::Open {
+                selector: "workspace/default".to_string(),
+            }),
+            config: None,
+            verbose: false,
+        };
+
+        let code = with_editor_env(Some(&editor_path.display().to_string()), || {
+            handler
+                .execute(&cli)
+                .expect("edit open should eventually succeed")
+        });
+        assert_eq!(code, 0);
+
+        let count = std::fs::read_to_string(&count_file).expect("count file should be present");
+        assert_eq!(count.trim(), "2");
+
+        let active = crate::read_active_config(&state).expect("config should be readable");
+        let workspace = active
+            .config
+            .workspaces
+            .get("default")
+            .expect("workspace should exist");
+        assert_eq!(workspace.root_path, "workspace/default-reopened");
+    }
+
+    #[test]
+    fn edit_open_handles_ctrl_c_gracefully() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state.clone());
+        let editor_path = fixture.temp_root().join("mock-editor-ctrlc.sh");
+
+        write_mock_editor_script(&editor_path, "exit 130");
+
+        let cli = Cli {
+            command: Commands::Edit(EditCommands::Open {
+                selector: "workspace/default".to_string(),
+            }),
+            config: None,
+            verbose: false,
+        };
+
+        let code = with_editor_env(Some(&editor_path.display().to_string()), || {
+            handler
+                .execute(&cli)
+                .expect("ctrl+c should return exit code, not error")
+        });
+        assert_eq!(code, 130);
     }
 
     #[test]
