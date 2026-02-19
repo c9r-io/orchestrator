@@ -47,6 +47,8 @@ cargo llvm-cov
 cargo llvm-cov --html
 ```
 
+> **Why llvm-cov over tarpaulin?** tarpaulin has known issues with `#[async_trait]` macros (reports dramatically lower coverage for async trait code). `cargo-llvm-cov` uses LLVM's instrumentation and correctly tracks async trait coverage.
+
 If a Makefile defines coverage targets, use those instead:
 
 ```bash
@@ -57,6 +59,16 @@ make coverage-html
 
 Notes:
 - Coverage exclusions (migrations, generated code, thin wiring) are project-specific. Follow the project's existing exclusions if present.
+- Document coverage exclusions so reviewers understand why files are skipped:
+
+| Example Exclusion | Typical Reason |
+|-------------------|---------------|
+| `repository/*.rs` | Thin data mapping layer (ORM-equivalent), no business logic |
+| `main.rs` | Program entry point |
+| `migration/*.rs` | Database migration scripts |
+| `src/index.ts` | Barrel re-export, no logic |
+| `src/types/**/*.ts` | Pure type definitions, no runtime code |
+
 - Treat coverage as a signal: prioritize service/business logic and error branches.
 
 ## Frontend (TypeScript, if `portal/` exists)
@@ -89,3 +101,40 @@ When asked to "complete tests" or "increase coverage":
 - Prefer testing pure business logic without Docker.
 - Avoid brittle implementation-detail assertions.
 - For E2E gaps, add only a few stable tests for critical flows (see `e2e-testing` skill).
+
+## Coverage Targets (Guidance)
+
+All test coverage targets follow a project minimum of `>=90%` where possible:
+
+| Layer | Target | Notes |
+|-------|--------|-------|
+| Domain/Business logic | >=90% | Pure validation, no I/O |
+| Service layer | >=90% | Core business logic |
+| API handlers | >=90% | HTTP routing and request validation |
+| gRPC handlers (if applicable) | >=90% | RPC service methods |
+| Repository layer | N/A | Often excluded from tracking (thin data mapping) |
+| Frontend utils/services | >=90% | Non-UI logic |
+
+## HTTP Handler Testing with Dependency Injection
+
+If the project uses a DI / `HasServices` trait pattern (generic handlers with swappable state), test production handler code by providing a test state that implements the same trait:
+
+```
+Production:  AppState (impl HasServices) → build_router() → Handlers<AppState>
+Tests:       TestAppState (impl HasServices) → build_router() → Handlers<TestAppState>
+                                                    ↑
+                                          Same production handlers!
+```
+
+Key rules:
+1. **Always use the trait** for new handlers — never use concrete `AppState` directly.
+2. **Test production code** — `build_test_router()` should use production `build_router(state)`.
+3. **Mock external services** with wiremock or equivalent.
+4. **Use test repositories** — in-memory implementations of repository traits.
+
+## Troubleshooting
+
+- **Compilation errors**: Run `cargo clean` first
+- **Mock expectations not met**: Check predicate conditions
+- **Low coverage with tarpaulin**: Use `cargo llvm-cov` instead (tarpaulin can't track `#[async_trait]` macros properly)
+- **llvm-cov not found**: Install with `cargo install cargo-llvm-cov`

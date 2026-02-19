@@ -29,7 +29,17 @@ Notes:
 - If the API does not require auth, omit `API_TOKEN` and `API_TOKEN_CMD`.
 - If the API requires auth, prefer providing a project-specific `API_TOKEN_CMD` (for example, a script under `scripts/`).
 
+## Test Scripts Directory (`scripts/qa/`)
+
+**IMPORTANT**: A collection of reusable QA test scripts may exist in `scripts/qa/`. Before writing any new test script, **always check `scripts/qa/` first** for an existing script that covers the same or similar scenario.
+
+- **Reuse first**: Run `ls scripts/qa/` or `Glob: scripts/qa/*` to find existing scripts. If a matching script exists, use it directly (or adapt it) instead of creating a new one.
+- **Create in `scripts/qa/`**: When a new test script is needed, always place it under `scripts/qa/` — never in the project root or other ad-hoc locations.
+- **Naming convention**: Follow existing patterns — e.g., `test-{feature}.{js,mjs,py,sh}` or `{feature}_test.py`.
+
 ## Workflow
+
+**IMPORTANT: This skill is strictly for testing and reporting. NEVER attempt to fix, patch, or modify any source code during QA testing. If a test fails, create a ticket immediately and move on to the next scenario.**
 
 1. Confirm which QA document(s) to execute under `docs/qa/`.
 2. Parse scenarios and required setup (test data, environment, expected DB state).
@@ -37,8 +47,11 @@ Notes:
    - Execute UI steps (if applicable) with browser automation.
    - Execute API steps using `.claude/skills/tools/qa-api-test.sh` (if applicable).
    - Validate database state (if applicable).
-   - If failure: collect evidence and create a ticket under `docs/ticket/`.
+   - If FAIL → **Immediately create ticket** in `docs/ticket/` (DO NOT defer to end).
+   - Report scenario result (PASS/FAIL) before moving to next.
 4. Report a summary: pass/fail counts, created tickets, and any follow-up actions.
+
+**Ticket creation rule**: Create the ticket the moment a scenario is confirmed as FAIL — before starting the next scenario. This ensures no failure is lost if the session is interrupted, and gives the user real-time visibility into issues as they surface.
 
 ## UI Automation (Optional)
 
@@ -86,7 +99,18 @@ mysql -h 127.0.0.1 -P 3306 -u root mydb -e "SELECT 1"
 
 ## Ticket Creation for Failures
 
-Create a ticket file under `docs/ticket/` when a scenario fails.
+**CRITICAL: Create the ticket RIGHT NOW, before moving to the next scenario.** Do NOT accumulate failures for batch ticket creation later. Each failed scenario gets its own ticket written to `docs/ticket/` immediately upon confirmation of failure.
+
+Workflow per failure:
+1. Gather all evidence (error message, logs, DB state, screenshots)
+2. Write ticket file to `docs/ticket/` using the naming and structure below
+3. Inform user: "❌ Scenario #N FAIL — ticket created: `docs/ticket/{filename}.md`"
+4. Only then proceed to the next scenario
+
+This ensures:
+- No failures are lost if the session is interrupted or context is compressed
+- User has real-time visibility into each issue as it surfaces
+- Ticket evidence is freshest at the moment of failure (logs, DB state haven't been polluted by subsequent tests)
 
 Naming:
 - `{module}_{document}_scenario{N}_{YYMMDD_HHMMSS}.md`
@@ -140,6 +164,14 @@ Template:
 ```sql
 {queries and results}
 ```
+
+---
+
+## Analysis
+
+**Root Cause**: {Analysis of likely cause}
+**Severity**: High / Medium / Low
+**Related Components**: Frontend / Backend / Database / Cache / External Service
 ```
 
 ## Reset Guidance

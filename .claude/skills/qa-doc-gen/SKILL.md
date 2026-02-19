@@ -1,30 +1,34 @@
 ---
 name: qa-doc-gen
-description: "Generate QA test case documents from confirmed feature implementation plans. Use this skill AFTER a feature plan has been approved by the user (via plan mode or explicit confirmation). Converts the agreed feature behavior, acceptance criteria, and edge cases into structured QA test documents under docs/qa/. Triggers when (1) user says to generate QA docs after plan approval, (2) user asks to create test cases for a newly planned feature, (3) user asks to turn a feature plan into QA testing content."
+description: "Generate or update QA/security/UIUX test documentation after confirmed feature implementation plans or completed refactors. Use this skill AFTER plan approval or code completion to: (1) add new QA test docs for new behavior, (2) generate design docs, and (3) run cross-doc impact analysis across docs/qa/, docs/security/, and docs/uiux/ to update stale steps, expectations, and assertions. Triggers when users ask to create QA docs, update test docs after implementation, or sync QA/security/UIUX docs after behavior changes."
 ---
 
 # QA Doc Gen
 
-After a feature plan is confirmed, generate QA test case documents that capture the feature's expected behavior for manual testing.
+After a feature plan is confirmed or a refactor is completed, generate and synchronize test documentation so all QA/security/UIUX docs match real behavior.
 
 ## Workflow
 
 ```
-1. Extract feature details from the confirmed plan (plan mode output)
+1. Extract feature details and behavior deltas from confirmed plan / implemented code
 2. Determine module classification and file naming
 3. Generate design doc(s) under docs/design_doc/ (platform doc, before QA)
 4. Generate QA test document(s) following project format
-5. Update docs/qa/README.md index
-6. Update docs/design_doc/README.md index
+5. Run cross-doc impact scan on docs/qa, docs/security, docs/uiux
+6. Patch all impacted existing docs to remove stale steps/assertions
+7. Update docs/qa/README.md index
+8. Update docs/design_doc/README.md index
+9. Update docs/security/README.md and docs/uiux/README.md when changed
 ```
 
 ## Step 1: Extract from Confirmed Plan
 
-From the confirmed plan, extract:
+From the confirmed plan and merged implementation, extract:
 
 - **Feature name**: What the feature is called
 - **Module**: Which module it belongs to (used as the folder under `docs/qa/`, e.g. `docs/qa/{module}/`)
 - **Behavior**: Normal flow, error cases, edge cases
+- **Behavior deltas**: What changed compared to old docs (auth rules, token types, permission boundaries, UI routes, API contracts, redirects)
 - **UI interactions**: Pages, buttons, forms involved
 - **API endpoints**: If applicable, include method, path, request/response
 - **Database changes**: New tables/columns, expected data states
@@ -102,16 +106,52 @@ For each feature behavior in the plan, generate scenarios covering:
 
 Not every type is needed for every feature - select the relevant ones.
 
-## Step 5: Update QA README Index
+## Step 5: Run Cross-Doc Impact Analysis (Mandatory)
+
+After creating/updating the primary docs, always scan and classify potential impacts in:
+
+- `docs/qa/**/*.md`
+- `docs/security/**/*.md`
+- `docs/uiux/**/*.md`
+
+Use search patterns based on behavior deltas, for example:
+
+- route changes (`/dashboard`, `/settings`, `/auth/callback`)
+- token model changes (`id_token`, `access_token`, `token exchange`)
+- permission/auth changes (`401`, `403`, `scope`, `audience`, `role`)
+- UI navigation text and expected redirect paths
+
+For each impacted document, do one of:
+
+1. **Patch required**: update steps/expected results/security assertions/UI flow
+2. **Note required**: add prerequisite note or branch-path note to avoid tester confusion
+3. **No change**: explicitly record why unaffected
+
+Never stop at creating only new docs when old docs are stale.
+
+## Step 6: Update QA README Index
 
 After creating the QA document(s), update `docs/qa/README.md`:
 
 1. Add the new document to its module's index table
 2. Keep the README lightweight and project-agnostic (avoid hardcoded totals unless the project explicitly maintains them)
 
-## Step 6: Update Design Doc README Index
+## Step 7: Update Design Doc README Index
 
 After creating the design doc(s), update `docs/design_doc/README.md`:
 
 1. Add the new document to its module's index table
 2. Keep the README lightweight and project-agnostic
+
+## Step 8: Update Other Indexes When Changed
+
+If the cross-doc impact analysis (Step 5) modified files under `docs/security/` or `docs/uiux/`, update their respective `README.md` indexes as well.
+
+## Output Requirements
+
+In the final response, always include:
+
+1. New docs created/updated for the feature itself
+2. Cross-doc impact list grouped by `qa/security/uiux`
+3. Updated files and rationale per file
+4. Remaining docs reviewed but unchanged (with reason)

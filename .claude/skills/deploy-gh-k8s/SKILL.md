@@ -1,6 +1,6 @@
 ---
 name: deploy-gh-k8s
-description: End-to-end deployment workflow for this repo that gates on the latest GitHub Actions run, deploys with deploy/upgrade.sh to Kubernetes, monitors kubectl resources, troubleshoots failures (logs, code, IaC), and performs health checks. Use when the user asks to deploy/release/go-live or requests a Kubernetes deployment/check.
+description: End-to-end deployment workflow for this repo that gates on the latest GitHub Actions run, deploys with deploy/upgrade.sh to Kubernetes, monitors kubectl resources, troubleshoots failures (logs, code, IaC), and performs health checks. Use when the user asks to deploy/release/go-live, says "进行部署", "发布", "上线", or requests a Kubernetes deployment/check.
 ---
 
 # Deploy GH K8s

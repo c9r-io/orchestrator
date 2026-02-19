@@ -33,7 +33,20 @@ cargo run --release
 
 ## Run Benchmarks
 
-Set the target base URL:
+If the project has a `scripts/benchmark.sh`, use it:
+
+```bash
+# Quick test (lower concurrency range)
+./scripts/benchmark.sh
+
+# Full test (higher concurrency range)
+./scripts/benchmark.sh full
+
+# Custom target URL
+BASE_URL=http://your-server:8080 ./scripts/benchmark.sh
+```
+
+Otherwise, run `hey` directly. Set the target base URL:
 
 ```bash
 BASE_URL=http://localhost:8080
@@ -59,6 +72,29 @@ hey -n 1000 -c 25 -m POST -H "Content-Type: application/json" \
   "$BASE_URL/api/v1/items"
 ```
 
+## Recommended Test Endpoints
+
+| Endpoint | Purpose | Measures |
+|----------|---------|----------|
+| `/health` | Pure compute | Framework baseline QPS |
+| `/ready` | DB + Cache | I/O bound performance |
+| `/api/v1/{resource}` | Business logic | Real API performance |
+
+## Output Metrics
+
+- **Max Stable QPS**: Highest throughput before degradation
+- **Best Concurrency**: Optimal concurrent connections
+- **P50/P99 Latency**: Response time percentiles
+
+## Performance Rating
+
+| Rating | /health QPS | Notes |
+|--------|-------------|-------|
+| Excellent | > 30,000 | Optimal performance |
+| Good | > 10,000 | Production ready |
+| Fair | > 5,000 | Check bottlenecks |
+| Low | < 5,000 | Likely debug mode |
+
 ## Interpreting Results
 
 Track:
@@ -71,4 +107,12 @@ If numbers regress after a change:
 - confirm environment is clean (consider `./scripts/reset-docker.sh` if stateful)
 - check logs for slow queries/timeouts
 - profile hot paths (language/framework specific)
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Low QPS | Ensure `--release` flag (Rust), check resource usage |
+| Service not running | Start via Docker Compose or `cargo run --release` |
+| DB/Cache issues | `docker compose ps`, restart services |
 

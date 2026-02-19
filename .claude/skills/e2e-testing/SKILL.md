@@ -12,7 +12,12 @@ This skill assumes `project-bootstrap` style repos when applicable:
 - Full-stack environment via Docker Compose in `docker/docker-compose.yml`
 - Clean reset script at `./scripts/reset-docker.sh`
 
-## Strategy
+## Test Strategy
+
+| Type | Directory | Target | Requirements | Purpose |
+|------|-----------|--------|--------------|---------|
+| Frontend isolation | `portal/tests/e2e/` | dev server (e.g. localhost:5173) | Vite dev only | UI rendering, component behavior |
+| Full-stack integration | `portal/tests/e2e-integration/` | Docker services (e.g. localhost:3000) | Docker + all services | Login, API calls, data flow |
 
 Prefer a small number of stable E2E tests covering critical journeys:
 - Login/auth (if applicable)
@@ -55,7 +60,10 @@ If the project already has a combined script (recommended), use it (example):
 
 ```bash
 cd portal
-npm run test:e2e:full:reset
+npm run test:e2e:full:reset    # Reset env + run tests (recommended)
+npm run test:e2e:full          # Run only (requires services)
+npm run test:e2e:full -- --ui  # With Playwright UI mode
+npm run test:e2e:full -- --headed  # See browser during run
 ```
 
 ## Writing Tests
@@ -79,6 +87,17 @@ test("scenario: critical flow", async ({ page }) => {
 });
 ```
 
+### API Test Pattern
+
+```ts
+import { test, expect } from "@playwright/test";
+
+test("Health endpoint accessible", async ({ request }) => {
+  const response = await request.get("http://localhost:8080/health");
+  expect(response.ok()).toBeTruthy();
+});
+```
+
 ## Troubleshooting Flakes
 
 Checklist:
@@ -91,6 +110,7 @@ Checklist:
 
 ```bash
 cd portal
-npx playwright show-report
+npx playwright show-report playwright-report       # Frontend tests
+npx playwright show-report playwright-report-full  # Full-stack tests (if separated)
 ```
 
