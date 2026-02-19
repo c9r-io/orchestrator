@@ -1,0 +1,3 @@
+- Added `TestState` builder in `orchestrator/src-tauri/src/test_utils.rs` that seeds isolated app_root/config/db/logs under `std::env::temp_dir()` unique subdirectories and returns reusable `Arc<InnerState>` instances.
+- Mirroring test config to temp `config/default.yaml` plus `init_schema` + `load_or_seed_config` + `build_active_config` + `backfill_legacy_data` gives parity with production initialization while keeping test DB isolated.
+- Implemented `Drop` cleanup on `TestState` to recursively remove temp roots and added focused tests (`test_state_compiles`, `test_state_creates_workspace`, `test_state_cleanup`) for infrastructure guarantees.

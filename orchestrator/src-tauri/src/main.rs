@@ -2,6 +2,8 @@
 
 mod cli;
 mod cli_handler;
+#[cfg(test)]
+mod test_utils;
 
 use anyhow::{Context, Result};
 use clap::Parser;
