@@ -262,7 +262,7 @@ Wave 3 (edit + final integration):
 
 ---
 
-- [ ] 3. **Define Resource trait with registry**
+- [x] 3. **Define Resource trait with registry**
 
   **What to do**:
   - Define `Resource` trait with methods:

@@ -7,3 +7,9 @@
 - Each resource kind has dedicated struct: `WorkspaceSpec` (root_path, qa_targets, ticket_dir), `AgentSpec` (templates for init_once/qa/fix/retest/loop_guard), `AgentGroupSpec` (agents list), `WorkflowSpec` (steps, loop_policy, finalize).
 - Tests cover all 4 resource kinds, annotations support, and explicit apiVersion rejection; borrowing pattern: validate_version() early, then reference-bind spec extraction with `&resource.spec` to avoid partial moves.
 - No business logic (apply, edit) implemented — cli_types is INPUT-ONLY schema for declarative manifests; internal OrchestratorConfig structures remain unchanged for backward compatibility.
+
+- Added `src-tauri/src/resource.rs` as the compile-time bridge layer: `Resource` trait + `ApplyResult` enum + `RegisteredResource` dispatch enum to represent Workspace/Agent/AgentGroup/Workflow without per-kind trait impls yet.
+- Introduced explicit `resource_registry()` with typed constructor fns (`build_workspace`, `build_agent`, `build_agent_group`, `build_workflow`) so `dispatch_resource(OrchestratorResource)` validates kind/spec alignment before conversion.
+- `Resource` is implemented on the dispatch enum only; `apply()` performs generic map upsert (`Created`/`Configured`/`Unchanged`) via serialization-equivalence, while deep per-kind business rules remain deferred to later tasks.
+- Added reversible bridge conversions between YAML specs and runtime config structs (including workflow loop/finalize/step prehook shape mapping) to support `apply()` and `get_from()` round-tripping.
+- Added focused tests in `resource.rs` for trait surface (`resource_trait_*`), apply result semantics (`apply_result_*`), and dispatch correctness (`resource_dispatch_*`) using `TestState` for isolated config snapshots.

@@ -3,6 +3,7 @@
 mod cli;
 mod cli_handler;
 mod cli_types;
+mod resource;
 #[cfg(test)]
 mod test_utils;
 
