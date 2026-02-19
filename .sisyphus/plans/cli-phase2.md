@@ -315,7 +315,7 @@ Wave 3 (edit + final integration):
 
 ---
 
-- [ ] 4. **Implement Resource trait for 4 config kinds**
+- [x] 4. **Implement Resource trait for 4 config kinds**
 
   **What to do**:
   - Implement Resource for WorkspaceConfig

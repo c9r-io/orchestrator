@@ -96,6 +96,225 @@ pub fn dispatch_resource(resource: OrchestratorResource) -> Result<RegisteredRes
     Err(anyhow!("unsupported resource kind"))
 }
 
+fn validate_resource_name(name: &str) -> Result<()> {
+    if name.trim().is_empty() {
+        return Err(anyhow!("metadata.name cannot be empty"));
+    }
+    Ok(())
+}
+
+fn metadata_with_name(name: &str) -> ResourceMetadata {
+    ResourceMetadata {
+        name: name.to_string(),
+        labels: None,
+        annotations: None,
+    }
+}
+
+fn manifest_yaml(
+    kind: ResourceKind,
+    metadata: &ResourceMetadata,
+    spec: ResourceSpec,
+) -> Result<String> {
+    let manifest = OrchestratorResource {
+        api_version: API_VERSION.to_string(),
+        kind,
+        metadata: metadata.clone(),
+        spec,
+    };
+    Ok(serde_yaml::to_string(&manifest)?)
+}
+
+impl Resource for WorkspaceResource {
+    fn kind(&self) -> ResourceKind {
+        ResourceKind::Workspace
+    }
+
+    fn name(&self) -> &str {
+        &self.metadata.name
+    }
+
+    fn validate(&self) -> Result<()> {
+        validate_resource_name(self.name())?;
+        if self.spec.root_path.trim().is_empty() {
+            return Err(anyhow!("workspace.spec.root_path cannot be empty"));
+        }
+        if self.spec.ticket_dir.trim().is_empty() {
+            return Err(anyhow!("workspace.spec.ticket_dir cannot be empty"));
+        }
+        Ok(())
+    }
+
+    fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+        let incoming = workspace_spec_to_config(&self.spec);
+        apply_to_map(&mut config.workspaces, self.name(), incoming)
+    }
+
+    fn to_yaml(&self) -> Result<String> {
+        manifest_yaml(
+            ResourceKind::Workspace,
+            &self.metadata,
+            ResourceSpec::Workspace(self.spec.clone()),
+        )
+    }
+
+    fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
+        config.workspaces.get(name).map(|workspace| Self {
+            metadata: metadata_with_name(name),
+            spec: workspace_config_to_spec(workspace),
+        })
+    }
+}
+
+impl Resource for AgentResource {
+    fn kind(&self) -> ResourceKind {
+        ResourceKind::Agent
+    }
+
+    fn name(&self) -> &str {
+        &self.metadata.name
+    }
+
+    fn validate(&self) -> Result<()> {
+        validate_resource_name(self.name())?;
+        let templates = &self.spec.templates;
+        if templates.init_once.is_none()
+            && templates.qa.is_none()
+            && templates.fix.is_none()
+            && templates.retest.is_none()
+            && templates.loop_guard.is_none()
+        {
+            return Err(anyhow!(
+                "agent.spec.templates must define at least one template"
+            ));
+        }
+        for value in [
+            templates.init_once.as_deref(),
+            templates.qa.as_deref(),
+            templates.fix.as_deref(),
+            templates.retest.as_deref(),
+            templates.loop_guard.as_deref(),
+        ] {
+            if matches!(value, Some(raw) if raw.trim().is_empty()) {
+                return Err(anyhow!(
+                    "agent.spec.templates entries cannot be empty strings"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+        let incoming = agent_spec_to_config(&self.spec);
+        apply_to_map(&mut config.agents, self.name(), incoming)
+    }
+
+    fn to_yaml(&self) -> Result<String> {
+        manifest_yaml(
+            ResourceKind::Agent,
+            &self.metadata,
+            ResourceSpec::Agent(self.spec.clone()),
+        )
+    }
+
+    fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
+        config.agents.get(name).map(|agent| Self {
+            metadata: metadata_with_name(name),
+            spec: agent_config_to_spec(agent),
+        })
+    }
+}
+
+impl Resource for AgentGroupResource {
+    fn kind(&self) -> ResourceKind {
+        ResourceKind::AgentGroup
+    }
+
+    fn name(&self) -> &str {
+        &self.metadata.name
+    }
+
+    fn validate(&self) -> Result<()> {
+        validate_resource_name(self.name())?;
+        if self.spec.agents.is_empty() {
+            return Err(anyhow!("agent_group.spec.agents cannot be empty"));
+        }
+        if self.spec.agents.iter().any(|agent| agent.trim().is_empty()) {
+            return Err(anyhow!("agent_group.spec.agents entries cannot be empty"));
+        }
+        Ok(())
+    }
+
+    fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+        let incoming = agent_group_spec_to_config(&self.spec);
+        apply_to_map(&mut config.agent_groups, self.name(), incoming)
+    }
+
+    fn to_yaml(&self) -> Result<String> {
+        manifest_yaml(
+            ResourceKind::AgentGroup,
+            &self.metadata,
+            ResourceSpec::AgentGroup(self.spec.clone()),
+        )
+    }
+
+    fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
+        config.agent_groups.get(name).map(|group| Self {
+            metadata: metadata_with_name(name),
+            spec: agent_group_config_to_spec(group),
+        })
+    }
+}
+
+impl Resource for WorkflowResource {
+    fn kind(&self) -> ResourceKind {
+        ResourceKind::Workflow
+    }
+
+    fn name(&self) -> &str {
+        &self.metadata.name
+    }
+
+    fn validate(&self) -> Result<()> {
+        validate_resource_name(self.name())?;
+        if self.spec.steps.is_empty() {
+            return Err(anyhow!("workflow.spec.steps cannot be empty"));
+        }
+        if self.spec.steps.iter().any(|step| step.id.trim().is_empty()) {
+            return Err(anyhow!("workflow.spec.steps[].id cannot be empty"));
+        }
+        if self
+            .spec
+            .steps
+            .iter()
+            .any(|step| step.step_type.trim().is_empty())
+        {
+            return Err(anyhow!("workflow.spec.steps[].type cannot be empty"));
+        }
+        Ok(())
+    }
+
+    fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+        let incoming = workflow_spec_to_config(&self.spec);
+        apply_to_map(&mut config.workflows, self.name(), incoming)
+    }
+
+    fn to_yaml(&self) -> Result<String> {
+        manifest_yaml(
+            ResourceKind::Workflow,
+            &self.metadata,
+            ResourceSpec::Workflow(self.spec.clone()),
+        )
+    }
+
+    fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
+        config.workflows.get(name).map(|workflow| Self {
+            metadata: metadata_with_name(name),
+            spec: workflow_config_to_spec(workflow),
+        })
+    }
+}
+
 impl Resource for RegisteredResource {
     fn kind(&self) -> ResourceKind {
         match self {
@@ -116,138 +335,44 @@ impl Resource for RegisteredResource {
     }
 
     fn validate(&self) -> Result<()> {
-        if self.name().trim().is_empty() {
-            return Err(anyhow!("metadata.name cannot be empty"));
-        }
-
         match self {
-            Self::Workspace(resource) => {
-                if resource.spec.root_path.trim().is_empty() {
-                    return Err(anyhow!("workspace.spec.root_path cannot be empty"));
-                }
-                if resource.spec.ticket_dir.trim().is_empty() {
-                    return Err(anyhow!("workspace.spec.ticket_dir cannot be empty"));
-                }
-            }
-            Self::Agent(resource) => {
-                let templates = &resource.spec.templates;
-                if templates.init_once.is_none()
-                    && templates.qa.is_none()
-                    && templates.fix.is_none()
-                    && templates.retest.is_none()
-                    && templates.loop_guard.is_none()
-                {
-                    return Err(anyhow!(
-                        "agent.spec.templates must define at least one template"
-                    ));
-                }
-            }
-            Self::AgentGroup(resource) => {
-                if resource.spec.agents.is_empty() {
-                    return Err(anyhow!("agent_group.spec.agents cannot be empty"));
-                }
-            }
-            Self::Workflow(resource) => {
-                if resource.spec.steps.is_empty() {
-                    return Err(anyhow!("workflow.spec.steps cannot be empty"));
-                }
-            }
+            Self::Workspace(resource) => resource.validate(),
+            Self::Agent(resource) => resource.validate(),
+            Self::AgentGroup(resource) => resource.validate(),
+            Self::Workflow(resource) => resource.validate(),
         }
-
-        Ok(())
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
         match self {
-            Self::Workspace(resource) => {
-                let incoming = workspace_spec_to_config(&resource.spec);
-                apply_to_map(&mut config.workspaces, &resource.metadata.name, incoming)
-            }
-            Self::Agent(resource) => {
-                let incoming = agent_spec_to_config(&resource.spec);
-                apply_to_map(&mut config.agents, &resource.metadata.name, incoming)
-            }
-            Self::AgentGroup(resource) => {
-                let incoming = agent_group_spec_to_config(&resource.spec);
-                apply_to_map(&mut config.agent_groups, &resource.metadata.name, incoming)
-            }
-            Self::Workflow(resource) => {
-                let incoming = workflow_spec_to_config(&resource.spec);
-                apply_to_map(&mut config.workflows, &resource.metadata.name, incoming)
-            }
+            Self::Workspace(resource) => resource.apply(config),
+            Self::Agent(resource) => resource.apply(config),
+            Self::AgentGroup(resource) => resource.apply(config),
+            Self::Workflow(resource) => resource.apply(config),
         }
     }
 
     fn to_yaml(&self) -> Result<String> {
-        let manifest = match self {
-            Self::Workspace(resource) => OrchestratorResource {
-                api_version: API_VERSION.to_string(),
-                kind: ResourceKind::Workspace,
-                metadata: resource.metadata.clone(),
-                spec: ResourceSpec::Workspace(resource.spec.clone()),
-            },
-            Self::Agent(resource) => OrchestratorResource {
-                api_version: API_VERSION.to_string(),
-                kind: ResourceKind::Agent,
-                metadata: resource.metadata.clone(),
-                spec: ResourceSpec::Agent(resource.spec.clone()),
-            },
-            Self::AgentGroup(resource) => OrchestratorResource {
-                api_version: API_VERSION.to_string(),
-                kind: ResourceKind::AgentGroup,
-                metadata: resource.metadata.clone(),
-                spec: ResourceSpec::AgentGroup(resource.spec.clone()),
-            },
-            Self::Workflow(resource) => OrchestratorResource {
-                api_version: API_VERSION.to_string(),
-                kind: ResourceKind::Workflow,
-                metadata: resource.metadata.clone(),
-                spec: ResourceSpec::Workflow(resource.spec.clone()),
-            },
-        };
-        Ok(serde_yaml::to_string(&manifest)?)
+        match self {
+            Self::Workspace(resource) => resource.to_yaml(),
+            Self::Agent(resource) => resource.to_yaml(),
+            Self::AgentGroup(resource) => resource.to_yaml(),
+            Self::Workflow(resource) => resource.to_yaml(),
+        }
     }
 
     fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
-        if let Some(workspace) = config.workspaces.get(name) {
-            return Some(Self::Workspace(WorkspaceResource {
-                metadata: ResourceMetadata {
-                    name: name.to_string(),
-                    labels: None,
-                    annotations: None,
-                },
-                spec: workspace_config_to_spec(workspace),
-            }));
+        if let Some(workspace) = WorkspaceResource::get_from(config, name) {
+            return Some(Self::Workspace(workspace));
         }
-        if let Some(agent) = config.agents.get(name) {
-            return Some(Self::Agent(AgentResource {
-                metadata: ResourceMetadata {
-                    name: name.to_string(),
-                    labels: None,
-                    annotations: None,
-                },
-                spec: agent_config_to_spec(agent),
-            }));
+        if let Some(agent) = AgentResource::get_from(config, name) {
+            return Some(Self::Agent(agent));
         }
-        if let Some(agent_group) = config.agent_groups.get(name) {
-            return Some(Self::AgentGroup(AgentGroupResource {
-                metadata: ResourceMetadata {
-                    name: name.to_string(),
-                    labels: None,
-                    annotations: None,
-                },
-                spec: agent_group_config_to_spec(agent_group),
-            }));
+        if let Some(agent_group) = AgentGroupResource::get_from(config, name) {
+            return Some(Self::AgentGroup(agent_group));
         }
-        if let Some(workflow) = config.workflows.get(name) {
-            return Some(Self::Workflow(WorkflowResource {
-                metadata: ResourceMetadata {
-                    name: name.to_string(),
-                    labels: None,
-                    annotations: None,
-                },
-                spec: workflow_config_to_spec(workflow),
-            }));
+        if let Some(workflow) = WorkflowResource::get_from(config, name) {
+            return Some(Self::Workflow(workflow));
         }
         None
     }
@@ -545,6 +670,75 @@ mod tests {
         }
     }
 
+    fn agent_manifest(name: &str, qa_command: &str) -> OrchestratorResource {
+        OrchestratorResource {
+            api_version: API_VERSION.to_string(),
+            kind: ResourceKind::Agent,
+            metadata: ResourceMetadata {
+                name: name.to_string(),
+                labels: None,
+                annotations: None,
+            },
+            spec: ResourceSpec::Agent(AgentSpec {
+                templates: AgentTemplatesSpec {
+                    init_once: None,
+                    qa: Some(qa_command.to_string()),
+                    fix: None,
+                    retest: None,
+                    loop_guard: None,
+                },
+            }),
+        }
+    }
+
+    fn agent_group_manifest(name: &str, agents: &[&str]) -> OrchestratorResource {
+        OrchestratorResource {
+            api_version: API_VERSION.to_string(),
+            kind: ResourceKind::AgentGroup,
+            metadata: ResourceMetadata {
+                name: name.to_string(),
+                labels: None,
+                annotations: None,
+            },
+            spec: ResourceSpec::AgentGroup(AgentGroupSpec {
+                agents: agents.iter().map(|agent| (*agent).to_string()).collect(),
+            }),
+        }
+    }
+
+    fn workflow_manifest(name: &str, group_id: &str) -> OrchestratorResource {
+        OrchestratorResource {
+            api_version: API_VERSION.to_string(),
+            kind: ResourceKind::Workflow,
+            metadata: ResourceMetadata {
+                name: name.to_string(),
+                labels: None,
+                annotations: None,
+            },
+            spec: ResourceSpec::Workflow(WorkflowSpec {
+                steps: vec![WorkflowStepSpec {
+                    id: "qa".to_string(),
+                    step_type: "qa".to_string(),
+                    enabled: true,
+                    agent_group_id: Some(group_id.to_string()),
+                    prehook: None,
+                }],
+                loop_policy: WorkflowLoopSpec {
+                    mode: "once".to_string(),
+                    max_cycles: Some(3),
+                },
+                finalize: WorkflowFinalizeSpec {
+                    rules: vec![WorkflowFinalizeRuleSpec {
+                        id: "qa-passed".to_string(),
+                        when: "qa_exit_code == 0".to_string(),
+                        status: "qa_passed".to_string(),
+                        reason: Some("qa succeeded".to_string()),
+                    }],
+                },
+            }),
+        }
+    }
+
     #[test]
     fn resource_dispatch_maps_workspace_manifest() {
         let resource = dispatch_resource(workspace_manifest("dispatch-ws", "workspace/dispatch"))
@@ -605,6 +799,112 @@ mod tests {
             .expect("default workspace should exist");
         assert_eq!(resource.kind(), ResourceKind::Workspace);
         assert_eq!(resource.name(), "default");
+    }
+
+    #[test]
+    fn workspace_resource_apply() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let mut config = {
+            let active = crate::read_active_config(&state).expect("state should be readable");
+            active.config.clone()
+        };
+
+        let resource =
+            dispatch_resource(workspace_manifest("ws-roundtrip", "workspace/ws-roundtrip"))
+                .expect("workspace dispatch should succeed");
+        assert_eq!(resource.apply(&mut config), ApplyResult::Created);
+
+        let loaded = WorkspaceResource::get_from(&config, "ws-roundtrip")
+            .expect("workspace should be present in config");
+        assert_eq!(loaded.spec.root_path, "workspace/ws-roundtrip");
+        assert_eq!(loaded.kind(), ResourceKind::Workspace);
+    }
+
+    #[test]
+    fn agent_resource_apply() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let mut config = {
+            let active = crate::read_active_config(&state).expect("state should be readable");
+            active.config.clone()
+        };
+
+        let resource = dispatch_resource(agent_manifest("agent-roundtrip", "cargo test"))
+            .expect("agent dispatch should succeed");
+        assert_eq!(resource.apply(&mut config), ApplyResult::Created);
+
+        let loaded = AgentResource::get_from(&config, "agent-roundtrip")
+            .expect("agent should be present in config");
+        assert_eq!(loaded.spec.templates.qa.as_deref(), Some("cargo test"));
+        assert_eq!(loaded.kind(), ResourceKind::Agent);
+    }
+
+    #[test]
+    fn agent_group_resource_roundtrip() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let mut config = {
+            let active = crate::read_active_config(&state).expect("state should be readable");
+            active.config.clone()
+        };
+
+        let resource = dispatch_resource(agent_group_manifest(
+            "group-roundtrip",
+            &["opencode", "claudecode"],
+        ))
+        .expect("agent group dispatch should succeed");
+        assert_eq!(resource.apply(&mut config), ApplyResult::Created);
+
+        let loaded = AgentGroupResource::get_from(&config, "group-roundtrip")
+            .expect("agent group should be present in config");
+        assert_eq!(loaded.spec.agents, vec!["opencode", "claudecode"]);
+        assert_eq!(loaded.kind(), ResourceKind::AgentGroup);
+    }
+
+    #[test]
+    fn workflow_resource_roundtrip() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let mut config = {
+            let active = crate::read_active_config(&state).expect("state should be readable");
+            active.config.clone()
+        };
+
+        let resource = dispatch_resource(workflow_manifest("wf-roundtrip", "opencode"))
+            .expect("workflow dispatch should succeed");
+        assert_eq!(resource.apply(&mut config), ApplyResult::Created);
+
+        let loaded = WorkflowResource::get_from(&config, "wf-roundtrip")
+            .expect("workflow should be present in config");
+        assert_eq!(loaded.spec.steps.len(), 1);
+        assert_eq!(loaded.spec.steps[0].step_type, "qa");
+        assert_eq!(loaded.spec.loop_policy.mode, "once");
+        assert_eq!(loaded.spec.loop_policy.max_cycles, Some(3));
+    }
+
+    #[test]
+    fn resource_to_yaml() {
+        let workspace = WorkspaceResource {
+            metadata: ResourceMetadata {
+                name: "yaml-roundtrip".to_string(),
+                labels: None,
+                annotations: None,
+            },
+            spec: WorkspaceSpec {
+                root_path: "workspace/yaml-roundtrip".to_string(),
+                qa_targets: vec!["docs/qa".to_string()],
+                ticket_dir: "docs/ticket".to_string(),
+            },
+        };
+
+        let yaml = workspace
+            .to_yaml()
+            .expect("workspace yaml should serialize");
+        assert!(yaml.contains("apiVersion: orchestrator.dev/v1"));
+        assert!(yaml.contains("kind: Workspace"));
+        assert!(yaml.contains("name: yaml-roundtrip"));
+        assert!(yaml.contains("root_path: workspace/yaml-roundtrip"));
     }
 
     #[test]

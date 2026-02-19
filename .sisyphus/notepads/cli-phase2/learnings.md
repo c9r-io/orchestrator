@@ -13,3 +13,8 @@
 - `Resource` is implemented on the dispatch enum only; `apply()` performs generic map upsert (`Created`/`Configured`/`Unchanged`) via serialization-equivalence, while deep per-kind business rules remain deferred to later tasks.
 - Added reversible bridge conversions between YAML specs and runtime config structs (including workflow loop/finalize/step prehook shape mapping) to support `apply()` and `get_from()` round-tripping.
 - Added focused tests in `resource.rs` for trait surface (`resource_trait_*`), apply result semantics (`apply_result_*`), and dispatch correctness (`resource_dispatch_*`) using `TestState` for isolated config snapshots.
+
+- Added direct `Resource` trait impls for `WorkspaceResource`, `AgentResource`, `AgentGroupResource`, and `WorkflowResource`, with `RegisteredResource` now delegating to per-kind impls for `validate/apply/to_yaml`.
+- Shared helpers (`validate_resource_name`, `metadata_with_name`, `manifest_yaml`) reduce duplicate k8s-manifest assembly and ensure each kind emits `apiVersion/kind/metadata/spec` YAML consistently.
+- Per-kind validation now checks required fields at the wrapper level: workspace path/ticket dir non-empty, agent has at least one non-empty template string, agent group has non-empty members, workflow has non-empty steps with non-empty `id`/`type`.
+- Added roundtrip tests for each kind (`workspace_resource_apply`, `agent_resource_apply`, `agent_group_resource_roundtrip`, `workflow_resource_roundtrip`) and a dedicated serialization test (`resource_to_yaml`) using `TestState` snapshots.
