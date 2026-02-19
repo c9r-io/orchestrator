@@ -1,4 +1,6 @@
-use crate::cli::{Cli, Commands, ConfigCommands, OutputFormat, TaskCommands, WorkspaceCommands};
+use crate::cli::{
+    Cli, Commands, ConfigCommands, DbCommands, OutputFormat, TaskCommands, WorkspaceCommands,
+};
 use crate::cli_types::OrchestratorResource;
 use crate::resource::{
     dispatch_resource, AgentGroupResource, AgentResource, RegisteredResource, Resource,
@@ -24,6 +26,7 @@ impl CliHandler {
             Commands::Task(cmd) => self.handle_task(cmd),
             Commands::Workspace(cmd) => self.handle_workspace(cmd),
             Commands::Config(cmd) => self.handle_config(cmd),
+            Commands::Db(cmd) => self.handle_db(cmd),
             Commands::Daemon => {
                 println!("Starting daemon mode (UI)... use --cli flag for CLI mode");
                 Ok(0)
@@ -285,6 +288,20 @@ impl CliHandler {
             ConfigCommands::ListAgents { output } => {
                 let active = crate::read_active_config(&self.state)?;
                 self.print_agents(&active.config.agents, *output)
+            }
+        }
+    }
+
+    fn handle_db(&self, cmd: &DbCommands) -> Result<i32> {
+        match cmd {
+            DbCommands::Reset { force } => {
+                if !force {
+                    eprintln!("Use --force to confirm database reset");
+                    return Ok(1);
+                }
+                crate::reset_db(&self.state)?;
+                println!("Database reset completed");
+                Ok(0)
             }
         }
     }

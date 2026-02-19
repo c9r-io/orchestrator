@@ -5377,6 +5377,18 @@ mod prehook_tests {
     }
 }
 
+fn reset_db(state: &InnerState) -> Result<()> {
+    let conn = open_conn(&state.db_path)?;
+    
+    // Clear tables in reverse dependency order: child tables before parent tables
+    conn.execute("DELETE FROM command_runs", [])?;
+    conn.execute("DELETE FROM events", [])?;
+    conn.execute("DELETE FROM task_items", [])?;
+    conn.execute("DELETE FROM tasks", [])?;
+    
+    Ok(())
+}
+
 fn main() {
     let cli = cli::Cli::parse();
 
@@ -5388,7 +5400,7 @@ fn main() {
         }
     };
 
-    if matches!(cli.command, cli::Commands::Task(_) | cli::Commands::Workspace(_) | cli::Commands::Config(_)) {
+    if matches!(cli.command, cli::Commands::Task(_) | cli::Commands::Workspace(_) | cli::Commands::Config(_) | cli::Commands::Db(_)) {
         let handler = cli_handler::CliHandler::new(state.inner.clone());
         match handler.execute(&cli) {
             Ok(code) => std::process::exit(code),

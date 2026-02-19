@@ -375,7 +375,7 @@ Wave 3 (edit + final integration):
 
 ---
 
-- [ ] 5. **Implement db reset command**
+- [x] 5. **Implement db reset command**
 
   **What to do**:
   - Add `Db` variant to Commands enum in cli.rs

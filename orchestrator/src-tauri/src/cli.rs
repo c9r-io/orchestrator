@@ -43,6 +43,10 @@ pub enum Commands {
     #[command(subcommand)]
     Config(ConfigCommands),
 
+    /// Manage database
+    #[command(subcommand)]
+    Db(DbCommands),
+
     /// Run in daemon mode (default, starts UI if available)
     #[command(alias = "serve")]
     Daemon,
@@ -218,6 +222,16 @@ pub enum ConfigCommands {
         /// Output format
         #[arg(short, long, default_value = "table")]
         output: OutputFormat,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum DbCommands {
+    /// Reset the database to initial state
+    Reset {
+        /// Force reset without confirmation
+        #[arg(short, long)]
+        force: bool,
     },
 }
 
