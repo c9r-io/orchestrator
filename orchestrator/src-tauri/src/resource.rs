@@ -957,3 +957,173 @@ mod tests {
         assert_eq!(updated.apply(&mut config), ApplyResult::Configured);
     }
 }
+
+#[test]
+fn parse_workflow_step_type_valid() {
+    assert_eq!(
+        parse_workflow_step_type("init_once").unwrap(),
+        WorkflowStepType::InitOnce
+    );
+    assert_eq!(
+        parse_workflow_step_type("qa").unwrap(),
+        WorkflowStepType::Qa
+    );
+    assert_eq!(
+        parse_workflow_step_type("ticket_scan").unwrap(),
+        WorkflowStepType::TicketScan
+    );
+    assert_eq!(
+        parse_workflow_step_type("fix").unwrap(),
+        WorkflowStepType::Fix
+    );
+    assert_eq!(
+        parse_workflow_step_type("retest").unwrap(),
+        WorkflowStepType::Retest
+    );
+}
+
+#[test]
+fn parse_workflow_step_type_invalid() {
+    let result = parse_workflow_step_type("unknown");
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("unknown workflow step type"));
+}
+
+#[test]
+fn parse_loop_mode_infinite() {
+    let mode = parse_loop_mode("infinite");
+    match mode {
+        LoopMode::Infinite => (), // pass
+        _ => panic!("expected Infinite"),
+    }
+}
+
+#[test]
+fn parse_loop_mode_default() {
+    let mode1 = parse_loop_mode("once");
+    let mode2 = parse_loop_mode("anything_else");
+    match (mode1, mode2) {
+        (LoopMode::Once, LoopMode::Once) => (), // pass
+        _ => panic!("expected Once for both"),
+    }
+}
+
+#[test]
+fn loop_mode_as_str_returns_correct_values() {
+    assert_eq!(loop_mode_as_str(&LoopMode::Once), "once");
+    assert_eq!(loop_mode_as_str(&LoopMode::Infinite), "infinite");
+}
+
+#[test]
+fn agent_validation_rejects_empty_templates() {
+    let agent = AgentResource {
+        metadata: ResourceMetadata {
+            name: "test-agent".to_string(),
+            labels: None,
+            annotations: None,
+        },
+        spec: AgentSpec {
+            templates: AgentTemplatesSpec {
+                init_once: None,
+                qa: None,
+                fix: None,
+                retest: None,
+                loop_guard: None,
+            },
+        },
+    };
+    let result = agent.validate();
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("at least one template"));
+}
+
+#[test]
+fn agent_group_validation_rejects_empty_list() {
+    let group = AgentGroupResource {
+        metadata: ResourceMetadata {
+            name: "test-group".to_string(),
+            labels: None,
+            annotations: None,
+        },
+        spec: AgentGroupSpec { agents: vec![] },
+    };
+    let result = group.validate();
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("cannot be empty"));
+}
+
+#[test]
+fn workflow_validation_rejects_empty_steps() {
+    let workflow = WorkflowResource {
+        metadata: ResourceMetadata {
+            name: "test-workflow".to_string(),
+            labels: None,
+            annotations: None,
+        },
+        spec: WorkflowSpec {
+            steps: vec![],
+            loop_policy: WorkflowLoopSpec {
+                mode: "once".to_string(),
+                max_cycles: None,
+            },
+            finalize: WorkflowFinalizeSpec { rules: vec![] },
+        },
+    };
+    let result = workflow.validate();
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("cannot be empty"));
+}
+
+#[test]
+fn workspace_to_yaml_includes_all_fields() {
+    let workspace = WorkspaceResource {
+        metadata: ResourceMetadata {
+            name: "full-workspace".to_string(),
+            labels: Some([("env".to_string(), "test".to_string())].into()),
+            annotations: Some([("desc".to_string(), "test workspace".to_string())].into()),
+        },
+        spec: WorkspaceSpec {
+            root_path: "/path/to/workspace".to_string(),
+            qa_targets: vec!["docs/qa".to_string(), "tests".to_string()],
+            ticket_dir: "tickets".to_string(),
+        },
+    };
+    let yaml = workspace.to_yaml().expect("should serialize");
+    assert!(yaml.contains("full-workspace"));
+    assert!(yaml.contains("/path/to/workspace"));
+    assert!(yaml.contains("docs/qa"));
+    assert!(yaml.contains("tickets"));
+}
+
+#[test]
+fn agent_to_yaml_includes_templates() {
+    let agent = AgentResource {
+        metadata: ResourceMetadata {
+            name: "full-agent".to_string(),
+            labels: None,
+            annotations: None,
+        },
+        spec: AgentSpec {
+            templates: AgentTemplatesSpec {
+                init_once: Some("init".to_string()),
+                qa: Some("test".to_string()),
+                fix: Some("fix".to_string()),
+                retest: Some("retest".to_string()),
+                loop_guard: Some("guard".to_string()),
+            },
+        },
+    };
+    let yaml = agent.to_yaml().expect("should serialize");
+    assert!(yaml.contains("full-agent"));
+    assert!(yaml.contains("init"));
+    assert!(yaml.contains("test"));
+    assert!(yaml.contains("fix"));
+    assert!(yaml.contains("retest"));
+    assert!(yaml.contains("guard"));
+}

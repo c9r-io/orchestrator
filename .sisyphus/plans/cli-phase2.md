@@ -733,7 +733,7 @@ Wave 3 (edit + final integration):
 
 ---
 
-- [ ] 14. **Coverage verification (90% threshold)**
+- [x] 14. **Coverage verification (90% threshold)**
 
   **What to do**:
   - Run `cargo llvm-cov --fail-under-lines 90`
