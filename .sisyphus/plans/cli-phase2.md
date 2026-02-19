@@ -205,7 +205,7 @@ Wave 3 (edit + final integration):
 
 ---
 
-- [ ] 2. **Define k8s-style YAML types**
+- [x] 2. **Define k8s-style YAML types**
 
   **What to do**:
   - Create `OrchestratorResource`, `ResourceMetadata`, `ResourceSpec` structs
