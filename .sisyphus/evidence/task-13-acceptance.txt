@@ -1,0 +1,29 @@
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 54 filtered out; finished in 0.00s
+
+
+running 10 tests
+test integration_tests::db_reset_clears_tasks_but_preserves_config ... ok
+test integration_tests::apply_dry_run_does_not_persist ... ok
+test integration_tests::edit_export_generates_valid_yaml ... ok
+test integration_tests::apply_creates_resource_and_persists ... ok
+test integration_tests::integration_all_commands_work_together ... ok
+test integration_tests::apply_edit_round_trip ... ok
+test integration_tests::apply_preserves_unmentioned_resources ... ok
+test integration_tests::multi_document_apply ... ok
+test integration_tests::multi_resource_apply_partial_failure ... ok
+test integration_tests::apply_updates_existing_resource ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 54 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.84s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

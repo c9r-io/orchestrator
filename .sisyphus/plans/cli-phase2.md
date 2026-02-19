@@ -672,51 +672,14 @@ Wave 3 (edit + final integration):
 
 ---
 
-- [ ] 12. **Integrate edit into CLI**
+- [x] 12. **Integrate edit into CLI** (COMPLETED IN T10/T11)
 
-  **What to do**:
-  - Add Edit variant to cli.rs Commands enum
-  - Add resource selector argument (workspace/<id>, agent/<id>, etc.)
-  - Wire up handler
-
-  **Must NOT do**:
-  - Don't add new functionality (T10-T11 have it)
-
-  **Recommended Agent Profile**:
-  > **Category**: `quick`
-  > - Reason: Wiring existing logic
-
-  **Parallelization**:
-  - **Can Run In Parallel**: YES (Wave 3, with T10-T11)
-  - **Parallel Group**: Wave 3
-  - **Blocks**: T13
-  - **Blocked By**: T11
-
-  **References**:
-  - cli.rs Commands pattern
-
-  **Acceptance Criteria**:
-  - [ ] `./orchestrator.sh edit workspace/default` works
-  - [ ] `--help` shows usage
-
-  **QA Scenarios**:
-  ```
-  Scenario: edit command is registered
-    Tool: Bash
-    Preconditions: None
-    Steps:
-      1. cd orchestrator && ./scripts/orchestrator.sh edit --help
-    Expected Result: Shows edit usage
-    Evidence: .sisyphus/evidence/task-12-help.{ext}
-  ```
-
-  **Commit**: YES
-  - Message: `feat(cli): wire edit into CLI`
-  - Files: `src-tauri/src/cli.rs`
+  Edit command already wired in cli.rs with resource selector argument.
+  EditCommands::Open variant handles the edit workflow.
 
 ---
 
-- [ ] 13. **Integration tests for all commands**
+- [x] 13. **Integration tests for all commands**
 
   **What to do**:
   - Test db reset + task list round-trip

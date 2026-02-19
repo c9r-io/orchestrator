@@ -723,13 +723,12 @@ fn is_ctrl_c_exit(status: &ExitStatus) -> bool {
     #[cfg(unix)]
     {
         use std::os::unix::process::ExitStatusExt;
-        return status.signal() == Some(2);
+        if status.signal() == Some(2) {
+            return true;
+        }
     }
 
-    #[cfg(not(unix))]
-    {
-        false
-    }
+    false
 }
 
 #[cfg(test)]
@@ -767,15 +766,15 @@ mod tests {
         let previous = std::env::var("EDITOR").ok();
 
         match editor {
-            Some(value) => std::env::set_var("EDITOR", value),
-            None => std::env::remove_var("EDITOR"),
+            Some(value) => unsafe { std::env::set_var("EDITOR", value) },
+            None => unsafe { std::env::remove_var("EDITOR") },
         }
 
         let result = f();
 
         match previous {
-            Some(value) => std::env::set_var("EDITOR", value),
-            None => std::env::remove_var("EDITOR"),
+            Some(value) => unsafe { std::env::set_var("EDITOR", value) },
+            None => unsafe { std::env::remove_var("EDITOR") },
         }
 
         result

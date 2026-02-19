@@ -1,0 +1,113 @@
+warning: methods `with_agent` and `with_workflow` are never used
+  --> src/test_utils.rs:60:19
+   |
+11 | impl TestState {
+   | -------------- methods in this implementation
+...
+60 |     pub(crate) fn with_agent(mut self, name: impl Into<String>, config: AgentConfig) -> Self {
+   |                   ^^^^^^^^^^
+...
+76 |     pub(crate) fn with_workflow(mut self, name: impl Into<String>, config: WorkflowConfig) -> Self {
+   |                   ^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `agent-orchestrator` (bin "agent-orchestrator" test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s
+     Running unittests src/lib.rs (target/debug/deps/agent_orchestrator-6680424bae983e23)
+
+running 9 tests
+test qa_utils::tests::new_ticket_diff_returns_empty_when_no_new_items ... ok
+test qa_utils::tests::new_ticket_diff_keeps_duplicates_if_after_has_duplicates ... ok
+test qa_utils::tests::render_template_handles_empty_ticket_paths ... ok
+test qa_utils::tests::new_ticket_diff_returns_only_new_items_with_original_order ... ok
+test qa_utils::tests::render_template_replaces_placeholders ... ok
+test qa_utils::tests::validate_workspace_rel_path_accepts_normal_relative_paths ... ok
+test qa_utils::tests::validate_workspace_rel_path_rejects_absolute_path ... ok
+test qa_utils::tests::validate_workspace_rel_path_rejects_empty_input ... ok
+test qa_utils::tests::validate_workspace_rel_path_rejects_parent_segments ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/agent_orchestrator-dcaed9580ff2cf3b)
+
+running 54 tests
+test cli::tests::parse_apply_defaults_dry_run_to_false ... ok
+test cli::tests::parse_edit_export_command ... ok
+test cli::tests::parse_apply_file_and_dry_run_flags ... ok
+test cli::tests::parse_edit_open_command ... ok
+test cli::tests::parse_edit_export_with_agent_selector ... ok
+test cli_handler::tests::apply_dry_run_does_not_persist_created_resource ... ok
+test cli_handler::tests::edit_export_returns_error_for_missing_resource ... ok
+test cli_handler::tests::apply_dry_run_returns_one_on_invalid_resource ... ok
+test cli_handler::tests::edit_export_returns_temp_file_path ... ok
+test cli_handler::tests::apply_create_non_dry_run_creates_resource ... ok
+test cli_handler::tests::parse_resource_selector_agent_opencode ... ok
+test cli_handler::tests::parse_resource_selector_rejects_missing_kind ... ok
+test cli_handler::tests::parse_resource_selector_rejects_missing_name ... ok
+test cli_handler::tests::parse_resource_selector_rejects_no_separator ... ok
+test cli_handler::tests::parse_resource_selector_with_slash_in_name_uses_first_slash_only ... ok
+test cli_handler::tests::parse_resource_selector_workspace_default ... ok
+test cli_types::tests::invalid_apiversion ... ok
+test cli_types::tests::parse_agent_group_yaml ... ok
+test cli_types::tests::parse_agent_yaml ... ok
+test cli_types::tests::parse_workflow_yaml ... ok
+test cli_types::tests::parse_workspace_yaml ... ok
+test cli_types::tests::resource_with_annotations ... ok
+test prehook_tests::finalize_rules_mark_unresolved_on_fix_failure ... ok
+test cli_handler::tests::apply_persist_non_dry_run_writes_new_config_version ... ok
+test prehook_tests::normalize_rel_path_for_match_strips_noise_and_blocks_parent_segments ... ok
+test prehook_tests::parse_ticket_preview_and_active_status_rules_work ... ok
+test prehook_tests::simulate_prehook_rejects_invalid_expression ... ok
+test prehook_tests::simulate_prehook_uses_runtime_evaluator ... ok
+test prehook_tests::validate_step_prehook_accepts_valid_cel ... ok
+test prehook_tests::validate_step_prehook_rejects_empty_expression ... ok
+test prehook_tests::validate_step_prehook_rejects_invalid_cel_expression ... ok
+test prehook_tests::finalize_rules_mark_verified_after_clean_retest ... ok
+test cli_handler::tests::multi_document_apply_dry_run_parses_all_documents ... ok
+test cli_handler::tests::apply_update_non_dry_run_updates_existing_resource ... ok
+test resource::tests::agent_group_resource_roundtrip ... ok
+test resource::tests::agent_resource_apply ... ok
+test resource::tests::resource_dispatch_maps_workspace_manifest ... ok
+test resource::tests::resource_dispatch_rejects_mismatched_spec_kind ... ok
+test resource::tests::resource_to_yaml ... ok
+test resource::tests::apply_result_configured_when_resource_changes ... ok
+test resource::tests::resource_trait_to_yaml_serializes_manifest_shape ... ok
+test resource::tests::resource_trait_validate_rejects_empty_name ... ok
+test resource::tests::apply_result_created_when_missing ... ok
+test resource::tests::apply_result_unchanged_for_identical_resource ... ok
+test resource::tests::resource_trait_get_from_reads_existing_config ... ok
+test resource::tests::workflow_resource_roundtrip ... ok
+test resource::tests::workspace_resource_apply ... ok
+test test_utils::tests::test_state_cleanup ... ok
+test test_utils::tests::test_state_compiles ... ok
+test test_utils::tests::test_state_creates_workspace ... ok
+test cli_handler::tests::edit_open_applies_valid_edit ... ok
+test cli_handler::tests::edit_validation_reopens_until_manifest_is_valid ... ok
+test cli_handler::tests::edit_open_handles_ctrl_c_gracefully ... ok
+test cli_handler::tests::edit_open_requires_editor_env ... ok
+
+test result: ok. 54 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.12s
+
+     Running tests/integration_test.rs (target/debug/deps/integration_test-1f0b1cf5274c8a4b)
+
+running 10 tests
+test integration_tests::db_reset_clears_tasks_but_preserves_config ... ok
+test integration_tests::apply_creates_resource_and_persists ... ok
+test integration_tests::apply_dry_run_does_not_persist ... ok
+test integration_tests::edit_export_generates_valid_yaml ... ok
+test integration_tests::integration_all_commands_work_together ... ok
+test integration_tests::apply_preserves_unmentioned_resources ... ok
+test integration_tests::apply_updates_existing_resource ... ok
+test integration_tests::apply_edit_round_trip ... ok
+test integration_tests::multi_document_apply ... ok
+test integration_tests::multi_resource_apply_partial_failure ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests agent_orchestrator
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -29,3 +29,11 @@
 - Task7 correction: handle_apply now clones active config, applies validated manifests, prints workspace/agent style created/configured messages, and persists merged config only in non-dry-run mode after all documents pass validation.
 - Task7 correction: apply_resource checks existence via per-kind get_from before merge, then returns Created vs Configured classification while still calling merge logic on the working config.
 - Task7 correction: added apply_create/apply_update/apply_persist tests covering create flow, update flow, and persistence version behavior (dry-run no version bump, non-dry-run version bump).
+
+- T11:  must drop active-config read lock before persist/reload to avoid deadlock in tests and runtime loop.
+- T11: Mocking  is reliable with executable shell scripts plus an env mutex to serialize  mutation across parallel tests.
+- T11: Re-open loop validated by first writing invalid manifest then valid manifest; assert invocation count to prove retry path.
+
+- T11: edit open must drop active-config read lock before persist/reload to avoid deadlock in tests and runtime loop.
+- T11: Mocking $EDITOR is reliable with executable shell scripts plus an env mutex to serialize EDITOR mutation across parallel tests.
+- T11: Re-open loop validated by first writing invalid manifest then valid manifest; assert invocation count to prove retry path.
