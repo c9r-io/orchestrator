@@ -23,6 +23,14 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
+    Apply {
+        #[arg(short = 'f', long = "file")]
+        file: String,
+
+        #[arg(long)]
+        dry_run: bool,
+    },
+
     /// Manage tasks
     #[command(subcommand)]
     Task(TaskCommands),
@@ -252,6 +260,38 @@ impl From<&Cli> for LegacyCliOptions {
             name: None,
             goal: None,
             target_files,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn parse_apply_file_and_dry_run_flags() {
+        let cli = Cli::parse_from(["orchestrator", "apply", "-f", "resources.yaml", "--dry-run"]);
+
+        match cli.command {
+            Commands::Apply { file, dry_run } => {
+                assert_eq!(file, "resources.yaml");
+                assert!(dry_run);
+            }
+            _ => panic!("expected apply command"),
+        }
+    }
+
+    #[test]
+    fn parse_apply_defaults_dry_run_to_false() {
+        let cli = Cli::parse_from(["orchestrator", "apply", "-f", "resources.yaml"]);
+
+        match cli.command {
+            Commands::Apply { file, dry_run } => {
+                assert_eq!(file, "resources.yaml");
+                assert!(!dry_run);
+            }
+            _ => panic!("expected apply command"),
         }
     }
 }

@@ -1,0 +1,3 @@
+warning: methods `apply` and `to_yaml` are never used
+warning: function `apply_to_map` is never used
+warning: `agent-orchestrator` (bin "agent-orchestrator") generated 16 warnings (run `cargo fix --bin "agent-orchestrator" -p agent-orchestrator` to apply 3 suggestions)

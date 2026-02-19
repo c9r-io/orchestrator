@@ -18,3 +18,8 @@
 - Shared helpers (`validate_resource_name`, `metadata_with_name`, `manifest_yaml`) reduce duplicate k8s-manifest assembly and ensure each kind emits `apiVersion/kind/metadata/spec` YAML consistently.
 - Per-kind validation now checks required fields at the wrapper level: workspace path/ticket dir non-empty, agent has at least one non-empty template string, agent group has non-empty members, workflow has non-empty steps with non-empty `id`/`type`.
 - Added roundtrip tests for each kind (`workspace_resource_apply`, `agent_resource_apply`, `agent_group_resource_roundtrip`, `workflow_resource_roundtrip`) and a dedicated serialization test (`resource_to_yaml`) using `TestState` snapshots.
+
+- Added top-level CLI command parsing for `apply -f <file> [--dry-run]` in `cli.rs`, including defaults (`dry_run = false`) and explicit `-f/--file` manifest targeting.
+- Implemented `CliHandler::handle_apply` to parse YAML streams with `serde_yaml::Deserializer`, skip null docs, validate `apiVersion`, dispatch to `RegisteredResource`, run `resource.validate()`, and print kubectl-style dry-run messages without persistence.
+- Used kind-specific `Resource::get_from` checks (`WorkspaceResource`, `AgentResource`, `AgentGroupResource`, `WorkflowResource`) against active config to classify each manifest as `created` vs `configured` during dry-run preview.
+- Added CLI handler tests for `apply_dry_run` exit behavior and non-persistence guarantees, plus `multi_document` coverage proving `---` manifests are parsed and processed document-by-document.

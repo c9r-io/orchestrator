@@ -1,6 +1,12 @@
 use crate::cli::{Cli, Commands, ConfigCommands, OutputFormat, TaskCommands, WorkspaceCommands};
+use crate::cli_types::OrchestratorResource;
+use crate::resource::{
+    dispatch_resource, AgentGroupResource, AgentResource, RegisteredResource, Resource,
+    WorkflowResource, WorkspaceResource,
+};
 use crate::InnerState;
 use anyhow::{Context, Result};
+use serde::Deserialize;
 use std::sync::Arc;
 
 pub struct CliHandler {
@@ -14,6 +20,7 @@ impl CliHandler {
 
     pub fn execute(&self, cli: &Cli) -> Result<i32> {
         match &cli.command {
+            Commands::Apply { file, dry_run } => self.handle_apply(file, *dry_run),
             Commands::Task(cmd) => self.handle_task(cmd),
             Commands::Workspace(cmd) => self.handle_workspace(cmd),
             Commands::Config(cmd) => self.handle_config(cmd),
@@ -22,6 +29,72 @@ impl CliHandler {
                 Ok(0)
             }
         }
+    }
+
+    fn handle_apply(&self, file: &str, dry_run: bool) -> Result<i32> {
+        let content = std::fs::read_to_string(file)
+            .with_context(|| format!("failed to read manifest file: {}", file))?;
+        let resources = Self::parse_resources_from_yaml(&content)?;
+        let active = crate::read_active_config(&self.state)?;
+
+        let mut has_errors = false;
+        for (index, manifest) in resources.into_iter().enumerate() {
+            let resource = match manifest.validate_version() {
+                Ok(()) => manifest,
+                Err(error) => {
+                    eprintln!("document {}: {}", index + 1, error);
+                    has_errors = true;
+                    continue;
+                }
+            };
+
+            let registered = match dispatch_resource(resource) {
+                Ok(resource) => resource,
+                Err(error) => {
+                    eprintln!("document {}: {}", index + 1, error);
+                    has_errors = true;
+                    continue;
+                }
+            };
+
+            if let Err(error) = registered.validate() {
+                eprintln!(
+                    "{} / {} invalid: {}",
+                    kind_as_str(registered.kind()),
+                    registered.name(),
+                    error
+                );
+                has_errors = true;
+                continue;
+            }
+
+            let action = if self.resource_exists(&active.config, &registered) {
+                "configured"
+            } else {
+                "created"
+            };
+
+            if dry_run {
+                println!(
+                    "{}/{} would be {} (dry run)",
+                    kind_as_str(registered.kind()),
+                    registered.name(),
+                    action
+                );
+            } else {
+                println!(
+                    "{}/{} would be {}",
+                    kind_as_str(registered.kind()),
+                    registered.name(),
+                    action
+                );
+            }
+        }
+
+        if has_errors {
+            return Ok(1);
+        }
+        Ok(0)
     }
 
     fn handle_task(&self, cmd: &TaskCommands) -> Result<i32> {
@@ -212,6 +285,40 @@ impl CliHandler {
             ConfigCommands::ListAgents { output } => {
                 let active = crate::read_active_config(&self.state)?;
                 self.print_agents(&active.config.agents, *output)
+            }
+        }
+    }
+
+    fn parse_resources_from_yaml(content: &str) -> Result<Vec<OrchestratorResource>> {
+        let mut resources = Vec::new();
+        for document in serde_yaml::Deserializer::from_str(content) {
+            let value = serde_yaml::Value::deserialize(document)?;
+            if value.is_null() {
+                continue;
+            }
+            let resource = serde_yaml::from_value::<OrchestratorResource>(value)?;
+            resources.push(resource);
+        }
+        Ok(resources)
+    }
+
+    fn resource_exists(
+        &self,
+        config: &crate::OrchestratorConfig,
+        resource: &RegisteredResource,
+    ) -> bool {
+        match resource {
+            RegisteredResource::Workspace(current) => {
+                WorkspaceResource::get_from(config, current.name()).is_some()
+            }
+            RegisteredResource::Agent(current) => {
+                AgentResource::get_from(config, current.name()).is_some()
+            }
+            RegisteredResource::AgentGroup(current) => {
+                AgentGroupResource::get_from(config, current.name()).is_some()
+            }
+            RegisteredResource::Workflow(current) => {
+                WorkflowResource::get_from(config, current.name()).is_some()
             }
         }
     }
@@ -407,5 +514,154 @@ impl CliHandler {
             }
         }
         Ok(0)
+    }
+}
+
+fn kind_as_str(kind: crate::cli_types::ResourceKind) -> &'static str {
+    match kind {
+        crate::cli_types::ResourceKind::Workspace => "workspace",
+        crate::cli_types::ResourceKind::Agent => "agent",
+        crate::cli_types::ResourceKind::AgentGroup => "agentgroup",
+        crate::cli_types::ResourceKind::Workflow => "workflow",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::TestState;
+
+    fn write_manifest(path: &std::path::Path, content: &str) {
+        std::fs::write(path, content).expect("manifest should be writable");
+    }
+
+    #[test]
+    fn apply_dry_run_does_not_persist_created_resource() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state.clone());
+        let manifest_path = fixture.temp_root().join("apply-created.yaml");
+
+        write_manifest(
+            &manifest_path,
+            r#"
+apiVersion: orchestrator.dev/v1
+kind: Workspace
+metadata:
+  name: dry-run-created
+spec:
+  root_path: workspace/dry-run-created
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+"#,
+        );
+
+        let cli = Cli {
+            command: Commands::Apply {
+                file: manifest_path.display().to_string(),
+                dry_run: true,
+            },
+            config: None,
+            verbose: false,
+        };
+
+        let code = handler.execute(&cli).expect("dry-run should succeed");
+        assert_eq!(code, 0);
+
+        let active = crate::read_active_config(&state).expect("config should be readable");
+        assert!(!active.config.workspaces.contains_key("dry-run-created"));
+    }
+
+    #[test]
+    fn apply_dry_run_returns_one_on_invalid_resource() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state.clone());
+        let manifest_path = fixture.temp_root().join("apply-invalid.yaml");
+
+        write_manifest(
+            &manifest_path,
+            r#"
+apiVersion: orchestrator.dev/v1
+kind: Workspace
+metadata:
+  name: invalid-workspace
+spec:
+  root_path: ""
+  qa_targets: []
+  ticket_dir: docs/ticket
+"#,
+        );
+
+        let cli = Cli {
+            command: Commands::Apply {
+                file: manifest_path.display().to_string(),
+                dry_run: true,
+            },
+            config: None,
+            verbose: false,
+        };
+
+        let code = handler
+            .execute(&cli)
+            .expect("invalid dry-run should still return exit code");
+        assert_eq!(code, 1);
+    }
+
+    #[test]
+    fn multi_document_apply_dry_run_parses_all_documents() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state.clone());
+        let manifest_path = fixture.temp_root().join("apply-multi.yaml");
+
+        write_manifest(
+            &manifest_path,
+            r#"
+apiVersion: orchestrator.dev/v1
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: workspace/default
+  qa_targets:
+    - docs/qa
+    - docs/security
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v1
+kind: Workspace
+metadata:
+  name: dry-run-multi
+spec:
+  root_path: workspace/dry-run-multi
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+"#,
+        );
+
+        let parsed = CliHandler::parse_resources_from_yaml(
+            &std::fs::read_to_string(&manifest_path).expect("manifest should be readable"),
+        )
+        .expect("multi-document parsing should succeed");
+        assert_eq!(parsed.len(), 2);
+
+        let cli = Cli {
+            command: Commands::Apply {
+                file: manifest_path.display().to_string(),
+                dry_run: true,
+            },
+            config: None,
+            verbose: false,
+        };
+
+        let code = handler.execute(&cli).expect("dry-run should succeed");
+        assert_eq!(code, 0);
+
+        let active = crate::read_active_config(&state).expect("config should be readable");
+        assert!(!active.config.workspaces.contains_key("dry-run-multi"));
+        assert!(active.config.workspaces.contains_key("default"));
     }
 }

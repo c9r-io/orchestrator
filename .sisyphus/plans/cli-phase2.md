@@ -444,7 +444,7 @@ Wave 3 (edit + final integration):
 
 ---
 
-- [ ] 6. **Implement apply --dry-run**
+- [x] 6. **Implement apply --dry-run**
 
   **What to do**:
   - Add Apply variant to Commands enum
