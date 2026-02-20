@@ -171,11 +171,11 @@ impl CliHandler {
                         }
                         OutputFormat::Table => {
                             let templates: Vec<&str> = [
-                                agent.templates.init_once.as_deref(),
-                                agent.templates.qa.as_deref(),
-                                agent.templates.fix.as_deref(),
-                                agent.templates.retest.as_deref(),
-                                agent.templates.loop_guard.as_deref(),
+                                agent.templates.get("init_once").map(|s| s.as_str()),
+                                agent.templates.get("qa").map(|s| s.as_str()),
+                                agent.templates.get("fix").map(|s| s.as_str()),
+                                agent.templates.get("retest").map(|s| s.as_str()),
+                                agent.templates.get("loop_guard").map(|s| s.as_str()),
                             ]
                             .into_iter()
                             .flatten()
@@ -250,11 +250,11 @@ impl CliHandler {
                         }
                         OutputFormat::Table => {
                             let templates: Vec<&str> = [
-                                agent.templates.init_once.as_deref(),
-                                agent.templates.qa.as_deref(),
-                                agent.templates.fix.as_deref(),
-                                agent.templates.retest.as_deref(),
-                                agent.templates.loop_guard.as_deref(),
+                                agent.templates.get("init_once").map(|s| s.as_str()),
+                                agent.templates.get("qa").map(|s| s.as_str()),
+                                agent.templates.get("fix").map(|s| s.as_str()),
+                                agent.templates.get("retest").map(|s| s.as_str()),
+                                agent.templates.get("loop_guard").map(|s| s.as_str()),
                             ]
                             .into_iter()
                             .flatten()
@@ -390,13 +390,14 @@ impl CliHandler {
                     println!("Use --force to confirm deletion of task {}", task_id);
                     return Ok(0);
                 }
+                let resolved_id = crate::resolve_task_id(&self.state, task_id)?;
                 let rt = tokio::runtime::Runtime::new()?;
                 rt.block_on(crate::stop_task_runtime_for_delete(
                     self.state.clone(),
-                    task_id,
+                    &resolved_id,
                 ))?;
-                crate::delete_task_impl(&self.state, task_id)?;
-                println!("Task deleted: {}", task_id);
+                crate::delete_task_impl(&self.state, &resolved_id)?;
+                println!("Task deleted: {}", resolved_id);
                 Ok(0)
             }
             TaskCommands::Retry { task_item_id } => {
@@ -798,7 +799,7 @@ impl CliHandler {
                         .steps
                         .iter()
                         .filter(|s| s.enabled)
-                        .map(|s| s.step_type.as_str())
+                        .map(|s| s.id.as_str())
                         .collect();
                     println!("{:<20} {:<30}", id, steps.join(", "));
                 }
@@ -820,24 +821,10 @@ impl CliHandler {
                 println!("{}", serde_yaml::to_string(agents)?);
             }
             OutputFormat::Table => {
-                println!("{:<20} {:<20}", "ID", "PHASES");
+                println!("{:<20} {:<20}", "ID", "CAPABILITIES");
                 println!("{:-<20} {:-<20}", "", "");
                 for (id, cfg) in agents {
-                    let mut phases = Vec::new();
-                    let t = &cfg.templates;
-                    if t.init_once.is_some() {
-                        phases.push("init_once");
-                    }
-                    if t.qa.is_some() {
-                        phases.push("qa");
-                    }
-                    if t.fix.is_some() {
-                        phases.push("fix");
-                    }
-                    if t.retest.is_some() {
-                        phases.push("retest");
-                    }
-                    println!("{:<20} {:<20}", id, phases.join(", "));
+                    println!("{:<20} {:<20}", id, cfg.capabilities.join(", "));
                 }
             }
         }

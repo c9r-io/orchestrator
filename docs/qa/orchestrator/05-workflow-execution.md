@@ -17,6 +17,12 @@ This document tests complete workflow execution using mock bash agents. The orch
 ```yaml
 agents:
   mock_echo:
+    metadata:
+      name: mock_echo
+    capabilities:
+    - qa
+    - fix
+    - retest
     templates:
       qa: "echo 'qa-phase: {rel_path}'"
       fix: "echo 'fix-phase: {ticket_paths}'"
@@ -27,16 +33,24 @@ agents:
 ```yaml
 agents:
   mock_sleep:
+    metadata:
+      name: mock_sleep
+    capabilities:
+    - qa
+    - fix
     templates:
       qa: "sleep 0.5 && echo 'qa-complete'"
       fix: "sleep 0.5 && echo 'fix-complete'"
-      retest: "sleep 0.5 && echo 'retest-complete'"
 ```
 
 #### Multi-line Output Agent
 ```yaml
 agents:
   mock_multiline:
+    metadata:
+      name: mock_multiline
+    capabilities:
+    - qa
     templates:
       qa: |
         echo "=== QA Started ==="
@@ -48,6 +62,11 @@ agents:
 ```yaml
 agents:
   mock_fail:
+    metadata:
+      name: mock_fail
+    capabilities:
+    - qa
+    - fix
     templates:
       qa: "echo 'QA failed' && exit 1"
       fix: "echo 'Fix attempted' && exit 0"
@@ -57,6 +76,11 @@ agents:
 ```yaml
 agents:
   mock_writer:
+    metadata:
+      name: mock_writer
+    capabilities:
+    - qa
+    - fix
     templates:
       qa: "echo 'result: {rel_path}' > /tmp/qa-result.txt"
       fix: "echo 'fixed: {rel_path}' > /tmp/fix-result.txt"
@@ -66,6 +90,10 @@ agents:
 ```yaml
 agents:
   mock_conditional:
+    metadata:
+      name: mock_conditional
+    capabilities:
+    - qa
     templates:
       qa: |
         if [ -f /tmp/skip_qa ]; then
@@ -79,8 +107,11 @@ agents:
 ```yaml
 agents:
   mock_loop_guard:
+    metadata:
+      name: mock_loop_guard
+    capabilities: []
     templates:
-      loop_guard: |
+      default: |
         if [ {unresolved_items} -eq 0 ]; then
           echo "stop"
         else
@@ -254,9 +285,15 @@ agents:
      infinite_qa:
        steps:
          - id: qa
-           type: qa
+           required_capability: qa
            enabled: true
+           repeatable: true
            agent_group_id: qa_group
+         - id: check_done
+           builtin: loop_guard
+           enabled: true
+           is_guard: true
+           repeatable: true
        loop:
          mode: infinite
          guard:

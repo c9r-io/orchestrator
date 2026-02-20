@@ -1,5 +1,68 @@
 # AI Dev Platform Index
 
+## Project Overview
+
+This project is an **Agent Orchestrator** (code in `orchestrator/` folder) designed to provide both **workflow orchestration** and **agent orchestration** capabilities in a unified platform.
+
+### Core Capabilities
+
+- **Workflow Orchestration**: Define, manage, and execute complex multi-step workflows with built-in state management, error handling, and retry mechanisms
+- **Agent Orchestration**: Coordinate multiple specialized agents to work together on complex tasks, with intelligent task delegation and result aggregation
+
+### Architecture
+
+The orchestrator combines workflow engines with agent coordination to enable:
+- **Capability-driven orchestration**: Steps declare required capabilities, agents declare supported capabilities
+- **Dynamic agent selection**: Based on capability matching and preference scoring
+- **Declarative workflow definitions**: Steps can be builtin (`init_once`, `ticket_scan`, `loop_guard`) or capability-based
+- **Repeatable steps**: Control whether steps execute in every loop cycle
+- **Guard steps**: Steps that can terminate the workflow loop based on their output
+- Built-in observability and debugging (real-time logs, event tracking)
+
+### Config Format
+
+```yaml
+agents:
+  opencode:
+    metadata:
+      name: opencode
+    capabilities:
+    - qa
+    - fix
+    - retest
+    templates:
+      qa: "opencode run {rel_path}"
+      fix: "opencode run {ticket_paths}"
+
+workflows:
+  my_workflow:
+    steps:
+    - id: init
+      builtin: init_once
+      repeatable: false
+    - id: qa_test
+      required_capability: qa
+      repeatable: true
+      agent_group_id: qa_group
+    - id: check_done
+      builtin: loop_guard
+      is_guard: true
+      repeatable: true
+    loop:
+      mode: infinite
+      guard:
+        stop_when_no_unresolved: true
+```
+
+### Tech Stack
+
+- **Backend**: Tauri (Rust)
+- **Frontend**: React + TypeScript
+- **Database**: SQLite for task/item lifecycle tracking
+- **CLI**: kubectl-style interface for task management
+
+---
+
 This repo is an AI-first development scaffold. When a task touches architecture or UI design language, consult the corresponding docs before making decisions or changes:
 
 - Architecture reference: `docs/architecture.md`

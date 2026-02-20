@@ -139,16 +139,27 @@ export interface WorkspaceConfig {
   ticket_dir: string;
 }
 
-export interface AgentTemplates {
-  init_once?: string;
-  qa?: string;
-  fix?: string;
-  retest?: string;
-  loop_guard?: string;
+export type CostPreference = 'performance' | 'quality' | 'balance';
+
+export interface AgentMetadata {
+  name: string;
+  description: string;
+  version?: string;
+  cost?: number;
+}
+
+export interface AgentPreference {
+  success_rate?: number;
+  avg_duration_ms?: number;
+  total_runs: number;
+  last_used_at?: string;
 }
 
 export interface AgentConfig {
-  templates: AgentTemplates;
+  metadata: AgentMetadata;
+  capabilities: string[];
+  templates: Record<string, string>;
+  preference: AgentPreference;
 }
 
 export interface AgentGroupConfig {
@@ -205,8 +216,14 @@ export type WorkflowLoopMode = 'once' | 'infinite';
 
 export interface WorkflowStepConfig {
   id: string;
-  type: WorkflowStepType;
+  description?: string;
+  type?: WorkflowStepType;
+  required_capability?: string;
+  builtin?: string;
   enabled: boolean;
+  repeatable: boolean;
+  is_guard: boolean;
+  cost_preference?: CostPreference;
   agent_group_id?: string;
   prehook?: StepPrehookConfig;
 }

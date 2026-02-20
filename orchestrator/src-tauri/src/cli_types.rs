@@ -104,6 +104,26 @@ pub struct WorkspaceSpec {
 pub struct AgentSpec {
     /// Templates for each workflow phase
     pub templates: AgentTemplatesSpec,
+
+    /// Agent capabilities (e.g., qa, fix, retest)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<Vec<String>>,
+
+    /// Agent metadata (cost, description)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<AgentMetadataSpec>,
+}
+
+/// Agent metadata specification.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentMetadataSpec {
+    /// Agent cost tier (0-255)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost: Option<u8>,
+
+    /// Agent description
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 /// Agent command templates for different workflow phases.

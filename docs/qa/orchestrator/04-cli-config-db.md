@@ -37,32 +37,37 @@ Entry points:
      workspace: default
      workflow: qa_only
    workspaces:
-     default:
-       root_path: /path/to/project
-       qa_targets:
-         - docs/qa
-       ticket_dir: docs/ticket
-   agents:
-     mock:
-       templates:
-         qa: "echo 'test'"
-   agent_groups:
-     test_group:
-       agents:
-         - mock
-   workflows:
-     qa_only:
-       steps:
-         - id: qa
-           type: qa
-           enabled: true
-           agent_group_id: test_group
-       loop:
-         mode: once
-       finalize:
-         rules: []
-   EOF
-   ```
+      default:
+        root_path: /path/to/project
+        qa_targets:
+          - docs/qa
+        ticket_dir: docs/ticket
+    agents:
+      mock:
+        metadata:
+          name: mock
+        capabilities:
+        - qa
+        templates:
+          qa: "echo 'test'"
+    agent_groups:
+      test_group:
+        agents:
+          - mock
+    workflows:
+      qa_only:
+        steps:
+          - id: qa
+            required_capability: qa
+            enabled: true
+            repeatable: false
+            agent_group_id: test_group
+        loop:
+          mode: once
+        finalize:
+          rules: []
+    EOF
+    ```
 
 2. Apply configuration:
    ```bash
@@ -132,34 +137,39 @@ Entry points:
      workspace: default
      workflow: qa_only
    workspaces:
-     default:
-       root_path: /path/to/project
-       qa_targets:
-         - docs/qa
-       ticket_dir: docs/ticket
-     new-workspace:
-       root_path: /path/to/new
-       qa_targets:
-         - docs/qa
-       ticket_dir: docs/ticket
-   agents:
-     mock:
-       templates:
-         qa: "echo test"
-   agent_groups: {}
-   workflows:
-     qa_only:
-       steps:
-         - id: qa
-           type: qa
-           enabled: false
-       loop:
-         mode: once
-       finalize:
-         rules: []
-   EOF
-   orchestrator config set /tmp/add-workspace.yaml
-   ```
+      default:
+        root_path: /path/to/project
+        qa_targets:
+          - docs/qa
+        ticket_dir: docs/ticket
+      new-workspace:
+        root_path: /path/to/new
+        qa_targets:
+          - docs/qa
+        ticket_dir: docs/ticket
+    agents:
+      mock:
+        metadata:
+          name: mock
+        capabilities:
+        - qa
+        templates:
+          qa: "echo test"
+    agent_groups: {}
+    workflows:
+      qa_only:
+        steps:
+          - id: qa
+            required_capability: qa
+            enabled: false
+            repeatable: false
+        loop:
+          mode: once
+        finalize:
+          rules: []
+    EOF
+    orchestrator config set /tmp/add-workspace.yaml
+    ```
 
 2. Verify new workspace:
    ```bash

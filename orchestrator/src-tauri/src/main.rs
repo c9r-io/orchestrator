@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod capability;
 mod cli;
 mod cli_handler;
 mod cli_types;
@@ -7,11 +8,11 @@ mod resource;
 #[cfg(test)]
 mod test_utils;
 
+use agent_orchestrator::qa_utils::{new_ticket_diff, render_template, validate_workspace_rel_path};
 use anyhow::{Context, Result};
-use clap::Parser;
 use cel_interpreter::{Context as CelContext, Program, Value as CelValue};
 use chrono::Utc;
-use agent_orchestrator::qa_utils::{new_ticket_diff, render_template, validate_workspace_rel_path};
+use clap::Parser;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -64,29 +65,66 @@ struct WorkspaceConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct AgentConfig {
-    templates: AgentTemplates,
+struct AgentMetadata {
+    name: String,
+    description: String,
+    version: Option<String>,
+    cost: Option<u8>,
+}
+
+impl Default for AgentMetadata {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            description: String::new(),
+            version: None,
+            cost: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct AgentPreference {
+    success_rate: Option<f32>,
+    avg_duration_ms: Option<u32>,
+    total_runs: u32,
+    last_used_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct AgentTemplates {
-    init_once: Option<String>,
-    qa: Option<String>,
-    fix: Option<String>,
-    retest: Option<String>,
-    loop_guard: Option<String>,
+struct AgentConfig {
+    #[serde(default)]
+    metadata: AgentMetadata,
+    #[serde(default)]
+    capabilities: Vec<String>,
+    #[serde(default)]
+    templates: HashMap<String, String>,
+    #[serde(default)]
+    preference: AgentPreference,
 }
 
-impl AgentTemplates {
-    fn phase_template(&self, phase: &str) -> Option<&str> {
-        match phase {
-            "init_once" => self.init_once.as_deref(),
-            "qa" => self.qa.as_deref(),
-            "fix" => self.fix.as_deref(),
-            "retest" => self.retest.as_deref(),
-            "loop_guard" => self.loop_guard.as_deref(),
-            _ => None,
+impl AgentConfig {
+    fn new() -> Self {
+        Self {
+            metadata: AgentMetadata::default(),
+            capabilities: Vec::new(),
+            templates: HashMap::new(),
+            preference: AgentPreference::default(),
         }
+    }
+
+    fn get_template(&self, capability: &str) -> Option<&String> {
+        self.templates.get(capability)
+    }
+
+    fn supports_capability(&self, capability: &str) -> bool {
+        self.capabilities.contains(&capability.to_string())
+    }
+}
+
+impl Default for AgentConfig {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -103,6 +141,7 @@ enum WorkflowStepType {
     TicketScan,
     Fix,
     Retest,
+    LoopGuard,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -170,6 +209,7 @@ impl WorkflowStepType {
             Self::TicketScan => "ticket_scan",
             Self::Fix => "fix",
             Self::Retest => "retest",
+            Self::LoopGuard => "loop_guard",
         }
     }
 }
@@ -217,24 +257,64 @@ struct WorkflowLoopConfig {
     guard: WorkflowLoopGuardConfig,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum CostPreference {
+    Performance,
+    Quality,
+    Balance,
+}
+
+impl Default for CostPreference {
+    fn default() -> Self {
+        Self::Balance
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct WorkflowStepConfig {
     id: String,
-    #[serde(rename = "type")]
-    step_type: WorkflowStepType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    step_type: Option<WorkflowStepType>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    required_capability: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    builtin: Option<String>,
     enabled: bool,
+    #[serde(default = "default_true")]
+    repeatable: bool,
+    #[serde(default)]
+    is_guard: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cost_preference: Option<CostPreference>,
     #[serde(default, alias = "agent_id")]
     agent_group_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     prehook: Option<StepPrehookConfig>,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TaskExecutionStep {
     id: String,
-    #[serde(rename = "type")]
-    step_type: WorkflowStepType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    step_type: Option<WorkflowStepType>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    required_capability: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    builtin: Option<String>,
     agent_group_id: String,
+    #[serde(default = "default_true")]
+    repeatable: bool,
+    #[serde(default)]
+    is_guard: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cost_preference: Option<CostPreference>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     prehook: Option<StepPrehookConfig>,
 }
@@ -250,7 +330,13 @@ struct TaskExecutionPlan {
 
 impl TaskExecutionPlan {
     fn step(&self, step_type: WorkflowStepType) -> Option<&TaskExecutionStep> {
-        self.steps.iter().find(|step| step.step_type == step_type)
+        self.steps
+            .iter()
+            .find(|step| step.step_type.as_ref() == Some(&step_type))
+    }
+
+    fn step_by_id(&self, id: &str) -> Option<&TaskExecutionStep> {
+        self.steps.iter().find(|step| step.id == id)
     }
 }
 
@@ -288,36 +374,66 @@ fn default_workflow_steps(
     vec![
         WorkflowStepConfig {
             id: "init_once".to_string(),
-            step_type: WorkflowStepType::InitOnce,
+            description: None,
+            step_type: Some(WorkflowStepType::InitOnce),
+            required_capability: None,
+            builtin: Some("init_once".to_string()),
             enabled: false,
+            repeatable: false,
+            is_guard: false,
+            cost_preference: None,
             agent_group_id: None,
             prehook: None,
         },
         WorkflowStepConfig {
             id: "qa".to_string(),
-            step_type: WorkflowStepType::Qa,
+            description: None,
+            step_type: Some(WorkflowStepType::Qa),
+            required_capability: Some("qa".to_string()),
+            builtin: None,
             enabled: qa.is_some(),
+            repeatable: true,
+            is_guard: false,
+            cost_preference: None,
             agent_group_id: qa.map(str::to_string),
             prehook: None,
         },
         WorkflowStepConfig {
             id: "ticket_scan".to_string(),
-            step_type: WorkflowStepType::TicketScan,
+            description: None,
+            step_type: Some(WorkflowStepType::TicketScan),
+            required_capability: None,
+            builtin: Some("ticket_scan".to_string()),
             enabled: ticket_scan,
+            repeatable: true,
+            is_guard: false,
+            cost_preference: None,
             agent_group_id: None,
             prehook: None,
         },
         WorkflowStepConfig {
             id: "fix".to_string(),
-            step_type: WorkflowStepType::Fix,
+            description: None,
+            step_type: Some(WorkflowStepType::Fix),
+            required_capability: Some("fix".to_string()),
+            builtin: None,
             enabled: fix.is_some(),
+            repeatable: true,
+            is_guard: false,
+            cost_preference: None,
             agent_group_id: fix.map(str::to_string),
             prehook: None,
         },
         WorkflowStepConfig {
             id: "retest".to_string(),
-            step_type: WorkflowStepType::Retest,
+            description: None,
+            step_type: Some(WorkflowStepType::Retest),
+            required_capability: Some("retest".to_string()),
+            builtin: None,
             enabled: retest.is_some(),
+            repeatable: true,
+            is_guard: false,
+            cost_preference: None,
             agent_group_id: retest.map(str::to_string),
             prehook: None,
         },
@@ -451,34 +567,46 @@ impl Default for OrchestratorConfig {
         agents.insert(
             "opencode".to_string(),
             AgentConfig {
-                templates: AgentTemplates {
-                    init_once: Some("echo \"agent-orchestrator init_once\"".to_string()),
-                    qa: Some(
-                        "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
-                            .to_string(),
-                    ),
-                    fix: None,
-                    retest: Some(
-                        "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
-                            .to_string(),
-                    ),
-                    loop_guard: Some(
-                        "if [ \"{unresolved_items}\" -eq 0 ]; then echo stop; else echo continue; fi"
-                            .to_string(),
-                    ),
+                metadata: AgentMetadata {
+                    name: "opencode".to_string(),
+                    description: "OpenCode Agent".to_string(),
+                    version: None,
+                    cost: None,
                 },
+                capabilities: vec![
+                    "init_once".to_string(),
+                    "qa".to_string(),
+                    "fix".to_string(),
+                    "retest".to_string(),
+                    "loop_guard".to_string(),
+                ],
+                templates: {
+                    let mut m = HashMap::new();
+                    m.insert("init_once".to_string(), "echo \"agent-orchestrator init_once\"".to_string());
+                    m.insert("qa".to_string(), "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\"".to_string());
+                    m.insert("retest".to_string(), "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\"".to_string());
+                    m.insert("loop_guard".to_string(), "if [ \"{unresolved_items}\" -eq 0 ]; then echo stop; else echo continue; fi".to_string());
+                    m
+                },
+                preference: AgentPreference::default(),
             },
         );
         agents.insert(
             "claudecode".to_string(),
             AgentConfig {
-                templates: AgentTemplates {
-                    init_once: None,
-                    qa: None,
-                    fix: Some("claude -p --dangerously-skip-permissions --verbose --model opus --output-format stream-json \"/ticket-fix {ticket_paths}\"".to_string()),
-                    retest: None,
-                    loop_guard: None,
+                metadata: AgentMetadata {
+                    name: "claudecode".to_string(),
+                    description: "Claude Code Agent".to_string(),
+                    version: None,
+                    cost: None,
                 },
+                capabilities: vec!["fix".to_string()],
+                templates: {
+                    let mut m = HashMap::new();
+                    m.insert("fix".to_string(), "claude -p --dangerously-skip-permissions --verbose --model opus --output-format stream-json \"/ticket-fix {ticket_paths}\"".to_string());
+                    m
+                },
+                preference: AgentPreference::default(),
             },
         );
 
@@ -961,7 +1089,7 @@ fn resolve_agent_from_group(
             config
                 .agents
                 .get(id.as_str())
-                .and_then(|a| a.templates.phase_template(phase))
+                .and_then(|a| a.get_template(phase))
                 .is_some()
         })
         .map(|s| s.as_str())
@@ -978,12 +1106,95 @@ fn resolve_agent_from_group(
     use rand::Rng;
     let idx = rand::thread_rng().gen_range(0..candidates.len());
     let agent_id = candidates[idx];
-    let template = config.agents[agent_id]
-        .templates
-        .phase_template(phase)
-        .unwrap();
+    let template = config.agents[agent_id].get_template(phase).unwrap();
 
     Ok((agent_id.to_string(), template.to_string()))
+}
+
+fn select_agent_by_capability(
+    capability: &str,
+    agents: &HashMap<String, AgentConfig>,
+    agent_groups: &HashMap<String, AgentGroupConfig>,
+    cost_preference: &Option<CostPreference>,
+) -> Result<(String, String)> {
+    let mut candidates: Vec<_> = agents
+        .iter()
+        .filter(|(_, cfg)| cfg.supports_capability(capability))
+        .collect();
+
+    if candidates.is_empty() {
+        anyhow::bail!("No agent found with capability: {}", capability);
+    }
+
+    if let Some(pref) = cost_preference {
+        match pref {
+            CostPreference::Performance => {
+                candidates.sort_by(|a, b| {
+                    let cost_a = a.1.metadata.cost.unwrap_or(50);
+                    let cost_b = b.1.metadata.cost.unwrap_or(50);
+                    cost_a.cmp(&cost_b)
+                });
+            }
+            CostPreference::Quality => {
+                candidates.sort_by(|a, b| {
+                    let cost_a = a.1.metadata.cost.unwrap_or(50);
+                    let cost_b = b.1.metadata.cost.unwrap_or(50);
+                    cost_b.cmp(&cost_a)
+                });
+            }
+            CostPreference::Balance => {
+                candidates.sort_by(|a, b| {
+                    let cost_a = a.1.metadata.cost.unwrap_or(50);
+                    let cost_b = b.1.metadata.cost.unwrap_or(50);
+                    let deviation_a = (cost_a as i32 - 50).abs();
+                    let deviation_b = (cost_b as i32 - 50).abs();
+                    deviation_a.cmp(&deviation_b)
+                });
+            }
+        }
+    }
+
+    use rand::Rng;
+    let idx = rand::thread_rng().gen_range(0..candidates.len());
+    let (agent_id, config) = candidates[idx];
+
+    let template = config
+        .get_template(capability)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Agent {} has capability {} but no template",
+                agent_id,
+                capability
+            )
+        })?
+        .clone();
+
+    Ok((agent_id.clone(), template))
+}
+
+fn select_agent_by_preference(agents: &HashMap<String, AgentConfig>) -> Result<(String, String)> {
+    for (id, cfg) in agents {
+        if cfg.capabilities.is_empty() || cfg.metadata.name == "default_agent" {
+            let template = cfg
+                .templates
+                .get("default")
+                .cloned()
+                .unwrap_or_else(|| "echo default".to_string());
+            return Ok((id.clone(), template));
+        }
+    }
+
+    use rand::Rng;
+    let idx = rand::thread_rng().gen_range(0..agents.len());
+    let (agent_id, config) = agents.iter().nth(idx).unwrap();
+    let template = config
+        .templates
+        .values()
+        .next()
+        .cloned()
+        .unwrap_or_else(|| "echo default".to_string());
+
+    Ok((agent_id.clone(), template))
 }
 
 #[derive(Debug, Clone)]
@@ -1287,7 +1498,10 @@ async fn delete_task(
         task_id
     );
     delete_task_impl(&state.inner, &task_id).map_err(err_to_string)?;
-    println!("[agent-orchestrator][delete] db records removed task_id={}", task_id);
+    println!(
+        "[agent-orchestrator][delete] db records removed task_id={}",
+        task_id
+    );
     emit_event(
         &app,
         &task_id,
@@ -1295,7 +1509,10 @@ async fn delete_task(
         "task_deleted",
         json!({ "task_id": task_id }),
     );
-    println!("[agent-orchestrator][delete] emitted task_deleted task_id={}", task_id);
+    println!(
+        "[agent-orchestrator][delete] emitted task_deleted task_id={}",
+        task_id
+    );
     Ok(DeleteTaskResponse {
         task_id,
         deleted: true,
@@ -1449,7 +1666,7 @@ fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
     let had_ticket_scan_step = workflow
         .steps
         .iter()
-        .any(|step| step.step_type == WorkflowStepType::TicketScan);
+        .any(|step| step.step_type.as_ref() == Some(&WorkflowStepType::TicketScan));
     if workflow.steps.is_empty() {
         workflow.steps = default_workflow_steps(
             workflow.qa.as_deref(),
@@ -1459,9 +1676,17 @@ fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
         );
     }
     let mut normalized: Vec<WorkflowStepConfig> = Vec::new();
-    let mut by_type: HashMap<&'static str, WorkflowStepConfig> = HashMap::new();
+    let mut by_type: HashMap<String, WorkflowStepConfig> = HashMap::new();
     for step in workflow.steps.drain(..) {
-        by_type.entry(step.step_type.as_str()).or_insert(step);
+        // Key priority: step_type > builtin > required_capability > id
+        let key = step
+            .step_type
+            .as_ref()
+            .map(|t| t.as_str().to_string())
+            .or_else(|| step.builtin.clone())
+            .or_else(|| step.required_capability.clone())
+            .unwrap_or(step.id.clone());
+        by_type.entry(key).or_insert(step);
     }
     for step_type in [
         WorkflowStepType::InitOnce,
@@ -1470,13 +1695,20 @@ fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
         WorkflowStepType::Fix,
         WorkflowStepType::Retest,
     ] {
-        if let Some(step) = by_type.remove(step_type.as_str()) {
+        let key = step_type.as_str().to_string();
+        if let Some(step) = by_type.remove(&key) {
             normalized.push(step);
         } else {
             normalized.push(WorkflowStepConfig {
                 id: step_type.as_str().to_string(),
-                step_type,
+                description: None,
+                step_type: Some(step_type),
+                required_capability: None,
+                builtin: None,
                 enabled: false,
+                repeatable: true,
+                is_guard: false,
+                cost_preference: None,
                 agent_group_id: None,
                 prehook: None,
             });
@@ -1485,26 +1717,31 @@ fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
     workflow.steps = normalized;
     for step in &mut workflow.steps {
         if step.id.trim().is_empty() {
-            step.id = step.step_type.as_str().to_string();
+            step.id = step
+                .step_type
+                .as_ref()
+                .map(|t| t.as_str())
+                .unwrap_or(&step.id)
+                .to_string();
         }
     }
     let qa_enabled = workflow
         .steps
         .iter()
-        .any(|step| step.step_type == WorkflowStepType::Qa && step.enabled);
+        .any(|step| step.step_type.as_ref() == Some(&WorkflowStepType::Qa) && step.enabled);
     let fix_enabled = workflow
         .steps
         .iter()
-        .any(|step| step.step_type == WorkflowStepType::Fix && step.enabled);
+        .any(|step| step.step_type.as_ref() == Some(&WorkflowStepType::Fix) && step.enabled);
     let retest_enabled = workflow
         .steps
         .iter()
-        .any(|step| step.step_type == WorkflowStepType::Retest && step.enabled);
+        .any(|step| step.step_type.as_ref() == Some(&WorkflowStepType::Retest) && step.enabled);
     if !had_ticket_scan_step && !qa_enabled && fix_enabled && !retest_enabled {
         if let Some(scan_step) = workflow
             .steps
             .iter_mut()
-            .find(|step| step.step_type == WorkflowStepType::TicketScan)
+            .find(|step| step.step_type.as_ref() == Some(&WorkflowStepType::TicketScan))
         {
             scan_step.enabled = true;
             scan_step.agent_group_id = None;
@@ -1560,10 +1797,16 @@ fn validate_workflow_config(
     }
 
     let mut enabled_count = 0usize;
-    let mut seen: HashMap<&'static str, bool> = HashMap::new();
+    let mut seen: HashMap<String, bool> = HashMap::new();
     for step in &workflow.steps {
-        let key = step.step_type.as_str();
-        if seen.insert(key, true).is_some() {
+        let key = step
+            .step_type
+            .as_ref()
+            .map(|t| t.as_str())
+            .or_else(|| step.builtin.as_deref())
+            .or_else(|| step.required_capability.as_deref())
+            .unwrap_or(&step.id);
+        if seen.insert(key.to_string(), true).is_some() {
             anyhow::bail!(
                 "workflow '{}' has duplicate step type '{}'",
                 workflow_id,
@@ -1574,7 +1817,7 @@ fn validate_workflow_config(
             continue;
         }
         enabled_count += 1;
-        if step.step_type == WorkflowStepType::TicketScan {
+        if step.step_type.as_ref() == Some(&WorkflowStepType::TicketScan) {
             if let Some(prehook) = step.prehook.as_ref() {
                 validate_step_prehook(prehook, workflow_id, key)?;
             }
@@ -1597,7 +1840,7 @@ fn validate_workflow_config(
             config
                 .agents
                 .get(aid)
-                .and_then(|a| a.templates.phase_template(key))
+                .and_then(|a| a.get_template(key))
                 .is_some()
         });
         if !has_template {
@@ -1648,7 +1891,7 @@ fn validate_workflow_config(
                 config
                     .agents
                     .get(aid)
-                    .and_then(|a| a.templates.phase_template("loop_guard"))
+                    .and_then(|a| a.get_template("loop_guard"))
                     .is_some()
             });
             if !has_loop_guard {
@@ -2221,26 +2464,36 @@ fn build_execution_plan(
         if !step.enabled {
             continue;
         }
-        if step.step_type == WorkflowStepType::TicketScan {
+        if step.builtin.is_some() {
             steps.push(TaskExecutionStep {
                 id: step.id.clone(),
                 step_type: step.step_type.clone(),
+                required_capability: step.required_capability.clone(),
+                builtin: step.builtin.clone(),
                 agent_group_id: "builtin".to_string(),
+                repeatable: step.repeatable,
+                is_guard: step.is_guard,
+                cost_preference: step.cost_preference.clone(),
                 prehook: step.prehook.clone(),
             });
             continue;
         }
+        let key = step.required_capability.as_deref().unwrap_or(&step.id);
         let group_id = step.agent_group_id.as_deref().with_context(|| {
             format!(
                 "workflow '{}' step '{}' missing agent_group_id",
-                workflow_id,
-                step.step_type.as_str()
+                workflow_id, key
             )
         })?;
         steps.push(TaskExecutionStep {
             id: step.id.clone(),
             step_type: step.step_type.clone(),
+            required_capability: step.required_capability.clone(),
+            builtin: step.builtin.clone(),
             agent_group_id: group_id.to_string(),
+            repeatable: step.repeatable,
+            is_guard: step.is_guard,
+            cost_preference: step.cost_preference.clone(),
             prehook: step.prehook.clone(),
         });
     }
@@ -3018,12 +3271,39 @@ fn collect_target_files_from_active_tickets(
     Ok(result)
 }
 
+fn resolve_task_id(state: &InnerState, task_id: &str) -> Result<String> {
+    let conn = open_conn(&state.db_path)?;
+    
+    // First try exact match
+    let mut stmt = conn.prepare("SELECT id FROM tasks WHERE id = ?1")?;
+    let exact_match: Option<String> = stmt.query_row(params![task_id], |row| row.get(0)).optional()?;
+    
+    if let Some(id) = exact_match {
+        return Ok(id);
+    }
+    
+    // Try prefix match (short ID)
+    let pattern = format!("{}%", task_id);
+    let mut stmt = conn.prepare("SELECT id FROM tasks WHERE id LIKE ?1")?;
+    let matches: Vec<String> = stmt
+        .query_map(params![pattern], |row| row.get(0))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    
+    match matches.len() {
+        1 => Ok(matches.into_iter().next().unwrap()),
+        0 => anyhow::bail!("task not found: {}", task_id),
+        _ => anyhow::bail!("multiple tasks match prefix '{}': {:?}", task_id, matches),
+    }
+}
+
 fn load_task_summary(state: &InnerState, task_id: &str) -> Result<TaskSummary> {
+    // Resolve short ID to full ID
+    let resolved_id = resolve_task_id(state, task_id)?;
     let conn = open_conn(&state.db_path)?;
     let mut stmt = conn.prepare(
         "SELECT id, name, status, started_at, completed_at, goal, target_files_json, workspace_id, workflow_id, created_at, updated_at FROM tasks WHERE id = ?1",
     )?;
-    let mut summary = stmt.query_row(params![task_id], |row| {
+    let mut summary = stmt.query_row(params![resolved_id], |row| {
         let target_raw: String = row.get(6)?;
         let target_files = serde_json::from_str::<Vec<String>>(&target_raw).unwrap_or_default();
         Ok(TaskSummary {
@@ -3046,7 +3326,7 @@ fn load_task_summary(state: &InnerState, task_id: &str) -> Result<TaskSummary> {
 
     let (total, finished, failed): (i64, i64, i64) = conn.query_row(
         "SELECT COUNT(*), SUM(CASE WHEN status IN ('qa_passed','fixed','verified','skipped','unresolved') THEN 1 ELSE 0 END), SUM(CASE WHEN status IN ('qa_failed','unresolved') THEN 1 ELSE 0 END) FROM task_items WHERE task_id = ?1",
-        params![task_id],
+        params![resolved_id],
         |row| {
             Ok((
                 row.get(0)?,
@@ -3079,12 +3359,13 @@ fn list_tasks_impl(state: &InnerState) -> Result<Vec<TaskSummary>> {
 fn get_task_details_impl(state: &InnerState, task_id: &str) -> Result<TaskDetail> {
     let task = load_task_summary(state, task_id)?;
     let conn = open_conn(&state.db_path)?;
+    let resolved_id = &task.id;
 
     let mut items_stmt = conn.prepare(
         "SELECT id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, updated_at FROM task_items WHERE task_id = ?1 ORDER BY order_no",
     )?;
     let items = items_stmt
-        .query_map(params![task_id], |row| {
+        .query_map(params![resolved_id], |row| {
             let ticket_files_raw: String = row.get(5)?;
             let ticket_content_raw: String = row.get(6)?;
             Ok(TaskItemDto {
@@ -3114,7 +3395,7 @@ fn get_task_details_impl(state: &InnerState, task_id: &str) -> Result<TaskDetail
          LIMIT 120",
     )?;
     let runs = runs_stmt
-        .query_map(params![task_id], |row| {
+        .query_map(params![resolved_id], |row| {
             Ok(CommandRunDto {
                 id: row.get(0)?,
                 task_item_id: row.get(1)?,
@@ -3137,7 +3418,7 @@ fn get_task_details_impl(state: &InnerState, task_id: &str) -> Result<TaskDetail
         "SELECT id, task_id, task_item_id, event_type, payload_json, created_at FROM events WHERE task_id = ?1 ORDER BY id DESC LIMIT 200",
     )?;
     let events = events_stmt
-        .query_map(params![task_id], |row| {
+        .query_map(params![resolved_id], |row| {
             let payload_raw: String = row.get(4)?;
             Ok(EventDto {
                 id: row.get(0)?,
@@ -3159,12 +3440,16 @@ fn get_task_details_impl(state: &InnerState, task_id: &str) -> Result<TaskDetail
 }
 
 fn delete_task_impl(state: &InnerState, task_id: &str) -> Result<()> {
-    println!("[agent-orchestrator][delete] delete_task_impl start task_id={}", task_id);
+    let resolved_id = resolve_task_id(state, task_id)?;
+    println!(
+        "[agent-orchestrator][delete] delete_task_impl start task_id={}",
+        resolved_id
+    );
     let conn = open_conn(&state.db_path)?;
     let exists = conn
         .query_row(
             "SELECT 1 FROM tasks WHERE id = ?1",
-            params![task_id],
+            params![resolved_id],
             |row| row.get::<_, i64>(0),
         )
         .optional()?;
@@ -3179,7 +3464,7 @@ fn delete_task_impl(state: &InnerState, task_id: &str) -> Result<()> {
          JOIN task_items ti ON ti.id = cr.task_item_id
          WHERE ti.task_id = ?1",
     )?;
-    for row in runs_stmt.query_map(params![task_id], |row| {
+    for row in runs_stmt.query_map(params![resolved_id], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
     })? {
         let (stdout_path, stderr_path) = row?;
@@ -3192,20 +3477,20 @@ fn delete_task_impl(state: &InnerState, task_id: &str) -> Result<()> {
     }
 
     let tx = conn.unchecked_transaction()?;
-    tx.execute("DELETE FROM events WHERE task_id = ?1", params![task_id])?;
+    tx.execute("DELETE FROM events WHERE task_id = ?1", params![resolved_id])?;
     tx.execute(
         "DELETE FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = ?1)",
-        params![task_id],
+        params![resolved_id],
     )?;
     tx.execute(
         "DELETE FROM task_items WHERE task_id = ?1",
-        params![task_id],
+        params![resolved_id],
     )?;
-    tx.execute("DELETE FROM tasks WHERE id = ?1", params![task_id])?;
+    tx.execute("DELETE FROM tasks WHERE id = ?1", params![resolved_id])?;
     tx.commit()?;
     println!(
         "[agent-orchestrator][delete] delete_task_impl committed tx task_id={}",
-        task_id
+        resolved_id
     );
 
     let log_file_count = log_paths.len();
@@ -3214,8 +3499,7 @@ fn delete_task_impl(state: &InnerState, task_id: &str) -> Result<()> {
     }
     println!(
         "[agent-orchestrator][delete] delete_task_impl removed {} log files task_id={}",
-        log_file_count,
-        task_id
+        log_file_count, resolved_id
     );
 
     Ok(())
@@ -3226,6 +3510,7 @@ fn stream_task_logs_impl(
     task_id: &str,
     line_limit: usize,
 ) -> Result<Vec<LogChunk>> {
+    let resolved_id = resolve_task_id(state, task_id)?;
     let conn = open_conn(&state.db_path)?;
     let mut stmt = conn.prepare(
         "SELECT cr.id, cr.phase, cr.stdout_path, cr.stderr_path
@@ -3237,7 +3522,7 @@ fn stream_task_logs_impl(
     )?;
 
     let mut chunks = Vec::new();
-    for row in stmt.query_map(params![task_id], |row| {
+    for row in stmt.query_map(params![resolved_id], |row| {
         Ok((
             row.get::<_, String>(0)?,
             row.get::<_, String>(1)?,
@@ -3987,6 +4272,82 @@ async fn shutdown_running_tasks(state: Arc<InnerState>) {
     }
 }
 
+#[derive(Debug, Clone)]
+struct GuardResult {
+    should_stop: bool,
+    reason: String,
+}
+
+async fn execute_guard_step(
+    state: &Arc<InnerState>,
+    app: Option<&AppHandle>,
+    task_id: &str,
+    step: &TaskExecutionStep,
+    task_ctx: &TaskRuntimeContext,
+    runtime: &RunningTask,
+) -> Result<GuardResult> {
+    if let Some(builtin) = &step.builtin {
+        match builtin.as_str() {
+            "loop_guard" => {
+                let unresolved = count_unresolved_items(state, task_id)?;
+                let should_stop = unresolved == 0;
+                return Ok(GuardResult {
+                    should_stop,
+                    reason: if should_stop {
+                        "no_unresolved".to_string()
+                    } else {
+                        "has_unresolved".to_string()
+                    },
+                });
+            }
+            _ => {}
+        }
+    }
+
+    let (agent_id, template) = {
+        let active = read_active_config(state)?;
+        if let Some(capability) = &step.required_capability {
+            select_agent_by_capability(
+                capability,
+                &active.config.agents,
+                &active.config.agent_groups,
+                &step.cost_preference,
+            )?
+        } else {
+            select_agent_by_preference(&active.config.agents)?
+        }
+    };
+
+    let command = template
+        .replace("{task_id}", task_id)
+        .replace("{cycle}", &task_ctx.current_cycle.to_string());
+
+    let result = run_phase(
+        state,
+        app,
+        task_id,
+        task_id,
+        "guard",
+        command,
+        &task_ctx.workspace_root,
+        &task_ctx.workspace_id,
+        &agent_id,
+        runtime,
+    )
+    .await?;
+
+    let output = std::fs::read_to_string(&result.stdout_path).unwrap_or_default();
+
+    let should_stop = output.trim().to_lowercase().starts_with("stop")
+        || output.trim().to_lowercase().starts_with("false")
+        || output.trim().to_lowercase().starts_with("no");
+
+    Ok(GuardResult {
+        should_stop,
+        reason: output.trim().to_string(),
+    })
+}
+
 async fn run_task_loop(
     state: Arc<InnerState>,
     app: Option<&AppHandle>,
@@ -4090,41 +4451,60 @@ async fn run_task_loop(
             }
         }
 
+        for step in &task_ctx.execution_plan.steps {
+            if !step.is_guard {
+                continue;
+            }
+
+            if !step.repeatable && task_ctx.current_cycle > 1 {
+                continue;
+            }
+
+            let guard_result =
+                execute_guard_step(&state, app, task_id, step, &task_ctx, &runtime).await?;
+
+            if guard_result.should_stop {
+                insert_event(
+                    &state,
+                    task_id,
+                    None,
+                    "workflow_terminated",
+                    json!({
+                        "cycle": task_ctx.current_cycle,
+                        "guard_step": step.id,
+                        "reason": guard_result.reason
+                    }),
+                )?;
+                if let Some(app) = app {
+                    emit_event(
+                        app,
+                        task_id,
+                        None,
+                        "workflow_terminated",
+                        json!({"guard_step": step.id}),
+                    );
+                }
+                return Ok(());
+            }
+        }
+
         let unresolved = count_unresolved_items(&state, task_id)?;
-        let (should_continue, reason) = if let Some((decision, reason)) = evaluate_loop_guard_rules(
-            &task_ctx.execution_plan.loop_policy,
-            task_ctx.current_cycle,
-            unresolved,
-        ) {
-            (decision, reason)
-        } else if let Some(group_id) = task_ctx
-            .execution_plan
-            .loop_policy
-            .guard
-            .agent_group_id
-            .as_deref()
-        {
-            run_guard_agent_decision(
-                &state,
-                app,
-                task_id,
-                &task_ctx,
-                &runtime,
-                task_ctx.current_cycle,
-                unresolved,
-                group_id,
-            )
-            .await?
-        } else if task_ctx
+
+        let should_continue = if task_ctx
             .execution_plan
             .loop_policy
             .guard
             .stop_when_no_unresolved
-            && unresolved == 0
         {
-            (false, "no_unresolved".to_string())
+            unresolved > 0
         } else {
-            (true, "continue".to_string())
+            true
+        };
+
+        let reason = if !should_continue {
+            "no_unresolved_items".to_string()
+        } else {
+            "continue".to_string()
         };
         insert_event(
             &state,
@@ -5379,13 +5759,13 @@ mod prehook_tests {
 
 fn reset_db(state: &InnerState) -> Result<()> {
     let conn = open_conn(&state.db_path)?;
-    
+
     // Clear tables in reverse dependency order: child tables before parent tables
     conn.execute("DELETE FROM command_runs", [])?;
     conn.execute("DELETE FROM events", [])?;
     conn.execute("DELETE FROM task_items", [])?;
     conn.execute("DELETE FROM tasks", [])?;
-    
+
     Ok(())
 }
 
@@ -5400,7 +5780,18 @@ fn main() {
         }
     };
 
-    if matches!(cli.command, cli::Commands::Task(_) | cli::Commands::Workspace(_) | cli::Commands::Config(_) | cli::Commands::Db(_) | cli::Commands::Apply { .. } | cli::Commands::Edit(_) | cli::Commands::Completion(_) | cli::Commands::Get { .. } | cli::Commands::Describe { .. }) {
+    if matches!(
+        cli.command,
+        cli::Commands::Task(_)
+            | cli::Commands::Workspace(_)
+            | cli::Commands::Config(_)
+            | cli::Commands::Db(_)
+            | cli::Commands::Apply { .. }
+            | cli::Commands::Edit(_)
+            | cli::Commands::Completion(_)
+            | cli::Commands::Get { .. }
+            | cli::Commands::Describe { .. }
+    ) {
         let handler = cli_handler::CliHandler::new(state.inner.clone());
         match handler.execute(&cli) {
             Ok(code) => std::process::exit(code),

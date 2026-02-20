@@ -100,3 +100,4 @@ Maintain a lightweight index table here for fast navigation:
 | orchestrator | `docs/qa/orchestrator/04-cli-config-db.md` | 4 | Config set and db reset |
 | orchestrator | `docs/qa/orchestrator/05-workflow-execution.md` | 6 | Full workflow with mock agents |
 | orchestrator | `docs/qa/orchestrator/06-cli-output-formats.md` | 5 | JSON/YAML output validation |
+| orchestrator | `docs/qa/orchestrator/07-capability-orchestration.md` | 6 | Capability-driven orchestration, cost preference, repeatable, guard |

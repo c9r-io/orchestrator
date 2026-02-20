@@ -1,12 +1,13 @@
 use crate::cli_types::{
-    AgentGroupSpec, AgentSpec, AgentTemplatesSpec, OrchestratorResource, ResourceKind,
-    ResourceMetadata, ResourceSpec, WorkflowFinalizeRuleSpec, WorkflowFinalizeSpec,
+    AgentGroupSpec, AgentMetadataSpec, AgentSpec, AgentTemplatesSpec, OrchestratorResource,
+    ResourceKind, ResourceMetadata, ResourceSpec, WorkflowFinalizeRuleSpec, WorkflowFinalizeSpec,
     WorkflowLoopSpec, WorkflowPrehookSpec, WorkflowSpec, WorkflowStepSpec, WorkspaceSpec,
 };
 use crate::{
-    AgentConfig, AgentGroupConfig, AgentTemplates, LoopMode, OrchestratorConfig, StepHookEngine,
-    StepPrehookConfig, WorkflowConfig, WorkflowFinalizeConfig, WorkflowFinalizeRule,
-    WorkflowLoopConfig, WorkflowStepConfig, WorkflowStepType, WorkspaceConfig,
+    AgentConfig, AgentGroupConfig, AgentMetadata, AgentPreference, LoopMode, OrchestratorConfig,
+    StepHookEngine, StepPrehookConfig, WorkflowConfig, WorkflowFinalizeConfig,
+    WorkflowFinalizeRule, WorkflowLoopConfig, WorkflowStepConfig, WorkflowStepType,
+    WorkspaceConfig,
 };
 use anyhow::{anyhow, Result};
 use serde::Serialize;
@@ -495,25 +496,68 @@ fn workspace_config_to_spec(config: &WorkspaceConfig) -> WorkspaceSpec {
 }
 
 fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
+    let capabilities = vec![
+        spec.templates.init_once.as_ref().map(|_| "init_once"),
+        spec.templates.qa.as_ref().map(|_| "qa"),
+        spec.templates.fix.as_ref().map(|_| "fix"),
+        spec.templates.retest.as_ref().map(|_| "retest"),
+        spec.templates.loop_guard.as_ref().map(|_| "loop_guard"),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|s| s.to_string())
+    .collect();
+
+    let mut templates = std::collections::HashMap::new();
+    if let Some(t) = &spec.templates.init_once {
+        templates.insert("init_once".to_string(), t.clone());
+    }
+    if let Some(t) = &spec.templates.qa {
+        templates.insert("qa".to_string(), t.clone());
+    }
+    if let Some(t) = &spec.templates.fix {
+        templates.insert("fix".to_string(), t.clone());
+    }
+    if let Some(t) = &spec.templates.retest {
+        templates.insert("retest".to_string(), t.clone());
+    }
+    if let Some(t) = &spec.templates.loop_guard {
+        templates.insert("loop_guard".to_string(), t.clone());
+    }
+
     AgentConfig {
-        templates: AgentTemplates {
-            init_once: spec.templates.init_once.clone(),
-            qa: spec.templates.qa.clone(),
-            fix: spec.templates.fix.clone(),
-            retest: spec.templates.retest.clone(),
-            loop_guard: spec.templates.loop_guard.clone(),
-        },
+        metadata: AgentMetadata::default(),
+        capabilities,
+        templates,
+        preference: AgentPreference::default(),
     }
 }
 
 fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
     AgentSpec {
         templates: AgentTemplatesSpec {
-            init_once: config.templates.init_once.clone(),
-            qa: config.templates.qa.clone(),
-            fix: config.templates.fix.clone(),
-            retest: config.templates.retest.clone(),
-            loop_guard: config.templates.loop_guard.clone(),
+            init_once: config.templates.get("init_once").cloned(),
+            qa: config.templates.get("qa").cloned(),
+            fix: config.templates.get("fix").cloned(),
+            retest: config.templates.get("retest").cloned(),
+            loop_guard: config.templates.get("loop_guard").cloned(),
+        },
+        capabilities: if config.capabilities.is_empty() {
+            None
+        } else {
+            Some(config.capabilities.clone())
+        },
+        metadata: if config.metadata.description.is_empty() && config.metadata.cost.is_none() {
+            None
+        } else {
+            Some(AgentMetadataSpec {
+                cost: config.metadata.cost,
+                description: if config.metadata.description.is_empty() {
+                    None
+                } else {
+                    Some(config.metadata.description.clone())
+                },
+            })
         },
     }
 }
@@ -536,8 +580,16 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> WorkflowConfig {
         .iter()
         .map(|step| WorkflowStepConfig {
             id: step.id.clone(),
-            step_type: parse_workflow_step_type(&step.step_type).unwrap_or(WorkflowStepType::Qa),
+            description: None,
+            step_type: Some(
+                parse_workflow_step_type(&step.step_type).unwrap_or(WorkflowStepType::Qa),
+            ),
+            required_capability: None,
+            builtin: None,
             enabled: step.enabled,
+            repeatable: true,
+            is_guard: false,
+            cost_preference: None,
             agent_group_id: step.agent_group_id.clone(),
             prehook: step.prehook.as_ref().map(|prehook| StepPrehookConfig {
                 engine: StepHookEngine::Cel,
@@ -587,7 +639,11 @@ fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
         .iter()
         .map(|step| WorkflowStepSpec {
             id: step.id.clone(),
-            step_type: step.step_type.as_str().to_string(),
+            step_type: step
+                .step_type
+                .as_ref()
+                .map(|t| t.as_str().to_string())
+                .unwrap_or_default(),
             enabled: step.enabled,
             agent_group_id: step.agent_group_id.clone(),
             prehook: step.prehook.as_ref().map(|prehook| WorkflowPrehookSpec {
@@ -687,6 +743,8 @@ mod tests {
                     retest: None,
                     loop_guard: None,
                 },
+                capabilities: None,
+                metadata: None,
             }),
         }
     }
@@ -765,6 +823,8 @@ mod tests {
                     retest: None,
                     loop_guard: None,
                 },
+                capabilities: None,
+                metadata: None,
             }),
         };
 
@@ -1033,6 +1093,8 @@ fn agent_validation_rejects_empty_templates() {
                 retest: None,
                 loop_guard: None,
             },
+            capabilities: None,
+            metadata: None,
         },
     };
     let result = agent.validate();
@@ -1117,6 +1179,8 @@ fn agent_to_yaml_includes_templates() {
                 retest: Some("retest".to_string()),
                 loop_guard: Some("guard".to_string()),
             },
+            capabilities: None,
+            metadata: None,
         },
     };
     let yaml = agent.to_yaml().expect("should serialize");

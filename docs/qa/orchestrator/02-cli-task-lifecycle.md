@@ -101,27 +101,32 @@ Entry point: `orchestrator task <command>`
        qa_targets:
          - docs/qa
        ticket_dir: docs/ticket
-   agents:
-     mock_sleep:
-       templates:
-         qa: "sleep 10 && echo 'done'"
-   agent_groups:
-     sleep_group:
-       agents:
-         - mock_sleep
-   workflows:
-     qa_only:
-       steps:
-         - id: qa
-           type: qa
-           enabled: true
-           agent_group_id: sleep_group
-       loop:
-         mode: once
-       finalize:
-         rules: []
-   EOF
-   ```
+    agents:
+      mock_sleep:
+        metadata:
+          name: mock_sleep
+        capabilities:
+        - qa
+        templates:
+          qa: "sleep 10 && echo 'done'"
+    agent_groups:
+      sleep_group:
+        agents:
+          - mock_sleep
+    workflows:
+      qa_only:
+        steps:
+          - id: qa
+            required_capability: qa
+            enabled: true
+            repeatable: false
+            agent_group_id: sleep_group
+        loop:
+          mode: once
+        finalize:
+          rules: []
+    EOF
+    ```
 
 2. Start task in background:
    ```bash

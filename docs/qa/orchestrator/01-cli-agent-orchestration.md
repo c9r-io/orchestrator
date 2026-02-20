@@ -20,17 +20,25 @@ For testing purposes, use mock agents with bash commands:
 ```yaml
 agents:
   mock_echo:
+    metadata:
+      name: mock_echo
+    capabilities:
+    - qa
+    - fix
+    - retest
     templates:
       qa: "echo 'qa-phase: {rel_path}'"
       fix: "echo 'fix-phase: {ticket_paths}'"
       retest: "echo 'retest-phase: {rel_path}'"
-      init_once: "echo 'init-phase'"
-      loop_guard: "echo 'continue'"
   mock_sleep:
+    metadata:
+      name: mock_sleep
+    capabilities:
+    - qa
+    - fix
     templates:
       qa: "sleep 0.1 && echo 'qa-complete'"
       fix: "sleep 0.1 && echo 'fix-complete'"
-      retest: "sleep 0.1 && echo 'retest-complete'"
 ```
 
 ---
@@ -244,28 +252,28 @@ Validate configuration validation catches invalid configurations.
    resume:
      auto: true
    defaults:
-     workspace: default
-     workflow: qa_only
-   workspaces:
-     invalid-ws:
-       root_path: ""
-       qa_targets: []
-       ticket_dir: docs/ticket
-   agents: {}
-   agent_groups: {}
-   workflows:
-     test:
-       steps:
-         - id: qa
-           type: qa
-           enabled: true
-           agent_group_id: none
-       loop:
-         mode: once
-       finalize:
-         rules: []
-   EOF
-   ```
+      workspace: default
+      workflow: qa_only
+    workspaces:
+      invalid-ws:
+        root_path: ""
+        qa_targets: []
+        ticket_dir: docs/ticket
+    agents: {}
+    agent_groups: {}
+    workflows:
+      test:
+        steps:
+          - id: qa
+            required_capability: qa
+            enabled: true
+            repeatable: false
+        loop:
+          mode: once
+        finalize:
+          rules: []
+    EOF
+    ```
 
 2. Validate the invalid config:
    ```bash
@@ -279,26 +287,27 @@ Validate configuration validation catches invalid configurations.
      shell: /bin/bash
      shell_arg: -lc
    resume:
-     auto: true
-   defaults:
-     workspace: default
-     workflow: qa_only
-   workspaces:
-     default:
-       root_path: /tmp/test
-       qa_targets:
-         - docs/qa
-       ticket_dir: docs/ticket
-   agents: {}
-   agent_groups: {}
-   workflows:
-     qa_only:
-       steps:
-         - id: qa
-           type: qa
-           enabled: false
-       loop:
-         mode: once
+      auto: true
+    defaults:
+      workspace: default
+      workflow: qa_only
+    workspaces:
+      default:
+        root_path: /tmp/test
+        qa_targets:
+          - docs/qa
+        ticket_dir: docs/ticket
+    agents: {}
+    agent_groups: {}
+    workflows:
+      qa_only:
+        steps:
+          - id: qa
+            required_capability: qa
+            enabled: false
+            repeatable: false
+        loop:
+          mode: once
        finalize:
          rules: []
    EOF
