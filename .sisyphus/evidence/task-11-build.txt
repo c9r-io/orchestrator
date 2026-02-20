@@ -1,2 +1,0 @@
-   Compiling agent-orchestrator v0.1.0 (/Volumes/Yotta/ai_native_sdlc/orchestrator/src-tauri)
-    Finished `release` profile [optimized] target(s) in 10.64s
