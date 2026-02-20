@@ -94,5 +94,9 @@ Maintain a lightweight index table here for fast navigation:
 
 | Module | Doc | Scenarios | Notes |
 |--------|-----|-----------|-------|
-| user | `docs/qa/user/01-crud.md` | 5 | create/update/delete |
-| auth | `docs/qa/auth/01-login.md` | 3 | happy path |
+| orchestrator | `docs/qa/orchestrator/01-cli-agent-orchestration.md` | 6 | CLI task lifecycle with mock agents |
+| orchestrator | `docs/qa/orchestrator/02-cli-task-lifecycle.md` | 5 | Start/pause/resume/logs/retry |
+| orchestrator | `docs/qa/orchestrator/03-cli-edit-export5 | Edit export.md` | /open commands |
+| orchestrator | `docs/qa/orchestrator/04-cli-config-db.md` | 4 | Config set and db reset |
+| orchestrator | `docs/qa/orchestrator/05-workflow-execution.md` | 6 | Full workflow with mock agents |
+| orchestrator | `docs/qa/orchestrator/06-cli-output-formats.md` | 5 | JSON/YAML output validation |

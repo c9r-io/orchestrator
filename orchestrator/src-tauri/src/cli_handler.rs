@@ -1,6 +1,6 @@
 use crate::cli::{
-    Cli, Commands, ConfigCommands, DbCommands, EditCommands, OutputFormat, TaskCommands,
-    WorkspaceCommands,
+    generate_completion, Cli, Commands, CompletionCommands, ConfigCommands, DbCommands,
+    EditCommands, OutputFormat, TaskCommands, WorkspaceCommands,
 };
 use crate::cli_types::OrchestratorResource;
 use crate::resource::{
@@ -9,7 +9,9 @@ use crate::resource::{
 };
 use crate::InnerState;
 use anyhow::{Context, Result};
+use clap_complete::Shell;
 use serde::Deserialize;
+use std::path::Path;
 use std::process::{Command, ExitStatus};
 use std::sync::Arc;
 
@@ -25,11 +27,14 @@ impl CliHandler {
     pub fn execute(&self, cli: &Cli) -> Result<i32> {
         match &cli.command {
             Commands::Apply { file, dry_run } => self.handle_apply(file, *dry_run),
+            Commands::Get { resource, output } => self.handle_get(resource, *output),
+            Commands::Describe { resource, output } => self.handle_describe(resource, *output),
             Commands::Task(cmd) => self.handle_task(cmd),
             Commands::Workspace(cmd) => self.handle_workspace(cmd),
             Commands::Config(cmd) => self.handle_config(cmd),
             Commands::Edit(cmd) => self.handle_edit(cmd),
             Commands::Db(cmd) => self.handle_db(cmd),
+            Commands::Completion(cmd) => self.handle_completion(cmd),
             Commands::Daemon => {
                 println!("Starting daemon mode (UI)... use --cli flag for CLI mode");
                 Ok(0)
@@ -113,6 +118,164 @@ impl CliHandler {
         }
 
         Ok(0)
+    }
+
+    fn handle_get(&self, resource: &str, output: OutputFormat) -> Result<i32> {
+        let parts: Vec<&str> = resource.split('/').collect();
+        if parts.len() != 2 {
+            anyhow::bail!(
+                "invalid resource format: {} (use format: resource/name, e.g., ws/default)",
+                resource
+            );
+        }
+        let (kind, name) = (parts[0], parts[1]);
+
+        match kind {
+            "ws" | "workspace" => self.handle_workspace(&WorkspaceCommands::Info {
+                workspace_id: name.to_string(),
+                output,
+            }),
+            "wf" | "workflow" => {
+                let active = crate::read_active_config(&self.state)?;
+                if let Some(wf) = active.config.workflows.get(name) {
+                    match output {
+                        OutputFormat::Json => {
+                            println!("{}", serde_json::to_string_pretty(wf)?);
+                        }
+                        OutputFormat::Yaml => {
+                            println!("{}", serde_yaml::to_string(wf)?);
+                        }
+                        OutputFormat::Table => {
+                            let step_types: Vec<String> = wf
+                                .steps
+                                .iter()
+                                .map(|s| format!("{:?}", s.step_type))
+                                .collect();
+                            println!("{:<20} {:<40}", name, step_types.join(", "));
+                        }
+                    }
+                    Ok(0)
+                } else {
+                    anyhow::bail!("workflow not found: {}", name)
+                }
+            }
+            "agent" => {
+                let active = crate::read_active_config(&self.state)?;
+                if let Some(agent) = active.config.agents.get(name) {
+                    match output {
+                        OutputFormat::Json => {
+                            println!("{}", serde_json::to_string_pretty(agent)?);
+                        }
+                        OutputFormat::Yaml => {
+                            println!("{}", serde_yaml::to_string(agent)?);
+                        }
+                        OutputFormat::Table => {
+                            let templates: Vec<&str> = [
+                                agent.templates.init_once.as_deref(),
+                                agent.templates.qa.as_deref(),
+                                agent.templates.fix.as_deref(),
+                                agent.templates.retest.as_deref(),
+                                agent.templates.loop_guard.as_deref(),
+                            ]
+                            .into_iter()
+                            .flatten()
+                            .collect();
+                            println!("{:<20} {:?}", name, templates);
+                        }
+                    }
+                    Ok(0)
+                } else {
+                    anyhow::bail!("agent not found: {}", name)
+                }
+            }
+            "task" | "t" => self.handle_task(&TaskCommands::Info {
+                task_id: name.to_string(),
+                output,
+            }),
+            _ => anyhow::bail!(
+                "unknown resource type: {} (supported: ws/workspace, wf/workflow, agent, task)",
+                kind
+            ),
+        }
+    }
+
+    fn handle_describe(&self, resource: &str, output: OutputFormat) -> Result<i32> {
+        let parts: Vec<&str> = resource.split('/').collect();
+        if parts.len() != 2 {
+            anyhow::bail!(
+                "invalid resource format: {} (use format: resource/name)",
+                resource
+            );
+        }
+        let (kind, name) = (parts[0], parts[1]);
+
+        match kind {
+            "ws" | "workspace" => self.handle_workspace(&WorkspaceCommands::Info {
+                workspace_id: name.to_string(),
+                output,
+            }),
+            "wf" | "workflow" => {
+                let active = crate::read_active_config(&self.state)?;
+                if let Some(wf) = active.config.workflows.get(name) {
+                    match output {
+                        OutputFormat::Json => {
+                            println!("{}", serde_json::to_string_pretty(wf)?);
+                        }
+                        OutputFormat::Yaml => {
+                            println!("{}", serde_yaml::to_string(wf)?);
+                        }
+                        OutputFormat::Table => {
+                            let step_types: Vec<String> = wf
+                                .steps
+                                .iter()
+                                .map(|s| format!("{:?}", s.step_type))
+                                .collect();
+                            println!("{:<20} {:<40}", name, step_types.join(", "));
+                        }
+                    }
+                    Ok(0)
+                } else {
+                    anyhow::bail!("workflow not found: {}", name)
+                }
+            }
+            "agent" => {
+                let active = crate::read_active_config(&self.state)?;
+                if let Some(agent) = active.config.agents.get(name) {
+                    match output {
+                        OutputFormat::Json => {
+                            println!("{}", serde_json::to_string_pretty(agent)?);
+                        }
+                        OutputFormat::Yaml => {
+                            println!("{}", serde_yaml::to_string(agent)?);
+                        }
+                        OutputFormat::Table => {
+                            let templates: Vec<&str> = [
+                                agent.templates.init_once.as_deref(),
+                                agent.templates.qa.as_deref(),
+                                agent.templates.fix.as_deref(),
+                                agent.templates.retest.as_deref(),
+                                agent.templates.loop_guard.as_deref(),
+                            ]
+                            .into_iter()
+                            .flatten()
+                            .collect();
+                            println!("{:<20} {:?}", name, templates);
+                        }
+                    }
+                    Ok(0)
+                } else {
+                    anyhow::bail!("agent not found: {}", name)
+                }
+            }
+            "task" | "t" => self.handle_task(&TaskCommands::Info {
+                task_id: name.to_string(),
+                output,
+            }),
+            _ => anyhow::bail!(
+                "unknown resource type: {} (supported: ws/workspace, wf/workflow, agent, task)",
+                kind
+            ),
+        }
     }
 
     fn handle_task(&self, cmd: &TaskCommands) -> Result<i32> {
@@ -426,6 +589,17 @@ impl CliHandler {
         }
     }
 
+    fn handle_completion(&self, cmd: &CompletionCommands) -> Result<i32> {
+        let shell = match cmd {
+            CompletionCommands::Bash => Shell::Bash,
+            CompletionCommands::Zsh => Shell::Zsh,
+            CompletionCommands::Fish => Shell::Fish,
+            CompletionCommands::PowerShell => Shell::PowerShell,
+        };
+        generate_completion(shell);
+        Ok(0)
+    }
+
     fn parse_resources_from_yaml(content: &str) -> Result<Vec<OrchestratorResource>> {
         let mut resources = Vec::new();
         for document in serde_yaml::Deserializer::from_str(content) {
@@ -550,7 +724,17 @@ impl CliHandler {
                 println!("{:-<20} {:-<40}", "", "");
                 for id in ids {
                     if let Some(ws) = workspaces.get(id) {
-                        println!("{:<20} {:<40}", id, ws.root_path);
+                        let root_path = Path::new(&ws.root_path);
+                        let absolute_path = if root_path.is_absolute() {
+                            root_path.to_path_buf()
+                        } else {
+                            self.state
+                                .app_root
+                                .join(&ws.root_path)
+                                .canonicalize()
+                                .unwrap_or_else(|_| self.state.app_root.join(&ws.root_path))
+                        };
+                        println!("{:<20} {:<40}", id, absolute_path.display());
                     }
                 }
             }

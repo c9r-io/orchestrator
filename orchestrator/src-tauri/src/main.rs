@@ -5400,7 +5400,7 @@ fn main() {
         }
     };
 
-    if matches!(cli.command, cli::Commands::Task(_) | cli::Commands::Workspace(_) | cli::Commands::Config(_) | cli::Commands::Db(_)) {
+    if matches!(cli.command, cli::Commands::Task(_) | cli::Commands::Workspace(_) | cli::Commands::Config(_) | cli::Commands::Db(_) | cli::Commands::Apply { .. } | cli::Commands::Edit(_) | cli::Commands::Completion(_) | cli::Commands::Get { .. } | cli::Commands::Describe { .. }) {
         let handler = cli_handler::CliHandler::new(state.inner.clone());
         match handler.execute(&cli) {
             Ok(code) => std::process::exit(code),

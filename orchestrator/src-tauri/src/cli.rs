@@ -1,4 +1,5 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap_complete::Shell;
 use serde::{Deserialize, Serialize};
 
 /// Agent Orchestrator CLI - kubectl-like command-line interface
@@ -23,6 +24,7 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
+    #[command(alias = "ap")]
     Apply {
         #[arg(short = 'f', long = "file")]
         file: String,
@@ -31,27 +33,42 @@ pub enum Commands {
         dry_run: bool,
     },
 
-    /// Manage tasks
-    #[command(subcommand)]
+    #[command(alias = "g")]
+    Get {
+        #[arg(value_name = "RESOURCE")]
+        resource: String,
+
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+
+    #[command(alias = "desc")]
+    Describe {
+        #[arg(value_name = "RESOURCE")]
+        resource: String,
+
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+
+    #[command(alias = "t", subcommand)]
     Task(TaskCommands),
 
-    /// Manage workspaces
-    #[command(subcommand)]
+    #[command(alias = "ws", subcommand)]
     Workspace(WorkspaceCommands),
 
-    /// Manage configuration
-    #[command(subcommand)]
+    #[command(alias = "cfg", alias = "c", subcommand)]
     Config(ConfigCommands),
 
-    /// Manage resources
-    #[command(subcommand)]
+    #[command(alias = "e", subcommand)]
     Edit(EditCommands),
 
-    /// Manage database
-    #[command(subcommand)]
+    #[command(alias = "db", subcommand)]
     Db(DbCommands),
 
-    /// Run in daemon mode (default, starts UI if available)
+    #[command(alias = "comp", subcommand)]
+    Completion(CompletionCommands),
+
     #[command(alias = "serve")]
     Daemon,
 }
@@ -174,19 +191,17 @@ pub enum TaskCommands {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum WorkspaceCommands {
-    /// List all workspaces
+    #[command(alias = "ls")]
     List {
-        /// Output format
         #[arg(short, long, default_value = "table")]
         output: OutputFormat,
     },
 
-    /// Get workspace details
+    #[command(alias = "get")]
     Info {
-        /// Workspace ID
+        #[arg(short, long)]
         workspace_id: String,
 
-        /// Output format
         #[arg(short, long, default_value = "table")]
         output: OutputFormat,
     },
@@ -194,16 +209,14 @@ pub enum WorkspaceCommands {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum EditCommands {
-    /// Export a resource for editing
+    #[command(alias = "ex")]
     Export {
-        /// Resource selector (kind/name, e.g., workspace/default, agent/opencode)
         #[arg(value_name = "RESOURCE")]
         selector: String,
     },
 
-    /// Open a resource in $EDITOR and apply validated changes
+    #[command(alias = "op")]
     Open {
-        /// Resource selector (kind/name, e.g., workspace/default, agent/opencode)
         #[arg(value_name = "RESOURCE")]
         selector: String,
     },
@@ -211,36 +224,28 @@ pub enum EditCommands {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum ConfigCommands {
-    /// Get current configuration
     #[command(alias = "get")]
     View {
-        /// Output format
         #[arg(short, long, default_value = "yaml")]
         output: OutputFormat,
     },
 
-    /// Set configuration from file
     Set {
-        /// Path to config file
         config_file: String,
     },
 
-    /// Validate configuration file
     Validate {
-        /// Path to config file
         config_file: String,
     },
 
-    /// List available workflows
+    #[command(alias = "lw", alias = "list-wf")]
     ListWorkflows {
-        /// Output format
         #[arg(short, long, default_value = "table")]
         output: OutputFormat,
     },
 
-    /// List available agents
+    #[command(alias = "la", alias = "list-agent")]
     ListAgents {
-        /// Output format
         #[arg(short, long, default_value = "table")]
         output: OutputFormat,
     },
@@ -248,12 +253,18 @@ pub enum ConfigCommands {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum DbCommands {
-    /// Reset the database to initial state
     Reset {
-        /// Force reset without confirmation
         #[arg(short, long)]
         force: bool,
     },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum CompletionCommands {
+    Bash,
+    Zsh,
+    Fish,
+    PowerShell,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -298,6 +309,11 @@ impl From<&Cli> for LegacyCliOptions {
             target_files,
         }
     }
+}
+
+pub fn generate_completion(shell: Shell) {
+    let mut app = Cli::command();
+    clap_complete::generate(shell, &mut app, "orchestrator", &mut std::io::stdout());
 }
 
 #[cfg(test)]

@@ -1,0 +1,142 @@
+# Orchestrator - CLI Edit and Export
+
+**Module**: orchestrator
+**Scope**: Validate edit export/open commands for resource management
+**Scenarios**: 4
+**Priority**: Medium
+
+---
+
+## Background
+
+This document tests the edit commands for exporting and opening resources in the editor.
+
+Entry point: `orchestrator edit <command>`
+
+---
+
+## Scenario 1: Edit Export Workspace
+
+### Preconditions
+
+- Workspace exists in configuration
+
+### Steps
+
+1. Export workspace resource:
+   ```bash
+   orchestrator edit export workspace/default
+   ```
+
+2. Verify exported YAML format:
+   ```bash
+   # Output should be valid YAML with apiVersion, kind, metadata, spec
+   ```
+
+### Expected
+
+- Export shows workspace configuration in manifest format
+- Output can be used with `orchestrator apply`
+
+---
+
+## Scenario 2: Edit Export Agent
+
+### Preconditions
+
+- Agent configured in configuration
+
+### Steps
+
+1. Export agent resource:
+   ```bash
+   orchestrator edit export agent/opencode
+   ```
+
+2. Verify agent templates are included:
+   ```bash
+   # Should show qa, fix, retest templates
+   ```
+
+### Expected
+
+- Export shows agent configuration with all templates
+
+---
+
+## Scenario 3: Edit Export Workflow
+
+### Preconditions
+
+- Workflow configured in configuration
+
+### Steps
+
+1. Export workflow resource:
+   ```bash
+   orchestrator edit export workflow/qa_only
+   ```
+
+2. Verify workflow steps are included:
+   ```bash
+   # Should show steps, loop, finalize rules
+   ```
+
+### Expected
+
+- Export shows full workflow configuration
+
+---
+
+## Scenario 4: Edit Export Agent Group
+
+### Preconditions
+
+- Agent group configured
+
+### Steps
+
+1. Export agent group:
+   ```bash
+   orchestrator edit export agentgroup/qa_group
+   ```
+
+2. Verify group members are shown:
+   ```bash
+   # Should list agents in the group
+   ```
+
+### Expected
+
+- Export shows agent group with member list
+
+---
+
+## Scenario 5: Edit Open (if implemented)
+
+### Preconditions
+
+- $EDITOR environment variable set
+
+### Steps
+
+1. Try to open workspace in editor:
+   ```bash
+   EDITOR=cat orchestrator edit open workspace/default
+   ```
+
+### Expected
+
+- Opens resource in editor (or shows content if EDITOR=cat)
+
+---
+
+## Checklist
+
+| # | Scenario | Status | Test Date | Tester | Notes |
+|---|----------|--------|-----------|--------|-------|
+| 1 | Edit Export Workspace | ☐ | | | |
+| 2 | Edit Export Agent | ☐ | | | |
+| 3 | Edit Export Workflow | ☐ | | | |
+| 4 | Edit Export Agent Group | ☐ | | | |
+| 5 | Edit Open | ☐ | | | |

@@ -33,3 +33,4 @@ docs/design_doc/
 | Module | Doc | Related QA | Notes |
 |--------|-----|------------|-------|
 | example | `docs/design_doc/example/01-sample.md` | `docs/qa/example/01-sample.md` | skeleton |
+| orchestrator | `docs/design_doc/orchestrator/01-cli-agent-orchestration.md` | `docs/qa/orchestrator/01-cli-agent-orchestration.md` | CLI testing with mock agents |
