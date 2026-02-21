@@ -890,4 +890,210 @@ mod tests {
         let result = planner.generate_plan(&context);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_prehook_decision_branch() {
+        let decision = PrehookDecision::Branch {
+            target: "fix".to_string(),
+            context: HashMap::new(),
+        };
+        assert!(decision.is_branch());
+        assert!(!decision.should_run());
+    }
+
+    #[test]
+    fn test_prehook_decision_dynamic_add() {
+        let step = DynamicStepInstance {
+            id: "dynamic_fix_1".to_string(),
+            source_id: "quick_fix".to_string(),
+            step_type: "fix".to_string(),
+            agent_id: Some("quick_fixer".to_string()),
+            template: Some("fix {rel_path}".to_string()),
+            context: HashMap::new(),
+        };
+        let decision = PrehookDecision::DynamicAdd { steps: vec![step] };
+        assert!(decision.is_dynamic_add());
+        assert!(decision.should_run());
+    }
+
+    #[test]
+    fn test_prehook_decision_transform() {
+        let decision = PrehookDecision::Transform {
+            template: "new_template {rel_path}".to_string(),
+            target_steps: vec!["fix".to_string()],
+        };
+        assert!(decision.is_transform());
+        assert!(decision.should_run());
+    }
+
+    #[test]
+    fn test_dynamic_step_pool_priority() {
+        let mut pool = DynamicStepPool::new();
+
+        pool.add_step(DynamicStepConfig {
+            id: "low_priority".to_string(),
+            description: None,
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: Some("active_ticket_count > 0".to_string()),
+            priority: 1,
+            max_runs: None,
+        });
+
+        pool.add_step(DynamicStepConfig {
+            id: "high_priority".to_string(),
+            description: None,
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: Some("active_ticket_count > 0".to_string()),
+            priority: 100,
+            max_runs: None,
+        });
+
+        let context = StepPrehookContext {
+            active_ticket_count: 5,
+            ..Default::default()
+        };
+
+        let matches = pool.find_matching_steps(&context);
+        assert_eq!(matches.len(), 2);
+        assert_eq!(matches[0].id, "high_priority");
+    }
+
+    #[test]
+    fn test_dag_find_next_nodes() {
+        let mut plan = DynamicExecutionPlan::new();
+
+        plan.add_node(WorkflowNode {
+            id: "qa".to_string(),
+            step_type: "qa".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+
+        plan.add_node(WorkflowNode {
+            id: "fix".to_string(),
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: true,
+        })
+        .unwrap();
+
+        plan.add_node(WorkflowNode {
+            id: "done".to_string(),
+            step_type: "done".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: true,
+            repeatable: false,
+        })
+        .unwrap();
+
+        // Unconditional edge: qa -> fix
+        plan.add_edge(WorkflowEdge {
+            from: "qa".to_string(),
+            to: "fix".to_string(),
+            condition: None,
+        })
+        .unwrap();
+
+        // Conditional edge: fix -> done (when no tickets)
+        plan.add_edge(WorkflowEdge {
+            from: "fix".to_string(),
+            to: "done".to_string(),
+            condition: Some("active_ticket_count == 0".to_string()),
+        })
+        .unwrap();
+
+        let context = StepPrehookContext {
+            active_ticket_count: 0,
+            ..Default::default()
+        };
+
+        // From qa should find fix (unconditional)
+        let next_from_qa = plan.find_next_nodes("qa", &context);
+        assert!(next_from_qa.contains(&"fix".to_string()));
+
+        // From fix with 0 tickets should find done
+        let next_from_fix = plan.find_next_nodes("fix", &context);
+        assert!(next_from_fix.contains(&"done".to_string()));
+    }
+
+    #[test]
+    fn test_dag_get_node() {
+        let mut plan = DynamicExecutionPlan::new();
+
+        plan.add_node(WorkflowNode {
+            id: "test".to_string(),
+            step_type: "qa".to_string(),
+            agent_id: Some("echo".to_string()),
+            template: Some("echo test".to_string()),
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+
+        let node = plan.get_node("test");
+        assert!(node.is_some());
+        assert_eq!(node.unwrap().id, "test");
+
+        let none = plan.get_node("nonexistent");
+        assert!(none.is_none());
+    }
+
+    #[test]
+    fn test_dag_is_completed() {
+        let mut plan = DynamicExecutionPlan::new();
+
+        plan.add_node(WorkflowNode {
+            id: "start".to_string(),
+            step_type: "init".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+
+        plan.add_node(WorkflowNode {
+            id: "end".to_string(),
+            step_type: "done".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: true,
+            repeatable: false,
+        })
+        .unwrap();
+
+        plan.add_edge(WorkflowEdge {
+            from: "start".to_string(),
+            to: "end".to_string(),
+            condition: None,
+        })
+        .unwrap();
+
+        let mut state = DagExecutionState::default();
+
+        // Not completed yet
+        assert!(!plan.is_completed(&state));
+
+        // Mark end node as completed
+        state.completed_nodes.insert("end".to_string());
+
+        // Now should be completed
+        assert!(plan.is_completed(&state));
+    }
 }

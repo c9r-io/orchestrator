@@ -15,6 +15,9 @@ Tauri + React based workflow orchestrator for agent-driven operations.
 - **Structured AgentOutput** with artifacts, confidence, and quality scores
 - **MessageBus** for agent-to-agent communication
 - **Artifact parsing** from agent stdout/stderr (JSON and text markers)
+- **Dynamic Orchestration** with PrehookDecision (Run/Skip/Branch/DynamicAdd/Transform)
+- **DAG Execution Engine** with topological sort and cycle detection
+- **Dynamic Step Pool** for runtime step selection based on context
 
 ## Directory
 
@@ -176,6 +179,16 @@ Legacy CLI examples (still supported):
 - UI-only metadata is stored under `prehook.ui` for round-trip editing
 - Final state decisions can be configured with `workflow.finalize.rules[]` (first-match wins)
 
+### Extended Prehook Decisions (Dynamic Orchestration)
+
+When `prehook.extended: true` is set, the prehook can return complex decisions beyond simple run/skip:
+
+- **Run**: Execute the step (default)
+- **Skip**: Skip the step with a reason
+- **Branch**: Jump to a different step with context
+- **DynamicAdd**: Dynamically inject steps into the execution plan
+- **Transform**: Replace templates for subsequent steps
+
 Available visual fields:
 
 - `active_ticket_count`, `new_ticket_count`, `cycle`
@@ -203,6 +216,44 @@ Template placeholders:
 - `{ticket_paths}`: space-separated ticket file paths for current item
 - loop guard template placeholders: `{task_id}`, `{cycle}`, `{unresolved_items}`
 - **Enhanced placeholders**: `{phase}`, `{upstream[0].exit_code}`, `{upstream[0].confidence}`, `{shared_state.key}`
+
+## Dynamic Steps (Optional)
+
+Workflows can define a pool of dynamic steps that are selected at runtime based on context:
+
+```yaml
+workflows:
+  adaptive:
+    steps:
+      - id: qa
+        type: qa
+        enabled: true
+    dynamic_steps:
+      - id: quick_fix
+        step_type: fix
+        trigger: "qa_confidence > 0.8 && active_ticket_count < 3"
+        priority: 10
+        max_runs: 1
+      - id: deep_retest
+        step_type: retest
+        trigger: "cycle > 2 && active_ticket_count > 5"
+        priority: 5
+```
+
+- **trigger**: CEL condition that determines when this step is eligible
+- **priority**: Higher priority steps are selected first when multiple match
+- **max_runs**: Maximum times this step can execute per item
+
+## DAG Execution Engine
+
+The orchestrator includes a DAG (Directed Acyclic Graph) execution engine for advanced workflows:
+
+- **WorkflowNode**: Represents a step in the workflow
+- **WorkflowEdge**: Directed connections between nodes with optional CEL conditions
+- **Topological Sort**: Validates execution order and detects cycles
+- **Conditional Edges**: Paths branch based on CEL conditions evaluated at runtime
+
+This enables complex workflows with dynamic branching and conditional execution paths.
 
 Path safety rules:
 

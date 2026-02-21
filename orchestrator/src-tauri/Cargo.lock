@@ -18,6 +18,7 @@ dependencies = [
  "clap",
  "clap_complete",
  "glob",
+ "lazy_static",
  "pathdiff",
  "rand 0.8.5",
  "rusqlite",

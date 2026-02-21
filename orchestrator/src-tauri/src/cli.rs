@@ -432,3 +432,16 @@ mod tests {
         }
     }
 }
+
+use crate::cli_handler::CliHandler;
+use crate::dto::CliOptions;
+use crate::state::InnerState;
+use anyhow::Result;
+use std::sync::Arc;
+
+pub async fn run_cli_mode(state: Arc<InnerState>, _options: CliOptions) -> Result<()> {
+    let handler = CliHandler::new(state);
+    let cli = Cli::parse();
+    let exit_code = handler.execute(&cli)?;
+    std::process::exit(exit_code);
+}

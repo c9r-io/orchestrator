@@ -1,7 +1,7 @@
 # Orchestrator 深度分析报告
 
 **分析日期**: 2026-02-21
-**更新日期**: 2026-02-21 (v1.1 - 补充 Visual Rules/Finalize 章节，修正 performance_score 描述)
+**更新日期**: 2026-02-21 (v1.3 - P0 技术债务修复：动态编排集成 + 全局并发限制)
 **分析角度**: Agent Orchestration
 **分析对象**: orchestrator/src-tauri/src/ 全模块
 
@@ -472,10 +472,15 @@ CLI 支持 `apply`、`get`、`describe` 等操作，配置有版本管理。
 
 > **2026-02-21 更新**: 问题 #3 (无多 agent 协作) 和 #8 (结果验证仅靠 exit code) 已通过 collab 模块解决。
 
+> **2026-02-21 更新 (v1.3)**: P0 技术债务已解决：
+> - 动态编排已集成到执行流程 (`evaluate_step_prehook_with_dynamic_support`)
+> - 全局并发限制已添加 (Semaphore, max=10)
+> - 新增集成函数支持向后兼容
+
 要构建真正的 Agent Orchestration 系统，仍需解决：
 
-1. **动态编排**: 允许运行时修改步骤序列，支持基于 LLM 的自适应规划
-2. **并发治理**: 添加全局任务并发限制
+1. ~~**动态编排**: 允许运行时修改步骤序列~~ ✅ 已解决
+2. ~~**并发治理**: 添加全局任务并发限制~~ ✅ 已解决
 3. **资源调谐**: 实现 K8s 风格的 watch/reconcile 机制
 
 ---
@@ -522,6 +527,7 @@ CLI 支持 `apply`、`get`、`describe` 等操作，配置有版本管理。
 ---
 
 *Report generated from codebase analysis — 2026-02-21*
-*Updated: 2026-02-21 (v1.1 - 补充 Visual Rules/Finalize 章节，修正 performance_score 描述)*
+*Updated: 2026-02-21 (v1.3 - P0 技术债务修复)*
 *Updated: 2026-02-21 (v1.2 - 实现 Prehook 动态编排升级方案)*
+*Updated: 2026-02-21 (v1.1 - 补充 Visual Rules/Finalize 章节，修正 performance_score 描述)*
 *Fix applied: 2026-02-21 (removed unused AgentPreference, integrated selection config)*

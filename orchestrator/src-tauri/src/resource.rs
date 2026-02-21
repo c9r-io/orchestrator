@@ -3,11 +3,13 @@ use crate::cli_types::{
     ResourceMetadata, ResourceSpec, WorkflowFinalizeRuleSpec, WorkflowFinalizeSpec,
     WorkflowLoopSpec, WorkflowPrehookSpec, WorkflowSpec, WorkflowStepSpec, WorkspaceSpec,
 };
-use crate::{
+use crate::config::{
     AgentConfig, AgentMetadata, AgentSelectionConfig, LoopMode, OrchestratorConfig, StepHookEngine,
     StepPrehookConfig, WorkflowConfig, WorkflowFinalizeConfig, WorkflowFinalizeRule,
-    WorkflowLoopConfig, WorkflowStepConfig, WorkflowStepType, WorkspaceConfig,
+    WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig, WorkflowStepType,
+    WorkspaceConfig,
 };
+use crate::config_load::read_active_config;
 use anyhow::{anyhow, Result};
 use serde::Serialize;
 
@@ -506,7 +508,7 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> WorkflowConfig {
 
     let loop_policy = WorkflowLoopConfig {
         mode: parse_loop_mode(&spec.loop_policy.mode),
-        guard: crate::WorkflowLoopGuardConfig {
+        guard: WorkflowLoopGuardConfig {
             max_cycles: spec.loop_policy.max_cycles,
             ..Default::default()
         },
@@ -742,7 +744,7 @@ mod tests {
     fn resource_trait_get_from_reads_existing_config() {
         let mut fixture = TestState::new();
         let state = fixture.build();
-        let active = crate::read_active_config(&state).expect("state should be readable");
+        let active = read_active_config(&state).expect("state should be readable");
         let resource = RegisteredResource::get_from(&active.config, "default")
             .expect("default workspace should exist");
         assert_eq!(resource.kind(), ResourceKind::Workspace);
@@ -754,7 +756,7 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let mut config = {
-            let active = crate::read_active_config(&state).expect("state should be readable");
+            let active = read_active_config(&state).expect("state should be readable");
             active.config.clone()
         };
 
@@ -774,7 +776,7 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let mut config = {
-            let active = crate::read_active_config(&state).expect("state should be readable");
+            let active = read_active_config(&state).expect("state should be readable");
             active.config.clone()
         };
 
@@ -793,7 +795,7 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let mut config = {
-            let active = crate::read_active_config(&state).expect("state should be readable");
+            let active = read_active_config(&state).expect("state should be readable");
             active.config.clone()
         };
 
@@ -838,7 +840,7 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let mut config = {
-            let active = crate::read_active_config(&state).expect("state should be readable");
+            let active = read_active_config(&state).expect("state should be readable");
             active.config.clone()
         };
 
@@ -855,7 +857,7 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let mut config = {
-            let active = crate::read_active_config(&state).expect("state should be readable");
+            let active = read_active_config(&state).expect("state should be readable");
             active.config.clone()
         };
 
@@ -870,7 +872,7 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let mut config = {
-            let active = crate::read_active_config(&state).expect("state should be readable");
+            let active = read_active_config(&state).expect("state should be readable");
             active.config.clone()
         };
 

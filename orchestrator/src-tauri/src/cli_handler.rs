@@ -1,13 +1,27 @@
+use crate::api::{create_task_impl, reset_task_item_for_retry};
 use crate::cli::{
     generate_completion, Cli, Commands, CompletionCommands, ConfigCommands, DbCommands,
     EditCommands, OutputFormat, TaskCommands, WorkspaceCommands,
 };
-use crate::cli_types::OrchestratorResource;
+use crate::cli_types::{OrchestratorResource, ResourceKind};
+use crate::config::OrchestratorConfig;
+use crate::config::{AgentConfig, WorkflowConfig, WorkspaceConfig};
+use crate::config_load::{
+    build_active_config, load_config_overview, persist_config_and_reload, read_active_config,
+};
+use crate::db::reset_db;
+use crate::dto::ConfigOverview;
+use crate::dto::{CreateTaskPayload, TaskDetail, TaskSummary};
 use crate::resource::{
     dispatch_resource, AgentResource, ApplyResult, RegisteredResource, Resource, WorkflowResource,
     WorkspaceResource,
 };
-use crate::InnerState;
+use crate::scheduler::{
+    delete_task_impl, find_latest_resumable_task_id, get_task_details_impl, list_tasks_impl,
+    load_task_summary, prepare_task_for_start, resolve_task_id, run_task_loop, spawn_task_runner,
+    stop_task_runtime, stop_task_runtime_for_delete, stream_task_logs_impl, RunningTask,
+};
+use crate::state::InnerState;
 use anyhow::{Context, Result};
 use clap_complete::Shell;
 use serde::Deserialize;
@@ -65,7 +79,7 @@ impl CliHandler {
                 Ok(0)
             }
             "config" => {
-                let config = crate::read_active_config(&self.state)?;
+                let config = read_active_config(&self.state)?;
                 println!("Active Configuration:");
                 println!(
                     "{}",
@@ -102,7 +116,7 @@ impl CliHandler {
             .with_context(|| format!("failed to read manifest file: {}", file))?;
         let resources = Self::parse_resources_from_yaml(&content)?;
         let mut merged_config = {
-            let active = crate::read_active_config(&self.state)?;
+            let active = read_active_config(&self.state)?;
             active.config.clone()
         };
 
@@ -169,7 +183,7 @@ impl CliHandler {
         if !dry_run && !applied_results.is_empty() {
             let merged_yaml = serde_yaml::to_string(&merged_config)
                 .context("failed to serialize applied configuration")?;
-            crate::persist_config_and_reload(&self.state, merged_config, merged_yaml, "cli")?;
+            persist_config_and_reload(&self.state, merged_config, merged_yaml, "cli")?;
         }
 
         Ok(0)
@@ -191,7 +205,7 @@ impl CliHandler {
                 output,
             }),
             "wf" | "workflow" => {
-                let active = crate::read_active_config(&self.state)?;
+                let active = read_active_config(&self.state)?;
                 if let Some(wf) = active.config.workflows.get(name) {
                     match output {
                         OutputFormat::Json => {
@@ -215,7 +229,7 @@ impl CliHandler {
                 }
             }
             "agent" => {
-                let active = crate::read_active_config(&self.state)?;
+                let active = read_active_config(&self.state)?;
                 if let Some(agent) = active.config.agents.get(name) {
                     match output {
                         OutputFormat::Json => {
@@ -270,7 +284,7 @@ impl CliHandler {
                 output,
             }),
             "wf" | "workflow" => {
-                let active = crate::read_active_config(&self.state)?;
+                let active = read_active_config(&self.state)?;
                 if let Some(wf) = active.config.workflows.get(name) {
                     match output {
                         OutputFormat::Json => {
@@ -294,7 +308,7 @@ impl CliHandler {
                 }
             }
             "agent" => {
-                let active = crate::read_active_config(&self.state)?;
+                let active = read_active_config(&self.state)?;
                 if let Some(agent) = active.config.agents.get(name) {
                     match output {
                         OutputFormat::Json => {
@@ -340,7 +354,7 @@ impl CliHandler {
                 output,
                 verbose,
             } => {
-                let tasks = crate::list_tasks_impl(&self.state)?;
+                let tasks = list_tasks_impl(&self.state)?;
                 let filtered: Vec<_> = match status {
                     Some(s) => tasks.into_iter().filter(|t| t.status == *s).collect(),
                     None => tasks,
@@ -355,7 +369,7 @@ impl CliHandler {
                 target_file,
                 no_start,
             } => {
-                let payload = crate::CreateTaskPayload {
+                let payload = CreateTaskPayload {
                     name: name.clone(),
                     goal: goal.clone(),
                     project_id: None,
@@ -367,48 +381,48 @@ impl CliHandler {
                         Some(target_file.clone())
                     },
                 };
-                let created = crate::create_task_impl(&self.state, payload)?;
+                let created = create_task_impl(&self.state, payload)?;
                 println!("Task created: {}", created.id);
                 if !no_start {
-                    crate::prepare_task_for_start(&self.state, &created.id)?;
-                    let runtime = crate::RunningTask::new();
+                    prepare_task_for_start(&self.state, &created.id)?;
+                    let runtime = RunningTask::new();
                     let rt = tokio::runtime::Runtime::new()?;
-                    rt.block_on(crate::run_task_loop(
+                    rt.block_on(run_task_loop(
                         self.state.clone(),
                         None,
                         &created.id,
                         runtime,
                     ))?;
-                    let summary = crate::load_task_summary(&self.state, &created.id)?;
+                    let summary = load_task_summary(&self.state, &created.id)?;
                     println!("Task finished: {} status={}", summary.id, summary.status);
                 }
                 Ok(0)
             }
             TaskCommands::Info { task_id, output } => {
-                let detail = crate::get_task_details_impl(&self.state, task_id)?;
+                let detail = get_task_details_impl(&self.state, task_id)?;
                 self.print_task_detail(&detail, *output)
             }
             TaskCommands::Start { task_id, latest } => {
                 let id = if let Some(id) = task_id {
-                    crate::resolve_task_id(&self.state, id)?
+                    resolve_task_id(&self.state, id)?
                 } else if *latest {
-                    crate::find_latest_resumable_task_id(&self.state, true)?
+                    find_latest_resumable_task_id(&self.state, true)?
                         .context("no resumable task found")?
                 } else {
                     anyhow::bail!("task_id or --latest required")
                 };
-                crate::prepare_task_for_start(&self.state, &id)?;
-                let runtime = crate::RunningTask::new();
+                prepare_task_for_start(&self.state, &id)?;
+                let runtime = RunningTask::new();
                 let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(crate::run_task_loop(self.state.clone(), None, &id, runtime))?;
-                let summary = crate::load_task_summary(&self.state, &id)?;
+                rt.block_on(run_task_loop(self.state.clone(), None, &id, runtime))?;
+                let summary = load_task_summary(&self.state, &id)?;
                 println!("Task finished: {} status={}", summary.id, summary.status);
                 Ok(0)
             }
             TaskCommands::Pause { task_id } => {
-                let resolved_id = crate::resolve_task_id(&self.state, task_id)?;
+                let resolved_id = resolve_task_id(&self.state, task_id)?;
                 let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(crate::stop_task_runtime(
+                rt.block_on(stop_task_runtime(
                     self.state.clone(),
                     &resolved_id,
                     "paused",
@@ -417,17 +431,17 @@ impl CliHandler {
                 Ok(0)
             }
             TaskCommands::Resume { task_id } => {
-                let resolved_id = crate::resolve_task_id(&self.state, task_id)?;
-                crate::prepare_task_for_start(&self.state, &resolved_id)?;
-                let runtime = crate::RunningTask::new();
+                let resolved_id = resolve_task_id(&self.state, task_id)?;
+                prepare_task_for_start(&self.state, &resolved_id)?;
+                let runtime = RunningTask::new();
                 let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(crate::run_task_loop(
+                rt.block_on(run_task_loop(
                     self.state.clone(),
                     None,
                     &resolved_id,
                     runtime,
                 ))?;
-                let summary = crate::load_task_summary(&self.state, &resolved_id)?;
+                let summary = load_task_summary(&self.state, &resolved_id)?;
                 println!("Task finished: {} status={}", summary.id, summary.status);
                 Ok(0)
             }
@@ -437,8 +451,8 @@ impl CliHandler {
                 tail: _,
                 timestamps: _,
             } => {
-                let resolved_id = crate::resolve_task_id(&self.state, task_id)?;
-                let logs = crate::stream_task_logs_impl(&self.state, &resolved_id, 300)?;
+                let resolved_id = resolve_task_id(&self.state, task_id)?;
+                let logs = stream_task_logs_impl(&self.state, &resolved_id, 300)?;
                 for chunk in logs {
                     println!("{}", chunk.content);
                 }
@@ -449,28 +463,23 @@ impl CliHandler {
                     println!("Use --force to confirm deletion of task {}", task_id);
                     return Ok(0);
                 }
-                let resolved_id = crate::resolve_task_id(&self.state, task_id)?;
+                let resolved_id = resolve_task_id(&self.state, task_id)?;
                 let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(crate::stop_task_runtime_for_delete(
+                rt.block_on(stop_task_runtime_for_delete(
                     self.state.clone(),
                     &resolved_id,
                 ))?;
-                crate::delete_task_impl(&self.state, &resolved_id)?;
+                delete_task_impl(&self.state, &resolved_id)?;
                 println!("Task deleted: {}", resolved_id);
                 Ok(0)
             }
             TaskCommands::Retry { task_item_id } => {
-                let task_id = crate::reset_task_item_for_retry(&self.state, task_item_id)?;
-                crate::prepare_task_for_start(&self.state, &task_id)?;
-                let runtime = crate::RunningTask::new();
+                let task_id = reset_task_item_for_retry(&self.state, task_item_id)?;
+                prepare_task_for_start(&self.state, &task_id)?;
+                let runtime = RunningTask::new();
                 let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(crate::run_task_loop(
-                    self.state.clone(),
-                    None,
-                    &task_id,
-                    runtime,
-                ))?;
-                let summary = crate::load_task_summary(&self.state, &task_id)?;
+                rt.block_on(run_task_loop(self.state.clone(), None, &task_id, runtime))?;
+                let summary = load_task_summary(&self.state, &task_id)?;
                 println!("Retry finished: {} status={}", summary.id, summary.status);
                 Ok(0)
             }
@@ -478,7 +487,7 @@ impl CliHandler {
     }
 
     fn handle_workspace(&self, cmd: &WorkspaceCommands) -> Result<i32> {
-        let active = crate::read_active_config(&self.state)?;
+        let active = read_active_config(&self.state)?;
         match cmd {
             WorkspaceCommands::List { output } => {
                 let workspaces: Vec<_> = active.config.workspaces.keys().cloned().collect();
@@ -501,30 +510,30 @@ impl CliHandler {
     fn handle_config(&self, cmd: &ConfigCommands) -> Result<i32> {
         match cmd {
             ConfigCommands::View { output } => {
-                let overview = crate::load_config_overview(&self.state)?;
+                let overview = load_config_overview(&self.state)?;
                 self.print_config(&overview, *output)
             }
             ConfigCommands::Set { config_file } => {
                 let content = std::fs::read_to_string(config_file)?;
-                let config: crate::OrchestratorConfig = serde_yaml::from_str(&content)?;
-                crate::persist_config_and_reload(&self.state, config, content, "cli")?;
+                let config: OrchestratorConfig = serde_yaml::from_str(&content)?;
+                persist_config_and_reload(&self.state, config, content, "cli")?;
                 println!("Configuration updated");
                 Ok(0)
             }
             ConfigCommands::Validate { config_file } => {
                 let content = std::fs::read_to_string(config_file)?;
-                let config: crate::OrchestratorConfig = serde_yaml::from_str(&content)?;
-                let candidate = crate::build_active_config(&self.state.app_root, config)?;
+                let config: OrchestratorConfig = serde_yaml::from_str(&content)?;
+                let candidate = build_active_config(&self.state.app_root, config)?;
                 let normalized = serde_yaml::to_string(&candidate.config)?;
                 println!("Configuration is valid:\n{}", normalized);
                 Ok(0)
             }
             ConfigCommands::ListWorkflows { output } => {
-                let active = crate::read_active_config(&self.state)?;
+                let active = read_active_config(&self.state)?;
                 self.print_workflows(&active.config.workflows, *output)
             }
             ConfigCommands::ListAgents { output } => {
-                let active = crate::read_active_config(&self.state)?;
+                let active = read_active_config(&self.state)?;
                 self.print_agents(&active.config.agents, *output)
             }
         }
@@ -534,7 +543,7 @@ impl CliHandler {
         match cmd {
             EditCommands::Export { selector } => {
                 let (kind_str, name) = parse_resource_selector(selector)?;
-                let active = crate::read_active_config(&self.state)?;
+                let active = read_active_config(&self.state)?;
                 let resource = RegisteredResource::get_from(&active.config, name)
                     .with_context(|| format!("resource not found: {}/{}", kind_str, name))?;
                 let yaml = resource.to_yaml()?;
@@ -549,7 +558,7 @@ impl CliHandler {
     fn edit_open(&self, selector: &str) -> Result<i32> {
         let (kind_str, name) = parse_resource_selector(selector)?;
         let (resource, mut merged_config) = {
-            let active = crate::read_active_config(&self.state)?;
+            let active = read_active_config(&self.state)?;
             let resource = RegisteredResource::get_from(&active.config, name)
                 .with_context(|| format!("resource not found: {}/{}", kind_str, name))?;
             (resource, active.config.clone())
@@ -612,7 +621,7 @@ impl CliHandler {
             let result = self.apply_resource(&mut merged_config, &registered);
             let merged_yaml = serde_yaml::to_string(&merged_config)
                 .context("failed to serialize edited configuration")?;
-            crate::persist_config_and_reload(&self.state, merged_config, merged_yaml, "cli")?;
+            persist_config_and_reload(&self.state, merged_config, merged_yaml, "cli")?;
 
             let action = match result {
                 ApplyResult::Created => "created",
@@ -642,7 +651,7 @@ impl CliHandler {
                     eprintln!("Use --force to confirm database reset");
                     return Ok(1);
                 }
-                crate::reset_db(&self.state)?;
+                reset_db(&self.state)?;
                 println!("Database reset completed");
                 Ok(0)
             }
@@ -675,7 +684,7 @@ impl CliHandler {
 
     fn apply_resource(
         &self,
-        config: &mut crate::OrchestratorConfig,
+        config: &mut OrchestratorConfig,
         resource: &RegisteredResource,
     ) -> ApplyResult {
         let existed = match resource {
@@ -700,7 +709,7 @@ impl CliHandler {
 
     fn print_tasks(
         &self,
-        tasks: &[crate::TaskSummary],
+        tasks: &[TaskSummary],
         format: OutputFormat,
         _verbose: bool,
     ) -> Result<i32> {
@@ -734,7 +743,7 @@ impl CliHandler {
         Ok(0)
     }
 
-    fn print_task_detail(&self, detail: &crate::TaskDetail, format: OutputFormat) -> Result<i32> {
+    fn print_task_detail(&self, detail: &TaskDetail, format: OutputFormat) -> Result<i32> {
         match format {
             OutputFormat::Json => {
                 println!("{}", serde_json::to_string_pretty(detail)?);
@@ -765,7 +774,7 @@ impl CliHandler {
     fn print_workspaces(
         &self,
         ids: &[String],
-        workspaces: &std::collections::HashMap<String, crate::WorkspaceConfig>,
+        workspaces: &std::collections::HashMap<String, WorkspaceConfig>,
         format: OutputFormat,
     ) -> Result<i32> {
         match format {
@@ -802,7 +811,7 @@ impl CliHandler {
     fn print_workspace_detail(
         &self,
         id: &str,
-        ws: &crate::WorkspaceConfig,
+        ws: &WorkspaceConfig,
         format: OutputFormat,
     ) -> Result<i32> {
         match format {
@@ -823,7 +832,7 @@ impl CliHandler {
         Ok(0)
     }
 
-    fn print_config(&self, overview: &crate::ConfigOverview, format: OutputFormat) -> Result<i32> {
+    fn print_config(&self, overview: &ConfigOverview, format: OutputFormat) -> Result<i32> {
         match format {
             OutputFormat::Json => {
                 println!("{}", serde_json::to_string_pretty(&overview.config)?);
@@ -837,7 +846,7 @@ impl CliHandler {
 
     fn print_workflows(
         &self,
-        workflows: &std::collections::HashMap<String, crate::WorkflowConfig>,
+        workflows: &std::collections::HashMap<String, WorkflowConfig>,
         format: OutputFormat,
     ) -> Result<i32> {
         match format {
@@ -866,7 +875,7 @@ impl CliHandler {
 
     fn print_agents(
         &self,
-        agents: &std::collections::HashMap<String, crate::AgentConfig>,
+        agents: &std::collections::HashMap<String, AgentConfig>,
         format: OutputFormat,
     ) -> Result<i32> {
         match format {
@@ -888,11 +897,11 @@ impl CliHandler {
     }
 }
 
-fn kind_as_str(kind: crate::cli_types::ResourceKind) -> &'static str {
+fn kind_as_str(kind: ResourceKind) -> &'static str {
     match kind {
-        crate::cli_types::ResourceKind::Workspace => "workspace",
-        crate::cli_types::ResourceKind::Agent => "agent",
-        crate::cli_types::ResourceKind::Workflow => "workflow",
+        ResourceKind::Workspace => "workspace",
+        ResourceKind::Agent => "agent",
+        ResourceKind::Workflow => "workflow",
     }
 }
 
@@ -1154,7 +1163,7 @@ YAML"#,
         });
         assert_eq!(code, 0);
 
-        let active = crate::read_active_config(&state).expect("config should be readable");
+        let active = read_active_config(&state).expect("config should be readable");
         let workspace = active
             .config
             .workspaces
@@ -1231,7 +1240,7 @@ fi"#,
         let count = std::fs::read_to_string(&count_file).expect("count file should be present");
         assert_eq!(count.trim(), "2");
 
-        let active = crate::read_active_config(&state).expect("config should be readable");
+        let active = read_active_config(&state).expect("config should be readable");
         let workspace = active
             .config
             .workspaces
@@ -1299,7 +1308,7 @@ spec:
         let code = handler.execute(&cli).expect("dry-run should succeed");
         assert_eq!(code, 0);
 
-        let active = crate::read_active_config(&state).expect("config should be readable");
+        let active = read_active_config(&state).expect("config should be readable");
         assert!(!active.config.workspaces.contains_key("dry-run-created"));
     }
 
@@ -1390,7 +1399,7 @@ spec:
         let code = handler.execute(&cli).expect("dry-run should succeed");
         assert_eq!(code, 0);
 
-        let active = crate::read_active_config(&state).expect("config should be readable");
+        let active = read_active_config(&state).expect("config should be readable");
         assert!(!active.config.workspaces.contains_key("dry-run-multi"));
         assert!(active.config.workspaces.contains_key("default"));
     }
@@ -1421,7 +1430,7 @@ spec:
         let code = handler.execute(&cli).expect("apply create should succeed");
         assert_eq!(code, 0);
 
-        let active = crate::read_active_config(&state).expect("config should be readable");
+        let active = read_active_config(&state).expect("config should be readable");
         let workspace = active
             .config
             .workspaces
@@ -1469,7 +1478,7 @@ spec:
         };
         assert_eq!(handler.execute(&second_apply).expect("second apply"), 0);
 
-        let active = crate::read_active_config(&state).expect("config should be readable");
+        let active = read_active_config(&state).expect("config should be readable");
         let workspace = active
             .config
             .workspaces
@@ -1489,7 +1498,7 @@ spec:
         ensure_workspace_structure(fixture.temp_root(), "workspace/apply-persist-dry");
         ensure_workspace_structure(fixture.temp_root(), "workspace/apply-persist");
 
-        let baseline_version = crate::load_config_overview(&state)
+        let baseline_version = load_config_overview(&state)
             .expect("baseline overview should be readable")
             .version;
 
@@ -1511,7 +1520,7 @@ spec:
                 .expect("dry run should succeed"),
             0
         );
-        let version_after_dry_run = crate::load_config_overview(&state)
+        let version_after_dry_run = load_config_overview(&state)
             .expect("overview after dry run should be readable")
             .version;
         assert_eq!(version_after_dry_run, baseline_version);
@@ -1533,7 +1542,7 @@ spec:
             0
         );
 
-        let version_after_apply = crate::load_config_overview(&state)
+        let version_after_apply = load_config_overview(&state)
             .expect("overview after apply should be readable")
             .version;
         assert_eq!(version_after_apply, baseline_version + 1);
