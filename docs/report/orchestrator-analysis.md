@@ -480,6 +480,48 @@ CLI 支持 `apply`、`get`、`describe` 等操作，配置有版本管理。
 
 ---
 
+## 升级实现记录 (2026-02-21)
+
+### 问题 #4 升级方案实施：Prehook 条件系统 → 动态编排
+
+**已实现：**
+
+1. **Phase 1: Prehook 2.0** (`dynamic_orchestration.rs`)
+   - 新增 `PrehookDecision` 枚举，支持 Run/Skip/Branch/DynamicAdd/Transform 五种决策
+   - 新增 `evaluate_step_prehook_extended` 函数支持扩展决策
+   - `StepPrehookConfig` 新增 `extended` 字段支持向后兼容
+
+2. **Phase 2: Dynamic Step Registry**
+   - 新增 `DynamicStepConfig` 配置结构（trigger, priority, max_runs）
+   - 新增 `DynamicStepPool` 动态步骤池（支持按上下文匹配）
+   - `WorkflowConfig` 新增 `dynamic_steps` 字段
+
+3. **Phase 3: DAG Execution Engine**
+   - 新增 `WorkflowNode` 和 `WorkflowEdge` 结构
+   - 新增 `DynamicExecutionPlan` 支持 DAG 拓扑结构
+   - 实现 cycle detection 和 topological sort
+   - 新增 `find_next_nodes` 支持条件边评估
+   - 新增 `DagExecutionState` 追踪执行状态
+
+4. **Phase 4: Adaptive Planner (接口)**
+   - 新增 `AdaptivePlannerConfig` 配置
+   - 新增 `ExecutionHistoryRecord` 历史记录
+   - 定义 `LlmClient` trait（供后续实现）
+   - 实现 `AdaptivePlanner` 基于历史生成执行计划
+
+**配置文件更新：**
+- `config/default.yaml` 新增 `adaptive` workflow 示例，展示动态步骤配置
+
+**测试覆盖：**
+- `test_prehook_decision_from_bool`
+- `test_dynamic_step_pool`
+- `test_dag_topological_sort`
+- `test_dag_cycle_detection`
+- `test_adaptive_planner_disabled`
+
+---
+
 *Report generated from codebase analysis — 2026-02-21*
 *Updated: 2026-02-21 (v1.1 - 补充 Visual Rules/Finalize 章节，修正 performance_score 描述)*
+*Updated: 2026-02-21 (v1.2 - 实现 Prehook 动态编排升级方案)*
 *Fix applied: 2026-02-21 (removed unused AgentPreference, integrated selection config)*

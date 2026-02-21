@@ -499,6 +499,7 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> WorkflowConfig {
                 when: prehook.when.clone(),
                 reason: prehook.reason.clone(),
                 ui: None,
+                extended: false,
             }),
         })
         .collect();
@@ -533,6 +534,7 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> WorkflowConfig {
         qa: None,
         fix: None,
         retest: None,
+        dynamic_steps: vec![],
     }
 }
 

@@ -79,6 +79,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                     qa: None,
                     fix: None,
                     retest: None,
+                    dynamic_steps: vec![],
                 },
             );
             workflows

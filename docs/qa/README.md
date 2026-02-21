@@ -128,6 +128,7 @@ Maintain a lightweight index table here for fast navigation:
 | orchestrator | `docs/qa/orchestrator/08-project-namespace.md` | 6 | Project namespace for resource isolation, project fallback |
 | orchestrator | `docs/qa/orchestrator/09-agent-selection-strategy.md` | 5 | Multi-factor scoring, runtime metrics, capability-aware health (default: capability_aware) |
 | orchestrator | `docs/qa/orchestrator/10-agent-collaboration.md` | 5 | AgentOutput structure, MessageBus, artifact parsing, enhanced template rendering |
+| orchestrator | `docs/qa/orchestrator/13-dynamic-orchestration.md` | 6 | PrehookDecision extended types, DynamicStepPool, DAG execution, cycle detection, AdaptivePlanner |
 | orchestrator | `docs/qa/script/` | 3 | Shell scripts for pause/resume, retry, three-phase workflow testing |
 
 ## Important Notes for QA Engineers

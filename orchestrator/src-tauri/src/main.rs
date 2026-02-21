@@ -4,6 +4,7 @@ mod cli;
 mod cli_handler;
 mod cli_types;
 mod collab;
+mod dynamic_orchestration;
 mod metrics;
 mod resource;
 #[cfg(test)]
@@ -11,6 +12,10 @@ mod test_utils;
 
 use agent_orchestrator::collab::{
     parse_artifacts_from_output, AgentOutput, Artifact, ExecutionMetrics, MessageBus,
+};
+use agent_orchestrator::dynamic_orchestration::{
+    DynamicExecutionPlan, DynamicStepConfig, DynamicStepPool, PrehookDecision, WorkflowEdge,
+    WorkflowNode,
 };
 use agent_orchestrator::qa_utils::{new_ticket_diff, render_template, validate_workspace_rel_path};
 use anyhow::{Context, Result};
@@ -218,6 +223,8 @@ struct StepPrehookConfig {
     reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     ui: Option<StepPrehookUiConfig>,
+    #[serde(default)]
+    extended: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -377,6 +384,8 @@ struct WorkflowConfig {
     fix: Option<String>,
     #[serde(default)]
     retest: Option<String>,
+    #[serde(default)]
+    dynamic_steps: Vec<DynamicStepConfig>,
 }
 
 fn default_workflow_steps(
@@ -1976,6 +1985,44 @@ fn evaluate_step_prehook(
     }
 
     Ok(should_run)
+}
+
+fn evaluate_step_prehook_extended(
+    state: &InnerState,
+    app: Option<&AppHandle>,
+    prehook: Option<&StepPrehookConfig>,
+    context: &StepPrehookContext,
+) -> Result<PrehookDecision> {
+    let Some(prehook) = prehook else {
+        return Ok(PrehookDecision::Run);
+    };
+    let expression = prehook.when.trim();
+
+    let should_run = evaluate_step_prehook_expression(expression, context)?;
+
+    let decision: PrehookDecision = should_run.into();
+
+    let action = match &decision {
+        PrehookDecision::Run => "run",
+        PrehookDecision::Skip { .. } => "skip",
+        PrehookDecision::Branch { .. } => "branch",
+        PrehookDecision::DynamicAdd { .. } => "dynamic_add",
+        PrehookDecision::Transform { .. } => "transform",
+    };
+
+    emit_step_prehook_event(
+        state,
+        app,
+        context,
+        expression,
+        prehook
+            .reason
+            .as_deref()
+            .unwrap_or(action),
+        action,
+    )?;
+
+    Ok(decision)
 }
 
 fn build_step_prehook_cel_context(context: &StepPrehookContext) -> Result<CelContext<'_>> {
@@ -5784,6 +5831,7 @@ mod prehook_tests {
             when: "active_ticket_count > 0 && qa_failed == true".to_string(),
             reason: None,
             ui: None,
+            extended: false,
         };
         assert!(validate_step_prehook(&hook, "wf", "fix").is_ok());
     }
@@ -5795,6 +5843,7 @@ mod prehook_tests {
             when: "   ".to_string(),
             reason: None,
             ui: None,
+            extended: false,
         };
         assert!(validate_step_prehook(&hook, "wf", "fix").is_err());
     }
@@ -5806,6 +5855,7 @@ mod prehook_tests {
             when: "active_ticket_count >".to_string(),
             reason: None,
             ui: None,
+            extended: false,
         };
         assert!(validate_step_prehook(&hook, "wf", "fix").is_err());
     }
@@ -6062,6 +6112,7 @@ fn main() {
                         qa: None,
                         fix: None,
                         retest: None,
+                        dynamic_steps: vec![],
                     },
                 );
                 workflows
