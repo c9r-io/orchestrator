@@ -539,3 +539,244 @@ pub fn emit_item_finalize_event(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{StepHookEngine, StepPrehookContext, WorkflowFinalizeRule};
+
+    #[test]
+    fn test_validate_step_prehook_valid_cel() {
+        let prehook = StepPrehookConfig {
+            when: "active_ticket_count > 0".to_string(),
+            reason: None,
+            engine: StepHookEngine::Cel,
+            ui: None,
+            extended: false,
+        };
+        let result = validate_step_prehook(&prehook, "test-workflow", "qa");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_step_prehook_empty_expression() {
+        let prehook = StepPrehookConfig {
+            when: "".to_string(),
+            reason: None,
+            engine: StepHookEngine::Cel,
+            ui: None,
+            extended: false,
+        };
+        let result = validate_step_prehook(&prehook, "test-workflow", "qa");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("prehook.when cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_step_prehook_invalid_cel() {
+        let prehook = StepPrehookConfig {
+            when: "invalid cel expression @#$%".to_string(),
+            reason: None,
+            engine: StepHookEngine::Cel,
+            ui: None,
+            extended: false,
+        };
+        let result = validate_step_prehook(&prehook, "test-workflow", "qa");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_workflow_finalize_rule_valid() {
+        let rule = WorkflowFinalizeRule {
+            id: "test-rule".to_string(),
+            engine: StepHookEngine::Cel,
+            when: "active_ticket_count == 0".to_string(),
+            status: "skipped".to_string(),
+            reason: Some("no tickets".to_string()),
+        };
+        let result = validate_workflow_finalize_rule(&rule, "test-workflow");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_workflow_finalize_rule_empty_id() {
+        let rule = WorkflowFinalizeRule {
+            id: "".to_string(),
+            engine: StepHookEngine::Cel,
+            when: "true".to_string(),
+            status: "skipped".to_string(),
+            reason: None,
+        };
+        let result = validate_workflow_finalize_rule(&rule, "test-workflow");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("empty id"));
+    }
+
+    #[test]
+    fn test_validate_workflow_finalize_rule_empty_status() {
+        let rule = WorkflowFinalizeRule {
+            id: "test-rule".to_string(),
+            engine: StepHookEngine::Cel,
+            when: "true".to_string(),
+            status: "".to_string(),
+            reason: None,
+        };
+        let result = validate_workflow_finalize_rule(&rule, "test-workflow");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("empty status"));
+    }
+
+    #[test]
+    fn test_validate_workflow_finalize_rule_empty_when() {
+        let rule = WorkflowFinalizeRule {
+            id: "test-rule".to_string(),
+            engine: StepHookEngine::Cel,
+            when: "".to_string(),
+            status: "skipped".to_string(),
+            reason: None,
+        };
+        let result = validate_workflow_finalize_rule(&rule, "test-workflow");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("empty when"));
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_true() {
+        let context = StepPrehookContext {
+            task_id: "task-1".to_string(),
+            task_item_id: "item-1".to_string(),
+            cycle: 1,
+            step: "qa".to_string(),
+            qa_file_path: "test.md".to_string(),
+            item_status: "pending".to_string(),
+            task_status: "running".to_string(),
+            qa_exit_code: Some(1),
+            fix_exit_code: Some(0),
+            retest_exit_code: Some(0),
+            active_ticket_count: 5,
+            new_ticket_count: 2,
+            qa_failed: true,
+            fix_required: false,
+            qa_confidence: None,
+            qa_quality_score: None,
+            fix_has_changes: None,
+            upstream_artifacts: vec![],
+        };
+        let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_false() {
+        let context = StepPrehookContext {
+            task_id: "task-1".to_string(),
+            task_item_id: "item-1".to_string(),
+            cycle: 1,
+            step: "qa".to_string(),
+            qa_file_path: "test.md".to_string(),
+            item_status: "pending".to_string(),
+            task_status: "running".to_string(),
+            qa_exit_code: Some(0),
+            fix_exit_code: Some(0),
+            retest_exit_code: Some(0),
+            active_ticket_count: 0,
+            new_ticket_count: 0,
+            qa_failed: false,
+            fix_required: false,
+            qa_confidence: None,
+            qa_quality_score: None,
+            fix_has_changes: None,
+            upstream_artifacts: vec![],
+        };
+        let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_invalid() {
+        let context = StepPrehookContext {
+            task_id: "task-1".to_string(),
+            task_item_id: "item-1".to_string(),
+            cycle: 1,
+            step: "qa".to_string(),
+            qa_file_path: "test.md".to_string(),
+            item_status: "pending".to_string(),
+            task_status: "running".to_string(),
+            qa_exit_code: Some(0),
+            fix_exit_code: Some(0),
+            retest_exit_code: Some(0),
+            active_ticket_count: 0,
+            new_ticket_count: 0,
+            qa_failed: false,
+            fix_required: false,
+            qa_confidence: None,
+            qa_quality_score: None,
+            fix_has_changes: None,
+            upstream_artifacts: vec![],
+        };
+        let result = evaluate_step_prehook_expression("invalid @#$ expression", &context);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_qa_failed() {
+        let context = StepPrehookContext {
+            task_id: "task-1".to_string(),
+            task_item_id: "item-1".to_string(),
+            cycle: 1,
+            step: "fix".to_string(),
+            qa_file_path: "test.md".to_string(),
+            item_status: "pending".to_string(),
+            task_status: "running".to_string(),
+            qa_exit_code: Some(1),
+            fix_exit_code: Some(0),
+            retest_exit_code: Some(0),
+            active_ticket_count: 3,
+            new_ticket_count: 1,
+            qa_failed: true,
+            fix_required: false,
+            qa_confidence: None,
+            qa_quality_score: None,
+            fix_has_changes: None,
+            upstream_artifacts: vec![],
+        };
+        let result = evaluate_step_prehook_expression("qa_failed == true", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_compound() {
+        let context = StepPrehookContext {
+            task_id: "task-1".to_string(),
+            task_item_id: "item-1".to_string(),
+            cycle: 2,
+            step: "retest".to_string(),
+            qa_file_path: "test.md".to_string(),
+            item_status: "pending".to_string(),
+            task_status: "running".to_string(),
+            qa_exit_code: Some(0),
+            fix_exit_code: Some(0),
+            retest_exit_code: Some(0),
+            active_ticket_count: 2,
+            new_ticket_count: 0,
+            qa_failed: false,
+            fix_required: false,
+            qa_confidence: None,
+            qa_quality_score: None,
+            fix_has_changes: None,
+            upstream_artifacts: vec![],
+        };
+        let result = evaluate_step_prehook_expression(
+            "active_ticket_count > 0 && cycle >= 2 && qa_exit_code == 0",
+            &context,
+        );
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+}

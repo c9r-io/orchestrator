@@ -2,14 +2,19 @@ use crate::config::{
     ItemFinalizeContext, LoopMode, StepPrehookContext, TaskExecutionStep, TaskRuntimeContext,
     WorkflowFinalizeOutcome, WorkflowStepType,
 };
-use crate::config_load::{build_execution_plan, now_ts, read_active_config, resolve_workspace_path};
+use crate::config_load::{
+    build_execution_plan, now_ts, read_active_config, resolve_workspace_path,
+};
 use crate::db::open_conn;
 use crate::dto::{
     CommandRunDto, CreateTaskPayload, EventDto, LogChunk, TaskDetail, TaskItemDto, TaskSummary,
     TicketPreviewData, UNASSIGNED_QA_FILE_PATH,
 };
 use crate::events::{emit_event, insert_event};
-use crate::health::{increment_consecutive_errors, mark_agent_diseased, reset_consecutive_errors, update_capability_health};
+use crate::health::{
+    increment_consecutive_errors, mark_agent_diseased, reset_consecutive_errors,
+    update_capability_health,
+};
 use crate::prehook::{
     emit_item_finalize_event, emit_step_prehook_event, evaluate_finalize_rule_expression,
     evaluate_step_prehook, evaluate_step_prehook_expression,
@@ -391,7 +396,11 @@ pub fn prepare_task_for_start(state: &InnerState, task_id: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn spawn_task_runner(state: Arc<InnerState>, app: AppHandle, task_id: String) -> Result<()> {
+pub async fn spawn_task_runner(
+    state: Arc<InnerState>,
+    app: AppHandle,
+    task_id: String,
+) -> Result<()> {
     {
         let mut running = state.running.lock().await;
         if running.contains_key(&task_id) {
@@ -400,9 +409,11 @@ pub async fn spawn_task_runner(state: Arc<InnerState>, app: AppHandle, task_id: 
         running.insert(task_id.clone(), RunningTask::new());
     }
 
-    let permit = TASK_SEMAPHORE.clone().acquire_owned().await.map_err(|e| {
-        anyhow::anyhow!("Failed to acquire semaphore: {}", e)
-    })?;
+    let permit = TASK_SEMAPHORE
+        .clone()
+        .acquire_owned()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to acquire semaphore: {}", e))?;
 
     tokio::spawn(async move {
         let runtime = {
@@ -433,7 +444,7 @@ pub async fn spawn_task_runner(state: Arc<InnerState>, app: AppHandle, task_id: 
         }
 
         drop(permit);
-        
+
         let mut running = state.running.lock().await;
         running.remove(&task_id);
     });
@@ -564,18 +575,19 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
         .get(&workflow_id)
         .with_context(|| format!("workflow not found for task {}: {}", task_id, workflow_id))?;
 
-    let mut execution_plan = serde_json::from_str::<crate::config::TaskExecutionPlan>(&execution_plan_json)
-        .ok()
-        .filter(|plan| !plan.steps.is_empty())
-        .unwrap_or_else(|| {
-            build_execution_plan(&active.config, workflow, &workflow_id).unwrap_or(
-                crate::config::TaskExecutionPlan {
-                    steps: Vec::new(),
-                    loop_policy: crate::config::WorkflowLoopConfig::default(),
-                    finalize: crate::config::default_workflow_finalize_config(),
-                },
-            )
-        });
+    let mut execution_plan =
+        serde_json::from_str::<crate::config::TaskExecutionPlan>(&execution_plan_json)
+            .ok()
+            .filter(|plan| !plan.steps.is_empty())
+            .unwrap_or_else(|| {
+                build_execution_plan(&active.config, workflow, &workflow_id).unwrap_or(
+                    crate::config::TaskExecutionPlan {
+                        steps: Vec::new(),
+                        loop_policy: crate::config::WorkflowLoopConfig::default(),
+                        finalize: crate::config::default_workflow_finalize_config(),
+                    },
+                )
+            });
     if execution_plan.finalize.rules.is_empty() {
         execution_plan.finalize = crate::config::default_workflow_finalize_config();
     }
@@ -878,7 +890,10 @@ pub fn count_unresolved_items(state: &InnerState, task_id: &str) -> Result<i64> 
     .context("count unresolved items")
 }
 
-pub fn list_task_items_for_cycle(state: &InnerState, task_id: &str) -> Result<Vec<crate::dto::TaskItemRow>> {
+pub fn list_task_items_for_cycle(
+    state: &InnerState,
+    task_id: &str,
+) -> Result<Vec<crate::dto::TaskItemRow>> {
     let conn = open_conn(&state.db_path)?;
     let mut stmt = conn.prepare(
         "SELECT id, qa_file_path
@@ -1042,17 +1057,11 @@ pub async fn run_phase_with_rotation(
     let (agent_id, template) = {
         let active = read_active_config(state)?;
         let agents = active.config.agents.clone();
-        
+
         if let Some(cap) = capability {
             let health_map = state.agent_health.read().unwrap();
             let metrics_map = state.agent_metrics.read().unwrap();
-            select_agent_advanced(
-                cap,
-                &agents,
-                &health_map,
-                &metrics_map,
-                &HashSet::new(),
-            )?
+            select_agent_advanced(cap, &agents, &health_map, &metrics_map, &HashSet::new())?
         } else {
             select_agent_by_preference(&agents)?
         }
@@ -1125,7 +1134,10 @@ pub async fn execute_guard_step(
 
     let command = template
         .replace("{task_id}", &shell_escape(task_id))
-        .replace("{cycle}", &shell_escape(&task_ctx.current_cycle.to_string()));
+        .replace(
+            "{cycle}",
+            &shell_escape(&task_ctx.current_cycle.to_string()),
+        );
 
     let result = run_phase(
         state,

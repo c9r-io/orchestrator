@@ -1,13 +1,16 @@
+use crate::config::{LoopMode, WorkflowStepType};
+use crate::config_load::build_execution_plan;
 use crate::config_load::{
     load_config_overview, now_ts, persist_config_and_reload, read_active_config,
 };
+use crate::db;
 use crate::db::open_conn;
 use crate::dto::{
     AgentHealthInfo, BootstrapResponse, ConfigOverview, ConfigValidationResult,
-    ConfigVersionDetail, ConfigVersionSummary, CreateTaskOptions, CreateTaskDefaults,
+    ConfigVersionDetail, ConfigVersionSummary, CreateTaskDefaults, CreateTaskOptions,
     CreateTaskPayload, DeleteTaskResponse, NamedOption, SaveConfigFormPayload,
-    SaveConfigYamlPayload, SimulatePrehookPayload, SimulatePrehookResult, TaskDetail,
-    TaskSummary, ValidationErrorDto, ValidationWarningDto,
+    SaveConfigYamlPayload, SimulatePrehookPayload, SimulatePrehookResult, TaskDetail, TaskSummary,
+    ValidationErrorDto, ValidationWarningDto,
 };
 use crate::prehook::simulate_prehook_impl;
 use crate::scheduler::{
@@ -20,9 +23,6 @@ use crate::ticket::{
     collect_target_files, collect_target_files_from_active_tickets,
     should_seed_targets_from_active_tickets,
 };
-use crate::config_load::build_execution_plan;
-use crate::config::{WorkflowStepType, LoopMode};
-use crate::db;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use rusqlite::{params, OptionalExtension};
@@ -42,8 +42,8 @@ pub async fn bootstrap(state: State<'_, ManagedState>) -> Result<BootstrapRespon
             resumed_task_id: None,
         });
     }
-    let resumed_task_id =
-        crate::scheduler::find_latest_resumable_task_id(&state.inner, false).map_err(err_to_string)?;
+    let resumed_task_id = crate::scheduler::find_latest_resumable_task_id(&state.inner, false)
+        .map_err(err_to_string)?;
     Ok(BootstrapResponse { resumed_task_id })
 }
 
@@ -125,8 +125,8 @@ pub async fn save_config_from_yaml(
     state: State<'_, ManagedState>,
     payload: SaveConfigYamlPayload,
 ) -> Result<ConfigOverview, String> {
-    let config =
-        serde_yaml::from_str::<crate::config::OrchestratorConfig>(&payload.yaml).map_err(err_to_string)?;
+    let config = serde_yaml::from_str::<crate::config::OrchestratorConfig>(&payload.yaml)
+        .map_err(err_to_string)?;
     persist_config_and_reload(&state.inner, config, payload.yaml, "ui-yaml").map_err(err_to_string)
 }
 
@@ -136,7 +136,7 @@ pub async fn validate_config_yaml(
     payload: SaveConfigYamlPayload,
 ) -> Result<ConfigValidationResult, String> {
     use crate::config_validation::validator::ConfigValidator;
-    use crate::config_validation::{ValidationLevel, PathValidationOptions};
+    use crate::config_validation::{PathValidationOptions, ValidationLevel};
 
     let validator = ConfigValidator::new(&state.inner.app_root)
         .with_level(ValidationLevel::Full)
@@ -161,19 +161,27 @@ pub async fn validate_config_yaml(
             .map_err(err_to_string)?;
         let normalized_yaml = serde_yaml::to_string(&candidate.config).map_err(err_to_string)?;
 
-        let errors: Vec<_> = result.errors.iter().map(|e| ValidationErrorDto {
-            code: format!("{:?}", e.code),
-            message: e.message.clone(),
-            field: e.field.clone(),
-            context: e.context.clone(),
-        }).collect();
+        let errors: Vec<_> = result
+            .errors
+            .iter()
+            .map(|e| ValidationErrorDto {
+                code: format!("{:?}", e.code),
+                message: e.message.clone(),
+                field: e.field.clone(),
+                context: e.context.clone(),
+            })
+            .collect();
 
-        let warnings: Vec<_> = result.warnings.iter().map(|w| ValidationWarningDto {
-            code: format!("{:?}", w.code),
-            message: w.message.clone(),
-            field: w.field.clone(),
-            suggestion: w.suggestion.clone(),
-        }).collect();
+        let warnings: Vec<_> = result
+            .warnings
+            .iter()
+            .map(|w| ValidationWarningDto {
+                code: format!("{:?}", w.code),
+                message: w.message.clone(),
+                field: w.field.clone(),
+                suggestion: w.suggestion.clone(),
+            })
+            .collect();
 
         Ok(ConfigValidationResult {
             valid: result.is_valid,
@@ -183,19 +191,27 @@ pub async fn validate_config_yaml(
             summary: result.report(),
         })
     } else {
-        let errors: Vec<_> = result.errors.iter().map(|e| ValidationErrorDto {
-            code: format!("{:?}", e.code),
-            message: e.message.clone(),
-            field: e.field.clone(),
-            context: e.context.clone(),
-        }).collect();
+        let errors: Vec<_> = result
+            .errors
+            .iter()
+            .map(|e| ValidationErrorDto {
+                code: format!("{:?}", e.code),
+                message: e.message.clone(),
+                field: e.field.clone(),
+                context: e.context.clone(),
+            })
+            .collect();
 
-        let warnings: Vec<_> = result.warnings.iter().map(|w| ValidationWarningDto {
-            code: format!("{:?}", w.code),
-            message: w.message.clone(),
-            field: w.field.clone(),
-            suggestion: w.suggestion.clone(),
-        }).collect();
+        let warnings: Vec<_> = result
+            .warnings
+            .iter()
+            .map(|w| ValidationWarningDto {
+                code: format!("{:?}", w.code),
+                message: w.message.clone(),
+                field: w.field.clone(),
+                suggestion: w.suggestion.clone(),
+            })
+            .collect();
 
         Ok(ConfigValidationResult {
             valid: result.is_valid,
@@ -263,7 +279,10 @@ pub async fn create_task(
     create_task_impl(&state.inner, payload).map_err(err_to_string)
 }
 
-pub fn create_task_impl(state: &crate::state::InnerState, payload: CreateTaskPayload) -> Result<TaskSummary> {
+pub fn create_task_impl(
+    state: &crate::state::InnerState,
+    payload: CreateTaskPayload,
+) -> Result<TaskSummary> {
     let active = read_active_config(state)?;
 
     let project_id = payload
@@ -439,7 +458,10 @@ pub async fn retry_task_item(
     load_task_summary(&state.inner, &task_id).map_err(err_to_string)
 }
 
-pub fn reset_task_item_for_retry(state: &crate::state::InnerState, task_item_id: &str) -> Result<String> {
+pub fn reset_task_item_for_retry(
+    state: &crate::state::InnerState,
+    task_item_id: &str,
+) -> Result<String> {
     let conn = open_conn(&state.db_path)?;
     let task_id: String = conn.query_row(
         "SELECT task_id FROM task_items WHERE id = ?1",
@@ -506,7 +528,9 @@ pub async fn simulate_prehook(
 }
 
 #[tauri::command]
-pub async fn get_agent_health(state: State<'_, ManagedState>) -> Result<Vec<AgentHealthInfo>, String> {
+pub async fn get_agent_health(
+    state: State<'_, ManagedState>,
+) -> Result<Vec<AgentHealthInfo>, String> {
     let health = state.inner.agent_health.read().map_err(|e| e.to_string())?;
     let now = Utc::now();
     let mut result = Vec::new();

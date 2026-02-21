@@ -25,7 +25,9 @@ mod ticket;
 #[cfg(test)]
 mod test_utils;
 
-use crate::collab::{parse_artifacts_from_output, AgentOutput, Artifact, ExecutionMetrics, MessageBus};
+use crate::collab::{
+    parse_artifacts_from_output, AgentOutput, Artifact, ExecutionMetrics, MessageBus,
+};
 use crate::config_load::{detect_app_root, load_or_seed_config, now_ts};
 use crate::db::init_schema;
 use crate::dto::CliOptions;
@@ -205,7 +207,10 @@ fn backfill_legacy_data(
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    let binary_name = args.first().map(|s| s.as_str()).unwrap_or("agent-orchestrator");
+    let binary_name = args
+        .first()
+        .map(|s| s.as_str())
+        .unwrap_or("agent-orchestrator");
 
     let cli_options = parse_cli_options(&args[1..])?;
 

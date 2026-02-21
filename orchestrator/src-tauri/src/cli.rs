@@ -431,26 +431,338 @@ mod tests {
             _ => panic!("expected workspace info command"),
         }
     }
+
+    #[test]
+    fn parse_init_command() {
+        let cli = Cli::parse_from(["orchestrator", "init"]);
+
+        match cli.command {
+            Commands::Init { root, force } => {
+                assert_eq!(root, None);
+                assert!(!force);
+            }
+            _ => panic!("expected init command"),
+        }
+    }
+
+    #[test]
+    fn parse_init_command_with_options() {
+        let cli = Cli::parse_from(["orchestrator", "init", "--root", "/tmp/test", "--force"]);
+
+        match cli.command {
+            Commands::Init { root, force } => {
+                assert_eq!(root, Some("/tmp/test".to_string()));
+                assert!(force);
+            }
+            _ => panic!("expected init command"),
+        }
+    }
+
+    #[test]
+    fn parse_get_command() {
+        let cli = Cli::parse_from(["orchestrator", "get", "workspace/default"]);
+
+        match cli.command {
+            Commands::Get { resource, output } => {
+                assert_eq!(resource, "workspace/default");
+                assert_eq!(output, OutputFormat::Table);
+            }
+            _ => panic!("expected get command"),
+        }
+    }
+
+    #[test]
+    fn parse_get_command_yaml() {
+        let cli = Cli::parse_from(["orchestrator", "get", "agent/echo", "-o", "yaml"]);
+
+        match cli.command {
+            Commands::Get { resource, output } => {
+                assert_eq!(resource, "agent/echo");
+                assert_eq!(output, OutputFormat::Yaml);
+            }
+            _ => panic!("expected get command"),
+        }
+    }
+
+    #[test]
+    fn parse_describe_command() {
+        let cli = Cli::parse_from(["orchestrator", "describe", "workflow/basic"]);
+
+        match cli.command {
+            Commands::Describe { resource, output } => {
+                assert_eq!(resource, "workflow/basic");
+                assert_eq!(output, OutputFormat::Yaml);
+            }
+            _ => panic!("expected describe command"),
+        }
+    }
+
+    #[test]
+    fn parse_db_command() {
+        let cli = Cli::parse_from(["orchestrator", "db", "reset"]);
+
+        match cli.command {
+            Commands::Db(DbCommands::Reset { force }) => {
+                assert!(!force);
+            }
+            _ => panic!("expected db reset command"),
+        }
+    }
+
+    #[test]
+    fn parse_db_reset_force() {
+        let cli = Cli::parse_from(["orchestrator", "db", "reset", "--force"]);
+
+        match cli.command {
+            Commands::Db(DbCommands::Reset { force }) => {
+                assert!(force);
+            }
+            _ => panic!("expected db reset command"),
+        }
+    }
+
+    #[test]
+    fn parse_completion_command() {
+        let cli = Cli::parse_from(["orchestrator", "completion", "bash"]);
+
+        match cli.command {
+            Commands::Completion(CompletionCommands::Bash) => {}
+            _ => panic!("expected completion bash command"),
+        }
+    }
+
+    #[test]
+    fn parse_task_info_command() {
+        let cli = Cli::parse_from(["orchestrator", "task", "info", "task-123"]);
+
+        match cli.command {
+            Commands::Task(TaskCommands::Info { task_id, output }) => {
+                assert_eq!(task_id, "task-123");
+                assert_eq!(output, OutputFormat::Table);
+            }
+            _ => panic!("expected task info command"),
+        }
+    }
+
+    #[test]
+    fn parse_task_start_command() {
+        let cli = Cli::parse_from(["orchestrator", "task", "start", "task-123"]);
+
+        match cli.command {
+            Commands::Task(TaskCommands::Start { task_id, latest }) => {
+                assert_eq!(task_id, Some("task-123".to_string()));
+                assert!(!latest);
+            }
+            _ => panic!("expected task start command"),
+        }
+    }
+
+    #[test]
+    fn parse_task_start_latest() {
+        let cli = Cli::parse_from(["orchestrator", "task", "start", "--latest"]);
+
+        match cli.command {
+            Commands::Task(TaskCommands::Start { task_id, latest }) => {
+                assert_eq!(task_id, None);
+                assert!(latest);
+            }
+            _ => panic!("expected task start command"),
+        }
+    }
+
+    #[test]
+    fn parse_task_list_command() {
+        let cli = Cli::parse_from(["orchestrator", "task", "list"]);
+
+        match cli.command {
+            Commands::Task(TaskCommands::List {
+                status,
+                output,
+                verbose,
+            }) => {
+                assert_eq!(status, None);
+                assert_eq!(output, OutputFormat::Table);
+                assert!(!verbose);
+            }
+            _ => panic!("expected task list command"),
+        }
+    }
+
+    #[test]
+    fn parse_task_list_with_options() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "task",
+            "list",
+            "--status",
+            "running",
+            "-o",
+            "json",
+            "-v",
+        ]);
+
+        match cli.command {
+            Commands::Task(TaskCommands::List {
+                status,
+                output,
+                verbose,
+            }) => {
+                assert_eq!(status, Some("running".to_string()));
+                assert_eq!(output, OutputFormat::Json);
+                assert!(verbose);
+            }
+            _ => panic!("expected task list command"),
+        }
+    }
+
+    #[test]
+    fn parse_task_delete_command() {
+        let cli = Cli::parse_from(["orchestrator", "task", "delete", "task-123"]);
+
+        match cli.command {
+            Commands::Task(TaskCommands::Delete { task_id, force }) => {
+                assert_eq!(task_id, "task-123");
+                assert!(!force);
+            }
+            _ => panic!("expected task delete command"),
+        }
+    }
+
+    #[test]
+    fn parse_task_delete_force() {
+        let cli = Cli::parse_from(["orchestrator", "task", "delete", "task-123", "--force"]);
+
+        match cli.command {
+            Commands::Task(TaskCommands::Delete { task_id, force }) => {
+                assert_eq!(task_id, "task-123");
+                assert!(force);
+            }
+            _ => panic!("expected task delete command"),
+        }
+    }
+
+    #[test]
+    fn parse_task_retry_command() {
+        let cli = Cli::parse_from(["orchestrator", "task", "retry", "item-123"]);
+
+        match cli.command {
+            Commands::Task(TaskCommands::Retry { task_item_id }) => {
+                assert_eq!(task_item_id, "item-123");
+            }
+            _ => panic!("expected task retry command"),
+        }
+    }
+
+    #[test]
+    fn parse_task_pause_command() {
+        let cli = Cli::parse_from(["orchestrator", "task", "pause", "task-123"]);
+
+        match cli.command {
+            Commands::Task(TaskCommands::Pause { task_id }) => {
+                assert_eq!(task_id, "task-123");
+            }
+            _ => panic!("expected task pause command"),
+        }
+    }
+
+    #[test]
+    fn parse_task_resume_command() {
+        let cli = Cli::parse_from(["orchestrator", "task", "resume", "task-123"]);
+
+        match cli.command {
+            Commands::Task(TaskCommands::Resume { task_id }) => {
+                assert_eq!(task_id, "task-123");
+            }
+            _ => panic!("expected task resume command"),
+        }
+    }
+
+    #[test]
+    fn parse_config_view_command() {
+        let cli = Cli::parse_from(["orchestrator", "config", "view"]);
+
+        match cli.command {
+            Commands::Config(ConfigCommands::View { output }) => {
+                assert_eq!(output, OutputFormat::Yaml);
+            }
+            _ => panic!("expected config view command"),
+        }
+    }
+
+    #[test]
+    fn parse_config_view_json() {
+        let cli = Cli::parse_from(["orchestrator", "config", "view", "-o", "json"]);
+
+        match cli.command {
+            Commands::Config(ConfigCommands::View { output }) => {
+                assert_eq!(output, OutputFormat::Json);
+            }
+            _ => panic!("expected config view command"),
+        }
+    }
+
+    #[test]
+    fn parse_config_validate_command() {
+        let cli = Cli::parse_from(["orchestrator", "config", "validate", "/path/to/config.yaml"]);
+
+        match cli.command {
+            Commands::Config(ConfigCommands::Validate { config_file }) => {
+                assert_eq!(config_file, "/path/to/config.yaml");
+            }
+            _ => panic!("expected config validate command"),
+        }
+    }
+
+    #[test]
+    fn parse_config_list_workflows_command() {
+        let cli = Cli::parse_from(["orchestrator", "config", "list-workflows"]);
+
+        match cli.command {
+            Commands::Config(ConfigCommands::ListWorkflows { output }) => {
+                assert_eq!(output, OutputFormat::Table);
+            }
+            _ => panic!("expected config list-workflows command"),
+        }
+    }
+
+    #[test]
+    fn parse_config_list_agents_command() {
+        let cli = Cli::parse_from(["orchestrator", "config", "list-agents", "-o", "json"]);
+
+        match cli.command {
+            Commands::Config(ConfigCommands::ListAgents { output }) => {
+                assert_eq!(output, OutputFormat::Json);
+            }
+            _ => panic!("expected config list-agents command"),
+        }
+    }
 }
 
 use crate::cli_handler::CliHandler;
 use crate::dto::CliOptions;
 use crate::state::InnerState;
 use anyhow::Result;
-use std::sync::Arc;
 use std::env;
+use std::sync::Arc;
 
 pub async fn run_cli_mode(state: Arc<InnerState>, _options: CliOptions) -> Result<()> {
     let handler = CliHandler::new(state);
-    
+
     let args: Vec<String> = env::args().collect();
-    let program_name = args.first().cloned().unwrap_or_else(|| "orchestrator".to_string());
-    let filtered: Vec<String> = args.into_iter().skip(1).filter(|arg| arg != "--cli").collect();
+    let program_name = args
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "orchestrator".to_string());
+    let filtered: Vec<String> = args
+        .into_iter()
+        .skip(1)
+        .filter(|arg| arg != "--cli")
+        .collect();
     let mut clap_args = vec![program_name];
     clap_args.extend(filtered);
-    
+
     let cli = Cli::parse_from(&clap_args);
-    
+
     let exit_code = handler.execute(&cli)?;
     std::process::exit(exit_code);
 }
