@@ -1,0 +1,12 @@
+runner:
+  shell: /bin/bash
+  shell_arg: -lc
+resume:
+  auto: false
+defaults:
+  project: ""
+  workspace: ""
+  workflow: ""
+workspaces: {}
+agents: {}
+workflows: {}

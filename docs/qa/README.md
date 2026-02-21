@@ -7,6 +7,30 @@ Goals:
 - Steps and assertions are explicit. Include runnable API/DB verification commands when needed.
 - The document structure is stable, making it easier for agents to automate execution and compare expected results.
 
+## Test Scripts
+
+Some advanced scenarios require shell scripts for testing. These are located in `docs/qa/script/`:
+
+| Script | Purpose | Usage |
+|---------|---------|-------|
+| `test-task-pause-resume.sh` | Test task pause and resume functionality | `./test-task-pause-resume.sh` |
+| `test-task-retry.sh` | Test task retry functionality | `./test-task-retry.sh` |
+| `test-three-phase-workflow.sh` | Test QA+Fix+Retest workflow | `./test-three-phase-workflow.sh` |
+
+### Important: Tool Updates Required
+
+> **WARNING**: Before running these scripts, always check if the orchestrator binary needs to be rebuilt:
+> 
+> ```bash
+> # Check if binary exists
+> ls -la orchestrator/src-tauri/target/release/agent-orchestrator
+> 
+> # If not exists or needs update, rebuild:
+> cd orchestrator/src-tauri && cargo build --release
+> ```
+> 
+> The scripts assume the binary is at `orchestrator/src-tauri/target/release/agent-orchestrator`. If the project structure changes, update the `BINARY` variable in each script.
+
 ## Suggested Directory Structure
 
 Organize by module:
@@ -100,6 +124,27 @@ Maintain a lightweight index table here for fast navigation:
 | orchestrator | `docs/qa/orchestrator/04-cli-config-db.md` | 4 | Config set and db reset |
 | orchestrator | `docs/qa/orchestrator/05-workflow-execution.md` | 6 | Full workflow with mock agents |
 | orchestrator | `docs/qa/orchestrator/06-cli-output-formats.md` | 5 | JSON/YAML output validation |
-| orchestrator | `docs/qa/orchestrator/07-capability-orchestration.md` | 6 | Capability-driven orchestration, cost preference, repeatable, guard |
+| orchestrator | `docs/qa/orchestrator/07-capability-orchestration.md` | 6 | Capability-driven orchestration, agent selection strategy, repeatable, guard |
 | orchestrator | `docs/qa/orchestrator/08-project-namespace.md` | 6 | Project namespace for resource isolation, project fallback |
-| orchestrator | `docs/qa/orchestrator/09-agent-selection-strategy.md` | 5 | Multi-factor scoring, runtime metrics, capability-aware health |
+| orchestrator | `docs/qa/orchestrator/09-agent-selection-strategy.md` | 5 | Multi-factor scoring, runtime metrics, capability-aware health (default: capability_aware) |
+| orchestrator | `docs/qa/orchestrator/10-agent-collaboration.md` | 5 | AgentOutput structure, MessageBus, artifact parsing, enhanced template rendering |
+| orchestrator | `docs/qa/script/` | 3 | Shell scripts for pause/resume, retry, three-phase workflow testing |
+
+## Important Notes for QA Engineers
+
+1. **Check Binary First**: Before running any tests, verify the orchestrator binary exists and is up-to-date:
+   ```bash
+   ls -la orchestrator/src-tauri/target/release/agent-orchestrator
+   ```
+
+2. **Rebuild if Needed**: If the binary is missing or old, rebuild:
+   ```bash
+   cd orchestrator/src-tauri && cargo build --release
+   ```
+
+3. **Script Paths**: Scripts assume the project structure is:
+   - Binary: `orchestrator/src-tauri/target/release/agent-orchestrator`
+   - Config: `orchestrator/config/default.yaml`
+   - Data: `orchestrator/data/agent_orchestrator.db`
+   
+   If structure changes, update the script variables accordingly.

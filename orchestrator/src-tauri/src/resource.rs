@@ -4,10 +4,9 @@ use crate::cli_types::{
     WorkflowLoopSpec, WorkflowPrehookSpec, WorkflowSpec, WorkflowStepSpec, WorkspaceSpec,
 };
 use crate::{
-    AgentConfig, AgentMetadata, AgentPreference, AgentSelectionConfig, LoopMode,
-    OrchestratorConfig, StepHookEngine, StepPrehookConfig, WorkflowConfig, WorkflowFinalizeConfig,
-    WorkflowFinalizeRule, WorkflowLoopConfig, WorkflowStepConfig, WorkflowStepType,
-    WorkspaceConfig,
+    AgentConfig, AgentMetadata, AgentSelectionConfig, LoopMode, OrchestratorConfig, StepHookEngine,
+    StepPrehookConfig, WorkflowConfig, WorkflowFinalizeConfig, WorkflowFinalizeRule,
+    WorkflowLoopConfig, WorkflowStepConfig, WorkflowStepType, WorkspaceConfig,
 };
 use anyhow::{anyhow, Result};
 use serde::Serialize;
@@ -450,7 +449,6 @@ fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
         metadata: AgentMetadata::default(),
         capabilities,
         templates,
-        preference: AgentPreference::default(),
         selection: AgentSelectionConfig::default(),
     }
 }
@@ -469,16 +467,12 @@ fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
         } else {
             Some(config.capabilities.clone())
         },
-        metadata: if config.metadata.description.is_empty() && config.metadata.cost.is_none() {
+        metadata: if config.metadata.description.is_none() && config.metadata.cost.is_none() {
             None
         } else {
             Some(AgentMetadataSpec {
                 cost: config.metadata.cost,
-                description: if config.metadata.description.is_empty() {
-                    None
-                } else {
-                    Some(config.metadata.description.clone())
-                },
+                description: config.metadata.description.clone(),
             })
         },
     }

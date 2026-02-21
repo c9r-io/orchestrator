@@ -274,50 +274,85 @@ agents:
 
 ### Preconditions
 
-- Config with loop enabled (mode: infinite)
-- Loop guard agent configured
+- Config with loop_test workflow (pre-configured in default.yaml)
+- No tickets exist initially
 
 ### Steps
 
-1. Create config with infinite loop:
-   ```yaml
-   workflows:
-     infinite_qa:
-       steps:
-         - id: qa
-           required_capability: qa
-           enabled: true
-           repeatable: true
-         - id: check_done
-           builtin: loop_guard
-           enabled: true
-           is_guard: true
-           repeatable: true
-       loop:
-         mode: infinite
-         guard:
-           enabled: true
-           stop_when_no_unresolved: true
-       finalize:
-         rules: []
+1. Verify loop_test workflow exists in config:
+   ```bash
+   orchestrator config list-workflows
    ```
 
-2. Create and start task:
+2. Create task with loop_test workflow:
    ```bash
-   orchestrator task create --workflow infinite_qa --no-start
+   orchestrator task create \
+     --name "loop-mode-test" \
+     --goal "Test infinite loop with max_cycles" \
+     --workflow loop_test \
+     --no-start
+   ```
+
+3. Start task:
+   ```bash
    orchestrator task start {task_id}
    ```
 
-3. Manually stop or let loop complete:
+4. Check execution cycles:
    ```bash
-   # Watch task status
-   orchestrator task info {task_id}
+   # Query database for cycle count
+   sqlite3 orchestrator/data/agent_orchestrator.db \
+     "SELECT id, status, current_cycle FROM tasks WHERE id = '{task_id}'"
    ```
 
 ### Expected
 
-- Task loops until condition is met
-- Loop guard controls iteration count
+- Task runs in infinite loop mode but stops after 3 cycles (max_cycles: 3)
+- Task completes with status "completed"
+- current_cycle = 3
+
+### Verification
+
+```bash
+# Check final status
+orchestrator task info {task_id}
+
+# Expected output:
+# Status: completed
+# Progress: 1/1 items
+
+# Check cycle count
+sqlite3 orchestrator/data/agent_orchestrator.db \
+  "SELECT current_cycle FROM tasks WHERE id = '{task_id}'"
+# Expected: 3
+```
+
+### Workflow Configuration Reference
+
+The loop_test workflow is pre-configured in `config/default.yaml`:
+
+```yaml
+workflows:
+  loop_test:
+    steps:
+    - id: run_qa
+      type: qa
+      required_capability: qa
+      enabled: true
+      repeatable: true
+      is_guard: false
+    loop:
+      mode: infinite
+      guard:
+        enabled: false
+        stop_when_no_unresolved: false
+        max_cycles: 3
+```
+
+Key points:
+- `mode: infinite` - enables infinite loop
+- `max_cycles: 3` - limits iterations to 3
+- `guard.enabled: false` - no guard agent needed
 
 ---
 

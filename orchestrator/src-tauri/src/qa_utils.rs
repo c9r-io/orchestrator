@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Component, Path};
 
 pub fn validate_workspace_rel_path(raw: &str, field: &str) -> Result<()> {
@@ -36,6 +36,45 @@ pub fn render_template(template: &str, rel_path: &str, ticket_paths: &[String]) 
     template
         .replace("{rel_path}", rel_path)
         .replace("{ticket_paths}", &ticket_paths.join(" "))
+}
+
+pub fn render_template_with_context(
+    template: &str,
+    rel_path: &str,
+    ticket_paths: &[String],
+    phase: &str,
+    upstream_outputs: &[serde_json::Value],
+    shared_state: &HashMap<String, serde_json::Value>,
+) -> String {
+    let mut result = template.to_string();
+
+    // Basic placeholders
+    result = result.replace("{rel_path}", rel_path);
+    result = result.replace("{ticket_paths}", &ticket_paths.join(" "));
+    result = result.replace("{phase}", phase);
+
+    // Upstream outputs (JSON serialized)
+    for (i, output) in upstream_outputs.iter().enumerate() {
+        let prefix = format!("upstream[{}]", i);
+        if let Some(v) = output.get("exit_code").and_then(|v| v.as_i64()) {
+            result = result.replace(&format!("{}.exit_code", prefix), &v.to_string());
+        }
+        if let Some(v) = output.get("confidence").and_then(|v| v.as_f64()) {
+            result = result.replace(&format!("{}.confidence", prefix), &v.to_string());
+        }
+    }
+
+    // Shared state
+    for (key, value) in shared_state {
+        let placeholder = format!("{{{}}}", key);
+        if let Some(s) = value.as_str() {
+            result = result.replace(&placeholder, s);
+        } else if let Ok(s) = serde_json::to_string(value) {
+            result = result.replace(&placeholder, &s);
+        }
+    }
+
+    result
 }
 
 #[cfg(test)]

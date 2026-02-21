@@ -53,7 +53,7 @@ Entry point: `orchestrator task <command>` with configured agents
 ### Expected
 
 - Agent selection considers multiple factors, not just cost
-- Selection event shows strategy "adaptive"
+- Selection event shows strategy "capability_aware" (default)
 - Metrics tracked for selected agent
 
 ---

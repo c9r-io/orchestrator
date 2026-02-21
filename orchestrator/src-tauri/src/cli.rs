@@ -82,6 +82,12 @@ pub enum Commands {
 
     #[command(alias = "serve")]
     Daemon,
+
+    #[command(alias = "dbg")]
+    Debug {
+        #[arg(long)]
+        component: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone)]

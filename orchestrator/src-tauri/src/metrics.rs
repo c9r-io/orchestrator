@@ -100,10 +100,10 @@ pub struct SelectionWeights {
 impl Default for SelectionWeights {
     fn default() -> Self {
         Self {
-            cost: 0.25,
-            success_rate: 0.35,
+            cost: 0.20,
+            success_rate: 0.30,
             performance: 0.25,
-            load: 0.15,
+            load: 0.25,
         }
     }
 }

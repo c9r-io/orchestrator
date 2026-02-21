@@ -11,14 +11,16 @@
 
 This document tests the upgraded orchestration features:
 - **Capability-driven selection**: Agents declare capabilities, steps request capabilities
-- **Cost preference**: Steps can prefer performance (low cost), quality (high cost), or balance
+- **Agent-level selection strategy**: Each agent configures its own selection strategy via `selection.strategy`
 - **Repeatable steps**: Steps can be marked repeatable (run every cycle) or one-time
 - **Guard steps**: Steps can be marked as guards that terminate the workflow loop
 - **Builtin steps**: init_once, ticket_scan, loop_guard are builtin behaviors
 
+> **Note**: The workflow step's `cost_preference` field is deprecated (kept for backward compatibility). Agent selection now uses the agent's own `selection.strategy` as the primary configuration.
+
 ### New Config Format Reference
 
-#### Agent with Capabilities and Cost
+#### Agent with Capabilities and Selection Strategy
 ```yaml
 agents:
   fast_agent:
@@ -28,6 +30,13 @@ agents:
     capabilities:
     - qa
     - fix
+    selection:
+      strategy: performance_first  # cost_based, success_rate_weighted, performance_first, adaptive, load_balanced, capability_aware
+      weights:  # optional, for adaptive strategy
+        cost: 0.2
+        success_rate: 0.3
+        performance: 0.3
+        load: 0.2
     templates:
       qa: "echo 'fast qa'"
       fix: "echo 'fast fix'"
@@ -42,14 +51,13 @@ agents:
       fix: "echo 'slow but quality fix'"
 ```
 
-#### Step with Capability and Cost Preference
+#### Step with Capability (No longer uses cost_preference)
 ```yaml
 workflows:
   my_workflow:
     steps:
     - id: qa_test
       required_capability: qa
-      cost_preference: performance  # performance | quality | balance
       repeatable: true
       is_guard: false
     - id: check_done
@@ -57,6 +65,8 @@ workflows:
       is_guard: true
       repeatable: true
 ```
+
+> **Deprecation Notice**: The `cost_preference` field in workflow steps is deprecated. Configure agent selection strategy at the agent level using `selection.strategy`.
 
 ---
 
@@ -159,68 +169,69 @@ Validate that when a step requires a capability, only agents with that capabilit
 
 ---
 
-## Scenario 2: Cost Preference - Performance
+## Scenario 2: Agent Selection Strategy - Performance First
 
 ### Preconditions
 
-- Two agents with same capability but different costs
-- Cost preference set to "performance"
+- Two agents with same capability but different selection strategies
 
 ### Goal
 
-Validate that when cost_preference is "performance", the lower-cost agent is selected.
+Validate that agents with `performance_first` strategy are prioritized.
 
 ### Steps
 
-1. Create config with two agents having same capability but different costs:
+1. Create config with agents having different selection strategies:
    ```bash
-   cat > /tmp/cost-perf-test.yaml << 'EOF'
+   cat > /tmp/selection-perf-test.yaml << 'EOF'
    runner:
      shell: /bin/bash
      shell_arg: -lc
    defaults:
      workspace: default
-     workflow: cost_test
+     workflow: selection_test
    workspaces:
      default:
        root_path: .
        qa_targets: []
        ticket_dir: docs/ticket
    agents:
-     cheap_agent:
+     fast_agent:
        metadata:
-         name: cheap_agent
+         name: fast_agent
          cost: 20
        capabilities:
        - qa
        - fix
+       selection:
+         strategy: performance_first
        templates:
-         qa: "echo 'cheap-qa'"
-         fix: "echo 'cheap-fix'"
-     
-     expensive_agent:
+         qa: "echo 'fast-qa'"
+         fix: "echo 'fast-fix'"
+   
+     quality_agent:
        metadata:
-         name: expensive_agent
+         name: quality_agent
          cost: 80
        capabilities:
        - qa
        - fix
+       selection:
+         strategy: success_rate_weighted
        templates:
-         qa: "echo 'expensive-qa'"
-         fix: "echo 'expensive-fix'"
+         qa: "echo 'quality-qa'"
+         fix: "echo 'quality-fix'"
    
    workflows:
-     cost_test:
+     selection_test:
        steps:
        - id: do_qa
          required_capability: qa
-         cost_preference: performance
          enabled: true
          repeatable: false
 
        - id: do_fix
          required_capability: fix
-         cost_preference: performance
          enabled: true
          repeatable: false
 
@@ -232,12 +243,12 @@ Validate that when cost_preference is "performance", the lower-cost agent is sel
 2. Apply and test:
    ```bash
    cd orchestrator
-   ./src-tauri/target/release/agent-orchestrator apply -f /tmp/cost-perf-test.yaml
+   ./src-tauri/target/release/agent-orchestrator apply -f /tmp/selection-perf-test.yaml
    ./src-tauri/target/release/agent-orchestrator task create \
-     --name "cost-perf-test" \
-     --goal "Test performance cost" \
+     --name "selection-perf-test" \
+     --goal "Test selection strategy" \
      --workspace default \
-     --workflow cost_test
+     --workflow selection_test
    ```
 
 3. Check logs:
@@ -247,63 +258,67 @@ Validate that when cost_preference is "performance", the lower-cost agent is sel
 
 ### Expected
 
-- Both QA and Fix steps use `cheap_agent` (cost=20, lower than expensive_agent's cost=80)
-- Logs show "cheap-qa" and "cheap-fix"
+- Both QA and Fix steps favor agents with `performance_first` strategy
+- Logs show "fast-qa" and "fast-fix"
+- Selection events show strategy "performance_first"
 
 ---
 
-## Scenario 3: Cost Preference - Quality
+## Scenario 3: Agent Selection Strategy - Success Rate Weighted
 
 ### Preconditions
 
-- Same agents as Scenario 2
-- Cost preference set to "quality"
+- Two agents with different selection strategies
+- One agent configured with `success_rate_weighted`
 
 ### Goal
 
-Validate that when cost_preference is "quality", the higher-cost agent is selected.
+Validate that agents with higher success rates are prioritized when using `success_rate_weighted` strategy.
 
 ### Steps
 
-1. Create config with quality preference:
+1. Create config with success_rate_weighted strategy:
    ```bash
-   cat > /tmp/cost-quality-test.yaml << 'EOF'
+   cat > /tmp/selection-quality-test.yaml << 'EOF'
    runner:
      shell: /bin/bash
      shell_arg: -lc
    defaults:
      workspace: default
-     workflow: quality_test
+     workflow: quality_selection_test
    workspaces:
      default:
        root_path: .
        qa_targets: []
        ticket_dir: docs/ticket
    agents:
-     cheap_agent:
+     proven_agent:
        metadata:
-         name: cheap_agent
+         name: proven_agent
+         cost: 50
+       capabilities:
+       - qa
+       selection:
+         strategy: success_rate_weighted
+       templates:
+         qa: "echo 'proven-qa'"
+   
+     new_agent:
+       metadata:
+         name: new_agent
          cost: 20
        capabilities:
        - qa
+       selection:
+         strategy: capability_aware
        templates:
-         qa: "echo 'cheap-qa'"
-     
-     expensive_agent:
-       metadata:
-         name: expensive_agent
-         cost: 80
-       capabilities:
-       - qa
-       templates:
-         qa: "echo 'expensive-qa'"
+         qa: "echo 'new-qa'"
    
    workflows:
-     quality_test:
+     quality_selection_test:
        steps:
        - id: do_qa
          required_capability: qa
-         cost_preference: quality
          enabled: true
          repeatable: false
 
@@ -315,12 +330,12 @@ Validate that when cost_preference is "quality", the higher-cost agent is select
 2. Apply and test:
    ```bash
    cd orchestrator
-   ./src-tauri/target/release/agent-orchestrator apply -f /tmp/cost-quality-test.yaml
+   ./src-tauri/target/release/agent-orchestrator apply -f /tmp/selection-quality-test.yaml
    ./src-tauri/target/release/agent-orchestrator task create \
-     --name "cost-quality-test" \
-     --goal "Test quality cost" \
+     --name "selection-quality-test" \
+     --goal "Test success rate weighted" \
      --workspace default \
-     --workflow quality_test
+     --workflow quality_selection_test
    ```
 
 3. Check logs:
@@ -511,14 +526,14 @@ Validate that when a guard step returns "stop", the workflow loop terminates.
 
 ### Goal
 
-Validate that config view correctly displays new fields (capabilities, cost, cost_preference, repeatable, is_guard).
+Validate that config view correctly displays new fields (capabilities, cost, selection.strategy, repeatable, is_guard).
 
 ### Steps
 
 1. Apply config with new fields:
    ```bash
    cd orchestrator
-   ./src-tauri/target/release/agent-orchestrator apply -f /tmp/cost-perf-test.yaml
+   ./src-tauri/target/release/agent-orchestrator apply -f /tmp/selection-perf-test.yaml
    ```
 
 2. View config:
@@ -531,7 +546,8 @@ Validate that config view correctly displays new fields (capabilities, cost, cos
 
 - Agents show `metadata.cost` field
 - Agents show `capabilities` array
-- Steps show `cost_preference`, `repeatable`, `is_guard`, `required_capability`, `builtin` fields
+- Agents show `selection.strategy` field (default: "capability_aware")
+- Steps show `repeatable`, `is_guard`, `required_capability`, `builtin` fields
 
 ---
 

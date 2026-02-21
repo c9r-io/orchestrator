@@ -12,6 +12,9 @@ Tauri + React based workflow orchestrator for agent-driven operations.
 - Real-time dashboard for task list, item progress, and command logs
 - Config Center with `Form`/`YAML` switch for workspace/workflow/agent editing
 - Config persistence in SQLite with hot reload for new tasks
+- **Structured AgentOutput** with artifacts, confidence, and quality scores
+- **MessageBus** for agent-to-agent communication
+- **Artifact parsing** from agent stdout/stderr (JSON and text markers)
 
 ## Directory
 
@@ -199,6 +202,7 @@ Template placeholders:
 - `{rel_path}`: current QA/security markdown file path
 - `{ticket_paths}`: space-separated ticket file paths for current item
 - loop guard template placeholders: `{task_id}`, `{cycle}`, `{unresolved_items}`
+- **Enhanced placeholders**: `{phase}`, `{upstream[0].exit_code}`, `{upstream[0].confidence}`, `{shared_state.key}`
 
 Path safety rules:
 

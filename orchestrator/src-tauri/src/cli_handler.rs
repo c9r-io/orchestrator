@@ -10,7 +10,8 @@ use crate::resource::{
 use crate::InnerState;
 use anyhow::{Context, Result};
 use clap_complete::Shell;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use serde_yaml;
 use std::path::Path;
 use std::process::{Command, ExitStatus};
 use std::sync::Arc;
@@ -42,6 +43,57 @@ impl CliHandler {
             Commands::Daemon => {
                 println!("Starting daemon mode (UI)... use --cli flag for CLI mode");
                 Ok(0)
+            }
+            Commands::Debug { component } => self.handle_debug(component.as_deref()),
+        }
+    }
+
+    fn handle_debug(&self, component: Option<&str>) -> Result<i32> {
+        let comp = component.unwrap_or("state");
+
+        match comp {
+            "state" => {
+                println!("Debug Information");
+                println!("=================");
+                println!("");
+                println!("Note: MessageBus is an internal component.");
+                println!("Use 'orchestrator task list' and 'orchestrator task logs' for runtime debugging.");
+                println!("");
+                println!("Available debug components:");
+                println!("  state     - Show runtime state info (this)");
+                println!("  config    - Show active configuration");
+                println!("  messagebus - Show MessageBus status (internal)");
+                Ok(0)
+            }
+            "config" => {
+                let config = crate::read_active_config(&self.state)?;
+                println!("Active Configuration:");
+                println!(
+                    "{}",
+                    serde_yaml::to_string(&config.config).unwrap_or_default()
+                );
+                Ok(0)
+            }
+            "messagebus" => {
+                println!("MessageBus Debug Information");
+                println!("============================");
+                println!("");
+                println!("MessageBus is an internal component for agent-to-agent communication.");
+                println!(
+                    "It is initialized in InnerState and used for publishing/subscribing messages."
+                );
+                println!("");
+                println!("Implementation location: src/message_bus.rs");
+                println!("");
+                println!("To verify MessageBus is working:");
+                println!("  1. Run a task with multiple agents");
+                println!("  2. Check logs for message_bus events");
+                Ok(0)
+            }
+            _ => {
+                eprintln!("Unknown debug component: {}", comp);
+                eprintln!("Available: state, config, messagebus");
+                Ok(1)
             }
         }
     }
@@ -339,7 +391,7 @@ impl CliHandler {
             }
             TaskCommands::Start { task_id, latest } => {
                 let id = if let Some(id) = task_id {
-                    id.clone()
+                    crate::resolve_task_id(&self.state, id)?
                 } else if *latest {
                     crate::find_latest_resumable_task_id(&self.state, true)?
                         .context("no resumable task found")?
@@ -355,26 +407,28 @@ impl CliHandler {
                 Ok(0)
             }
             TaskCommands::Pause { task_id } => {
+                let resolved_id = crate::resolve_task_id(&self.state, task_id)?;
                 let rt = tokio::runtime::Runtime::new()?;
                 rt.block_on(crate::stop_task_runtime(
                     self.state.clone(),
-                    task_id,
+                    &resolved_id,
                     "paused",
                 ))?;
-                println!("Task paused: {}", task_id);
+                println!("Task paused: {}", resolved_id);
                 Ok(0)
             }
             TaskCommands::Resume { task_id } => {
-                crate::prepare_task_for_start(&self.state, task_id)?;
+                let resolved_id = crate::resolve_task_id(&self.state, task_id)?;
+                crate::prepare_task_for_start(&self.state, &resolved_id)?;
                 let runtime = crate::RunningTask::new();
                 let rt = tokio::runtime::Runtime::new()?;
                 rt.block_on(crate::run_task_loop(
                     self.state.clone(),
                     None,
-                    task_id,
+                    &resolved_id,
                     runtime,
                 ))?;
-                let summary = crate::load_task_summary(&self.state, task_id)?;
+                let summary = crate::load_task_summary(&self.state, &resolved_id)?;
                 println!("Task finished: {} status={}", summary.id, summary.status);
                 Ok(0)
             }
@@ -384,7 +438,8 @@ impl CliHandler {
                 tail: _,
                 timestamps: _,
             } => {
-                let logs = crate::stream_task_logs_impl(&self.state, task_id, 300)?;
+                let resolved_id = crate::resolve_task_id(&self.state, task_id)?;
+                let logs = crate::stream_task_logs_impl(&self.state, &resolved_id, 300)?;
                 for chunk in logs {
                     println!("{}", chunk.content);
                 }

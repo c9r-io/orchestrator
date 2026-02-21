@@ -4,11 +4,15 @@ mod capability;
 mod cli;
 mod cli_handler;
 mod cli_types;
+mod collab;
 mod metrics;
 mod resource;
 #[cfg(test)]
 mod test_utils;
 
+use agent_orchestrator::collab::{
+    parse_artifacts_from_output, AgentOutput, Artifact, ExecutionMetrics, MessageBus,
+};
 use agent_orchestrator::qa_utils::{new_ticket_diff, render_template, validate_workspace_rel_path};
 use anyhow::{Context, Result};
 use cel_interpreter::{Context as CelContext, Program, Value as CelValue};
@@ -104,7 +108,8 @@ struct WorkspaceConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct AgentMetadata {
     name: String,
-    description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
     version: Option<String>,
     cost: Option<u8>,
 }
@@ -113,19 +118,11 @@ impl Default for AgentMetadata {
     fn default() -> Self {
         Self {
             name: String::new(),
-            description: String::new(),
+            description: None,
             version: None,
             cost: None,
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct AgentPreference {
-    success_rate: Option<f32>,
-    avg_duration_ms: Option<u32>,
-    total_runs: u32,
-    last_used_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -137,17 +134,20 @@ struct AgentConfig {
     #[serde(default)]
     templates: HashMap<String, String>,
     #[serde(default)]
-    preference: AgentPreference,
-    #[serde(default)]
     selection: AgentSelectionConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 struct AgentSelectionConfig {
-    #[serde(default)]
-    strategy: Option<SelectionStrategy>,
+    #[serde(default = "default_selection_strategy")]
+    strategy: SelectionStrategy,
     #[serde(default)]
     weights: Option<SelectionWeights>,
+}
+
+fn default_selection_strategy() -> SelectionStrategy {
+    SelectionStrategy::CapabilityAware  // 新 Agent 默认使用能力感知策略
 }
 
 impl AgentConfig {
@@ -156,7 +156,6 @@ impl AgentConfig {
             metadata: AgentMetadata::default(),
             capabilities: Vec::new(),
             templates: HashMap::new(),
-            preference: AgentPreference::default(),
             selection: AgentSelectionConfig::default(),
         }
     }
@@ -170,9 +169,7 @@ impl AgentConfig {
     }
 
     fn get_selection_strategy(&self) -> SelectionStrategy {
-        self.selection
-            .strategy
-            .unwrap_or(SelectionStrategy::Adaptive)
+        self.selection.strategy
     }
 
     fn get_selection_weights(&self) -> SelectionWeights {
@@ -628,6 +625,7 @@ struct InnerState {
     running: Mutex<HashMap<String, RunningTask>>,
     agent_health: std::sync::RwLock<HashMap<String, AgentHealthState>>,
     agent_metrics: std::sync::RwLock<HashMap<String, AgentMetrics>>,
+    message_bus: Arc<MessageBus>,
 }
 
 #[derive(Clone)]
@@ -1051,73 +1049,12 @@ fn update_capability_health(
     }
 }
 
-fn select_agent_by_capability(
-    capability: &str,
-    agents: &HashMap<String, AgentConfig>,
-    cost_preference: &Option<CostPreference>,
-) -> Result<(String, String)> {
-    let mut candidates: Vec<_> = agents
-        .iter()
-        .filter(|(_, cfg)| cfg.supports_capability(capability))
-        .collect();
-
-    if candidates.is_empty() {
-        anyhow::bail!("No agent found with capability: {}", capability);
-    }
-
-    if let Some(pref) = cost_preference {
-        match pref {
-            CostPreference::Performance => {
-                candidates.sort_by(|a, b| {
-                    let cost_a = a.1.metadata.cost.unwrap_or(50);
-                    let cost_b = b.1.metadata.cost.unwrap_or(50);
-                    cost_a.cmp(&cost_b)
-                });
-            }
-            CostPreference::Quality => {
-                candidates.sort_by(|a, b| {
-                    let cost_a = a.1.metadata.cost.unwrap_or(50);
-                    let cost_b = b.1.metadata.cost.unwrap_or(50);
-                    cost_b.cmp(&cost_a)
-                });
-            }
-            CostPreference::Balance => {
-                candidates.sort_by(|a, b| {
-                    let cost_a = a.1.metadata.cost.unwrap_or(50);
-                    let cost_b = b.1.metadata.cost.unwrap_or(50);
-                    let deviation_a = (cost_a as i32 - 50).abs();
-                    let deviation_b = (cost_b as i32 - 50).abs();
-                    deviation_a.cmp(&deviation_b)
-                });
-            }
-        }
-    }
-
-    use rand::Rng;
-    let idx = rand::thread_rng().gen_range(0..candidates.len());
-    let (agent_id, config) = candidates[idx];
-
-    let template = config
-        .get_template(capability)
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Agent {} has capability {} but no template",
-                agent_id,
-                capability
-            )
-        })?
-        .clone();
-
-    Ok((agent_id.clone(), template))
-}
-
 fn select_agent_advanced(
     capability: &str,
     agents: &HashMap<String, AgentConfig>,
     health_map: &HashMap<String, AgentHealthState>,
     metrics_map: &HashMap<String, AgentMetrics>,
     excluded_agents: &HashSet<String>,
-    cost_preference: &Option<CostPreference>,
 ) -> Result<(String, String)> {
     use metrics::calculate_agent_score;
 
@@ -1138,28 +1075,29 @@ fn select_agent_advanced(
         anyhow::bail!("No healthy agent found with capability: {}", capability);
     }
 
-    let strategy = match cost_preference {
-        Some(CostPreference::Performance) => SelectionStrategy::PerformanceFirst,
-        Some(CostPreference::Quality) => SelectionStrategy::SuccessRateWeighted,
-        Some(CostPreference::Balance) => SelectionStrategy::Adaptive,
-        None => SelectionStrategy::Adaptive,
-    };
-
-    let requirement = SelectionRequirement {
-        capability: capability.to_string(),
-        strategy,
-        weights: SelectionWeights::default(),
-        max_load: 5,
-        consider_health: true,
-        capability_aware: true,
-    };
-
     let mut scored: Vec<_> = candidates
         .iter()
         .map(|(id, cfg)| {
             let health = health_map.get(*id);
             let metrics = metrics_map.get(*id);
             let cost_u32 = cfg.metadata.cost.map(|c| c as u32);
+
+            let (strategy, weights) = {
+                let sel = &cfg.selection;
+                let s = sel.strategy;
+                let w = sel.weights.clone().unwrap_or_default();
+                (s, w)
+            };
+
+            let requirement = SelectionRequirement {
+                capability: capability.to_string(),
+                strategy,
+                weights,
+                max_load: 5,
+                consider_health: true,
+                capability_aware: true,
+            };
+
             let score = calculate_agent_score(
                 *id,
                 cost_u32,
@@ -1245,6 +1183,18 @@ struct StepPrehookContext {
     new_ticket_count: i64,
     qa_failed: bool,
     fix_required: bool,
+    // New structured fields from AgentOutput
+    qa_confidence: Option<f32>,
+    qa_quality_score: Option<f32>,
+    fix_has_changes: Option<bool>,
+    upstream_artifacts: Vec<ArtifactSummary>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ArtifactSummary {
+    phase: String,
+    kind: String,
+    path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1272,6 +1222,14 @@ struct ItemFinalizeContext {
     retest_enabled: bool,
     retest_ran: bool,
     retest_success: bool,
+    // New AgentOutput fields
+    qa_confidence: Option<f32>,
+    qa_quality_score: Option<f32>,
+    fix_confidence: Option<f32>,
+    fix_quality_score: Option<f32>,
+    total_artifacts: i64,
+    has_ticket_artifacts: bool,
+    has_code_change_artifacts: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -2436,6 +2394,10 @@ fn simulate_prehook_impl(payload: SimulatePrehookPayload) -> Result<SimulatePreh
         new_ticket_count: payload.context.new_ticket_count,
         qa_failed: payload.context.qa_failed,
         fix_required: payload.context.fix_required,
+        qa_confidence: None,
+        qa_quality_score: None,
+        fix_has_changes: None,
+        upstream_artifacts: vec![],
     };
     let result = evaluate_step_prehook_expression(&expression, &context)?;
     Ok(SimulatePrehookResult { result, expression })
@@ -2847,6 +2809,7 @@ fn init_state(cli_config_path: Option<String>) -> Result<ManagedState> {
             running: Mutex::new(HashMap::new()),
             agent_health: std::sync::RwLock::new(HashMap::new()),
             agent_metrics: std::sync::RwLock::new(HashMap::new()),
+            message_bus: Arc::new(MessageBus::new()),
         }),
     })
 }
@@ -4368,7 +4331,6 @@ async fn execute_guard_step(
                 &health_map,
                 &metrics_map,
                 &HashSet::new(),
-                &step.cost_preference,
             )?
         } else {
             select_agent_by_preference(&active.config.agents)?
@@ -4431,7 +4393,6 @@ async fn run_task_loop(
                     &anchor_item_id,
                     "init_once",
                     step.required_capability.as_deref(),
-                    step.cost_preference.clone(),
                     ".",
                     &[],
                     &task_ctx.workspace_root,
@@ -4439,7 +4400,7 @@ async fn run_task_loop(
                     &runtime,
                 )
                 .await?;
-                if !init_result.success {
+                if !init_result.is_success() {
                     anyhow::bail!("init_once failed: exit={}", init_result.exit_code);
                 }
                 insert_event(
@@ -4548,7 +4509,16 @@ async fn run_task_loop(
 
         let unresolved = count_unresolved_items(&state, task_id)?;
 
-        let should_continue = if task_ctx
+        // Check loop mode first - Once mode should only run one cycle
+        let loop_mode_check = evaluate_loop_guard_rules(
+            &task_ctx.execution_plan.loop_policy,
+            task_ctx.current_cycle,
+            unresolved,
+        );
+        
+        let should_continue = if let Some((continue_loop, _)) = loop_mode_check {
+            continue_loop
+        } else if task_ctx
             .execution_plan
             .loop_policy
             .guard
@@ -4559,7 +4529,9 @@ async fn run_task_loop(
             true
         };
 
-        let reason = if !should_continue {
+        let reason = if let Some((_, reason)) = loop_mode_check {
+            reason
+        } else if !should_continue {
             "no_unresolved_items".to_string()
         } else {
             "continue".to_string()
@@ -4634,13 +4606,13 @@ fn evaluate_loop_guard_rules(
     match loop_policy.mode {
         LoopMode::Once => Some((false, "once_mode".to_string())),
         LoopMode::Infinite => {
-            if !loop_policy.guard.enabled {
-                return Some((true, "guard_disabled".to_string()));
-            }
             if let Some(max_cycles) = loop_policy.guard.max_cycles {
                 if current_cycle >= max_cycles {
                     return Some((false, "max_cycles_reached".to_string()));
                 }
+            }
+            if !loop_policy.guard.enabled {
+                return Some((true, "guard_disabled".to_string()));
             }
             None
         }
@@ -4718,7 +4690,6 @@ async fn run_guard_agent_decision(
             &health_map,
             &metrics_map,
             &HashSet::new(),
-            &None,
         )?
     };
     let command = render_loop_guard_template(&template, task_id, current_cycle, unresolved);
@@ -4807,6 +4778,10 @@ async fn process_item(
                 new_ticket_count,
                 qa_failed,
                 fix_required: qa_failed || !active_tickets.is_empty(),
+                qa_confidence: None,
+                qa_quality_score: None,
+                fix_has_changes: None,
+                upstream_artifacts: vec![],
             },
         )?;
         if !should_run_qa {
@@ -4857,7 +4832,6 @@ async fn process_item(
                 item_id,
                 "qa",
                 qa_step.required_capability.as_deref(),
-                qa_step.cost_preference.clone(),
                 &item.qa_file_path,
                 &[],
                 &task_ctx.workspace_root,
@@ -4869,8 +4843,20 @@ async fn process_item(
             let after_tickets = list_ticket_files(task_ctx)?;
             active_tickets = new_ticket_diff(&before_tickets, &after_tickets);
             new_ticket_count = active_tickets.len() as i64;
-            if qa_result.success && active_tickets.is_empty() {
+            if qa_result.is_success() && active_tickets.is_empty() {
                 item_status = "qa_passed".to_string();
+                update_task_item(
+                    state,
+                    item_id,
+                    "qa_passed",
+                    None,
+                    None,
+                    Some(false),
+                    Some(false),
+                    Some(""),
+                    false,
+                    false,
+                )?;
             } else {
                 qa_failed = true;
                 if active_tickets.is_empty() {
@@ -4901,6 +4887,18 @@ async fn process_item(
         new_ticket_count = active_tickets.len() as i64;
         if active_tickets.is_empty() {
             item_status = "skipped".to_string();
+            update_task_item(
+                state,
+                item_id,
+                "skipped",
+                None,
+                None,
+                Some(false),
+                Some(false),
+                Some(""),
+                true,
+                false,
+            )?;
         } else {
             qa_failed = true;
             let ticket_content: Vec<Value> = active_tickets
@@ -4943,6 +4941,10 @@ async fn process_item(
                 new_ticket_count,
                 qa_failed,
                 fix_required: qa_failed || !active_tickets.is_empty(),
+                qa_confidence: None,
+                qa_quality_score: None,
+                fix_has_changes: None,
+                upstream_artifacts: vec![],
             },
         )?;
         if should_run_scan {
@@ -4993,6 +4995,10 @@ async fn process_item(
                     new_ticket_count,
                     qa_failed,
                     fix_required: qa_failed || !active_tickets.is_empty(),
+                    qa_confidence: None,
+                    qa_quality_score: None,
+                    fix_has_changes: None,
+                    upstream_artifacts: vec![],
                 },
             )?;
             if should_run_fix {
@@ -5017,7 +5023,6 @@ async fn process_item(
                     item_id,
                     "fix",
                     fix_step.required_capability.as_deref(),
-                    fix_step.cost_preference.clone(),
                     &item.qa_file_path,
                     &active_tickets,
                     &task_ctx.workspace_root,
@@ -5026,7 +5031,7 @@ async fn process_item(
                 )
                 .await?;
                 fix_exit_code = Some(fix_result.exit_code);
-                fix_success = fix_result.success;
+                fix_success = fix_result.is_success();
             }
         }
     }
@@ -5052,6 +5057,10 @@ async fn process_item(
                     new_ticket_count,
                     qa_failed,
                     fix_required: qa_failed || !active_tickets.is_empty(),
+                    qa_confidence: None,
+                    qa_quality_score: None,
+                    fix_has_changes: None,
+                    upstream_artifacts: vec![],
                 },
             )?;
             if should_run_retest {
@@ -5076,7 +5085,6 @@ async fn process_item(
                     item_id,
                     "retest",
                     retest_step.required_capability.as_deref(),
-                    retest_step.cost_preference.clone(),
                     &item.qa_file_path,
                     &[],
                     &task_ctx.workspace_root,
@@ -5085,7 +5093,7 @@ async fn process_item(
                 )
                 .await?;
                 retest_exit_code = Some(retest_result.exit_code);
-                retest_success = retest_result.success;
+                retest_success = retest_result.is_success();
                 let after_retest_tickets = list_ticket_files(task_ctx)?;
                 retest_new_tickets = new_ticket_diff(&before_retest_tickets, &after_retest_tickets);
             }
@@ -5116,6 +5124,13 @@ async fn process_item(
         retest_enabled,
         retest_ran,
         retest_success,
+        qa_confidence: None,
+        qa_quality_score: None,
+        fix_confidence: None,
+        fix_quality_score: None,
+        total_artifacts: 0,
+        has_ticket_artifacts: false,
+        has_code_change_artifacts: false,
     };
     let outcome =
         resolve_workflow_finalize_outcome(&task_ctx.execution_plan.finalize, &finalize_context)?
@@ -5228,13 +5243,12 @@ async fn run_phase_with_rotation(
     task_item_id: &str,
     phase: &str,
     required_capability: Option<&str>,
-    cost_preference: Option<CostPreference>,
     rel_path: &str,
     ticket_paths: &[String],
     workspace_root: &Path,
     workspace_id: &str,
     runtime: &RunningTask,
-) -> Result<RunResult> {
+) -> Result<AgentOutput> {
     let candidate_agent_ids: Vec<String> = {
         let active = read_active_config(state)?;
         active
@@ -5272,7 +5286,6 @@ async fn run_phase_with_rotation(
                     &health_map,
                     &metrics_map,
                     &tried_agents,
-                    &cost_preference,
                 )?
             } else {
                 select_agent_by_preference(&active.config.agents)?
@@ -5378,7 +5391,10 @@ async fn run_phase_with_rotation(
                 metrics::MetricsCollector::record_success(entry, duration);
             }
         }
-        return Ok(result);
+        
+        // Convert RunResult to AgentOutput
+        let agent_output = run_result_to_agent_output(result, agent_id.clone(), phase.to_string());
+        return Ok(agent_output);
     }
     anyhow::bail!(
         "all agents for capability '{:?}' are diseased",
@@ -5661,6 +5677,43 @@ async fn run_phase(
     })
 }
 
+fn run_result_to_agent_output(
+    result: RunResult,
+    agent_id: String,
+    phase: String,
+) -> AgentOutput {
+    let stdout = std::fs::read_to_string(&result.stdout_path).unwrap_or_default();
+    let stderr = std::fs::read_to_string(&result.stderr_path).unwrap_or_default();
+    let run_id = Uuid::new_v4();
+    
+    let mut output = AgentOutput::new(
+        run_id,
+        agent_id,
+        phase,
+        result.exit_code,
+        stdout.clone(),
+        stderr.clone(),
+    );
+    
+    output = output.with_metrics(ExecutionMetrics {
+        duration_ms: result.duration_ms.unwrap_or(0),
+        tokens_consumed: None,
+        api_calls: None,
+        retry_count: 0,
+    });
+    
+    output = output.with_confidence(if result.success { 1.0 } else { 0.0 });
+    output = output.with_quality_score(if result.success { 1.0 } else { 0.0 });
+    
+    // Parse artifacts from stdout/stderr
+    let artifacts = parse_artifacts_from_output(&stdout);
+    let artifacts_stderr = parse_artifacts_from_output(&stderr);
+    let all_artifacts: Vec<Artifact> = artifacts.into_iter().chain(artifacts_stderr.into_iter()).collect();
+    output = output.with_artifacts(all_artifacts);
+    
+    output
+}
+
 async fn kill_current_child(runtime: &RunningTask) {
     let mut slot = runtime.child.lock().await;
     if let Some(child) = slot.as_mut() {
@@ -5885,6 +5938,13 @@ mod prehook_tests {
             retest_enabled: true,
             retest_ran: true,
             retest_success: true,
+            qa_confidence: None,
+            qa_quality_score: None,
+            fix_confidence: None,
+            fix_quality_score: None,
+            total_artifacts: 0,
+            has_ticket_artifacts: false,
+            has_code_change_artifacts: false,
         };
         let outcome = resolve_workflow_finalize_outcome(&finalize, &context)
             .expect("finalize evaluation should succeed")
@@ -5919,6 +5979,13 @@ mod prehook_tests {
             retest_enabled: true,
             retest_ran: false,
             retest_success: false,
+            qa_confidence: None,
+            qa_quality_score: None,
+            fix_confidence: None,
+            fix_quality_score: None,
+            total_artifacts: 0,
+            has_ticket_artifacts: false,
+            has_code_change_artifacts: false,
         };
         let outcome = resolve_workflow_finalize_outcome(&finalize, &context)
             .expect("finalize evaluation should succeed")
@@ -5993,7 +6060,7 @@ fn main() {
                     AgentConfig {
                         metadata: AgentMetadata {
                             name: "echo".to_string(),
-                            description: "Echo agent for testing".to_string(),
+                            description: Some("Echo agent for testing".to_string()),
                             version: None,
                             cost: Some(1),
                         },
@@ -6003,7 +6070,6 @@ fn main() {
                             t.insert("qa".to_string(), "echo 'qa: {rel_path}'".to_string());
                             t
                         },
-                        preference: AgentPreference::default(),
                         selection: AgentSelectionConfig::default(),
                     },
                 );
@@ -6094,6 +6160,7 @@ fn main() {
             | cli::Commands::Completion(_)
             | cli::Commands::Get { .. }
             | cli::Commands::Describe { .. }
+            | cli::Commands::Debug { .. }
     ) {
         let handler = cli_handler::CliHandler::new(state.inner.clone());
         match handler.execute(&cli) {

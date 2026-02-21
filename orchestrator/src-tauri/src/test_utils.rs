@@ -44,7 +44,6 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                         t.insert("qa".to_string(), "echo 'qa: {rel_path}'".to_string());
                         t
                     },
-                    preference: AgentPreference::default(),
                     selection: AgentSelectionConfig::default(),
                 },
             );
