@@ -49,15 +49,19 @@ fn print_cli_help(binary_name: &str) {
 fn parse_cli_options(args: &[String]) -> Result<CliOptions> {
     let mut options = CliOptions::new();
     let mut idx = 0usize;
+    let mut seen_cli = false;
 
     while idx < args.len() {
         match args[idx].as_str() {
             "--cli" => {
                 options.cli = true;
+                seen_cli = true;
                 idx += 1;
             }
             "--help" | "-h" => {
-                options.show_help = true;
+                if !seen_cli {
+                    options.show_help = true;
+                }
                 idx += 1;
             }
             "--no-auto-resume" => {
@@ -101,10 +105,7 @@ fn parse_cli_options(args: &[String]) -> Result<CliOptions> {
                 options.target_files.push(value.clone());
                 idx += 2;
             }
-            unknown => {
-                if options.cli {
-                    anyhow::bail!("unknown argument: {}", unknown);
-                }
+            _ => {
                 idx += 1;
             }
         }

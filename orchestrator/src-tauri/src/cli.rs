@@ -438,10 +438,19 @@ use crate::dto::CliOptions;
 use crate::state::InnerState;
 use anyhow::Result;
 use std::sync::Arc;
+use std::env;
 
 pub async fn run_cli_mode(state: Arc<InnerState>, _options: CliOptions) -> Result<()> {
     let handler = CliHandler::new(state);
-    let cli = Cli::parse();
+    
+    let args: Vec<String> = env::args().collect();
+    let program_name = args.first().cloned().unwrap_or_else(|| "orchestrator".to_string());
+    let filtered: Vec<String> = args.into_iter().skip(1).filter(|arg| arg != "--cli").collect();
+    let mut clap_args = vec![program_name];
+    clap_args.extend(filtered);
+    
+    let cli = Cli::parse_from(&clap_args);
+    
     let exit_code = handler.execute(&cli)?;
     std::process::exit(exit_code);
 }
