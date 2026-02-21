@@ -7,7 +7,7 @@ use crate::dto::{
     ConfigVersionDetail, ConfigVersionSummary, CreateTaskOptions, CreateTaskDefaults,
     CreateTaskPayload, DeleteTaskResponse, NamedOption, SaveConfigFormPayload,
     SaveConfigYamlPayload, SimulatePrehookPayload, SimulatePrehookResult, TaskDetail,
-    TaskSummary,
+    TaskSummary, ValidationErrorDto, ValidationWarningDto,
 };
 use crate::prehook::simulate_prehook_impl;
 use crate::scheduler::{
@@ -135,20 +135,76 @@ pub async fn validate_config_yaml(
     state: State<'_, ManagedState>,
     payload: SaveConfigYamlPayload,
 ) -> Result<ConfigValidationResult, String> {
-    let config =
-        serde_yaml::from_str::<crate::config::OrchestratorConfig>(&payload.yaml).map_err(err_to_string)?;
-    let candidate = crate::config_load::build_active_config(&state.inner.app_root, config).map_err(err_to_string)?;
-    let current = read_active_config(&state.inner)
-        .map_err(err_to_string)?
-        .config
-        .clone();
-    let conn = open_conn(&state.inner.db_path).map_err(err_to_string)?;
-    crate::config_load::enforce_deletion_guards(&conn, &current, &candidate.config).map_err(err_to_string)?;
-    let normalized_yaml = serde_yaml::to_string(&candidate.config).map_err(err_to_string)?;
-    Ok(ConfigValidationResult {
-        valid: true,
-        normalized_yaml,
-    })
+    use crate::config_validation::validator::ConfigValidator;
+    use crate::config_validation::{ValidationLevel, PathValidationOptions};
+
+    let validator = ConfigValidator::new(&state.inner.app_root)
+        .with_level(ValidationLevel::Full)
+        .with_path_options(PathValidationOptions {
+            missing_path_is_error: false,
+            check_path_escape: true,
+        });
+
+    let result = validator.validate_yaml(&payload.yaml);
+
+    if result.errors.is_empty() {
+        let config = serde_yaml::from_str::<crate::config::OrchestratorConfig>(&payload.yaml)
+            .map_err(err_to_string)?;
+        let candidate = crate::config_load::build_active_config(&state.inner.app_root, config)
+            .map_err(err_to_string)?;
+        let current = read_active_config(&state.inner)
+            .map_err(err_to_string)?
+            .config
+            .clone();
+        let conn = open_conn(&state.inner.db_path).map_err(err_to_string)?;
+        crate::config_load::enforce_deletion_guards(&conn, &current, &candidate.config)
+            .map_err(err_to_string)?;
+        let normalized_yaml = serde_yaml::to_string(&candidate.config).map_err(err_to_string)?;
+
+        let errors: Vec<_> = result.errors.iter().map(|e| ValidationErrorDto {
+            code: format!("{:?}", e.code),
+            message: e.message.clone(),
+            field: e.field.clone(),
+            context: e.context.clone(),
+        }).collect();
+
+        let warnings: Vec<_> = result.warnings.iter().map(|w| ValidationWarningDto {
+            code: format!("{:?}", w.code),
+            message: w.message.clone(),
+            field: w.field.clone(),
+            suggestion: w.suggestion.clone(),
+        }).collect();
+
+        Ok(ConfigValidationResult {
+            valid: result.is_valid,
+            normalized_yaml,
+            errors,
+            warnings,
+            summary: result.report(),
+        })
+    } else {
+        let errors: Vec<_> = result.errors.iter().map(|e| ValidationErrorDto {
+            code: format!("{:?}", e.code),
+            message: e.message.clone(),
+            field: e.field.clone(),
+            context: e.context.clone(),
+        }).collect();
+
+        let warnings: Vec<_> = result.warnings.iter().map(|w| ValidationWarningDto {
+            code: format!("{:?}", w.code),
+            message: w.message.clone(),
+            field: w.field.clone(),
+            suggestion: w.suggestion.clone(),
+        }).collect();
+
+        Ok(ConfigValidationResult {
+            valid: result.is_valid,
+            normalized_yaml: String::new(),
+            errors,
+            warnings,
+            summary: result.report(),
+        })
+    }
 }
 
 #[tauri::command]

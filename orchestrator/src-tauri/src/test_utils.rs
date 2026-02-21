@@ -1,6 +1,30 @@
-use super::*;
+use crate::collab::MessageBus;
+use crate::config::{
+    AgentConfig, AgentMetadata, AgentSelectionConfig, ConfigDefaults, LoopMode, OrchestratorConfig,
+    ResumeConfig, RunnerConfig, WorkflowConfig, WorkflowFinalizeConfig, WorkflowLoopConfig,
+    WorkflowLoopGuardConfig, WorkflowStepConfig, WorkflowStepType, WorkspaceConfig,
+};
+use crate::config_load::{build_active_config, load_or_seed_config, read_active_config};
+use crate::db::init_schema;
+use crate::state::InnerState;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::Mutex;
+use uuid::Uuid;
+
+use crate::config::ResolvedWorkspace;
+use crate::db::open_conn;
+
+fn backfill_legacy_data(
+    _db_path: &Path,
+    _default_workspace_id: &str,
+    _default_workflow_id: &str,
+    _workspace: &ResolvedWorkspace,
+) -> anyhow::Result<()> {
+    Ok(())
+}
 
 fn create_minimal_test_config() -> OrchestratorConfig {
     OrchestratorConfig {

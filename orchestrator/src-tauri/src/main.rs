@@ -7,6 +7,7 @@ mod cli_types;
 mod collab;
 mod config;
 mod config_load;
+mod config_validation;
 mod db;
 mod dto;
 mod dynamic_orchestration;
