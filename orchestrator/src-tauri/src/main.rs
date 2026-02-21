@@ -1,6 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod capability;
 mod cli;
 mod cli_handler;
 mod cli_types;
@@ -19,8 +18,8 @@ use cel_interpreter::{Context as CelContext, Program, Value as CelValue};
 use chrono::Utc;
 use clap::Parser;
 use metrics::{
-    AgentHealthState, AgentMetrics, CapabilityHealth, MetricsCollector, SelectionRequirement,
-    SelectionStrategy, SelectionWeights,
+    AgentHealthState, AgentMetrics, CapabilityHealth, SelectionRequirement, SelectionStrategy,
+    SelectionWeights,
 };
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -50,6 +49,7 @@ struct ProjectConfig {
 }
 
 impl ProjectConfig {
+    #[allow(dead_code)]
     fn empty() -> Self {
         Self {
             description: None,
@@ -105,24 +105,13 @@ struct WorkspaceConfig {
     ticket_dir: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct AgentMetadata {
     name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     description: Option<String>,
     version: Option<String>,
     cost: Option<u8>,
-}
-
-impl Default for AgentMetadata {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            description: None,
-            version: None,
-            cost: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -137,8 +126,7 @@ struct AgentConfig {
     selection: AgentSelectionConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct AgentSelectionConfig {
     #[serde(default = "default_selection_strategy")]
     strategy: SelectionStrategy,
@@ -147,7 +135,7 @@ struct AgentSelectionConfig {
 }
 
 fn default_selection_strategy() -> SelectionStrategy {
-    SelectionStrategy::CapabilityAware  // 新 Agent 默认使用能力感知策略
+    SelectionStrategy::CapabilityAware // 新 Agent 默认使用能力感知策略
 }
 
 impl AgentConfig {
@@ -168,10 +156,12 @@ impl AgentConfig {
         self.capabilities.contains(&capability.to_string())
     }
 
+    #[allow(dead_code)]
     fn get_selection_strategy(&self) -> SelectionStrategy {
         self.selection.strategy
     }
 
+    #[allow(dead_code)]
     fn get_selection_weights(&self) -> SelectionWeights {
         self.selection.weights.clone().unwrap_or_default()
     }
@@ -196,14 +186,10 @@ enum WorkflowStepType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 enum StepHookEngine {
+    #[default]
     Cel,
-}
-
-impl Default for StepHookEngine {
-    fn default() -> Self {
-        Self::Cel
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -266,15 +252,11 @@ impl WorkflowStepType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 enum LoopMode {
+    #[default]
     Once,
     Infinite,
-}
-
-impl Default for LoopMode {
-    fn default() -> Self {
-        Self::Once
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -306,16 +288,12 @@ struct WorkflowLoopConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 enum CostPreference {
     Performance,
     Quality,
+    #[default]
     Balance,
-}
-
-impl Default for CostPreference {
-    fn default() -> Self {
-        Self::Balance
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -379,6 +357,7 @@ impl TaskExecutionPlan {
             .find(|step| step.step_type.as_ref() == Some(&step_type))
     }
 
+    #[allow(dead_code)]
     fn step_by_id(&self, id: &str) -> Option<&TaskExecutionStep> {
         self.steps.iter().find(|step| step.id == id)
     }
@@ -574,6 +553,7 @@ struct ResolvedWorkspace {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct ResolvedProject {
     workspaces: HashMap<String, ResolvedWorkspace>,
     agents: HashMap<String, AgentConfig>,
@@ -625,6 +605,7 @@ struct InnerState {
     running: Mutex<HashMap<String, RunningTask>>,
     agent_health: std::sync::RwLock<HashMap<String, AgentHealthState>>,
     agent_metrics: std::sync::RwLock<HashMap<String, AgentMetrics>>,
+    #[allow(dead_code)]
     message_bus: Arc<MessageBus>,
 }
 
@@ -645,6 +626,7 @@ impl RunningTask {
 
 #[derive(Debug, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 struct CreateTaskPayload {
     name: Option<String>,
     goal: Option<String>,
@@ -652,19 +634,6 @@ struct CreateTaskPayload {
     workspace_id: Option<String>,
     workflow_id: Option<String>,
     target_files: Option<Vec<String>>,
-}
-
-impl Default for CreateTaskPayload {
-    fn default() -> Self {
-        Self {
-            name: None,
-            goal: None,
-            project_id: None,
-            workspace_id: None,
-            workflow_id: None,
-            target_files: None,
-        }
-    }
 }
 
 #[derive(Debug, Serialize)]
@@ -725,20 +694,11 @@ struct SimulatePrehookContextPayload {
 
 #[derive(Debug, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 struct SimulatePrehookPayload {
     expression: String,
     step: Option<String>,
     context: SimulatePrehookContextPayload,
-}
-
-impl Default for SimulatePrehookPayload {
-    fn default() -> Self {
-        Self {
-            expression: String::new(),
-            step: None,
-            context: SimulatePrehookContextPayload::default(),
-        }
-    }
 }
 
 #[derive(Debug, Serialize)]
@@ -884,6 +844,7 @@ const DISEASE_DURATION_HOURS: i64 = 5;
 const CONSECUTIVE_ERROR_THRESHOLD: u32 = 2;
 const IDLE_TIMEOUT_SECS: u64 = 600; // 10 minutes
 
+#[allow(dead_code)]
 fn is_agent_healthy(health_map: &HashMap<String, AgentHealthState>, agent_id: &str) -> bool {
     match health_map.get(agent_id) {
         None => true,
@@ -1058,7 +1019,7 @@ fn select_agent_advanced(
 ) -> Result<(String, String)> {
     use metrics::calculate_agent_score;
 
-    let mut candidates: Vec<_> = agents
+    let candidates: Vec<_> = agents
         .iter()
         .filter(|(id, cfg)| {
             if excluded_agents.contains(*id) {
@@ -1099,7 +1060,7 @@ fn select_agent_advanced(
             };
 
             let score = calculate_agent_score(
-                *id,
+                id,
                 cost_u32,
                 &metrics.cloned(),
                 &health.cloned(),
@@ -1788,8 +1749,8 @@ fn validate_workflow_config(
             .step_type
             .as_ref()
             .map(|t| t.as_str())
-            .or_else(|| step.builtin.as_deref())
-            .or_else(|| step.required_capability.as_deref())
+            .or(step.builtin.as_deref())
+            .or(step.required_capability.as_deref())
             .unwrap_or(&step.id);
         if seen.insert(key.to_string(), true).is_some() {
             anyhow::bail!(
@@ -2684,7 +2645,7 @@ fn enforce_deletion_guards(
         }
     }
 
-    let removed_agents: Vec<String> = previous
+    let _removed_agents: Vec<String> = previous
         .agents
         .keys()
         .filter(|id| !candidate.agents.contains_key(*id))
@@ -4303,20 +4264,17 @@ async fn execute_guard_step(
     runtime: &RunningTask,
 ) -> Result<GuardResult> {
     if let Some(builtin) = &step.builtin {
-        match builtin.as_str() {
-            "loop_guard" => {
-                let unresolved = count_unresolved_items(state, task_id)?;
-                let should_stop = unresolved == 0;
-                return Ok(GuardResult {
-                    should_stop,
-                    reason: if should_stop {
-                        "no_unresolved".to_string()
-                    } else {
-                        "has_unresolved".to_string()
-                    },
-                });
-            }
-            _ => {}
+        if builtin.as_str() == "loop_guard" {
+            let unresolved = count_unresolved_items(state, task_id)?;
+            let should_stop = unresolved == 0;
+            return Ok(GuardResult {
+                should_stop,
+                reason: if should_stop {
+                    "no_unresolved".to_string()
+                } else {
+                    "has_unresolved".to_string()
+                },
+            });
         }
     }
 
@@ -4515,7 +4473,7 @@ async fn run_task_loop(
             task_ctx.current_cycle,
             unresolved,
         );
-        
+
         let should_continue = if let Some((continue_loop, _)) = loop_mode_check {
             continue_loop
         } else if task_ctx
@@ -4619,6 +4577,7 @@ fn evaluate_loop_guard_rules(
     }
 }
 
+#[allow(dead_code)]
 fn parse_guard_agent_decision(output: &str) -> Option<bool> {
     for line in output.lines().rev() {
         let trimmed = line.trim();
@@ -4653,6 +4612,7 @@ fn parse_guard_agent_decision(output: &str) -> Option<bool> {
     None
 }
 
+#[allow(dead_code)]
 fn render_loop_guard_template(
     template: &str,
     task_id: &str,
@@ -4665,6 +4625,7 @@ fn render_loop_guard_template(
         .replace("{unresolved_items}", &unresolved_items.to_string())
 }
 
+#[allow(dead_code)]
 async fn run_guard_agent_decision(
     state: &Arc<InnerState>,
     app: Option<&AppHandle>,
@@ -5332,7 +5293,7 @@ async fn run_phase_with_rotation(
             let mut metrics = state.agent_metrics.write().unwrap();
             let entry = metrics
                 .entry(agent_id.clone())
-                .or_insert_with(|| metrics::MetricsCollector::new_agent_metrics());
+                .or_insert_with(metrics::MetricsCollector::new_agent_metrics);
             metrics::MetricsCollector::increment_load(entry);
         }
 
@@ -5371,7 +5332,7 @@ async fn run_phase_with_rotation(
                 let mut metrics = state.agent_metrics.write().unwrap();
                 let entry = metrics
                     .entry(agent_id.clone())
-                    .or_insert_with(|| metrics::MetricsCollector::new_agent_metrics());
+                    .or_insert_with(metrics::MetricsCollector::new_agent_metrics);
                 metrics::MetricsCollector::record_failure(entry);
             }
             if errors >= CONSECUTIVE_ERROR_THRESHOLD {
@@ -5387,11 +5348,11 @@ async fn run_phase_with_rotation(
                 let mut metrics = state.agent_metrics.write().unwrap();
                 let entry = metrics
                     .entry(agent_id.clone())
-                    .or_insert_with(|| metrics::MetricsCollector::new_agent_metrics());
+                    .or_insert_with(metrics::MetricsCollector::new_agent_metrics);
                 metrics::MetricsCollector::record_success(entry, duration);
             }
         }
-        
+
         // Convert RunResult to AgentOutput
         let agent_output = run_result_to_agent_output(result, agent_id.clone(), phase.to_string());
         return Ok(agent_output);
@@ -5677,15 +5638,11 @@ async fn run_phase(
     })
 }
 
-fn run_result_to_agent_output(
-    result: RunResult,
-    agent_id: String,
-    phase: String,
-) -> AgentOutput {
+fn run_result_to_agent_output(result: RunResult, agent_id: String, phase: String) -> AgentOutput {
     let stdout = std::fs::read_to_string(&result.stdout_path).unwrap_or_default();
     let stderr = std::fs::read_to_string(&result.stderr_path).unwrap_or_default();
     let run_id = Uuid::new_v4();
-    
+
     let mut output = AgentOutput::new(
         run_id,
         agent_id,
@@ -5694,23 +5651,23 @@ fn run_result_to_agent_output(
         stdout.clone(),
         stderr.clone(),
     );
-    
+
     output = output.with_metrics(ExecutionMetrics {
         duration_ms: result.duration_ms.unwrap_or(0),
         tokens_consumed: None,
         api_calls: None,
         retry_count: 0,
     });
-    
+
     output = output.with_confidence(if result.success { 1.0 } else { 0.0 });
     output = output.with_quality_score(if result.success { 1.0 } else { 0.0 });
-    
+
     // Parse artifacts from stdout/stderr
     let artifacts = parse_artifacts_from_output(&stdout);
     let artifacts_stderr = parse_artifacts_from_output(&stderr);
-    let all_artifacts: Vec<Artifact> = artifacts.into_iter().chain(artifacts_stderr.into_iter()).collect();
+    let all_artifacts: Vec<Artifact> = artifacts.into_iter().chain(artifacts_stderr).collect();
     output = output.with_artifacts(all_artifacts);
-    
+
     output
 }
 

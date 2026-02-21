@@ -201,16 +201,10 @@ impl Default for WorkflowLoopSpec {
 }
 
 /// Workflow finalization rules specification.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct WorkflowFinalizeSpec {
     #[serde(default)]
     pub rules: Vec<WorkflowFinalizeRuleSpec>,
-}
-
-impl Default for WorkflowFinalizeSpec {
-    fn default() -> Self {
-        Self { rules: Vec::new() }
-    }
 }
 
 /// Individual finalization rule.

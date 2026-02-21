@@ -34,7 +34,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                 AgentConfig {
                     metadata: AgentMetadata {
                         name: "echo".to_string(),
-                        description: "Echo agent for testing".to_string(),
+                        description: Some("Echo agent for testing".to_string()),
                         version: None,
                         cost: Some(1),
                     },
@@ -203,6 +203,7 @@ impl TestState {
             running: Mutex::new(HashMap::new()),
             agent_health: std::sync::RwLock::new(HashMap::new()),
             agent_metrics: std::sync::RwLock::new(HashMap::new()),
+            message_bus: Arc::new(MessageBus::new()),
         });
         self.state = Some(state.clone());
         state

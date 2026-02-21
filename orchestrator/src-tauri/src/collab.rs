@@ -3,6 +3,8 @@
 //! Provides structured agent-to-agent communication, message bus,
 //! shared context, and DAG-based workflow execution.
 
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -134,13 +136,30 @@ impl Artifact {
 /// Types of artifacts an agent can produce
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ArtifactKind {
-    Ticket { severity: Severity, category: String },
-    CodeChange { files: Vec<String> },
-    TestResult { passed: u32, failed: u32 },
-    Analysis { findings: Vec<Finding> },
-    Decision { choice: String, rationale: String },
-    Data { schema: String },
-    Custom { name: String },
+    Ticket {
+        severity: Severity,
+        category: String,
+    },
+    CodeChange {
+        files: Vec<String>,
+    },
+    TestResult {
+        passed: u32,
+        failed: u32,
+    },
+    Analysis {
+        findings: Vec<Finding>,
+    },
+    Decision {
+        choice: String,
+        rationale: String,
+    },
+    Data {
+        schema: String,
+    },
+    Custom {
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -202,7 +221,11 @@ impl AgentMessage {
         Self {
             id: Uuid::new_v4(),
             msg_type: MessageType::Response,
-            sender: original.receivers.first().cloned().unwrap_or(original.sender.clone()),
+            sender: original
+                .receivers
+                .first()
+                .cloned()
+                .unwrap_or(original.sender.clone()),
             receivers: vec![original.sender.clone()],
             payload,
             correlation_id: Some(original.id),
@@ -404,10 +427,10 @@ impl MessageBus {
     /// Get latest message for a specific phase
     pub async fn get_latest_output(&self, phase: &str) -> Result<Option<AgentOutput>> {
         let store = self.message_store.read().await;
-        
+
         // Find latest execution result for the phase
         let mut latest: Option<(DateTime<Utc>, &AgentMessage)> = None;
-        
+
         for msg in store.values() {
             if let MessagePayload::ExecutionResult(ref result) = msg.payload {
                 if result.output.phase == phase {
@@ -479,7 +502,9 @@ impl std::fmt::Debug for MessagePattern {
             MessagePattern::ByType(t) => f.debug_tuple("ByType").field(t).finish(),
             MessagePattern::ByPhase(p) => f.debug_tuple("ByPhase").field(p).finish(),
             MessagePattern::ByAgent(a) => f.debug_tuple("ByAgent").field(a).finish(),
-            MessagePattern::ByTaskItem(t, i) => f.debug_tuple("ByTaskItem").field(t).field(i).finish(),
+            MessagePattern::ByTaskItem(t, i) => {
+                f.debug_tuple("ByTaskItem").field(t).field(i).finish()
+            }
             MessagePattern::Custom(_) => f.debug_tuple("Custom").finish(),
         }
     }
@@ -491,7 +516,7 @@ impl MessagePattern {
             MessagePattern::ByType(t) => msg.msg_type == *t,
             MessagePattern::ByPhase(p) => {
                 if let MessagePayload::ExecutionRequest(ref req) = msg.payload {
-                    req.context.phase.as_ref().map(|s| s.as_str()) == Some(p)
+                    req.context.phase.as_deref() == Some(p)
                 } else {
                     false
                 }
@@ -562,7 +587,7 @@ impl AgentContext {
     /// Add upstream output to context
     pub fn add_upstream_output(&mut self, output: AgentOutput) {
         self.upstream_outputs.push(output.clone());
-        
+
         // Also register as artifact
         for artifact in output.artifacts {
             self.artifacts.register(self.phase.clone(), artifact);
@@ -578,28 +603,27 @@ impl AgentContext {
         result = result.replace("{item_id}", &self.item_id);
         result = result.replace("{cycle}", &self.cycle.to_string());
         result = result.replace("{phase}", &self.phase);
-        result = result.replace("{workspace_root}", 
-            &self.workspace_root.to_string_lossy());
+        result = result.replace("{workspace_root}", &self.workspace_root.to_string_lossy());
 
         // Upstream outputs
         for (i, output) in self.upstream_outputs.iter().enumerate() {
             let prefix = format!("upstream[{}]", i);
-            
+
             result = result.replace(
                 &format!("{}.exit_code", prefix),
-                &output.exit_code.to_string()
+                &output.exit_code.to_string(),
             );
             result = result.replace(
                 &format!("{}.confidence", prefix),
-                &output.confidence.to_string()
+                &output.confidence.to_string(),
             );
             result = result.replace(
                 &format!("{}.quality_score", prefix),
-                &output.quality_score.to_string()
+                &output.quality_score.to_string(),
             );
             result = result.replace(
                 &format!("{}.duration_ms", prefix),
-                &output.metrics.duration_ms.to_string()
+                &output.metrics.duration_ms.to_string(),
             );
 
             // Artifacts
@@ -608,7 +632,7 @@ impl AgentContext {
                     let key = format!("{}.artifacts[{}].content", prefix, j);
                     result = result.replace(
                         &format!("{{{}}}", key),
-                        &serde_json::to_string(content).unwrap_or_default()
+                        &serde_json::to_string(content).unwrap_or_default(),
                     );
                 }
             }
@@ -618,10 +642,7 @@ impl AgentContext {
         result = self.shared_state.render_template(&result);
 
         // Artifact registry shortcuts
-        result = result.replace(
-            "{artifacts.count}",
-            &self.artifacts.count().to_string()
-        );
+        result = result.replace("{artifacts.count}", &self.artifacts.count().to_string());
 
         result
     }
@@ -671,7 +692,10 @@ impl ArtifactRegistry {
     }
 
     pub fn get_by_phase(&self, phase: &str) -> Vec<&Artifact> {
-        self.artifacts.get(phase).map(|v| v.iter().collect()).unwrap_or_default()
+        self.artifacts
+            .get(phase)
+            .map(|v| v.iter().collect())
+            .unwrap_or_default()
     }
 
     pub fn get_by_kind(&self, kind: &ArtifactKind) -> Vec<&Artifact> {
@@ -734,7 +758,7 @@ impl SharedState {
 /// Parse artifacts from agent stdout/stderr output
 pub fn parse_artifacts_from_output(output: &str) -> Vec<Artifact> {
     let mut artifacts = Vec::new();
-    
+
     // Try to parse as JSON array of artifacts
     if let Ok(parsed) = serde_json::from_str::<Vec<serde_json::Value>>(output) {
         for value in parsed {
@@ -751,7 +775,7 @@ pub fn parse_artifacts_from_output(output: &str) -> Vec<Artifact> {
         }
         return artifacts;
     }
-    
+
     // Try to parse as JSON object
     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(output) {
         if let Some(kind) = extract_artifact_kind(&parsed) {
@@ -765,23 +789,24 @@ pub fn parse_artifacts_from_output(output: &str) -> Vec<Artifact> {
             artifacts.push(artifact);
         }
     }
-    
+
     // Try to extract ticket markers from plain text
     for line in output.lines() {
         if let Some(ticket) = parse_ticket_from_line(line) {
             artifacts.push(ticket);
         }
     }
-    
+
     artifacts
 }
 
 fn extract_artifact_kind(value: &serde_json::Value) -> Option<ArtifactKind> {
     let kind = value.get("kind")?.as_str()?;
-    
+
     match kind {
         "ticket" => {
-            let severity = value.get("severity")
+            let severity = value
+                .get("severity")
                 .and_then(|v| v.as_str())
                 .map(|s| match s {
                     "critical" => Severity::Critical,
@@ -791,56 +816,87 @@ fn extract_artifact_kind(value: &serde_json::Value) -> Option<ArtifactKind> {
                     _ => Severity::Info,
                 })
                 .unwrap_or(Severity::Info);
-            
-            let category = value.get("category")
+
+            let category = value
+                .get("category")
                 .and_then(|v| v.as_str())
                 .unwrap_or("general")
                 .to_string();
-            
+
             Some(ArtifactKind::Ticket { severity, category })
         }
         "code_change" => {
-            let files = value.get("files")
+            let files = value
+                .get("files")
                 .and_then(|v| v.as_array())
-                .map(|arr| arr.iter().filter_map(|f| f.as_str().map(String::from)).collect())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|f| f.as_str().map(String::from))
+                        .collect()
+                })
                 .unwrap_or_default();
-            
+
             Some(ArtifactKind::CodeChange { files })
         }
         "test_result" => {
             let passed = value.get("passed").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
             let failed = value.get("failed").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-            
+
             Some(ArtifactKind::TestResult { passed, failed })
         }
         "analysis" => {
-            let findings = value.get("findings")
+            let findings = value
+                .get("findings")
                 .and_then(|v| v.as_array())
                 .map(|arr| {
-                    arr.iter().filter_map(|f| {
-                        Some(Finding {
-                            title: f.get("title")?.as_str()?.to_string(),
-                            description: f.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-                            severity: f.get("severity").and_then(|v| v.as_str()).map(|s| match s {
-                                "critical" => Severity::Critical,
-                                "high" => Severity::High,
-                                "medium" => Severity::Medium,
-                                "low" => Severity::Low,
-                                _ => Severity::Info,
-                            }).unwrap_or(Severity::Info),
-                            location: f.get("location").and_then(|v| v.as_str()).map(String::from),
-                            suggestion: f.get("suggestion").and_then(|v| v.as_str()).map(String::from),
+                    arr.iter()
+                        .filter_map(|f| {
+                            Some(Finding {
+                                title: f.get("title")?.as_str()?.to_string(),
+                                description: f
+                                    .get("description")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_string(),
+                                severity: f
+                                    .get("severity")
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| match s {
+                                        "critical" => Severity::Critical,
+                                        "high" => Severity::High,
+                                        "medium" => Severity::Medium,
+                                        "low" => Severity::Low,
+                                        _ => Severity::Info,
+                                    })
+                                    .unwrap_or(Severity::Info),
+                                location: f
+                                    .get("location")
+                                    .and_then(|v| v.as_str())
+                                    .map(String::from),
+                                suggestion: f
+                                    .get("suggestion")
+                                    .and_then(|v| v.as_str())
+                                    .map(String::from),
+                            })
                         })
-                    }).collect()
+                        .collect()
                 })
                 .unwrap_or_default();
-            
+
             Some(ArtifactKind::Analysis { findings })
         }
         "decision" => {
-            let choice = value.get("choice").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
-            let rationale = value.get("rationale").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            
+            let choice = value
+                .get("choice")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_string();
+            let rationale = value
+                .get("rationale")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
             Some(ArtifactKind::Decision { choice, rationale })
         }
         _ => None,
@@ -852,7 +908,7 @@ fn parse_ticket_from_line(line: &str) -> Option<Artifact> {
     if !line.contains("[TICKET:") {
         return None;
     }
-    
+
     let severity = if line.contains("severity=critical") {
         Severity::Critical
     } else if line.contains("severity=high") {
@@ -864,7 +920,7 @@ fn parse_ticket_from_line(line: &str) -> Option<Artifact> {
     } else {
         Severity::Info
     };
-    
+
     let category = if line.contains("category=bug") {
         "bug".to_string()
     } else if line.contains("category=security") {
@@ -874,7 +930,7 @@ fn parse_ticket_from_line(line: &str) -> Option<Artifact> {
     } else {
         "general".to_string()
     };
-    
+
     Some(Artifact::new(ArtifactKind::Ticket { severity, category }))
 }
 
@@ -910,19 +966,15 @@ impl WorkflowDag {
     }
 
     pub fn get_entry_nodes(&self) -> Vec<&String> {
-        let targets: std::collections::HashSet<_> = self.edges
-            .iter()
-            .map(|e| &e.to)
-            .collect();
-        
-        self.nodes.keys()
-            .filter(|k| !targets.contains(k))
-            .collect()
+        let targets: std::collections::HashSet<_> = self.edges.iter().map(|e| &e.to).collect();
+
+        self.nodes.keys().filter(|k| !targets.contains(k)).collect()
     }
 
     pub fn get_ready_nodes(&self, completed: &std::collections::HashSet<String>) -> Vec<String> {
         // A node is ready if all its dependencies are completed
-        self.nodes.keys()
+        self.nodes
+            .keys()
             .filter(|k| !completed.contains(*k))
             .filter(|k| {
                 let deps = self.get_dependencies(k);
@@ -935,7 +987,7 @@ impl WorkflowDag {
     fn get_dependencies(&self, node_id: &str) -> Vec<String> {
         self.edges
             .iter()
-            .filter(|e| &e.to == node_id)
+            .filter(|e| e.to == node_id)
             .map(|e| e.from.clone())
             .collect()
     }
@@ -957,21 +1009,11 @@ pub struct AgentRequirement {
     pub min_success_rate: Option<f32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NodeConfig {
     pub timeout_ms: Option<u64>,
     pub retry_enabled: bool,
     pub max_retries: u32,
-}
-
-impl Default for NodeConfig {
-    fn default() -> Self {
-        Self {
-            timeout_ms: None,
-            retry_enabled: false,
-            max_retries: 0,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1034,14 +1076,14 @@ mod tests {
     #[test]
     fn test_artifact_registry() {
         let mut registry = ArtifactRegistry::default();
-        
+
         let artifact = Artifact::new(ArtifactKind::Ticket {
             severity: Severity::High,
             category: "bug".to_string(),
         });
-        
+
         registry.register("qa".to_string(), artifact);
-        
+
         assert_eq!(registry.count(), 1);
         assert!(registry.get_latest("qa").is_some());
     }
@@ -1074,7 +1116,7 @@ mod tests {
     #[test]
     fn test_workflow_dag_entry_nodes() {
         let mut dag = WorkflowDag::new("test".to_string(), "Test Workflow".to_string());
-        
+
         dag.add_node(WorkflowNode {
             id: "start".to_string(),
             step_type: StepType::InitOnce,
@@ -1086,7 +1128,7 @@ mod tests {
             prehook: None,
             config: NodeConfig::default(),
         });
-        
+
         dag.add_node(WorkflowNode {
             id: "qa".to_string(),
             step_type: StepType::Qa,
@@ -1098,7 +1140,7 @@ mod tests {
             prehook: None,
             config: NodeConfig::default(),
         });
-        
+
         dag.add_edge(WorkflowEdge {
             from: "start".to_string(),
             to: "qa".to_string(),

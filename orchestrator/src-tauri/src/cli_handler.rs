@@ -10,8 +10,7 @@ use crate::resource::{
 use crate::InnerState;
 use anyhow::{Context, Result};
 use clap_complete::Shell;
-use serde::{Deserialize, Serialize};
-use serde_yaml;
+use serde::Deserialize;
 use std::path::Path;
 use std::process::{Command, ExitStatus};
 use std::sync::Arc;
@@ -55,10 +54,10 @@ impl CliHandler {
             "state" => {
                 println!("Debug Information");
                 println!("=================");
-                println!("");
+                println!();
                 println!("Note: MessageBus is an internal component.");
                 println!("Use 'orchestrator task list' and 'orchestrator task logs' for runtime debugging.");
-                println!("");
+                println!();
                 println!("Available debug components:");
                 println!("  state     - Show runtime state info (this)");
                 println!("  config    - Show active configuration");
@@ -77,14 +76,14 @@ impl CliHandler {
             "messagebus" => {
                 println!("MessageBus Debug Information");
                 println!("============================");
-                println!("");
+                println!();
                 println!("MessageBus is an internal component for agent-to-agent communication.");
                 println!(
                     "It is initialized in InnerState and used for publishing/subscribing messages."
                 );
-                println!("");
+                println!();
                 println!("Implementation location: src/message_bus.rs");
-                println!("");
+                println!();
                 println!("To verify MessageBus is working:");
                 println!("  1. Run a task with multiple agents");
                 println!("  2. Check logs for message_bus events");

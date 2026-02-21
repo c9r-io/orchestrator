@@ -140,6 +140,7 @@ impl Default for SelectionRequirement {
 
 /// Result of agent scoring
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct AgentScore {
     pub agent_id: String,
     pub total_score: f32,
@@ -317,9 +318,10 @@ fn is_agent_globally_healthy(health: &AgentHealthState) -> bool {
 }
 
 /// Check if agent is healthy for a specific capability
+#[allow(dead_code)]
 pub fn is_capability_healthy(
     health: &Option<AgentHealthState>,
-    agent_id: &str,
+    _agent_id: &str,
     capability: &str,
 ) -> bool {
     // First check global health
