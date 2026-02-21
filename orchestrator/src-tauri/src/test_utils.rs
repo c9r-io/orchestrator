@@ -2,6 +2,91 @@ use super::*;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+fn create_minimal_test_config() -> OrchestratorConfig {
+    OrchestratorConfig {
+        runner: RunnerConfig {
+            shell: "/bin/bash".to_string(),
+            shell_arg: "-lc".to_string(),
+        },
+        resume: ResumeConfig { auto: false },
+        defaults: ConfigDefaults {
+            project: String::new(),
+            workspace: "default".to_string(),
+            workflow: "basic".to_string(),
+        },
+        projects: HashMap::new(),
+        workspaces: {
+            let mut ws = HashMap::new();
+            ws.insert(
+                "default".to_string(),
+                WorkspaceConfig {
+                    root_path: "workspace/default".to_string(),
+                    qa_targets: vec!["docs/qa".to_string()],
+                    ticket_dir: "docs/ticket".to_string(),
+                },
+            );
+            ws
+        },
+        agents: {
+            let mut agents = HashMap::new();
+            agents.insert(
+                "echo".to_string(),
+                AgentConfig {
+                    metadata: AgentMetadata {
+                        name: "echo".to_string(),
+                        description: "Echo agent for testing".to_string(),
+                        version: None,
+                        cost: Some(1),
+                    },
+                    capabilities: vec!["qa".to_string()],
+                    templates: {
+                        let mut t = HashMap::new();
+                        t.insert("qa".to_string(), "echo 'qa: {rel_path}'".to_string());
+                        t
+                    },
+                    preference: AgentPreference::default(),
+                    selection: AgentSelectionConfig::default(),
+                },
+            );
+            agents
+        },
+        workflows: {
+            let mut workflows = HashMap::new();
+            workflows.insert(
+                "basic".to_string(),
+                WorkflowConfig {
+                    steps: vec![WorkflowStepConfig {
+                        id: "run_qa".to_string(),
+                        description: None,
+                        step_type: Some(WorkflowStepType::Qa),
+                        builtin: None,
+                        required_capability: None,
+                        enabled: true,
+                        repeatable: false,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                    }],
+                    loop_policy: WorkflowLoopConfig {
+                        mode: LoopMode::Once,
+                        guard: WorkflowLoopGuardConfig {
+                            enabled: false,
+                            stop_when_no_unresolved: false,
+                            max_cycles: None,
+                            agent_template: None,
+                        },
+                    },
+                    finalize: WorkflowFinalizeConfig { rules: vec![] },
+                    qa: None,
+                    fix: None,
+                    retest: None,
+                },
+            );
+            workflows
+        },
+    }
+}
+
 pub(crate) struct TestState {
     temp_root: PathBuf,
     config: OrchestratorConfig,
@@ -21,11 +106,7 @@ impl TestState {
         ));
         std::fs::create_dir_all(&temp_root).expect("failed to create test temp root");
 
-        let mut config = OrchestratorConfig::default();
-        if let Some(default_workspace) = config.workspaces.get_mut("default") {
-            default_workspace.root_path = "workspace/default".to_string();
-        }
-
+        let config = create_minimal_test_config();
         Self {
             temp_root,
             config,

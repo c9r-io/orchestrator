@@ -25,7 +25,6 @@ pub struct Cli {
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     /// Initialize orchestrator with a default configuration
-    #[command(alias = "init")]
     Init {
         /// Workspace root path (default: current directory)
         #[arg(short, long)]
@@ -412,14 +411,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_workspace_info_with_flag() {
-        let cli = Cli::parse_from([
-            "orchestrator",
-            "workspace",
-            "info",
-            "--workspace-id",
-            "my-ws",
-        ]);
+    fn parse_workspace_info_with_output_format() {
+        let cli = Cli::parse_from(["orchestrator", "workspace", "info", "my-ws", "-o", "json"]);
 
         match cli.command {
             Commands::Workspace(WorkspaceCommands::Info {
@@ -427,7 +420,7 @@ mod tests {
                 output,
             }) => {
                 assert_eq!(workspace_id, "my-ws");
-                assert_eq!(output, OutputFormat::Table);
+                assert_eq!(output, OutputFormat::Json);
             }
             _ => panic!("expected workspace info command"),
         }

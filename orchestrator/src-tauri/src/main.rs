@@ -170,7 +170,9 @@ impl AgentConfig {
     }
 
     fn get_selection_strategy(&self) -> SelectionStrategy {
-        self.selection.strategy.unwrap_or(SelectionStrategy::Adaptive)
+        self.selection
+            .strategy
+            .unwrap_or(SelectionStrategy::Adaptive)
     }
 
     fn get_selection_weights(&self) -> SelectionWeights {
@@ -894,7 +896,11 @@ fn is_agent_healthy(health_map: &HashMap<String, AgentHealthState>, agent_id: &s
     }
 }
 
-fn is_capability_healthy(health_map: &HashMap<String, AgentHealthState>, agent_id: &str, capability: &str) -> bool {
+fn is_capability_healthy(
+    health_map: &HashMap<String, AgentHealthState>,
+    agent_id: &str,
+    capability: &str,
+) -> bool {
     match health_map.get(agent_id) {
         None => true,
         Some(state) => {
@@ -1018,23 +1024,24 @@ fn update_capability_health(
 ) {
     if let Some(cap) = capability {
         let mut health = state.agent_health.write().unwrap();
-        let entry = health.entry(agent_id.to_string()).or_insert_with(|| {
-            AgentHealthState {
+        let entry = health
+            .entry(agent_id.to_string())
+            .or_insert_with(|| AgentHealthState {
                 diseased_until: None,
                 consecutive_errors: 0,
                 total_lifetime_errors: 0,
                 capability_health: std::collections::HashMap::new(),
-            }
-        });
-        
-        let cap_health = entry.capability_health.entry(cap.to_string()).or_insert_with(|| {
-            CapabilityHealth {
+            });
+
+        let cap_health = entry
+            .capability_health
+            .entry(cap.to_string())
+            .or_insert_with(|| CapabilityHealth {
                 success_count: 0,
                 failure_count: 0,
                 last_error_at: None,
-            }
-        });
-        
+            });
+
         if success {
             cap_health.success_count += 1;
         } else {
@@ -1113,7 +1120,7 @@ fn select_agent_advanced(
     cost_preference: &Option<CostPreference>,
 ) -> Result<(String, String)> {
     use metrics::calculate_agent_score;
-    
+
     let mut candidates: Vec<_> = agents
         .iter()
         .filter(|(id, cfg)| {
@@ -1168,7 +1175,7 @@ fn select_agent_advanced(
 
     let top_count = std::cmp::min(3, scored.len());
     let top_slice = &scored[..top_count];
-    
+
     use rand::Rng;
     let idx = rand::thread_rng().gen_range(0..top_slice.len());
     let (agent_id, config, _score) = top_slice[idx];
@@ -1306,7 +1313,7 @@ async fn get_create_task_options(
     state: State<'_, ManagedState>,
 ) -> Result<CreateTaskOptions, String> {
     let active = read_active_config(&state.inner).map_err(err_to_string)?;
-    
+
     // Get projects list
     let mut projects: Vec<NamedOption> = active
         .config
@@ -1316,7 +1323,7 @@ async fn get_create_task_options(
         .map(|id| NamedOption { id })
         .collect();
     projects.sort_by(|a, b| a.id.cmp(&b.id));
-    
+
     // Get workspaces - include both global and project-level workspaces
     let mut workspaces: Vec<NamedOption> = active
         .config
@@ -1843,7 +1850,10 @@ fn validate_workflow_config(
             }
             continue;
         }
-        let has_agent = config.agents.values().any(|a| a.get_template(key).is_some());
+        let has_agent = config
+            .agents
+            .values()
+            .any(|a| a.get_template(key).is_some());
         if !has_agent {
             anyhow::bail!(
                 "no agent has template for step '{}' used by workflow '{}'",
@@ -1870,7 +1880,10 @@ fn validate_workflow_config(
         }
     }
     if workflow.loop_policy.guard.enabled {
-        let has_loop_guard = config.agents.values().any(|a| a.get_template("loop_guard").is_some());
+        let has_loop_guard = config
+            .agents
+            .values()
+            .any(|a| a.get_template("loop_guard").is_some());
         if !has_loop_guard {
             anyhow::bail!(
                 "workflow '{}' loop.guard enabled but no agent has loop_guard template",
@@ -3036,7 +3049,7 @@ fn write_initial_config_to_db(db_path: &Path, config: &OrchestratorConfig) -> Re
     let yaml = serde_yaml::to_string(config).context("failed to serialize config to yaml")?;
     let json_raw = serde_json::to_string(config).context("failed to serialize config to json")?;
     let now = now_ts();
-    
+
     conn.execute(
         "INSERT INTO orchestrator_config (id, config_yaml, config_json, version, updated_at) VALUES (1, ?1, ?2, 1, ?3)",
         params![yaml, json_raw, now],
@@ -3100,24 +3113,36 @@ fn create_task_impl(state: &InnerState, payload: CreateTaskPayload) -> Result<Ta
         .workspace_id
         .clone()
         .unwrap_or_else(|| active.default_workspace_id.clone());
-    
+
     let workspace = if let Some(project) = active.projects.get(&project_id) {
         project.workspaces.get(&workspace_id).cloned()
     } else {
         active.workspaces.get(&workspace_id).cloned()
-    }.with_context(|| format!("workspace not found: {} in project: {}", workspace_id, project_id))?;
+    }
+    .with_context(|| {
+        format!(
+            "workspace not found: {} in project: {}",
+            workspace_id, project_id
+        )
+    })?;
 
     let workflow_id = payload
         .workflow_id
         .clone()
         .unwrap_or_else(|| active.default_workflow_id.clone());
-    
+
     let workflow = if let Some(project) = active.projects.get(&project_id) {
         project.workflows.get(&workflow_id).cloned()
     } else {
         active.config.workflows.get(&workflow_id).cloned()
-    }.with_context(|| format!("workflow not found: {} in project: {}", workflow_id, project_id))?;
-    
+    }
+    .with_context(|| {
+        format!(
+            "workflow not found: {} in project: {}",
+            workflow_id, project_id
+        )
+    })?;
+
     let execution_plan = build_execution_plan(&active.config, &workflow, &workflow_id)?;
     let execution_plan_json =
         serde_json::to_string(&execution_plan).context("serialize execution plan")?;
@@ -3290,22 +3315,24 @@ fn collect_target_files_from_active_tickets(
 
 fn resolve_task_id(state: &InnerState, task_id: &str) -> Result<String> {
     let conn = open_conn(&state.db_path)?;
-    
+
     // First try exact match
     let mut stmt = conn.prepare("SELECT id FROM tasks WHERE id = ?1")?;
-    let exact_match: Option<String> = stmt.query_row(params![task_id], |row| row.get(0)).optional()?;
-    
+    let exact_match: Option<String> = stmt
+        .query_row(params![task_id], |row| row.get(0))
+        .optional()?;
+
     if let Some(id) = exact_match {
         return Ok(id);
     }
-    
+
     // Try prefix match (short ID)
     let pattern = format!("{}%", task_id);
     let mut stmt = conn.prepare("SELECT id FROM tasks WHERE id LIKE ?1")?;
     let matches: Vec<String> = stmt
         .query_map(params![pattern], |row| row.get(0))?
         .collect::<std::result::Result<Vec<_>, _>>()?;
-    
+
     match matches.len() {
         1 => Ok(matches.into_iter().next().unwrap()),
         0 => anyhow::bail!("task not found: {}", task_id),
@@ -3495,7 +3522,10 @@ fn delete_task_impl(state: &InnerState, task_id: &str) -> Result<()> {
     }
 
     let tx = conn.unchecked_transaction()?;
-    tx.execute("DELETE FROM events WHERE task_id = ?1", params![resolved_id])?;
+    tx.execute(
+        "DELETE FROM events WHERE task_id = ?1",
+        params![resolved_id],
+    )?;
     tx.execute(
         "DELETE FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = ?1)",
         params![resolved_id],
@@ -5223,21 +5253,18 @@ async fn run_phase_with_rotation(
     };
 
     if candidate_agent_ids.is_empty() {
-        anyhow::bail!(
-            "no agents found for capability '{:?}'",
-            required_capability
-        );
+        anyhow::bail!("no agents found for capability '{:?}'", required_capability);
     }
 
     let max_retries = candidate_agent_ids.len();
     let mut tried_agents: HashSet<String> = HashSet::new();
-    
+
     for attempt in 0..max_retries {
         let (agent_id, template) = {
             let active = read_active_config(state)?;
             let health_map = state.agent_health.read().unwrap();
             let metrics_map = state.agent_metrics.read().unwrap();
-            
+
             if let Some(cap) = required_capability {
                 select_agent_advanced(
                     cap,
@@ -5251,17 +5278,17 @@ async fn run_phase_with_rotation(
                 select_agent_by_preference(&active.config.agents)?
             }
         };
-        
+
         // Mark this agent as tried
         tried_agents.insert(agent_id.clone());
-        
+
         // Emit selection decision event for observability
         if let Some(app) = app {
             let health_map = state.agent_health.read().unwrap();
             let metrics_map = state.agent_metrics.read().unwrap();
             let health = health_map.get(&agent_id);
             let metrics = metrics_map.get(&agent_id);
-            
+
             emit_event(
                 app,
                 task_id,
@@ -5284,18 +5311,18 @@ async fn run_phase_with_rotation(
                 }),
             );
         }
-        
+
         let command = render_template(&template, rel_path, ticket_paths);
-        
+
         // Increment load before execution
         {
             let mut metrics = state.agent_metrics.write().unwrap();
-            let entry = metrics.entry(agent_id.clone()).or_insert_with(|| {
-                metrics::MetricsCollector::new_agent_metrics()
-            });
+            let entry = metrics
+                .entry(agent_id.clone())
+                .or_insert_with(|| metrics::MetricsCollector::new_agent_metrics());
             metrics::MetricsCollector::increment_load(entry);
         }
-        
+
         let result = run_phase(
             state,
             app,
@@ -5309,7 +5336,7 @@ async fn run_phase_with_rotation(
             runtime,
         )
         .await?;
-        
+
         // Decrement load after execution
         {
             let mut metrics = state.agent_metrics.write().unwrap();
@@ -5329,9 +5356,9 @@ async fn run_phase_with_rotation(
             // Record failure metrics
             {
                 let mut metrics = state.agent_metrics.write().unwrap();
-                let entry = metrics.entry(agent_id.clone()).or_insert_with(|| {
-                    metrics::MetricsCollector::new_agent_metrics()
-                });
+                let entry = metrics
+                    .entry(agent_id.clone())
+                    .or_insert_with(|| metrics::MetricsCollector::new_agent_metrics());
                 metrics::MetricsCollector::record_failure(entry);
             }
             if errors >= CONSECUTIVE_ERROR_THRESHOLD {
@@ -5345,9 +5372,9 @@ async fn run_phase_with_rotation(
             // Record success metrics
             if let Some(duration) = result.duration_ms {
                 let mut metrics = state.agent_metrics.write().unwrap();
-                let entry = metrics.entry(agent_id.clone()).or_insert_with(|| {
-                    metrics::MetricsCollector::new_agent_metrics()
-                });
+                let entry = metrics
+                    .entry(agent_id.clone())
+                    .or_insert_with(|| metrics::MetricsCollector::new_agent_metrics());
                 metrics::MetricsCollector::record_success(entry, duration);
             }
         }
@@ -5919,16 +5946,21 @@ fn main() {
     if let cli::Commands::Init { root, force } = &cli.command {
         let app_root = detect_app_root();
         let config_path = app_root.join("config/default.yaml");
-        
+
         // Check if config already exists
         if config_path.exists() && !force {
-            eprintln!("config file already exists at {}. Use --force to overwrite.", config_path.display());
+            eprintln!(
+                "config file already exists at {}. Use --force to overwrite.",
+                config_path.display()
+            );
             std::process::exit(1);
         }
-        
+
         // Determine root path
-        let root_path = root.clone().unwrap_or_else(|| app_root.to_string_lossy().to_string());
-        
+        let root_path = root
+            .clone()
+            .unwrap_or_else(|| app_root.to_string_lossy().to_string());
+
         // Create minimal config with a placeholder agent and workflow
         let config = OrchestratorConfig {
             runner: RunnerConfig {
@@ -5944,38 +5976,45 @@ fn main() {
             projects: HashMap::new(),
             workspaces: {
                 let mut ws = HashMap::new();
-                ws.insert("default".to_string(), WorkspaceConfig {
-                    root_path: root_path.clone(),
-                    qa_targets: vec!["docs/qa".to_string()],
-                    ticket_dir: "docs/ticket".to_string(),
-                });
+                ws.insert(
+                    "default".to_string(),
+                    WorkspaceConfig {
+                        root_path: root_path.clone(),
+                        qa_targets: vec!["docs/qa".to_string()],
+                        ticket_dir: "docs/ticket".to_string(),
+                    },
+                );
                 ws
             },
             agents: {
                 let mut agents = HashMap::new();
-                agents.insert("echo".to_string(), AgentConfig {
-                    metadata: AgentMetadata {
-                        name: "echo".to_string(),
-                        description: "Echo agent for testing".to_string(),
-                        version: None,
-                        cost: Some(1),
+                agents.insert(
+                    "echo".to_string(),
+                    AgentConfig {
+                        metadata: AgentMetadata {
+                            name: "echo".to_string(),
+                            description: "Echo agent for testing".to_string(),
+                            version: None,
+                            cost: Some(1),
+                        },
+                        capabilities: vec!["qa".to_string()],
+                        templates: {
+                            let mut t = HashMap::new();
+                            t.insert("qa".to_string(), "echo 'qa: {rel_path}'".to_string());
+                            t
+                        },
+                        preference: AgentPreference::default(),
+                        selection: AgentSelectionConfig::default(),
                     },
-                    capabilities: vec!["qa".to_string()],
-                    templates: {
-                        let mut t = HashMap::new();
-                        t.insert("qa".to_string(), "echo 'qa: {rel_path}'".to_string());
-                        t
-                    },
-                    preference: AgentPreference::default(),
-                    selection: AgentSelectionConfig::default(),
-                });
+                );
                 agents
             },
             workflows: {
                 let mut workflows = HashMap::new();
-                workflows.insert("basic".to_string(), WorkflowConfig {
-                    steps: vec![
-                        WorkflowStepConfig {
+                workflows.insert(
+                    "basic".to_string(),
+                    WorkflowConfig {
+                        steps: vec![WorkflowStepConfig {
                             id: "run_qa".to_string(),
                             description: None,
                             step_type: Some(WorkflowStepType::Qa),
@@ -5986,49 +6025,53 @@ fn main() {
                             is_guard: false,
                             cost_preference: None,
                             prehook: None,
+                        }],
+                        loop_policy: WorkflowLoopConfig {
+                            mode: LoopMode::Once,
+                            guard: WorkflowLoopGuardConfig {
+                                enabled: false,
+                                stop_when_no_unresolved: false,
+                                max_cycles: None,
+                                agent_template: None,
+                            },
                         },
-                    ],
-                    loop_policy: WorkflowLoopConfig {
-                        mode: LoopMode::Once,
-                        guard: WorkflowLoopGuardConfig {
-                            enabled: false,
-                            stop_when_no_unresolved: false,
-                            max_cycles: None,
-                            agent_template: None,
-                        },
+                        finalize: WorkflowFinalizeConfig { rules: vec![] },
+                        qa: None,
+                        fix: None,
+                        retest: None,
                     },
-                    finalize: WorkflowFinalizeConfig { rules: vec![] },
-                    qa: None,
-                    fix: None,
-                    retest: None,
-                });
+                );
                 workflows
             },
         };
-        
+
         // Write config file
         let yaml = serde_yaml::to_string(&config).expect("failed to serialize config");
         if let Err(e) = std::fs::write(&config_path, &yaml) {
             eprintln!("failed to write config file: {}", e);
             std::process::exit(1);
         }
-        
+
         // Initialize database
         let data_dir = app_root.join("data");
         let db_path = data_dir.join("agent_orchestrator.db");
-        
+
         if let Err(e) = init_schema(&db_path) {
             eprintln!("failed to initialize database: {}", e);
             std::process::exit(1);
         }
-        
+
         // Write config to database
         if let Err(e) = write_initial_config_to_db(&db_path, &config) {
             eprintln!("failed to write config to database: {}", e);
             std::process::exit(1);
         }
-        
-        println!("Orchestrator initialized at {} with workspace: {}", config_path.display(), root_path);
+
+        println!(
+            "Orchestrator initialized at {} with workspace: {}",
+            config_path.display(),
+            root_path
+        );
         std::process::exit(0);
     }
 
