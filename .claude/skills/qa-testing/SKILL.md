@@ -5,16 +5,26 @@ description: Execute scenario-based QA testing with optional browser automation,
 
 # QA Testing Skill
 
-Execute scenario-based QA testing driven by `docs/qa/**/*.md` documents. This skill is intentionally project-agnostic and assumes the repo was created by `project-bootstrap` (or follows similar Docker/K8s conventions).
+Execute scenario-based QA testing driven by `docs/qa/**/*.md` documents.
 
 ## Prerequisites
 
-- Local environment is runnable via Docker Compose (`docker/docker-compose.yml`).
-- Reset script exists: `scripts/reset-docker.sh`.
-- QA docs exist under `docs/qa/` (generate them via `qa-doc-gen` if missing).
-- Optional (only if needed by the QA doc):
-  - UI automation via Playwright tools.
-  - Database CLI access for validation queries.
+**CRITICAL: Always rebuild CLI before testing to ensure you have the latest version.**
+
+1. **Rebuild CLI** (REQUIRED - ensures latest code):
+   ```bash
+   cd orchestrator/src-tauri && cargo build --release
+   ```
+
+2. **Initialize orchestrator if needed**:
+   ```bash
+   cd orchestrator
+   rm -f data/agent_orchestrator.db config/default.yaml
+   ./scripts/orchestrator.sh init
+   ```
+
+3. QA docs exist under `docs/qa/`.
+4. Optional: UI automation via Playwright tools.
 
 ## Conventions / Configuration
 
@@ -72,18 +82,12 @@ Examples:
 
 ## Logs / Troubleshooting
 
-Prefer Compose logs first:
+For orchestrator CLI, check logs in `data/logs/` directory:
 
 ```bash
-docker compose -f docker/docker-compose.yml ps
-docker compose -f docker/docker-compose.yml logs --tail 200
-```
-
-If you need a single container:
-
-```bash
-docker ps
-docker logs <container> --tail 200
+ls -la orchestrator/data/logs/
+# or check specific task logs
+./orchestrator/scripts/orchestrator.sh task logs <task-id>
 ```
 
 ## Database Validation (Optional)
@@ -176,9 +180,71 @@ Template:
 
 ## Reset Guidance
 
-If environment might be dirty, reset and retry:
+```bash
+cd orchestrator
+rm -f data/agent_orchestrator.db config/default.yaml
+./scripts/orchestrator.sh init
+```
+
+## Troubleshooting Configuration Issues
+
+### Orchestrator: CLI Initialization
+
+The orchestrator no longer has hardcoded defaults. Use `init` command to create a minimal config:
 
 ```bash
-./scripts/reset-docker.sh
+cd orchestrator
+
+# Full reset: remove DB and config
+rm -f data/agent_orchestrator.db config/default.yaml
+
+# Initialize with default settings
+./scripts/orchestrator.sh init
+
+# Or with custom root path
+./scripts/orchestrator.sh init --root /path/to/project
+
+# Force overwrite existing config
+./scripts/orchestrator.sh init --force
 ```
+
+This creates:
+- 1 workspace (`default`)
+- 1 agent (`echo`) with qa capability
+- 1 workflow (`basic`) with qa step
+
+### When CLI fails immediately with config errors:
+
+1. **Run the actual command first** — don't try to guess the problem:
+   ```bash
+   ./scripts/orchestrator.sh task list
+   ```
+   Read the actual error message before making any changes.
+
+2. **Common config errors and solutions**:
+
+   - `loop.guard enabled but no agent has loop_guard template`:
+     - Set `loop.guard.enabled: false` in the workflow, OR
+     - Add `loop_guard` template to an agent
+
+   - `config.workspaces cannot be empty`:
+     - Check if there's a top-level `workspaces:` field (not nested under `projects.*`)
+     - Remove empty `workspaces: {}` at the end of YAML file
+
+   - `config.agents cannot be empty`:
+     - Check if there's a top-level `agents:` field (not nested under `projects.*`)
+     - Remove empty `agents: {}` at the end of YAML file
+
+   - `failed to parse config`:
+     - Try: `git checkout HEAD~2 -- config/default.yaml` to restore original
+     - Then re-validate incrementally
+
+3. **Git restore is faster than debugging**:
+   - If config is corrupted, `git checkout HEAD~2 -- path/to/config.yaml` is often faster than iterative fixes
+   - Always check git history to understand what changed
+
+4. **Project-specific entry points**:
+   - Not all projects use Docker — check `orchestrator/scripts/orchestrator.sh` for CLI tools
+   - Look for `scripts/*.sh` files in the project root
+   - Check `package.json` scripts for test commands
 

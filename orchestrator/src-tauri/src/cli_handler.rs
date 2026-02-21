@@ -26,6 +26,10 @@ impl CliHandler {
 
     pub fn execute(&self, cli: &Cli) -> Result<i32> {
         match &cli.command {
+            Commands::Init { .. } => {
+                // Init command is handled in main.rs before reaching here
+                Ok(0)
+            }
             Commands::Apply { file, dry_run } => self.handle_apply(file, *dry_run),
             Commands::Get { resource, output } => self.handle_get(resource, *output),
             Commands::Describe { resource, output } => self.handle_describe(resource, *output),

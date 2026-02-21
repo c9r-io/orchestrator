@@ -593,131 +593,21 @@ struct ActiveConfig {
 
 impl Default for OrchestratorConfig {
     fn default() -> Self {
-        let mut workspaces = HashMap::new();
-        workspaces.insert(
-            "default".to_string(),
-            WorkspaceConfig {
-                root_path: "../..".to_string(),
-                qa_targets: vec!["docs/qa".to_string(), "docs/security".to_string()],
-                ticket_dir: "docs/ticket".to_string(),
-            },
-        );
-
-        let mut agents = HashMap::new();
-        agents.insert(
-            "opencode".to_string(),
-            AgentConfig {
-                metadata: AgentMetadata {
-                    name: "opencode".to_string(),
-                    description: "OpenCode Agent".to_string(),
-                    version: None,
-                    cost: None,
-                },
-                capabilities: vec![
-                    "init_once".to_string(),
-                    "qa".to_string(),
-                    "fix".to_string(),
-                    "retest".to_string(),
-                    "loop_guard".to_string(),
-                ],
-                templates: {
-                    let mut m = HashMap::new();
-                    m.insert("init_once".to_string(), "echo \"agent-orchestrator init_once\"".to_string());
-                    m.insert("qa".to_string(), "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\"".to_string());
-                    m.insert("retest".to_string(), "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\"".to_string());
-                    m.insert("loop_guard".to_string(), "if [ \"{unresolved_items}\" -eq 0 ]; then echo stop; else echo continue; fi".to_string());
-                    m
-                },
-                preference: AgentPreference::default(),
-                selection: AgentSelectionConfig::default(),
-            },
-        );
-        agents.insert(
-            "claudecode".to_string(),
-            AgentConfig {
-                metadata: AgentMetadata {
-                    name: "claudecode".to_string(),
-                    description: "Claude Code Agent".to_string(),
-                    version: None,
-                    cost: None,
-                },
-                capabilities: vec!["fix".to_string()],
-                templates: {
-                    let mut m = HashMap::new();
-                    m.insert("fix".to_string(), "claude -p --dangerously-skip-permissions --verbose --model opus --output-format stream-json \"/ticket-fix {ticket_paths}\"".to_string());
-                    m
-                },
-                preference: AgentPreference::default(),
-                selection: AgentSelectionConfig::default(),
-            },
-        );
-
-        let mut workflows = HashMap::new();
-        workflows.insert(
-            "qa_only".to_string(),
-            WorkflowConfig {
-                steps: default_workflow_steps(Some("opencode"), false, None, None),
-                loop_policy: WorkflowLoopConfig::default(),
-                finalize: default_workflow_finalize_config(),
-                qa: None,
-                fix: None,
-                retest: None,
-            },
-        );
-        workflows.insert(
-            "qa_fix".to_string(),
-            WorkflowConfig {
-                steps: default_workflow_steps(Some("opencode"), false, Some("claudecode"), None),
-                loop_policy: WorkflowLoopConfig::default(),
-                finalize: default_workflow_finalize_config(),
-                qa: None,
-                fix: None,
-                retest: None,
-            },
-        );
-        workflows.insert(
-            "only-fix".to_string(),
-            WorkflowConfig {
-                steps: default_workflow_steps(None, true, Some("claudecode"), None),
-                loop_policy: WorkflowLoopConfig::default(),
-                finalize: default_workflow_finalize_config(),
-                qa: None,
-                fix: None,
-                retest: None,
-            },
-        );
-        workflows.insert(
-            "qa_fix_retest".to_string(),
-            WorkflowConfig {
-                steps: default_workflow_steps(
-                    Some("opencode"),
-                    false,
-                    Some("claudecode"),
-                    Some("opencode"),
-                ),
-                loop_policy: WorkflowLoopConfig::default(),
-                finalize: default_workflow_finalize_config(),
-                qa: None,
-                fix: None,
-                retest: None,
-            },
-        );
-
         Self {
             runner: RunnerConfig {
-                shell: "/bin/zsh".to_string(),
+                shell: "/bin/bash".to_string(),
                 shell_arg: "-lc".to_string(),
             },
-            resume: ResumeConfig { auto: true },
+            resume: ResumeConfig { auto: false },
             defaults: ConfigDefaults {
-                project: "default".to_string(),
-                workspace: "default".to_string(),
-                workflow: "qa_fix_retest".to_string(),
+                project: String::new(),
+                workspace: String::new(),
+                workflow: String::new(),
             },
             projects: HashMap::new(),
-            workspaces,
-            agents,
-            workflows,
+            workspaces: HashMap::new(),
+            agents: HashMap::new(),
+            workflows: HashMap::new(),
         }
     }
 }
@@ -1756,11 +1646,10 @@ fn detect_app_root() -> PathBuf {
 }
 
 fn load_config(config_path: &Path) -> Result<OrchestratorConfig> {
-    match std::fs::read_to_string(config_path) {
-        Ok(content) => serde_yaml::from_str::<OrchestratorConfig>(&content)
-            .with_context(|| format!("failed to parse {}", config_path.display())),
-        Err(_) => Ok(OrchestratorConfig::default()),
-    }
+    let content = std::fs::read_to_string(config_path)
+        .with_context(|| format!("config file not found: {}", config_path.display()))?;
+    serde_yaml::from_str::<OrchestratorConfig>(&content)
+        .with_context(|| format!("failed to parse {}", config_path.display()))
 }
 
 fn open_conn(db_path: &Path) -> Result<Connection> {
@@ -2902,9 +2791,18 @@ fn load_config_overview(state: &InnerState) -> Result<ConfigOverview> {
     })
 }
 
-fn init_state() -> Result<ManagedState> {
+fn init_state(cli_config_path: Option<String>) -> Result<ManagedState> {
     let app_root = detect_app_root();
-    let config_path = app_root.join("config/default.yaml");
+    let config_path = match cli_config_path {
+        Some(p) => {
+            if std::path::Path::new(&p).is_absolute() {
+                std::path::PathBuf::from(p)
+            } else {
+                app_root.join(p)
+            }
+        }
+        None => app_root.join("config/default.yaml"),
+    };
     let data_dir = app_root.join("data");
     let logs_dir = data_dir.join("logs");
     std::fs::create_dir_all(&logs_dir)
@@ -3129,6 +3027,23 @@ fn init_schema(db_path: &Path) -> Result<()> {
         "command_runs",
         "project_id",
         "ALTER TABLE command_runs ADD COLUMN project_id TEXT NOT NULL DEFAULT ''",
+    )?;
+    Ok(())
+}
+
+fn write_initial_config_to_db(db_path: &Path, config: &OrchestratorConfig) -> Result<()> {
+    let conn = open_conn(db_path)?;
+    let yaml = serde_yaml::to_string(config).context("failed to serialize config to yaml")?;
+    let json_raw = serde_json::to_string(config).context("failed to serialize config to json")?;
+    let now = now_ts();
+    
+    conn.execute(
+        "INSERT INTO orchestrator_config (id, config_yaml, config_json, version, updated_at) VALUES (1, ?1, ?2, 1, ?3)",
+        params![yaml, json_raw, now],
+    )?;
+    conn.execute(
+        "INSERT INTO orchestrator_config_versions (version, config_yaml, config_json, created_at, author) VALUES (1, ?1, ?2, ?3, 'init')",
+        params![yaml, json_raw, now],
     )?;
     Ok(())
 }
@@ -6000,7 +5915,124 @@ fn reset_db(state: &InnerState) -> Result<()> {
 fn main() {
     let cli = cli::Cli::parse();
 
-    let state = match init_state() {
+    // Handle init command specially - it can run without existing config
+    if let cli::Commands::Init { root, force } = &cli.command {
+        let app_root = detect_app_root();
+        let config_path = app_root.join("config/default.yaml");
+        
+        // Check if config already exists
+        if config_path.exists() && !force {
+            eprintln!("config file already exists at {}. Use --force to overwrite.", config_path.display());
+            std::process::exit(1);
+        }
+        
+        // Determine root path
+        let root_path = root.clone().unwrap_or_else(|| app_root.to_string_lossy().to_string());
+        
+        // Create minimal config with a placeholder agent and workflow
+        let config = OrchestratorConfig {
+            runner: RunnerConfig {
+                shell: "/bin/bash".to_string(),
+                shell_arg: "-lc".to_string(),
+            },
+            resume: ResumeConfig { auto: false },
+            defaults: ConfigDefaults {
+                project: "default".to_string(),
+                workspace: "default".to_string(),
+                workflow: "basic".to_string(),
+            },
+            projects: HashMap::new(),
+            workspaces: {
+                let mut ws = HashMap::new();
+                ws.insert("default".to_string(), WorkspaceConfig {
+                    root_path: root_path.clone(),
+                    qa_targets: vec!["docs/qa".to_string()],
+                    ticket_dir: "docs/ticket".to_string(),
+                });
+                ws
+            },
+            agents: {
+                let mut agents = HashMap::new();
+                agents.insert("echo".to_string(), AgentConfig {
+                    metadata: AgentMetadata {
+                        name: "echo".to_string(),
+                        description: "Echo agent for testing".to_string(),
+                        version: None,
+                        cost: Some(1),
+                    },
+                    capabilities: vec!["qa".to_string()],
+                    templates: {
+                        let mut t = HashMap::new();
+                        t.insert("qa".to_string(), "echo 'qa: {rel_path}'".to_string());
+                        t
+                    },
+                    preference: AgentPreference::default(),
+                    selection: AgentSelectionConfig::default(),
+                });
+                agents
+            },
+            workflows: {
+                let mut workflows = HashMap::new();
+                workflows.insert("basic".to_string(), WorkflowConfig {
+                    steps: vec![
+                        WorkflowStepConfig {
+                            id: "run_qa".to_string(),
+                            description: None,
+                            step_type: Some(WorkflowStepType::Qa),
+                            builtin: None,
+                            required_capability: Some("qa".to_string()),
+                            enabled: true,
+                            repeatable: false,
+                            is_guard: false,
+                            cost_preference: None,
+                            prehook: None,
+                        },
+                    ],
+                    loop_policy: WorkflowLoopConfig {
+                        mode: LoopMode::Once,
+                        guard: WorkflowLoopGuardConfig {
+                            enabled: false,
+                            stop_when_no_unresolved: false,
+                            max_cycles: None,
+                            agent_template: None,
+                        },
+                    },
+                    finalize: WorkflowFinalizeConfig { rules: vec![] },
+                    qa: None,
+                    fix: None,
+                    retest: None,
+                });
+                workflows
+            },
+        };
+        
+        // Write config file
+        let yaml = serde_yaml::to_string(&config).expect("failed to serialize config");
+        if let Err(e) = std::fs::write(&config_path, &yaml) {
+            eprintln!("failed to write config file: {}", e);
+            std::process::exit(1);
+        }
+        
+        // Initialize database
+        let data_dir = app_root.join("data");
+        let db_path = data_dir.join("agent_orchestrator.db");
+        
+        if let Err(e) = init_schema(&db_path) {
+            eprintln!("failed to initialize database: {}", e);
+            std::process::exit(1);
+        }
+        
+        // Write config to database
+        if let Err(e) = write_initial_config_to_db(&db_path, &config) {
+            eprintln!("failed to write config to database: {}", e);
+            std::process::exit(1);
+        }
+        
+        println!("Orchestrator initialized at {} with workspace: {}", config_path.display(), root_path);
+        std::process::exit(0);
+    }
+
+    let state = match init_state(cli.config.clone()) {
         Ok(value) => value,
         Err(err) => {
             eprintln!("failed to initialize orchestrator: {}", err);

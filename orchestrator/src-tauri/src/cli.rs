@@ -24,6 +24,18 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
+    /// Initialize orchestrator with a default configuration
+    #[command(alias = "init")]
+    Init {
+        /// Workspace root path (default: current directory)
+        #[arg(short, long)]
+        root: Option<String>,
+
+        /// Force overwrite existing configuration
+        #[arg(short, long)]
+        force: bool,
+    },
+
     #[command(alias = "ap")]
     Apply {
         #[arg(short = 'f', long = "file")]
@@ -199,7 +211,7 @@ pub enum WorkspaceCommands {
 
     #[command(alias = "get")]
     Info {
-        #[arg(short, long)]
+        #[arg(value_name = "WORKSPACE_ID")]
         workspace_id: String,
 
         #[arg(short, long, default_value = "table")]
@@ -267,7 +279,7 @@ pub enum CompletionCommands {
     PowerShell,
 }
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
 pub enum OutputFormat {
     Table,
     Json,
@@ -380,6 +392,44 @@ mod tests {
                 assert_eq!(selector, "workspace/default");
             }
             _ => panic!("expected edit open command"),
+        }
+    }
+
+    #[test]
+    fn parse_workspace_info_with_positional_arg() {
+        let cli = Cli::parse_from(["orchestrator", "workspace", "info", "new-workspace"]);
+
+        match cli.command {
+            Commands::Workspace(WorkspaceCommands::Info {
+                workspace_id,
+                output,
+            }) => {
+                assert_eq!(workspace_id, "new-workspace");
+                assert_eq!(output, OutputFormat::Table);
+            }
+            _ => panic!("expected workspace info command"),
+        }
+    }
+
+    #[test]
+    fn parse_workspace_info_with_flag() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "workspace",
+            "info",
+            "--workspace-id",
+            "my-ws",
+        ]);
+
+        match cli.command {
+            Commands::Workspace(WorkspaceCommands::Info {
+                workspace_id,
+                output,
+            }) => {
+                assert_eq!(workspace_id, "my-ws");
+                assert_eq!(output, OutputFormat::Table);
+            }
+            _ => panic!("expected workspace info command"),
         }
     }
 }
