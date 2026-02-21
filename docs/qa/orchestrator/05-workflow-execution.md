@@ -288,7 +288,6 @@ agents:
            required_capability: qa
            enabled: true
            repeatable: true
-           agent_group_id: qa_group
          - id: check_done
            builtin: loop_guard
            enabled: true

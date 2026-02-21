@@ -43,8 +43,8 @@ const STATUS_CLASS: Record<string, string> = {
 type ItemFilter = 'all' | 'active' | 'unresolved' | 'completed';
 type Theme = 'light' | 'dark';
 type ViewTab = 'tasks' | 'config';
-type ConfigFormTab = 'overview' | 'workspace' | 'agent' | 'agent_group' | 'workflow' | 'yaml';
-type ConfigEntityKind = 'workspace' | 'agent' | 'agent_group' | 'workflow';
+type ConfigFormTab = 'overview' | 'workspace' | 'agent' | 'workflow' | 'yaml';
+type ConfigEntityKind = 'workspace' | 'agent' | 'workflow';
 interface PendingEntitySwitch {
   kind: ConfigEntityKind;
   id: string;
@@ -54,7 +54,6 @@ const CONFIG_FORM_TABS: Array<{ id: ConfigFormTab; label: string; hint: string }
   { id: 'overview', label: '总览', hint: '默认入口与配置状态' },
   { id: 'workspace', label: 'Workspace', hint: '目录、目标与工单路径' },
   { id: 'agent', label: 'Agent', hint: '阶段模板与执行角色' },
-  { id: 'agent_group', label: 'Agent Group', hint: 'Agent 分组与轮转策略' },
   { id: 'workflow', label: 'Workflow', hint: '步骤、Prehook 与循环策略' },
   { id: 'yaml', label: 'YAML', hint: '高级配置编辑' }
 ];
@@ -403,23 +402,20 @@ function cloneConfig(config: OrchestratorConfigModel): OrchestratorConfigModel {
   return JSON.parse(JSON.stringify(config)) as OrchestratorConfigModel;
 }
 
-function defaultWorkflowSteps(firstGroupId: string) {
+function defaultWorkflowSteps() {
   return [
-    { id: 'init_once', type: 'init_once' as const, enabled: false, agent_group_id: undefined },
-    { id: 'qa', type: 'qa' as const, enabled: Boolean(firstGroupId), agent_group_id: firstGroupId || undefined },
-    { id: 'ticket_scan', type: 'ticket_scan' as const, enabled: false, agent_group_id: undefined },
-    { id: 'fix', type: 'fix' as const, enabled: false, agent_group_id: undefined },
-    { id: 'retest', type: 'retest' as const, enabled: false, agent_group_id: undefined }
+    { id: 'init_once', type: 'init_once' as const, enabled: false, repeatable: true, is_guard: false },
+    { id: 'qa', type: 'qa' as const, enabled: true, repeatable: true, is_guard: false },
+    { id: 'ticket_scan', type: 'ticket_scan' as const, enabled: false, repeatable: true, is_guard: false },
+    { id: 'fix', type: 'fix' as const, enabled: false, repeatable: true, is_guard: false },
+    { id: 'retest', type: 'retest' as const, enabled: false, repeatable: true, is_guard: false }
   ];
 }
 
 function ensureWorkflowShape(config: OrchestratorConfigModel) {
-  if (!config.agent_groups) {
-    config.agent_groups = {};
-  }
   for (const workflow of Object.values(config.workflows)) {
     if (!workflow.steps) {
-      workflow.steps = defaultWorkflowSteps('');
+      workflow.steps = defaultWorkflowSteps();
     }
     const byType = new Map(workflow.steps.map((step) => [step.type, step]));
     workflow.steps = WORKFLOW_STEP_ORDER.map((stepType) => {
@@ -427,16 +423,15 @@ function ensureWorkflowShape(config: OrchestratorConfigModel) {
       if (existing) {
         return normalizePrehook({ ...existing, id: existing.id || stepType });
       }
-      return { id: stepType, type: stepType, enabled: false, agent_group_id: undefined };
+      return { id: stepType, type: stepType, enabled: false, repeatable: true, is_guard: false };
     });
     workflow.loop = workflow.loop ?? {
       mode: 'once',
-      guard: { enabled: true, stop_when_no_unresolved: true, agent_group_id: undefined }
+      guard: { enabled: true, stop_when_no_unresolved: true }
     };
     workflow.loop.guard = workflow.loop.guard ?? {
       enabled: true,
-      stop_when_no_unresolved: true,
-      agent_group_id: undefined
+      stop_when_no_unresolved: true
     };
   }
 }
@@ -549,12 +544,7 @@ export function App() {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
-  const [selectedAgentGroupId, setSelectedAgentGroupId] = useState<string | null>(null);
   const [agentHealthList, setAgentHealthList] = useState<AgentHealthInfo[]>([]);
-  const [agentGroupAddFilter, setAgentGroupAddFilter] = useState('');
-  const [agentGroupDropdownOpen, setAgentGroupDropdownOpen] = useState(false);
-  const [pendingRemoveAgentId, setPendingRemoveAgentId] = useState<string | null>(null);
-  const agentGroupDropdownRef = useRef<HTMLDivElement>(null);
   const [pendingEntitySwitch, setPendingEntitySwitch] = useState<PendingEntitySwitch | null>(null);
   const [entitySwitchBusy, setEntitySwitchBusy] = useState(false);
   const [configBusy, setConfigBusy] = useState(false);
@@ -649,17 +639,9 @@ export function App() {
     () => Object.keys(configDraft?.agents ?? {}).sort(),
     [configDraft]
   );
-  const agentGroupKeys = useMemo(
-    () => Object.keys(configDraft?.agent_groups ?? {}).sort(),
-    [configDraft]
-  );
   const selectedAgentIndex = useMemo(
     () => (selectedAgentId ? agentKeys.indexOf(selectedAgentId) : -1),
     [agentKeys, selectedAgentId]
-  );
-  const selectedAgentGroupIndex = useMemo(
-    () => (selectedAgentGroupId ? agentGroupKeys.indexOf(selectedAgentGroupId) : -1),
-    [agentGroupKeys, selectedAgentGroupId]
   );
   const selectedWorkspaceIndex = useMemo(
     () => (selectedWorkspaceId ? workspaceKeys.indexOf(selectedWorkspaceId) : -1),
@@ -683,13 +665,6 @@ export function App() {
     return JSON.stringify(configDraft.agents[selectedAgentId] ?? null) !==
       JSON.stringify(configSavedSnapshot.agents[selectedAgentId] ?? null);
   }, [configDraft, configSavedSnapshot, selectedAgentId]);
-  const selectedAgentGroupDirty = useMemo(() => {
-    if (!selectedAgentGroupId || !configDraft || !configSavedSnapshot) {
-      return false;
-    }
-    return JSON.stringify(configDraft.agent_groups[selectedAgentGroupId] ?? null) !==
-      JSON.stringify(configSavedSnapshot.agent_groups[selectedAgentGroupId] ?? null);
-  }, [configDraft, configSavedSnapshot, selectedAgentGroupId]);
   const selectedWorkflowDirty = useMemo(() => {
     if (!selectedWorkflowId || !configDraft || !configSavedSnapshot) {
       return false;
@@ -905,16 +880,6 @@ export function App() {
   }
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (agentGroupDropdownRef.current && !agentGroupDropdownRef.current.contains(e.target as Node)) {
-        setAgentGroupDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  useEffect(() => {
     const saved = (localStorage.getItem('orchestrator-theme') as Theme | null) ?? 'dark';
     const nextTheme: Theme = saved === 'dark' ? 'dark' : 'light';
     setTheme(nextTheme);
@@ -1029,16 +994,6 @@ export function App() {
   }, [agentKeys]);
 
   useEffect(() => {
-    if (agentGroupKeys.length === 0) {
-      setSelectedAgentGroupId(null);
-      return;
-    }
-    setSelectedAgentGroupId((current) =>
-      current && agentGroupKeys.includes(current) ? current : agentGroupKeys[0]
-    );
-  }, [agentGroupKeys]);
-
-  useEffect(() => {
     if (workflowKeys.length === 0) {
       setSelectedWorkflowId(null);
       return;
@@ -1140,13 +1095,11 @@ export function App() {
     const lookupMap: Record<ConfigEntityKind, Record<string, unknown>> = {
       workspace: configDraft.workspaces,
       agent: configDraft.agents,
-      agent_group: configDraft.agent_groups,
       workflow: configDraft.workflows,
     };
     const savedMap: Record<ConfigEntityKind, Record<string, unknown>> = {
       workspace: configSavedSnapshot.workspaces,
       agent: configSavedSnapshot.agents,
-      agent_group: configSavedSnapshot.agent_groups,
       workflow: configSavedSnapshot.workflows,
     };
     return JSON.stringify(lookupMap[kind]?.[id] ?? null) !== JSON.stringify(savedMap[kind]?.[id] ?? null);
@@ -1157,8 +1110,6 @@ export function App() {
       setSelectedWorkspaceId(target.id);
     } else if (target.kind === 'agent') {
       setSelectedAgentId(target.id);
-    } else if (target.kind === 'agent_group') {
-      setSelectedAgentGroupId(target.id);
     } else {
       setSelectedWorkflowId(target.id);
     }
@@ -1175,9 +1126,7 @@ export function App() {
         ? selectedWorkspaceId
         : kind === 'agent'
           ? selectedAgentId
-          : kind === 'agent_group'
-            ? selectedAgentGroupId
-            : selectedWorkflowId;
+          : selectedWorkflowId;
     if (!nextId || nextId === currentId) {
       return;
     }
@@ -1361,35 +1310,16 @@ export function App() {
     setSelectedAgentId(id);
   }
 
-  function addAgentGroup() {
-    const id = `group-${Date.now()}`;
-    updateConfig((draft) => {
-      draft.agent_groups[id] = { agents: [] };
-    });
-    setSelectedAgentGroupId(id);
-  }
-
-  function removeAgentGroup(groupId: string) {
-    const index = agentGroupKeys.indexOf(groupId);
-    const nextSelection = agentGroupKeys[index + 1] ?? agentGroupKeys[index - 1] ?? null;
-    updateConfig((draft) => {
-      delete draft.agent_groups[groupId];
-    });
-    setSelectedAgentGroupId(nextSelection);
-  }
-
   function addWorkflow() {
     const id = `workflow-${Date.now()}`;
     updateConfig((draft) => {
-      const firstGroup = Object.keys(draft.agent_groups)[0] ?? '';
       draft.workflows[id] = {
-        steps: defaultWorkflowSteps(firstGroup),
+        steps: defaultWorkflowSteps(),
         loop: {
           mode: 'once',
           guard: {
             enabled: true,
-            stop_when_no_unresolved: true,
-            agent_group_id: undefined
+            stop_when_no_unresolved: true
           }
         }
       };
@@ -2241,183 +2171,6 @@ export function App() {
                     </section>
                   )}
 
-                  {configTab === 'agent_group' && (
-                    <section className="config-block">
-                      <div className="config-block-head">
-                        <div>
-                          <h3>Agent Group 设定</h3>
-                          <p className="muted">配置 Agent 分组，实现多 Agent 轮转与故障自动恢复。</p>
-                        </div>
-                        <button className="ghost-button" onClick={addAgentGroup}>新增 Agent Group</button>
-                      </div>
-                      <div className="entity-split-layout">
-                        <aside className="entity-nav-panel">
-                          <strong>Agent Group 列表</strong>
-                          <div className="entity-nav-list">
-                            {agentGroupKeys.map((gid) => (
-                              <button
-                                key={gid}
-                                type="button"
-                                className={`ghost-button entity-nav-item ${selectedAgentGroupId === gid ? 'active' : ''}`}
-                                onClick={() => requestEntitySwitch('agent_group', gid)}
-                              >
-                                <span>{gid}</span>
-                                {selectedAgentGroupId === gid && selectedAgentGroupDirty && (
-                                  <span className="dirty-dot" aria-label="unsaved changes" />
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        </aside>
-                        <div className="entity-editor-panel">
-                          {selectedAgentGroupId && configDraft?.agent_groups[selectedAgentGroupId] ? (
-                            <>
-                              <div className="entity-editor-head">
-                                <div>
-                                  <strong>当前 Agent Group: {selectedAgentGroupId}</strong>
-                                  <p className="muted">
-                                    {selectedAgentGroupDirty ? '存在未保存变更' : '已与最近保存版本同步'}
-                                  </p>
-                                </div>
-                                <div className="actions">
-                                  <button
-                                    type="button"
-                                    className="ghost-button"
-                                    disabled={selectedAgentGroupIndex <= 0}
-                                    onClick={() =>
-                                      requestEntitySwitch('agent_group', agentGroupKeys[selectedAgentGroupIndex - 1] ?? selectedAgentGroupId)
-                                    }
-                                  >
-                                    上一个
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="ghost-button"
-                                    disabled={selectedAgentGroupIndex < 0 || selectedAgentGroupIndex >= agentGroupKeys.length - 1}
-                                    onClick={() =>
-                                      requestEntitySwitch('agent_group', agentGroupKeys[selectedAgentGroupIndex + 1] ?? selectedAgentGroupId)
-                                    }
-                                  >
-                                    下一个
-                                  </button>
-                                  {agentGroupKeys
-                                    .filter((gid) => gid !== selectedAgentGroupId)
-                                    .length > 0 && (
-                                    <button className="ghost-button danger-button" onClick={() => removeAgentGroup(selectedAgentGroupId)}>
-                                      删除
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                              <label>Agent 成员</label>
-                              <div className="agent-add-row" ref={agentGroupDropdownRef}>
-                                <div className="agent-add-dropdown">
-                                  <input
-                                    type="text"
-                                    placeholder="搜索 Agent..."
-                                    value={agentGroupAddFilter}
-                                    onChange={(e) => { setAgentGroupAddFilter(e.target.value); setAgentGroupDropdownOpen(true); }}
-                                    onFocus={() => setAgentGroupDropdownOpen(true)}
-                                  />
-                                  {agentGroupDropdownOpen && (() => {
-                                    const group = configDraft.agent_groups[selectedAgentGroupId!];
-                                    const available = agentKeys
-                                      .filter((id) => !(group?.agents ?? []).includes(id))
-                                      .filter((id) => !agentGroupAddFilter || id.toLowerCase().includes(agentGroupAddFilter.toLowerCase()));
-                                    return available.length > 0 ? (
-                                      <div className="agent-add-dropdown-list">
-                                        {available.map((id) => (
-                                          <button
-                                            key={id}
-                                            type="button"
-                                            className="agent-add-dropdown-item"
-                                            onClick={() => {
-                                              updateConfig((draft) => {
-                                                const g = draft.agent_groups[selectedAgentGroupId!];
-                                                if (g && !g.agents.includes(id)) g.agents.push(id);
-                                              });
-                                              setAgentGroupAddFilter('');
-                                              setAgentGroupDropdownOpen(false);
-                                            }}
-                                          >
-                                            {id}
-                                          </button>
-                                        ))}
-                                      </div>
-                                    ) : null;
-                                  })()}
-                                </div>
-                              </div>
-
-                              <h4 style={{ margin: '8px 0 4px' }}>已添加成员</h4>
-                              <div className="agent-member-list">
-                                {(configDraft.agent_groups[selectedAgentGroupId!]?.agents ?? []).map((agentId) => {
-                                  const info = agentHealthList.find((h) => h.agent_id === agentId);
-                                  return (
-                                    <div key={agentId} className="agent-member-card">
-                                      <div className="agent-member-info">
-                                        <span className="agent-member-name">{agentId}</span>
-                                        <span className={`badge ${info?.healthy !== false ? 'green' : 'red'}`}>
-                                          {info?.healthy !== false ? 'healthy' : 'diseased'}
-                                        </span>
-                                        {info && !info.healthy && info.diseased_until && (
-                                          <span className="badge gray">恢复于 {new Date(info.diseased_until).toLocaleString()}</span>
-                                        )}
-                                        {info && info.consecutive_errors > 0 && (
-                                          <span className="badge amber">错误×{info.consecutive_errors}</span>
-                                        )}
-                                      </div>
-                                      <button
-                                        type="button"
-                                        className="ghost-button agent-member-remove"
-                                        onClick={() => setPendingRemoveAgentId(agentId)}
-                                        title="移除"
-                                      >
-                                        ✕
-                                      </button>
-                                    </div>
-                                  );
-                                })}
-                                {(configDraft.agent_groups[selectedAgentGroupId!]?.agents ?? []).length === 0 && (
-                                  <p className="muted">暂无成员，请从上方下拉菜单追加。</p>
-                                )}
-                              </div>
-
-                              {pendingRemoveAgentId && (
-                                <div className="modal-backdrop" onClick={() => setPendingRemoveAgentId(null)} role="presentation">
-                                  <section className="modal-card switch-confirm-modal" role="dialog" aria-modal="true"
-                                    onClick={(e) => e.stopPropagation()}>
-                                    <div className="modal-head">
-                                      <h2>确认移除</h2>
-                                      <button className="ghost-button" onClick={() => setPendingRemoveAgentId(null)}>取消</button>
-                                    </div>
-                                    <p className="muted">
-                                      确定要将 <strong>{pendingRemoveAgentId}</strong> 从 Agent Group <strong>{selectedAgentGroupId}</strong> 中移除吗？
-                                    </p>
-                                    <div className="actions">
-                                      <button onClick={() => {
-                                        updateConfig((draft) => {
-                                          const g = draft.agent_groups[selectedAgentGroupId!];
-                                          if (g) g.agents = g.agents.filter((a) => a !== pendingRemoveAgentId);
-                                        });
-                                        setPendingRemoveAgentId(null);
-                                      }}>
-                                        确认移除
-                                      </button>
-                                      <button className="ghost-button" onClick={() => setPendingRemoveAgentId(null)}>取消</button>
-                                    </div>
-                                  </section>
-                                </div>
-                              )}
-                            </>
-                          ) : (
-                            <p className="muted">请选择一个 Agent Group 或新增一个。</p>
-                          )}
-                        </div>
-                      </div>
-                    </section>
-                  )}
-
                   {configTab === 'workflow' && (
                     <section className="config-block">
                       <div className="config-block-head">
@@ -2518,43 +2271,12 @@ export function App() {
                                         const target = draft.workflows[id].steps.find((entry) => entry.type === stepType);
                                         if (target) {
                                           target.enabled = event.target.checked;
-                                          if (!event.target.checked) {
-                                            target.agent_group_id = undefined;
-                                          } else if (isBuiltinTicketScan) {
-                                            target.agent_group_id = undefined;
-                                          } else if (!target.agent_group_id && agentGroupKeys[0]) {
-                                            target.agent_group_id = agentGroupKeys[0];
-                                          }
                                         }
                                       })
                                     }
                                   />
                                   {stepType}
                                 </label>
-                                <select
-                                  value={isBuiltinTicketScan ? '' : (step.agent_group_id ?? '')}
-                                  disabled={!step.enabled || isBuiltinTicketScan}
-                                  onChange={(event) =>
-                                    updateConfig((draft) => {
-                                      const target = draft.workflows[id].steps.find((entry) => entry.type === stepType);
-                                      if (target) {
-                                        if (isBuiltinTicketScan) {
-                                          target.agent_group_id = undefined;
-                                          return;
-                                        }
-                                        target.agent_group_id = event.target.value || undefined;
-                                      }
-                                    })
-                                  }
-                                >
-                                  {isBuiltinTicketScan && <option value="">(builtin)</option>}
-                                  <option value="">(none)</option>
-                                  {agentGroupKeys.map((groupId) => (
-                                    <option key={groupId} value={groupId}>
-                                      {groupId}
-                                    </option>
-                                  ))}
-                                </select>
                                 <div className="step-prehook">
                                   <label>
                                     <input
@@ -3030,24 +2752,6 @@ export function App() {
                               }
                             />
                             无未解决项时停止
-                          </label>
-                          <label>
-                            Guard Agent（可选）
-                            <select
-                              value={wf.loop.guard.agent_group_id ?? ''}
-                              onChange={(event) =>
-                                updateConfig((draft) => {
-                                  draft.workflows[id].loop.guard.agent_group_id = event.target.value || undefined;
-                                })
-                              }
-                            >
-                              <option value="">(none)</option>
-                              {agentGroupKeys.map((groupId) => (
-                                <option key={groupId} value={groupId}>
-                                  {groupId}
-                                </option>
-                              ))}
-                            </select>
                           </label>
                           <label>
                             最大循环次数（可选）

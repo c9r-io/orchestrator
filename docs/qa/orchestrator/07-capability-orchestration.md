@@ -52,8 +52,6 @@ workflows:
       cost_preference: performance  # performance | quality | balance
       repeatable: true
       is_guard: false
-      agent_group_id: qa_group
-    
     - id: check_done
       builtin: loop_guard
       is_guard: true
@@ -114,11 +112,6 @@ Validate that when a step requires a capability, only agents with that capabilit
        templates:
          fix: "echo 'fix-from-agent-fix-only'"
    
-   agent_groups:
-     all:
-       - agent_qa_only
-       - agent_fix_only
-   
    workflows:
      test_capability:
        steps:
@@ -126,12 +119,12 @@ Validate that when a step requires a capability, only agents with that capabilit
          required_capability: qa
          enabled: true
          repeatable: false
-         agent_group_id: all
+
        - id: run_fix
          required_capability: fix
          enabled: true
          repeatable: false
-         agent_group_id: all
+
        loop:
          mode: once
    EOF
@@ -216,11 +209,6 @@ Validate that when cost_preference is "performance", the lower-cost agent is sel
          qa: "echo 'expensive-qa'"
          fix: "echo 'expensive-fix'"
    
-   agent_groups:
-     both:
-       - cheap_agent
-       - expensive_agent
-   
    workflows:
      cost_test:
        steps:
@@ -229,13 +217,13 @@ Validate that when cost_preference is "performance", the lower-cost agent is sel
          cost_preference: performance
          enabled: true
          repeatable: false
-         agent_group_id: both
+
        - id: do_fix
          required_capability: fix
          cost_preference: performance
          enabled: true
          repeatable: false
-         agent_group_id: both
+
        loop:
          mode: once
    EOF
@@ -310,11 +298,6 @@ Validate that when cost_preference is "quality", the higher-cost agent is select
        templates:
          qa: "echo 'expensive-qa'"
    
-   agent_groups:
-     both:
-       - cheap_agent
-       - expensive_agent
-   
    workflows:
      quality_test:
        steps:
@@ -323,7 +306,7 @@ Validate that when cost_preference is "quality", the higher-cost agent is select
          cost_preference: quality
          enabled: true
          repeatable: false
-         agent_group_id: both
+
        loop:
          mode: once
    EOF
@@ -389,10 +372,6 @@ Validate that repeatable steps run every cycle, while non-repeatable steps run o
        templates:
          qa: "echo 'cycle-{cycle}'"
    
-   agent_groups:
-     test:
-       - test_agent
-   
    workflows:
      repeat_test:
        steps:
@@ -400,12 +379,12 @@ Validate that repeatable steps run every cycle, while non-repeatable steps run o
          required_capability: qa
          enabled: true
          repeatable: false
-         agent_group_id: test
+
        - id: every_cycle
          required_capability: qa
          enabled: true
          repeatable: true
-         agent_group_id: test
+
        loop:
          mode: infinite
          guard:
@@ -479,10 +458,6 @@ Validate that when a guard step returns "stop", the workflow loop terminates.
          qa: "echo 'qa-run'"
          default: "echo 'stop'"
    
-   agent_groups:
-     test:
-       - test_agent
-   
    workflows:
      guard_test:
        steps:
@@ -490,7 +465,7 @@ Validate that when a guard step returns "stop", the workflow loop terminates.
          required_capability: qa
          enabled: true
          repeatable: true
-         agent_group_id: test
+
        - id: check_stop
          builtin: loop_guard
          enabled: true

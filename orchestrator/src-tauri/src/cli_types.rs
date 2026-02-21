@@ -14,7 +14,7 @@ pub struct OrchestratorResource {
     #[serde(rename = "apiVersion")]
     pub api_version: String,
 
-    /// Resource kind (Workspace, Agent, AgentGroup, Workflow)
+    /// Resource kind (Workspace, Agent, Workflow)
     pub kind: ResourceKind,
 
     /// Resource metadata (name, labels, annotations)
@@ -45,7 +45,6 @@ impl OrchestratorResource {
 pub enum ResourceKind {
     Workspace,
     Agent,
-    AgentGroup,
     Workflow,
 }
 
@@ -75,9 +74,6 @@ pub enum ResourceSpec {
 
     /// Agent resource spec
     Agent(AgentSpec),
-
-    /// Agent group resource spec
-    AgentGroup(AgentGroupSpec),
 
     /// Workflow resource spec
     Workflow(WorkflowSpec),
@@ -145,14 +141,6 @@ pub struct AgentTemplatesSpec {
     pub loop_guard: Option<String>,
 }
 
-/// Agent group resource specification.
-/// Groups multiple agents together.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AgentGroupSpec {
-    /// List of agent names in this group
-    pub agents: Vec<String>,
-}
-
 /// Workflow resource specification.
 /// Defines a workflow pipeline with steps, loop policy, and finalization rules.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -179,9 +167,6 @@ pub struct WorkflowStepSpec {
     pub step_type: String,
 
     pub enabled: bool,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent_group_id: Option<String>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prehook: Option<WorkflowPrehookSpec>,
@@ -315,34 +300,6 @@ spec:
     }
 
     #[test]
-    fn parse_agent_group_yaml() {
-        let yaml = r#"
-apiVersion: orchestrator.dev/v1
-kind: AgentGroup
-metadata:
-  name: qa-agents
-spec:
-  agents:
-    - qa-runner
-    - linter
-"#;
-
-        let resource: OrchestratorResource =
-            serde_yaml::from_str(yaml).expect("Failed to parse agent group YAML");
-
-        resource
-            .validate_version()
-            .expect("Version validation failed");
-        assert_eq!(resource.kind, ResourceKind::AgentGroup);
-
-        if let ResourceSpec::AgentGroup(spec) = &resource.spec {
-            assert_eq!(spec.agents, vec!["qa-runner", "linter"]);
-        } else {
-            panic!("Expected AgentGroupSpec");
-        }
-    }
-
-    #[test]
     fn parse_workflow_yaml() {
         let yaml = r#"
 apiVersion: orchestrator.dev/v1
@@ -354,7 +311,6 @@ spec:
     - id: qa
       type: qa
       enabled: true
-      agent_group_id: qa-agents
   loop:
     mode: once
   finalize:

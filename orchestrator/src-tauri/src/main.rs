@@ -4,6 +4,7 @@ mod capability;
 mod cli;
 mod cli_handler;
 mod cli_types;
+mod metrics;
 mod resource;
 #[cfg(test)]
 mod test_utils;
@@ -13,6 +14,10 @@ use anyhow::{Context, Result};
 use cel_interpreter::{Context as CelContext, Program, Value as CelValue};
 use chrono::Utc;
 use clap::Parser;
+use metrics::{
+    AgentHealthState, AgentMetrics, CapabilityHealth, MetricsCollector, SelectionRequirement,
+    SelectionStrategy, SelectionWeights,
+};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -29,21 +34,53 @@ use uuid::Uuid;
 use walkdir::WalkDir;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct ProjectConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(default)]
+    workspaces: HashMap<String, WorkspaceConfig>,
+    #[serde(default)]
+    agents: HashMap<String, AgentConfig>,
+    #[serde(default)]
+    workflows: HashMap<String, WorkflowConfig>,
+}
+
+impl ProjectConfig {
+    fn empty() -> Self {
+        Self {
+            description: None,
+            workspaces: HashMap::new(),
+            agents: HashMap::new(),
+            workflows: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct OrchestratorConfig {
     runner: RunnerConfig,
     resume: ResumeConfig,
     defaults: ConfigDefaults,
+    #[serde(default)]
+    projects: HashMap<String, ProjectConfig>,
+    #[serde(default)]
     workspaces: HashMap<String, WorkspaceConfig>,
+    #[serde(default)]
     agents: HashMap<String, AgentConfig>,
     #[serde(default)]
-    agent_groups: HashMap<String, AgentGroupConfig>,
     workflows: HashMap<String, WorkflowConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ConfigDefaults {
+    #[serde(default = "default_project")]
+    project: String,
     workspace: String,
     workflow: String,
+}
+
+fn default_project() -> String {
+    "default".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,6 +138,16 @@ struct AgentConfig {
     templates: HashMap<String, String>,
     #[serde(default)]
     preference: AgentPreference,
+    #[serde(default)]
+    selection: AgentSelectionConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct AgentSelectionConfig {
+    #[serde(default)]
+    strategy: Option<SelectionStrategy>,
+    #[serde(default)]
+    weights: Option<SelectionWeights>,
 }
 
 impl AgentConfig {
@@ -110,6 +157,7 @@ impl AgentConfig {
             capabilities: Vec::new(),
             templates: HashMap::new(),
             preference: AgentPreference::default(),
+            selection: AgentSelectionConfig::default(),
         }
     }
 
@@ -120,17 +168,20 @@ impl AgentConfig {
     fn supports_capability(&self, capability: &str) -> bool {
         self.capabilities.contains(&capability.to_string())
     }
+
+    fn get_selection_strategy(&self) -> SelectionStrategy {
+        self.selection.strategy.unwrap_or(SelectionStrategy::Adaptive)
+    }
+
+    fn get_selection_weights(&self) -> SelectionWeights {
+        self.selection.weights.clone().unwrap_or_default()
+    }
 }
 
 impl Default for AgentConfig {
     fn default() -> Self {
         Self::new()
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct AgentGroupConfig {
-    agents: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -232,8 +283,6 @@ struct WorkflowLoopGuardConfig {
     enabled: bool,
     stop_when_no_unresolved: bool,
     max_cycles: Option<u32>,
-    #[serde(default, alias = "agent_id")]
-    agent_group_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     agent_template: Option<String>,
 }
@@ -244,7 +293,6 @@ impl Default for WorkflowLoopGuardConfig {
             enabled: true,
             stop_when_no_unresolved: true,
             max_cycles: None,
-            agent_group_id: None,
             agent_template: None,
         }
     }
@@ -289,8 +337,6 @@ struct WorkflowStepConfig {
     is_guard: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     cost_preference: Option<CostPreference>,
-    #[serde(default, alias = "agent_id")]
-    agent_group_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     prehook: Option<StepPrehookConfig>,
 }
@@ -308,7 +354,6 @@ struct TaskExecutionStep {
     required_capability: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     builtin: Option<String>,
-    agent_group_id: String,
     #[serde(default = "default_true")]
     repeatable: bool,
     #[serde(default)]
@@ -356,15 +401,6 @@ struct WorkflowConfig {
     retest: Option<String>,
 }
 
-impl WorkflowConfig {
-    fn uses_agent_group(&self, group_id: &str) -> bool {
-        self.steps
-            .iter()
-            .any(|step| step.enabled && step.agent_group_id.as_deref() == Some(group_id))
-            || self.loop_policy.guard.agent_group_id.as_deref() == Some(group_id)
-    }
-}
-
 fn default_workflow_steps(
     qa: Option<&str>,
     ticket_scan: bool,
@@ -382,7 +418,6 @@ fn default_workflow_steps(
             repeatable: false,
             is_guard: false,
             cost_preference: None,
-            agent_group_id: None,
             prehook: None,
         },
         WorkflowStepConfig {
@@ -395,7 +430,6 @@ fn default_workflow_steps(
             repeatable: true,
             is_guard: false,
             cost_preference: None,
-            agent_group_id: qa.map(str::to_string),
             prehook: None,
         },
         WorkflowStepConfig {
@@ -408,7 +442,6 @@ fn default_workflow_steps(
             repeatable: true,
             is_guard: false,
             cost_preference: None,
-            agent_group_id: None,
             prehook: None,
         },
         WorkflowStepConfig {
@@ -421,7 +454,6 @@ fn default_workflow_steps(
             repeatable: true,
             is_guard: false,
             cost_preference: None,
-            agent_group_id: fix.map(str::to_string),
             prehook: None,
         },
         WorkflowStepConfig {
@@ -434,7 +466,6 @@ fn default_workflow_steps(
             repeatable: true,
             is_guard: false,
             cost_preference: None,
-            agent_group_id: retest.map(str::to_string),
             prehook: None,
         },
     ]
@@ -544,9 +575,18 @@ struct ResolvedWorkspace {
 }
 
 #[derive(Debug, Clone)]
+struct ResolvedProject {
+    workspaces: HashMap<String, ResolvedWorkspace>,
+    agents: HashMap<String, AgentConfig>,
+    workflows: HashMap<String, WorkflowConfig>,
+}
+
+#[derive(Debug, Clone)]
 struct ActiveConfig {
     config: OrchestratorConfig,
     workspaces: HashMap<String, ResolvedWorkspace>,
+    projects: HashMap<String, ResolvedProject>,
+    default_project_id: String,
     default_workspace_id: String,
     default_workflow_id: String,
 }
@@ -589,6 +629,7 @@ impl Default for OrchestratorConfig {
                     m
                 },
                 preference: AgentPreference::default(),
+                selection: AgentSelectionConfig::default(),
             },
         );
         agents.insert(
@@ -607,6 +648,7 @@ impl Default for OrchestratorConfig {
                     m
                 },
                 preference: AgentPreference::default(),
+                selection: AgentSelectionConfig::default(),
             },
         );
 
@@ -661,20 +703,6 @@ impl Default for OrchestratorConfig {
             },
         );
 
-        let mut agent_groups = HashMap::new();
-        agent_groups.insert(
-            "opencode".to_string(),
-            AgentGroupConfig {
-                agents: vec!["opencode".to_string()],
-            },
-        );
-        agent_groups.insert(
-            "claudecode".to_string(),
-            AgentGroupConfig {
-                agents: vec!["claudecode".to_string()],
-            },
-        );
-
         Self {
             runner: RunnerConfig {
                 shell: "/bin/zsh".to_string(),
@@ -682,12 +710,13 @@ impl Default for OrchestratorConfig {
             },
             resume: ResumeConfig { auto: true },
             defaults: ConfigDefaults {
+                project: "default".to_string(),
                 workspace: "default".to_string(),
                 workflow: "qa_fix_retest".to_string(),
             },
+            projects: HashMap::new(),
             workspaces,
             agents,
-            agent_groups,
             workflows,
         }
     }
@@ -706,6 +735,7 @@ struct InnerState {
     active_config: RwLock<ActiveConfig>,
     running: Mutex<HashMap<String, RunningTask>>,
     agent_health: std::sync::RwLock<HashMap<String, AgentHealthState>>,
+    agent_metrics: std::sync::RwLock<HashMap<String, AgentMetrics>>,
 }
 
 #[derive(Clone)]
@@ -728,6 +758,7 @@ impl RunningTask {
 struct CreateTaskPayload {
     name: Option<String>,
     goal: Option<String>,
+    project_id: Option<String>,
     workspace_id: Option<String>,
     workflow_id: Option<String>,
     target_files: Option<Vec<String>>,
@@ -738,6 +769,7 @@ impl Default for CreateTaskPayload {
         Self {
             name: None,
             goal: None,
+            project_id: None,
             workspace_id: None,
             workflow_id: None,
             target_files: None,
@@ -757,6 +789,7 @@ struct NamedOption {
 
 #[derive(Debug, Serialize)]
 struct CreateTaskDefaults {
+    project_id: String,
     workspace_id: String,
     workflow_id: String,
 }
@@ -764,6 +797,7 @@ struct CreateTaskDefaults {
 #[derive(Debug, Serialize)]
 struct CreateTaskOptions {
     defaults: CreateTaskDefaults,
+    projects: Vec<NamedOption>,
     workspaces: Vec<NamedOption>,
     workflows: Vec<NamedOption>,
 }
@@ -852,6 +886,7 @@ struct TaskSummary {
     started_at: Option<String>,
     completed_at: Option<String>,
     goal: String,
+    project_id: String,
     workspace_id: String,
     workflow_id: String,
     target_files: Vec<String>,
@@ -952,12 +987,7 @@ struct RunResult {
     stdout_path: String,
     stderr_path: String,
     timed_out: bool,
-}
-
-#[derive(Debug, Clone)]
-struct AgentHealthState {
-    diseased_until: Option<chrono::DateTime<Utc>>,
-    consecutive_errors: u32,
+    duration_ms: Option<u64>,
 }
 
 const DISEASE_DURATION_HOURS: i64 = 5;
@@ -974,6 +1004,23 @@ fn is_agent_healthy(health_map: &HashMap<String, AgentHealthState>, agent_id: &s
     }
 }
 
+fn is_capability_healthy(health_map: &HashMap<String, AgentHealthState>, agent_id: &str, capability: &str) -> bool {
+    match health_map.get(agent_id) {
+        None => true,
+        Some(state) => {
+            if let Some(until) = state.diseased_until {
+                if Utc::now() < until {
+                    if let Some(cap_health) = state.capability_health.get(capability) {
+                        return cap_health.success_rate() >= 0.5;
+                    }
+                    return false;
+                }
+            }
+            true
+        }
+    }
+}
+
 fn mark_agent_diseased(state: &InnerState, app: Option<&AppHandle>, agent_id: &str) {
     let mut health = state.agent_health.write().unwrap();
     let entry = health
@@ -981,6 +1028,8 @@ fn mark_agent_diseased(state: &InnerState, app: Option<&AppHandle>, agent_id: &s
         .or_insert(AgentHealthState {
             diseased_until: None,
             consecutive_errors: 0,
+            total_lifetime_errors: 0,
+            capability_health: std::collections::HashMap::new(),
         });
     entry.diseased_until = Some(Utc::now() + chrono::Duration::hours(DISEASE_DURATION_HOURS));
     let diseased_until = entry.diseased_until;
@@ -1013,6 +1062,8 @@ fn increment_consecutive_errors(
         .or_insert(AgentHealthState {
             diseased_until: None,
             consecutive_errors: 0,
+            total_lifetime_errors: 0,
+            capability_health: std::collections::HashMap::new(),
         });
     entry.consecutive_errors += 1;
     let consecutive_errors = entry.consecutive_errors;
@@ -1069,52 +1120,43 @@ fn reset_consecutive_errors(state: &InnerState, app: Option<&AppHandle>, agent_i
     }
 }
 
-fn resolve_agent_from_group(
+fn update_capability_health(
     state: &InnerState,
-    config: &OrchestratorConfig,
-    group_id: &str,
-    phase: &str,
-) -> Result<(String, String)> {
-    let group = config
-        .agent_groups
-        .get(group_id)
-        .with_context(|| format!("unknown agent_group '{}'", group_id))?;
-    let health = state.agent_health.read().unwrap();
-
-    let candidates: Vec<&str> = group
-        .agents
-        .iter()
-        .filter(|id| is_agent_healthy(&health, id))
-        .filter(|id| {
-            config
-                .agents
-                .get(id.as_str())
-                .and_then(|a| a.get_template(phase))
-                .is_some()
-        })
-        .map(|s| s.as_str())
-        .collect();
-
-    if candidates.is_empty() {
-        anyhow::bail!(
-            "agent_group '{}' has no healthy agents for phase '{}'",
-            group_id,
-            phase
-        );
+    agent_id: &str,
+    capability: Option<&str>,
+    success: bool,
+) {
+    if let Some(cap) = capability {
+        let mut health = state.agent_health.write().unwrap();
+        let entry = health.entry(agent_id.to_string()).or_insert_with(|| {
+            AgentHealthState {
+                diseased_until: None,
+                consecutive_errors: 0,
+                total_lifetime_errors: 0,
+                capability_health: std::collections::HashMap::new(),
+            }
+        });
+        
+        let cap_health = entry.capability_health.entry(cap.to_string()).or_insert_with(|| {
+            CapabilityHealth {
+                success_count: 0,
+                failure_count: 0,
+                last_error_at: None,
+            }
+        });
+        
+        if success {
+            cap_health.success_count += 1;
+        } else {
+            cap_health.failure_count += 1;
+            cap_health.last_error_at = Some(Utc::now());
+        }
     }
-
-    use rand::Rng;
-    let idx = rand::thread_rng().gen_range(0..candidates.len());
-    let agent_id = candidates[idx];
-    let template = config.agents[agent_id].get_template(phase).unwrap();
-
-    Ok((agent_id.to_string(), template.to_string()))
 }
 
 fn select_agent_by_capability(
     capability: &str,
     agents: &HashMap<String, AgentConfig>,
-    agent_groups: &HashMap<String, AgentGroupConfig>,
     cost_preference: &Option<CostPreference>,
 ) -> Result<(String, String)> {
     let mut candidates: Vec<_> = agents
@@ -1157,6 +1199,89 @@ fn select_agent_by_capability(
     use rand::Rng;
     let idx = rand::thread_rng().gen_range(0..candidates.len());
     let (agent_id, config) = candidates[idx];
+
+    let template = config
+        .get_template(capability)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Agent {} has capability {} but no template",
+                agent_id,
+                capability
+            )
+        })?
+        .clone();
+
+    Ok((agent_id.clone(), template))
+}
+
+fn select_agent_advanced(
+    capability: &str,
+    agents: &HashMap<String, AgentConfig>,
+    health_map: &HashMap<String, AgentHealthState>,
+    metrics_map: &HashMap<String, AgentMetrics>,
+    excluded_agents: &HashSet<String>,
+    cost_preference: &Option<CostPreference>,
+) -> Result<(String, String)> {
+    use metrics::calculate_agent_score;
+    
+    let mut candidates: Vec<_> = agents
+        .iter()
+        .filter(|(id, cfg)| {
+            if excluded_agents.contains(*id) {
+                return false;
+            }
+            if !cfg.supports_capability(capability) {
+                return false;
+            }
+            is_capability_healthy(health_map, id, capability)
+        })
+        .collect();
+
+    if candidates.is_empty() {
+        anyhow::bail!("No healthy agent found with capability: {}", capability);
+    }
+
+    let strategy = match cost_preference {
+        Some(CostPreference::Performance) => SelectionStrategy::PerformanceFirst,
+        Some(CostPreference::Quality) => SelectionStrategy::SuccessRateWeighted,
+        Some(CostPreference::Balance) => SelectionStrategy::Adaptive,
+        None => SelectionStrategy::Adaptive,
+    };
+
+    let requirement = SelectionRequirement {
+        capability: capability.to_string(),
+        strategy,
+        weights: SelectionWeights::default(),
+        max_load: 5,
+        consider_health: true,
+        capability_aware: true,
+    };
+
+    let mut scored: Vec<_> = candidates
+        .iter()
+        .map(|(id, cfg)| {
+            let health = health_map.get(*id);
+            let metrics = metrics_map.get(*id);
+            let cost_u32 = cfg.metadata.cost.map(|c| c as u32);
+            let score = calculate_agent_score(
+                *id,
+                cost_u32,
+                &metrics.cloned(),
+                &health.cloned(),
+                &requirement,
+            );
+            (*id, cfg, score.total_score)
+        })
+        .collect();
+
+    scored.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+
+    let top_count = std::cmp::min(3, scored.len());
+    let top_slice = &scored[..top_count];
+    
+    use rand::Rng;
+    let idx = rand::thread_rng().gen_range(0..top_slice.len());
+    let (agent_id, config, _score) = top_slice[idx];
 
     let template = config
         .get_template(capability)
@@ -1265,6 +1390,7 @@ struct CliOptions {
     show_help: bool,
     no_auto_resume: bool,
     task_id: Option<String>,
+    project_id: Option<String>,
     workspace_id: Option<String>,
     workflow_id: Option<String>,
     name: Option<String>,
@@ -1290,6 +1416,18 @@ async fn get_create_task_options(
     state: State<'_, ManagedState>,
 ) -> Result<CreateTaskOptions, String> {
     let active = read_active_config(&state.inner).map_err(err_to_string)?;
+    
+    // Get projects list
+    let mut projects: Vec<NamedOption> = active
+        .config
+        .projects
+        .keys()
+        .cloned()
+        .map(|id| NamedOption { id })
+        .collect();
+    projects.sort_by(|a, b| a.id.cmp(&b.id));
+    
+    // Get workspaces - include both global and project-level workspaces
     let mut workspaces: Vec<NamedOption> = active
         .config
         .workspaces
@@ -1297,8 +1435,17 @@ async fn get_create_task_options(
         .cloned()
         .map(|id| NamedOption { id })
         .collect();
+    // Add project workspaces
+    if let Some(project_config) = active.config.projects.get(&active.default_project_id) {
+        for ws_id in project_config.workspaces.keys() {
+            if !workspaces.iter().any(|w| w.id == *ws_id) {
+                workspaces.push(NamedOption { id: ws_id.clone() });
+            }
+        }
+    }
     workspaces.sort_by(|a, b| a.id.cmp(&b.id));
 
+    // Get workflows - include both global and project-level workflows
     let mut workflows: Vec<NamedOption> = active
         .config
         .workflows
@@ -1306,13 +1453,23 @@ async fn get_create_task_options(
         .cloned()
         .map(|id| NamedOption { id })
         .collect();
+    // Add project workflows
+    if let Some(project_config) = active.config.projects.get(&active.default_project_id) {
+        for wf_id in project_config.workflows.keys() {
+            if !workflows.iter().any(|w| w.id == *wf_id) {
+                workflows.push(NamedOption { id: wf_id.clone() });
+            }
+        }
+    }
     workflows.sort_by(|a, b| a.id.cmp(&b.id));
 
     Ok(CreateTaskOptions {
         defaults: CreateTaskDefaults {
+            project_id: active.default_project_id.clone(),
             workspace_id: active.default_workspace_id.clone(),
             workflow_id: active.default_workflow_id.clone(),
         },
+        projects,
         workspaces,
         workflows,
     })
@@ -1709,7 +1866,6 @@ fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                 repeatable: true,
                 is_guard: false,
                 cost_preference: None,
-                agent_group_id: None,
                 prehook: None,
             });
         }
@@ -1744,7 +1900,6 @@ fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
             .find(|step| step.step_type.as_ref() == Some(&WorkflowStepType::TicketScan))
         {
             scan_step.enabled = true;
-            scan_step.agent_group_id = None;
         }
     }
     workflow.qa = None;
@@ -1757,30 +1912,6 @@ fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
 }
 
 fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorConfig {
-    // Auto-migrate: if agent_groups is empty, create a 1:1 group for each referenced agent
-    if config.agent_groups.is_empty() && !config.agents.is_empty() {
-        let mut referenced: HashSet<String> = HashSet::new();
-        for workflow in config.workflows.values() {
-            for step in &workflow.steps {
-                if let Some(id) = &step.agent_group_id {
-                    referenced.insert(id.clone());
-                }
-            }
-            if let Some(id) = &workflow.loop_policy.guard.agent_group_id {
-                referenced.insert(id.clone());
-            }
-        }
-        for id in &referenced {
-            if config.agents.contains_key(id) && !config.agent_groups.contains_key(id) {
-                config.agent_groups.insert(
-                    id.clone(),
-                    AgentGroupConfig {
-                        agents: vec![id.clone()],
-                    },
-                );
-            }
-        }
-    }
     for workflow in config.workflows.values_mut() {
         normalize_workflow_config(workflow);
     }
@@ -1823,43 +1954,13 @@ fn validate_workflow_config(
             }
             continue;
         }
-        let group_id = step.agent_group_id.as_deref().with_context(|| {
-            format!(
-                "workflow '{}' step '{}' missing agent_group_id",
-                workflow_id, key
-            )
-        })?;
-        let group = config.agent_groups.get(group_id).with_context(|| {
-            format!(
-                "workflow '{}' step '{}' references unknown agent_group '{}'",
-                workflow_id, key, group_id
-            )
-        })?;
-        // Verify at least one agent in group has the required template
-        let has_template = group.agents.iter().any(|aid| {
-            config
-                .agents
-                .get(aid)
-                .and_then(|a| a.get_template(key))
-                .is_some()
-        });
-        if !has_template {
+        let has_agent = config.agents.values().any(|a| a.get_template(key).is_some());
+        if !has_agent {
             anyhow::bail!(
-                "agent_group '{}' has no agent with template for step '{}' used by workflow '{}'",
-                group_id,
+                "no agent has template for step '{}' used by workflow '{}'",
                 key,
                 workflow_id
             );
-        }
-        // Verify all agents in group exist
-        for aid in &group.agents {
-            if !config.agents.contains_key(aid) {
-                anyhow::bail!(
-                    "agent_group '{}' references unknown agent '{}'",
-                    group_id,
-                    aid
-                );
-            }
         }
         if let Some(prehook) = step.prehook.as_ref() {
             validate_step_prehook(prehook, workflow_id, key)?;
@@ -1880,27 +1981,12 @@ fn validate_workflow_config(
         }
     }
     if workflow.loop_policy.guard.enabled {
-        if let Some(group_id) = workflow.loop_policy.guard.agent_group_id.as_deref() {
-            let group = config.agent_groups.get(group_id).with_context(|| {
-                format!(
-                    "workflow '{}' loop.guard references unknown agent_group '{}'",
-                    workflow_id, group_id
-                )
-            })?;
-            let has_loop_guard = group.agents.iter().any(|aid| {
-                config
-                    .agents
-                    .get(aid)
-                    .and_then(|a| a.get_template("loop_guard"))
-                    .is_some()
-            });
-            if !has_loop_guard {
-                anyhow::bail!(
-                    "workflow '{}' loop.guard agent_group '{}' has no agent with loop_guard template",
-                    workflow_id,
-                    group_id
-                );
-            }
+        let has_loop_guard = config.agents.values().any(|a| a.get_template("loop_guard").is_some());
+        if !has_loop_guard {
+            anyhow::bail!(
+                "workflow '{}' loop.guard enabled but no agent has loop_guard template",
+                workflow_id
+            );
         }
     }
     Ok(())
@@ -2470,7 +2556,6 @@ fn build_execution_plan(
                 step_type: step.step_type.clone(),
                 required_capability: step.required_capability.clone(),
                 builtin: step.builtin.clone(),
-                agent_group_id: "builtin".to_string(),
                 repeatable: step.repeatable,
                 is_guard: step.is_guard,
                 cost_preference: step.cost_preference.clone(),
@@ -2478,19 +2563,11 @@ fn build_execution_plan(
             });
             continue;
         }
-        let key = step.required_capability.as_deref().unwrap_or(&step.id);
-        let group_id = step.agent_group_id.as_deref().with_context(|| {
-            format!(
-                "workflow '{}' step '{}' missing agent_group_id",
-                workflow_id, key
-            )
-        })?;
         steps.push(TaskExecutionStep {
             id: step.id.clone(),
             step_type: step.step_type.clone(),
             required_capability: step.required_capability.clone(),
             builtin: step.builtin.clone(),
-            agent_group_id: group_id.to_string(),
             repeatable: step.repeatable,
             is_guard: step.is_guard,
             cost_preference: step.cost_preference.clone(),
@@ -2512,8 +2589,8 @@ fn resolve_and_validate_workspaces(
     if config.workspaces.is_empty() {
         anyhow::bail!("config.workspaces cannot be empty");
     }
-    if config.agents.is_empty() && config.agent_groups.is_empty() {
-        anyhow::bail!("config.agents and config.agent_groups cannot both be empty");
+    if config.agents.is_empty() {
+        anyhow::bail!("config.agents cannot be empty");
     }
     if config.workflows.is_empty() {
         anyhow::bail!("config.workflows cannot be empty");
@@ -2592,12 +2669,45 @@ fn resolve_and_validate_workspaces(
 fn build_active_config(app_root: &Path, config: OrchestratorConfig) -> Result<ActiveConfig> {
     let config = normalize_config(config);
     let workspaces = resolve_and_validate_workspaces(app_root, &config)?;
+    let projects = resolve_and_validate_projects(app_root, &config)?;
     Ok(ActiveConfig {
+        default_project_id: config.defaults.project.clone(),
         default_workspace_id: config.defaults.workspace.clone(),
         default_workflow_id: config.defaults.workflow.clone(),
         workspaces,
+        projects,
         config,
     })
+}
+
+fn resolve_and_validate_projects(
+    app_root: &Path,
+    config: &OrchestratorConfig,
+) -> Result<HashMap<String, ResolvedProject>> {
+    let mut resolved = HashMap::new();
+    for (project_id, project_config) in &config.projects {
+        let mut workspaces = HashMap::new();
+        for (workspace_id, workspace_config) in &project_config.workspaces {
+            let root_path = app_root.join(&workspace_config.root_path);
+            workspaces.insert(
+                workspace_id.clone(),
+                ResolvedWorkspace {
+                    root_path,
+                    qa_targets: workspace_config.qa_targets.clone(),
+                    ticket_dir: workspace_config.ticket_dir.clone(),
+                },
+            );
+        }
+        resolved.insert(
+            project_id.clone(),
+            ResolvedProject {
+                workspaces,
+                agents: project_config.agents.clone(),
+                workflows: project_config.workflows.clone(),
+            },
+        );
+    }
+    Ok(resolved)
 }
 
 fn atomic_write_string(path: &Path, content: &str) -> Result<()> {
@@ -2671,10 +2781,6 @@ fn count_tasks_by_workflow(conn: &Connection, workflow_id: &str) -> Result<i64> 
     Ok(count)
 }
 
-fn agent_group_is_referenced(workflows: &HashMap<String, WorkflowConfig>, group_id: &str) -> bool {
-    workflows.values().any(|wf| wf.uses_agent_group(group_id))
-}
-
 fn enforce_deletion_guards(
     conn: &Connection,
     previous: &OrchestratorConfig,
@@ -2720,33 +2826,6 @@ fn enforce_deletion_guards(
         .filter(|id| !candidate.agents.contains_key(*id))
         .cloned()
         .collect();
-    for agent_id in &removed_agents {
-        // Check if agent is still referenced by any agent_group
-        for (gid, group) in &candidate.agent_groups {
-            if group.agents.contains(agent_id) {
-                anyhow::bail!(
-                    "cannot delete agent '{}' because agent_group '{}' still references it",
-                    agent_id,
-                    gid
-                );
-            }
-        }
-    }
-
-    let removed_groups: Vec<String> = previous
-        .agent_groups
-        .keys()
-        .filter(|id| !candidate.agent_groups.contains_key(*id))
-        .cloned()
-        .collect();
-    for group_id in removed_groups {
-        if agent_group_is_referenced(&candidate.workflows, &group_id) {
-            anyhow::bail!(
-                "cannot delete agent_group '{}' because workflows still reference it",
-                group_id
-            );
-        }
-    }
 
     Ok(())
 }
@@ -2856,6 +2935,7 @@ fn init_state() -> Result<ManagedState> {
             active_config: RwLock::new(active),
             running: Mutex::new(HashMap::new()),
             agent_health: std::sync::RwLock::new(HashMap::new()),
+            agent_metrics: std::sync::RwLock::new(HashMap::new()),
         }),
     })
 }
@@ -2987,6 +3067,12 @@ fn init_schema(db_path: &Path) -> Result<()> {
     ensure_column(
         &conn,
         "tasks",
+        "project_id",
+        "ALTER TABLE tasks ADD COLUMN project_id TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        &conn,
+        "tasks",
         "workspace_root",
         "ALTER TABLE tasks ADD COLUMN workspace_root TEXT NOT NULL DEFAULT ''",
     )?;
@@ -3038,6 +3124,12 @@ fn init_schema(db_path: &Path) -> Result<()> {
         "agent_id",
         "ALTER TABLE command_runs ADD COLUMN agent_id TEXT NOT NULL DEFAULT ''",
     )?;
+    ensure_column(
+        &conn,
+        "command_runs",
+        "project_id",
+        "ALTER TABLE command_runs ADD COLUMN project_id TEXT NOT NULL DEFAULT ''",
+    )?;
     Ok(())
 }
 
@@ -3084,25 +3176,34 @@ fn backfill_legacy_data(
 fn create_task_impl(state: &InnerState, payload: CreateTaskPayload) -> Result<TaskSummary> {
     let active = read_active_config(state)?;
 
+    let project_id = payload
+        .project_id
+        .clone()
+        .unwrap_or_else(|| active.default_project_id.clone());
+
     let workspace_id = payload
         .workspace_id
         .clone()
         .unwrap_or_else(|| active.default_workspace_id.clone());
-    let workspace = active
-        .workspaces
-        .get(&workspace_id)
-        .with_context(|| format!("workspace not found: {}", workspace_id))?;
+    
+    let workspace = if let Some(project) = active.projects.get(&project_id) {
+        project.workspaces.get(&workspace_id).cloned()
+    } else {
+        active.workspaces.get(&workspace_id).cloned()
+    }.with_context(|| format!("workspace not found: {} in project: {}", workspace_id, project_id))?;
 
     let workflow_id = payload
         .workflow_id
         .clone()
         .unwrap_or_else(|| active.default_workflow_id.clone());
-    let workflow = active
-        .config
-        .workflows
-        .get(&workflow_id)
-        .with_context(|| format!("workflow not found: {}", workflow_id))?;
-    let execution_plan = build_execution_plan(&active.config, workflow, &workflow_id)?;
+    
+    let workflow = if let Some(project) = active.projects.get(&project_id) {
+        project.workflows.get(&workflow_id).cloned()
+    } else {
+        active.config.workflows.get(&workflow_id).cloned()
+    }.with_context(|| format!("workflow not found: {} in project: {}", workflow_id, project_id))?;
+    
+    let execution_plan = build_execution_plan(&active.config, &workflow, &workflow_id)?;
     let execution_plan_json =
         serde_json::to_string(&execution_plan).context("serialize execution plan")?;
     let loop_mode = match execution_plan.loop_policy.mode {
@@ -3142,12 +3243,13 @@ fn create_task_impl(state: &InnerState, payload: CreateTaskPayload) -> Result<Ta
     let conn = open_conn(&state.db_path)?;
     let tx = conn.unchecked_transaction()?;
     tx.execute(
-        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, execution_plan_json, loop_mode, current_cycle, init_done, resume_token, created_at, updated_at) VALUES (?1, ?2, 'pending', NULL, NULL, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11, 0, 0, NULL, ?12, ?12)",
+        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, project_id, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, execution_plan_json, loop_mode, current_cycle, init_done, resume_token, created_at, updated_at) VALUES (?1, ?2, 'pending', NULL, NULL, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 0, 0, NULL, ?13, ?13)",
         params![
             task_id,
             task_name,
             goal,
             serde_json::to_string(&target_files)?,
+            project_id,
             workspace_id,
             workflow_id,
             workspace.root_path.to_string_lossy().to_string(),
@@ -3301,7 +3403,7 @@ fn load_task_summary(state: &InnerState, task_id: &str) -> Result<TaskSummary> {
     let resolved_id = resolve_task_id(state, task_id)?;
     let conn = open_conn(&state.db_path)?;
     let mut stmt = conn.prepare(
-        "SELECT id, name, status, started_at, completed_at, goal, target_files_json, workspace_id, workflow_id, created_at, updated_at FROM tasks WHERE id = ?1",
+        "SELECT id, name, status, started_at, completed_at, goal, target_files_json, project_id, workspace_id, workflow_id, created_at, updated_at FROM tasks WHERE id = ?1",
     )?;
     let mut summary = stmt.query_row(params![resolved_id], |row| {
         let target_raw: String = row.get(6)?;
@@ -3313,8 +3415,9 @@ fn load_task_summary(state: &InnerState, task_id: &str) -> Result<TaskSummary> {
             started_at: row.get(3)?,
             completed_at: row.get(4)?,
             goal: row.get(5)?,
-            workspace_id: row.get(7)?,
-            workflow_id: row.get(8)?,
+            project_id: row.get(7)?,
+            workspace_id: row.get(8)?,
+            workflow_id: row.get(9)?,
             target_files,
             total_items: 0,
             finished_items: 0,
@@ -4110,6 +4213,11 @@ fn parse_cli_options(args: &[String]) -> Result<CliOptions> {
                 options.workspace_id = Some(value.clone());
                 idx += 2;
             }
+            "--project" => {
+                let value = args.get(idx + 1).context("missing value for --project")?;
+                options.project_id = Some(value.clone());
+                idx += 2;
+            }
             "--workflow" => {
                 let value = args.get(idx + 1).context("missing value for --workflow")?;
                 options.workflow_id = Some(value.clone());
@@ -4306,11 +4414,15 @@ async fn execute_guard_step(
 
     let (agent_id, template) = {
         let active = read_active_config(state)?;
+        let health_map = state.agent_health.read().unwrap();
+        let metrics_map = state.agent_metrics.read().unwrap();
         if let Some(capability) = &step.required_capability {
-            select_agent_by_capability(
+            select_agent_advanced(
                 capability,
                 &active.config.agents,
-                &active.config.agent_groups,
+                &health_map,
+                &metrics_map,
+                &HashSet::new(),
                 &step.cost_preference,
             )?
         } else {
@@ -4373,7 +4485,8 @@ async fn run_task_loop(
                     task_id,
                     &anchor_item_id,
                     "init_once",
-                    &step.agent_group_id,
+                    step.required_capability.as_deref(),
+                    step.cost_preference.clone(),
                     ".",
                     &[],
                     &task_ctx.workspace_root,
@@ -4643,7 +4756,6 @@ async fn run_guard_agent_decision(
     runtime: &RunningTask,
     current_cycle: u32,
     unresolved: i64,
-    agent_group_id: &str,
 ) -> Result<(bool, String)> {
     let Some(anchor_item_id) = first_task_item_id(state, task_id)? else {
         anyhow::bail!(
@@ -4651,10 +4763,18 @@ async fn run_guard_agent_decision(
             task_id
         );
     };
-    // Resolve agent dynamically and build the loop guard command
     let (agent_id, template) = {
         let active = read_active_config(state)?;
-        resolve_agent_from_group(state, &active.config, agent_group_id, "loop_guard")?
+        let health_map = state.agent_health.read().unwrap();
+        let metrics_map = state.agent_metrics.read().unwrap();
+        select_agent_advanced(
+            "loop_guard",
+            &active.config.agents,
+            &health_map,
+            &metrics_map,
+            &HashSet::new(),
+            &None,
+        )?
     };
     let command = render_loop_guard_template(&template, task_id, current_cycle, unresolved);
     let result = run_phase(
@@ -4791,7 +4911,8 @@ async fn process_item(
                 task_id,
                 item_id,
                 "qa",
-                &qa_step.agent_group_id,
+                qa_step.required_capability.as_deref(),
+                qa_step.cost_preference.clone(),
                 &item.qa_file_path,
                 &[],
                 &task_ctx.workspace_root,
@@ -4950,7 +5071,8 @@ async fn process_item(
                     task_id,
                     item_id,
                     "fix",
-                    &fix_step.agent_group_id,
+                    fix_step.required_capability.as_deref(),
+                    fix_step.cost_preference.clone(),
                     &item.qa_file_path,
                     &active_tickets,
                     &task_ctx.workspace_root,
@@ -5008,7 +5130,8 @@ async fn process_item(
                     task_id,
                     item_id,
                     "retest",
-                    &retest_step.agent_group_id,
+                    retest_step.required_capability.as_deref(),
+                    retest_step.cost_preference.clone(),
                     &item.qa_file_path,
                     &[],
                     &task_ctx.workspace_root,
@@ -5159,29 +5282,105 @@ async fn run_phase_with_rotation(
     task_id: &str,
     task_item_id: &str,
     phase: &str,
-    agent_group_id: &str,
+    required_capability: Option<&str>,
+    cost_preference: Option<CostPreference>,
     rel_path: &str,
     ticket_paths: &[String],
     workspace_root: &Path,
     workspace_id: &str,
     runtime: &RunningTask,
 ) -> Result<RunResult> {
-    let group_size = {
+    let candidate_agent_ids: Vec<String> = {
         let active = read_active_config(state)?;
         active
             .config
-            .agent_groups
-            .get(agent_group_id)
-            .map(|g| g.agents.len())
-            .unwrap_or(1)
+            .agents
+            .iter()
+            .filter(|(_, cfg)| {
+                if let Some(cap) = required_capability {
+                    cfg.supports_capability(cap)
+                } else {
+                    true
+                }
+            })
+            .map(|(id, _)| id.clone())
+            .collect()
     };
-    let max_retries = group_size;
-    for _attempt in 0..max_retries {
+
+    if candidate_agent_ids.is_empty() {
+        anyhow::bail!(
+            "no agents found for capability '{:?}'",
+            required_capability
+        );
+    }
+
+    let max_retries = candidate_agent_ids.len();
+    let mut tried_agents: HashSet<String> = HashSet::new();
+    
+    for attempt in 0..max_retries {
         let (agent_id, template) = {
             let active = read_active_config(state)?;
-            resolve_agent_from_group(state, &active.config, agent_group_id, phase)?
+            let health_map = state.agent_health.read().unwrap();
+            let metrics_map = state.agent_metrics.read().unwrap();
+            
+            if let Some(cap) = required_capability {
+                select_agent_advanced(
+                    cap,
+                    &active.config.agents,
+                    &health_map,
+                    &metrics_map,
+                    &tried_agents,
+                    &cost_preference,
+                )?
+            } else {
+                select_agent_by_preference(&active.config.agents)?
+            }
         };
+        
+        // Mark this agent as tried
+        tried_agents.insert(agent_id.clone());
+        
+        // Emit selection decision event for observability
+        if let Some(app) = app {
+            let health_map = state.agent_health.read().unwrap();
+            let metrics_map = state.agent_metrics.read().unwrap();
+            let health = health_map.get(&agent_id);
+            let metrics = metrics_map.get(&agent_id);
+            
+            emit_event(
+                app,
+                task_id,
+                Some(task_item_id),
+                "agent_selected",
+                json!({
+                    "agent_id": agent_id,
+                    "capability": required_capability,
+                    "attempt": attempt + 1,
+                    "strategy": "adaptive",
+                    "metrics": {
+                        "total_runs": metrics.map(|m| m.total_runs).unwrap_or(0),
+                        "success_rate": metrics.map(|m| m.recent_success_rate).unwrap_or(0.5),
+                        "current_load": metrics.map(|m| m.current_load).unwrap_or(0),
+                    },
+                    "health": {
+                        "consecutive_errors": health.map(|h| h.consecutive_errors).unwrap_or(0),
+                        "is_diseased": health.map(|h| h.diseased_until.is_some()).unwrap_or(false),
+                    }
+                }),
+            );
+        }
+        
         let command = render_template(&template, rel_path, ticket_paths);
+        
+        // Increment load before execution
+        {
+            let mut metrics = state.agent_metrics.write().unwrap();
+            let entry = metrics.entry(agent_id.clone()).or_insert_with(|| {
+                metrics::MetricsCollector::new_agent_metrics()
+            });
+            metrics::MetricsCollector::increment_load(entry);
+        }
+        
         let result = run_phase(
             state,
             app,
@@ -5195,13 +5394,31 @@ async fn run_phase_with_rotation(
             runtime,
         )
         .await?;
+        
+        // Decrement load after execution
+        {
+            let mut metrics = state.agent_metrics.write().unwrap();
+            if let Some(entry) = metrics.get_mut(&agent_id) {
+                metrics::MetricsCollector::decrement_load(entry);
+            }
+        }
 
         if result.timed_out {
             mark_agent_diseased(state, app, &agent_id);
+            update_capability_health(state, &agent_id, required_capability, false);
             continue;
         }
         if !result.success {
             let errors = increment_consecutive_errors(state, app, &agent_id);
+            update_capability_health(state, &agent_id, required_capability, false);
+            // Record failure metrics
+            {
+                let mut metrics = state.agent_metrics.write().unwrap();
+                let entry = metrics.entry(agent_id.clone()).or_insert_with(|| {
+                    metrics::MetricsCollector::new_agent_metrics()
+                });
+                metrics::MetricsCollector::record_failure(entry);
+            }
             if errors >= CONSECUTIVE_ERROR_THRESHOLD {
                 mark_agent_diseased(state, app, &agent_id);
                 continue;
@@ -5209,13 +5426,21 @@ async fn run_phase_with_rotation(
         }
         if result.success {
             reset_consecutive_errors(state, app, &agent_id);
+            update_capability_health(state, &agent_id, required_capability, true);
+            // Record success metrics
+            if let Some(duration) = result.duration_ms {
+                let mut metrics = state.agent_metrics.write().unwrap();
+                let entry = metrics.entry(agent_id.clone()).or_insert_with(|| {
+                    metrics::MetricsCollector::new_agent_metrics()
+                });
+                metrics::MetricsCollector::record_success(entry, duration);
+            }
         }
         return Ok(result);
     }
     anyhow::bail!(
-        "all agents in group '{}' are diseased for phase '{}'",
-        agent_group_id,
-        phase
+        "all agents for capability '{:?}' are diseased",
+        required_capability
     );
 }
 
@@ -5233,6 +5458,7 @@ async fn run_phase(
 ) -> Result<RunResult> {
     let run_id = Uuid::new_v4().to_string();
     let started_at = now_ts();
+    let start_instant = Instant::now();
     let stdout_path = state
         .logs_dir
         .join(format!("{}-{}-stdout.log", phase, &run_id))
@@ -5489,6 +5715,7 @@ async fn run_phase(
         stdout_path,
         stderr_path,
         timed_out,
+        duration_ms: Some(start_instant.elapsed().as_millis() as u64),
     })
 }
 
@@ -5541,6 +5768,7 @@ fn resolve_cli_task_id(state: &InnerState, options: &CliOptions) -> Result<Strin
     let payload = CreateTaskPayload {
         name: options.name.clone(),
         goal: options.goal.clone(),
+        project_id: options.project_id.clone(),
         workspace_id: options.workspace_id.clone(),
         workflow_id: options.workflow_id.clone(),
         target_files: if options.target_files.is_empty() {

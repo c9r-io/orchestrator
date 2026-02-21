@@ -43,7 +43,6 @@ workflows:
     - id: qa_test
       required_capability: qa
       repeatable: true
-      agent_group_id: qa_group
     - id: check_done
       builtin: loop_guard
       is_guard: true

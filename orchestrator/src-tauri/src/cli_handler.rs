@@ -4,8 +4,8 @@ use crate::cli::{
 };
 use crate::cli_types::OrchestratorResource;
 use crate::resource::{
-    dispatch_resource, AgentGroupResource, AgentResource, ApplyResult, RegisteredResource,
-    Resource, WorkflowResource, WorkspaceResource,
+    dispatch_resource, AgentResource, ApplyResult, RegisteredResource, Resource, WorkflowResource,
+    WorkspaceResource,
 };
 use crate::InnerState;
 use anyhow::{Context, Result};
@@ -303,6 +303,7 @@ impl CliHandler {
                 let payload = crate::CreateTaskPayload {
                     name: name.clone(),
                     goal: goal.clone(),
+                    project_id: None,
                     workspace_id: workspace.clone(),
                     workflow_id: workflow.clone(),
                     target_files: if target_file.is_empty() {
@@ -626,9 +627,6 @@ impl CliHandler {
             RegisteredResource::Agent(current) => {
                 AgentResource::get_from(config, current.name()).is_some()
             }
-            RegisteredResource::AgentGroup(current) => {
-                AgentGroupResource::get_from(config, current.name()).is_some()
-            }
             RegisteredResource::Workflow(current) => {
                 WorkflowResource::get_from(config, current.name()).is_some()
             }
@@ -836,7 +834,6 @@ fn kind_as_str(kind: crate::cli_types::ResourceKind) -> &'static str {
     match kind {
         crate::cli_types::ResourceKind::Workspace => "workspace",
         crate::cli_types::ResourceKind::Agent => "agent",
-        crate::cli_types::ResourceKind::AgentGroup => "agentgroup",
         crate::cli_types::ResourceKind::Workflow => "workflow",
     }
 }

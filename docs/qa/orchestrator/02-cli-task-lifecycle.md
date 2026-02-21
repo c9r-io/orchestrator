@@ -109,10 +109,6 @@ Entry point: `orchestrator task <command>`
         - qa
         templates:
           qa: "sleep 10 && echo 'done'"
-    agent_groups:
-      sleep_group:
-        agents:
-          - mock_sleep
     workflows:
       qa_only:
         steps:
@@ -120,7 +116,6 @@ Entry point: `orchestrator task <command>`
             required_capability: qa
             enabled: true
             repeatable: false
-            agent_group_id: sleep_group
         loop:
           mode: once
         finalize:

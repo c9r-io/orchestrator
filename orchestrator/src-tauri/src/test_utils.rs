@@ -59,17 +59,7 @@ impl TestState {
 
     pub(crate) fn with_agent(mut self, name: impl Into<String>, config: AgentConfig) -> Self {
         let agent_id = name.into();
-        self.config.agents.insert(agent_id.clone(), config);
-        let group = self
-            .config
-            .agent_groups
-            .entry(agent_id.clone())
-            .or_insert_with(|| AgentGroupConfig {
-                agents: vec![agent_id.clone()],
-            });
-        if !group.agents.iter().any(|agent| agent == &agent_id) {
-            group.agents.push(agent_id);
-        }
+        self.config.agents.insert(agent_id, config);
         self
     }
 
@@ -132,6 +122,7 @@ impl TestState {
             active_config: RwLock::new(active),
             running: Mutex::new(HashMap::new()),
             agent_health: std::sync::RwLock::new(HashMap::new()),
+            agent_metrics: std::sync::RwLock::new(HashMap::new()),
         });
         self.state = Some(state.clone());
         state

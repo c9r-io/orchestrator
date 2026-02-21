@@ -96,8 +96,10 @@ Maintain a lightweight index table here for fast navigation:
 |--------|-----|-----------|-------|
 | orchestrator | `docs/qa/orchestrator/01-cli-agent-orchestration.md` | 6 | CLI task lifecycle with mock agents |
 | orchestrator | `docs/qa/orchestrator/02-cli-task-lifecycle.md` | 5 | Start/pause/resume/logs/retry |
-| orchestrator | `docs/qa/orchestrator/03-cli-edit-export5 | Edit export.md` | /open commands |
+| orchestrator | `docs/qa/orchestrator/03-cli-edit-export.md` | 5 | Edit export commands |
 | orchestrator | `docs/qa/orchestrator/04-cli-config-db.md` | 4 | Config set and db reset |
 | orchestrator | `docs/qa/orchestrator/05-workflow-execution.md` | 6 | Full workflow with mock agents |
 | orchestrator | `docs/qa/orchestrator/06-cli-output-formats.md` | 5 | JSON/YAML output validation |
 | orchestrator | `docs/qa/orchestrator/07-capability-orchestration.md` | 6 | Capability-driven orchestration, cost preference, repeatable, guard |
+| orchestrator | `docs/qa/orchestrator/08-project-namespace.md` | 6 | Project namespace for resource isolation, project fallback |
+| orchestrator | `docs/qa/orchestrator/09-agent-selection-strategy.md` | 5 | Multi-factor scoring, runtime metrics, capability-aware health |

@@ -162,10 +162,6 @@ export interface AgentConfig {
   preference: AgentPreference;
 }
 
-export interface AgentGroupConfig {
-  agents: string[];
-}
-
 export interface AgentHealthInfo {
   agent_id: string;
   healthy: boolean;
@@ -224,7 +220,6 @@ export interface WorkflowStepConfig {
   repeatable: boolean;
   is_guard: boolean;
   cost_preference?: CostPreference;
-  agent_group_id?: string;
   prehook?: StepPrehookConfig;
 }
 
@@ -232,7 +227,6 @@ export interface WorkflowLoopGuardConfig {
   enabled: boolean;
   stop_when_no_unresolved: boolean;
   max_cycles?: number;
-  agent_group_id?: string;
 }
 
 export interface WorkflowLoopConfig {
@@ -272,7 +266,6 @@ export interface OrchestratorConfigModel {
   };
   workspaces: Record<string, WorkspaceConfig>;
   agents: Record<string, AgentConfig>;
-  agent_groups: Record<string, AgentGroupConfig>;
   workflows: Record<string, WorkflowConfig>;
 }
 

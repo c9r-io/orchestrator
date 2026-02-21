@@ -1,11 +1,11 @@
 use crate::cli_types::{
-    AgentGroupSpec, AgentMetadataSpec, AgentSpec, AgentTemplatesSpec, OrchestratorResource,
-    ResourceKind, ResourceMetadata, ResourceSpec, WorkflowFinalizeRuleSpec, WorkflowFinalizeSpec,
+    AgentMetadataSpec, AgentSpec, AgentTemplatesSpec, OrchestratorResource, ResourceKind,
+    ResourceMetadata, ResourceSpec, WorkflowFinalizeRuleSpec, WorkflowFinalizeSpec,
     WorkflowLoopSpec, WorkflowPrehookSpec, WorkflowSpec, WorkflowStepSpec, WorkspaceSpec,
 };
 use crate::{
-    AgentConfig, AgentGroupConfig, AgentMetadata, AgentPreference, LoopMode, OrchestratorConfig,
-    StepHookEngine, StepPrehookConfig, WorkflowConfig, WorkflowFinalizeConfig,
+    AgentConfig, AgentMetadata, AgentPreference, AgentSelectionConfig, LoopMode,
+    OrchestratorConfig, StepHookEngine, StepPrehookConfig, WorkflowConfig, WorkflowFinalizeConfig,
     WorkflowFinalizeRule, WorkflowLoopConfig, WorkflowStepConfig, WorkflowStepType,
     WorkspaceConfig,
 };
@@ -43,12 +43,6 @@ pub struct AgentResource {
 }
 
 #[derive(Debug, Clone)]
-pub struct AgentGroupResource {
-    pub metadata: ResourceMetadata,
-    pub spec: AgentGroupSpec,
-}
-
-#[derive(Debug, Clone)]
 pub struct WorkflowResource {
     pub metadata: ResourceMetadata,
     pub spec: WorkflowSpec,
@@ -58,7 +52,6 @@ pub struct WorkflowResource {
 pub enum RegisteredResource {
     Workspace(WorkspaceResource),
     Agent(AgentResource),
-    AgentGroup(AgentGroupResource),
     Workflow(WorkflowResource),
 }
 
@@ -68,7 +61,7 @@ pub struct ResourceRegistration {
     pub build: fn(OrchestratorResource) -> Result<RegisteredResource>,
 }
 
-pub fn resource_registry() -> [ResourceRegistration; 4] {
+pub fn resource_registry() -> [ResourceRegistration; 3] {
     [
         ResourceRegistration {
             kind: ResourceKind::Workspace,
@@ -77,10 +70,6 @@ pub fn resource_registry() -> [ResourceRegistration; 4] {
         ResourceRegistration {
             kind: ResourceKind::Agent,
             build: build_agent,
-        },
-        ResourceRegistration {
-            kind: ResourceKind::AgentGroup,
-            build: build_agent_group,
         },
         ResourceRegistration {
             kind: ResourceKind::Workflow,
@@ -226,47 +215,6 @@ impl Resource for AgentResource {
     }
 }
 
-impl Resource for AgentGroupResource {
-    fn kind(&self) -> ResourceKind {
-        ResourceKind::AgentGroup
-    }
-
-    fn name(&self) -> &str {
-        &self.metadata.name
-    }
-
-    fn validate(&self) -> Result<()> {
-        validate_resource_name(self.name())?;
-        if self.spec.agents.is_empty() {
-            return Err(anyhow!("agent_group.spec.agents cannot be empty"));
-        }
-        if self.spec.agents.iter().any(|agent| agent.trim().is_empty()) {
-            return Err(anyhow!("agent_group.spec.agents entries cannot be empty"));
-        }
-        Ok(())
-    }
-
-    fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
-        let incoming = agent_group_spec_to_config(&self.spec);
-        apply_to_map(&mut config.agent_groups, self.name(), incoming)
-    }
-
-    fn to_yaml(&self) -> Result<String> {
-        manifest_yaml(
-            ResourceKind::AgentGroup,
-            &self.metadata,
-            ResourceSpec::AgentGroup(self.spec.clone()),
-        )
-    }
-
-    fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
-        config.agent_groups.get(name).map(|group| Self {
-            metadata: metadata_with_name(name),
-            spec: agent_group_config_to_spec(group),
-        })
-    }
-}
-
 impl Resource for WorkflowResource {
     fn kind(&self) -> ResourceKind {
         ResourceKind::Workflow
@@ -321,7 +269,6 @@ impl Resource for RegisteredResource {
         match self {
             Self::Workspace(_) => ResourceKind::Workspace,
             Self::Agent(_) => ResourceKind::Agent,
-            Self::AgentGroup(_) => ResourceKind::AgentGroup,
             Self::Workflow(_) => ResourceKind::Workflow,
         }
     }
@@ -330,7 +277,6 @@ impl Resource for RegisteredResource {
         match self {
             Self::Workspace(resource) => &resource.metadata.name,
             Self::Agent(resource) => &resource.metadata.name,
-            Self::AgentGroup(resource) => &resource.metadata.name,
             Self::Workflow(resource) => &resource.metadata.name,
         }
     }
@@ -339,7 +285,6 @@ impl Resource for RegisteredResource {
         match self {
             Self::Workspace(resource) => resource.validate(),
             Self::Agent(resource) => resource.validate(),
-            Self::AgentGroup(resource) => resource.validate(),
             Self::Workflow(resource) => resource.validate(),
         }
     }
@@ -348,7 +293,6 @@ impl Resource for RegisteredResource {
         match self {
             Self::Workspace(resource) => resource.apply(config),
             Self::Agent(resource) => resource.apply(config),
-            Self::AgentGroup(resource) => resource.apply(config),
             Self::Workflow(resource) => resource.apply(config),
         }
     }
@@ -357,7 +301,6 @@ impl Resource for RegisteredResource {
         match self {
             Self::Workspace(resource) => resource.to_yaml(),
             Self::Agent(resource) => resource.to_yaml(),
-            Self::AgentGroup(resource) => resource.to_yaml(),
             Self::Workflow(resource) => resource.to_yaml(),
         }
     }
@@ -368,9 +311,6 @@ impl Resource for RegisteredResource {
         }
         if let Some(agent) = AgentResource::get_from(config, name) {
             return Some(Self::Agent(agent));
-        }
-        if let Some(agent_group) = AgentGroupResource::get_from(config, name) {
-            return Some(Self::AgentGroup(agent_group));
         }
         if let Some(workflow) = WorkflowResource::get_from(config, name) {
             return Some(Self::Workflow(workflow));
@@ -438,25 +378,6 @@ fn build_agent(resource: OrchestratorResource) -> Result<RegisteredResource> {
             Ok(RegisteredResource::Agent(AgentResource { metadata, spec }))
         }
         _ => Err(anyhow!("resource kind/spec mismatch for Agent")),
-    }
-}
-
-fn build_agent_group(resource: OrchestratorResource) -> Result<RegisteredResource> {
-    let OrchestratorResource {
-        kind,
-        metadata,
-        spec,
-        ..
-    } = resource;
-    if kind != ResourceKind::AgentGroup {
-        return Err(anyhow!("resource kind/spec mismatch for AgentGroup"));
-    }
-    match spec {
-        ResourceSpec::AgentGroup(spec) => Ok(RegisteredResource::AgentGroup(AgentGroupResource {
-            metadata,
-            spec,
-        })),
-        _ => Err(anyhow!("resource kind/spec mismatch for AgentGroup")),
     }
 }
 
@@ -530,6 +451,7 @@ fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
         capabilities,
         templates,
         preference: AgentPreference::default(),
+        selection: AgentSelectionConfig::default(),
     }
 }
 
@@ -562,18 +484,6 @@ fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
     }
 }
 
-fn agent_group_spec_to_config(spec: &AgentGroupSpec) -> AgentGroupConfig {
-    AgentGroupConfig {
-        agents: spec.agents.clone(),
-    }
-}
-
-fn agent_group_config_to_spec(config: &AgentGroupConfig) -> AgentGroupSpec {
-    AgentGroupSpec {
-        agents: config.agents.clone(),
-    }
-}
-
 fn workflow_spec_to_config(spec: &WorkflowSpec) -> WorkflowConfig {
     let steps = spec
         .steps
@@ -590,7 +500,6 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> WorkflowConfig {
             repeatable: true,
             is_guard: false,
             cost_preference: None,
-            agent_group_id: step.agent_group_id.clone(),
             prehook: step.prehook.as_ref().map(|prehook| StepPrehookConfig {
                 engine: StepHookEngine::Cel,
                 when: prehook.when.clone(),
@@ -645,7 +554,6 @@ fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
                 .map(|t| t.as_str().to_string())
                 .unwrap_or_default(),
             enabled: step.enabled,
-            agent_group_id: step.agent_group_id.clone(),
             prehook: step.prehook.as_ref().map(|prehook| WorkflowPrehookSpec {
                 when: prehook.when.clone(),
                 reason: prehook.reason.clone(),
@@ -749,22 +657,7 @@ mod tests {
         }
     }
 
-    fn agent_group_manifest(name: &str, agents: &[&str]) -> OrchestratorResource {
-        OrchestratorResource {
-            api_version: API_VERSION.to_string(),
-            kind: ResourceKind::AgentGroup,
-            metadata: ResourceMetadata {
-                name: name.to_string(),
-                labels: None,
-                annotations: None,
-            },
-            spec: ResourceSpec::AgentGroup(AgentGroupSpec {
-                agents: agents.iter().map(|agent| (*agent).to_string()).collect(),
-            }),
-        }
-    }
-
-    fn workflow_manifest(name: &str, group_id: &str) -> OrchestratorResource {
+    fn workflow_manifest(name: &str) -> OrchestratorResource {
         OrchestratorResource {
             api_version: API_VERSION.to_string(),
             kind: ResourceKind::Workflow,
@@ -778,7 +671,6 @@ mod tests {
                     id: "qa".to_string(),
                     step_type: "qa".to_string(),
                     enabled: true,
-                    agent_group_id: Some(group_id.to_string()),
                     prehook: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
@@ -901,28 +793,6 @@ mod tests {
     }
 
     #[test]
-    fn agent_group_resource_roundtrip() {
-        let mut fixture = TestState::new();
-        let state = fixture.build();
-        let mut config = {
-            let active = crate::read_active_config(&state).expect("state should be readable");
-            active.config.clone()
-        };
-
-        let resource = dispatch_resource(agent_group_manifest(
-            "group-roundtrip",
-            &["opencode", "claudecode"],
-        ))
-        .expect("agent group dispatch should succeed");
-        assert_eq!(resource.apply(&mut config), ApplyResult::Created);
-
-        let loaded = AgentGroupResource::get_from(&config, "group-roundtrip")
-            .expect("agent group should be present in config");
-        assert_eq!(loaded.spec.agents, vec!["opencode", "claudecode"]);
-        assert_eq!(loaded.kind(), ResourceKind::AgentGroup);
-    }
-
-    #[test]
     fn workflow_resource_roundtrip() {
         let mut fixture = TestState::new();
         let state = fixture.build();
@@ -931,7 +801,7 @@ mod tests {
             active.config.clone()
         };
 
-        let resource = dispatch_resource(workflow_manifest("wf-roundtrip", "opencode"))
+        let resource = dispatch_resource(workflow_manifest("wf-roundtrip"))
             .expect("workflow dispatch should succeed");
         assert_eq!(resource.apply(&mut config), ApplyResult::Created);
 
@@ -1103,21 +973,6 @@ fn agent_validation_rejects_empty_templates() {
         .unwrap_err()
         .to_string()
         .contains("at least one template"));
-}
-
-#[test]
-fn agent_group_validation_rejects_empty_list() {
-    let group = AgentGroupResource {
-        metadata: ResourceMetadata {
-            name: "test-group".to_string(),
-            labels: None,
-            annotations: None,
-        },
-        spec: AgentGroupSpec { agents: vec![] },
-    };
-    let result = group.validate();
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("cannot be empty"));
 }
 
 #[test]

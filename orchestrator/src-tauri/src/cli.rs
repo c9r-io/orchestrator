@@ -63,7 +63,7 @@ pub enum Commands {
     #[command(alias = "e", subcommand)]
     Edit(EditCommands),
 
-    #[command(alias = "db", subcommand)]
+    #[command(subcommand)]
     Db(DbCommands),
 
     #[command(alias = "comp", subcommand)]

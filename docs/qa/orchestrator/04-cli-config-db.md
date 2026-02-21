@@ -50,10 +50,6 @@ Entry points:
         - qa
         templates:
           qa: "echo 'test'"
-    agent_groups:
-      test_group:
-        agents:
-          - mock
     workflows:
       qa_only:
         steps:
@@ -61,7 +57,6 @@ Entry points:
             required_capability: qa
             enabled: true
             repeatable: false
-            agent_group_id: test_group
         loop:
           mode: once
         finalize:
@@ -104,7 +99,6 @@ Entry points:
      workspace: nonexistent
    workspaces: {}
    agents: {}
-   agent_groups: {}
    workflows: {}
    EOF
    orchestrator config set /tmp/invalid-config.yaml

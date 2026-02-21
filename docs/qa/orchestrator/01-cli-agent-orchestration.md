@@ -260,7 +260,6 @@ Validate configuration validation catches invalid configurations.
         qa_targets: []
         ticket_dir: docs/ticket
     agents: {}
-    agent_groups: {}
     workflows:
       test:
         steps:
@@ -298,7 +297,6 @@ Validate configuration validation catches invalid configurations.
           - docs/qa
         ticket_dir: docs/ticket
     agents: {}
-    agent_groups: {}
     workflows:
       qa_only:
         steps:

@@ -88,31 +88,7 @@ Entry point: `orchestrator edit <command>`
 
 ---
 
-## Scenario 4: Edit Export Agent Group
-
-### Preconditions
-
-- Agent group configured
-
-### Steps
-
-1. Export agent group:
-   ```bash
-   orchestrator edit export agentgroup/qa_group
-   ```
-
-2. Verify group members are shown:
-   ```bash
-   # Should list agents in the group
-   ```
-
-### Expected
-
-- Export shows agent group with member list
-
----
-
-## Scenario 5: Edit Open (if implemented)
+## Scenario 4: Edit Open (if implemented)
 
 ### Preconditions
 
@@ -138,5 +114,4 @@ Entry point: `orchestrator edit <command>`
 | 1 | Edit Export Workspace | ☐ | | | |
 | 2 | Edit Export Agent | ☐ | | | |
 | 3 | Edit Export Workflow | ☐ | | | |
-| 4 | Edit Export Agent Group | ☐ | | | |
-| 5 | Edit Open | ☐ | | | |
+| 4 | Edit Open | ☐ | | | |
