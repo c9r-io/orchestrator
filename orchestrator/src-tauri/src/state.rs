@@ -1,8 +1,10 @@
 use crate::collab::MessageBus;
 use crate::config::ActiveConfig;
+use crate::events::EventSink;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, RwLock};
 use tokio::process::Child;
 use tokio::sync::Mutex;
@@ -28,6 +30,21 @@ pub struct InnerState {
     pub agent_health: std::sync::RwLock<HashMap<String, crate::metrics::AgentHealthState>>,
     pub agent_metrics: std::sync::RwLock<HashMap<String, crate::metrics::AgentMetrics>>,
     pub message_bus: Arc<MessageBus>,
+    pub event_sink: std::sync::RwLock<Arc<dyn EventSink>>,
+}
+
+impl InnerState {
+    pub fn emit_event(
+        &self,
+        task_id: &str,
+        task_item_id: Option<&str>,
+        event_type: &str,
+        payload: Value,
+    ) {
+        if let Ok(sink) = self.event_sink.read() {
+            sink.emit(task_id, task_item_id, event_type, payload);
+        }
+    }
 }
 
 #[derive(Clone)]

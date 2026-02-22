@@ -30,5 +30,5 @@ walkdir = "2.5"
 pathdiff = "0.2"
 
 [features]
-default = ["custom-protocol"]
-custom-protocol = ["tauri/custom-protocol"]
+default = []
+ui = ["tauri/custom-protocol"]

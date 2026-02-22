@@ -1,12 +1,9 @@
 use crate::config::{
     ItemFinalizeContext, StepHookEngine, StepPrehookConfig, StepPrehookContext,
-    WorkflowFinalizeConfig, WorkflowFinalizeOutcome, WorkflowFinalizeRule,
+    WorkflowFinalizeConfig, WorkflowFinalizeRule,
 };
-use crate::dynamic_orchestration::PrehookDecision;
 use anyhow::Result;
 use cel_interpreter::{Context as CelContext, Program, Value as CelValue};
-use serde_json::json;
-use std::path::Path;
 
 pub fn validate_step_prehook(
     prehook: &StepPrehookConfig,
@@ -424,7 +421,6 @@ pub fn simulate_prehook_impl(
 
 pub fn evaluate_step_prehook(
     state: &crate::state::InnerState,
-    app: Option<&tauri::AppHandle>,
     prehook: Option<&StepPrehookConfig>,
     context: &StepPrehookContext,
 ) -> Result<bool> {
@@ -438,7 +434,6 @@ pub fn evaluate_step_prehook(
     if should_run {
         emit_step_prehook_event(
             state,
-            app,
             context,
             expression,
             prehook
@@ -450,7 +445,6 @@ pub fn evaluate_step_prehook(
     } else {
         emit_step_prehook_event(
             state,
-            app,
             context,
             expression,
             prehook
@@ -466,7 +460,6 @@ pub fn evaluate_step_prehook(
 
 pub fn emit_step_prehook_event(
     state: &crate::state::InnerState,
-    app: Option<&tauri::AppHandle>,
     context: &StepPrehookContext,
     expression: &str,
     reason: &str,
@@ -497,21 +490,17 @@ pub fn emit_step_prehook_event(
         "step_prehook_evaluated",
         payload.clone(),
     )?;
-    if let Some(app_handle) = app {
-        crate::events::emit_event(
-            app_handle,
-            &context.task_id,
-            Some(&context.task_item_id),
-            "step_prehook_evaluated",
-            payload,
-        );
-    }
+    state.emit_event(
+        &context.task_id,
+        Some(&context.task_item_id),
+        "step_prehook_evaluated",
+        payload,
+    );
     Ok(())
 }
 
 pub fn emit_item_finalize_event(
     state: &crate::state::InnerState,
-    app: Option<&tauri::AppHandle>,
     context: &ItemFinalizeContext,
     outcome: &crate::config::WorkflowFinalizeOutcome,
 ) -> Result<()> {
@@ -528,15 +517,12 @@ pub fn emit_item_finalize_event(
         "item_finalize_evaluated",
         payload.clone(),
     )?;
-    if let Some(app_handle) = app {
-        crate::events::emit_event(
-            app_handle,
-            &context.task_id,
-            Some(&context.task_item_id),
-            "item_finalize_evaluated",
-            payload,
-        );
-    }
+    state.emit_event(
+        &context.task_id,
+        Some(&context.task_item_id),
+        "item_finalize_evaluated",
+        payload,
+    );
     Ok(())
 }
 

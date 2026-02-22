@@ -1,37 +1,31 @@
 use crate::config::{
     ItemFinalizeContext, LoopMode, StepPrehookContext, TaskExecutionStep, TaskRuntimeContext,
-    WorkflowFinalizeOutcome, WorkflowStepType,
+    WorkflowStepType,
 };
 use crate::config_load::{
     build_execution_plan, now_ts, read_active_config, resolve_workspace_path,
 };
 use crate::db::open_conn;
 use crate::dto::{
-    CommandRunDto, CreateTaskPayload, EventDto, LogChunk, TaskDetail, TaskItemDto, TaskSummary,
-    TicketPreviewData, UNASSIGNED_QA_FILE_PATH,
+    CommandRunDto, EventDto, LogChunk, TaskDetail, TaskItemDto, TaskSummary,
 };
-use crate::events::{emit_event, insert_event};
+use crate::events::insert_event;
 use crate::health::{
     increment_consecutive_errors, mark_agent_diseased, reset_consecutive_errors,
     update_capability_health,
 };
-use crate::prehook::{
-    emit_item_finalize_event, emit_step_prehook_event, evaluate_finalize_rule_expression,
-    evaluate_step_prehook, evaluate_step_prehook_expression,
-};
+use crate::prehook::{emit_item_finalize_event, evaluate_step_prehook};
 use crate::selection::{select_agent_advanced, select_agent_by_preference};
 use crate::state::{InnerState, TASK_SEMAPHORE};
 use crate::ticket::{
-    is_active_ticket_status, list_existing_tickets_for_item, read_ticket_preview,
-    scan_active_tickets_for_task_items,
+    list_existing_tickets_for_item, scan_active_tickets_for_task_items,
 };
 use anyhow::{Context, Result};
-use chrono::Utc;
 use rusqlite::{params, OptionalExtension};
 
 pub use crate::state::RunningTask;
 use serde_json::json;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 fn shell_escape(s: &str) -> String {
@@ -39,13 +33,10 @@ fn shell_escape(s: &str) -> String {
 }
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use tauri::AppHandle;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Child;
-use tokio::sync::Mutex;
-use tokio::time::{sleep, Duration, Instant};
+use tokio::time::Instant;
 use uuid::Uuid;
 
+#[allow(dead_code)]
 const IDLE_TIMEOUT_SECS: u64 = 600;
 
 pub async fn kill_current_child(runtime: &RunningTask) {
@@ -398,7 +389,6 @@ pub fn prepare_task_for_start(state: &InnerState, task_id: &str) -> Result<()> {
 
 pub async fn spawn_task_runner(
     state: Arc<InnerState>,
-    app: AppHandle,
     task_id: String,
 ) -> Result<()> {
     {
@@ -422,8 +412,7 @@ pub async fn spawn_task_runner(
         };
 
         if let Some(runtime) = runtime {
-            let run_result =
-                run_task_loop(state.clone(), Some(&app), &task_id, runtime.clone()).await;
+            let run_result = run_task_loop(state.clone(), &task_id, runtime.clone()).await;
             if let Err(err) = run_result {
                 let _ = set_task_status(&state, &task_id, "failed", false);
                 let _ = insert_event(
@@ -433,8 +422,7 @@ pub async fn spawn_task_runner(
                     "task_failed",
                     json!({"error": err.to_string()}),
                 );
-                emit_event(
-                    &app,
+                state.emit_event(
                     &task_id,
                     None,
                     "task_failed",
@@ -486,6 +474,7 @@ pub async fn stop_task_runtime_for_delete(state: Arc<InnerState>, task_id: &str)
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn shutdown_running_tasks(state: Arc<InnerState>) {
     let runtimes: Vec<(String, RunningTask)> = {
         let running = state.running.lock().await;
@@ -620,7 +609,6 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
 
 pub async fn run_task_loop(
     state: Arc<InnerState>,
-    app: Option<&AppHandle>,
     task_id: &str,
     runtime: RunningTask,
 ) -> Result<()> {
@@ -639,7 +627,6 @@ pub async fn run_task_loop(
                 )?;
                 let init_result = run_phase_with_rotation(
                     &state,
-                    app,
                     task_id,
                     &anchor_item_id,
                     "init_once",
@@ -677,9 +664,7 @@ pub async fn run_task_loop(
                 "task_paused",
                 json!({"reason":"stop_flag"}),
             )?;
-            if let Some(app) = app {
-                emit_event(app, task_id, None, "task_paused", json!({}));
-            }
+            state.emit_event(task_id, None, "task_paused", json!({}));
             return Ok(());
         }
 
@@ -692,15 +677,12 @@ pub async fn run_task_loop(
             "cycle_started",
             json!({"cycle": task_ctx.current_cycle}),
         )?;
-        if let Some(app) = app {
-            emit_event(
-                app,
-                task_id,
-                None,
-                "cycle_started",
-                json!({"cycle": task_ctx.current_cycle}),
-            );
-        }
+        state.emit_event(
+            task_id,
+            None,
+            "cycle_started",
+            json!({"cycle": task_ctx.current_cycle}),
+        );
 
         let items = list_task_items_for_cycle(&state, task_id)?;
         let task_item_paths: Vec<String> =
@@ -708,7 +690,6 @@ pub async fn run_task_loop(
         for item in items {
             process_item(
                 &state,
-                app,
                 task_id,
                 &item,
                 &task_item_paths,
@@ -730,8 +711,7 @@ pub async fn run_task_loop(
                 continue;
             }
 
-            let guard_result =
-                execute_guard_step(&state, app, task_id, step, &task_ctx, &runtime).await?;
+            let guard_result = execute_guard_step(&state, task_id, step, &task_ctx, &runtime).await?;
 
             if guard_result.should_stop {
                 insert_event(
@@ -745,15 +725,12 @@ pub async fn run_task_loop(
                         "reason": guard_result.reason
                     }),
                 )?;
-                if let Some(app) = app {
-                    emit_event(
-                        app,
-                        task_id,
-                        None,
-                        "workflow_terminated",
-                        json!({"guard_step": step.id}),
-                    );
-                }
+                state.emit_event(
+                    task_id,
+                    None,
+                    "workflow_terminated",
+                    json!({"guard_step": step.id}),
+                );
                 return Ok(());
             }
         }
@@ -798,20 +775,17 @@ pub async fn run_task_loop(
                 "unresolved_items": unresolved
             }),
         )?;
-        if let Some(app) = app {
-            emit_event(
-                app,
-                task_id,
-                None,
-                "loop_guard_decision",
-                json!({
-                    "cycle": task_ctx.current_cycle,
-                    "continue": should_continue,
-                    "reason": reason,
-                    "unresolved_items": unresolved
-                }),
-            );
-        }
+        state.emit_event(
+            task_id,
+            None,
+            "loop_guard_decision",
+            json!({
+                "cycle": task_ctx.current_cycle,
+                "continue": should_continue,
+                "reason": reason,
+                "unresolved_items": unresolved
+            }),
+        );
         if !should_continue {
             break;
         }
@@ -828,21 +802,11 @@ pub async fn run_task_loop(
             "task_failed",
             json!({"unresolved_items": unresolved}),
         )?;
-        if let Some(app) = app {
-            emit_event(
-                app,
-                task_id,
-                None,
-                "task_failed",
-                json!({"unresolved_items": unresolved}),
-            );
-        }
+        state.emit_event(task_id, None, "task_failed", json!({"unresolved_items": unresolved}));
     } else {
         set_task_status(&state, task_id, "completed", true)?;
         insert_event(&state, task_id, None, "task_completed", json!({}))?;
-        if let Some(app) = app {
-            emit_event(app, task_id, None, "task_completed", json!({}));
-        }
+        state.emit_event(task_id, None, "task_completed", json!({}));
     }
 
     Ok(())
@@ -936,7 +900,6 @@ pub fn update_task_cycle_state(
 
 pub async fn run_phase(
     state: &Arc<InnerState>,
-    app: Option<&AppHandle>,
     task_id: &str,
     item_id: &str,
     phase: &str,
@@ -958,7 +921,7 @@ pub async fn run_phase(
         active.config.runner.clone()
     };
 
-    let mut child = tokio::process::Command::new(&runner.shell)
+    let child = tokio::process::Command::new(&runner.shell)
         .arg(&runner.shell_arg)
         .arg(command.clone())
         .current_dir(workspace_root)
@@ -1023,12 +986,12 @@ pub async fn run_phase(
 
     update_capability_health(state, agent_id, Some(phase), success);
     if !success {
-        let errors = increment_consecutive_errors(state, app, agent_id);
+        let errors = increment_consecutive_errors(state, agent_id);
         if errors >= 2 {
-            mark_agent_diseased(state, app, agent_id);
+            mark_agent_diseased(state, agent_id);
         }
     } else {
-        reset_consecutive_errors(state, app, agent_id);
+        reset_consecutive_errors(state, agent_id);
     }
 
     Ok(crate::dto::RunResult {
@@ -1043,7 +1006,6 @@ pub async fn run_phase(
 
 pub async fn run_phase_with_rotation(
     state: &Arc<InnerState>,
-    app: Option<&AppHandle>,
     task_id: &str,
     item_id: &str,
     phase: &str,
@@ -1074,7 +1036,6 @@ pub async fn run_phase_with_rotation(
 
     run_phase(
         state,
-        app,
         task_id,
         item_id,
         phase,
@@ -1094,7 +1055,6 @@ pub struct GuardResult {
 
 pub async fn execute_guard_step(
     state: &Arc<InnerState>,
-    app: Option<&AppHandle>,
     task_id: &str,
     step: &TaskExecutionStep,
     task_ctx: &TaskRuntimeContext,
@@ -1141,7 +1101,6 @@ pub async fn execute_guard_step(
 
     let result = run_phase(
         state,
-        app,
         task_id,
         task_id,
         "guard",
@@ -1167,7 +1126,6 @@ pub async fn execute_guard_step(
 
 pub async fn process_item(
     state: &Arc<InnerState>,
-    app: Option<&AppHandle>,
     task_id: &str,
     item: &crate::dto::TaskItemRow,
     task_item_paths: &[String],
@@ -1183,7 +1141,7 @@ pub async fn process_item(
     let fix_enabled = fix_step.is_some();
     let retest_enabled = retest_step.is_some();
     let mut active_tickets: Vec<String> = Vec::new();
-    let mut retest_new_tickets: Vec<String> = Vec::new();
+    let retest_new_tickets: Vec<String> = Vec::new();
     let mut qa_failed = false;
     let mut qa_ran = false;
     let mut qa_skipped = false;
@@ -1200,7 +1158,6 @@ pub async fn process_item(
     if let Some(qa_step) = qa_step {
         let should_run_qa = evaluate_step_prehook(
             state,
-            app,
             qa_step.prehook.as_ref(),
             &StepPrehookContext {
                 task_id: task_id.to_string(),
@@ -1235,7 +1192,6 @@ pub async fn process_item(
             )?;
             let result = run_phase_with_rotation(
                 state,
-                app,
                 task_id,
                 item_id,
                 "qa",
@@ -1311,7 +1267,6 @@ pub async fn process_item(
         if fix_step.enabled && !active_tickets.is_empty() {
             let should_run_fix = evaluate_step_prehook(
                 state,
-                app,
                 fix_step.prehook.as_ref(),
                 &StepPrehookContext {
                     task_id: task_id.to_string(),
@@ -1346,7 +1301,6 @@ pub async fn process_item(
                 )?;
                 let result = run_phase_with_rotation(
                     state,
-                    app,
                     task_id,
                     item_id,
                     "fix",
@@ -1386,7 +1340,6 @@ pub async fn process_item(
             )?;
             let result = run_phase_with_rotation(
                 state,
-                app,
                 task_id,
                 item_id,
                 "retest",
@@ -1469,7 +1422,7 @@ pub async fn process_item(
         &finalize_context,
     )? {
         item_status = outcome.status.clone();
-        emit_item_finalize_event(state, app, &finalize_context, &outcome)?;
+        emit_item_finalize_event(state, &finalize_context, &outcome)?;
     }
 
     let conn = open_conn(&state.db_path)?;

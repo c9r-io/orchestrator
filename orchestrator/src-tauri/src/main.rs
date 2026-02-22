@@ -25,18 +25,16 @@ mod ticket;
 #[cfg(test)]
 mod test_utils;
 
-use crate::collab::{
-    parse_artifacts_from_output, AgentOutput, Artifact, ExecutionMetrics, MessageBus,
-};
-use crate::config_load::{detect_app_root, load_or_seed_config, now_ts};
+use crate::collab::MessageBus;
+use crate::config_load::{detect_app_root, load_or_seed_config};
 use crate::db::init_schema;
 use crate::dto::CliOptions;
 use crate::state::ManagedState;
 use anyhow::{Context, Result};
-use clap::Parser;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, RwLock};
-use tauri::{AppHandle, Manager, State};
+#[cfg(feature = "ui")]
+use tauri::Manager;
 use tokio::sync::Mutex;
 
 fn print_cli_help(binary_name: &str) {
@@ -160,6 +158,7 @@ fn init_state(cli_config_path: Option<String>) -> Result<ManagedState> {
             agent_health: std::sync::RwLock::new(std::collections::HashMap::new()),
             agent_metrics: std::sync::RwLock::new(std::collections::HashMap::new()),
             message_bus: Arc::new(MessageBus::new()),
+            event_sink: std::sync::RwLock::new(Arc::new(crate::events::NoopSink)),
         }),
     })
 }
@@ -224,31 +223,50 @@ async fn main() -> Result<()> {
     if cli_options.cli {
         cli::run_cli_mode(state.inner.clone(), cli_options).await?;
     } else {
-        tauri::Builder::default()
-            .manage(state)
-            .invoke_handler(tauri::generate_handler![
-                api::bootstrap,
-                api::get_create_task_options,
-                api::get_config_overview,
-                api::save_config_from_form,
-                api::save_config_from_yaml,
-                api::validate_config_yaml,
-                api::list_config_versions,
-                api::get_config_version,
-                api::create_task,
-                api::list_tasks,
-                api::get_task_details,
-                api::start_task,
-                api::pause_task,
-                api::resume_task,
-                api::retry_task_item,
-                api::delete_task,
-                api::stream_task_logs,
-                api::simulate_prehook,
-                api::get_agent_health,
-            ])
-            .run(tauri::generate_context!())
-            .expect("error while running tauri application");
+        #[cfg(feature = "ui")]
+        {
+            tauri::Builder::default()
+                .manage(state)
+                .setup(|app| {
+                    let managed_state = app.state::<ManagedState>();
+                    let mut sink = managed_state
+                        .inner
+                        .event_sink
+                        .write()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    *sink = Arc::new(crate::events::TauriSink::new(app.handle()));
+                    Ok(())
+                })
+                .invoke_handler(tauri::generate_handler![
+                    api::bootstrap,
+                    api::get_create_task_options,
+                    api::get_config_overview,
+                    api::save_config_from_form,
+                    api::save_config_from_yaml,
+                    api::validate_config_yaml,
+                    api::list_config_versions,
+                    api::get_config_version,
+                    api::create_task,
+                    api::list_tasks,
+                    api::get_task_details,
+                    api::start_task,
+                    api::pause_task,
+                    api::resume_task,
+                    api::retry_task_item,
+                    api::delete_task,
+                    api::stream_task_logs,
+                    api::simulate_prehook,
+                    api::get_agent_health,
+                ])
+                .run(tauri::generate_context!())
+                .expect("error while running tauri application");
+        }
+        #[cfg(not(feature = "ui"))]
+        {
+            eprintln!("UI mode is not available. Build with --features ui to enable.");
+            eprintln!("Running in CLI mode instead. Use --cli flag or subcommands.");
+            cli::run_cli_mode(state.inner.clone(), cli_options).await?;
+        }
     }
 
     Ok(())

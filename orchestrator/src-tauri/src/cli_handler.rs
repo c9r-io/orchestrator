@@ -18,8 +18,8 @@ use crate::resource::{
 };
 use crate::scheduler::{
     delete_task_impl, find_latest_resumable_task_id, get_task_details_impl, list_tasks_impl,
-    load_task_summary, prepare_task_for_start, resolve_task_id, run_task_loop, spawn_task_runner,
-    stop_task_runtime, stop_task_runtime_for_delete, stream_task_logs_impl, RunningTask,
+    load_task_summary, prepare_task_for_start, resolve_task_id, run_task_loop, stop_task_runtime,
+    stop_task_runtime_for_delete, stream_task_logs_impl, RunningTask,
 };
 use crate::state::InnerState;
 use anyhow::{Context, Result};
@@ -387,12 +387,7 @@ impl CliHandler {
                     prepare_task_for_start(&self.state, &created.id)?;
                     let runtime = RunningTask::new();
                     let rt = tokio::runtime::Runtime::new()?;
-                    rt.block_on(run_task_loop(
-                        self.state.clone(),
-                        None,
-                        &created.id,
-                        runtime,
-                    ))?;
+                    rt.block_on(run_task_loop(self.state.clone(), &created.id, runtime))?;
                     let summary = load_task_summary(&self.state, &created.id)?;
                     println!("Task finished: {} status={}", summary.id, summary.status);
                 }
@@ -414,7 +409,7 @@ impl CliHandler {
                 prepare_task_for_start(&self.state, &id)?;
                 let runtime = RunningTask::new();
                 let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(run_task_loop(self.state.clone(), None, &id, runtime))?;
+                rt.block_on(run_task_loop(self.state.clone(), &id, runtime))?;
                 let summary = load_task_summary(&self.state, &id)?;
                 println!("Task finished: {} status={}", summary.id, summary.status);
                 Ok(0)
@@ -435,12 +430,7 @@ impl CliHandler {
                 prepare_task_for_start(&self.state, &resolved_id)?;
                 let runtime = RunningTask::new();
                 let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(run_task_loop(
-                    self.state.clone(),
-                    None,
-                    &resolved_id,
-                    runtime,
-                ))?;
+                rt.block_on(run_task_loop(self.state.clone(), &resolved_id, runtime))?;
                 let summary = load_task_summary(&self.state, &resolved_id)?;
                 println!("Task finished: {} status={}", summary.id, summary.status);
                 Ok(0)
@@ -478,7 +468,7 @@ impl CliHandler {
                 prepare_task_for_start(&self.state, &task_id)?;
                 let runtime = RunningTask::new();
                 let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(run_task_loop(self.state.clone(), None, &task_id, runtime))?;
+                rt.block_on(run_task_loop(self.state.clone(), &task_id, runtime))?;
                 let summary = load_task_summary(&self.state, &task_id)?;
                 println!("Retry finished: {} status={}", summary.id, summary.status);
                 Ok(0)

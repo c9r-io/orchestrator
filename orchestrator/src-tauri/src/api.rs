@@ -1,9 +1,8 @@
-use crate::config::{LoopMode, WorkflowStepType};
+use crate::config::LoopMode;
 use crate::config_load::build_execution_plan;
 use crate::config_load::{
     load_config_overview, now_ts, persist_config_and_reload, read_active_config,
 };
-use crate::db;
 use crate::db::open_conn;
 use crate::dto::{
     AgentHealthInfo, BootstrapResponse, ConfigOverview, ConfigValidationResult,
@@ -26,14 +25,15 @@ use crate::ticket::{
 use anyhow::{Context, Result};
 use chrono::Utc;
 use rusqlite::{params, OptionalExtension};
-use std::sync::Arc;
-use tauri::{AppHandle, State};
+#[cfg(feature = "ui")]
+use tauri::State;
 use uuid::Uuid;
 
 fn err_to_string(err: impl std::fmt::Display) -> String {
     err.to_string()
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn bootstrap(state: State<'_, ManagedState>) -> Result<BootstrapResponse, String> {
     let active = read_active_config(&state.inner).map_err(err_to_string)?;
@@ -47,6 +47,7 @@ pub async fn bootstrap(state: State<'_, ManagedState>) -> Result<BootstrapRespon
     Ok(BootstrapResponse { resumed_task_id })
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn get_create_task_options(
     state: State<'_, ManagedState>,
@@ -106,11 +107,13 @@ pub async fn get_create_task_options(
     })
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn get_config_overview(state: State<'_, ManagedState>) -> Result<ConfigOverview, String> {
     load_config_overview(&state.inner).map_err(err_to_string)
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn save_config_from_form(
     state: State<'_, ManagedState>,
@@ -120,6 +123,7 @@ pub async fn save_config_from_form(
     persist_config_and_reload(&state.inner, payload.config, yaml, "ui-form").map_err(err_to_string)
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn save_config_from_yaml(
     state: State<'_, ManagedState>,
@@ -130,6 +134,7 @@ pub async fn save_config_from_yaml(
     persist_config_and_reload(&state.inner, config, payload.yaml, "ui-yaml").map_err(err_to_string)
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn validate_config_yaml(
     state: State<'_, ManagedState>,
@@ -223,6 +228,7 @@ pub async fn validate_config_yaml(
     }
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn list_config_versions(
     state: State<'_, ManagedState>,
@@ -247,6 +253,7 @@ pub async fn list_config_versions(
     Ok(rows)
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn get_config_version(
     state: State<'_, ManagedState>,
@@ -271,6 +278,7 @@ pub async fn get_config_version(
     detail.ok_or_else(|| format!("config version not found: {}", version))
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn create_task(
     state: State<'_, ManagedState>,
@@ -394,11 +402,13 @@ pub fn create_task_impl(
     load_task_summary(state, &task_id)
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn list_tasks(state: State<'_, ManagedState>) -> Result<Vec<TaskSummary>, String> {
     list_tasks_impl(&state.inner).map_err(err_to_string)
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn get_task_details(
     state: State<'_, ManagedState>,
@@ -407,19 +417,20 @@ pub async fn get_task_details(
     get_task_details_impl(&state.inner, &task_id).map_err(err_to_string)
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn start_task(
     state: State<'_, ManagedState>,
-    app: AppHandle,
     task_id: String,
 ) -> Result<TaskSummary, String> {
     prepare_task_for_start(&state.inner, &task_id).map_err(err_to_string)?;
-    spawn_task_runner(state.inner.clone(), app, task_id.clone())
+    spawn_task_runner(state.inner.clone(), task_id.clone())
         .await
         .map_err(err_to_string)?;
     load_task_summary(&state.inner, &task_id).map_err(err_to_string)
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn pause_task(
     state: State<'_, ManagedState>,
@@ -431,28 +442,28 @@ pub async fn pause_task(
     load_task_summary(&state.inner, &task_id).map_err(err_to_string)
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn resume_task(
     state: State<'_, ManagedState>,
-    app: AppHandle,
     task_id: String,
 ) -> Result<TaskSummary, String> {
     prepare_task_for_start(&state.inner, &task_id).map_err(err_to_string)?;
-    spawn_task_runner(state.inner.clone(), app, task_id.clone())
+    spawn_task_runner(state.inner.clone(), task_id.clone())
         .await
         .map_err(err_to_string)?;
     load_task_summary(&state.inner, &task_id).map_err(err_to_string)
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn retry_task_item(
     state: State<'_, ManagedState>,
-    app: AppHandle,
     task_item_id: String,
 ) -> Result<TaskSummary, String> {
     let task_id = reset_task_item_for_retry(&state.inner, &task_item_id).map_err(err_to_string)?;
     prepare_task_for_start(&state.inner, &task_id).map_err(err_to_string)?;
-    spawn_task_runner(state.inner.clone(), app, task_id.clone())
+    spawn_task_runner(state.inner.clone(), task_id.clone())
         .await
         .map_err(err_to_string)?;
     load_task_summary(&state.inner, &task_id).map_err(err_to_string)
@@ -475,10 +486,10 @@ pub fn reset_task_item_for_retry(
     Ok(task_id)
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn delete_task(
     state: State<'_, ManagedState>,
-    app: AppHandle,
     task_id: String,
 ) -> Result<DeleteTaskResponse, String> {
     println!("[agent-orchestrator][delete] begin task_id={}", task_id);
@@ -494,8 +505,7 @@ pub async fn delete_task(
         "[agent-orchestrator][delete] db records removed task_id={}",
         task_id
     );
-    crate::events::emit_event(
-        &app,
+    state.inner.emit_event(
         &task_id,
         None,
         "task_deleted",
@@ -511,6 +521,7 @@ pub async fn delete_task(
     })
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn stream_task_logs(
     state: State<'_, ManagedState>,
@@ -520,6 +531,7 @@ pub async fn stream_task_logs(
     stream_task_logs_impl(&state.inner, &task_id, limit.unwrap_or(300)).map_err(err_to_string)
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn simulate_prehook(
     payload: SimulatePrehookPayload,
@@ -527,6 +539,7 @@ pub async fn simulate_prehook(
     simulate_prehook_impl(payload).map_err(err_to_string)
 }
 
+#[cfg(feature = "ui")]
 #[tauri::command]
 pub async fn get_agent_health(
     state: State<'_, ManagedState>,

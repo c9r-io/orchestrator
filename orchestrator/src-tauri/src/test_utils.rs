@@ -6,6 +6,7 @@ use crate::config::{
 };
 use crate::config_load::{build_active_config, load_or_seed_config, read_active_config};
 use crate::db::init_schema;
+use crate::events::NoopSink;
 use crate::state::InnerState;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -229,6 +230,7 @@ impl TestState {
             agent_health: std::sync::RwLock::new(HashMap::new()),
             agent_metrics: std::sync::RwLock::new(HashMap::new()),
             message_bus: Arc::new(MessageBus::new()),
+            event_sink: std::sync::RwLock::new(Arc::new(NoopSink)),
         });
         self.state = Some(state.clone());
         state

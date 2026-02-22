@@ -2,7 +2,6 @@ use crate::metrics::{AgentHealthState, CapabilityHealth};
 use crate::state::InnerState;
 use chrono::Utc;
 use std::collections::HashMap;
-use tauri::AppHandle;
 
 const DISEASE_DURATION_HOURS: i64 = 5;
 
@@ -37,7 +36,7 @@ pub fn is_capability_healthy(
     }
 }
 
-pub fn mark_agent_diseased(state: &InnerState, app: Option<&AppHandle>, agent_id: &str) {
+pub fn mark_agent_diseased(state: &InnerState, agent_id: &str) {
     let mut health = state.agent_health.write().unwrap();
     let entry = health
         .entry(agent_id.to_string())
@@ -51,27 +50,20 @@ pub fn mark_agent_diseased(state: &InnerState, app: Option<&AppHandle>, agent_id
     let diseased_until = entry.diseased_until;
     let consecutive_errors = entry.consecutive_errors;
     drop(health);
-    if let Some(app) = app {
-        crate::events::emit_event(
-            app,
-            "",
-            None,
-            "agent_health_changed",
-            serde_json::json!({
-                "agent_id": agent_id,
-                "healthy": false,
-                "diseased_until": diseased_until.map(|d| d.to_rfc3339()),
-                "consecutive_errors": consecutive_errors
-            }),
-        );
-    }
+    state.emit_event(
+        "",
+        None,
+        "agent_health_changed",
+        serde_json::json!({
+            "agent_id": agent_id,
+            "healthy": false,
+            "diseased_until": diseased_until.map(|d| d.to_rfc3339()),
+            "consecutive_errors": consecutive_errors
+        }),
+    );
 }
 
-pub fn increment_consecutive_errors(
-    state: &InnerState,
-    app: Option<&AppHandle>,
-    agent_id: &str,
-) -> u32 {
+pub fn increment_consecutive_errors(state: &InnerState, agent_id: &str) -> u32 {
     let mut health = state.agent_health.write().unwrap();
     let entry = health
         .entry(agent_id.to_string())
@@ -89,24 +81,21 @@ pub fn increment_consecutive_errors(
         Some(until) => Utc::now() >= until,
     };
     drop(health);
-    if let Some(app) = app {
-        crate::events::emit_event(
-            app,
-            "",
-            None,
-            "agent_health_changed",
-            serde_json::json!({
-                "agent_id": agent_id,
-                "healthy": healthy,
-                "diseased_until": diseased_until.map(|d| d.to_rfc3339()),
-                "consecutive_errors": consecutive_errors
-            }),
-        );
-    }
+    state.emit_event(
+        "",
+        None,
+        "agent_health_changed",
+        serde_json::json!({
+            "agent_id": agent_id,
+            "healthy": healthy,
+            "diseased_until": diseased_until.map(|d| d.to_rfc3339()),
+            "consecutive_errors": consecutive_errors
+        }),
+    );
     consecutive_errors
 }
 
-pub fn reset_consecutive_errors(state: &InnerState, app: Option<&AppHandle>, agent_id: &str) {
+pub fn reset_consecutive_errors(state: &InnerState, agent_id: &str) {
     let mut health = state.agent_health.write().unwrap();
     if let Some(entry) = health.get_mut(agent_id) {
         if entry.consecutive_errors == 0 {
@@ -119,20 +108,17 @@ pub fn reset_consecutive_errors(state: &InnerState, app: Option<&AppHandle>, age
             Some(until) => Utc::now() >= until,
         };
         drop(health);
-        if let Some(app) = app {
-            crate::events::emit_event(
-                app,
-                "",
-                None,
-                "agent_health_changed",
-                serde_json::json!({
-                    "agent_id": agent_id,
-                    "healthy": healthy,
-                    "diseased_until": diseased_until.map(|d| d.to_rfc3339()),
-                    "consecutive_errors": 0
-                }),
-            );
-        }
+        state.emit_event(
+            "",
+            None,
+            "agent_health_changed",
+            serde_json::json!({
+                "agent_id": agent_id,
+                "healthy": healthy,
+                "diseased_until": diseased_until.map(|d| d.to_rfc3339()),
+                "consecutive_errors": 0
+            }),
+        );
     }
 }
 
