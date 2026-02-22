@@ -433,6 +433,7 @@ pub struct TaskRuntimeContext {
     pub execution_plan: TaskExecutionPlan,
     pub current_cycle: u32,
     pub init_done: bool,
+    pub dynamic_steps: Vec<crate::dynamic_orchestration::DynamicStepConfig>,
 }
 
 /// Step prehook context for evaluation

@@ -263,22 +263,22 @@ pub fn resolve_and_validate_workspaces(
     config: &OrchestratorConfig,
 ) -> Result<HashMap<String, ResolvedWorkspace>> {
     if config.workspaces.is_empty() {
-        anyhow::bail!("config.workspaces cannot be empty");
+        anyhow::bail!("[EMPTY_WORKSPACES] config.workspaces cannot be empty\n  category: validation\n  suggested_fix: add at least one workspace with root_path and qa_targets");
     }
     if config.agents.is_empty() {
-        anyhow::bail!("config.agents cannot be empty");
+        anyhow::bail!("[EMPTY_AGENTS] config.agents cannot be empty\n  category: validation\n  suggested_fix: add at least one agent with capabilities and templates");
     }
     if config.workflows.is_empty() {
-        anyhow::bail!("config.workflows cannot be empty");
+        anyhow::bail!("[EMPTY_WORKFLOWS] config.workflows cannot be empty\n  category: validation\n  suggested_fix: add at least one workflow with steps");
     }
 
     let mut resolved = HashMap::new();
     for (id, entry) in &config.workspaces {
         if id.trim().is_empty() {
-            anyhow::bail!("workspace id cannot be empty");
+            anyhow::bail!("[INVALID_WORKSPACE] workspace id cannot be empty\n  category: validation\n  suggested_fix: provide a non-empty workspace name");
         }
         if entry.qa_targets.is_empty() {
-            anyhow::bail!("workspace '{}' qa_targets cannot be empty", id);
+            anyhow::bail!("[INVALID_WORKSPACE] workspace '{}' qa_targets cannot be empty\n  category: validation\n  suggested_fix: add at least one qa_targets path (e.g. docs/qa)", id);
         }
 
         let root_path = app_root
@@ -412,7 +412,7 @@ pub fn load_or_seed_config(
         Some(path) => path,
         None => {
             anyhow::bail!(
-                "orchestrator config is not initialized in sqlite; run 'orchestrator config bootstrap --from <file>' first"
+                "[CONFIG_NOT_INITIALIZED] orchestrator config is not initialized in sqlite\n  category: validation\n  suggested_fix: run 'orchestrator config bootstrap --from <file>' first"
             )
         }
     };
@@ -558,7 +558,7 @@ pub fn bootstrap_config_from_file(
         )
         .optional()?;
     if exists.is_some() && !force {
-        anyhow::bail!("sqlite config already exists; re-run with --force to replace it");
+        anyhow::bail!("[CONFIG_EXISTS] sqlite config already exists\n  category: validation\n  suggested_fix: re-run with --force to replace it");
     }
 
     let current_version: i64 = tx

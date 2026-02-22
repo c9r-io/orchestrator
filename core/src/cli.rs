@@ -227,6 +227,10 @@ pub enum WorkspaceCommands {
     List {
         #[arg(short, long, default_value = "table")]
         output: OutputFormat,
+
+        /// Filter by project
+        #[arg(short, long)]
+        project: Option<String>,
     },
 
     #[command(alias = "get")]

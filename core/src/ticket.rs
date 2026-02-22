@@ -2,6 +2,7 @@ use crate::config::TaskRuntimeContext;
 use crate::config_load::resolve_workspace_path;
 use crate::dto::{TicketPreviewData, UNASSIGNED_QA_FILE_PATH};
 use anyhow::Result;
+use chrono::Utc;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -255,6 +256,112 @@ pub fn should_seed_targets_from_active_tickets(
         && execution_plan
             .step(crate::config::WorkflowStepType::TicketScan)
             .is_some()
+}
+
+pub fn create_ticket_for_qa_failure(
+    workspace_root: &Path,
+    ticket_dir: &str,
+    task_name: &str,
+    qa_file_path: &str,
+    exit_code: i64,
+    stdout_path: &str,
+    stderr_path: &str,
+) -> Result<Option<String>> {
+    let abs_ticket_dir = resolve_workspace_path(workspace_root, ticket_dir, "ticket_dir")?;
+    if !abs_ticket_dir.exists() {
+        std::fs::create_dir_all(&abs_ticket_dir)?;
+    }
+
+    let now = Utc::now();
+    let timestamp = now.format("%y%m%d_%H%M%S").to_string();
+
+    let qa_stem = Path::new(qa_file_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown");
+    let filename = format!("auto_{qa_stem}_{timestamp}.md");
+    let ticket_path = abs_ticket_dir.join(&filename);
+
+    if ticket_path.exists() {
+        return Ok(None);
+    }
+
+    let stdout_snippet = std::fs::read_to_string(stdout_path)
+        .unwrap_or_default()
+        .lines()
+        .rev()
+        .take(20)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let stderr_snippet = std::fs::read_to_string(stderr_path)
+        .unwrap_or_default()
+        .lines()
+        .rev()
+        .take(10)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let created = now.format("%Y-%m-%d %H:%M:%S").to_string();
+    let content = format!(
+        r#"# Ticket: QA Failure - {qa_stem}
+
+**Created**: {created}
+**QA Document**: `{qa_file_path}`
+**Status**: FAILED
+
+---
+
+## Test Content
+Automated ticket created by orchestrator when QA phase failed for task "{task_name}".
+
+---
+
+## Expected Result
+QA phase exits with code 0 (success).
+
+---
+
+## Actual Result
+QA phase exited with code {exit_code}.
+
+---
+
+## Evidence
+
+**stdout** (last 20 lines):
+```text
+{stdout_snippet}
+```
+
+**stderr** (last 10 lines):
+```text
+{stderr_snippet}
+```
+
+---
+
+## Analysis
+
+**Root Cause**: Auto-generated ticket; investigate QA output above.
+**Severity**: Medium
+**Related Components**: Backend
+"#
+    );
+
+    std::fs::write(&ticket_path, content)?;
+
+    let rel = pathdiff::diff_paths(&ticket_path, workspace_root)
+        .unwrap_or_else(|| ticket_path.clone())
+        .to_string_lossy()
+        .to_string();
+    Ok(Some(rel))
 }
 
 pub fn collect_target_files_from_active_tickets(

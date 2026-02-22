@@ -19,7 +19,8 @@ Entry point: `./scripts/orchestrator.sh config view`
 
 ### Preconditions
 
-- A config containing capability orchestration fields is already applied.
+- Orchestrator initialized: `./scripts/orchestrator.sh init --force`
+- Config bootstrapped with capability fields: `./scripts/orchestrator.sh config bootstrap --from fixtures/capability-test.yaml --force`
 
 ### Steps
 

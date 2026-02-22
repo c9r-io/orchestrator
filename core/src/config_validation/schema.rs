@@ -20,6 +20,7 @@ pub fn validate_schema(config: &OrchestratorConfig) -> ValidationResult {
     validate_workspaces(&config.workspaces, &mut result);
     validate_agents(&config.agents, &mut result);
     validate_workflows(&config.workflows, &config.agents, &mut result);
+    validate_projects(&config.projects, &config.agents, &mut result);
 
     result
 }
@@ -286,9 +287,70 @@ fn validate_workflow_step(
             result.add_error(ValidationError {
                 code: ErrorCode::InvalidReference,
                 message: format!("No agent has template for step '{}'", step_key),
-                field: Some(field_prefix),
+                field: Some(field_prefix.clone()),
                 context: Some(format!("step: {}", step.id)),
             });
+        }
+
+        if let Some(ref cap) = step.required_capability {
+            let has_capable_agent = agents.values().any(|a| a.capabilities.contains(cap));
+            if !has_capable_agent {
+                result.add_error(ValidationError {
+                    code: ErrorCode::InvalidReference,
+                    message: format!(
+                        "step '{}' requires capability '{}' but no agent provides it",
+                        step.id, cap
+                    ),
+                    field: Some(field_prefix),
+                    context: Some(format!("workflow: {}", workflow_id)),
+                });
+            }
+        }
+    }
+}
+
+fn validate_projects(
+    projects: &HashMap<String, crate::config::ProjectConfig>,
+    global_agents: &HashMap<String, AgentConfig>,
+    result: &mut ValidationResult,
+) {
+    for (proj_id, project) in projects {
+        let field_prefix = format!("projects.{}", proj_id);
+
+        for (ws_id, ws) in &project.workspaces {
+            if ws.root_path.trim().is_empty() {
+                result.add_error(ValidationError {
+                    code: ErrorCode::MissingRequiredField,
+                    message: "root_path is required".to_string(),
+                    field: Some(format!("{}.workspaces.{}.root_path", field_prefix, ws_id)),
+                    context: None,
+                });
+            }
+        }
+
+        let merged_agents: HashMap<String, &AgentConfig> = global_agents
+            .iter()
+            .chain(project.agents.iter())
+            .map(|(k, v)| (k.clone(), v))
+            .collect();
+
+        for (wf_id, wf) in &project.workflows {
+            for step in &wf.steps {
+                if let Some(ref cap) = step.required_capability {
+                    let has_capable = merged_agents.values().any(|a| a.capabilities.contains(cap));
+                    if !has_capable {
+                        result.add_error(ValidationError {
+                            code: ErrorCode::InvalidReference,
+                            message: format!(
+                                "step '{}' requires capability '{}' but no agent provides it",
+                                step.id, cap
+                            ),
+                            field: Some(format!("{}.workflows.{}", field_prefix, wf_id)),
+                            context: Some(format!("project: {}", proj_id)),
+                        });
+                    }
+                }
+            }
         }
     }
 }

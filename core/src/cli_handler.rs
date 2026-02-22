@@ -23,6 +23,7 @@ use crate::state::InnerState;
 use crate::task_ops::{create_task_impl, reset_task_item_for_retry};
 use anyhow::{Context, Result};
 use clap_complete::Shell;
+use serde_json::json;
 use std::path::Path;
 use std::process::{Command, ExitStatus};
 use std::sync::Arc;
@@ -231,23 +232,36 @@ impl CliHandler {
                 if let Some(agent) = active.config.agents.get(name) {
                     match output {
                         OutputFormat::Json => {
-                            println!("{}", serde_json::to_string_pretty(agent)?);
+                            let mut obj = serde_json::to_value(agent)?;
+                            if let Some(map) = obj.as_object_mut() {
+                                map.insert("output_schema".to_string(), json!({
+                                    "type": "AgentOutput",
+                                    "fields": {
+                                        "exit_code": "i64",
+                                        "stdout": "String",
+                                        "stderr": "String",
+                                        "artifacts": "[Artifact]",
+                                        "confidence": "f32 (0.0-1.0)",
+                                        "quality_score": "f32 (0.0-1.0)"
+                                    },
+                                    "artifact_kinds": ["ticket", "code_change", "test_result", "analysis", "decision"]
+                                }));
+                            }
+                            println!("{}", serde_json::to_string_pretty(&obj)?);
                         }
                         OutputFormat::Yaml => {
                             println!("{}", serde_yaml::to_string(agent)?);
                         }
                         OutputFormat::Table => {
-                            let templates: Vec<&str> = [
-                                agent.templates.get("init_once").map(|s| s.as_str()),
-                                agent.templates.get("qa").map(|s| s.as_str()),
-                                agent.templates.get("fix").map(|s| s.as_str()),
-                                agent.templates.get("retest").map(|s| s.as_str()),
-                                agent.templates.get("loop_guard").map(|s| s.as_str()),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect();
-                            println!("{:<20} {:?}", name, templates);
+                            println!("Agent: {}", name);
+                            println!("  Cost: {:?}", agent.metadata.cost);
+                            println!("  Capabilities: {:?}", agent.capabilities);
+                            println!("  Strategy: {:?}", agent.selection.strategy);
+                            println!("  Templates:");
+                            for (phase, tmpl) in &agent.templates {
+                                println!("    {}: {}", phase, tmpl);
+                            }
+                            println!("  Output Schema: AgentOutput {{ exit_code, stdout, artifacts, confidence, quality_score }}");
                         }
                     }
                     Ok(0)
@@ -448,9 +462,19 @@ impl CliHandler {
     fn handle_workspace(&self, cmd: &WorkspaceCommands) -> Result<i32> {
         let active = read_active_config(&self.state)?;
         match cmd {
-            WorkspaceCommands::List { output } => {
-                let workspaces: Vec<_> = active.config.workspaces.keys().cloned().collect();
-                self.print_workspaces(&workspaces, &active.config.workspaces, *output)
+            WorkspaceCommands::List { output, project } => {
+                let ws_map = if let Some(proj_id) = project {
+                    active
+                        .config
+                        .projects
+                        .get(proj_id)
+                        .map(|p| &p.workspaces)
+                        .unwrap_or(&active.config.workspaces)
+                } else {
+                    &active.config.workspaces
+                };
+                let workspaces: Vec<_> = ws_map.keys().cloned().collect();
+                self.print_workspaces(&workspaces, ws_map, *output)
             }
             WorkspaceCommands::Info {
                 workspace_id,

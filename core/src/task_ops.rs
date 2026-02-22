@@ -26,34 +26,34 @@ pub fn create_task_impl(state: &crate::state::InnerState, payload: CreateTaskPay
         .clone()
         .unwrap_or_else(|| active.default_workspace_id.clone());
 
-    let workspace = if let Some(project) = active.projects.get(&project_id) {
-        project.workspaces.get(&workspace_id).cloned()
-    } else {
-        active.workspaces.get(&workspace_id).cloned()
-    }
-    .with_context(|| {
-        format!(
-            "workspace not found: {} in project: {}",
-            workspace_id, project_id
-        )
-    })?;
+    let workspace = active
+        .projects
+        .get(&project_id)
+        .and_then(|p| p.workspaces.get(&workspace_id).cloned())
+        .or_else(|| active.workspaces.get(&workspace_id).cloned())
+        .with_context(|| {
+            format!(
+                "workspace not found: {} (checked project '{}' then global)",
+                workspace_id, project_id
+            )
+        })?;
 
     let workflow_id = payload
         .workflow_id
         .clone()
         .unwrap_or_else(|| active.default_workflow_id.clone());
 
-    let workflow = if let Some(project) = active.projects.get(&project_id) {
-        project.workflows.get(&workflow_id).cloned()
-    } else {
-        active.config.workflows.get(&workflow_id).cloned()
-    }
-    .with_context(|| {
-        format!(
-            "workflow not found: {} in project: {}",
-            workflow_id, project_id
-        )
-    })?;
+    let workflow = active
+        .projects
+        .get(&project_id)
+        .and_then(|p| p.workflows.get(&workflow_id).cloned())
+        .or_else(|| active.config.workflows.get(&workflow_id).cloned())
+        .with_context(|| {
+            format!(
+                "workflow not found: {} (checked project '{}' then global)",
+                workflow_id, project_id
+            )
+        })?;
 
     let execution_plan = build_execution_plan(&active.config, &workflow, &workflow_id)?;
     let execution_plan_json =

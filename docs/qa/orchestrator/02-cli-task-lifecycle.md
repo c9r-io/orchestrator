@@ -83,7 +83,8 @@ Entry point: `orchestrator task <command>`
 
 ### Preconditions
 
-- A running task exists (or create one that runs for a while)
+- Orchestrator initialized and config bootstrapped (see Scenario 1 preconditions)
+- A running task exists (or create one that runs for a while using the mock config below)
 
 ### Steps
 
@@ -200,8 +201,8 @@ Entry point: `orchestrator task <command>`
 
 ### Preconditions
 
+- Orchestrator initialized and config bootstrapped with a failing agent (e.g. `exit 1`)
 - A task with failed items exists
-- Clean database state: `rm -f data/agent_orchestrator.db`
 
 ### Steps
 

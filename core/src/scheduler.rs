@@ -18,7 +18,8 @@ use crate::prehook::{emit_item_finalize_event, evaluate_step_prehook};
 use crate::selection::{select_agent_advanced, select_agent_by_preference};
 use crate::state::{InnerState, TASK_SEMAPHORE};
 use crate::ticket::{
-    list_existing_tickets_for_item, scan_active_tickets_for_task_items,
+    create_ticket_for_qa_failure, list_existing_tickets_for_item,
+    scan_active_tickets_for_task_items,
 };
 use anyhow::{Context, Result};
 use rusqlite::{params, OptionalExtension};
@@ -581,7 +582,7 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
         execution_plan.finalize = crate::config::default_workflow_finalize_config();
     }
     if execution_plan.steps.is_empty() {
-        anyhow::bail!("task '{}' has empty execution plan", task_id);
+        anyhow::bail!("[EMPTY_PLAN] task '{}' has empty execution plan\n  category: runtime\n  suggested_fix: ensure the workflow has at least one enabled step", task_id);
     }
 
     let workspace_root = PathBuf::from(workspace_root_raw);
@@ -597,6 +598,8 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
         .with_context(|| format!("failed to canonicalize workspace root for task {}", task_id))?;
     resolve_workspace_path(&workspace_root, &ticket_dir, "task.ticket_dir")?;
 
+    let dynamic_steps = workflow.dynamic_steps.clone();
+
     Ok(TaskRuntimeContext {
         workspace_id,
         workspace_root,
@@ -604,6 +607,7 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
         execution_plan,
         current_cycle: current_cycle.max(0) as u32,
         init_done: init_done == 1,
+        dynamic_steps,
     })
 }
 
@@ -1159,6 +1163,7 @@ pub async fn process_item(
     let mut retest_exit_code: Option<i64> = None;
     let mut new_ticket_count = 0_i64;
     let mut item_status = "pending".to_string();
+    let mut phase_artifacts: Vec<crate::collab::Artifact> = Vec::new();
 
     if let Some(qa_step) = qa_step {
         let should_run_qa = evaluate_step_prehook(
@@ -1210,6 +1215,20 @@ pub async fn process_item(
             .await?;
             qa_exit_code = Some(result.exit_code);
             qa_failed = result.exit_code != 0;
+
+            let stdout_content = std::fs::read_to_string(&result.stdout_path).unwrap_or_default();
+            let qa_artifacts = crate::collab::parse_artifacts_from_output(&stdout_content);
+            if !qa_artifacts.is_empty() {
+                insert_event(
+                    state,
+                    task_id,
+                    Some(item_id),
+                    "artifacts_parsed",
+                    json!({"step":"qa","count":qa_artifacts.len()}),
+                )?;
+                phase_artifacts.extend(qa_artifacts);
+            }
+
             if !result.is_success() {
                 insert_event(
                     state,
@@ -1241,6 +1260,57 @@ pub async fn process_item(
 
     if qa_failed || (!active_tickets.is_empty() && qa_enabled) {
         item_status = "qa_failed".to_string();
+    }
+
+    if qa_failed {
+        if let Some(qa_exit) = qa_exit_code {
+            let stdout_path = format!(
+                "{}/data/runs/{}/{}/qa/stdout.log",
+                task_ctx.workspace_root.display(),
+                task_id,
+                item_id
+            );
+            let stderr_path = format!(
+                "{}/data/runs/{}/{}/qa/stderr.log",
+                task_ctx.workspace_root.display(),
+                task_id,
+                item_id
+            );
+            let task_name = open_conn(&state.db_path)
+                .ok()
+                .and_then(|conn| {
+                    conn.query_row(
+                        "SELECT name FROM tasks WHERE id = ?1",
+                        params![task_id],
+                        |row| row.get::<_, String>(0),
+                    )
+                    .ok()
+                })
+                .unwrap_or_else(|| task_id.to_string());
+            match create_ticket_for_qa_failure(
+                &task_ctx.workspace_root,
+                &task_ctx.ticket_dir,
+                &task_name,
+                &item.qa_file_path,
+                qa_exit,
+                &stdout_path,
+                &stderr_path,
+            ) {
+                Ok(Some(ticket_path)) => {
+                    insert_event(
+                        state,
+                        task_id,
+                        Some(item_id),
+                        "ticket_created",
+                        json!({"path": ticket_path, "qa_file": item.qa_file_path}),
+                    )?;
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    eprintln!("[warn] failed to auto-create ticket: {e}");
+                }
+            }
+        }
     }
 
     if let Some(scan_step) = ticket_scan_step {
@@ -1322,6 +1392,20 @@ pub async fn process_item(
                 if fix_success {
                     item_status = "fixed".to_string();
                 }
+
+                let fix_stdout = std::fs::read_to_string(&result.stdout_path).unwrap_or_default();
+                let fix_artifacts = crate::collab::parse_artifacts_from_output(&fix_stdout);
+                if !fix_artifacts.is_empty() {
+                    insert_event(
+                        state,
+                        task_id,
+                        Some(item_id),
+                        "artifacts_parsed",
+                        json!({"step":"fix","count":fix_artifacts.len()}),
+                    )?;
+                    phase_artifacts.extend(fix_artifacts);
+                }
+
                 insert_event(
                     state,
                     task_id,
@@ -1367,6 +1451,67 @@ pub async fn process_item(
                 Some(item_id),
                 "step_finished",
                 json!({"step":"retest","exit_code":result.exit_code,"success":retest_success}),
+            )?;
+        }
+    }
+
+    if !task_ctx.dynamic_steps.is_empty() {
+        let pool = {
+            let mut p = crate::dynamic_orchestration::DynamicStepPool::new();
+            for ds in &task_ctx.dynamic_steps {
+                p.add_step(ds.clone());
+            }
+            p
+        };
+        let dyn_ctx = crate::dynamic_orchestration::StepPrehookContext {
+            task_id: task_id.to_string(),
+            task_item_id: item_id.to_string(),
+            cycle: task_ctx.current_cycle,
+            step: "dynamic".to_string(),
+            qa_file_path: item.qa_file_path.clone(),
+            item_status: item_status.clone(),
+            task_status: "running".to_string(),
+            qa_exit_code,
+            fix_exit_code,
+            retest_exit_code,
+            active_ticket_count: active_tickets.len() as i64,
+            new_ticket_count,
+            qa_failed,
+            fix_required: !active_tickets.is_empty(),
+            qa_confidence: None,
+            qa_quality_score: None,
+            fix_has_changes: None,
+            upstream_artifacts: vec![],
+        };
+        let matched = pool.find_matching_steps(&dyn_ctx);
+        for ds in matched {
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "dynamic_step_started",
+                json!({"step_id": ds.id, "step_type": ds.step_type, "priority": ds.priority}),
+            )?;
+            let cap = Some(ds.step_type.as_str());
+            let result = run_phase_with_rotation(
+                state,
+                task_id,
+                item_id,
+                &ds.step_type,
+                cap,
+                &item.qa_file_path,
+                &active_tickets,
+                &task_ctx.workspace_root,
+                &task_ctx.workspace_id,
+                runtime,
+            )
+            .await?;
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "dynamic_step_finished",
+                json!({"step_id": ds.id, "exit_code": result.exit_code, "success": result.is_success()}),
             )?;
         }
     }
@@ -1417,9 +1562,9 @@ pub async fn process_item(
         qa_quality_score: None,
         fix_confidence: None,
         fix_quality_score: None,
-        total_artifacts: 0,
-        has_ticket_artifacts: false,
-        has_code_change_artifacts: false,
+        total_artifacts: phase_artifacts.len() as i64,
+        has_ticket_artifacts: phase_artifacts.iter().any(|a| matches!(a.kind, crate::collab::ArtifactKind::Ticket { .. })),
+        has_code_change_artifacts: phase_artifacts.iter().any(|a| matches!(a.kind, crate::collab::ArtifactKind::CodeChange { .. })),
     };
 
     if let Some(outcome) = crate::prehook::resolve_workflow_finalize_outcome(

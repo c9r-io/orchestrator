@@ -15,6 +15,10 @@ BINARY="$(qa_binary_path)"
 qa_require_binary
 cd "$REPO_ROOT"
 
+qa_info "Ensuring config is bootstrapped..."
+"$BINARY" init --force 2>/dev/null || true
+"$BINARY" config bootstrap --from fixtures/output-formats.yaml --force 2>/dev/null || { qa_error "Failed to bootstrap config"; exit 2; }
+
 qa_info "========================================"
 qa_info "TEST: Task Pause and Resume"
 qa_info "========================================"

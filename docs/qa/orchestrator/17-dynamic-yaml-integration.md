@@ -19,7 +19,8 @@ Entry point: `./scripts/orchestrator.sh config <command>`
 
 ### Preconditions
 
-- Runtime config is initialized.
+- Orchestrator initialized: `./scripts/orchestrator.sh init --force`
+- Config bootstrapped: `./scripts/orchestrator.sh config bootstrap --from fixtures/output-formats.yaml --force` (or any valid config fixture)
 
 ### Steps
 

@@ -178,6 +178,68 @@ Template:
 **Related Components**: Frontend / Backend / Database / Cache / External Service
 ```
 
+## Batch Execution: Lessons Learned
+
+When running QA across many documents (e.g., 19 docs, 80+ scenarios), the following hard-won lessons apply.
+
+### 1. Ticket Preservation Across Batches
+
+**CRITICAL: Never delete `docs/ticket/` contents between batches.**
+
+When splitting QA into sequential batches (e.g., docs 00-04, 05-09, 10-14, 15-17), each batch's environment reset **must not** delete tickets created by previous batches. Specifically:
+
+- ❌ **NEVER** include `find docs/ticket -name '*.md' ! -name 'README.md' -delete` as a cross-batch step. This destroys tickets from earlier batches.
+- ✅ Only clean tickets **within a single QA doc's setup** if that doc's precondition explicitly requires an empty ticket directory — and even then, back up existing tickets first or scope the deletion narrowly.
+- ✅ If a QA doc says "clean ticket dir", only remove tickets created by **that specific doc's previous run**, not all tickets.
+
+**Root cause of past incident**: Batch 2 instructions included a blanket ticket cleanup that wiped Batch 1's 3 tickets. Batch 3 wiped Batch 2's 18 tickets. Batch 4 wiped Batch 3's 10 tickets. Only Batch 4's 5 tickets survived — 31 tickets had to be recreated from session transcripts.
+
+### 2. SQLite Contention — No Parallel Batches
+
+**NEVER run multiple QA batches in parallel** when they share a SQLite database (`data/agent_orchestrator.db`).
+
+- SQLite does not support concurrent writers. Parallel agents will cause DB lock contention, corrupted state, and false failures.
+- Always run batches **sequentially**, with a full DB reset between each batch.
+- Each batch agent must have **exclusive DB access**.
+
+### 3. Environment Reset Between Batches
+
+The correct reset sequence between batches:
+
+```bash
+# Reset DB (required)
+rm -f data/agent_orchestrator.db
+./scripts/orchestrator.sh init
+
+# Bootstrap config if needed by the next batch's QA docs
+./scripts/orchestrator.sh config bootstrap --from fixtures/<relevant>.yaml --force
+
+# DO NOT delete docs/ticket/*.md — preserve prior batch tickets
+```
+
+### 4. `init` vs `config bootstrap`
+
+- `init` only creates the DB schema and a minimal default config. It does **not** load fixture data.
+- Most QA scenarios require `config bootstrap --from <fixture> --force` after `init` to load agents, workflows, and workspaces into SQLite.
+- QA scripts (`docs/qa/script/*.sh`) that call `task create` will fail if only `init` was run — they need bootstrapped config.
+
+### 5. Delegation Prompt Design for Batch Agents
+
+When delegating QA batches to subagents:
+
+- **Explicitly state**: "Do NOT delete any files in `docs/ticket/` that were not created by your own batch"
+- **Grant exclusive access**: "YOU HAVE EXCLUSIVE DB ACCESS — no other agents are running"
+- **List fixture mapping**: Tell each agent exactly which fixture file to use for each QA doc
+- **Include the full ticket template**: Subagents may not have access to this skill doc
+
+### 6. Session Transcripts as Recovery Source
+
+If tickets are lost, they can be reconstructed from subagent session transcripts:
+- Each subagent session records all tool calls (including file writes via `apply_patch` or `write`)
+- Use `session_search(query="ticket", session_id="ses_xxx")` to find ticket-related actions
+- Use `session_read(session_id="ses_xxx")` to read the full final summary with PASS/FAIL details
+- Recreated tickets should use a reconstructed timestamp (batch timeframe) rather than current time
+
 ## Reset Guidance
 
 ```bash
