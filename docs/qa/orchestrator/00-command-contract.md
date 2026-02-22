@@ -55,11 +55,21 @@ Entry point: `./scripts/orchestrator.sh <command>` (recommended) or `./core/targ
 
 ### Preconditions
 
-- At least one workspace exists (e.g., `default`).
+- Database initialized and config bootstrapped from a YAML file that defines a `default` workspace.
+  The `init` command only creates the DB schema; it does **not** load config or create workspaces.
+  You must run `config bootstrap --from <file>` (or pass `--config <file>` at runtime) so that
+  the `default` workspace is present in SQLite before running any workspace/task commands.
 
 ### Steps
 
-1. Validate workspace info positional argument:
+1. Bootstrap environment (if not already done):
+   ```bash
+   rm -f data/agent_orchestrator.db
+   ./scripts/orchestrator.sh init
+   ./scripts/orchestrator.sh config bootstrap --from <config.yaml>
+   ```
+
+2. Validate workspace info positional argument:
    ```bash
    ./scripts/orchestrator.sh workspace info default
    ```

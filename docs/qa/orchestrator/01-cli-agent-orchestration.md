@@ -48,8 +48,49 @@ agents:
 ### Preconditions
 
 - Orchestrator binary built and available at `./core/target/release/agent-orchestrator`
-- Test workspace exists with QA targets configured
-- Mock agent/workflow already bootstrapped into SQLite config
+- Runtime initialized and mock config bootstrapped into SQLite:
+   ```bash
+   ./scripts/orchestrator.sh init
+   cat > /tmp/mock-bootstrap.yaml << 'EOF'
+   runner:
+     shell: /bin/bash
+     shell_arg: -lc
+   resume:
+     auto: false
+   defaults:
+     workspace: default
+     workflow: qa_only
+   workspaces:
+     default:
+       root_path: .
+       qa_targets:
+         - docs/qa
+       ticket_dir: docs/ticket
+   agents:
+     mock_echo:
+       metadata:
+         name: mock_echo
+       capabilities:
+         - qa
+       templates:
+         qa: "echo 'qa-phase: {rel_path}'"
+   workflows:
+     qa_only:
+       steps:
+         - id: qa
+           required_capability: qa
+           enabled: true
+           repeatable: false
+       loop:
+         mode: once
+         guard:
+           enabled: false
+           stop_when_no_unresolved: false
+       finalize:
+         rules: []
+   EOF
+   ./scripts/orchestrator.sh config bootstrap --from /tmp/mock-bootstrap.yaml --force
+   ```
 
 ### Goal
 
@@ -295,16 +336,26 @@ Validate configuration validation catches invalid configurations.
        qa_targets:
          - docs/qa
        ticket_dir: docs/ticket
-   agents: {}
+   agents:
+     mock:
+       metadata:
+         name: mock
+       capabilities:
+         - qa
+       templates:
+         qa: "echo test"
    workflows:
      qa_only:
        steps:
          - id: qa
            required_capability: qa
-           enabled: false
+           enabled: true
            repeatable: false
        loop:
          mode: once
+         guard:
+           enabled: false
+           stop_when_no_unresolved: false
        finalize:
          rules: []
    EOF

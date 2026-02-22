@@ -73,15 +73,26 @@ cd ..
 
 ### Goal
 
-验证配置校验能识别多个结构性错误。
+验证配置校验能识别多个结构性错误并聚合输出。
+
+> Note: Config must be serde-deserializable (all required struct fields present)
+> for post-deserialization semantic validation to aggregate errors.
+> Maps with `#[serde(default)]` deserialize as empty maps, so empty `workspaces`,
+> `agents`, and `workflows` maps pass serde but fail semantic validation.
 
 ### Steps
 
-1. 创建缺失关键字段的配置:
+1. 创建包含多个语义错误的配置 (serde 可解析但语义无效):
    ```bash
    cat > /tmp/multi-error.yaml << 'YAML'
    runner:
      shell: /bin/bash
+     shell_arg: -lc
+   resume:
+     auto: false
+   defaults:
+     workspace: nonexistent
+     workflow: nonexistent
    workspaces: {}
    agents: {}
    workflows: {}
@@ -95,7 +106,7 @@ cd ..
 ### Expected
 
 - 命令返回非零退出码
-- 输出包含多个校验错误信息
+- 输出包含多个校验错误信息 (e.g., workspaces empty, agents empty, workflows empty, invalid defaults references)
 
 ---
 

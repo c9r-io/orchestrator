@@ -11,6 +11,28 @@
 
 This document tests complete workflow execution using mock bash agents. The orchestrator should execute each phase (qa, fix, retest) and handle the output correctly.
 
+### Common Preconditions (All Scenarios)
+
+**Every scenario** requires a clean environment to avoid cross-contamination:
+
+1. Fresh database with config bootstrapped from a YAML file that includes
+   the relevant mock agent(s) and all required workflows (`qa_only`, `qa_fix`,
+   `qa_fix_retest`, `loop_test`). A reference fixture is at
+   `fixtures/test-workflow-execution.yaml`.
+2. **Empty ticket directory** — remove all `.md` files from `docs/ticket/`
+   (except `README.md`) before running any scenario. Pre-existing tickets
+   will be picked up by the ticket scan / finalize rules and cause items to
+   be marked `unresolved`, which makes the task status `failed` even when the
+   agent exits with code 0.
+
+```bash
+# Recommended setup (run once before all scenarios)
+rm -f data/agent_orchestrator.db
+./scripts/orchestrator.sh init
+./scripts/orchestrator.sh config bootstrap --from fixtures/test-workflow-execution.yaml --force
+find docs/ticket -name '*.md' ! -name 'README.md' -delete
+```
+
 ### Mock Agent Templates Reference
 
 #### Basic Echo Agent
@@ -125,8 +147,9 @@ agents:
 
 ### Preconditions
 
-- Config with mock_echo agent and qa_only workflow
-- QA target files exist
+- See **Common Preconditions** above (clean DB, bootstrapped config, empty ticket dir)
+- Config contains `mock_echo` agent with `qa` capability and `qa_only` workflow
+- QA target files exist under the workspace's `qa_targets` path
 
 ### Steps
 
@@ -162,8 +185,8 @@ agents:
 
 ### Preconditions
 
-- Config with mock agents and qa_fix workflow
-- No tickets exist initially
+- See **Common Preconditions** above (clean DB, bootstrapped config, empty ticket dir)
+- Config contains mock agents with `qa`/`fix` capabilities and `qa_fix` workflow
 
 ### Steps
 
@@ -198,7 +221,8 @@ agents:
 
 ### Preconditions
 
-- Config with mock agents and qa_fix_retest workflow
+- See **Common Preconditions** above (clean DB, bootstrapped config, empty ticket dir)
+- Config contains mock agents with `qa`/`fix`/`retest` capabilities and `qa_fix_retest` workflow
 
 ### Steps
 
@@ -233,14 +257,17 @@ agents:
 
 ### Preconditions
 
-- Config with mock_fail agent (fails QA)
-- Empty ticket directory
+- See **Common Preconditions** above (clean DB, bootstrapped config, empty ticket dir)
+- Config must include `mock_fail` agent whose QA template exits non-zero
+- The `mock_fail` agent must be the **only** agent with the `qa` capability so the
+  orchestrator selects it (remove or disable other QA-capable agents in the config)
 
 ### Steps
 
-1. Create config with failing agent:
+1. Bootstrap a config where only the `mock_fail` agent has `qa` capability:
    ```bash
-   # Update config to use mock_fail agent
+   # Use a dedicated fixture or edit the config YAML before bootstrap
+   ./scripts/orchestrator.sh config bootstrap --from <fail-config.yaml> --force
    ```
 
 2. Create task:
@@ -274,8 +301,8 @@ agents:
 
 ### Preconditions
 
-- Config with loop_test workflow already applied into SQLite
-- No tickets exist initially
+- See **Common Preconditions** above (clean DB, bootstrapped config, empty ticket dir)
+- Config contains `loop_test` workflow with `mode: infinite` and `max_cycles: 3`
 
 ### Steps
 

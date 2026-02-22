@@ -311,6 +311,37 @@ fn try_handle_preflight_command(cli: &Cli) -> Result<Option<i32>> {
             let app_root = detect_app_root();
             Ok(Some(run_apply_preflight(&app_root, file, *dry_run)?))
         }
+        Commands::Config(ConfigCommands::Validate { config_file }) => {
+            let app_root = detect_app_root();
+            let content = std::fs::read_to_string(config_file)
+                .with_context(|| format!("cannot read config file: {}", config_file))?;
+
+            let validator =
+                crate::config_validation::validator::ConfigValidator::new(&app_root)
+                    .with_level(crate::config_validation::ValidationLevel::Full);
+            let result = validator.validate_yaml(&content);
+
+            if !result.warnings.is_empty() || !result.errors.is_empty() {
+                eprintln!("{}", result.report());
+            }
+
+            if !result.is_valid {
+                return Ok(Some(1));
+            }
+
+            let config: crate::config::OrchestratorConfig = serde_yaml::from_str(&content)?;
+            match config_load::build_active_config(&app_root, config) {
+                Ok(candidate) => {
+                    let normalized = serde_yaml::to_string(&candidate.config)?;
+                    println!("Configuration is valid:\n{}", normalized);
+                    Ok(Some(0))
+                }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    Ok(Some(1))
+                }
+            }
+        }
         _ => Ok(None),
     }
 }

@@ -20,7 +20,8 @@ Entry point: `orchestrator task <command>`
 ### Preconditions
 
 - Orchestrator binary available
-- Workspace configured with mock agents
+- Runtime initialized and mock config bootstrapped (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions)
+- Workspace configured with mock agents that produce exit-code 0 (e.g. `echo 'done'`)
 
 ### Steps
 
@@ -46,8 +47,9 @@ Entry point: `orchestrator task <command>`
 
 ### Expected
 
-- Task starts in "running" or "completed" status
-- Task details show progress
+- Task starts and transitions through "running" to a terminal status ("completed" or "failed")
+- With mock agents (echo commands), task typically ends as "failed" because finalize rules detect unresolved tickets in the ticket directory — this is expected workflow behavior, not a CLI bug
+- Task details show progress (items processed count)
 
 ---
 
@@ -119,6 +121,9 @@ Entry point: `orchestrator task <command>`
             repeatable: false
         loop:
           mode: once
+          guard:
+            enabled: false
+            stop_when_no_unresolved: false
         finalize:
           rules: []
     EOF
@@ -156,7 +161,8 @@ Entry point: `orchestrator task <command>`
 
 ### Preconditions
 
-- A task has been executed at least once
+- Runtime initialized and mock config bootstrapped (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions)
+- A task has been executed **successfully** at least once (task must reach running state so that command_runs are recorded)
 
 ### Steps
 
@@ -182,7 +188,7 @@ Entry point: `orchestrator task <command>`
 
 ### Expected
 
-- Logs display command output
+- Logs display command output (empty output is expected if the task had no command_runs, e.g. it failed before execution)
 - Tail limit works correctly
 - Timestamps are shown when requested
 

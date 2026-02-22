@@ -72,7 +72,10 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
         WorkflowStepType::Retest,
     ] {
         let key = step_type.as_str().to_string();
-        if let Some(step) = by_type.remove(&key) {
+        if let Some(mut step) = by_type.remove(&key) {
+            if step.step_type.is_none() {
+                step.step_type = Some(step_type.clone());
+            }
             normalized.push(step);
         } else {
             normalized.push(WorkflowStepConfig {

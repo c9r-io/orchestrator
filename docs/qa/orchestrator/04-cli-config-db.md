@@ -21,7 +21,7 @@ Entry points:
 
 ### Preconditions
 
-- Valid configuration manifest is available.
+- Runtime initialized and config bootstrapped (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions).
 
 ### Steps
 
@@ -58,6 +58,9 @@ Entry points:
            enabled: true
        loop:
          mode: once
+         guard:
+           enabled: false
+           stop_when_no_unresolved: false
        finalize:
          rules: []
    EOF2
@@ -86,7 +89,7 @@ Entry points:
 
 ### Preconditions
 
-- None.
+- Runtime initialized and config bootstrapped (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions).
 
 ### Steps
 
@@ -120,6 +123,7 @@ Entry points:
 
 ### Preconditions
 
+- Runtime initialized and config bootstrapped (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions).
 - Current config contains `default` workspace.
 
 ### Steps
@@ -164,6 +168,9 @@ Entry points:
            enabled: true
        loop:
          mode: once
+         guard:
+           enabled: false
+           stop_when_no_unresolved: false
        finalize:
          rules: []
    EOF2

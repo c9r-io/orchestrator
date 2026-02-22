@@ -528,13 +528,8 @@ impl CliHandler {
                 }
                 Ok(0)
             }
-            ConfigCommands::Validate { config_file } => {
-                let content = std::fs::read_to_string(config_file)?;
-                let config: OrchestratorConfig = serde_yaml::from_str(&content)?;
-                let candidate = build_active_config(&self.state.app_root, config)?;
-                let normalized = serde_yaml::to_string(&candidate.config)?;
-                println!("Configuration is valid:\n{}", normalized);
-                Ok(0)
+            ConfigCommands::Validate { .. } => {
+                anyhow::bail!("config validate is handled as a preflight command")
             }
             ConfigCommands::ListWorkflows { output } => {
                 let active = read_active_config(&self.state)?;
