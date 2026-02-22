@@ -258,9 +258,12 @@ Validate that agents with `performance_first` strategy are prioritized.
 
 ### Expected
 
-- Both QA and Fix steps favor agents with `performance_first` strategy
-- Logs show "fast-qa" and "fast-fix"
-- Selection events show strategy "performance_first"
+- Agent selection scores each agent independently using its configured strategy
+- With no prior execution history, scoring relies primarily on cost factor — but final selection uses **random pick from top-3 candidates**, so results are non-deterministic when only 2 agents exist
+- After metrics accumulate across runs, `performance_first` strategy increasingly favors the lower-cost agent
+- Logs may show a mix of "fast-qa" and "quality-qa" in initial runs; this is expected exploration behavior
+
+> **Note**: The agent selector randomly picks from the top 3 scored candidates to allow exploration. With only 2 agents, both are always in the top 3, producing near-random initial distribution. As `MetricsCollector` records success/failure/duration data over time, score differentiation increases.
 
 ---
 
@@ -345,8 +348,12 @@ Validate that agents with higher success rates are prioritized when using `succe
 
 ### Expected
 
-- QA step favors `proven_agent` under `success_rate_weighted` strategy
-- Logs show `proven-qa`
+- Agent selection scores each agent using its configured strategy
+- With no prior execution history, scoring relies on cost and neutral defaults — final selection uses **random pick from top-3 candidates**
+- After multiple runs, `success_rate_weighted` strategy increasingly favors agents with higher success rates
+- Initial runs may show a mix of "proven-qa" and "new-qa"; this is expected exploration behavior
+
+> **Note**: Same top-3 random exploration as Scenario 2 applies here. The `success_rate_weighted` strategy (weight: cost 0.2, success_rate 0.8) differentiates effectively only when agents have accumulated different success/failure histories via `MetricsCollector`.
 
 ---
 
@@ -433,6 +440,8 @@ Validate that repeatable steps run every cycle, while non-repeatable steps run o
 
 - "one_time" step appears only in cycle 1
 - "every_cycle" step appears in every cycle (cycle-1, cycle-2, cycle-3, etc.)
+
+> **Note**: The test config above uses `mode: infinite` with `stop_when_no_unresolved: false` and no `max_cycles`. This means the loop will run indefinitely unless manually paused. To test bounded cycles, add `max_cycles: 3` to the `guard` section. Run data does not include a `step_id` field — to distinguish which step produced each run, check the `phase` field and the order of execution.
 
 ---
 

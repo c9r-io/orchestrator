@@ -86,9 +86,12 @@ Entry point: `orchestrator task <command>` with configured agents
 
 ### Expected
 
-- Agent metrics collected: `total_runs`, `successful_runs`, `avg_duration_ms`
-- Metrics update after each execution
-- Health state reflects recent performance
+- Agent metrics collected internally: `total_runs`, `successful_runs`, `avg_duration_ms` are updated via `MetricsCollector` after each `run_phase` call
+- Metrics accumulate in-memory in `agent_metrics` map and influence future agent selection scoring
+- `debug --component state` shows general runtime state but does not expose per-agent metrics (dedicated metrics debug view is not yet implemented)
+- Verify metrics are being used by observing that agent selection becomes less random over repeated runs
+
+> **Note**: Runtime metrics are recorded in-memory via `MetricsCollector::record_success`/`record_failure` and influence the scoring in `calculate_agent_score`. However, there is no dedicated CLI command to inspect raw agent metrics. Verify indirectly by running multiple cycles and checking whether agent selection stabilizes toward the expected strategy.
 
 ---
 
@@ -120,9 +123,12 @@ Entry point: `orchestrator task <command>` with configured agents
 
 ### Expected
 
-- Agent marked diseased for `qa` capability
-- Agent still available for `fix` capability
-- Health state shows per-capability tracking
+- Agent marked diseased for `qa` capability after 2+ consecutive failures (via `increment_consecutive_errors` → `mark_agent_diseased`)
+- Per-capability health tracked internally via `update_capability_health` (called after each `run_phase`)
+- If `multi-cap-agent` is diseased globally but has good `fix` capability health (`success_rate >= 0.5`), it remains available for `fix`
+- Verify by checking that the backup agent handles `qa` when primary is diseased, while primary still handles `fix`
+
+> **Note**: Per-capability health IS implemented and functional. The health state is tracked in-memory via `AgentHealthState.capability_health` map. There is no dedicated CLI command to inspect per-capability health state directly — verify via behavioral observation (which agent gets selected for which capability after failures).
 
 ---
 
@@ -159,10 +165,12 @@ Entry point: `orchestrator task <command>` with configured agents
 
 ### Expected
 
-- First agent selected, fails
-- Second retry does NOT select same failed agent
-- Retry cycles through different agents
-- Event log shows `attempt: 1`, `attempt: 2`, etc.
+- Failed items are marked `unresolved` and remain failed — **automatic retry with agent rotation is not implemented**
+- Manual retry is available via `orchestrator task retry <task_item_id>`, which resets the item to `pending` status
+- Manual retry does not exclude the previously failed agent — the same agent may be selected again
+- The `excluded_agents` parameter exists in `select_agent_advanced` but is not populated during retry
+
+> **Note**: Automatic retry with agent rotation is a planned but unimplemented feature. The current behavior is: if an agent fails, the item is finalized as `unresolved`. Use `task retry` to manually re-queue the item. To verify the failing agent is eventually avoided, rely on the health system — after 2+ consecutive failures, the agent is marked diseased and excluded from selection.
 
 ---
 
@@ -186,9 +194,12 @@ Entry point: `orchestrator task <command>` with configured agents
 
 ### Expected
 
-- Selection considers current load
-- Higher load agents receive lower scores
-- Load updates before and after execution
+- `MetricsCollector::increment_load` is called before each agent execution, `decrement_load` after completion
+- Load factor is used in scoring via `load_penalty` in `calculate_agent_score` (weight varies by strategy; `LoadBalanced` uses 0.5 weight)
+- Higher load agents receive lower scores during concurrent operations
+- Load metrics are tracked in-memory only — no `current_load` field is emitted in event payloads
+
+> **Note**: Load tracking is now wired in the scheduler. `increment_load` is called in `run_phase_with_rotation` and `execute_guard_step` before execution; `decrement_load` is called in `run_phase` after completion. However, load data is not persisted to events — it is used solely for in-memory scoring decisions during agent selection.
 
 ---
 

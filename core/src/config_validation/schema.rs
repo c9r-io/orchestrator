@@ -10,19 +10,44 @@ pub fn validate_schema(config: &OrchestratorConfig) -> ValidationResult {
     let mut result = ValidationResult::new();
     result.is_valid = true;
 
+    let all_workspaces = collect_all_workspaces(config);
+    let all_agents = collect_all_agents(config);
+
     validate_runner(&config.runner, &mut result);
     validate_defaults(
         &config.defaults,
-        &config.workspaces,
+        &all_workspaces,
         &config.workflows,
         &mut result,
     );
-    validate_workspaces(&config.workspaces, &mut result);
-    validate_agents(&config.agents, &mut result);
-    validate_workflows(&config.workflows, &config.agents, &mut result);
+    validate_workspaces(&config.workspaces, &config.projects, &mut result);
+    validate_agents(&config.agents, &config.projects, &mut result);
+    validate_workflows(&config.workflows, &all_agents, &mut result);
     validate_projects(&config.projects, &config.agents, &mut result);
 
     result
+}
+
+fn collect_all_workspaces(
+    config: &OrchestratorConfig,
+) -> HashMap<String, crate::config::WorkspaceConfig> {
+    let mut all = config.workspaces.clone();
+    for project in config.projects.values() {
+        for (ws_id, ws) in &project.workspaces {
+            all.entry(ws_id.clone()).or_insert_with(|| ws.clone());
+        }
+    }
+    all
+}
+
+fn collect_all_agents(config: &OrchestratorConfig) -> HashMap<String, AgentConfig> {
+    let mut all = config.agents.clone();
+    for project in config.projects.values() {
+        for (agent_id, agent) in &project.agents {
+            all.entry(agent_id.clone()).or_insert_with(|| agent.clone());
+        }
+    }
+    all
 }
 
 fn validate_runner(runner: &crate::config::RunnerConfig, result: &mut ValidationResult) {
@@ -94,9 +119,12 @@ fn validate_defaults(
 
 fn validate_workspaces(
     workspaces: &HashMap<String, crate::config::WorkspaceConfig>,
+    projects: &HashMap<String, crate::config::ProjectConfig>,
     result: &mut ValidationResult,
 ) {
-    if workspaces.is_empty() {
+    let has_project_workspaces = projects.values().any(|p| !p.workspaces.is_empty());
+
+    if workspaces.is_empty() && !has_project_workspaces {
         result.add_error(ValidationError {
             code: ErrorCode::EmptyCollection,
             message: "At least one workspace is required".to_string(),
@@ -107,39 +135,61 @@ fn validate_workspaces(
     }
 
     for (id, ws) in workspaces {
-        let field_prefix = format!("workspaces.{}", id);
+        validate_single_workspace(id, ws, "workspaces", result);
+    }
 
-        if ws.root_path.trim().is_empty() {
-            result.add_error(ValidationError {
-                code: ErrorCode::MissingRequiredField,
-                message: "root_path is required".to_string(),
-                field: Some(format!("{}.root_path", field_prefix)),
-                context: None,
-            });
-        }
-
-        if ws.qa_targets.is_empty() {
-            result.add_error(ValidationError {
-                code: ErrorCode::MissingRequiredField,
-                message: "qa_targets cannot be empty".to_string(),
-                field: Some(format!("{}.qa_targets", field_prefix)),
-                context: None,
-            });
-        }
-
-        if ws.ticket_dir.trim().is_empty() {
-            result.add_warning(ValidationWarning {
-                code: WarningCode::MissingRecommendedField,
-                message: "ticket_dir is recommended".to_string(),
-                field: Some(format!("{}.ticket_dir", field_prefix)),
-                suggestion: Some("Add ticket_dir for ticket tracking".to_string()),
-            });
+    for (proj_id, project) in projects {
+        for (ws_id, ws) in &project.workspaces {
+            let prefix = format!("projects.{}.workspaces", proj_id);
+            validate_single_workspace(ws_id, ws, &prefix, result);
         }
     }
 }
 
-fn validate_agents(agents: &HashMap<String, AgentConfig>, result: &mut ValidationResult) {
-    if agents.is_empty() {
+fn validate_single_workspace(
+    id: &str,
+    ws: &crate::config::WorkspaceConfig,
+    parent_field: &str,
+    result: &mut ValidationResult,
+) {
+    let field_prefix = format!("{}.{}", parent_field, id);
+
+    if ws.root_path.trim().is_empty() {
+        result.add_error(ValidationError {
+            code: ErrorCode::MissingRequiredField,
+            message: "root_path is required".to_string(),
+            field: Some(format!("{}.root_path", field_prefix)),
+            context: None,
+        });
+    }
+
+    if ws.qa_targets.is_empty() {
+        result.add_warning(ValidationWarning {
+            code: WarningCode::MissingRecommendedField,
+            message: "qa_targets is empty".to_string(),
+            field: Some(format!("{}.qa_targets", field_prefix)),
+            suggestion: Some("Add qa_targets for QA testing".to_string()),
+        });
+    }
+
+    if ws.ticket_dir.trim().is_empty() {
+        result.add_warning(ValidationWarning {
+            code: WarningCode::MissingRecommendedField,
+            message: "ticket_dir is recommended".to_string(),
+            field: Some(format!("{}.ticket_dir", field_prefix)),
+            suggestion: Some("Add ticket_dir for ticket tracking".to_string()),
+        });
+    }
+}
+
+fn validate_agents(
+    agents: &HashMap<String, AgentConfig>,
+    projects: &HashMap<String, crate::config::ProjectConfig>,
+    result: &mut ValidationResult,
+) {
+    let has_project_agents = projects.values().any(|p| !p.agents.is_empty());
+
+    if agents.is_empty() && !has_project_agents {
         result.add_error(ValidationError {
             code: ErrorCode::EmptyCollection,
             message: "At least one agent is required".to_string(),
@@ -150,25 +200,41 @@ fn validate_agents(agents: &HashMap<String, AgentConfig>, result: &mut Validatio
     }
 
     for (id, agent) in agents {
-        let field_prefix = format!("agents.{}", id);
+        validate_single_agent(id, agent, "agents", result);
+    }
 
-        if agent.templates.is_empty() {
-            result.add_warning(ValidationWarning {
-                code: WarningCode::MissingRecommendedField,
-                message: "Agent has no templates".to_string(),
-                field: Some(format!("{}.templates", field_prefix)),
-                suggestion: Some("Add at least one template (e.g., qa, fix)".to_string()),
-            });
+    for (proj_id, project) in projects {
+        for (agent_id, agent) in &project.agents {
+            let prefix = format!("projects.{}.agents", proj_id);
+            validate_single_agent(agent_id, agent, &prefix, result);
         }
+    }
+}
 
-        if agent.capabilities.is_empty() {
-            result.add_warning(ValidationWarning {
-                code: WarningCode::MissingRecommendedField,
-                message: "Agent has no capabilities declared".to_string(),
-                field: Some(format!("{}.capabilities", field_prefix)),
-                suggestion: Some("Add capabilities for agent selection".to_string()),
-            });
-        }
+fn validate_single_agent(
+    id: &str,
+    agent: &AgentConfig,
+    parent_field: &str,
+    result: &mut ValidationResult,
+) {
+    let field_prefix = format!("{}.{}", parent_field, id);
+
+    if agent.templates.is_empty() {
+        result.add_warning(ValidationWarning {
+            code: WarningCode::MissingRecommendedField,
+            message: "Agent has no templates".to_string(),
+            field: Some(format!("{}.templates", field_prefix)),
+            suggestion: Some("Add at least one template (e.g., qa, fix)".to_string()),
+        });
+    }
+
+    if agent.capabilities.is_empty() {
+        result.add_warning(ValidationWarning {
+            code: WarningCode::MissingRecommendedField,
+            message: "Agent has no capabilities declared".to_string(),
+            field: Some(format!("{}.capabilities", field_prefix)),
+            suggestion: Some("Add capabilities for agent selection".to_string()),
+        });
     }
 }
 

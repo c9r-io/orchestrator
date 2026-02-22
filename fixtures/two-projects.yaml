@@ -12,17 +12,29 @@ projects:
     workspaces:
       ws1:
         root_path: /tmp/pa
-        qa_targets: []
+        qa_targets:
+          - docs/qa
         ticket_dir: docs/ticket
-    agents: {}
+    agents:
+      pa_agent:
+        capabilities:
+          - qa
+        templates:
+          qa: "echo 'qa-project-a'"
     workflows: {}
   project-b:
     workspaces:
       ws2:
         root_path: /tmp/pb
-        qa_targets: []
+        qa_targets:
+          - docs/qa
         ticket_dir: docs/ticket
-    agents: {}
+    agents:
+      pb_agent:
+        capabilities:
+          - qa
+        templates:
+          qa: "echo 'qa-project-b'"
     workflows: {}
 workspaces: {}
 agents: {}
@@ -35,5 +47,8 @@ workflows:
         repeatable: false
     loop:
       mode: once
+      guard:
+        enabled: false
+        stop_when_no_unresolved: false
     finalize:
       rules: []

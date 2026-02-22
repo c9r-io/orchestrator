@@ -203,55 +203,17 @@ Validate that project resources are isolated from each other.
 
 ### Steps
 
-1. Create config with two projects (test config):
+1. Validate the two-projects fixture (projects define their own workspaces and agents; global workspaces/agents are empty):
    ```bash
-   cat > /tmp/two-projects.yaml << 'EOF'
-   defaults:
-     project: project-a
-     workspace: ws1
-     workflow: qa_only
-   projects:
-     project-a:
-       workspaces:
-         ws1:
-           root_path: /tmp/pa
-           qa_targets: []
-           ticket_dir: docs/ticket
-       agents: {}
-       workflows: {}
-     project-b:
-       workspaces:
-         ws2:
-           root_path: /tmp/pb
-           qa_targets: []
-           ticket_dir: docs/ticket
-       agents: {}
-       workflows: {}
-   workspaces: {}
-   agents: {}
-   workflows:
-     qa_only:
-       steps:
-         - id: qa
-           required_capability: qa
-           enabled: true
-           repeatable: false
-       loop:
-         mode: once
-       finalize:
-         rules: []
-   EOF
-   ```
-
-2. Validate config:
-   ```bash
-   ./core/target/release/agent-orchestrator config validate /tmp/two-projects.yaml
+   ./scripts/orchestrator.sh config validate fixtures/two-projects.yaml
    ```
 
 ### Expected
 
-- Config validates successfully
-- Two projects are recognized
+- Config validates successfully (exit code 0)
+- Two projects (project-a, project-b) are recognized with project-level workspaces and agents
+- Validator resolves project-level workspaces for `defaults.workspace` reference
+- Validator resolves project-level agents for workflow step capability matching
 
 ---
 

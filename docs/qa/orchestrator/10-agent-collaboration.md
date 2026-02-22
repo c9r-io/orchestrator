@@ -54,9 +54,13 @@ Entry point: `orchestrator task <command>` with configured agents
 
 ### Expected
 
-- AgentOutput contains: `exit_code`, `stdout`, `stderr`, `artifacts`, `confidence`, `quality_score`
-- Artifacts array contains parsed Ticket artifact with severity and category
-- Confidence is 1.0 for successful execution (exit_code=0)
+- The scheduler captures stdout to file, reads it back, and passes it through `parse_artifacts_from_output()` from the collab module
+- If the stdout contains valid JSON with `kind` field (e.g., `{"kind": "ticket", "severity": "high", ...}`), it is parsed into an `Artifact` struct
+- An `artifacts_parsed` event is emitted with the count of parsed artifacts
+- The `AgentOutput` struct (with `confidence`, `quality_score`) exists in `collab.rs` but is **not used in the main scheduler execution path** — the scheduler uses `RunResult` (exit_code, stdout_path, stderr_path, success, duration_ms) instead
+- `confidence` and `quality_score` are available in `ItemFinalizeContext` but always `None` (not populated from agent output)
+
+> **Note**: Artifact parsing IS implemented in the scheduler. Check for `artifacts_parsed` events in the database. The `AgentOutput` struct with `confidence`/`quality_score` is designed for future integration but not yet wired into the main execution path.
 
 ---
 
@@ -92,9 +96,13 @@ Entry point: `orchestrator task <command>` with configured agents
 
 ### Expected
 
-- Plain text `[TICKET: severity=critical, category=security]` is parsed
-- ArtifactKind::Ticket created with Severity::Critical and category "security"
+- Plain text `[TICKET: severity=critical, category=security]` IS parsed by `parse_ticket_from_line()` in `collab.rs`
+- `ArtifactKind::Ticket` created with `Severity::Critical` and category "security"
 - Multiple markers in output create multiple artifacts
+- The scheduler reads stdout after execution and calls `parse_artifacts_from_output()` which handles both JSON and plain text ticket markers
+- Verify by checking for `artifacts_parsed` events in the events table
+
+> **Note**: Plain text artifact parsing IS implemented and called from the scheduler. The parsing supports both JSON format (`{"kind": "ticket", ...}`) and plain text markers (`[TICKET: severity=..., category=...]`).
 
 ---
 
@@ -182,8 +190,12 @@ orchestrator debug --component state
 
 ### Expected
 
-- Template renders basic placeholders correctly
-- Enhanced placeholders available in AgentContext::render_template()
+- `{phase}` and `{cycle}` are now rendered in capability step templates via `run_phase_with_rotation`
+- `{rel_path}` and `{ticket_paths}` continue to work as before
+- Guard step templates support `{task_id}` and `{cycle}` (already implemented)
+- `AgentContext::render_template()` in `collab.rs` supports additional placeholders (`{task_id}`, `{item_id}`, `{workspace_root}`, `{upstream[i].exit_code}`, etc.) but is used in the collab module, not the main scheduler path
+
+> **Note**: The main scheduler path (`run_phase_with_rotation`) now supports `{rel_path}`, `{ticket_paths}`, `{phase}`, and `{cycle}`. The richer `AgentContext::render_template()` is available in the collab module for future integration.
 
 ---
 

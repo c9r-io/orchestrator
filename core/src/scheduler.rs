@@ -14,6 +14,7 @@ use crate::health::{
     increment_consecutive_errors, mark_agent_diseased, reset_consecutive_errors,
     update_capability_health,
 };
+use crate::metrics::MetricsCollector;
 use crate::prehook::{emit_item_finalize_event, evaluate_step_prehook};
 use crate::selection::{select_agent_advanced, select_agent_by_preference};
 use crate::state::{InnerState, TASK_SEMAPHORE};
@@ -639,6 +640,7 @@ pub async fn run_task_loop(
                     &[],
                     &task_ctx.workspace_root,
                     &task_ctx.workspace_id,
+                    task_ctx.current_cycle,
                     &runtime,
                 )
                 .await?;
@@ -994,6 +996,21 @@ pub async fn run_phase(
     )?;
 
     update_capability_health(state, agent_id, Some(phase), success);
+
+    let duration_ms = duration.as_millis() as u64;
+    {
+        let mut metrics_map = state.agent_metrics.write().unwrap();
+        let metrics = metrics_map
+            .entry(agent_id.to_string())
+            .or_insert_with(MetricsCollector::new_agent_metrics);
+        if success {
+            MetricsCollector::record_success(metrics, duration_ms);
+        } else {
+            MetricsCollector::record_failure(metrics);
+        }
+        MetricsCollector::decrement_load(metrics);
+    }
+
     if !success {
         let errors = increment_consecutive_errors(state, agent_id);
         if errors >= 2 {
@@ -1009,7 +1026,7 @@ pub async fn run_phase(
         stdout_path: stdout_path.to_string_lossy().to_string(),
         stderr_path: stderr_path.to_string_lossy().to_string(),
         timed_out: false,
-        duration_ms: Some(duration.as_millis() as u64),
+        duration_ms: Some(duration_ms),
     })
 }
 
@@ -1023,6 +1040,7 @@ pub async fn run_phase_with_rotation(
     ticket_paths: &[String],
     workspace_root: &Path,
     workspace_id: &str,
+    cycle: u32,
     runtime: &RunningTask,
 ) -> Result<crate::dto::RunResult> {
     let (agent_id, template) = {
@@ -1038,10 +1056,20 @@ pub async fn run_phase_with_rotation(
         }
     };
 
+    {
+        let mut metrics_map = state.agent_metrics.write().unwrap();
+        let metrics = metrics_map
+            .entry(agent_id.clone())
+            .or_insert_with(MetricsCollector::new_agent_metrics);
+        MetricsCollector::increment_load(metrics);
+    }
+
     let escaped_paths: Vec<String> = ticket_paths.iter().map(|p| shell_escape(p)).collect();
     let command = template
         .replace("{rel_path}", &shell_escape(rel_path))
-        .replace("{ticket_paths}", &escaped_paths.join(" "));
+        .replace("{ticket_paths}", &escaped_paths.join(" "))
+        .replace("{phase}", phase)
+        .replace("{cycle}", &cycle.to_string());
 
     run_phase(
         state,
@@ -1100,6 +1128,14 @@ pub async fn execute_guard_step(
             select_agent_by_preference(&active.config.agents)?
         }
     };
+
+    {
+        let mut metrics_map = state.agent_metrics.write().unwrap();
+        let metrics = metrics_map
+            .entry(agent_id.clone())
+            .or_insert_with(MetricsCollector::new_agent_metrics);
+        MetricsCollector::increment_load(metrics);
+    }
 
     let command = template
         .replace("{task_id}", &shell_escape(task_id))
@@ -1210,6 +1246,7 @@ pub async fn process_item(
                 &active_tickets,
                 &task_ctx.workspace_root,
                 &task_ctx.workspace_id,
+                task_ctx.current_cycle,
                 runtime,
             )
             .await?;
@@ -1384,6 +1421,7 @@ pub async fn process_item(
                     &active_tickets,
                     &task_ctx.workspace_root,
                     &task_ctx.workspace_id,
+                    task_ctx.current_cycle,
                     runtime,
                 )
                 .await?;
@@ -1437,6 +1475,7 @@ pub async fn process_item(
                 &retest_new_tickets,
                 &task_ctx.workspace_root,
                 &task_ctx.workspace_id,
+                task_ctx.current_cycle,
                 runtime,
             )
             .await?;
@@ -1503,6 +1542,7 @@ pub async fn process_item(
                 &active_tickets,
                 &task_ctx.workspace_root,
                 &task_ctx.workspace_id,
+                task_ctx.current_cycle,
                 runtime,
             )
             .await?;

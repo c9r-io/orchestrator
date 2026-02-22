@@ -220,6 +220,84 @@ pub fn validate_workflow_config(
     Ok(())
 }
 
+fn validate_workflow_config_with_agents(
+    all_agents: &HashMap<String, &crate::config::AgentConfig>,
+    workflow: &WorkflowConfig,
+    workflow_id: &str,
+) -> Result<()> {
+    if workflow.steps.is_empty() {
+        anyhow::bail!("workflow '{}' must define at least one step", workflow_id);
+    }
+
+    let mut enabled_count = 0usize;
+    let mut seen: HashMap<String, bool> = HashMap::new();
+    for step in &workflow.steps {
+        let key = step
+            .step_type
+            .as_ref()
+            .map(|t| t.as_str())
+            .or(step.builtin.as_deref())
+            .or(step.required_capability.as_deref())
+            .unwrap_or(&step.id);
+        if seen.insert(key.to_string(), true).is_some() {
+            anyhow::bail!(
+                "workflow '{}' has duplicate step type '{}'",
+                workflow_id,
+                key
+            );
+        }
+        if !step.enabled {
+            continue;
+        }
+        enabled_count += 1;
+        if step.step_type.as_ref() == Some(&WorkflowStepType::TicketScan) {
+            if let Some(prehook) = step.prehook.as_ref() {
+                crate::prehook::validate_step_prehook(prehook, workflow_id, key)?;
+            }
+            continue;
+        }
+        let has_agent = all_agents
+            .values()
+            .any(|a| a.get_template(key).is_some());
+        if !has_agent {
+            anyhow::bail!(
+                "no agent has template for step '{}' used by workflow '{}'",
+                key,
+                workflow_id
+            );
+        }
+        if let Some(prehook) = step.prehook.as_ref() {
+            crate::prehook::validate_step_prehook(prehook, workflow_id, key)?;
+        }
+    }
+    if enabled_count == 0 {
+        anyhow::bail!("workflow '{}' has no enabled steps", workflow_id);
+    }
+    for rule in &workflow.finalize.rules {
+        crate::prehook::validate_workflow_finalize_rule(rule, workflow_id)?;
+    }
+    if let Some(max_cycles) = workflow.loop_policy.guard.max_cycles {
+        if max_cycles == 0 {
+            anyhow::bail!(
+                "workflow '{}' loop.guard.max_cycles must be > 0",
+                workflow_id
+            );
+        }
+    }
+    if workflow.loop_policy.guard.enabled {
+        let has_loop_guard = all_agents
+            .values()
+            .any(|a| a.get_template("loop_guard").is_some());
+        if !has_loop_guard {
+            anyhow::bail!(
+                "workflow '{}' loop.guard enabled but no agent has loop_guard template",
+                workflow_id
+            );
+        }
+    }
+    Ok(())
+}
+
 pub fn ensure_within_root(root: &Path, target: &Path, field: &str) -> Result<()> {
     let root_canon = root
         .canonicalize()
@@ -262,10 +340,13 @@ pub fn resolve_and_validate_workspaces(
     app_root: &Path,
     config: &OrchestratorConfig,
 ) -> Result<HashMap<String, ResolvedWorkspace>> {
-    if config.workspaces.is_empty() {
+    let has_project_workspaces = config.projects.values().any(|p| !p.workspaces.is_empty());
+    let has_project_agents = config.projects.values().any(|p| !p.agents.is_empty());
+
+    if config.workspaces.is_empty() && !has_project_workspaces {
         anyhow::bail!("[EMPTY_WORKSPACES] config.workspaces cannot be empty\n  category: validation\n  suggested_fix: add at least one workspace with root_path and qa_targets");
     }
-    if config.agents.is_empty() {
+    if config.agents.is_empty() && !has_project_agents {
         anyhow::bail!("[EMPTY_AGENTS] config.agents cannot be empty\n  category: validation\n  suggested_fix: add at least one agent with capabilities and templates");
     }
     if config.workflows.is_empty() {
@@ -322,10 +403,15 @@ pub fn resolve_and_validate_workspaces(
         );
     }
 
-    if !resolved.contains_key(&config.defaults.workspace) {
+    let default_ws = &config.defaults.workspace;
+    let default_in_projects = config
+        .projects
+        .values()
+        .any(|p| p.workspaces.contains_key(default_ws));
+    if !resolved.contains_key(default_ws) && !default_in_projects {
         anyhow::bail!(
             "defaults.workspace '{}' does not exist",
-            config.defaults.workspace
+            default_ws
         );
     }
     if !config.workflows.contains_key(&config.defaults.workflow) {
@@ -335,8 +421,15 @@ pub fn resolve_and_validate_workspaces(
         );
     }
 
+    let all_agents: HashMap<String, &crate::config::AgentConfig> = config
+        .agents
+        .iter()
+        .chain(config.projects.values().flat_map(|p| p.agents.iter()))
+        .map(|(k, v)| (k.clone(), v))
+        .collect();
+
     for (workflow_id, workflow) in &config.workflows {
-        validate_workflow_config(config, workflow, workflow_id)?;
+        validate_workflow_config_with_agents(&all_agents, workflow, workflow_id)?;
     }
 
     Ok(resolved)
