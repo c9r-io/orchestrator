@@ -51,6 +51,7 @@ Resource resolution priority:
 
 - Orchestrator binary built at `./core/target/release/agent-orchestrator`
 - Default project/workspace/workflow already initialized in SQLite config
+- Use `./scripts/orchestrator.sh` (wrapper) for all commands, not the direct binary
 
 ### Goal
 
@@ -93,6 +94,7 @@ Validate task creation with explicit project specification stores project_id in 
 
 - Global workflow "test_capability" exists in config
 - Default project exists without custom workflows
+- Use `./scripts/orchestrator.sh` (wrapper) for all commands, not the direct binary
 
 ### Goal
 
@@ -125,6 +127,7 @@ Validate that when project doesn't define a workflow, global workflow is used.
 ### Preconditions
 
 - Project with multiple workspaces configured
+- Use `./scripts/orchestrator.sh` (wrapper) for all commands, not the direct binary
 
 ### Goal
 
@@ -155,6 +158,7 @@ Validate workspace resolution within project context.
 ### Preconditions
 
 - Orchestrator CLI available
+- Use `./scripts/orchestrator.sh` (wrapper) for all commands, not the direct binary
 
 ### Goal
 

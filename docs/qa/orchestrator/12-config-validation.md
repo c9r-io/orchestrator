@@ -40,7 +40,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
      workflow: test
    workspaces:
      default:
-       root_path: /tmp/test
+       root_path: "."
        qa_targets:
          - docs/qa
        ticket_dir: docs/ticket

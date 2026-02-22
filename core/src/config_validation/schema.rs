@@ -272,8 +272,17 @@ fn validate_workflow_step(
     if step.enabled {
         *enabled_count += 1;
 
+        let is_builtin_type = step.builtin.is_some()
+            || matches!(
+                step.step_type.as_ref(),
+                Some(
+                    WorkflowStepType::InitOnce
+                        | WorkflowStepType::TicketScan
+                        | WorkflowStepType::LoopGuard
+                )
+            );
         let has_template = agents.values().any(|a| a.get_template(step_key).is_some());
-        if !has_template && step.builtin.is_none() {
+        if !has_template && !is_builtin_type {
             result.add_error(ValidationError {
                 code: ErrorCode::InvalidReference,
                 message: format!("No agent has template for step '{}'", step_key),

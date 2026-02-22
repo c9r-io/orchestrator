@@ -129,6 +129,7 @@ Validate task creation and execution with mock bash agent completes successfully
 
 ### Preconditions
 
+- Database is clean: `rm -f data/agent_orchestrator.db` before running this scenario
 - At least one task exists in the system
 
 ### Goal
@@ -332,7 +333,7 @@ Validate configuration validation catches invalid configurations.
      workflow: qa_only
    workspaces:
      default:
-       root_path: /tmp/test
+       root_path: "."
        qa_targets:
          - docs/qa
        ticket_dir: docs/ticket
@@ -368,8 +369,9 @@ Validate configuration validation catches invalid configurations.
 
 ### Expected
 
-- Invalid config validation fails with error message
-- Valid config validation succeeds and shows normalized YAML
+- Invalid config validation fails with error message (e.g. empty root_path)
+- Absolute paths outside app root are rejected by the validator
+- Valid config with `root_path: "."` validation succeeds and shows normalized YAML
 
 ---
 

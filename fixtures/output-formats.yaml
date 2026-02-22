@@ -1,0 +1,38 @@
+runner:
+  shell: /bin/bash
+  shell_arg: "-lc"
+resume:
+  auto: false
+defaults:
+  project: default
+  workspace: default
+  workflow: qa_only
+projects: {}
+workspaces:
+  default:
+    root_path: "."
+    qa_targets:
+      - docs/qa/orchestrator
+    ticket_dir: docs/ticket
+agents:
+  format_agent:
+    metadata:
+      name: format_agent
+      cost: 10
+    capabilities:
+      - qa
+    templates:
+      qa: "echo 'format-qa'"
+workflows:
+  qa_only:
+    steps:
+      - id: qa
+        type: qa
+        required_capability: qa
+        enabled: true
+        repeatable: false
+    loop:
+      mode: once
+      guard:
+        enabled: false
+        stop_when_no_unresolved: false

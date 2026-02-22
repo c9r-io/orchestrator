@@ -83,7 +83,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
    workspaces:
      default:
        root_path: .
-       qa_targets: []
+       qa_targets: [docs/qa]
        ticket_dir: docs/ticket
    agents:
      echo:
@@ -174,6 +174,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 ### Preconditions
 
 - 存在损坏的 YAML 配置文件
+- To test `-c` with a broken file, ensure no SQLite config exists first (run `rm -f data/agent_orchestrator.db && orchestrator init` without bootstrap)
 
 ### Goal
 
@@ -193,6 +194,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 ### Expected
 
+- If SQLite already contains a bootstrapped config, the `-c` flag is ignored (SQLite config takes precedence)
 - 错误信息包含: `failed to parse` 或类似的解析错误
 - 工具正常退出
 

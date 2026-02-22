@@ -921,12 +921,17 @@ pub async fn run_phase(
         active.config.runner.clone()
     };
 
+    let stdout_file = std::fs::File::create(&stdout_path)
+        .with_context(|| format!("failed to create stdout log: {}", stdout_path.display()))?;
+    let stderr_file = std::fs::File::create(&stderr_path)
+        .with_context(|| format!("failed to create stderr log: {}", stderr_path.display()))?;
+
     let child = tokio::process::Command::new(&runner.shell)
         .arg(&runner.shell_arg)
         .arg(command.clone())
         .current_dir(workspace_root)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
+        .stdout(stdout_file)
+        .stderr(stderr_file)
         .kill_on_drop(true)
         .spawn()?;
 

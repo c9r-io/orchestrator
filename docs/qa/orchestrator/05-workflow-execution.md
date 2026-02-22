@@ -294,6 +294,7 @@ agents:
 - QA fails
 - Ticket is created in docs/ticket/
 - Fix phase may process the ticket
+- **Note**: If the only fix-capable agent becomes unhealthy (e.g. after QA failure), the task may report "No healthy agent found with capability: fix" — this is expected when agent health tracking marks the agent as diseased.
 
 ---
 
@@ -302,6 +303,7 @@ agents:
 ### Preconditions
 
 - See **Common Preconditions** above (clean DB, bootstrapped config, empty ticket dir)
+- Clean DB required: `rm -f data/agent_orchestrator.db` to avoid FK constraint violations from stale data
 - Config contains `loop_test` workflow with `mode: infinite` and `max_cycles: 3`
 
 ### Steps

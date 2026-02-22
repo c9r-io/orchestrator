@@ -77,6 +77,7 @@ workflows:
 - Orchestrator binary built
 - Database reset (fresh state)
 - Two agents with different capabilities configured
+- Use `config bootstrap --from` for flat config fixtures (not `apply -f`; apply expects manifest format with `apiVersion: orchestrator.dev/v1`)
 
 ### Goal
 
@@ -140,9 +141,9 @@ Validate that when a step requires a capability, only agents with that capabilit
    EOF
    ```
 
-3. Apply config:
+3. Bootstrap config:
    ```bash
-      ./core/target/release/agent-orchestrator apply -f /tmp/capability-test.yaml
+   ./core/target/release/agent-orchestrator config bootstrap --from /tmp/capability-test.yaml --force
    ```
 
 4. Create task:
@@ -173,6 +174,7 @@ Validate that when a step requires a capability, only agents with that capabilit
 ### Preconditions
 
 - Two agents with same capability but different selection strategies
+- Use `config bootstrap --from` for flat config fixtures (not `apply -f`; apply expects manifest format with `apiVersion: orchestrator.dev/v1`)
 
 ### Goal
 
@@ -239,9 +241,9 @@ Validate that agents with `performance_first` strategy are prioritized.
    EOF
    ```
 
-2. Apply and test:
+2. Bootstrap config and test:
    ```bash
-      ./core/target/release/agent-orchestrator apply -f /tmp/selection-perf-test.yaml
+   ./core/target/release/agent-orchestrator config bootstrap --from /tmp/selection-perf-test.yaml --force
    ./core/target/release/agent-orchestrator task create \
      --name "selection-perf-test" \
      --goal "Test selection strategy" \
@@ -268,6 +270,7 @@ Validate that agents with `performance_first` strategy are prioritized.
 
 - Two agents with different selection strategies
 - One agent configured with `success_rate_weighted`
+- Use `config bootstrap --from` for flat config fixtures (not `apply -f`; apply expects manifest format with `apiVersion: orchestrator.dev/v1`)
 
 ### Goal
 
@@ -325,9 +328,9 @@ Validate that agents with higher success rates are prioritized when using `succe
    EOF
    ```
 
-2. Apply and test:
+2. Bootstrap config and test:
    ```bash
-      ./core/target/release/agent-orchestrator apply -f /tmp/selection-quality-test.yaml
+   ./core/target/release/agent-orchestrator config bootstrap --from /tmp/selection-quality-test.yaml --force
    ./core/target/release/agent-orchestrator task create \
      --name "selection-quality-test" \
      --goal "Test success rate weighted" \
@@ -353,6 +356,7 @@ Validate that agents with higher success rates are prioritized when using `succe
 
 - Workflow with repeatable and non-repeatable steps
 - Infinite loop mode
+- Use `config bootstrap --from` for flat config fixtures (not `apply -f`; apply expects manifest format with `apiVersion: orchestrator.dev/v1`)
 
 ### Goal
 
@@ -405,9 +409,9 @@ Validate that repeatable steps run every cycle, while non-repeatable steps run o
    EOF
    ```
 
-2. Apply:
+2. Bootstrap config:
    ```bash
-      ./core/target/release/agent-orchestrator apply -f /tmp/repeatable-test.yaml
+   ./core/target/release/agent-orchestrator config bootstrap --from /tmp/repeatable-test.yaml --force
    ```
 
 3. Create task and start:
@@ -437,6 +441,7 @@ Validate that repeatable steps run every cycle, while non-repeatable steps run o
 ### Preconditions
 
 - Workflow with guard step that returns "stop"
+- Use `config bootstrap --from` for flat config fixtures (not `apply -f`; apply expects manifest format with `apiVersion: orchestrator.dev/v1`)
 
 ### Goal
 
@@ -490,9 +495,9 @@ Validate that when a guard step returns "stop", the workflow loop terminates.
    EOF
    ```
 
-2. Apply and test:
+2. Bootstrap config and test:
    ```bash
-      ./core/target/release/agent-orchestrator apply -f /tmp/guard-test.yaml
+   ./core/target/release/agent-orchestrator config bootstrap --from /tmp/guard-test.yaml --force
    ./core/target/release/agent-orchestrator task create \
      --name "guard-test" \
      --goal "Test guard step" \

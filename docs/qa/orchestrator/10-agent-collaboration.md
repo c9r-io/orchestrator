@@ -25,6 +25,8 @@ Entry point: `orchestrator task <command>` with configured agents
 
 - Orchestrator binary built and available
 - Test agent configured with JSON output capability
+- Full config must be bootstrapped first: `orchestrator config bootstrap --from fixtures/test-workflow-execution.yaml --force`
+- Then apply agent-specific manifests on top of the bootstrapped config
 
 ### Steps
 
@@ -64,6 +66,8 @@ Entry point: `orchestrator task <command>` with configured agents
 
 - Orchestrator running
 - Test agent configured with plain text ticket markers
+- Full config must be bootstrapped first: `orchestrator config bootstrap --from fixtures/test-workflow-execution.yaml --force`
+- Then apply agent-specific manifests on top of the bootstrapped config
 
 ### Steps
 
@@ -99,6 +103,7 @@ Entry point: `orchestrator task <command>` with configured agents
 ### Preconditions
 
 - Orchestrator binary built and available
+- `config bootstrap` is required after `init` for debug and task commands
 
 ### Steps
 

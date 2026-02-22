@@ -1,0 +1,46 @@
+runner:
+  shell: /bin/bash
+  shell_arg: -lc
+resume:
+  auto: false
+defaults:
+  workspace: default
+  workflow: quality_selection_test
+workspaces:
+  default:
+    root_path: .
+    qa_targets: []
+    ticket_dir: docs/ticket
+agents:
+  proven_agent:
+    metadata:
+      name: proven_agent
+      cost: 50
+    capabilities:
+    - qa
+    selection:
+      strategy: success_rate_weighted
+    templates:
+      qa: "echo 'proven-qa'"
+
+  new_agent:
+    metadata:
+      name: new_agent
+      cost: 20
+    capabilities:
+    - qa
+    selection:
+      strategy: capability_aware
+    templates:
+      qa: "echo 'new-qa'"
+
+workflows:
+  quality_selection_test:
+    steps:
+    - id: do_qa
+      required_capability: qa
+      enabled: true
+      repeatable: false
+
+    loop:
+      mode: once

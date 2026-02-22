@@ -50,7 +50,7 @@ Entry point: `orchestrator edit <command>`
 
 1. Export agent resource:
    ```bash
-   orchestrator edit export agent/opencode
+   orchestrator edit export agent/mock_echo
    ```
 
 2. Verify agent templates are included:
@@ -68,6 +68,7 @@ Entry point: `orchestrator edit <command>`
 
 ### Preconditions
 
+- Config must be bootstrapped first: `orchestrator config bootstrap --from fixtures/test-workflow-execution.yaml --force`
 - Workflow configured in configuration
 
 ### Steps

@@ -1,0 +1,51 @@
+runner:
+  shell: /bin/bash
+  shell_arg: "-lc"
+resume:
+  auto: false
+defaults:
+  project: default
+  workspace: default
+  workflow: qa_fix
+projects: {}
+workspaces:
+  default:
+    root_path: "."
+    qa_targets:
+      - docs/qa/orchestrator
+    ticket_dir: docs/ticket
+agents:
+  mock_fail:
+    metadata:
+      name: mock_fail
+    capabilities:
+      - qa
+      - fix
+    templates:
+      qa: "echo 'QA failed' && exit 1"
+      fix: "echo 'Fix attempted' && exit 0"
+workflows:
+  qa_fix:
+    steps:
+      - id: qa
+        type: qa
+        required_capability: qa
+        enabled: true
+        repeatable: true
+        is_guard: false
+      - id: ticket_scan
+        type: ticket_scan
+        enabled: true
+        repeatable: true
+        is_guard: false
+      - id: fix
+        type: fix
+        required_capability: fix
+        enabled: true
+        repeatable: true
+        is_guard: false
+    loop:
+      mode: once
+      guard:
+        enabled: false
+        stop_when_no_unresolved: false

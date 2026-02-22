@@ -1,0 +1,39 @@
+runner:
+  shell: /bin/bash
+  shell_arg: "-lc"
+resume:
+  auto: false
+defaults:
+  project: project-a
+  workspace: ws1
+  workflow: qa_only
+projects:
+  project-a:
+    workspaces:
+      ws1:
+        root_path: /tmp/pa
+        qa_targets: []
+        ticket_dir: docs/ticket
+    agents: {}
+    workflows: {}
+  project-b:
+    workspaces:
+      ws2:
+        root_path: /tmp/pb
+        qa_targets: []
+        ticket_dir: docs/ticket
+    agents: {}
+    workflows: {}
+workspaces: {}
+agents: {}
+workflows:
+  qa_only:
+    steps:
+      - id: qa
+        required_capability: qa
+        enabled: true
+        repeatable: false
+    loop:
+      mode: once
+    finalize:
+      rules: []

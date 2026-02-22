@@ -1,0 +1,42 @@
+runner:
+  shell: /bin/bash
+  shell_arg: -lc
+resume:
+  auto: false
+defaults:
+  workspace: default
+  workflow: guard_test
+workspaces:
+  default:
+    root_path: .
+    qa_targets: []
+    ticket_dir: docs/ticket
+agents:
+  test_agent:
+    metadata:
+      name: test_agent
+      cost: 50
+    capabilities:
+    - qa
+    templates:
+      qa: "echo 'qa-run'"
+      default: "echo 'stop'"
+
+workflows:
+  guard_test:
+    steps:
+    - id: run_qa
+      required_capability: qa
+      enabled: true
+      repeatable: true
+
+    - id: check_stop
+      builtin: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+    loop:
+      mode: infinite
+      guard:
+        enabled: true
+        stop_when_no_unresolved: true

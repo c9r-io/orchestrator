@@ -1,0 +1,55 @@
+runner:
+  shell: /bin/bash
+  shell_arg: -lc
+resume:
+  auto: false
+defaults:
+  workspace: default
+  workflow: selection_test
+workspaces:
+  default:
+    root_path: .
+    qa_targets: []
+    ticket_dir: docs/ticket
+agents:
+  fast_agent:
+    metadata:
+      name: fast_agent
+      cost: 20
+    capabilities:
+    - qa
+    - fix
+    selection:
+      strategy: performance_first
+    templates:
+      qa: "echo 'fast-qa'"
+      fix: "echo 'fast-fix'"
+
+  quality_agent:
+    metadata:
+      name: quality_agent
+      cost: 80
+    capabilities:
+    - qa
+    - fix
+    selection:
+      strategy: success_rate_weighted
+    templates:
+      qa: "echo 'quality-qa'"
+      fix: "echo 'quality-fix'"
+
+workflows:
+  selection_test:
+    steps:
+    - id: do_qa
+      required_capability: qa
+      enabled: true
+      repeatable: false
+
+    - id: do_fix
+      required_capability: fix
+      enabled: true
+      repeatable: false
+
+    loop:
+      mode: once

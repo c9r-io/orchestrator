@@ -4,3 +4,4 @@ data/logs/*.log
 config/default.yaml
 docs/ticket/*.md
 /core/target/
+data/logs/*

@@ -1,0 +1,77 @@
+runner:
+  shell: /bin/bash
+  shell_arg: "-lc"
+resume:
+  auto: false
+defaults:
+  project: default
+  workspace: default
+  workflow: test_capability
+projects:
+  default:
+    description: "Default project"
+    workspaces:
+      default:
+        root_path: .
+        qa_targets:
+          - docs/qa/orchestrator
+        ticket_dir: docs/ticket
+    agents: {}
+    workflows: {}
+workspaces:
+  default:
+    root_path: .
+    qa_targets:
+      - docs/qa/orchestrator
+    ticket_dir: docs/ticket
+agents:
+  global_agent:
+    metadata:
+      name: global_agent
+    capabilities:
+      - qa
+      - fix
+      - retest
+    templates:
+      qa: "echo 'qa-global'"
+      fix: "echo 'fix-global'"
+      retest: "echo 'retest-global'"
+workflows:
+  test_capability:
+    steps:
+      - id: qa
+        type: qa
+        required_capability: qa
+        enabled: true
+        repeatable: false
+    loop:
+      mode: once
+      guard:
+        enabled: false
+        stop_when_no_unresolved: false
+  qa_fix_retest:
+    steps:
+      - id: qa
+        type: qa
+        required_capability: qa
+        enabled: true
+        repeatable: false
+      - id: ticket_scan
+        type: ticket_scan
+        enabled: true
+        repeatable: false
+      - id: fix
+        type: fix
+        required_capability: fix
+        enabled: true
+        repeatable: false
+      - id: retest
+        type: retest
+        required_capability: retest
+        enabled: false
+        repeatable: false
+    loop:
+      mode: once
+      guard:
+        enabled: false
+        stop_when_no_unresolved: false

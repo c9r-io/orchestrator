@@ -1,0 +1,41 @@
+runner:
+  shell: /bin/bash
+  shell_arg: -lc
+resume:
+  auto: false
+defaults:
+  workspace: default
+  workflow: repeat_test
+workspaces:
+  default:
+    root_path: .
+    qa_targets: []
+    ticket_dir: docs/ticket
+agents:
+  test_agent:
+    metadata:
+      name: test_agent
+      cost: 50
+    capabilities:
+    - qa
+    templates:
+      qa: "echo 'cycle-{cycle}'"
+
+workflows:
+  repeat_test:
+    steps:
+    - id: one_time
+      required_capability: qa
+      enabled: true
+      repeatable: false
+
+    - id: every_cycle
+      required_capability: qa
+      enabled: true
+      repeatable: true
+
+    loop:
+      mode: infinite
+      guard:
+        enabled: true
+        stop_when_no_unresolved: false

@@ -21,6 +21,8 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 - 有效的配置文件存在 (包含基本结构)
 - 数据库已初始化
+- Note: `workspace list` requires a bootstrapped config in SQLite. After `init` only (without bootstrap), commands that need config will fail with "config is not initialized"
+- Dry-run apply (`apply --dry-run`) does NOT persist config
 
 ### Goal
 
@@ -87,6 +89,8 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 - Step 1 输出: `workspace/test-ws-dryrun created`
 - Step 2 显示 workspace 信息，包含正确的 root_path
+- After applying only a workspace (without agents and workflows), read commands like `workspace info` will fail with "active config is not runnable" because agents and workflows are required for a complete config
+- Apply workspaces, agents, and workflows before running info commands
 
 ---
 
@@ -95,6 +99,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 ### Preconditions
 
 - 无 workspace/agent/workflow 配置
+- The workflow manifest must match the expected schema for `apply`. If it uses an incorrect schema, it will fail with "data did not match any variant of untagged enum ResourceSpec". Use the correct Workflow manifest format (apiVersion, kind, metadata, spec with steps, loop, finalize)
 
 ### Goal
 

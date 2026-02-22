@@ -22,6 +22,7 @@ Entry point: `orchestrator task <command>`
 - Orchestrator binary available
 - Runtime initialized and mock config bootstrapped (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions)
 - Workspace configured with mock agents that produce exit-code 0 (e.g. `echo 'done'`)
+- Clean database state: `rm -f data/agent_orchestrator.db`
 
 ### Steps
 
@@ -100,33 +101,33 @@ Entry point: `orchestrator task <command>`
      workflow: qa_only
    workspaces:
      default:
-       root_path: /path/to/project
+       root_path: "."
        qa_targets:
          - docs/qa
        ticket_dir: docs/ticket
-    agents:
-      mock_sleep:
-        metadata:
-          name: mock_sleep
-        capabilities:
-        - qa
-        templates:
-          qa: "sleep 10 && echo 'done'"
-    workflows:
-      qa_only:
-        steps:
-          - id: qa
-            required_capability: qa
-            enabled: true
-            repeatable: false
-        loop:
-          mode: once
-          guard:
-            enabled: false
-            stop_when_no_unresolved: false
-        finalize:
-          rules: []
-    EOF
+   agents:
+     mock_sleep:
+       metadata:
+         name: mock_sleep
+       capabilities:
+         - qa
+       templates:
+         qa: "sleep 10 && echo 'done'"
+   workflows:
+     qa_only:
+       steps:
+         - id: qa
+           required_capability: qa
+           enabled: true
+           repeatable: false
+       loop:
+         mode: once
+         guard:
+           enabled: false
+           stop_when_no_unresolved: false
+       finalize:
+         rules: []
+   EOF
     ```
 
 2. Start task in background:
@@ -163,6 +164,7 @@ Entry point: `orchestrator task <command>`
 
 - Runtime initialized and mock config bootstrapped (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions)
 - A task has been executed **successfully** at least once (task must reach running state so that command_runs are recorded)
+- Task must have been started and executed (not just created) for command_runs to exist in the database
 
 ### Steps
 
@@ -199,6 +201,7 @@ Entry point: `orchestrator task <command>`
 ### Preconditions
 
 - A task with failed items exists
+- Clean database state: `rm -f data/agent_orchestrator.db`
 
 ### Steps
 

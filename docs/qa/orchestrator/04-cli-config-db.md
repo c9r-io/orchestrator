@@ -124,6 +124,7 @@ Entry points:
 ### Preconditions
 
 - Runtime initialized and config bootstrapped (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions).
+- Config must be bootstrapped: `./scripts/orchestrator.sh config bootstrap --from fixtures/test-workflow-execution.yaml --force`
 - Current config contains `default` workspace.
 
 ### Steps

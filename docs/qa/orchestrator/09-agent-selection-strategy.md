@@ -22,6 +22,8 @@ Entry point: `orchestrator task <command>` with configured agents
 - Orchestrator binary available
 - At least 2 agents configured with same capability (e.g., `qa`)
 - Agents have different `cost` metadata values
+- Clean start: `rm -f data/agent_orchestrator.db && orchestrator init`
+- Config must be bootstrapped (not just init): use `config bootstrap --from` with a complete fixture
 
 ### Steps
 
@@ -96,6 +98,7 @@ Entry point: `orchestrator task <command>` with configured agents
 
 - Multiple agents with different capability sets
 - One agent supports both `qa` and `fix`
+- A full config must be bootstrapped first before applying agent-only manifests
 
 ### Steps
 
@@ -129,6 +132,7 @@ Entry point: `orchestrator task <command>` with configured agents
 
 - Multiple agents support same capability
 - At least one agent set to always fail
+- A full config must be bootstrapped first before applying agent-only manifests
 
 ### Steps
 
@@ -167,6 +171,7 @@ Entry point: `orchestrator task <command>` with configured agents
 ### Preconditions
 
 - Multiple agents with same capability
+- `config bootstrap` (not just `init`) must be done before task commands
 
 ### Steps
 

@@ -11,6 +11,11 @@
 
 This document tests that all CLI commands support proper JSON and YAML output formats for scripting and integration.
 
+### Common Preconditions (Scenarios 2, 3, 5)
+
+- Config must be bootstrapped: `orchestrator config bootstrap --from fixtures/output-formats.yaml --force`
+- Previous DB state must be cleared: `rm -f data/agent_orchestrator.db`
+
 ---
 
 ## Scenario 1: Task List JSON/YAML Output
@@ -48,6 +53,7 @@ This document tests that all CLI commands support proper JSON and YAML output fo
 
 ### Preconditions
 
+- See **Common Preconditions** above
 - Task exists
 
 ### Steps
@@ -73,6 +79,7 @@ This document tests that all CLI commands support proper JSON and YAML output fo
 
 ### Preconditions
 
+- See **Common Preconditions** above
 - Workspaces exist
 
 ### Steps
@@ -128,6 +135,7 @@ This document tests that all CLI commands support proper JSON and YAML output fo
 
 ### Preconditions
 
+- See **Common Preconditions** above
 - Configuration exists
 
 ### Steps
