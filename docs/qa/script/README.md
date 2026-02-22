@@ -78,5 +78,5 @@ chmod +x *.sh
 - **Fix**: Reset the database:
   ```bash
   cd ../../..
-  rm -f orchestrator/data/agent_orchestrator.db
+  rm -f data/agent_orchestrator.db
   ```

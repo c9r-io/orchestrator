@@ -77,7 +77,7 @@ Validate task creation with explicit project specification stores project_id in 
 
 3. Query database for project_id:
    ```bash
-   sqlite3 orchestrator/data/agent_orchestrator.db "SELECT id, project_id, workspace_id, workflow_id FROM tasks WHERE name = 'test-project-task';"
+   sqlite3 data/agent_orchestrator.db "SELECT id, project_id, workspace_id, workflow_id FROM tasks WHERE name = 'test-project-task';"
    ```
 
 ### Expected

@@ -86,7 +86,7 @@ Validate that when a step requires a capability, only agents with that capabilit
 
 1. Reset to fresh state:
    ```bash
-   rm -f orchestrator/data/agent_orchestrator.db
+   rm -f data/agent_orchestrator.db
    ```
 
 2. Create test config with capability-based agents:

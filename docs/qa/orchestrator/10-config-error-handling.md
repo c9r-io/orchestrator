@@ -11,7 +11,7 @@
 
 重构后的 orchestrator 不再包含硬编码的默认配置。工具依赖于用户提供的配置文件。本测试验证配置缺失时的各种场景。
 
-Entry point: `./orchestrator/scripts/orchestrator.sh <command>`
+Entry point: `./scripts/orchestrator.sh <command>`
 
 ---
 

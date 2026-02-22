@@ -301,7 +301,7 @@ agents:
 4. Check execution cycles:
    ```bash
    # Query database for cycle count
-   sqlite3 orchestrator/data/agent_orchestrator.db \
+   sqlite3 data/agent_orchestrator.db \
      "SELECT id, status, current_cycle FROM tasks WHERE id = '{task_id}'"
    ```
 
@@ -322,7 +322,7 @@ orchestrator task info {task_id}
 # Progress: 1/1 items
 
 # Check cycle count
-sqlite3 orchestrator/data/agent_orchestrator.db \
+sqlite3 data/agent_orchestrator.db \
   "SELECT current_cycle FROM tasks WHERE id = '{task_id}'"
 # Expected: 3
 ```

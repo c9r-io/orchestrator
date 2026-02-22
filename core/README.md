@@ -17,6 +17,9 @@ cargo build --release
 
 # from repo root
 ./core/target/release/agent-orchestrator <command>
+
+# wrapper script
+./scripts/orchestrator.sh <command>
 ```
 
 ## Test
@@ -28,10 +31,9 @@ cargo test --lib --bins
 
 ## Config And Data
 
-When run from repo root, default paths are:
+When run from repo root, runtime paths are:
 
-- Config: `orchestrator/config/default.yaml`
-- DB: `orchestrator/data/agent_orchestrator.db`
-- Logs: `orchestrator/data/logs/`
+- DB: `data/agent_orchestrator.db`
+- Logs: `data/logs/`
 
-Use `--config <path>` to override the config file.
+Use `orchestrator config bootstrap --from <path>` to initialize config in SQLite.

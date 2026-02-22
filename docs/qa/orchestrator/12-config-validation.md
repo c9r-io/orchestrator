@@ -11,7 +11,7 @@
 
 测试 `config validate` 命令和配置错误检测。
 
-Entry point: `./orchestrator/scripts/orchestrator.sh <command>`
+Entry point: `./scripts/orchestrator.sh <command>`
 
 ---
 

@@ -11,7 +11,7 @@
 
 The Agent Orchestrator CLI provides kubectl-like command interface for task orchestration. This document tests the CLI interface using simple bash commands (echo, sleep) as mock agents to validate the full agent orchestration pipeline.
 
-Entry point: `./orchestrator/scripts/orchestrator.sh <command>` or `./core/target/release/agent-orchestrator <command>`
+Entry point: `./scripts/orchestrator.sh <command>` or `./core/target/release/agent-orchestrator <command>`
 
 ### Test Agent Configuration
 

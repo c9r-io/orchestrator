@@ -53,7 +53,7 @@ The Agent Orchestrator provides a kubectl-like CLI interface for managing tasks,
 ### CLI Interactions
 
 Entry points:
-- `./orchestrator/scripts/orchestrator.sh <command> [options]`
+- `./scripts/orchestrator.sh <command> [options]`
 - `./core/target/release/agent-orchestrator <command> [options]`
 
 Key commands:

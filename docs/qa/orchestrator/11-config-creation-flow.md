@@ -11,7 +11,7 @@
 
 测试使用 `apply` 命令创建 workspace、agent、workflow 配置资源。
 
-Entry point: `./orchestrator/scripts/orchestrator.sh <command>`
+Entry point: `./scripts/orchestrator.sh <command>`
 
 ---
 

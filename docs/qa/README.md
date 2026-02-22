@@ -148,6 +148,6 @@ Maintain a lightweight index table here for fast navigation:
 3. **Script Paths**: Scripts assume the project structure is:
    - Binary: `core/target/release/agent-orchestrator`
    - Config: `orchestrator/config/default.yaml`
-   - Data: `orchestrator/data/agent_orchestrator.db`
+   - Data: `data/agent_orchestrator.db`
    
    If structure changes, update the script variables accordingly.
