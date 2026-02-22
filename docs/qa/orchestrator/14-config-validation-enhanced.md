@@ -18,8 +18,6 @@
 
 **Primary Testing Method**: 单元测试 (CLI: `cargo test config_validation --lib`)
 
-**API Testing Method**: 当 Tauri UI 运行时，调用 `POST /api/validate_config_yaml`
-
 ---
 
 ## Test Method
@@ -27,31 +25,25 @@
 ### 单元测试 (推荐)
 
 ```bash
-cd orchestrator/src-tauri
+cd core
 cargo test config_validation --lib
 ```
 
-预期结果: 14 passed, 0 failed
-
-### API 测试 (需要启动 UI)
+### CLI 配置校验
 
 ```bash
-# 启动 Tauri UI
-cd orchestrator && npm run tauri:dev
+# 构建二进制
+cd core
+cargo build --release
 
-# 在另一个终端调用 API
-curl -X POST http://localhost:1420/api/validate_config_yaml \
-  -H "Content-Type: application/json" \
-  -d '{"yaml": "..."}'
+# 使用 CLI 校验配置文件
+cd ..
+./core/target/release/agent-orchestrator config validate /tmp/test-config.yaml
 ```
 
 ---
 
 ## Scenario 1: YAML 语法错误预检
-
-### Preconditions
-
-- 无
 
 ### Goal
 
@@ -59,88 +51,105 @@ curl -X POST http://localhost:1420/api/validate_config_yaml \
 
 ### Steps
 
-1. 发送包含 YAML 语法错误的配置:
+1. 创建无效 YAML:
    ```bash
-   curl -X POST http://localhost:1420/api/validate_config_yaml \
-     -H "Content-Type: application/json" \
-     -d '{"yaml": "invalid: yaml: content: ["}'
+   cat > /tmp/invalid-yaml.yaml << 'YAML'
+   invalid: yaml: content: [
+   YAML
+   ```
+2. 执行:
+   ```bash
+   ./core/target/release/agent-orchestrator config validate /tmp/invalid-yaml.yaml
    ```
 
 ### Expected
 
-- 返回 `valid: false`
-- `errors` 数组包含 YamlSyntaxError
-- `errors[0].message` 包含 "YAML syntax error"
-- `errors[0].code` 为 "YamlSyntaxError"
+- 命令返回非零退出码
+- 输出包含 YAML 语法错误
 
 ---
 
 ## Scenario 2: 多错误聚合报告
 
-### Preconditions
-
-- 无
-
 ### Goal
 
-验证配置校验返回所有错误而非仅第一个。
+验证配置校验能识别多个结构性错误。
 
 ### Steps
 
-1. 发送包含多个错误的配置（空 workspaces、agents、workflows、缺失 defaults）:
+1. 创建缺失关键字段的配置:
    ```bash
-   curl -X POST http://localhost:1420/api/validate_config_yaml \
-     -H "Content-Type: application/json" \
-     -d '{
-       "yaml": "runner:\n  shell: /bin/bash\nworkspaces: {}\nagents: {}\nworkflows: {}\n"
-     }'
+   cat > /tmp/multi-error.yaml << 'YAML'
+   runner:
+     shell: /bin/bash
+   workspaces: {}
+   agents: {}
+   workflows: {}
+   YAML
+   ```
+2. 执行:
+   ```bash
+   ./core/target/release/agent-orchestrator config validate /tmp/multi-error.yaml
    ```
 
 ### Expected
 
-- 返回 `valid: false`
-- `errors` 数组长度 >= 3
-- 包含 "workspaces cannot be empty"
-- 包含 "agents cannot be empty"  
-- 包含 "workflows cannot be empty"
+- 命令返回非零退出码
+- 输出包含多个校验错误信息
 
 ---
 
-## Scenario 3: 警告与错误分离
-
-### Preconditions
-
-- 无
+## Scenario 3: 路径不存在告警
 
 ### Goal
 
-验证路径不存在时返回警告而非错误。
+验证不存在路径能被识别并输出可读校验信息。
 
 ### Steps
 
-1. 发送包含不存在路径的配置（missing_path_is_error: false）:
+1. 创建包含不存在目录的配置:
    ```bash
-   curl -X POST http://localhost:1420/api/validate_config_yaml \
-     -H "Content-Type: application/json" \
-     -d '{
-       "yaml": "runner:\n  shell: /bin/bash\nresume:\n  auto: false\ndefaults:\n  project: default\n  workspace: default\n  workflow: basic\nworkspaces:\n  test:\n    root_path: /nonexistent/path/xyz123\n    qa_targets:\n      - docs\n    ticket_dir: tickets\nagents:\n  echo:\n    capabilities:\n      - qa\n    templates:\n      qa: echo test\nworkflows:\n  basic:\n    steps:\n      - id: qa\n        type: qa\n        enabled: true\n"
-     }'
+   cat > /tmp/missing-path.yaml << 'YAML'
+   runner:
+     shell: /bin/bash
+     shell_arg: -lc
+   resume:
+     auto: false
+   defaults:
+     project: default
+     workspace: default
+     workflow: basic
+   workspaces:
+     default:
+       root_path: /nonexistent/path/xyz123
+       qa_targets: [docs]
+       ticket_dir: tickets
+   agents:
+     echo:
+       capabilities: [qa]
+       templates:
+         qa: "echo test"
+   workflows:
+     basic:
+       steps:
+         - id: qa
+           type: qa
+           enabled: true
+   YAML
+   ```
+2. 执行:
+   ```bash
+   ./core/target/release/agent-orchestrator config validate /tmp/missing-path.yaml
    ```
 
 ### Expected
 
-- 返回 `valid: true`（警告不影响有效性）
-- `warnings` 数组非空
-- 包含 PathNotExists 警告
-- `warnings[0].suggestion` 包含创建目录的建议
+- 输出包含路径检查结果
+- 不因告警导致进程崩溃
 
 ---
 
 ## Scenario 4: 路径逃逸检测
-
-### Preconditions
-
-- 无
 
 ### Goal
 
@@ -148,51 +157,66 @@ curl -X POST http://localhost:1420/api/validate_config_yaml \
 
 ### Steps
 
-1. 发送包含路径逃逸的配置（通过 qa_targets 使用 `..`）:
+1. 创建含路径逃逸的配置:
    ```bash
-   curl -X POST http://localhost:1420/api/validate_config_yaml \
-     -H "Content-Type: application/json" \
-     -d '{
-       "yaml": "runner:\n  shell: /bin/bash\nresume:\n  auto: false\ndefaults:\n  project: default\n  workspace: default\n  workflow: basic\nworkspaces:\n  test:\n    root_path: .\n    qa_targets:\n      - ../../../etc\n    ticket_dir: tickets\nagents:\n  echo:\n    capabilities:\n      - qa\n    templates:\n      qa: echo test\nworkflows:\n  basic:\n    steps:\n      - id: qa\n        type: qa\n        enabled: true\n"
-     }'
+   cat > /tmp/path-escape.yaml << 'YAML'
+   runner:
+     shell: /bin/bash
+     shell_arg: -lc
+   resume:
+     auto: false
+   defaults:
+     project: default
+     workspace: default
+     workflow: basic
+   workspaces:
+     default:
+       root_path: .
+       qa_targets: [../../../etc]
+       ticket_dir: tickets
+   agents:
+     echo:
+       capabilities: [qa]
+       templates:
+         qa: "echo test"
+   workflows:
+     basic:
+       steps:
+         - id: qa
+           type: qa
+           enabled: true
+   YAML
+   ```
+2. 执行:
+   ```bash
+   ./core/target/release/agent-orchestrator config validate /tmp/path-escape.yaml
    ```
 
 ### Expected
 
-- 返回 `valid: false`
-- `errors` 包含 PathOutsideWorkspace 错误
+- 命令返回非零退出码
+- 输出包含路径越界相关错误
 
 ---
 
-## Scenario 5: 完整校验报告格式
-
-### Preconditions
-
-- 无
+## Scenario 5: 有效配置规范化输出
 
 ### Goal
 
-验证 API 返回完整的校验报告格式。
+验证有效配置被接受并可输出规范化结果。
 
 ### Steps
 
-1. 发送有效配置:
+1. 使用已有配置:
    ```bash
-   curl -X POST http://localhost:1420/api/validate_config_yaml \
-     -H "Content-Type: application/json" \
-     -d '{
-       "yaml": "runner:\n  shell: /bin/bash\n  shell_arg: -lc\nresume:\n  auto: false\ndefaults:\n  project: default\n  workspace: default\n  workflow: basic\nworkspaces:\n  default:\n    root_path: .\n    qa_targets:\n      - src\n    ticket_dir: tickets\nagents:\n  echo:\n    capabilities:\n      - qa\n    templates:\n      qa: echo test\nworkflows:\n  basic:\n    steps:\n      - id: qa\n        type: qa\n        enabled: true\n    loop:\n      mode: once\n      guard:\n        enabled: false\n        stop_when_no_unresolved: false\n    finalize:\n      rules: []\n"
-     }'
+   ./core/target/release/agent-orchestrator config validate orchestrator/config/default.yaml
    ```
 
 ### Expected
 
-- 返回包含以下字段的 JSON:
-  - `valid`: boolean
-  - `normalized_yaml`: string (规范化后的 YAML)
-  - `errors`: array
-  - `warnings`: array
-  - `summary`: string (人类可读报告)
+- 命令返回 0
+- 输出包含 "Configuration is valid"
+- 输出包含规范化后的 YAML
 
 ---
 
@@ -202,6 +226,6 @@ curl -X POST http://localhost:1420/api/validate_config_yaml \
 |---|----------|--------|-----------|--------|-------|
 | 1 | YAML 语法错误预检 | ☐ | | | |
 | 2 | 多错误聚合报告 | ☐ | | | |
-| 3 | 警告与错误分离 | ☐ | | | |
+| 3 | 路径不存在告警 | ☐ | | | |
 | 4 | 路径逃逸检测 | ☐ | | | |
-| 5 | 完整校验报告格式 | ☐ | | | |
+| 5 | 有效配置规范化输出 | ☐ | | | |

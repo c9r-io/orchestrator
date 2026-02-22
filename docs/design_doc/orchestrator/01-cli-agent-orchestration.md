@@ -54,7 +54,7 @@ The Agent Orchestrator provides a kubectl-like CLI interface for managing tasks,
 
 Entry points:
 - `./orchestrator/scripts/orchestrator.sh <command> [options]`
-- `./orchestrator/src-tauri/target/release/agent-orchestrator <command> [options]`
+- `./core/target/release/agent-orchestrator <command> [options]`
 
 Key commands:
 - `apply -f <file>` - Apply YAML manifests

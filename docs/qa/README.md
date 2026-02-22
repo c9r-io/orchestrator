@@ -23,13 +23,13 @@ Some advanced scenarios require shell scripts for testing. These are located in 
 > 
 > ```bash
 > # Check if binary exists
-> ls -la orchestrator/src-tauri/target/release/agent-orchestrator
+> ls -la core/target/release/agent-orchestrator
 > 
 > # If not exists or needs update, rebuild:
-> cd orchestrator/src-tauri && cargo build --release
+> cd core && cargo build --release
 > ```
 > 
-> The scripts assume the binary is at `orchestrator/src-tauri/target/release/agent-orchestrator`. If the project structure changes, update the `BINARY` variable in each script.
+> The scripts assume the binary is at `core/target/release/agent-orchestrator`. If the project structure changes, update the `BINARY` variable in each script.
 
 ## Suggested Directory Structure
 
@@ -137,16 +137,16 @@ Maintain a lightweight index table here for fast navigation:
 
 1. **Check Binary First**: Before running any tests, verify the orchestrator binary exists and is up-to-date:
    ```bash
-   ls -la orchestrator/src-tauri/target/release/agent-orchestrator
+   ls -la core/target/release/agent-orchestrator
    ```
 
 2. **Rebuild if Needed**: If the binary is missing or old, rebuild:
    ```bash
-   cd orchestrator/src-tauri && cargo build --release
+   cd core && cargo build --release
    ```
 
 3. **Script Paths**: Scripts assume the project structure is:
-   - Binary: `orchestrator/src-tauri/target/release/agent-orchestrator`
+   - Binary: `core/target/release/agent-orchestrator`
    - Config: `orchestrator/config/default.yaml`
    - Data: `orchestrator/data/agent_orchestrator.db`
    

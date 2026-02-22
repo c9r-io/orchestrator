@@ -17,12 +17,23 @@ pub fn now_ts() -> String {
 
 pub fn detect_app_root() -> PathBuf {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    if cwd.join("src-tauri").exists() && cwd.join("src").exists() {
+
+    if cwd.join("core").exists() && cwd.join("orchestrator").exists() {
+        return cwd.join("orchestrator");
+    }
+
+    if cwd.ends_with("core") {
+        let parent = cwd.parent().unwrap_or(&cwd);
+        if parent.join("orchestrator").exists() {
+            return parent.join("orchestrator");
+        }
+        return parent.to_path_buf();
+    }
+
+    if cwd.ends_with("orchestrator") {
         return cwd;
     }
-    if cwd.ends_with("src-tauri") {
-        return cwd.parent().unwrap_or(&cwd).to_path_buf();
-    }
+
     let candidate = cwd.join("tools/agent-orchestrator");
     if candidate.exists() {
         return candidate;

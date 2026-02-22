@@ -143,12 +143,12 @@ Validate that when a step requires a capability, only agents with that capabilit
 3. Apply config:
    ```bash
    cd orchestrator
-   ./src-tauri/target/release/agent-orchestrator apply -f /tmp/capability-test.yaml
+   ./core/target/release/agent-orchestrator apply -f /tmp/capability-test.yaml
    ```
 
 4. Create task:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task create \
+   ./core/target/release/agent-orchestrator task create \
      --name "capability-test" \
      --goal "Test capability selection" \
      --workspace default \
@@ -157,8 +157,8 @@ Validate that when a step requires a capability, only agents with that capabilit
 
 5. Get task info and check which agent was used:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task info {task_id}
-   ./src-tauri/target/release/agent-orchestrator task logs {task_id}
+   ./core/target/release/agent-orchestrator task info {task_id}
+   ./core/target/release/agent-orchestrator task logs {task_id}
    ```
 
 ### Expected
@@ -243,8 +243,8 @@ Validate that agents with `performance_first` strategy are prioritized.
 2. Apply and test:
    ```bash
    cd orchestrator
-   ./src-tauri/target/release/agent-orchestrator apply -f /tmp/selection-perf-test.yaml
-   ./src-tauri/target/release/agent-orchestrator task create \
+   ./core/target/release/agent-orchestrator apply -f /tmp/selection-perf-test.yaml
+   ./core/target/release/agent-orchestrator task create \
      --name "selection-perf-test" \
      --goal "Test selection strategy" \
      --workspace default \
@@ -253,7 +253,7 @@ Validate that agents with `performance_first` strategy are prioritized.
 
 3. Check logs:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task logs {task_id}
+   ./core/target/release/agent-orchestrator task logs {task_id}
    ```
 
 ### Expected
@@ -330,8 +330,8 @@ Validate that agents with higher success rates are prioritized when using `succe
 2. Apply and test:
    ```bash
    cd orchestrator
-   ./src-tauri/target/release/agent-orchestrator apply -f /tmp/selection-quality-test.yaml
-   ./src-tauri/target/release/agent-orchestrator task create \
+   ./core/target/release/agent-orchestrator apply -f /tmp/selection-quality-test.yaml
+   ./core/target/release/agent-orchestrator task create \
      --name "selection-quality-test" \
      --goal "Test success rate weighted" \
      --workspace default \
@@ -340,7 +340,7 @@ Validate that agents with higher success rates are prioritized when using `succe
 
 3. Check logs:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task logs {task_id}
+   ./core/target/release/agent-orchestrator task logs {task_id}
    ```
 
 ### Expected
@@ -411,12 +411,12 @@ Validate that repeatable steps run every cycle, while non-repeatable steps run o
 2. Apply:
    ```bash
    cd orchestrator
-   ./src-tauri/target/release/agent-orchestrator apply -f /tmp/repeatable-test.yaml
+   ./core/target/release/agent-orchestrator apply -f /tmp/repeatable-test.yaml
    ```
 
 3. Create task and start:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task create \
+   ./core/target/release/agent-orchestrator task create \
      --name "repeatable-test" \
      --goal "Test repeatable steps" \
      --workspace default \
@@ -426,7 +426,7 @@ Validate that repeatable steps run every cycle, while non-repeatable steps run o
 4. Wait for 2-3 cycles, then check logs:
    ```bash
    sleep 3
-   ./src-tauri/target/release/agent-orchestrator task logs {task_id}
+   ./core/target/release/agent-orchestrator task logs {task_id}
    ```
 
 ### Expected
@@ -497,8 +497,8 @@ Validate that when a guard step returns "stop", the workflow loop terminates.
 2. Apply and test:
    ```bash
    cd orchestrator
-   ./src-tauri/target/release/agent-orchestrator apply -f /tmp/guard-test.yaml
-   ./src-tauri/target/release/agent-orchestrator task create \
+   ./core/target/release/agent-orchestrator apply -f /tmp/guard-test.yaml
+   ./core/target/release/agent-orchestrator task create \
      --name "guard-test" \
      --goal "Test guard step" \
      --workspace default \
@@ -507,7 +507,7 @@ Validate that when a guard step returns "stop", the workflow loop terminates.
 
 3. Check task status:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task info {task_id}
+   ./core/target/release/agent-orchestrator task info {task_id}
    ```
 
 ### Expected
@@ -533,13 +533,13 @@ Validate that config view correctly displays new fields (capabilities, cost, sel
 1. Apply config with new fields:
    ```bash
    cd orchestrator
-   ./src-tauri/target/release/agent-orchestrator apply -f /tmp/selection-perf-test.yaml
+   ./core/target/release/agent-orchestrator apply -f /tmp/selection-perf-test.yaml
    ```
 
 2. View config:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator config view -o json | jq '.agents'
-   ./src-tauri/target/release/agent-orchestrator config view -o json | jq '.workflows | to_entries[0].value.steps'
+   ./core/target/release/agent-orchestrator config view -o json | jq '.agents'
+   ./core/target/release/agent-orchestrator config view -o json | jq '.workflows | to_entries[0].value.steps'
    ```
 
 ### Expected

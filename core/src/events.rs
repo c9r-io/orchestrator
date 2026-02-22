@@ -25,36 +25,6 @@ impl EventSink for NoopSink {
     }
 }
 
-#[cfg(feature = "ui")]
-pub struct TauriSink {
-    app: tauri::AppHandle,
-}
-
-#[cfg(feature = "ui")]
-impl TauriSink {
-    pub fn new(app: tauri::AppHandle) -> Self {
-        Self { app }
-    }
-}
-
-#[cfg(feature = "ui")]
-impl EventSink for TauriSink {
-    fn emit(&self, task_id: &str, task_item_id: Option<&str>, event_type: &str, payload: Value) {
-        use tauri::Manager;
-
-        let _ = self.app.emit_all(
-            "task-event",
-            serde_json::json!({
-                "task_id": task_id,
-                "task_item_id": task_item_id,
-                "event_type": event_type,
-                "payload": payload,
-                "ts": now_ts()
-            }),
-        );
-    }
-}
-
 pub fn insert_event(
     state: &InnerState,
     task_id: &str,

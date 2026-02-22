@@ -1,6 +1,6 @@
 node_modules/
 dist/
 coverage/
-src-tauri/target/
+../core/target/
 data/*.db
 data/logs/*.log

@@ -31,7 +31,7 @@ Entry point: `orchestrator` CLI, config file modifications, Rust unit tests
 
 1. Run unit tests for PrehookDecision:
    ```bash
-   cd orchestrator/src-tauri && cargo test test_prehook_decision_from_bool
+   cd core && cargo test test_prehook_decision_from_bool
    ```
 
 2. Verify test output shows Run/Skip behavior:
@@ -41,7 +41,7 @@ Entry point: `orchestrator` CLI, config file modifications, Rust unit tests
 
 3. Check PrehookDecision enum in code:
    ```bash
-   grep -n "enum PrehookDecision" orchestrator/src-tauri/src/dynamic_orchestration.rs
+   grep -n "enum PrehookDecision" core/src/dynamic_orchestration.rs
    ```
 
 ### Expected
@@ -67,7 +67,7 @@ N/A - Unit test verification
 
 1. Run dynamic step pool test:
    ```bash
-   cd orchestrator/src-tauri && cargo test test_dynamic_step_pool
+   cd core && cargo test test_dynamic_step_pool
    ```
 
 2. Verify pool matches based on trigger conditions:
@@ -102,7 +102,7 @@ N/A - Unit test verification
 
 1. Run topological sort test:
    ```bash
-   cd orchestrator/src-tauri && cargo test test_dag_topological_sort
+   cd core && cargo test test_dag_topological_sort
    ```
 
 2. Verify sorted order is correct:
@@ -112,7 +112,7 @@ N/A - Unit test verification
 
 3. Check DynamicExecutionPlan structure:
    ```bash
-   grep -n "struct DynamicExecutionPlan" orchestrator/src-tauri/src/dynamic_orchestration.rs
+   grep -n "struct DynamicExecutionPlan" core/src/dynamic_orchestration.rs
    ```
 
 ### Expected
@@ -137,7 +137,7 @@ N/A - Unit test verification
 
 1. Run cycle detection test:
    ```bash
-   cd orchestrator/src-tauri && cargo test test_dag_cycle_detection
+   cd core && cargo test test_dag_cycle_detection
    ```
 
 2. Verify cycle detection:
@@ -172,7 +172,7 @@ N/A - Unit test verification
 
 1. Run adaptive planner test:
    ```bash
-   cd orchestrator/src-tauri && cargo test test_adaptive_planner_disabled
+   cd core && cargo test test_adaptive_planner_disabled
    ```
 
 2. Verify disabled behavior:
@@ -182,7 +182,7 @@ N/A - Unit test verification
 
 3. Check AdaptivePlannerConfig defaults:
    ```bash
-   grep -A 5 "impl Default for AdaptivePlannerConfig" orchestrator/src-tauri/src/dynamic_orchestration.rs
+   grep -A 5 "impl Default for AdaptivePlannerConfig" core/src/dynamic_orchestration.rs
    ```
 
 ### Expected
@@ -217,7 +217,7 @@ N/A - Unit test verification
 
 3. Test config parsing:
    ```bash
-   cd orchestrator/src-tauri && cargo build --release
+   cd core && cargo build --release
    ```
 
 ### Expected

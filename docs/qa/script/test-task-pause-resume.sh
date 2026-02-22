@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-BINARY="$PROJECT_ROOT/orchestrator/src-tauri/target/release/agent-orchestrator"
+BINARY="$PROJECT_ROOT/core/target/release/agent-orchestrator"
 WORKSPACE="$PROJECT_ROOT/orchestrator"
 
 log_info() { echo "[INFO] $1"; }

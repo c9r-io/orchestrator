@@ -1,4 +1,3 @@
-pub mod api;
 pub mod cli_types;
 pub mod collab;
 pub mod config;
@@ -16,6 +15,7 @@ pub mod resource;
 pub mod scheduler;
 pub mod selection;
 pub mod state;
+pub mod task_ops;
 pub mod ticket;
 
 #[cfg(test)]

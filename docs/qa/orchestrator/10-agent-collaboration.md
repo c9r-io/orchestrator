@@ -109,7 +109,7 @@ Entry point: `orchestrator task <command>` with configured agents
 
 2. Check for message_bus in source code:
    ```bash
-   grep -n "message_bus" orchestrator/src-tauri/src/main.rs | head
+   grep -n "message_bus" core/src/main.rs | head
    ```
 
 3. Run a task and check logs for message events:
@@ -192,7 +192,7 @@ orchestrator debug --component state
 
 1. Check StepPrehookContext structure:
    ```bash
-   grep -A 20 "struct StepPrehookContext" orchestrator/src-tauri/src/main.rs
+   grep -A 20 "struct StepPrehookContext" core/src/main.rs
    ```
 
 2. Verify new fields exist:

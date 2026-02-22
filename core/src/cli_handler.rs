@@ -1,4 +1,3 @@
-use crate::api::{create_task_impl, reset_task_item_for_retry};
 use crate::cli::{
     generate_completion, Cli, Commands, CompletionCommands, ConfigCommands, DbCommands,
     EditCommands, OutputFormat, TaskCommands, WorkspaceCommands,
@@ -22,6 +21,7 @@ use crate::scheduler::{
     stop_task_runtime_for_delete, stream_task_logs_impl, RunningTask,
 };
 use crate::state::InnerState;
+use crate::task_ops::{create_task_impl, reset_task_item_for_retry};
 use anyhow::{Context, Result};
 use clap_complete::Shell;
 use serde::Deserialize;
@@ -53,10 +53,6 @@ impl CliHandler {
             Commands::Edit(cmd) => self.handle_edit(cmd),
             Commands::Db(cmd) => self.handle_db(cmd),
             Commands::Completion(cmd) => self.handle_completion(cmd),
-            Commands::Daemon => {
-                println!("Starting daemon mode (UI)... use --cli flag for CLI mode");
-                Ok(0)
-            }
             Commands::Debug { component } => self.handle_debug(component.as_deref()),
         }
     }
@@ -364,6 +360,7 @@ impl CliHandler {
             TaskCommands::Create {
                 name,
                 goal,
+                project,
                 workspace,
                 workflow,
                 target_file,
@@ -372,7 +369,7 @@ impl CliHandler {
                 let payload = CreateTaskPayload {
                     name: name.clone(),
                     goal: goal.clone(),
-                    project_id: None,
+                    project_id: project.clone(),
                     workspace_id: workspace.clone(),
                     workflow_id: workflow.clone(),
                     target_files: if target_file.is_empty() {

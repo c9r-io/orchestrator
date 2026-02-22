@@ -1,6 +1,9 @@
+use crate::cli_handler::CliHandler;
+use crate::state::InnerState;
+use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
-use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// Agent Orchestrator CLI - kubectl-like command-line interface
 #[derive(Parser, Debug)]
@@ -80,9 +83,6 @@ pub enum Commands {
     #[command(alias = "comp", subcommand)]
     Completion(CompletionCommands),
 
-    #[command(alias = "serve")]
-    Daemon,
-
     #[command(alias = "dbg")]
     Debug {
         #[arg(long)]
@@ -119,12 +119,16 @@ pub enum TaskCommands {
         #[arg(short, long)]
         goal: Option<String>,
 
+        /// Project ID to use
+        #[arg(short, long)]
+        project: Option<String>,
+
         /// Workspace ID to use
         #[arg(short, long)]
         workspace: Option<String>,
 
         /// Workflow ID to use
-        #[arg(short, long)]
+        #[arg(short = 'W', long)]
         workflow: Option<String>,
 
         /// Target files to process (can be specified multiple times)
@@ -289,43 +293,6 @@ pub enum OutputFormat {
     Table,
     Json,
     Yaml,
-}
-
-/// Legacy CLI options for backward compatibility
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[allow(dead_code)]
-pub struct LegacyCliOptions {
-    pub cli: bool,
-    pub show_help: bool,
-    pub no_auto_resume: bool,
-    pub task_id: Option<String>,
-    pub workspace_id: Option<String>,
-    pub workflow_id: Option<String>,
-    pub name: Option<String>,
-    pub goal: Option<String>,
-    pub target_files: Vec<String>,
-}
-
-impl From<&Cli> for LegacyCliOptions {
-    fn from(cli: &Cli) -> Self {
-        let mut target_files = Vec::new();
-
-        if let Commands::Task(TaskCommands::Create { target_file, .. }) = &cli.command {
-            target_files = target_file.clone();
-        }
-
-        LegacyCliOptions {
-            cli: true,
-            show_help: false,
-            no_auto_resume: false,
-            task_id: None,
-            workspace_id: None,
-            workflow_id: None,
-            name: None,
-            goal: None,
-            target_files,
-        }
-    }
 }
 
 pub fn generate_completion(shell: Shell) {
@@ -571,6 +538,38 @@ mod tests {
     }
 
     #[test]
+    fn parse_task_create_with_project_flag() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "task",
+            "create",
+            "--project",
+            "default",
+            "--name",
+            "test",
+            "--goal",
+            "goal",
+            "--no-start",
+        ]);
+
+        match cli.command {
+            Commands::Task(TaskCommands::Create {
+                project,
+                name,
+                goal,
+                no_start,
+                ..
+            }) => {
+                assert_eq!(project, Some("default".to_string()));
+                assert_eq!(name, Some("test".to_string()));
+                assert_eq!(goal, Some("goal".to_string()));
+                assert!(no_start);
+            }
+            _ => panic!("expected task create command"),
+        }
+    }
+
+    #[test]
     fn parse_task_list_command() {
         let cli = Cli::parse_from(["orchestrator", "task", "list"]);
 
@@ -738,31 +737,8 @@ mod tests {
     }
 }
 
-use crate::cli_handler::CliHandler;
-use crate::dto::CliOptions;
-use crate::state::InnerState;
-use anyhow::Result;
-use std::env;
-use std::sync::Arc;
-
-pub async fn run_cli_mode(state: Arc<InnerState>, _options: CliOptions) -> Result<()> {
+pub fn run_cli_mode(state: Arc<InnerState>, cli: Cli) -> Result<()> {
     let handler = CliHandler::new(state);
-
-    let args: Vec<String> = env::args().collect();
-    let program_name = args
-        .first()
-        .cloned()
-        .unwrap_or_else(|| "orchestrator".to_string());
-    let filtered: Vec<String> = args
-        .into_iter()
-        .skip(1)
-        .filter(|arg| arg != "--cli")
-        .collect();
-    let mut clap_args = vec![program_name];
-    clap_args.extend(filtered);
-
-    let cli = Cli::parse_from(&clap_args);
-
     let exit_code = handler.execute(&cli)?;
     std::process::exit(exit_code);
 }

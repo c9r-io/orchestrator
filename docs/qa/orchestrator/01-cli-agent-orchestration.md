@@ -11,7 +11,7 @@
 
 The Agent Orchestrator CLI provides kubectl-like command interface for task orchestration. This document tests the CLI interface using simple bash commands (echo, sleep) as mock agents to validate the full agent orchestration pipeline.
 
-Entry point: `./orchestrator/scripts/orchestrator.sh <command>` or `./orchestrator/src-tauri/target/release/agent-orchestrator <command>`
+Entry point: `./orchestrator/scripts/orchestrator.sh <command>` or `./core/target/release/agent-orchestrator <command>`
 
 ### Test Agent Configuration
 
@@ -47,7 +47,7 @@ agents:
 
 ### Preconditions
 
-- Orchestrator binary built and available at `./orchestrator/src-tauri/target/release/agent-orchestrator`
+- Orchestrator binary built and available at `./core/target/release/agent-orchestrator`
 - Test workspace exists with QA targets configured
 - Mock agent configured in `config/default.yaml`
 
@@ -60,7 +60,7 @@ Validate task creation and execution with mock bash agent completes successfully
 1. Create a new task with mock echo agent:
    ```bash
    cd /Volumes/Yotta/ai_native_sdlc/orchestrator
-   ./src-tauri/target/release/agent-orchestrator task create \
+   ./core/target/release/agent-orchestrator task create \
      --name "test-task-echo" \
      --goal "Test agent orchestration" \
      --workspace default \
@@ -69,12 +69,12 @@ Validate task creation and execution with mock bash agent completes successfully
 
 2. List tasks to verify creation:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task list
+   ./core/target/release/agent-orchestrator task list
    ```
 
 3. Get task details:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task info {task_id}
+   ./core/target/release/agent-orchestrator task info {task_id}
    ```
 
 ### Expected
@@ -99,25 +99,25 @@ Validate task list filtering by status works correctly.
 
 1. Create multiple tasks with different scenarios:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task create --name "task-1" --goal "test1" --no-start
-   ./src-tauri/target/release/agent-orchestrator task create --name "task-2" --goal "test2" --no-start
+   ./core/target/release/agent-orchestrator task create --name "task-1" --goal "test1" --no-start
+   ./core/target/release/agent-orchestrator task create --name "task-2" --goal "test2" --no-start
    ```
 
 2. List all tasks:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task list
+   ./core/target/release/agent-orchestrator task list
    ```
 
 3. Filter by status (if tasks exist):
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task list --status pending
-   ./src-tauri/target/release/agent-orchestrator task list --status completed
+   ./core/target/release/agent-orchestrator task list --status pending
+   ./core/target/release/agent-orchestrator task list --status completed
    ```
 
 4. Test output formats:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task list -o json
-   ./src-tauri/target/release/agent-orchestrator task list -o yaml
+   ./core/target/release/agent-orchestrator task list -o json
+   ./core/target/release/agent-orchestrator task list -o yaml
    ```
 
 ### Expected
@@ -142,28 +142,28 @@ Validate workspace listing and configuration viewing work correctly.
 
 1. List workspaces:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator workspace list
+   ./core/target/release/agent-orchestrator workspace list
    ```
 
 2. Get workspace details:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator workspace info default
+   ./core/target/release/agent-orchestrator workspace info default
    ```
 
 3. View current configuration:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator config view
-   ./src-tauri/target/release/agent-orchestrator config view -o json
+   ./core/target/release/agent-orchestrator config view
+   ./core/target/release/agent-orchestrator config view -o json
    ```
 
 4. List available workflows:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator config list-workflows
+   ./core/target/release/agent-orchestrator config list-workflows
    ```
 
 5. List available agents:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator config list-agents
+   ./core/target/release/agent-orchestrator config list-agents
    ```
 
 ### Expected
@@ -205,22 +205,22 @@ Validate apply command with dry-run mode doesn't persist changes.
 
 2. Apply with dry-run (should not persist):
    ```bash
-   ./src-tauri/target/release/agent-orchestrator apply -f /tmp/test-workspace.yaml --dry-run
+   ./core/target/release/agent-orchestrator apply -f /tmp/test-workspace.yaml --dry-run
    ```
 
 3. Verify workspace was NOT created:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator workspace list
+   ./core/target/release/agent-orchestrator workspace list
    ```
 
 4. Apply without dry-run:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator apply -f /tmp/test-workspace.yaml
+   ./core/target/release/agent-orchestrator apply -f /tmp/test-workspace.yaml
    ```
 
 5. Verify workspace WAS created:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator workspace info test-workspace
+   ./core/target/release/agent-orchestrator workspace info test-workspace
    ```
 
 ### Expected
@@ -276,7 +276,7 @@ Validate configuration validation catches invalid configurations.
 
 2. Validate the invalid config:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator config validate /tmp/invalid-config.yaml
+   ./core/target/release/agent-orchestrator config validate /tmp/invalid-config.yaml
    ```
 
 3. Create valid config:
@@ -313,7 +313,7 @@ Validate configuration validation catches invalid configurations.
 
 4. Validate the valid config:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator config validate /tmp/valid-config.yaml
+   ./core/target/release/agent-orchestrator config validate /tmp/valid-config.yaml
    ```
 
 ### Expected
@@ -337,22 +337,22 @@ Validate task deletion requires --force flag.
 
 1. Create a task:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task create --name "delete-me" --goal "test" --no-start
+   ./core/target/release/agent-orchestrator task create --name "delete-me" --goal "test" --no-start
    ```
 
 2. Try to delete without force (should prompt):
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task delete {task_id}
+   ./core/target/release/agent-orchestrator task delete {task_id}
    ```
 
 3. Delete with force:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task delete {task_id} --force
+   ./core/target/release/agent-orchestrator task delete {task_id} --force
    ```
 
 4. Verify deletion:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task list
+   ./core/target/release/agent-orchestrator task list
    ```
 
 ### Expected

@@ -34,12 +34,12 @@ Before running any script:
 
 1. **Check binary exists**:
    ```bash
-   ls -la ../orchestrator/src-tauri/target/release/agent-orchestrator
+   ls -la ../core/target/release/agent-orchestrator
    ```
 
 2. **Rebuild if needed**:
    ```bash
-   cd ../orchestrator/src-tauri && cargo build --release
+   cd ../core && cargo build --release
    ```
 
 ## Running Tests
@@ -69,14 +69,14 @@ chmod +x *.sh
 **Issue**: Tests hang or timeout
 - **Fix**: Check if there's a stuck task in the database and delete it:
   ```bash
-  cd ../orchestrator
-  ./src-tauri/target/release/agent-orchestrator task list
-  ./src-tauri/target/release/agent-orchestrator task delete <task-id> --force
+  cd ../../..
+  ./core/target/release/agent-orchestrator task list
+  ./core/target/release/agent-orchestrator task delete <task-id> --force
   ```
 
 **Issue**: Database locked
 - **Fix**: Reset the database:
   ```bash
-  cd ../orchestrator
-  rm -f data/agent_orchestrator.db
+  cd ../../..
+  rm -f orchestrator/data/agent_orchestrator.db
   ```

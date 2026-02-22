@@ -11,7 +11,7 @@
 
 The orchestrator now supports a Project concept to constrain resource naming spaces, similar to Kubernetes namespace. A project can contain multiple workspaces, and workspaces within the same project can share project-level workflows and agents.
 
-Entry point: `./orchestrator/src-tauri/target/release/agent-orchestrator <command>`
+Entry point: `./core/target/release/agent-orchestrator <command>`
 
 ### Config Model
 
@@ -49,7 +49,7 @@ Resource resolution priority:
 
 ### Preconditions
 
-- Orchestrator binary built at `./orchestrator/src-tauri/target/release/agent-orchestrator`
+- Orchestrator binary built at `./core/target/release/agent-orchestrator`
 - Default project configured in `config/default.yaml`
 
 ### Goal
@@ -60,23 +60,24 @@ Validate task creation with explicit project specification stores project_id in 
 
 1. Create task with explicit project:
    ```bash
-   cd /Volumes/Yotta/ai_native_sdlc/orchestrator
-   ./src-tauri/target/release/agent-orchestrator task create \
+   cd /Volumes/Yotta/ai_native_sdlc
+   ./core/target/release/agent-orchestrator task create \
      --name "test-project-task" \
      --goal "Test project namespace" \
      --project default \
      --workspace default \
-     --workflow test_capability
+     --workflow qa_fix_retest \
+     --no-start
    ```
 
 2. Get task details to verify project_id:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task info {task_id}
+   ./core/target/release/agent-orchestrator task info {task_id}
    ```
 
 3. Query database for project_id:
    ```bash
-   sqlite3 data/agent_orchestrator.db "SELECT id, project_id, workspace_id, workflow_id FROM tasks WHERE name = 'test-project-task';"
+   sqlite3 orchestrator/data/agent_orchestrator.db "SELECT id, project_id, workspace_id, workflow_id FROM tasks WHERE name = 'test-project-task';"
    ```
 
 ### Expected
@@ -102,7 +103,7 @@ Validate that when project doesn't define a workflow, global workflow is used.
 
 1. Create task without explicit workflow (should use default):
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task create \
+   ./core/target/release/agent-orchestrator task create \
      --name "test-fallback-workflow" \
      --goal "Test fallback" \
      --project default
@@ -134,7 +135,7 @@ Validate workspace resolution within project context.
 
 1. List workspaces via API:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator workspace list
+   ./core/target/release/agent-orchestrator workspace list
    ```
 
 2. Check get_create_task_options returns project workspaces:
@@ -164,12 +165,12 @@ Validate CLI --project flag is recognized and passed correctly.
 
 1. Test project flag with help:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task create --help
+   ./core/target/release/agent-orchestrator task create --help
    ```
 
 2. Create task with project flag:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator task create \
+   ./core/target/release/agent-orchestrator task create \
      --project default \
      --name "test-cli-project-flag" \
      --goal "Test CLI flag"
@@ -241,7 +242,7 @@ Validate that project resources are isolated from each other.
 
 2. Validate config:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator config validate /tmp/two-projects.yaml
+   ./core/target/release/agent-orchestrator config validate /tmp/two-projects.yaml
    ```
 
 ### Expected
@@ -261,7 +262,7 @@ Validate that defaults.project is required and defaults to "default".
 
 1. Check current config:
    ```bash
-   ./src-tauri/target/release/agent-orchestrator config view | grep -A5 "defaults:"
+   ./core/target/release/agent-orchestrator config view | grep -A5 "defaults:"
    ```
 
 2. Verify project field exists in defaults

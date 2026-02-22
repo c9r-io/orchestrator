@@ -247,23 +247,3 @@ pub struct AgentHealthInfo {
     pub diseased_until: Option<String>,
     pub consecutive_errors: u32,
 }
-
-#[derive(Debug, Default, Clone)]
-pub struct CliOptions {
-    pub cli: bool,
-    pub show_help: bool,
-    pub no_auto_resume: bool,
-    pub task_id: Option<String>,
-    pub project_id: Option<String>,
-    pub workspace_id: Option<String>,
-    pub workflow_id: Option<String>,
-    pub name: Option<String>,
-    pub goal: Option<String>,
-    pub target_files: Vec<String>,
-}
-
-impl CliOptions {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
