@@ -209,7 +209,8 @@ cd ..
 
 1. 使用已有配置:
    ```bash
-   ./core/target/release/agent-orchestrator config validate orchestrator/config/default.yaml
+   ./scripts/orchestrator.sh config export -f /tmp/exported-config.yaml
+   ./core/target/release/agent-orchestrator config validate /tmp/exported-config.yaml
    ```
 
 ### Expected

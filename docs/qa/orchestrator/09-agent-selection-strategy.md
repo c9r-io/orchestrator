@@ -25,7 +25,7 @@ Entry point: `orchestrator task <command>` with configured agents
 
 ### Steps
 
-1. Configure agents with different costs in `config/default.yaml`:
+1. Prepare a config manifest with agents that have different costs (then apply it):
    ```yaml
    agents:
      agent-low-cost:
@@ -77,9 +77,9 @@ Entry point: `orchestrator task <command>` with configured agents
    # Monitor for success/failure events
    ```
 
-3. Check agent health after multiple runs:
+3. Inspect runtime state after multiple runs:
    ```bash
-   orchestrator agent health
+   orchestrator debug --component state
    ```
 
 ### Expected

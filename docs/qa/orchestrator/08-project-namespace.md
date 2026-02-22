@@ -50,7 +50,7 @@ Resource resolution priority:
 ### Preconditions
 
 - Orchestrator binary built at `./core/target/release/agent-orchestrator`
-- Default project configured in `config/default.yaml`
+- Default project/workspace/workflow already initialized in SQLite config
 
 ### Goal
 
@@ -60,7 +60,6 @@ Validate task creation with explicit project specification stores project_id in 
 
 1. Create task with explicit project:
    ```bash
-   cd /Volumes/Yotta/ai_native_sdlc
    ./core/target/release/agent-orchestrator task create \
      --name "test-project-task" \
      --goal "Test project namespace" \

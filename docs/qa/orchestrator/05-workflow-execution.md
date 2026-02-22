@@ -2,7 +2,7 @@
 
 **Module**: orchestrator
 **Scope**: Validate complete workflow execution with various mock agent configurations
-**Scenarios**: 6
+**Scenarios**: 5
 **Priority**: High
 
 ---
@@ -274,7 +274,7 @@ agents:
 
 ### Preconditions
 
-- Config with loop_test workflow (pre-configured in default.yaml)
+- Config with loop_test workflow already applied into SQLite
 - No tickets exist initially
 
 ### Steps
@@ -329,7 +329,7 @@ sqlite3 data/agent_orchestrator.db \
 
 ### Workflow Configuration Reference
 
-The loop_test workflow is pre-configured in `config/default.yaml`:
+The loop_test workflow can be exported for inspection:
 
 ```yaml
 workflows:
@@ -356,42 +356,6 @@ Key points:
 
 ---
 
-## Scenario 6: Multiple Target Files
-
-### Preconditions
-
-- Multiple QA target files configured
-
-### Steps
-
-1. Create task targeting multiple files:
-   ```bash
-   orchestrator task create \
-     --name "multi-file-test" \
-     --goal "Test multiple files" \
-     --target-file docs/qa/orchestrator/01-cli-agent-orchestration.md \
-     --target-file docs/qa/orchestrator/02-cli-task-lifecycle.md \
-     --no-start
-   ```
-
-2. Start task:
-   ```bash
-   orchestrator task start {task_id}
-   ```
-
-3. Check task items:
-   ```bash
-   orchestrator task info {task_id}
-   ```
-
-### Expected
-
-- Each target file creates a separate task item
-- QA runs for each file
-- Progress shows X/Y items completed
-
----
-
 ## Checklist
 
 | # | Scenario | Status | Test Date | Tester | Notes |
@@ -401,4 +365,3 @@ Key points:
 | 3 | qa_fix_retest Workflow | ☐ | | | |
 | 4 | Ticket Creation | ☐ | | | |
 | 5 | Loop Mode | ☐ | | | |
-| 6 | Multiple Target Files | ☐ | | | |

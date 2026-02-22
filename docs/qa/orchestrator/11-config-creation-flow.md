@@ -30,7 +30,6 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 1. 创建 workspace manifest:
    ```bash
-   cd orchestrator
    cat > /tmp/test-ws.yaml << 'EOF'
    apiVersion: orchestrator.dev/v1
    kind: Workspace
@@ -75,19 +74,18 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 1. 创建实际 workspace:
    ```bash
-   cd orchestrator
    mkdir -p /tmp/test-ws
    ./scripts/orchestrator.sh apply -f /tmp/test-ws.yaml
    ```
 
 2. 验证已创建:
    ```bash
-   ./scripts/orchestrator.sh workspace info --workspace-id test-ws
+   ./scripts/orchestrator.sh workspace info test-ws-dryrun
    ```
 
 ### Expected
 
-- Step 1 输出: `workspace/test-ws created`
+- Step 1 输出: `workspace/test-ws-dryrun created`
 - Step 2 显示 workspace 信息，包含正确的 root_path
 
 ---
@@ -106,7 +104,6 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 1. 创建最小配置 manifest:
    ```bash
-   cd orchestrator
    cat > /tmp/minimal-config.yaml << 'EOF'
    apiVersion: orchestrator.dev/v1
    kind: Workspace
@@ -124,7 +121,6 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 2. 创建 agent:
    ```bash
-   cd orchestrator
    cat > /tmp/test-agent.yaml << 'EOF'
    apiVersion: orchestrator.dev/v1
    kind: Agent
@@ -142,7 +138,6 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 3. 创建 workflow:
    ```bash
-   cd orchestrator
    cat > /tmp/test-workflow.yaml << 'EOF'
    apiVersion: orchestrator.dev/v1
    kind: Workflow
@@ -189,7 +184,6 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 1. 更新 workspace:
    ```bash
-   cd orchestrator
    cat > /tmp/update-ws.yaml << 'EOF'
    apiVersion: orchestrator.dev/v1
    kind: Workspace
@@ -208,7 +202,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 2. 验证更新:
    ```bash
-   ./scripts/orchestrator.sh workspace info --workspace-id minimal-ws
+   ./scripts/orchestrator.sh workspace info minimal-ws
    ```
 
 ### Expected

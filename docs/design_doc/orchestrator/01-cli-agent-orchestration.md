@@ -21,7 +21,7 @@ The Agent Orchestrator provides a kubectl-like CLI interface for managing tasks,
 
 ### Goals
 
-- Validate all CLI command parsing (apply, task, workspace, config, edit, db, daemon)
+- Validate all CLI command parsing (init, apply, get, describe, task, workspace, config, edit, db, completion, debug)
 - Verify task lifecycle state transitions (pending -> running -> paused -> completed/failed)
 - Test agent template rendering with placeholder substitution
 - Validate workflow execution with multiple agents and phases
@@ -63,7 +63,7 @@ Key commands:
 - `config view/validate/set/list-workflows/list-agents` - Configuration
 - `edit export/open` - Resource editing
 - `db reset` - Database reset
-- `daemon` - Daemon mode
+- `debug --component <name>` - Runtime diagnostics
 
 ## Interfaces And Data
 
@@ -73,17 +73,21 @@ Key commands:
 orchestrator [global-options] <command> [command-options]
 
 Global Options:
-  --config <path>  Path to config file (default: ./config/default.yaml)
+  --config <path>  Optional seed config path for first-time sqlite bootstrap
   --verbose, -v    Enable verbose output
 
 Commands:
+  init [--root <path>] [--force]
   apply -f <file> [--dry-run]
+  get <resource> [-o table|json|yaml]
+  describe <resource> [-o table|json|yaml]
   task list|create|info|start|pause|resume|logs|delete|retry
   workspace list|info
-  config view|validate|set|list-workflows|list-agents
+  config view|validate|set|bootstrap|export|list-workflows|list-agents
   edit export|open
   db reset
-  daemon
+  completion bash|zsh|fish|powershell
+  debug [--component <name>]
 ```
 
 ### Agent Template Placeholders
@@ -114,7 +118,7 @@ Commands:
 
 3. **Task State Machine**: Tasks follow a deterministic state lifecycle: pending -> running -> (paused | completed | failed), enabling clear state verification.
 
-4. **YAML-based Configuration**: Resources are defined declaratively in YAML, following Kubernetes conventions (apiVersion, kind, metadata, spec).
+4. **SQLite-backed Runtime Config**: Runtime config is persisted in SQLite. YAML is used for bootstrap/apply/export workflow.
 
 ### Alternatives And Tradeoffs
 
@@ -146,11 +150,11 @@ Commands:
 
 - Task execution time per phase
 - Success/failure rates by workflow
-- Agent health status (healthy/diseased)
+- Agent selection and execution state (from debug/log events)
 
 ### Operations
 
-- Config file: `config/default.yaml`
+- Runtime config store: `data/agent_orchestrator.db` (`orchestrator_config` table)
 - Database: `data/agent_orchestrator.db`
 - Logs: `data/logs/`
 

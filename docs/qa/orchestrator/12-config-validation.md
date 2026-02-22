@@ -29,7 +29,6 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 1. 创建有效配置:
    ```bash
-   cd orchestrator
    cat > /tmp/valid-config.yaml << 'EOF'
    runner:
      shell: /bin/bash
@@ -95,7 +94,6 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 1. 创建无效配置:
    ```bash
-   cd orchestrator
    cat > /tmp/invalid-ws.yaml << 'EOF'
    runner:
      shell: /bin/bash
@@ -145,7 +143,6 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 1. 创建无效配置:
    ```bash
-   cd orchestrator
    cat > /tmp/invalid-workflow.yaml << 'EOF'
    runner:
      shell: /bin/bash
@@ -194,7 +191,6 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 1. 创建无效配置 (workflow 需要 qa 但没有 agent 提供 qa 模板):
    ```bash
-   cd orchestrator
    cat > /tmp/invalid-template.yaml << 'EOF'
    runner:
      shell: /bin/bash

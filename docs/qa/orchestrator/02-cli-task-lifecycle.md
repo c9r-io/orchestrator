@@ -61,7 +61,8 @@ Entry point: `orchestrator task <command>`
 
 1. Create and pause a task:
    ```bash
-   TASK_ID=$(orchestrator task create --name "latest-test" --goal "Test" --no-start --format json | jq -r '.id')
+   TASK_CREATE_OUTPUT=$(orchestrator task create --name "latest-test" --goal "Test" --no-start)
+   TASK_ID=$(echo "$TASK_CREATE_OUTPUT" | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 
 2. Start with --latest flag:

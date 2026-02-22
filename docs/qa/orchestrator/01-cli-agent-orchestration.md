@@ -49,7 +49,7 @@ agents:
 
 - Orchestrator binary built and available at `./core/target/release/agent-orchestrator`
 - Test workspace exists with QA targets configured
-- Mock agent configured in `config/default.yaml`
+- Mock agent/workflow already bootstrapped into SQLite config
 
 ### Goal
 
@@ -59,7 +59,6 @@ Validate task creation and execution with mock bash agent completes successfully
 
 1. Create a new task with mock echo agent:
    ```bash
-   cd /Volumes/Yotta/ai_native_sdlc/orchestrator
    ./core/target/release/agent-orchestrator task create \
      --name "test-task-echo" \
      --goal "Test agent orchestration" \
@@ -252,25 +251,25 @@ Validate configuration validation catches invalid configurations.
    resume:
      auto: true
    defaults:
-      workspace: default
-      workflow: qa_only
-    workspaces:
+     workspace: default
+     workflow: qa_only
+   workspaces:
       invalid-ws:
         root_path: ""
         qa_targets: []
         ticket_dir: docs/ticket
-    agents: {}
-    workflows:
-      test:
-        steps:
-          - id: qa
-            required_capability: qa
-            enabled: true
-            repeatable: false
-        loop:
-          mode: once
-        finalize:
-          rules: []
+   agents: {}
+   workflows:
+     test:
+       steps:
+         - id: qa
+           required_capability: qa
+           enabled: true
+           repeatable: false
+       loop:
+         mode: once
+       finalize:
+         rules: []
     EOF
     ```
 
@@ -286,26 +285,26 @@ Validate configuration validation catches invalid configurations.
      shell: /bin/bash
      shell_arg: -lc
    resume:
-      auto: true
-    defaults:
-      workspace: default
-      workflow: qa_only
-    workspaces:
-      default:
-        root_path: /tmp/test
-        qa_targets:
-          - docs/qa
-        ticket_dir: docs/ticket
-    agents: {}
-    workflows:
-      qa_only:
-        steps:
-          - id: qa
-            required_capability: qa
-            enabled: false
-            repeatable: false
-        loop:
-          mode: once
+     auto: true
+   defaults:
+     workspace: default
+     workflow: qa_only
+   workspaces:
+     default:
+       root_path: /tmp/test
+       qa_targets:
+         - docs/qa
+       ticket_dir: docs/ticket
+   agents: {}
+   workflows:
+     qa_only:
+       steps:
+         - id: qa
+           required_capability: qa
+           enabled: false
+           repeatable: false
+       loop:
+         mode: once
        finalize:
          rules: []
    EOF

@@ -2,65 +2,58 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-BINARY="$PROJECT_ROOT/core/target/release/agent-orchestrator"
-WORKSPACE="$PROJECT_ROOT/orchestrator"
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
 
-log_info() { echo "[INFO] $1"; }
-log_warn() { echo "[WARN] $1"; }
-log_error() { echo "[ERROR] $1"; }
-
-cd "$WORKSPACE"
-
-log_info "========================================"
-log_info "TEST: Task Retry"
-log_info "========================================"
-
-TASK_NAME="retry-test-$(date +%s)"
-
-log_info "Creating task..."
-TASK_OUTPUT=$($BINARY task create \
-    --name "$TASK_NAME" \
-    --goal "Test retry" \
-    --no-start 2>&1)
-
-TASK_ID=$(echo "$TASK_OUTPUT" | grep -oE '[0-9a-f-]{36}' | head -1)
-log_info "Task ID: $TASK_ID"
-
-log_info "Starting task..."
-$BINARY task start "$TASK_ID" 2>/dev/null || true
-
-sleep 3
-
-log_info "Checking task status..."
-TASK_STATUS=$($BINARY task info "$TASK_ID" 2>/dev/null | grep -oE 'Status: [a-z]+' | awk '{print $2}')
-log_info "Task status: $TASK_STATUS"
-
-log_info "Getting failed items..."
-FAILED_ITEMS=$($BINARY task info "$TASK_ID" -o json 2>/dev/null | jq -r '.items[] | select(.status == "unresolved") | .id' 2>/dev/null || echo "")
-
-if [[ -z "$FAILED_ITEMS" ]]; then
-    log_warn "No failed items found"
-    ITEMS_STATUS=$($BINARY task info "$TASK_ID" -o json 2>/dev/null | jq -r '.items[].status' 2>/dev/null || echo "unknown")
-    log_info "Item statuses: $ITEMS_STATUS"
-else
-    log_info "Found failed item: $FAILED_ITEMS"
-    
-    log_info "Retrying failed item..."
-    $BINARY task retry "$FAILED_ITEMS" 2>&1 || log_warn "Retry may have failed"
-    
-    sleep 2
-    
-    log_info "Checking status after retry..."
-    STATUS_AFTER=$($BINARY task info "$TASK_ID" 2>/dev/null | grep -oE 'Status: [a-z]+' | awk '{print $2}')
-    log_info "Status after retry: $STATUS_AFTER"
+if ! qa_parse_common_args "$@"; then
+  qa_print_usage
+  exit 1
 fi
 
-echo ""
-echo "========================================"
-echo "TEST RESULTS"
-echo "========================================"
-echo "Task ID: $TASK_ID"
-echo "Status: $TASK_STATUS"
-echo "Failed Items: ${FAILED_ITEMS:-none}"
-echo "RESULT: COMPLETED"
+REPO_ROOT="$(qa_repo_root)"
+BINARY="$(qa_binary_path)"
+qa_require_binary
+cd "$REPO_ROOT"
+
+qa_info "========================================"
+qa_info "TEST: Task Retry"
+qa_info "========================================"
+
+TASK_NAME="retry-test-$(date +%s)"
+CREATE_ARGS=(task create --name "$TASK_NAME" --goal "Test retry" --no-start)
+if [[ -n "${QA_WORKSPACE:-}" ]]; then
+  CREATE_ARGS+=(--workspace "$QA_WORKSPACE")
+fi
+
+qa_info "Creating task..."
+TASK_OUTPUT="$($BINARY "${CREATE_ARGS[@]}" 2>&1)"
+TASK_ID="$(qa_extract_task_id "$TASK_OUTPUT")"
+if [[ -z "$TASK_ID" ]]; then
+  qa_error "Failed to parse task id from: $TASK_OUTPUT"
+  exit 3
+fi
+
+"$BINARY" task start "$TASK_ID" >/dev/null 2>&1 || true
+sleep 3
+
+TASK_STATUS="$($BINARY task info "$TASK_ID" 2>/dev/null | grep -oE 'Status: [a-z]+' | awk '{print $2}')"
+FAILED_ITEMS="$($BINARY task info "$TASK_ID" -o json 2>/dev/null | jq -r '.items[] | select(.status == "unresolved") | .id' 2>/dev/null || true)"
+
+if [[ -n "$FAILED_ITEMS" ]]; then
+  qa_info "Retrying failed item: $FAILED_ITEMS"
+  "$BINARY" task retry "$FAILED_ITEMS" >/dev/null 2>&1 || true
+  sleep 2
+fi
+
+STATUS_AFTER="$($BINARY task info "$TASK_ID" 2>/dev/null | grep -oE 'Status: [a-z]+' | awk '{print $2}')"
+
+if [[ "${QA_OUTPUT_JSON:-0}" -eq 1 ]]; then
+  printf '{"task_id":"%s","status":"%s","failed_item":"%s","status_after_retry":"%s"}\n' \
+    "$TASK_ID" "$TASK_STATUS" "${FAILED_ITEMS:-}" "$STATUS_AFTER"
+else
+  echo "Task ID: $TASK_ID"
+  echo "Status: $TASK_STATUS"
+  echo "Failed Items: ${FAILED_ITEMS:-none}"
+  echo "Status after retry: $STATUS_AFTER"
+  echo "RESULT: COMPLETED"
+fi

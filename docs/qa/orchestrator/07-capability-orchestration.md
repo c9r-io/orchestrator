@@ -2,7 +2,7 @@
 
 **Module**: orchestrator
 **Scope**: Validate new capability-driven orchestration features (cost preference, repeatable steps, guard steps)
-**Scenarios**: 6
+**Scenarios**: 5
 **Priority**: High
 
 ---
@@ -142,8 +142,7 @@ Validate that when a step requires a capability, only agents with that capabilit
 
 3. Apply config:
    ```bash
-   cd orchestrator
-   ./core/target/release/agent-orchestrator apply -f /tmp/capability-test.yaml
+      ./core/target/release/agent-orchestrator apply -f /tmp/capability-test.yaml
    ```
 
 4. Create task:
@@ -242,8 +241,7 @@ Validate that agents with `performance_first` strategy are prioritized.
 
 2. Apply and test:
    ```bash
-   cd orchestrator
-   ./core/target/release/agent-orchestrator apply -f /tmp/selection-perf-test.yaml
+      ./core/target/release/agent-orchestrator apply -f /tmp/selection-perf-test.yaml
    ./core/target/release/agent-orchestrator task create \
      --name "selection-perf-test" \
      --goal "Test selection strategy" \
@@ -329,8 +327,7 @@ Validate that agents with higher success rates are prioritized when using `succe
 
 2. Apply and test:
    ```bash
-   cd orchestrator
-   ./core/target/release/agent-orchestrator apply -f /tmp/selection-quality-test.yaml
+      ./core/target/release/agent-orchestrator apply -f /tmp/selection-quality-test.yaml
    ./core/target/release/agent-orchestrator task create \
      --name "selection-quality-test" \
      --goal "Test success rate weighted" \
@@ -345,8 +342,8 @@ Validate that agents with higher success rates are prioritized when using `succe
 
 ### Expected
 
-- QA step uses `expensive_agent` (cost=80, higher than cheap_agent's cost=20)
-- Logs show "expensive-qa"
+- QA step favors `proven_agent` under `success_rate_weighted` strategy
+- Logs show `proven-qa`
 
 ---
 
@@ -410,8 +407,7 @@ Validate that repeatable steps run every cycle, while non-repeatable steps run o
 
 2. Apply:
    ```bash
-   cd orchestrator
-   ./core/target/release/agent-orchestrator apply -f /tmp/repeatable-test.yaml
+      ./core/target/release/agent-orchestrator apply -f /tmp/repeatable-test.yaml
    ```
 
 3. Create task and start:
@@ -496,8 +492,7 @@ Validate that when a guard step returns "stop", the workflow loop terminates.
 
 2. Apply and test:
    ```bash
-   cd orchestrator
-   ./core/target/release/agent-orchestrator apply -f /tmp/guard-test.yaml
+      ./core/target/release/agent-orchestrator apply -f /tmp/guard-test.yaml
    ./core/target/release/agent-orchestrator task create \
      --name "guard-test" \
      --goal "Test guard step" \
@@ -518,39 +513,6 @@ Validate that when a guard step returns "stop", the workflow loop terminates.
 
 ---
 
-## Scenario 6: Config View Shows New Fields
-
-### Preconditions
-
-- Config with new fields applied
-
-### Goal
-
-Validate that config view correctly displays new fields (capabilities, cost, selection.strategy, repeatable, is_guard).
-
-### Steps
-
-1. Apply config with new fields:
-   ```bash
-   cd orchestrator
-   ./core/target/release/agent-orchestrator apply -f /tmp/selection-perf-test.yaml
-   ```
-
-2. View config:
-   ```bash
-   ./core/target/release/agent-orchestrator config view -o json | jq '.agents'
-   ./core/target/release/agent-orchestrator config view -o json | jq '.workflows | to_entries[0].value.steps'
-   ```
-
-### Expected
-
-- Agents show `metadata.cost` field
-- Agents show `capabilities` array
-- Agents show `selection.strategy` field (default: "capability_aware")
-- Steps show `repeatable`, `is_guard`, `required_capability`, `builtin` fields
-
----
-
 ## Checklist
 
 | # | Scenario | Status | Test Date | Tester | Notes |
@@ -560,4 +522,3 @@ Validate that config view correctly displays new fields (capabilities, cost, sel
 | 3 | Cost Preference - Quality | ☐ | | | |
 | 4 | Repeatable Steps | ☐ | | | |
 | 5 | Guard Steps (is_guard) | ☐ | | | |
-| 6 | Config View Shows New Fields | ☐ | | | |

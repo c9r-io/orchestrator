@@ -77,7 +77,8 @@ N/A - Unit test verification
 
 3. Check DynamicStepConfig in config:
    ```bash
-   grep -A 10 "dynamic_steps:" orchestrator/config/default.yaml
+   ./scripts/orchestrator.sh config export -f /tmp/exported-config.yaml
+   grep -A 10 "dynamic_steps:" /tmp/exported-config.yaml
    ```
 
 ### Expected
@@ -197,41 +198,6 @@ N/A - Unit test verification
 
 ---
 
-## Scenario 6: YAML Configuration Integration
-
-### Preconditions
-
-- Orchestrator config file available
-
-### Steps
-
-1. Check adaptive workflow exists in config:
-   ```bash
-   grep -A 5 "adaptive:" orchestrator/config/default.yaml
-   ```
-
-2. Verify dynamic_steps section:
-   ```bash
-   grep -A 15 "dynamic_steps:" orchestrator/config/default.yaml | head -20
-   ```
-
-3. Test config parsing:
-   ```bash
-   cd core && cargo build --release
-   ```
-
-### Expected
-
-- `adaptive` workflow present in config
-- `dynamic_steps` array with quick_fix, deep_retest, analyze_failure entries
-- Config parses without errors
-
-### DB Checks
-
-N/A - Config file verification
-
----
-
 ## Cleanup
 
 All tests are unit tests, no cleanup required.
@@ -247,4 +213,3 @@ All tests are unit tests, no cleanup required.
 | 3. DAG Topological Sort | | |
 | 4. Cycle Detection | | |
 | 5. Adaptive Planner Disabled | | |
-| 6. YAML Configuration Integration | | |

@@ -1,6 +1,6 @@
 # QA Test Scripts
 
-This directory contains shell scripts for testing advanced orchestrator features that require background process management.
+Shell scripts for executable QA scenarios.
 
 ## Available Scripts
 
@@ -10,73 +10,44 @@ This directory contains shell scripts for testing advanced orchestrator features
 | `test-task-retry.sh` | Tests task item retry functionality |
 | `test-three-phase-workflow.sh` | Tests QA + Fix + Retest workflow execution |
 
-## Debug Command
+## Shared Library
 
-The orchestrator provides a debug command for QA testing:
-
-```bash
-# Show all debug options
-orchestrator debug
-
-# Show MessageBus information
-orchestrator debug --component messagebus
-
-# Show active configuration
-orchestrator debug --component config
-
-# Show runtime state
-orchestrator debug --component state
-```
+- Common helpers: `docs/qa/script/lib/common.sh`
+- Capabilities:
+  - repo root detection
+  - binary existence check
+  - common args parsing (`--workspace`, `--json`)
 
 ## Prerequisites
 
-Before running any script:
-
-1. **Check binary exists**:
+1. Binary exists:
    ```bash
-   ls -la ../core/target/release/agent-orchestrator
+   ls -la core/target/release/agent-orchestrator
    ```
 
-2. **Rebuild if needed**:
+2. Build when missing:
    ```bash
-   cd ../core && cargo build --release
+   (cd core && cargo build --release)
    ```
+
+3. Optional tools:
+   - `sqlite3` (for DB checks)
+   - `jq` (for JSON parsing)
 
 ## Running Tests
 
 ```bash
-# Make scripts executable (if needed)
-chmod +x *.sh
-
-# Run individual tests
-./test-task-pause-resume.sh
-./test-task-retry.sh
-./test-three-phase-workflow.sh
+./docs/qa/script/test-task-pause-resume.sh
+./docs/qa/script/test-task-retry.sh --json
+./docs/qa/script/test-three-phase-workflow.sh --workspace default
 ```
-
-## Script Requirements
-
-- Bash shell (`#!/usr/bin/env bash`)
-- SQLite3 for database verification
-- `jq` for JSON parsing
-- Network access (if testing remote features)
 
 ## Troubleshooting
 
-**Issue**: Script fails with "Binary not found"
-- **Fix**: Rebuild the orchestrator binary
-
-**Issue**: Tests hang or timeout
-- **Fix**: Check if there's a stuck task in the database and delete it:
-  ```bash
-  cd ../../..
-  ./core/target/release/agent-orchestrator task list
-  ./core/target/release/agent-orchestrator task delete <task-id> --force
-  ```
-
-**Issue**: Database locked
-- **Fix**: Reset the database:
-  ```bash
-  cd ../../..
-  rm -f data/agent_orchestrator.db
-  ```
+- Binary not found:
+  - rebuild release binary.
+- Task stuck:
+  - inspect `./scripts/orchestrator.sh task list`
+  - force delete stale task if needed.
+- DB lock:
+  - stop concurrent runs and retry.
