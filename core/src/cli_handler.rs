@@ -2,18 +2,17 @@ use crate::cli::{
     generate_completion, Cli, Commands, CompletionCommands, ConfigCommands, DbCommands,
     EditCommands, OutputFormat, TaskCommands, WorkspaceCommands,
 };
-use crate::cli_types::{OrchestratorResource, ResourceKind};
+use crate::cli_types::OrchestratorResource;
 use crate::config::OrchestratorConfig;
 use crate::config::{AgentConfig, WorkflowConfig, WorkspaceConfig};
 use crate::config_load::{
-    build_active_config, load_config_overview, persist_config_and_reload, read_active_config,
+    load_config_overview, persist_config_and_reload, read_active_config,
 };
 use crate::db::reset_db;
 use crate::dto::ConfigOverview;
 use crate::dto::{CreateTaskPayload, TaskDetail, TaskSummary};
 use crate::resource::{
-    dispatch_resource, AgentResource, ApplyResult, RegisteredResource, Resource, WorkflowResource,
-    WorkspaceResource,
+    dispatch_resource, kind_as_str, ApplyResult, RegisteredResource, Resource,
 };
 use crate::scheduler::{
     delete_task_impl, find_latest_resumable_task_id, get_task_details_impl, list_tasks_impl,
@@ -24,7 +23,6 @@ use crate::state::InnerState;
 use crate::task_ops::{create_task_impl, reset_task_item_for_retry};
 use anyhow::{Context, Result};
 use clap_complete::Shell;
-use serde::Deserialize;
 use std::path::Path;
 use std::process::{Command, ExitStatus};
 use std::sync::Arc;
@@ -44,9 +42,12 @@ impl CliHandler {
                 // Init command is handled in main.rs before reaching here
                 Ok(0)
             }
-            Commands::Apply { file, dry_run } => self.handle_apply(file, *dry_run),
+            Commands::Apply { .. } => {
+                unreachable!("apply is handled as a preflight command in main.rs")
+            }
             Commands::Get { resource, output } => self.handle_get(resource, *output),
             Commands::Describe { resource, output } => self.handle_describe(resource, *output),
+            Commands::Delete { resource, force } => self.handle_delete(resource, *force),
             Commands::Task(cmd) => self.handle_task(cmd),
             Commands::Workspace(cmd) => self.handle_workspace(cmd),
             Commands::Config(cmd) => self.handle_config(cmd),
@@ -105,84 +106,6 @@ impl CliHandler {
                 Ok(1)
             }
         }
-    }
-
-    fn handle_apply(&self, file: &str, dry_run: bool) -> Result<i32> {
-        let content = std::fs::read_to_string(file)
-            .with_context(|| format!("failed to read manifest file: {}", file))?;
-        let resources = Self::parse_resources_from_yaml(&content)?;
-        let mut merged_config = {
-            let active = read_active_config(&self.state)?;
-            active.config.clone()
-        };
-
-        let mut has_errors = false;
-        let mut applied_results = Vec::new();
-        for (index, manifest) in resources.into_iter().enumerate() {
-            let resource = match manifest.validate_version() {
-                Ok(()) => manifest,
-                Err(error) => {
-                    eprintln!("document {}: {}", index + 1, error);
-                    has_errors = true;
-                    continue;
-                }
-            };
-
-            let registered = match dispatch_resource(resource) {
-                Ok(resource) => resource,
-                Err(error) => {
-                    eprintln!("document {}: {}", index + 1, error);
-                    has_errors = true;
-                    continue;
-                }
-            };
-
-            if let Err(error) = registered.validate() {
-                eprintln!(
-                    "{} / {} invalid: {}",
-                    kind_as_str(registered.kind()),
-                    registered.name(),
-                    error
-                );
-                has_errors = true;
-                continue;
-            }
-
-            let result = self.apply_resource(&mut merged_config, &registered);
-            applied_results.push(result);
-            let action = match result {
-                ApplyResult::Created => "created",
-                ApplyResult::Configured | ApplyResult::Unchanged => "configured",
-            };
-
-            if dry_run {
-                println!(
-                    "{}/{} would be {} (dry run)",
-                    kind_as_str(registered.kind()),
-                    registered.name(),
-                    action
-                );
-            } else {
-                println!(
-                    "{}/{} {}",
-                    kind_as_str(registered.kind()),
-                    registered.name(),
-                    action
-                );
-            }
-        }
-
-        if has_errors {
-            return Ok(1);
-        }
-
-        if !dry_run && !applied_results.is_empty() {
-            let merged_yaml = serde_yaml::to_string(&merged_config)
-                .context("failed to serialize applied configuration")?;
-            persist_config_and_reload(&self.state, merged_config, merged_yaml, "cli")?;
-        }
-
-        Ok(0)
     }
 
     fn handle_get(&self, resource: &str, output: OutputFormat) -> Result<i32> {
@@ -341,6 +264,55 @@ impl CliHandler {
                 kind
             ),
         }
+    }
+
+    fn handle_delete(&self, resource: &str, force: bool) -> Result<i32> {
+        let parts: Vec<&str> = resource.split('/').collect();
+        if parts.len() != 2 {
+            anyhow::bail!(
+                "invalid resource format: {} (use format: kind/name, e.g., workspace/my-ws)",
+                resource
+            );
+        }
+        let (kind, name) = (parts[0], parts[1]);
+
+        if !force {
+            println!(
+                "Use --force to confirm deletion of {}/{}",
+                kind, name
+            );
+            return Ok(0);
+        }
+
+        let mut config = {
+            let active = read_active_config(&self.state)?;
+            active.config.clone()
+        };
+
+        if (kind == "ws" || kind == "workspace") && config.defaults.workspace == name {
+            anyhow::bail!(
+                "cannot delete workspace '{}': it is the current default workspace",
+                name
+            );
+        }
+        if (kind == "wf" || kind == "workflow") && config.defaults.workflow == name {
+            anyhow::bail!(
+                "cannot delete workflow '{}': it is the current default workflow",
+                name
+            );
+        }
+
+        let deleted =
+            crate::resource::delete_resource_by_kind(&mut config, kind, name)?;
+        if !deleted {
+            anyhow::bail!("{}/{} not found", kind, name);
+        }
+
+        let yaml = serde_yaml::to_string(&config)
+            .context("failed to serialize configuration after delete")?;
+        persist_config_and_reload(&self.state, config, yaml, "cli")?;
+        println!("{}/{} deleted", kind, name);
+        Ok(0)
     }
 
     fn handle_task(&self, cmd: &TaskCommands) -> Result<i32> {
@@ -621,7 +593,7 @@ impl CliHandler {
                 continue;
             }
 
-            let result = self.apply_resource(&mut merged_config, &registered);
+            let result = registered.apply(&mut merged_config);
             let merged_yaml = serde_yaml::to_string(&merged_config)
                 .context("failed to serialize edited configuration")?;
             persist_config_and_reload(&self.state, merged_config, merged_yaml, "cli")?;
@@ -649,13 +621,19 @@ impl CliHandler {
 
     fn handle_db(&self, cmd: &DbCommands) -> Result<i32> {
         match cmd {
-            DbCommands::Reset { force } => {
+            DbCommands::Reset {
+                force,
+                include_history,
+            } => {
                 if !force {
                     eprintln!("Use --force to confirm database reset");
                     return Ok(1);
                 }
-                reset_db(&self.state)?;
+                reset_db(&self.state, *include_history)?;
                 println!("Database reset completed");
+                if *include_history {
+                    println!("Config version history cleared (active version preserved)");
+                }
                 Ok(0)
             }
         }
@@ -672,43 +650,6 @@ impl CliHandler {
         Ok(0)
     }
 
-    fn parse_resources_from_yaml(content: &str) -> Result<Vec<OrchestratorResource>> {
-        let mut resources = Vec::new();
-        for document in serde_yaml::Deserializer::from_str(content) {
-            let value = serde_yaml::Value::deserialize(document)?;
-            if value.is_null() {
-                continue;
-            }
-            let resource = serde_yaml::from_value::<OrchestratorResource>(value)?;
-            resources.push(resource);
-        }
-        Ok(resources)
-    }
-
-    fn apply_resource(
-        &self,
-        config: &mut OrchestratorConfig,
-        resource: &RegisteredResource,
-    ) -> ApplyResult {
-        let existed = match resource {
-            RegisteredResource::Workspace(current) => {
-                WorkspaceResource::get_from(config, current.name()).is_some()
-            }
-            RegisteredResource::Agent(current) => {
-                AgentResource::get_from(config, current.name()).is_some()
-            }
-            RegisteredResource::Workflow(current) => {
-                WorkflowResource::get_from(config, current.name()).is_some()
-            }
-        };
-
-        let _ = resource.apply(config);
-        if existed {
-            ApplyResult::Configured
-        } else {
-            ApplyResult::Created
-        }
-    }
 
     fn print_tasks(
         &self,
@@ -897,14 +838,6 @@ impl CliHandler {
             }
         }
         Ok(0)
-    }
-}
-
-fn kind_as_str(kind: ResourceKind) -> &'static str {
-    match kind {
-        ResourceKind::Workspace => "workspace",
-        ResourceKind::Agent => "agent",
-        ResourceKind::Workflow => "workflow",
     }
 }
 
@@ -1278,276 +1211,118 @@ fi"#,
     }
 
     #[test]
-    fn apply_dry_run_does_not_persist_created_resource() {
-        let mut fixture = TestState::new();
-        let state = fixture.build();
-        let handler = CliHandler::new(state.clone());
-        let manifest_path = fixture.temp_root().join("apply-created.yaml");
-
-        write_manifest(
-            &manifest_path,
-            r#"
+    fn multi_document_yaml_parses_all_documents() {
+        let yaml = r#"
 apiVersion: orchestrator.dev/v1
 kind: Workspace
 metadata:
-  name: dry-run-created
+  name: ws-a
 spec:
-  root_path: workspace/dry-run-created
+  root_path: workspace/ws-a
   qa_targets:
     - docs/qa
-  ticket_dir: docs/ticket
-"#,
-        );
-
-        let cli = Cli {
-            command: Commands::Apply {
-                file: manifest_path.display().to_string(),
-                dry_run: true,
-            },
-            config: None,
-            verbose: false,
-        };
-
-        let code = handler.execute(&cli).expect("dry-run should succeed");
-        assert_eq!(code, 0);
-
-        let active = read_active_config(&state).expect("config should be readable");
-        assert!(!active.config.workspaces.contains_key("dry-run-created"));
-    }
-
-    #[test]
-    fn apply_dry_run_returns_one_on_invalid_resource() {
-        let mut fixture = TestState::new();
-        let state = fixture.build();
-        let handler = CliHandler::new(state.clone());
-        let manifest_path = fixture.temp_root().join("apply-invalid.yaml");
-
-        write_manifest(
-            &manifest_path,
-            r#"
-apiVersion: orchestrator.dev/v1
-kind: Workspace
-metadata:
-  name: invalid-workspace
-spec:
-  root_path: ""
-  qa_targets: []
-  ticket_dir: docs/ticket
-"#,
-        );
-
-        let cli = Cli {
-            command: Commands::Apply {
-                file: manifest_path.display().to_string(),
-                dry_run: true,
-            },
-            config: None,
-            verbose: false,
-        };
-
-        let code = handler
-            .execute(&cli)
-            .expect("invalid dry-run should still return exit code");
-        assert_eq!(code, 1);
-    }
-
-    #[test]
-    fn multi_document_apply_dry_run_parses_all_documents() {
-        let mut fixture = TestState::new();
-        let state = fixture.build();
-        let handler = CliHandler::new(state.clone());
-        let manifest_path = fixture.temp_root().join("apply-multi.yaml");
-
-        write_manifest(
-            &manifest_path,
-            r#"
-apiVersion: orchestrator.dev/v1
-kind: Workspace
-metadata:
-  name: default
-spec:
-  root_path: workspace/default
-  qa_targets:
-    - docs/qa
-    - docs/security
   ticket_dir: docs/ticket
 ---
 apiVersion: orchestrator.dev/v1
 kind: Workspace
 metadata:
-  name: dry-run-multi
+  name: ws-b
 spec:
-  root_path: workspace/dry-run-multi
+  root_path: workspace/ws-b
   qa_targets:
     - docs/qa
   ticket_dir: docs/ticket
-"#,
-        );
+"#;
 
-        let parsed = CliHandler::parse_resources_from_yaml(
-            &std::fs::read_to_string(&manifest_path).expect("manifest should be readable"),
-        )
-        .expect("multi-document parsing should succeed");
+        let parsed = crate::resource::parse_resources_from_yaml(yaml)
+            .expect("multi-document parsing should succeed");
         assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].metadata.name, "ws-a");
+        assert_eq!(parsed[1].metadata.name, "ws-b");
+    }
+
+    #[test]
+    fn delete_requires_force_flag() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state.clone());
 
         let cli = Cli {
-            command: Commands::Apply {
-                file: manifest_path.display().to_string(),
-                dry_run: true,
+            command: Commands::Delete {
+                resource: "workspace/default".to_string(),
+                force: false,
             },
             config: None,
             verbose: false,
         };
 
-        let code = handler.execute(&cli).expect("dry-run should succeed");
+        let code = handler.execute(&cli).expect("should succeed without deleting");
         assert_eq!(code, 0);
 
         let active = read_active_config(&state).expect("config should be readable");
-        assert!(!active.config.workspaces.contains_key("dry-run-multi"));
         assert!(active.config.workspaces.contains_key("default"));
     }
 
     #[test]
-    fn apply_create_non_dry_run_creates_resource() {
+    fn delete_rejects_default_workspace() {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let handler = CliHandler::new(state.clone());
-        let manifest_path = fixture.temp_root().join("apply-create.yaml");
-
-        ensure_workspace_structure(fixture.temp_root(), "workspace/apply-create");
-
-        write_manifest(
-            &manifest_path,
-            &workspace_manifest_yaml("apply-create", "workspace/apply-create"),
-        );
 
         let cli = Cli {
-            command: Commands::Apply {
-                file: manifest_path.display().to_string(),
-                dry_run: false,
+            command: Commands::Delete {
+                resource: "workspace/default".to_string(),
+                force: true,
             },
             config: None,
             verbose: false,
         };
 
-        let code = handler.execute(&cli).expect("apply create should succeed");
-        assert_eq!(code, 0);
-
-        let active = read_active_config(&state).expect("config should be readable");
-        let workspace = active
-            .config
-            .workspaces
-            .get("apply-create")
-            .expect("workspace should be created");
-        assert_eq!(workspace.root_path, "workspace/apply-create");
+        let result = handler.execute(&cli);
+        assert!(result.is_err());
+        let err_msg = format!("{:#}", result.unwrap_err());
+        assert!(err_msg.contains("default workspace"));
     }
 
     #[test]
-    fn apply_update_non_dry_run_updates_existing_resource() {
+    fn delete_rejects_default_workflow() {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let handler = CliHandler::new(state.clone());
-        let manifest_path = fixture.temp_root().join("apply-update.yaml");
 
-        ensure_workspace_structure(fixture.temp_root(), "workspace/apply-update-v1");
-        ensure_workspace_structure(fixture.temp_root(), "workspace/apply-update-v2");
-
-        write_manifest(
-            &manifest_path,
-            &workspace_manifest_yaml("apply-update", "workspace/apply-update-v1"),
-        );
-
-        let first_apply = Cli {
-            command: Commands::Apply {
-                file: manifest_path.display().to_string(),
-                dry_run: false,
+        let cli = Cli {
+            command: Commands::Delete {
+                resource: "workflow/basic".to_string(),
+                force: true,
             },
             config: None,
             verbose: false,
         };
-        assert_eq!(handler.execute(&first_apply).expect("first apply"), 0);
 
-        write_manifest(
-            &manifest_path,
-            &workspace_manifest_yaml("apply-update", "workspace/apply-update-v2"),
-        );
-        let second_apply = Cli {
-            command: Commands::Apply {
-                file: manifest_path.display().to_string(),
-                dry_run: false,
-            },
-            config: None,
-            verbose: false,
-        };
-        assert_eq!(handler.execute(&second_apply).expect("second apply"), 0);
-
-        let active = read_active_config(&state).expect("config should be readable");
-        let workspace = active
-            .config
-            .workspaces
-            .get("apply-update")
-            .expect("workspace should be updated");
-        assert_eq!(workspace.root_path, "workspace/apply-update-v2");
+        let result = handler.execute(&cli);
+        assert!(result.is_err());
+        let err_msg = format!("{:#}", result.unwrap_err());
+        assert!(err_msg.contains("default workflow"));
     }
 
     #[test]
-    fn apply_persist_non_dry_run_writes_new_config_version() {
+    fn delete_nonexistent_resource_returns_error() {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let handler = CliHandler::new(state.clone());
-        let dry_manifest_path = fixture.temp_root().join("apply-persist-dry.yaml");
-        let apply_manifest_path = fixture.temp_root().join("apply-persist.yaml");
 
-        ensure_workspace_structure(fixture.temp_root(), "workspace/apply-persist-dry");
-        ensure_workspace_structure(fixture.temp_root(), "workspace/apply-persist");
-
-        let baseline_version = load_config_overview(&state)
-            .expect("baseline overview should be readable")
-            .version;
-
-        write_manifest(
-            &dry_manifest_path,
-            &workspace_manifest_yaml("apply-persist-dry", "workspace/apply-persist-dry"),
-        );
-        let dry_run_cli = Cli {
-            command: Commands::Apply {
-                file: dry_manifest_path.display().to_string(),
-                dry_run: true,
+        let cli = Cli {
+            command: Commands::Delete {
+                resource: "workspace/nonexistent".to_string(),
+                force: true,
             },
             config: None,
             verbose: false,
         };
-        assert_eq!(
-            handler
-                .execute(&dry_run_cli)
-                .expect("dry run should succeed"),
-            0
-        );
-        let version_after_dry_run = load_config_overview(&state)
-            .expect("overview after dry run should be readable")
-            .version;
-        assert_eq!(version_after_dry_run, baseline_version);
 
-        write_manifest(
-            &apply_manifest_path,
-            &workspace_manifest_yaml("apply-persist", "workspace/apply-persist"),
-        );
-        let apply_cli = Cli {
-            command: Commands::Apply {
-                file: apply_manifest_path.display().to_string(),
-                dry_run: false,
-            },
-            config: None,
-            verbose: false,
-        };
-        assert_eq!(
-            handler.execute(&apply_cli).expect("apply should succeed"),
-            0
-        );
-
-        let version_after_apply = load_config_overview(&state)
-            .expect("overview after apply should be readable")
-            .version;
-        assert_eq!(version_after_apply, baseline_version + 1);
+        let result = handler.execute(&cli);
+        assert!(result.is_err());
+        let err_msg = format!("{:#}", result.unwrap_err());
+        assert!(err_msg.contains("not found"));
     }
 }

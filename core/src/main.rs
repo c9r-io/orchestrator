@@ -26,18 +26,18 @@ mod ticket;
 mod test_utils;
 
 use crate::cli::{Cli, Commands, ConfigCommands};
-use crate::cli_types::OrchestratorResource;
 use crate::collab::MessageBus;
 use crate::config_load::read_active_config;
 use crate::config_load::{
     detect_app_root, load_or_seed_config, load_raw_config_from_db, persist_raw_config,
 };
 use crate::db::init_schema;
-use crate::resource::{dispatch_resource, ApplyResult, RegisteredResource, Resource};
+use crate::resource::{
+    dispatch_resource, kind_as_str, parse_resources_from_yaml, ApplyResult, Resource,
+};
 use crate::state::ManagedState;
 use anyhow::{Context, Result};
 use clap::Parser;
-use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tokio::sync::Mutex;
@@ -47,9 +47,6 @@ fn init_state(cli_config_path: Option<String>) -> Result<ManagedState> {
     let seed_config_path = cli_config_path
         .as_ref()
         .map(|p| resolve_input_path(&app_root, p));
-    let config_path = seed_config_path
-        .clone()
-        .unwrap_or_else(|| app_root.join("config/default.yaml"));
     let (db_path, logs_dir) = initialize_runtime(&app_root)?;
 
     let (config, _yaml, _version, _updated_at) =
@@ -73,7 +70,6 @@ fn init_state(cli_config_path: Option<String>) -> Result<ManagedState> {
             app_root,
             db_path,
             logs_dir,
-            config_path,
             active_config: RwLock::new(active),
             running: Mutex::new(std::collections::HashMap::new()),
             agent_health: std::sync::RwLock::new(std::collections::HashMap::new()),
@@ -143,62 +139,6 @@ fn initialize_runtime(app_root: &Path) -> Result<(PathBuf, PathBuf)> {
     Ok((db_path, logs_dir))
 }
 
-fn parse_resources_from_yaml(content: &str) -> Result<Vec<OrchestratorResource>> {
-    let mut resources = Vec::new();
-    for document in serde_yaml::Deserializer::from_str(content) {
-        let value = serde_yaml::Value::deserialize(document)?;
-        if value.is_null() {
-            continue;
-        }
-        let resource = serde_yaml::from_value::<OrchestratorResource>(value)?;
-        resources.push(resource);
-    }
-    Ok(resources)
-}
-
-fn apply_resource_to_config(
-    config: &mut crate::config::OrchestratorConfig,
-    resource: &RegisteredResource,
-) -> ApplyResult {
-    match resource {
-        RegisteredResource::Workspace(current) => {
-            let existed = config.workspaces.contains_key(current.name());
-            let _ = resource.apply(config);
-            if existed {
-                ApplyResult::Configured
-            } else {
-                ApplyResult::Created
-            }
-        }
-        RegisteredResource::Agent(current) => {
-            let existed = config.agents.contains_key(current.name());
-            let _ = resource.apply(config);
-            if existed {
-                ApplyResult::Configured
-            } else {
-                ApplyResult::Created
-            }
-        }
-        RegisteredResource::Workflow(current) => {
-            let existed = config.workflows.contains_key(current.name());
-            let _ = resource.apply(config);
-            if existed {
-                ApplyResult::Configured
-            } else {
-                ApplyResult::Created
-            }
-        }
-    }
-}
-
-fn kind_as_str(kind: crate::cli_types::ResourceKind) -> &'static str {
-    match kind {
-        crate::cli_types::ResourceKind::Workspace => "workspace",
-        crate::cli_types::ResourceKind::Agent => "agent",
-        crate::cli_types::ResourceKind::Workflow => "workflow",
-    }
-}
-
 fn run_apply_preflight(app_root: &Path, file: &str, dry_run: bool) -> Result<i32> {
     let (db_path, _logs_dir) = initialize_runtime(app_root)?;
     let content = std::fs::read_to_string(file)
@@ -236,7 +176,7 @@ fn run_apply_preflight(app_root: &Path, file: &str, dry_run: bool) -> Result<i32
             continue;
         }
 
-        let result = apply_resource_to_config(&mut merged_config, &registered);
+        let result = registered.apply(&mut merged_config);
         applied_results.push(result);
         let action = match result {
             ApplyResult::Created => "created",

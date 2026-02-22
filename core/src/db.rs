@@ -217,11 +217,17 @@ pub fn count_tasks_by_workflow(conn: &Connection, workflow_id: &str) -> Result<i
     Ok(count)
 }
 
-pub fn reset_db(state: &crate::state::InnerState) -> Result<()> {
+pub fn reset_db(state: &crate::state::InnerState, include_history: bool) -> Result<()> {
     let conn = open_conn(&state.db_path)?;
     conn.execute("DELETE FROM events", [])?;
     conn.execute("DELETE FROM command_runs", [])?;
     conn.execute("DELETE FROM task_items", [])?;
     conn.execute("DELETE FROM tasks", [])?;
+    if include_history {
+        conn.execute(
+            "DELETE FROM orchestrator_config_versions WHERE version < (SELECT COALESCE(MAX(version), 0) FROM orchestrator_config_versions)",
+            [],
+        )?;
+    }
     Ok(())
 }

@@ -11,7 +11,7 @@ use crate::config::{
 };
 use crate::config_load::read_active_config;
 use anyhow::{anyhow, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 const API_VERSION: &str = "orchestrator.dev/v1";
 
@@ -29,6 +29,7 @@ pub trait Resource: Sized {
     fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult;
     fn to_yaml(&self) -> Result<String>;
     fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self>;
+    fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool;
 }
 
 #[derive(Debug, Clone)]
@@ -155,6 +156,10 @@ impl Resource for WorkspaceResource {
             spec: workspace_config_to_spec(workspace),
         })
     }
+
+    fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
+        config.workspaces.remove(name).is_some()
+    }
 }
 
 impl Resource for AgentResource {
@@ -214,6 +219,10 @@ impl Resource for AgentResource {
             spec: agent_config_to_spec(agent),
         })
     }
+
+    fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
+        config.agents.remove(name).is_some()
+    }
 }
 
 impl Resource for WorkflowResource {
@@ -262,6 +271,10 @@ impl Resource for WorkflowResource {
             metadata: metadata_with_name(name),
             spec: workflow_config_to_spec(workflow),
         })
+    }
+
+    fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
+        config.workflows.remove(name).is_some()
     }
 }
 
@@ -317,6 +330,35 @@ impl Resource for RegisteredResource {
             return Some(Self::Workflow(workflow));
         }
         None
+    }
+
+    fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
+        if config.workspaces.remove(name).is_some() {
+            return true;
+        }
+        if config.agents.remove(name).is_some() {
+            return true;
+        }
+        if config.workflows.remove(name).is_some() {
+            return true;
+        }
+        false
+    }
+}
+
+pub fn delete_resource_by_kind(
+    config: &mut OrchestratorConfig,
+    kind: &str,
+    name: &str,
+) -> Result<bool> {
+    match kind {
+        "ws" | "workspace" => Ok(WorkspaceResource::delete_from(config, name)),
+        "agent" => Ok(AgentResource::delete_from(config, name)),
+        "wf" | "workflow" => Ok(WorkflowResource::delete_from(config, name)),
+        _ => Err(anyhow!(
+            "unknown resource type: {} (supported: workspace, agent, workflow)",
+            kind
+        )),
     }
 }
 
@@ -608,6 +650,27 @@ fn loop_mode_as_str(mode: &LoopMode) -> &'static str {
         LoopMode::Once => "once",
         LoopMode::Infinite => "infinite",
     }
+}
+
+pub fn kind_as_str(kind: ResourceKind) -> &'static str {
+    match kind {
+        ResourceKind::Workspace => "workspace",
+        ResourceKind::Agent => "agent",
+        ResourceKind::Workflow => "workflow",
+    }
+}
+
+pub fn parse_resources_from_yaml(content: &str) -> Result<Vec<OrchestratorResource>> {
+    let mut resources = Vec::new();
+    for document in serde_yaml::Deserializer::from_str(content) {
+        let value = serde_yaml::Value::deserialize(document)?;
+        if value.is_null() {
+            continue;
+        }
+        let resource = serde_yaml::from_value::<OrchestratorResource>(value)?;
+        resources.push(resource);
+    }
+    Ok(resources)
 }
 
 #[cfg(test)]

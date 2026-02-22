@@ -1,63 +1,90 @@
-mod test_utils {
-    use std::path::{Path, PathBuf};
-    use std::time::{SystemTime, UNIX_EPOCH};
-    use uuid::Uuid;
+use agent_orchestrator::cli_types::ResourceKind;
+use agent_orchestrator::resource::{
+    delete_resource_by_kind, dispatch_resource, kind_as_str, parse_resources_from_yaml, ApplyResult,
+    Resource,
+};
 
-    pub struct TestState {
-        temp_root: PathBuf,
-    }
+fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
+    use agent_orchestrator::config::*;
+    use std::collections::HashMap;
 
-    impl TestState {
-        pub fn new() -> Self {
-            let nonce = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos();
-            let temp_root = std::env::temp_dir().join(format!(
-                "orchestrator-integration-test-{}-{}",
-                nonce,
-                Uuid::new_v4()
-            ));
-            std::fs::create_dir_all(&temp_root).expect("failed to create test temp root");
-
-            Self { temp_root }
-        }
-
-        pub fn temp_root(&self) -> &Path {
-            &self.temp_root
-        }
-
-        pub fn write_manifest(&self, filename: &str, content: &str) -> PathBuf {
-            let path = self.temp_root.join(filename);
-            std::fs::write(&path, content).expect("failed to write manifest");
-            path
-        }
-
-        pub fn ensure_workspace_structure(&self, root_path: &str) {
-            let root = self.temp_root.join(root_path);
-            std::fs::create_dir_all(root.join("docs/qa")).expect("qa dir should be creatable");
-            std::fs::create_dir_all(root.join("docs/ticket"))
-                .expect("ticket dir should be creatable");
-        }
-    }
-
-    impl Drop for TestState {
-        fn drop(&mut self) {
-            if self.temp_root.exists() {
-                let _ = std::fs::remove_dir_all(&self.temp_root);
-            }
-        }
+    OrchestratorConfig {
+        runner: RunnerConfig {
+            shell: "/bin/bash".to_string(),
+            shell_arg: "-lc".to_string(),
+        },
+        resume: ResumeConfig { auto: false },
+        defaults: ConfigDefaults {
+            project: String::new(),
+            workspace: "default".to_string(),
+            workflow: "basic".to_string(),
+        },
+        projects: HashMap::new(),
+        workspaces: {
+            let mut ws = HashMap::new();
+            ws.insert(
+                "default".to_string(),
+                WorkspaceConfig {
+                    root_path: "workspace/default".to_string(),
+                    qa_targets: vec!["docs/qa".to_string()],
+                    ticket_dir: "docs/ticket".to_string(),
+                },
+            );
+            ws
+        },
+        agents: {
+            let mut agents = HashMap::new();
+            agents.insert(
+                "echo".to_string(),
+                AgentConfig {
+                    metadata: AgentMetadata::default(),
+                    capabilities: vec!["qa".to_string()],
+                    templates: {
+                        let mut t = HashMap::new();
+                        t.insert("qa".to_string(), "echo qa".to_string());
+                        t
+                    },
+                    selection: AgentSelectionConfig::default(),
+                },
+            );
+            agents
+        },
+        workflows: {
+            let mut workflows = HashMap::new();
+            workflows.insert(
+                "basic".to_string(),
+                WorkflowConfig {
+                    steps: vec![WorkflowStepConfig {
+                        id: "run_qa".to_string(),
+                        description: None,
+                        step_type: Some(WorkflowStepType::Qa),
+                        builtin: None,
+                        required_capability: None,
+                        enabled: true,
+                        repeatable: false,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                    }],
+                    loop_policy: WorkflowLoopConfig {
+                        mode: LoopMode::Once,
+                        guard: WorkflowLoopGuardConfig::default(),
+                    },
+                    finalize: WorkflowFinalizeConfig { rules: vec![] },
+                    qa: None,
+                    fix: None,
+                    retest: None,
+                    dynamic_steps: vec![],
+                },
+            );
+            workflows
+        },
     }
 }
 
-#[cfg(test)]
-mod integration_tests {
-    use super::*;
-    use test_utils::TestState;
-
-    fn workspace_yaml(name: &str, root_path: &str) -> String {
-        format!(
-            r#"apiVersion: orchestrator.dev/v1
+fn workspace_yaml(name: &str, root_path: &str) -> String {
+    format!(
+        r#"apiVersion: orchestrator.dev/v1
 kind: Workspace
 metadata:
   name: {name}
@@ -67,12 +94,12 @@ spec:
     - docs/qa
   ticket_dir: docs/ticket
 "#
-        )
-    }
+    )
+}
 
-    fn agent_yaml(name: &str, qa_template: &str) -> String {
-        format!(
-            r#"apiVersion: orchestrator.dev/v1
+fn agent_yaml(name: &str, qa_template: &str) -> String {
+    format!(
+        r#"apiVersion: orchestrator.dev/v1
 kind: Agent
 metadata:
   name: {name}
@@ -80,221 +107,230 @@ spec:
   templates:
     qa: "{qa_template}"
 "#
-        )
+    )
+}
+
+#[test]
+fn apply_creates_new_workspace_in_config() {
+    let mut config = minimal_config();
+    let yaml = workspace_yaml("new-ws", "workspace/new-ws");
+    let resources = parse_resources_from_yaml(&yaml).expect("should parse");
+    assert_eq!(resources.len(), 1);
+
+    let registered = dispatch_resource(resources.into_iter().next().unwrap()).expect("dispatch");
+    assert_eq!(registered.kind(), ResourceKind::Workspace);
+    assert_eq!(registered.name(), "new-ws");
+    registered.validate().expect("should be valid");
+
+    let result = registered.apply(&mut config);
+    assert_eq!(result, ApplyResult::Created);
+    assert!(config.workspaces.contains_key("new-ws"));
+    assert_eq!(config.workspaces["new-ws"].root_path, "workspace/new-ws");
+}
+
+#[test]
+fn apply_updates_existing_workspace() {
+    let mut config = minimal_config();
+
+    let v1 = parse_resources_from_yaml(&workspace_yaml("default", "workspace/v1")).unwrap();
+    let r1 = dispatch_resource(v1.into_iter().next().unwrap()).unwrap();
+    let result = r1.apply(&mut config);
+    assert_eq!(result, ApplyResult::Configured);
+    assert_eq!(config.workspaces["default"].root_path, "workspace/v1");
+
+    let v2 = parse_resources_from_yaml(&workspace_yaml("default", "workspace/v2")).unwrap();
+    let r2 = dispatch_resource(v2.into_iter().next().unwrap()).unwrap();
+    let result = r2.apply(&mut config);
+    assert_eq!(result, ApplyResult::Configured);
+    assert_eq!(config.workspaces["default"].root_path, "workspace/v2");
+}
+
+#[test]
+fn apply_returns_unchanged_for_identical_resource() {
+    let mut config = minimal_config();
+    let yaml = workspace_yaml("default", "workspace/default");
+
+    let resources = parse_resources_from_yaml(&yaml).unwrap();
+    let registered = dispatch_resource(resources.into_iter().next().unwrap()).unwrap();
+    let result = registered.apply(&mut config);
+    assert_eq!(result, ApplyResult::Unchanged);
+}
+
+#[test]
+fn apply_preserves_unmentioned_resources() {
+    let mut config = minimal_config();
+
+    let yaml = workspace_yaml("new-ws", "workspace/new-ws");
+    let resources = parse_resources_from_yaml(&yaml).unwrap();
+    let registered = dispatch_resource(resources.into_iter().next().unwrap()).unwrap();
+    registered.apply(&mut config);
+
+    assert!(config.workspaces.contains_key("default"));
+    assert!(config.workspaces.contains_key("new-ws"));
+}
+
+#[test]
+fn multi_document_apply_parses_all_resources() {
+    let yaml = format!(
+        "{}---\n{}---\n{}",
+        workspace_yaml("ws-a", "workspace/ws-a"),
+        workspace_yaml("ws-b", "workspace/ws-b"),
+        agent_yaml("test-agent", "echo test")
+    );
+
+    let resources = parse_resources_from_yaml(&yaml).expect("should parse multi-doc");
+    assert_eq!(resources.len(), 3);
+    assert_eq!(resources[0].kind, ResourceKind::Workspace);
+    assert_eq!(resources[0].metadata.name, "ws-a");
+    assert_eq!(resources[1].kind, ResourceKind::Workspace);
+    assert_eq!(resources[1].metadata.name, "ws-b");
+    assert_eq!(resources[2].kind, ResourceKind::Agent);
+    assert_eq!(resources[2].metadata.name, "test-agent");
+}
+
+#[test]
+fn multi_document_apply_all_to_config() {
+    let mut config = minimal_config();
+    let yaml = format!(
+        "{}---\n{}",
+        workspace_yaml("ws-extra", "workspace/ws-extra"),
+        agent_yaml("agent-extra", "echo extra")
+    );
+
+    let resources = parse_resources_from_yaml(&yaml).unwrap();
+    for resource in resources {
+        let registered = dispatch_resource(resource).unwrap();
+        registered.validate().unwrap();
+        registered.apply(&mut config);
     }
 
-    fn multi_document_yaml() -> String {
-        r#"apiVersion: orchestrator.dev/v1
+    assert!(config.workspaces.contains_key("ws-extra"));
+    assert!(config.agents.contains_key("agent-extra"));
+}
+
+#[test]
+fn validation_rejects_empty_workspace_root_path() {
+    let yaml = r#"apiVersion: orchestrator.dev/v1
 kind: Workspace
 metadata:
-  name: ws1
+  name: bad-ws
 spec:
-  root_path: workspace/ws1
-  qa_targets:
-    - docs/qa
+  root_path: "  "
+  qa_targets: []
   ticket_dir: docs/ticket
----
-apiVersion: orchestrator.dev/v1
-kind: Workspace
-metadata:
-  name: ws2
-spec:
-  root_path: workspace/ws2
-  qa_targets:
-    - docs/qa
-  ticket_dir: docs/ticket
----
-apiVersion: orchestrator.dev/v1
+"#;
+    let resources = parse_resources_from_yaml(yaml).unwrap();
+    let registered = dispatch_resource(resources.into_iter().next().unwrap()).unwrap();
+    let result = registered.validate();
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("root_path"));
+}
+
+#[test]
+fn validation_rejects_empty_agent_templates() {
+    let yaml = r#"apiVersion: orchestrator.dev/v1
 kind: Agent
 metadata:
-  name: test-agent
+  name: empty-agent
 spec:
-  templates:
-    qa: "echo test"
-"#
-        .to_string()
-    }
+  templates: {}
+"#;
+    let resources = parse_resources_from_yaml(yaml).unwrap();
+    let registered = dispatch_resource(resources.into_iter().next().unwrap()).unwrap();
+    let result = registered.validate();
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("at least one template"));
+}
 
-    #[test]
-    fn db_reset_clears_tasks_but_preserves_config() {
-        let fixture = TestState::new();
-
-        assert!(fixture.temp_root().exists());
-    }
-
-    #[test]
-    fn apply_creates_resource_and_persists() {
-        let fixture = TestState::new();
-        fixture.ensure_workspace_structure("workspace/new-ws");
-
-        let manifest = fixture.write_manifest(
-            "apply-create.yaml",
-            &workspace_yaml("new-ws", "workspace/new-ws"),
-        );
-
-        assert!(manifest.exists());
-        let content = std::fs::read_to_string(&manifest).expect("should read manifest");
-        assert!(content.contains("kind: Workspace"));
-        assert!(content.contains("name: new-ws"));
-    }
-
-    #[test]
-    fn apply_updates_existing_resource() {
-        let fixture = TestState::new();
-        fixture.ensure_workspace_structure("workspace/update-ws-v1");
-        fixture.ensure_workspace_structure("workspace/update-ws-v2");
-
-        let manifest = fixture.write_manifest(
-            "apply-update.yaml",
-            &workspace_yaml("update-ws", "workspace/update-ws-v1"),
-        );
-
-        assert!(manifest.exists());
-
-        let manifest_v2 = fixture.write_manifest(
-            "apply-update.yaml",
-            &workspace_yaml("update-ws", "workspace/update-ws-v2"),
-        );
-
-        assert!(manifest_v2.exists());
-        let content = std::fs::read_to_string(&manifest_v2).expect("should read manifest");
-        assert!(content.contains("workspace/update-ws-v2"));
-    }
-
-    #[test]
-    fn apply_preserves_unmentioned_resources() {
-        let fixture = TestState::new();
-        fixture.ensure_workspace_structure("workspace/ws-a");
-        fixture.ensure_workspace_structure("workspace/ws-b");
-
-        let manifest_a = fixture.write_manifest(
-            "apply-preserve-a.yaml",
-            &workspace_yaml("ws-a", "workspace/ws-a"),
-        );
-
-        let manifest_b = fixture.write_manifest(
-            "apply-preserve-b.yaml",
-            &workspace_yaml("ws-b", "workspace/ws-b"),
-        );
-
-        assert!(manifest_a.exists());
-        assert!(manifest_b.exists());
-    }
-
-    #[test]
-    fn apply_edit_round_trip() {
-        let fixture = TestState::new();
-        fixture.ensure_workspace_structure("workspace/roundtrip-v1");
-        fixture.ensure_workspace_structure("workspace/roundtrip-v2");
-
-        let manifest = fixture.write_manifest(
-            "roundtrip.yaml",
-            &workspace_yaml("roundtrip", "workspace/roundtrip-v1"),
-        );
-        assert!(manifest.exists());
-
-        let edited_manifest = fixture.write_manifest(
-            "roundtrip-edited.yaml",
-            &workspace_yaml("roundtrip", "workspace/roundtrip-v2"),
-        );
-
-        let content = std::fs::read_to_string(&edited_manifest).expect("should read manifest");
-        assert!(content.contains("workspace/roundtrip-v2"));
-    }
-
-    #[test]
-    fn multi_document_apply() {
-        let fixture = TestState::new();
-        fixture.ensure_workspace_structure("workspace/ws1");
-        fixture.ensure_workspace_structure("workspace/ws2");
-
-        let manifest = fixture.write_manifest("multi-doc.yaml", &multi_document_yaml());
-
-        let content = std::fs::read_to_string(&manifest).expect("should read manifest");
-        assert!(content.contains("---"));
-        assert!(content.contains("name: ws1"));
-        assert!(content.contains("name: ws2"));
-        assert!(content.contains("name: test-agent"));
-    }
-
-    #[test]
-    fn integration_all_commands_work_together() {
-        let fixture = TestState::new();
-        fixture.ensure_workspace_structure("workspace/integration");
-
-        let initial_manifest = fixture.write_manifest(
-            "integration-initial.yaml",
-            &workspace_yaml("integration", "workspace/integration"),
-        );
-        assert!(initial_manifest.exists());
-
-        let agent_manifest = fixture.write_manifest(
-            "integration-agent.yaml",
-            &agent_yaml("integration-agent", "echo test"),
-        );
-        assert!(agent_manifest.exists());
-
-        assert!(initial_manifest.exists());
-        assert!(agent_manifest.exists());
-    }
-
-    #[test]
-    fn apply_dry_run_does_not_persist() {
-        let fixture = TestState::new();
-        fixture.ensure_workspace_structure("workspace/dry-run");
-
-        let manifest = fixture.write_manifest(
-            "dry-run.yaml",
-            &workspace_yaml("dry-run", "workspace/dry-run"),
-        );
-
-        assert!(manifest.exists());
-    }
-
-    #[test]
-    fn edit_export_generates_valid_yaml() {
-        let fixture = TestState::new();
-        fixture.ensure_workspace_structure("workspace/export-test");
-
-        let manifest = fixture.write_manifest(
-            "export-test.yaml",
-            &workspace_yaml("export-test", "workspace/export-test"),
-        );
-
-        let content = std::fs::read_to_string(&manifest).expect("should read manifest");
-
-        assert!(content.contains("apiVersion: orchestrator.dev/v1"));
-        assert!(content.contains("kind: Workspace"));
-        assert!(content.contains("metadata:"));
-        assert!(content.contains("spec:"));
-    }
-
-    #[test]
-    fn multi_resource_apply_partial_failure() {
-        let fixture = TestState::new();
-        fixture.ensure_workspace_structure("workspace/valid");
-
-        let mixed_yaml = format!(
-            r#"{}
----
-apiVersion: orchestrator.dev/v1
+#[test]
+fn validation_rejects_invalid_api_version() {
+    let yaml = r#"apiVersion: wrong/v2
 kind: Workspace
 metadata:
-  name: invalid-empty-path
+  name: invalid
 spec:
-  root_path: ""
-  qa_targets:
-    - docs/qa
+  root_path: /tmp
+  qa_targets: []
   ticket_dir: docs/ticket
-"#,
-            workspace_yaml("valid", "workspace/valid")
-        );
+"#;
+    let resources = parse_resources_from_yaml(yaml).unwrap();
+    let resource = &resources[0];
+    let result = resource.validate_version();
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("wrong/v2"));
+}
 
-        let manifest = fixture.write_manifest("mixed.yaml", &mixed_yaml);
-        assert!(manifest.exists());
+#[test]
+fn delete_removes_workspace_from_config() {
+    let mut config = minimal_config();
+    config.workspaces.insert(
+        "to-delete".to_string(),
+        agent_orchestrator::config::WorkspaceConfig {
+            root_path: "workspace/to-delete".to_string(),
+            qa_targets: vec!["docs/qa".to_string()],
+            ticket_dir: "docs/ticket".to_string(),
+        },
+    );
 
-        let content = std::fs::read_to_string(&manifest).expect("should read manifest");
-        assert!(content.contains("name: valid"));
-        assert!(content.contains("root_path: \"\""));
-    }
+    let deleted = delete_resource_by_kind(&mut config, "workspace", "to-delete")
+        .expect("should succeed");
+    assert!(deleted);
+    assert!(!config.workspaces.contains_key("to-delete"));
+    assert!(config.workspaces.contains_key("default"));
+}
+
+#[test]
+fn delete_returns_false_for_missing_resource() {
+    let mut config = minimal_config();
+    let deleted = delete_resource_by_kind(&mut config, "workspace", "nonexistent")
+        .expect("should succeed");
+    assert!(!deleted);
+}
+
+#[test]
+fn delete_rejects_unknown_resource_type() {
+    let mut config = minimal_config();
+    let result = delete_resource_by_kind(&mut config, "unknown", "foo");
+    assert!(result.is_err());
+}
+
+#[test]
+fn kind_as_str_covers_all_resource_kinds() {
+    assert_eq!(kind_as_str(ResourceKind::Workspace), "workspace");
+    assert_eq!(kind_as_str(ResourceKind::Agent), "agent");
+    assert_eq!(kind_as_str(ResourceKind::Workflow), "workflow");
+}
+
+#[test]
+fn apply_then_delete_roundtrip() {
+    let mut config = minimal_config();
+
+    let yaml = agent_yaml("temp-agent", "echo temp");
+    let resources = parse_resources_from_yaml(&yaml).unwrap();
+    let registered = dispatch_resource(resources.into_iter().next().unwrap()).unwrap();
+    assert_eq!(registered.apply(&mut config), ApplyResult::Created);
+    assert!(config.agents.contains_key("temp-agent"));
+
+    let deleted = delete_resource_by_kind(&mut config, "agent", "temp-agent").unwrap();
+    assert!(deleted);
+    assert!(!config.agents.contains_key("temp-agent"));
+}
+
+#[test]
+fn resource_to_yaml_roundtrip() {
+    let mut config = minimal_config();
+    let yaml = workspace_yaml("roundtrip-ws", "workspace/roundtrip");
+    let resources = parse_resources_from_yaml(&yaml).unwrap();
+    let registered = dispatch_resource(resources.into_iter().next().unwrap()).unwrap();
+    registered.apply(&mut config);
+
+    let exported = registered.to_yaml().expect("should serialize to yaml");
+    assert!(exported.contains("apiVersion: orchestrator.dev/v1"));
+    assert!(exported.contains("kind: Workspace"));
+    assert!(exported.contains("name: roundtrip-ws"));
+    assert!(exported.contains("workspace/roundtrip"));
+
+    let re_parsed = parse_resources_from_yaml(&exported).unwrap();
+    assert_eq!(re_parsed.len(), 1);
+    assert_eq!(re_parsed[0].metadata.name, "roundtrip-ws");
 }

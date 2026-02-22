@@ -195,15 +195,15 @@ impl TestState {
         std::fs::create_dir_all(&config_dir).expect("failed to create temp config dir");
         std::fs::create_dir_all(&logs_dir).expect("failed to create temp logs dir");
 
-        let config_path = config_dir.join("default.yaml");
+        let seed_path = config_dir.join("default.yaml");
         let yaml = serde_yaml::to_string(&self.config).expect("failed to serialize test config");
-        std::fs::write(&config_path, yaml).expect("failed to write temp config");
+        std::fs::write(&seed_path, yaml).expect("failed to write temp config");
 
         let db_path = data_dir.join("agent_orchestrator.db");
         init_schema(&db_path).expect("failed to initialize test schema");
 
         let (config, _yaml, _version, _updated_at) =
-            load_or_seed_config(&db_path, Some(&config_path)).expect("failed to load test config");
+            load_or_seed_config(&db_path, Some(&seed_path)).expect("failed to load test config");
         let active =
             build_active_config(&self.temp_root, config).expect("failed to build active config");
 
@@ -224,7 +224,6 @@ impl TestState {
             app_root: self.temp_root.clone(),
             db_path,
             logs_dir,
-            config_path,
             active_config: RwLock::new(active),
             running: Mutex::new(HashMap::new()),
             agent_health: std::sync::RwLock::new(HashMap::new()),
@@ -286,7 +285,6 @@ mod tests {
         let state = fixture.build();
 
         assert!(state.db_path.exists());
-        assert!(state.config_path.exists());
         assert!(state.logs_dir.exists());
     }
 

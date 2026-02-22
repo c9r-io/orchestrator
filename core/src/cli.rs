@@ -65,6 +65,17 @@ pub enum Commands {
         output: OutputFormat,
     },
 
+    /// Delete a resource by kind/name (e.g., workspace/my-ws)
+    #[command(alias = "rm")]
+    Delete {
+        #[arg(value_name = "RESOURCE")]
+        resource: String,
+
+        /// Force deletion without confirmation
+        #[arg(short, long)]
+        force: bool,
+    },
+
     #[command(alias = "t", subcommand)]
     Task(TaskCommands),
 
@@ -293,6 +304,10 @@ pub enum DbCommands {
     Reset {
         #[arg(short, long)]
         force: bool,
+
+        /// Also clear config version history (preserves current active config)
+        #[arg(long)]
+        include_history: bool,
     },
 }
 
@@ -481,12 +496,55 @@ mod tests {
     }
 
     #[test]
+    fn parse_delete_command() {
+        let cli = Cli::parse_from(["orchestrator", "delete", "workspace/old-ws"]);
+
+        match cli.command {
+            Commands::Delete { resource, force } => {
+                assert_eq!(resource, "workspace/old-ws");
+                assert!(!force);
+            }
+            _ => panic!("expected delete command"),
+        }
+    }
+
+    #[test]
+    fn parse_delete_force() {
+        let cli = Cli::parse_from(["orchestrator", "delete", "agent/old", "--force"]);
+
+        match cli.command {
+            Commands::Delete { resource, force } => {
+                assert_eq!(resource, "agent/old");
+                assert!(force);
+            }
+            _ => panic!("expected delete command"),
+        }
+    }
+
+    #[test]
+    fn parse_delete_alias_rm() {
+        let cli = Cli::parse_from(["orchestrator", "rm", "workflow/old-wf", "-f"]);
+
+        match cli.command {
+            Commands::Delete { resource, force } => {
+                assert_eq!(resource, "workflow/old-wf");
+                assert!(force);
+            }
+            _ => panic!("expected delete command via rm alias"),
+        }
+    }
+
+    #[test]
     fn parse_db_command() {
         let cli = Cli::parse_from(["orchestrator", "db", "reset"]);
 
         match cli.command {
-            Commands::Db(DbCommands::Reset { force }) => {
+            Commands::Db(DbCommands::Reset {
+                force,
+                include_history,
+            }) => {
                 assert!(!force);
+                assert!(!include_history);
             }
             _ => panic!("expected db reset command"),
         }
@@ -497,8 +555,34 @@ mod tests {
         let cli = Cli::parse_from(["orchestrator", "db", "reset", "--force"]);
 
         match cli.command {
-            Commands::Db(DbCommands::Reset { force }) => {
+            Commands::Db(DbCommands::Reset {
+                force,
+                include_history,
+            }) => {
                 assert!(force);
+                assert!(!include_history);
+            }
+            _ => panic!("expected db reset command"),
+        }
+    }
+
+    #[test]
+    fn parse_db_reset_include_history() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "db",
+            "reset",
+            "--force",
+            "--include-history",
+        ]);
+
+        match cli.command {
+            Commands::Db(DbCommands::Reset {
+                force,
+                include_history,
+            }) => {
+                assert!(force);
+                assert!(include_history);
             }
             _ => panic!("expected db reset command"),
         }
