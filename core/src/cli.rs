@@ -16,7 +16,7 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
 
-    /// Path to config file (default: ./config/default.yaml)
+    /// Optional seed config path for bootstrap-compatible workflows
     #[arg(short, long, global = true)]
     pub config: Option<String>,
 
@@ -27,7 +27,7 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
-    /// Initialize orchestrator with a default configuration
+    /// Initialize orchestrator runtime directories and SQLite schema
     Init {
         /// Workspace root path (default: current directory)
         #[arg(short, long)]
@@ -253,6 +253,22 @@ pub enum ConfigCommands {
 
     Set {
         config_file: String,
+    },
+
+    Bootstrap {
+        #[arg(long = "from")]
+        from_file: String,
+
+        #[arg(short, long)]
+        force: bool,
+    },
+
+    Export {
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+
+        #[arg(short = 'f', long = "file")]
+        file: Option<String>,
     },
 
     Validate {
@@ -709,6 +725,47 @@ mod tests {
                 assert_eq!(config_file, "/path/to/config.yaml");
             }
             _ => panic!("expected config validate command"),
+        }
+    }
+
+    #[test]
+    fn parse_config_bootstrap_command() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "config",
+            "bootstrap",
+            "--from",
+            "/tmp/config.yaml",
+            "--force",
+        ]);
+
+        match cli.command {
+            Commands::Config(ConfigCommands::Bootstrap { from_file, force }) => {
+                assert_eq!(from_file, "/tmp/config.yaml");
+                assert!(force);
+            }
+            _ => panic!("expected config bootstrap command"),
+        }
+    }
+
+    #[test]
+    fn parse_config_export_command() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "config",
+            "export",
+            "-o",
+            "json",
+            "-f",
+            "/tmp/out.json",
+        ]);
+
+        match cli.command {
+            Commands::Config(ConfigCommands::Export { output, file }) => {
+                assert_eq!(output, OutputFormat::Json);
+                assert_eq!(file, Some("/tmp/out.json".to_string()));
+            }
+            _ => panic!("expected config export command"),
         }
     }
 

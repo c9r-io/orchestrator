@@ -23,7 +23,6 @@ cargo test --lib --bins
 
 ## Runtime Paths
 
-- Config: `orchestrator/config/default.yaml`
 - Database: `orchestrator/data/agent_orchestrator.db`
 - Logs: `orchestrator/data/logs/`
 
@@ -35,7 +34,8 @@ cargo test --lib --bins
 ./orchestrator/scripts/orchestrator.sh task start --latest
 ./orchestrator/scripts/orchestrator.sh task logs <task-id>
 ./orchestrator/scripts/orchestrator.sh config view
-./orchestrator/scripts/orchestrator.sh config validate orchestrator/config/default.yaml
+./orchestrator/scripts/orchestrator.sh config bootstrap --from orchestrator/config/default.yaml
+./orchestrator/scripts/orchestrator.sh config export -o yaml -f /tmp/orchestrator-config.yaml
 ```
 - path escape (`..`) is rejected
 - existing paths are canonicalized and must remain inside workspace root

@@ -1,14 +1,12 @@
 use crate::config::{
-    ActiveConfig, AgentConfig, OrchestratorConfig, ResolvedProject, ResolvedWorkspace,
-    TaskExecutionPlan, WorkflowConfig, WorkflowStepConfig, WorkflowStepType,
+    ActiveConfig, OrchestratorConfig, ResolvedProject, ResolvedWorkspace, TaskExecutionPlan,
+    WorkflowConfig, WorkflowStepConfig, WorkflowStepType,
 };
 use crate::db::{count_tasks_by_workflow, count_tasks_by_workspace, open_conn};
 use crate::dto::ConfigOverview;
 use anyhow::{Context, Result};
 use rusqlite::{params, OptionalExtension};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 pub fn now_ts() -> String {
@@ -392,23 +390,9 @@ pub fn resolve_and_validate_projects(
     Ok(resolved)
 }
 
-pub fn atomic_write_string(path: &Path, content: &str) -> Result<()> {
-    let parent = path
-        .parent()
-        .with_context(|| format!("invalid file path: {}", path.display()))?;
-    std::fs::create_dir_all(parent)
-        .with_context(|| format!("failed to create dir {}", parent.display()))?;
-    let tmp_path = path.with_extension("yaml.tmp");
-    std::fs::write(&tmp_path, content)
-        .with_context(|| format!("failed writing temp config {}", tmp_path.display()))?;
-    std::fs::rename(&tmp_path, path)
-        .with_context(|| format!("failed replacing config {}", path.display()))?;
-    Ok(())
-}
-
 pub fn load_or_seed_config(
     db_path: &Path,
-    config_path: &Path,
+    seed_config_path: Option<&Path>,
 ) -> Result<(OrchestratorConfig, String, i64, String)> {
     let conn = open_conn(db_path)?;
     let row: Option<(String, String, i64, String)> = conn
@@ -428,6 +412,14 @@ pub fn load_or_seed_config(
         return Ok((config, yaml, version, updated_at));
     }
 
+    let config_path = match seed_config_path {
+        Some(path) => path,
+        None => {
+            anyhow::bail!(
+                "orchestrator config is not initialized in sqlite; run 'orchestrator config bootstrap --from <file>' first"
+            )
+        }
+    };
     let config = normalize_config(load_config(config_path)?);
     let yaml =
         serde_yaml::to_string(&config).context("failed to serialize initial config to yaml")?;
@@ -441,7 +433,6 @@ pub fn load_or_seed_config(
         "INSERT INTO orchestrator_config_versions (version, config_yaml, config_json, created_at, author) VALUES (1, ?1, ?2, ?3, 'bootstrap')",
         params![yaml, serde_json::to_string(&config)?, now],
     )?;
-    atomic_write_string(config_path, &yaml)?;
     Ok((config, yaml, 1, now))
 }
 
@@ -533,13 +524,67 @@ pub fn persist_config_and_reload(
         params![next_version, yaml, serde_json::to_string(&normalized)?, now, author],
     )?;
 
-    atomic_write_string(&state.config_path, &yaml)?;
     tx.commit()?;
 
     {
         let mut active = crate::state::write_active_config(state)?;
         *active = candidate;
     }
+
+    Ok(ConfigOverview {
+        config: normalized,
+        yaml,
+        version: next_version,
+        updated_at: now,
+    })
+}
+
+pub fn bootstrap_config_from_file(
+    app_root: &Path,
+    db_path: &Path,
+    source_path: &Path,
+    force: bool,
+    author: &str,
+) -> Result<ConfigOverview> {
+    let raw = load_config(source_path)?;
+    let candidate = build_active_config(app_root, raw)?;
+    let normalized = candidate.config;
+    let yaml = serde_yaml::to_string(&normalized).context("failed to serialize config yaml")?;
+    let json_raw = serde_json::to_string(&normalized).context("failed to serialize config json")?;
+
+    let conn = open_conn(db_path)?;
+    let tx = conn.unchecked_transaction()?;
+    let exists: Option<i64> = tx
+        .query_row(
+            "SELECT version FROM orchestrator_config WHERE id = 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if exists.is_some() && !force {
+        anyhow::bail!("sqlite config already exists; re-run with --force to replace it");
+    }
+
+    let current_version: i64 = tx
+        .query_row(
+            "SELECT COALESCE(MAX(version), 0) FROM orchestrator_config_versions",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    let next_version = current_version + 1;
+    let now = now_ts();
+
+    tx.execute(
+        "INSERT INTO orchestrator_config (id, config_yaml, config_json, version, updated_at) VALUES (1, ?1, ?2, ?3, ?4)
+         ON CONFLICT(id) DO UPDATE SET config_yaml=excluded.config_yaml, config_json=excluded.config_json, version=excluded.version, updated_at=excluded.updated_at",
+        params![yaml, json_raw, next_version, now],
+    )?;
+    tx.execute(
+        "INSERT INTO orchestrator_config_versions (version, config_yaml, config_json, created_at, author) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![next_version, yaml, serde_json::to_string(&normalized)?, now, author],
+    )?;
+    tx.commit()?;
 
     Ok(ConfigOverview {
         config: normalized,
@@ -563,6 +608,68 @@ pub fn load_config_overview(state: &crate::state::InnerState) -> Result<ConfigOv
         yaml,
         version,
         updated_at,
+    })
+}
+
+pub fn load_raw_config_from_db(
+    db_path: &Path,
+) -> Result<Option<(OrchestratorConfig, i64, String)>> {
+    let conn = open_conn(db_path)?;
+    let row: Option<(String, String, i64, String)> = conn
+        .query_row(
+            "SELECT config_yaml, config_json, version, updated_at FROM orchestrator_config WHERE id = 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .optional()?;
+
+    let Some((yaml, json_raw, version, updated_at)) = row else {
+        return Ok(None);
+    };
+
+    let config = serde_json::from_str::<OrchestratorConfig>(&json_raw)
+        .or_else(|_| serde_yaml::from_str::<OrchestratorConfig>(&yaml))
+        .context("failed to parse config from sqlite")?;
+    Ok(Some((normalize_config(config), version, updated_at)))
+}
+
+pub fn persist_raw_config(
+    db_path: &Path,
+    config: OrchestratorConfig,
+    author: &str,
+) -> Result<ConfigOverview> {
+    let normalized = normalize_config(config);
+    let yaml = serde_yaml::to_string(&normalized).context("failed to serialize config yaml")?;
+    let json_raw = serde_json::to_string(&normalized).context("failed to serialize config json")?;
+    let now = now_ts();
+
+    let conn = open_conn(db_path)?;
+    let tx = conn.unchecked_transaction()?;
+    let current_version: i64 = tx
+        .query_row(
+            "SELECT COALESCE(MAX(version), 0) FROM orchestrator_config_versions",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    let next_version = current_version + 1;
+
+    tx.execute(
+        "INSERT INTO orchestrator_config (id, config_yaml, config_json, version, updated_at) VALUES (1, ?1, ?2, ?3, ?4)
+         ON CONFLICT(id) DO UPDATE SET config_yaml=excluded.config_yaml, config_json=excluded.config_json, version=excluded.version, updated_at=excluded.updated_at",
+        params![yaml, json_raw, next_version, now],
+    )?;
+    tx.execute(
+        "INSERT INTO orchestrator_config_versions (version, config_yaml, config_json, created_at, author) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![next_version, yaml, serde_json::to_string(&normalized)?, now, author],
+    )?;
+    tx.commit()?;
+
+    Ok(ConfigOverview {
+        config: normalized,
+        yaml,
+        version: next_version,
+        updated_at: now,
     })
 }
 

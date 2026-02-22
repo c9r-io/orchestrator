@@ -203,7 +203,7 @@ impl TestState {
         init_schema(&db_path).expect("failed to initialize test schema");
 
         let (config, _yaml, _version, _updated_at) =
-            load_or_seed_config(&db_path, &config_path).expect("failed to load test config");
+            load_or_seed_config(&db_path, Some(&config_path)).expect("failed to load test config");
         let active =
             build_active_config(&self.temp_root, config).expect("failed to build active config");
 

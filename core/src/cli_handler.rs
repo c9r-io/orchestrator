@@ -507,6 +507,27 @@ impl CliHandler {
                 println!("Configuration updated");
                 Ok(0)
             }
+            ConfigCommands::Bootstrap { .. } => {
+                anyhow::bail!("config bootstrap must run before state initialization")
+            }
+            ConfigCommands::Export { output, file } => {
+                let overview = load_config_overview(&self.state)?;
+                let content = match output {
+                    OutputFormat::Yaml => overview.yaml,
+                    OutputFormat::Json => serde_json::to_string_pretty(&overview.config)?,
+                    OutputFormat::Table => {
+                        anyhow::bail!("unsupported export output format: table")
+                    }
+                };
+                if let Some(path) = file {
+                    std::fs::write(path, &content)
+                        .with_context(|| format!("failed to write export file: {}", path))?;
+                    println!("Configuration exported to {}", path);
+                } else {
+                    println!("{}", content);
+                }
+                Ok(0)
+            }
             ConfigCommands::Validate { config_file } => {
                 let content = std::fs::read_to_string(config_file)?;
                 let config: OrchestratorConfig = serde_yaml::from_str(&content)?;
