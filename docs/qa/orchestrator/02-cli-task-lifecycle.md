@@ -11,7 +11,18 @@
 
 This document tests the task lifecycle commands including starting, pausing, resuming tasks, viewing logs, and retrying failed items.
 
-Entry point: `orchestrator task <command>`
+Entry point: `./scripts/orchestrator.sh task <command>`
+
+### Project Isolation Setup
+
+Run once before scenarios:
+
+```bash
+QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/output-formats.yaml
+```
 
 ---
 
@@ -20,30 +31,30 @@ Entry point: `orchestrator task <command>`
 ### Preconditions
 
 - Orchestrator binary available
-- Runtime initialized and mock config bootstrapped (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions)
+- Runtime initialized and mock config applied (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions)
 - Workspace configured with mock agents that produce exit-code 0 (e.g. `echo 'done'`)
-- Clean database state: `rm -f data/agent_orchestrator.db`
+- Project-isolated reset: `./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force`
 
 ### Steps
 
 1. Create a task without auto-start:
    ```bash
-   orchestrator task create --name "pause-test" --goal "Test pause/resume" --no-start
+   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "pause-test" --goal "Test pause/resume" --no-start
    ```
 
 2. Verify task status is pending:
    ```bash
-   orchestrator task list
+   ./scripts/orchestrator.sh task list
    ```
 
 3. Start the task:
    ```bash
-   orchestrator task start {task_id}
+   ./scripts/orchestrator.sh task start {task_id}
    ```
 
 4. Check task status:
    ```bash
-   orchestrator task info {task_id}
+   ./scripts/orchestrator.sh task info {task_id}
    ```
 
 ### Expected
@@ -64,13 +75,13 @@ Entry point: `orchestrator task <command>`
 
 1. Create and pause a task:
    ```bash
-   TASK_CREATE_OUTPUT=$(orchestrator task create --name "latest-test" --goal "Test" --no-start)
+   TASK_CREATE_OUTPUT=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "latest-test" --goal "Test" --no-start)
    TASK_ID=$(echo "$TASK_CREATE_OUTPUT" | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 
 2. Start with --latest flag:
    ```bash
-   orchestrator task start --latest
+   ./scripts/orchestrator.sh task start --latest
    ```
 
 ### Expected
@@ -83,7 +94,7 @@ Entry point: `orchestrator task <command>`
 
 ### Preconditions
 
-- Orchestrator initialized and config bootstrapped (see Scenario 1 preconditions)
+- Orchestrator initialized and config applied (see Scenario 1 preconditions)
 - A running task exists (or create one that runs for a while using the mock config below)
 
 ### Steps
@@ -105,7 +116,7 @@ Entry point: `orchestrator task <command>`
        root_path: "."
        qa_targets:
          - docs/qa
-       ticket_dir: docs/ticket
+       ticket_dir: fixtures/ticket
    agents:
      mock_sleep:
        metadata:
@@ -133,23 +144,23 @@ Entry point: `orchestrator task <command>`
 
 2. Start task in background:
    ```bash
-   orchestrator task start {task_id} &
+   ./scripts/orchestrator.sh task start {task_id} &
    sleep 1
    ```
 
 3. Pause the task:
    ```bash
-   orchestrator task pause {task_id}
+   ./scripts/orchestrator.sh task pause {task_id}
    ```
 
 4. Verify task is paused:
    ```bash
-   orchestrator task info {task_id}
+   ./scripts/orchestrator.sh task info {task_id}
    ```
 
 5. Resume the task:
    ```bash
-   orchestrator task resume {task_id}
+   ./scripts/orchestrator.sh task resume {task_id}
    ```
 
 ### Expected
@@ -163,7 +174,7 @@ Entry point: `orchestrator task <command>`
 
 ### Preconditions
 
-- Runtime initialized and mock config bootstrapped (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions)
+- Runtime initialized and mock config applied (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions)
 - A task has been executed **successfully** at least once (task must reach running state so that command_runs are recorded)
 - Task must have been started and executed (not just created) for command_runs to exist in the database
 
@@ -171,27 +182,29 @@ Entry point: `orchestrator task <command>`
 
 1. Get task ID:
    ```bash
-   orchestrator task list
+   ./scripts/orchestrator.sh task list
    ```
 
 2. View task logs:
    ```bash
-   orchestrator task logs {task_id}
+   ./scripts/orchestrator.sh task logs {task_id}
    ```
 
 3. View last 10 lines:
    ```bash
-   orchestrator task logs {task_id} --tail 10
+   ./scripts/orchestrator.sh task logs {task_id} --tail 10
    ```
 
 4. View logs with timestamps:
    ```bash
-   orchestrator task logs {task_id} --timestamps
+   ./scripts/orchestrator.sh task logs {task_id} --timestamps
    ```
 
 ### Expected
 
-- Logs display command output (empty output is expected if the task had no command_runs, e.g. it failed before execution)
+- Logs display command output when command_runs and log files are valid
+- Empty output is expected only when the task had no command_runs (for example it failed before phase execution)
+- If `command_runs` exists but referenced log files are missing/corrupted, the command should surface a clear read error (no silent empty fallback)
 - Tail limit works correctly
 - Timestamps are shown when requested
 
@@ -201,7 +214,7 @@ Entry point: `orchestrator task <command>`
 
 ### Preconditions
 
-- Orchestrator initialized and config bootstrapped with a failing agent (e.g. `exit 1`)
+- Orchestrator initialized and config applied with a failing agent (e.g. `exit 1`)
 - A task with failed items exists
 
 ### Steps
@@ -213,7 +226,7 @@ Entry point: `orchestrator task <command>`
 
 2. After task fails, identify failed item:
    ```bash
-   orchestrator task info {task_id}
+   ./scripts/orchestrator.sh task info {task_id}
    ```
 
 3. Get the task item ID:
@@ -223,7 +236,7 @@ Entry point: `orchestrator task <command>`
 
 4. Retry the failed item:
    ```bash
-   orchestrator task retry {task_item_id}
+   ./scripts/orchestrator.sh task retry {task_item_id}
    ```
 
 ### Expected

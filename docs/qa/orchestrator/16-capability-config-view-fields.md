@@ -20,7 +20,7 @@ Entry point: `./scripts/orchestrator.sh config view`
 ### Preconditions
 
 - Orchestrator initialized: `./scripts/orchestrator.sh init --force`
-- Config bootstrapped with capability fields: `./scripts/orchestrator.sh config bootstrap --from fixtures/capability-test.yaml --force`
+- Config applied with capability fields: `./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/capability-test.yaml`
 
 ### Steps
 

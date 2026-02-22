@@ -1,19 +1,20 @@
 use crate::cli::{
-    generate_completion, Cli, Commands, CompletionCommands, ConfigCommands, DbCommands,
-    EditCommands, OutputFormat, TaskCommands, WorkspaceCommands,
+    generate_completion, AgentCommands, Cli, Commands, CompletionCommands, ConfigCommands,
+    DbCommands, EditCommands, OutputFormat, QaCommands, QaProjectCommands, TaskCommands,
+    WorkflowCommands, WorkspaceCommands,
 };
-use crate::cli_types::OrchestratorResource;
+use crate::cli_types::{
+    AgentSpec, AgentTemplatesSpec, OrchestratorResource, ResourceKind, ResourceMetadata,
+    ResourceSpec, WorkflowFinalizeSpec, WorkflowLoopSpec, WorkflowSpec, WorkflowStepSpec,
+    WorkspaceSpec,
+};
 use crate::config::OrchestratorConfig;
-use crate::config::{AgentConfig, WorkflowConfig, WorkspaceConfig};
-use crate::config_load::{
-    load_config_overview, persist_config_and_reload, read_active_config,
-};
+use crate::config::{AgentConfig, ProjectConfig, WorkflowConfig, WorkspaceConfig};
+use crate::config_load::{load_config_overview, persist_config_and_reload, read_active_config};
 use crate::db::reset_db;
 use crate::dto::ConfigOverview;
 use crate::dto::{CreateTaskPayload, TaskDetail, TaskSummary};
-use crate::resource::{
-    dispatch_resource, kind_as_str, ApplyResult, RegisteredResource, Resource,
-};
+use crate::resource::{dispatch_resource, kind_as_str, ApplyResult, RegisteredResource, Resource};
 use crate::scheduler::{
     delete_task_impl, find_latest_resumable_task_id, get_task_details_impl, list_tasks_impl,
     load_task_summary, prepare_task_for_start, resolve_task_id, run_task_loop, stop_task_runtime,
@@ -46,14 +47,21 @@ impl CliHandler {
             Commands::Apply { .. } => {
                 unreachable!("apply is handled as a preflight command in main.rs")
             }
-            Commands::Get { resource, output } => self.handle_get(resource, *output),
+            Commands::Get {
+                resource,
+                output,
+                selector,
+            } => self.handle_get(resource, *output, selector.as_deref()),
             Commands::Describe { resource, output } => self.handle_describe(resource, *output),
             Commands::Delete { resource, force } => self.handle_delete(resource, *force),
             Commands::Task(cmd) => self.handle_task(cmd),
             Commands::Workspace(cmd) => self.handle_workspace(cmd),
+            Commands::Agent(cmd) => self.handle_agent(cmd),
+            Commands::Workflow(cmd) => self.handle_workflow(cmd),
             Commands::Config(cmd) => self.handle_config(cmd),
             Commands::Edit(cmd) => self.handle_edit(cmd),
             Commands::Db(cmd) => self.handle_db(cmd),
+            Commands::Qa(cmd) => self.handle_qa(cmd),
             Commands::Completion(cmd) => self.handle_completion(cmd),
             Commands::Debug { component } => self.handle_debug(component.as_deref()),
         }
@@ -109,15 +117,24 @@ impl CliHandler {
         }
     }
 
-    fn handle_get(&self, resource: &str, output: OutputFormat) -> Result<i32> {
-        let parts: Vec<&str> = resource.split('/').collect();
-        if parts.len() != 2 {
-            anyhow::bail!(
-                "invalid resource format: {} (use format: resource/name, e.g., ws/default)",
-                resource
-            );
+    fn handle_get(
+        &self,
+        resource: &str,
+        output: OutputFormat,
+        selector: Option<&str>,
+    ) -> Result<i32> {
+        if resource.contains('/') {
+            if selector.is_some() {
+                anyhow::bail!("--selector/-l is only supported for list queries");
+            }
+            return self.handle_get_single(resource, output);
         }
-        let (kind, name) = (parts[0], parts[1]);
+
+        self.handle_get_list(resource, output, selector)
+    }
+
+    fn handle_get_single(&self, resource: &str, output: OutputFormat) -> Result<i32> {
+        let (kind, name) = parse_resource_selector(resource)?;
 
         match kind {
             "ws" | "workspace" => self.handle_workspace(&WorkspaceCommands::Info {
@@ -184,6 +201,190 @@ impl CliHandler {
             _ => anyhow::bail!(
                 "unknown resource type: {} (supported: ws/workspace, wf/workflow, agent, task)",
                 kind
+            ),
+        }
+    }
+
+    fn handle_get_list(
+        &self,
+        resource_type: &str,
+        output: OutputFormat,
+        selector: Option<&str>,
+    ) -> Result<i32> {
+        let selector_terms = selector
+            .map(parse_label_selector)
+            .transpose()?
+            .unwrap_or_default();
+        let active = read_active_config(&self.state)?;
+
+        match resource_type {
+            "ws" | "workspace" | "workspaces" => {
+                let rows: Vec<_> = active
+                    .config
+                    .workspaces
+                    .iter()
+                    .filter_map(|(name, ws)| {
+                        let metadata = ResourceMetadata {
+                            name: name.clone(),
+                            labels: active
+                                .config
+                                .resource_meta
+                                .workspaces
+                                .get(name)
+                                .and_then(|m| m.labels.clone()),
+                            annotations: active
+                                .config
+                                .resource_meta
+                                .workspaces
+                                .get(name)
+                                .and_then(|m| m.annotations.clone()),
+                        };
+                        if !matches_selector(&metadata.labels, &selector_terms) {
+                            return None;
+                        }
+                        Some(json!({
+                            "name": name,
+                            "root_path": ws.root_path,
+                            "qa_targets": ws.qa_targets,
+                            "ticket_dir": ws.ticket_dir,
+                            "labels": metadata.labels,
+                            "annotations": metadata.annotations,
+                        }))
+                    })
+                    .collect();
+                self.print_resource_rows("WORKSPACE", rows, output, |row| {
+                    let labels = row
+                        .get("labels")
+                        .and_then(|v| v.as_object())
+                        .map(string_map_to_csv)
+                        .unwrap_or_else(|| "-".to_string());
+                    format!(
+                        "{:<20} {:<40} {:<30}",
+                        row["name"].as_str().unwrap_or_default(),
+                        row["root_path"].as_str().unwrap_or_default(),
+                        labels
+                    )
+                })
+            }
+            "agent" | "agents" => {
+                let rows: Vec<_> = active
+                    .config
+                    .agents
+                    .iter()
+                    .filter_map(|(name, agent)| {
+                        let metadata = ResourceMetadata {
+                            name: name.clone(),
+                            labels: active
+                                .config
+                                .resource_meta
+                                .agents
+                                .get(name)
+                                .and_then(|m| m.labels.clone()),
+                            annotations: active
+                                .config
+                                .resource_meta
+                                .agents
+                                .get(name)
+                                .and_then(|m| m.annotations.clone()),
+                        };
+                        if !matches_selector(&metadata.labels, &selector_terms) {
+                            return None;
+                        }
+                        Some(json!({
+                            "name": name,
+                            "capabilities": agent.capabilities,
+                            "labels": metadata.labels,
+                            "annotations": metadata.annotations,
+                        }))
+                    })
+                    .collect();
+                self.print_resource_rows("AGENT", rows, output, |row| {
+                    let capabilities = row["capabilities"]
+                        .as_array()
+                        .map(|caps| {
+                            caps.iter()
+                                .filter_map(|c| c.as_str())
+                                .collect::<Vec<_>>()
+                                .join(",")
+                        })
+                        .unwrap_or_default();
+                    let labels = row
+                        .get("labels")
+                        .and_then(|v| v.as_object())
+                        .map(string_map_to_csv)
+                        .unwrap_or_else(|| "-".to_string());
+                    format!(
+                        "{:<20} {:<30} {:<30}",
+                        row["name"].as_str().unwrap_or_default(),
+                        capabilities,
+                        labels
+                    )
+                })
+            }
+            "wf" | "workflow" | "workflows" => {
+                let rows: Vec<_> = active
+                    .config
+                    .workflows
+                    .iter()
+                    .filter_map(|(name, workflow)| {
+                        let metadata = ResourceMetadata {
+                            name: name.clone(),
+                            labels: active
+                                .config
+                                .resource_meta
+                                .workflows
+                                .get(name)
+                                .and_then(|m| m.labels.clone()),
+                            annotations: active
+                                .config
+                                .resource_meta
+                                .workflows
+                                .get(name)
+                                .and_then(|m| m.annotations.clone()),
+                        };
+                        if !matches_selector(&metadata.labels, &selector_terms) {
+                            return None;
+                        }
+                        let steps: Vec<String> = workflow
+                            .steps
+                            .iter()
+                            .filter_map(|s| s.step_type.as_ref().map(|t| t.as_str().to_string()))
+                            .collect();
+                        Some(json!({
+                            "name": name,
+                            "steps": steps,
+                            "labels": metadata.labels,
+                            "annotations": metadata.annotations,
+                        }))
+                    })
+                    .collect();
+                self.print_resource_rows("WORKFLOW", rows, output, |row| {
+                    let steps = row["steps"]
+                        .as_array()
+                        .map(|steps| {
+                            steps
+                                .iter()
+                                .filter_map(|s| s.as_str())
+                                .collect::<Vec<_>>()
+                                .join(",")
+                        })
+                        .unwrap_or_default();
+                    let labels = row
+                        .get("labels")
+                        .and_then(|v| v.as_object())
+                        .map(string_map_to_csv)
+                        .unwrap_or_else(|| "-".to_string());
+                    format!(
+                        "{:<20} {:<30} {:<30}",
+                        row["name"].as_str().unwrap_or_default(),
+                        steps,
+                        labels
+                    )
+                })
+            }
+            _ => anyhow::bail!(
+                "unknown list resource type: {} (supported: workspaces, agents, workflows)",
+                resource_type
             ),
         }
     }
@@ -291,10 +492,7 @@ impl CliHandler {
         let (kind, name) = (parts[0], parts[1]);
 
         if !force {
-            println!(
-                "Use --force to confirm deletion of {}/{}",
-                kind, name
-            );
+            println!("Use --force to confirm deletion of {}/{}", kind, name);
             return Ok(0);
         }
 
@@ -316,8 +514,7 @@ impl CliHandler {
             );
         }
 
-        let deleted =
-            crate::resource::delete_resource_by_kind(&mut config, kind, name)?;
+        let deleted = crate::resource::delete_resource_by_kind(&mut config, kind, name)?;
         if !deleted {
             anyhow::bail!("{}/{} not found", kind, name);
         }
@@ -421,11 +618,11 @@ impl CliHandler {
             TaskCommands::Logs {
                 task_id,
                 follow: _,
-                tail: _,
-                timestamps: _,
+                tail,
+                timestamps,
             } => {
                 let resolved_id = resolve_task_id(&self.state, task_id)?;
-                let logs = stream_task_logs_impl(&self.state, &resolved_id, 300)?;
+                let logs = stream_task_logs_impl(&self.state, &resolved_id, *tail, *timestamps)?;
                 for chunk in logs {
                     println!("{}", chunk.content);
                 }
@@ -487,6 +684,122 @@ impl CliHandler {
                     .context(format!("workspace not found: {}", workspace_id))?;
                 self.print_workspace_detail(workspace_id, ws, *output)
             }
+            WorkspaceCommands::Create {
+                name,
+                root_path,
+                qa_target,
+                ticket_dir,
+                labels,
+                annotations,
+                dry_run,
+                output,
+            } => {
+                let metadata = build_resource_metadata(name, labels, annotations)?;
+                let spec = WorkspaceSpec {
+                    root_path: root_path.clone(),
+                    qa_targets: if qa_target.is_empty() {
+                        vec!["docs/qa".to_string()]
+                    } else {
+                        qa_target.clone()
+                    },
+                    ticket_dir: ticket_dir.clone(),
+                };
+                let manifest = OrchestratorResource {
+                    api_version: "orchestrator.dev/v1".to_string(),
+                    kind: ResourceKind::Workspace,
+                    metadata,
+                    spec: ResourceSpec::Workspace(spec),
+                };
+                self.apply_or_preview_manifest(manifest, *dry_run, *output)
+            }
+        }
+    }
+
+    fn handle_agent(&self, cmd: &AgentCommands) -> Result<i32> {
+        match cmd {
+            AgentCommands::Create {
+                name,
+                template_init_once,
+                template_qa,
+                template_fix,
+                template_retest,
+                template_loop_guard,
+                capability,
+                labels,
+                annotations,
+                dry_run,
+                output,
+            } => {
+                let metadata = build_resource_metadata(name, labels, annotations)?;
+                let spec = AgentSpec {
+                    templates: AgentTemplatesSpec {
+                        init_once: template_init_once.clone(),
+                        qa: template_qa.clone(),
+                        fix: template_fix.clone(),
+                        retest: template_retest.clone(),
+                        loop_guard: template_loop_guard.clone(),
+                    },
+                    capabilities: if capability.is_empty() {
+                        None
+                    } else {
+                        Some(capability.clone())
+                    },
+                    metadata: None,
+                };
+                let manifest = OrchestratorResource {
+                    api_version: "orchestrator.dev/v1".to_string(),
+                    kind: ResourceKind::Agent,
+                    metadata,
+                    spec: ResourceSpec::Agent(spec),
+                };
+                self.apply_or_preview_manifest(manifest, *dry_run, *output)
+            }
+        }
+    }
+
+    fn handle_workflow(&self, cmd: &WorkflowCommands) -> Result<i32> {
+        match cmd {
+            WorkflowCommands::Create {
+                name,
+                step,
+                loop_mode,
+                max_cycles,
+                labels,
+                annotations,
+                dry_run,
+                output,
+            } => {
+                let loop_mode_normalized = normalize_loop_mode(loop_mode)?;
+                let steps: Vec<WorkflowStepSpec> = step
+                    .iter()
+                    .map(|step_type| validate_workflow_step_type(step_type))
+                    .collect::<Result<Vec<_>>>()?
+                    .into_iter()
+                    .map(|step_type| WorkflowStepSpec {
+                        id: step_type.clone(),
+                        step_type,
+                        enabled: true,
+                        prehook: None,
+                    })
+                    .collect();
+
+                let metadata = build_resource_metadata(name, labels, annotations)?;
+                let spec = WorkflowSpec {
+                    steps,
+                    loop_policy: WorkflowLoopSpec {
+                        mode: loop_mode_normalized,
+                        max_cycles: *max_cycles,
+                    },
+                    finalize: WorkflowFinalizeSpec { rules: vec![] },
+                };
+                let manifest = OrchestratorResource {
+                    api_version: "orchestrator.dev/v1".to_string(),
+                    kind: ResourceKind::Workflow,
+                    metadata,
+                    spec: ResourceSpec::Workflow(spec),
+                };
+                self.apply_or_preview_manifest(manifest, *dry_run, *output)
+            }
         }
     }
 
@@ -502,9 +815,6 @@ impl CliHandler {
                 persist_config_and_reload(&self.state, config, content, "cli")?;
                 println!("Configuration updated");
                 Ok(0)
-            }
-            ConfigCommands::Bootstrap { .. } => {
-                anyhow::bail!("config bootstrap must run before state initialization")
             }
             ConfigCommands::Export { output, file } => {
                 let overview = load_config_overview(&self.state)?;
@@ -674,6 +984,286 @@ impl CliHandler {
         Ok(0)
     }
 
+    fn handle_qa(&self, cmd: &QaCommands) -> Result<i32> {
+        match cmd {
+            QaCommands::Project(project_cmd) => self.handle_qa_project(project_cmd),
+            QaCommands::Doctor { output } => self.handle_qa_doctor(*output),
+        }
+    }
+
+    fn handle_qa_project(&self, cmd: &QaProjectCommands) -> Result<i32> {
+        match cmd {
+            QaProjectCommands::Create {
+                project_id,
+                from_workspace,
+                workflow,
+                workspace,
+                root_path,
+                qa_target,
+                ticket_dir,
+                force,
+            } => {
+                let mut config = {
+                    let active = read_active_config(&self.state)?;
+                    active.config.clone()
+                };
+
+                let source_workspace = config
+                    .workspaces
+                    .get(from_workspace)
+                    .with_context(|| format!("source workspace not found: {}", from_workspace))?
+                    .clone();
+                let workflow_id = workflow
+                    .clone()
+                    .unwrap_or_else(|| config.defaults.workflow.clone());
+                let source_workflow = config
+                    .workflows
+                    .get(&workflow_id)
+                    .with_context(|| format!("workflow not found: {}", workflow_id))?
+                    .clone();
+
+                let workspace_id = workspace
+                    .clone()
+                    .unwrap_or_else(|| format!("{}-ws", project_id));
+                let resolved_root_path = root_path
+                    .clone()
+                    .unwrap_or_else(|| format!("workspace/{}", project_id));
+                let resolved_qa_targets = if qa_target.is_empty() {
+                    source_workspace.qa_targets
+                } else {
+                    qa_target.clone()
+                };
+
+                let new_workspace = WorkspaceConfig {
+                    root_path: resolved_root_path.clone(),
+                    qa_targets: resolved_qa_targets,
+                    ticket_dir: ticket_dir.clone(),
+                };
+
+                let project = config
+                    .projects
+                    .entry(project_id.clone())
+                    .or_insert_with(|| ProjectConfig {
+                        description: Some("qa isolated project".to_string()),
+                        workspaces: std::collections::HashMap::new(),
+                        agents: std::collections::HashMap::new(),
+                        workflows: std::collections::HashMap::new(),
+                    });
+
+                if !*force && !project.workspaces.is_empty() {
+                    anyhow::bail!(
+                        "project '{}' already exists; pass --force to overwrite project workspace/workflow",
+                        project_id
+                    );
+                }
+
+                project
+                    .workspaces
+                    .insert(workspace_id.clone(), new_workspace);
+                project
+                    .workflows
+                    .insert(workflow_id.clone(), source_workflow);
+
+                let workspace_root = self.state.app_root.join(&resolved_root_path);
+                std::fs::create_dir_all(&workspace_root).with_context(|| {
+                    format!(
+                        "failed to create workspace root for project '{}': {}",
+                        project_id,
+                        workspace_root.display()
+                    )
+                })?;
+                if let Some(ws) = project.workspaces.get(&workspace_id) {
+                    for target in &ws.qa_targets {
+                        std::fs::create_dir_all(workspace_root.join(target)).with_context(
+                            || {
+                                format!(
+                                    "failed to create qa target dir for project '{}': {}",
+                                    project_id, target
+                                )
+                            },
+                        )?;
+                    }
+                    std::fs::create_dir_all(workspace_root.join(&ws.ticket_dir)).with_context(
+                        || {
+                            format!(
+                                "failed to create ticket dir for project '{}': {}",
+                                project_id, ws.ticket_dir
+                            )
+                        },
+                    )?;
+                }
+
+                let yaml = serde_yaml::to_string(&config)
+                    .context("failed to serialize configuration after qa project create")?;
+                persist_config_and_reload(&self.state, config, yaml, "qa-project-create")?;
+
+                println!(
+                    "qa project created: project={} workspace={} workflow={}",
+                    project_id, workspace_id, workflow_id
+                );
+                Ok(0)
+            }
+            QaProjectCommands::Reset {
+                project_id,
+                keep_config,
+                force,
+            } => {
+                if !force {
+                    println!(
+                        "Use --force to confirm qa project reset for '{}' (sqlite DB file is preserved)",
+                        project_id
+                    );
+                    return Ok(0);
+                }
+
+                let removed = crate::db::reset_project_data(&self.state, project_id)?;
+
+                if !keep_config {
+                    let mut config = {
+                        let active = read_active_config(&self.state)?;
+                        active.config.clone()
+                    };
+                    config.projects.remove(project_id);
+                    let yaml = serde_yaml::to_string(&config).context(
+                        "failed to serialize configuration after qa project config cleanup",
+                    )?;
+                    persist_config_and_reload(&self.state, config, yaml, "qa-project-reset")?;
+                }
+
+                println!(
+                    "qa project reset completed: project={} tasks={} items={} runs={} events={} config_kept={}",
+                    project_id,
+                    removed.tasks,
+                    removed.task_items,
+                    removed.command_runs,
+                    removed.events,
+                    keep_config
+                );
+                Ok(0)
+            }
+        }
+    }
+
+    fn handle_qa_doctor(&self, format: OutputFormat) -> Result<i32> {
+        let conn = crate::db::open_conn(&self.state.db_path)?;
+        let journal_mode: String = conn
+            .query_row("PRAGMA journal_mode;", [], |row| row.get(0))
+            .unwrap_or_default();
+        let busy_timeout_ms: i64 = conn
+            .query_row("PRAGMA busy_timeout;", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let active = read_active_config(&self.state)?;
+        let checks = json!({
+            "sqlite": {
+                "journal_mode": journal_mode,
+                "busy_timeout_ms": busy_timeout_ms,
+            },
+            "config": {
+                "default_project": active.default_project_id,
+                "project_count": active.config.projects.len(),
+            },
+            "recommendations": [
+                "Use unique qa project id per scenario run",
+                "Use `orchestrator qa project reset <project> --keep-config --force` between reruns",
+            ]
+        });
+
+        match format {
+            OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&checks)?),
+            OutputFormat::Yaml => println!("{}", serde_yaml::to_string(&checks)?),
+            OutputFormat::Table => {
+                println!("QA Doctor");
+                println!("---------");
+                println!("sqlite.journal_mode: {}", checks["sqlite"]["journal_mode"]);
+                println!(
+                    "sqlite.busy_timeout_ms: {}",
+                    checks["sqlite"]["busy_timeout_ms"]
+                );
+                println!(
+                    "config.default_project: {}",
+                    checks["config"]["default_project"]
+                        .as_str()
+                        .unwrap_or_default()
+                );
+                println!(
+                    "config.project_count: {}",
+                    checks["config"]["project_count"].as_u64().unwrap_or(0)
+                );
+            }
+        }
+        Ok(0)
+    }
+
+    fn apply_or_preview_manifest(
+        &self,
+        manifest: OrchestratorResource,
+        dry_run: bool,
+        output: OutputFormat,
+    ) -> Result<i32> {
+        manifest
+            .validate_version()
+            .map_err(anyhow::Error::msg)
+            .context("invalid apiVersion in generated manifest")?;
+        let registered = dispatch_resource(manifest.clone())?;
+        registered.validate()?;
+
+        if dry_run {
+            match output {
+                OutputFormat::Yaml => println!("{}", serde_yaml::to_string(&manifest)?),
+                OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&manifest)?),
+                OutputFormat::Table => {
+                    anyhow::bail!("dry-run output format does not support table; use yaml or json")
+                }
+            }
+            return Ok(0);
+        }
+
+        let mut merged_config = {
+            let active = read_active_config(&self.state)?;
+            active.config.clone()
+        };
+        let result = registered.apply(&mut merged_config);
+        let merged_yaml = serde_yaml::to_string(&merged_config)
+            .context("failed to serialize updated configuration")?;
+        persist_config_and_reload(&self.state, merged_config, merged_yaml, "cli")?;
+
+        let action = match result {
+            ApplyResult::Created => "created",
+            ApplyResult::Configured | ApplyResult::Unchanged => "configured",
+        };
+        println!(
+            "{}/{} {}",
+            kind_as_str(registered.kind()),
+            registered.name(),
+            action
+        );
+        Ok(0)
+    }
+
+    fn print_resource_rows<F>(
+        &self,
+        kind: &str,
+        rows: Vec<serde_json::Value>,
+        format: OutputFormat,
+        table_row: F,
+    ) -> Result<i32>
+    where
+        F: Fn(&serde_json::Value) -> String,
+    {
+        match format {
+            OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&rows)?),
+            OutputFormat::Yaml => println!("{}", serde_yaml::to_string(&rows)?),
+            OutputFormat::Table => {
+                println!("{kind} LIST");
+                println!("{}", "-".repeat(kind.len() + 5));
+                for row in &rows {
+                    println!("{}", table_row(row));
+                }
+            }
+        }
+        Ok(0)
+    }
 
     fn print_tasks(
         &self,
@@ -884,6 +1474,125 @@ fn parse_resource_selector(selector: &str) -> Result<(&str, &str)> {
     }
 }
 
+fn parse_key_value_pairs(
+    values: &[String],
+    field_name: &str,
+) -> Result<std::collections::HashMap<String, String>> {
+    let mut out = std::collections::HashMap::new();
+    for raw in values {
+        let (key, value) = raw.split_once('=').with_context(|| {
+            format!("invalid {} entry '{}': expected key=value", field_name, raw)
+        })?;
+        let key = key.trim();
+        let value = value.trim();
+        if key.is_empty() || value.is_empty() {
+            anyhow::bail!(
+                "invalid {} entry '{}': key/value cannot be empty",
+                field_name,
+                raw
+            );
+        }
+        out.insert(key.to_string(), value.to_string());
+    }
+    Ok(out)
+}
+
+fn build_resource_metadata(
+    name: &str,
+    labels: &[String],
+    annotations: &[String],
+) -> Result<ResourceMetadata> {
+    let label_map = parse_key_value_pairs(labels, "label")?;
+    let annotation_map = parse_key_value_pairs(annotations, "annotation")?;
+    Ok(ResourceMetadata {
+        name: name.to_string(),
+        labels: if label_map.is_empty() {
+            None
+        } else {
+            Some(label_map)
+        },
+        annotations: if annotation_map.is_empty() {
+            None
+        } else {
+            Some(annotation_map)
+        },
+    })
+}
+
+fn parse_label_selector(selector: &str) -> Result<Vec<(String, String)>> {
+    let mut terms = Vec::new();
+    for part in selector.split(',') {
+        let trimmed = part.trim();
+        if trimmed.is_empty() {
+            anyhow::bail!("invalid label selector '{}': empty segment", selector);
+        }
+        let (key, value) = trimmed
+            .split_once('=')
+            .with_context(|| format!("invalid label selector '{}': expected key=value", trimmed))?;
+        let key = key.trim();
+        let value = value.trim();
+        if key.is_empty() || value.is_empty() {
+            anyhow::bail!(
+                "invalid label selector '{}': key/value cannot be empty",
+                trimmed
+            );
+        }
+        terms.push((key.to_string(), value.to_string()));
+    }
+    Ok(terms)
+}
+
+fn matches_selector(
+    labels: &Option<std::collections::HashMap<String, String>>,
+    selector: &[(String, String)],
+) -> bool {
+    if selector.is_empty() {
+        return true;
+    }
+    let Some(labels) = labels else {
+        return false;
+    };
+    selector
+        .iter()
+        .all(|(key, expected)| labels.get(key) == Some(expected))
+}
+
+fn string_map_to_csv(map: &serde_json::Map<String, serde_json::Value>) -> String {
+    let mut items: Vec<String> = map
+        .iter()
+        .filter_map(|(k, v)| v.as_str().map(|s| format!("{k}={s}")))
+        .collect();
+    items.sort();
+    if items.is_empty() {
+        "-".to_string()
+    } else {
+        items.join(",")
+    }
+}
+
+fn normalize_loop_mode(loop_mode: &str) -> Result<String> {
+    match loop_mode {
+        "once" => Ok("once".to_string()),
+        "infinite" => Ok("infinite".to_string()),
+        _ => anyhow::bail!(
+            "invalid --loop-mode '{}': expected one of once|infinite",
+            loop_mode
+        ),
+    }
+}
+
+fn validate_workflow_step_type(value: &str) -> Result<String> {
+    match value {
+        "init_once" | "qa" | "ticket_scan" | "fix" | "retest" | "loop_guard" => {
+            Ok(value.to_string())
+        }
+        _ => anyhow::bail!(
+            "invalid --step '{}': expected init_once|qa|ticket_scan|fix|retest|loop_guard",
+            value
+        ),
+    }
+}
+
 fn write_to_temp_file(content: &str) -> Result<std::path::PathBuf> {
     let temp_dir = std::env::temp_dir();
     let uuid = uuid::Uuid::new_v4();
@@ -929,6 +1638,7 @@ fn is_ctrl_c_exit(status: &ExitStatus) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::open_conn;
     use crate::test_utils::TestState;
     use std::os::unix::fs::PermissionsExt;
     use std::sync::{Mutex, OnceLock};
@@ -1035,7 +1745,6 @@ mod tests {
             command: Commands::Edit(EditCommands::Export {
                 selector: "workspace/default".to_string(),
             }),
-            config: None,
             verbose: false,
         };
 
@@ -1053,7 +1762,6 @@ mod tests {
             command: Commands::Edit(EditCommands::Export {
                 selector: "workspace/nonexistent".to_string(),
             }),
-            config: None,
             verbose: false,
         };
 
@@ -1073,7 +1781,6 @@ mod tests {
             command: Commands::Edit(EditCommands::Open {
                 selector: "workspace/default".to_string(),
             }),
-            config: None,
             verbose: false,
         };
 
@@ -1114,7 +1821,6 @@ YAML"#,
             command: Commands::Edit(EditCommands::Open {
                 selector: "workspace/default".to_string(),
             }),
-            config: None,
             verbose: false,
         };
 
@@ -1186,7 +1892,6 @@ fi"#,
             command: Commands::Edit(EditCommands::Open {
                 selector: "workspace/default".to_string(),
             }),
-            config: None,
             verbose: false,
         };
 
@@ -1222,7 +1927,6 @@ fi"#,
             command: Commands::Edit(EditCommands::Open {
                 selector: "workspace/default".to_string(),
             }),
-            config: None,
             verbose: false,
         };
 
@@ -1276,11 +1980,12 @@ spec:
                 resource: "workspace/default".to_string(),
                 force: false,
             },
-            config: None,
             verbose: false,
         };
 
-        let code = handler.execute(&cli).expect("should succeed without deleting");
+        let code = handler
+            .execute(&cli)
+            .expect("should succeed without deleting");
         assert_eq!(code, 0);
 
         let active = read_active_config(&state).expect("config should be readable");
@@ -1298,7 +2003,6 @@ spec:
                 resource: "workspace/default".to_string(),
                 force: true,
             },
-            config: None,
             verbose: false,
         };
 
@@ -1319,7 +2023,6 @@ spec:
                 resource: "workflow/basic".to_string(),
                 force: true,
             },
-            config: None,
             verbose: false,
         };
 
@@ -1340,7 +2043,6 @@ spec:
                 resource: "workspace/nonexistent".to_string(),
                 force: true,
             },
-            config: None,
             verbose: false,
         };
 
@@ -1348,5 +2050,189 @@ spec:
         assert!(result.is_err());
         let err_msg = format!("{:#}", result.unwrap_err());
         assert!(err_msg.contains("not found"));
+    }
+
+    #[test]
+    fn parse_label_selector_supports_comma_separated_equals() {
+        let parsed = parse_label_selector("env=prod,tier=backend").expect("should parse");
+        assert_eq!(
+            parsed,
+            vec![
+                ("env".to_string(), "prod".to_string()),
+                ("tier".to_string(), "backend".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_label_selector_rejects_invalid_term() {
+        let err = parse_label_selector("env").expect_err("selector should be invalid");
+        assert!(err.to_string().contains("expected key=value"));
+    }
+
+    #[test]
+    fn get_single_resource_rejects_selector_flag() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state.clone());
+        let cli = Cli {
+            command: Commands::Get {
+                resource: "workspace/default".to_string(),
+                output: OutputFormat::Table,
+                selector: Some("env=dev".to_string()),
+            },
+            verbose: false,
+        };
+
+        let err = handler
+            .execute(&cli)
+            .expect_err("selector should fail for single get");
+        assert!(err.to_string().contains("only supported for list queries"));
+    }
+
+    #[test]
+    fn workspace_create_dry_run_emits_manifest() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state.clone());
+        let cli = Cli {
+            command: Commands::Workspace(WorkspaceCommands::Create {
+                name: "dry-run-ws".to_string(),
+                root_path: "workspace/dry-run".to_string(),
+                qa_target: vec![],
+                ticket_dir: "docs/ticket".to_string(),
+                labels: vec!["env=dev".to_string()],
+                annotations: vec![],
+                dry_run: true,
+                output: OutputFormat::Yaml,
+            }),
+            verbose: false,
+        };
+
+        let code = handler.execute(&cli).expect("dry-run should pass");
+        assert_eq!(code, 0);
+    }
+
+    #[test]
+    fn qa_project_create_then_reset_keep_config_cleans_only_project_data() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state.clone());
+
+        let create_project = Cli {
+            command: Commands::Qa(QaCommands::Project(QaProjectCommands::Create {
+                project_id: "qa-isolated".to_string(),
+                from_workspace: "default".to_string(),
+                workflow: Some("basic".to_string()),
+                workspace: Some("qa-isolated-ws".to_string()),
+                root_path: Some("workspace/qa-isolated".to_string()),
+                qa_target: vec![],
+                ticket_dir: "docs/ticket".to_string(),
+                force: true,
+            })),
+            verbose: false,
+        };
+        assert_eq!(
+            handler
+                .execute(&create_project)
+                .expect("qa project create should succeed"),
+            0
+        );
+        let qa_file = fixture
+            .temp_root()
+            .join("workspace/qa-isolated/docs/qa/sample.md");
+        std::fs::write(&qa_file, "# sample\n").expect("qa sample file should be writable");
+
+        let create_task = Cli {
+            command: Commands::Task(TaskCommands::Create {
+                name: Some("qa-proj-task".to_string()),
+                goal: Some("verify reset".to_string()),
+                project: Some("qa-isolated".to_string()),
+                workspace: Some("qa-isolated-ws".to_string()),
+                workflow: Some("basic".to_string()),
+                target_file: vec![],
+                no_start: true,
+            }),
+            verbose: false,
+        };
+        assert_eq!(
+            handler
+                .execute(&create_task)
+                .expect("task create should succeed"),
+            0
+        );
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let before_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM tasks WHERE project_id = 'qa-isolated'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count before reset");
+        assert!(before_count >= 1);
+
+        let reset = Cli {
+            command: Commands::Qa(QaCommands::Project(QaProjectCommands::Reset {
+                project_id: "qa-isolated".to_string(),
+                keep_config: true,
+                force: true,
+            })),
+            verbose: false,
+        };
+        assert_eq!(handler.execute(&reset).expect("qa reset should succeed"), 0);
+
+        let after_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM tasks WHERE project_id = 'qa-isolated'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count after reset");
+        assert_eq!(after_count, 0);
+        drop(conn);
+        assert!(state.db_path.exists());
+
+        let active = read_active_config(&state).expect("config should be readable");
+        assert!(active.config.projects.contains_key("qa-isolated"));
+    }
+
+    #[test]
+    fn qa_project_reset_without_keep_config_removes_project_entry() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state.clone());
+
+        let create = Cli {
+            command: Commands::Qa(QaCommands::Project(QaProjectCommands::Create {
+                project_id: "qa-drop".to_string(),
+                from_workspace: "default".to_string(),
+                workflow: Some("basic".to_string()),
+                workspace: None,
+                root_path: None,
+                qa_target: vec![],
+                ticket_dir: "docs/ticket".to_string(),
+                force: true,
+            })),
+            verbose: false,
+        };
+        handler
+            .execute(&create)
+            .expect("qa project create should succeed");
+
+        let reset = Cli {
+            command: Commands::Qa(QaCommands::Project(QaProjectCommands::Reset {
+                project_id: "qa-drop".to_string(),
+                keep_config: false,
+                force: true,
+            })),
+            verbose: false,
+        };
+        handler
+            .execute(&reset)
+            .expect("qa project reset should succeed");
+
+        let active = read_active_config(&state).expect("config should be readable");
+        assert!(!active.config.projects.contains_key("qa-drop"));
     }
 }

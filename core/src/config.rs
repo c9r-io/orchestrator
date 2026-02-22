@@ -19,6 +19,8 @@ pub struct OrchestratorConfig {
     pub agents: HashMap<String, AgentConfig>,
     #[serde(default)]
     pub workflows: HashMap<String, WorkflowConfig>,
+    #[serde(default)]
+    pub resource_meta: ResourceMetadataStore,
 }
 
 impl Default for OrchestratorConfig {
@@ -38,8 +40,29 @@ impl Default for OrchestratorConfig {
             workspaces: HashMap::new(),
             agents: HashMap::new(),
             workflows: HashMap::new(),
+            resource_meta: ResourceMetadataStore::default(),
         }
     }
+}
+
+/// Persisted metadata for declarative resources.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ResourceMetadataStore {
+    #[serde(default)]
+    pub workspaces: HashMap<String, ResourceStoredMetadata>,
+    #[serde(default)]
+    pub agents: HashMap<String, ResourceStoredMetadata>,
+    #[serde(default)]
+    pub workflows: HashMap<String, ResourceStoredMetadata>,
+}
+
+/// Labels and annotations persisted independently from resource specs.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ResourceStoredMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub labels: Option<HashMap<String, String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub annotations: Option<HashMap<String, String>>,
 }
 
 /// Project-level configuration

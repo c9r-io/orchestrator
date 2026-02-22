@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This project is an **Agent Orchestrator** (code in `orchestrator/` folder) designed to provide both **workflow orchestration** and **agent orchestration** capabilities in a unified platform.
+This project is an **Agent Orchestrator** (code in `core/` folder) designed to provide both **workflow orchestration** and **agent orchestration** capabilities in a unified platform.
 
 ### Core Capabilities
 
@@ -64,8 +64,7 @@ workflows:
 
 ### Tech Stack
 
-- **Backend**: Tauri (Rust)
-- **Frontend**: React + TypeScript
+- **Backend**: Rust (CLI binary)
 - **Database**: SQLite for task/item lifecycle tracking
 - **CLI**: kubectl-style interface for task management
 

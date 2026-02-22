@@ -1,9 +1,29 @@
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection};
 use std::path::Path;
+use std::time::Duration;
+
+const SQLITE_BUSY_TIMEOUT_MS: u64 = 5000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProjectResetStats {
+    pub tasks: u64,
+    pub task_items: u64,
+    pub command_runs: u64,
+    pub events: u64,
+}
 
 pub fn open_conn(db_path: &Path) -> Result<Connection> {
-    Connection::open(db_path).context("failed to open sqlite db")
+    let conn = Connection::open(db_path).context("failed to open sqlite db")?;
+    conn.busy_timeout(Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS))
+        .context("failed to set sqlite busy timeout")?;
+    conn.execute_batch(
+        r#"
+        PRAGMA foreign_keys = ON;
+        "#,
+    )
+    .context("failed to configure sqlite pragmas")?;
+    Ok(conn)
 }
 
 pub fn ensure_column(conn: &Connection, table: &str, column: &str, ddl: &str) -> Result<()> {
@@ -22,6 +42,13 @@ pub fn ensure_column(conn: &Connection, table: &str, column: &str, ddl: &str) ->
 
 pub fn init_schema(db_path: &Path) -> Result<()> {
     let conn = open_conn(db_path)?;
+    conn.execute_batch(
+        r#"
+        PRAGMA journal_mode = WAL;
+        PRAGMA synchronous = NORMAL;
+        "#,
+    )
+    .context("failed to configure sqlite wal mode")?;
     conn.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS tasks (
@@ -230,4 +257,67 @@ pub fn reset_db(state: &crate::state::InnerState, include_history: bool) -> Resu
         )?;
     }
     Ok(())
+}
+
+pub fn reset_project_data(
+    state: &crate::state::InnerState,
+    project_id: &str,
+) -> Result<ProjectResetStats> {
+    let conn = open_conn(&state.db_path)?;
+    let tx = conn.unchecked_transaction()?;
+
+    let tasks: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM tasks WHERE project_id = ?1",
+        params![project_id],
+        |row| row.get(0),
+    )?;
+    let task_items: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM task_items WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?1)",
+        params![project_id],
+        |row| row.get(0),
+    )?;
+    let command_runs: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM command_runs WHERE task_item_id IN (
+            SELECT ti.id FROM task_items ti
+            JOIN tasks t ON t.id = ti.task_id
+            WHERE t.project_id = ?1
+        )",
+        params![project_id],
+        |row| row.get(0),
+    )?;
+    let events: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM events WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?1)",
+        params![project_id],
+        |row| row.get(0),
+    )?;
+
+    tx.execute(
+        "DELETE FROM command_runs WHERE task_item_id IN (
+            SELECT ti.id FROM task_items ti
+            JOIN tasks t ON t.id = ti.task_id
+            WHERE t.project_id = ?1
+        )",
+        params![project_id],
+    )?;
+    tx.execute(
+        "DELETE FROM events WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?1)",
+        params![project_id],
+    )?;
+    tx.execute(
+        "DELETE FROM task_items WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?1)",
+        params![project_id],
+    )?;
+    tx.execute(
+        "DELETE FROM tasks WHERE project_id = ?1",
+        params![project_id],
+    )?;
+
+    tx.commit()?;
+
+    Ok(ProjectResetStats {
+        tasks: tasks.max(0) as u64,
+        task_items: task_items.max(0) as u64,
+        command_runs: command_runs.max(0) as u64,
+        events: events.max(0) as u64,
+    })
 }

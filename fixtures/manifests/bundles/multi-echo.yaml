@@ -1,0 +1,42 @@
+apiVersion: orchestrator.dev/v1
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa/orchestrator
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v1
+kind: Agent
+metadata:
+  name: mock_echo_alpha
+spec:
+  capabilities:
+    - qa
+  templates:
+    qa: "echo 'alpha-qa: {rel_path}'"
+    loop_guard: "echo 'continue'"
+---
+apiVersion: orchestrator.dev/v1
+kind: Agent
+metadata:
+  name: mock_echo_beta
+spec:
+  capabilities:
+    - qa
+  templates:
+    qa: "echo 'beta-qa: {rel_path}'"
+---
+apiVersion: orchestrator.dev/v1
+kind: Workflow
+metadata:
+  name: multi_agent_qa
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: once

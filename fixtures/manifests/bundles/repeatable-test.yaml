@@ -1,0 +1,35 @@
+apiVersion: orchestrator.dev/v1
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v1
+kind: Agent
+metadata:
+  name: test_agent
+spec:
+  metadata:
+    cost: 50
+  capabilities:
+    - qa
+  templates:
+    qa: "echo 'cycle-{cycle}'"
+    loop_guard: "echo 'guard-check'"
+---
+apiVersion: orchestrator.dev/v1
+kind: Workflow
+metadata:
+  name: repeat_test
+spec:
+  steps:
+    - id: run_qa
+      type: qa
+      enabled: true
+  loop:
+    mode: infinite
+    max_cycles: 3

@@ -46,3 +46,6 @@ workflows:
 
     loop:
       mode: once
+      guard:
+        enabled: false
+        stop_when_no_unresolved: false

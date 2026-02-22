@@ -206,6 +206,7 @@ pub struct LogChunk {
     pub content: String,
     pub stdout_path: String,
     pub stderr_path: String,
+    pub started_at: Option<String>,
 }
 
 #[derive(Debug, Clone)]

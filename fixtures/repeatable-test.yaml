@@ -9,7 +9,8 @@ defaults:
 workspaces:
   default:
     root_path: .
-    qa_targets: []
+    qa_targets:
+      - docs/qa
     ticket_dir: docs/ticket
 agents:
   test_agent:
@@ -20,6 +21,7 @@ agents:
     - qa
     templates:
       qa: "echo 'cycle-{cycle}'"
+      loop_guard: "echo 'guard-check'"
 
 workflows:
   repeat_test:
@@ -39,3 +41,4 @@ workflows:
       guard:
         enabled: true
         stop_when_no_unresolved: false
+        max_cycles: 3

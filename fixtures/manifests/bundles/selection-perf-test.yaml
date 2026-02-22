@@ -1,0 +1,53 @@
+apiVersion: orchestrator.dev/v1
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v1
+kind: Agent
+metadata:
+  name: fast_agent
+spec:
+  metadata:
+    cost: 20
+  capabilities:
+    - qa
+    - fix
+  templates:
+    qa: "echo 'fast-qa'"
+    fix: "echo 'fast-fix'"
+    loop_guard: "echo 'continue'"
+---
+apiVersion: orchestrator.dev/v1
+kind: Agent
+metadata:
+  name: quality_agent
+spec:
+  metadata:
+    cost: 80
+  capabilities:
+    - qa
+    - fix
+  templates:
+    qa: "echo 'quality-qa'"
+    fix: "echo 'quality-fix'"
+---
+apiVersion: orchestrator.dev/v1
+kind: Workflow
+metadata:
+  name: selection_test
+spec:
+  steps:
+    - id: do_qa
+      type: qa
+      enabled: true
+    - id: do_fix
+      type: fix
+      enabled: true
+  loop:
+    mode: once

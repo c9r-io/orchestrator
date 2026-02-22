@@ -48,48 +48,12 @@ agents:
 ### Preconditions
 
 - Orchestrator binary built and available at `./core/target/release/agent-orchestrator`
-- Runtime initialized and mock config bootstrapped into SQLite:
+- Runtime initialized and mock config applied into SQLite:
    ```bash
-   ./scripts/orchestrator.sh init
-   cat > /tmp/mock-bootstrap.yaml << 'EOF'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   resume:
-     auto: false
-   defaults:
-     workspace: default
-     workflow: qa_only
-   workspaces:
-     default:
-       root_path: .
-       qa_targets:
-         - docs/qa
-       ticket_dir: docs/ticket
-   agents:
-     mock_echo:
-       metadata:
-         name: mock_echo
-       capabilities:
-         - qa
-       templates:
-         qa: "echo 'qa-phase: {rel_path}'"
-   workflows:
-     qa_only:
-       steps:
-         - id: qa
-           required_capability: qa
-           enabled: true
-           repeatable: false
-       loop:
-         mode: once
-         guard:
-           enabled: false
-           stop_when_no_unresolved: false
-       finalize:
-         rules: []
-   EOF
-   ./scripts/orchestrator.sh config bootstrap --from /tmp/mock-bootstrap.yaml --force
+   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/output-formats.yaml
    ```
 
 ### Goal
@@ -103,6 +67,7 @@ Validate task creation and execution with mock bash agent completes successfully
    ./core/target/release/agent-orchestrator task create \
      --name "test-task-echo" \
      --goal "Test agent orchestration" \
+     --project "${QA_PROJECT}" \
      --workspace default \
      --workflow qa_only
    ```
@@ -129,7 +94,7 @@ Validate task creation and execution with mock bash agent completes successfully
 
 ### Preconditions
 
-- Database is clean: `rm -f data/agent_orchestrator.db` before running this scenario
+- Project data is clean: `./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force` before running this scenario
 - At least one task exists in the system
 
 ### Goal
@@ -140,8 +105,8 @@ Validate task list filtering by status works correctly.
 
 1. Create multiple tasks with different scenarios:
    ```bash
-   ./core/target/release/agent-orchestrator task create --name "task-1" --goal "test1" --no-start
-   ./core/target/release/agent-orchestrator task create --name "task-2" --goal "test2" --no-start
+   ./core/target/release/agent-orchestrator task create --project "${QA_PROJECT}" --name "task-1" --goal "test1" --no-start
+   ./core/target/release/agent-orchestrator task create --project "${QA_PROJECT}" --name "task-2" --goal "test2" --no-start
    ```
 
 2. List all tasks:
@@ -240,13 +205,13 @@ Validate apply command with dry-run mode doesn't persist changes.
      root_path: /tmp/test-ws
      qa_targets:
        - docs/qa
-     ticket_dir: docs/ticket
+     ticket_dir: fixtures/ticket
    EOF
    ```
 
 2. Apply with dry-run (should not persist):
    ```bash
-   ./core/target/release/agent-orchestrator apply -f /tmp/test-workspace.yaml --dry-run
+   ./core/target/release/agent-orchestrator apply -f fixtures/manifests/bundles/test-workspace.yaml --dry-run
    ```
 
 3. Verify workspace was NOT created:
@@ -256,7 +221,7 @@ Validate apply command with dry-run mode doesn't persist changes.
 
 4. Apply without dry-run:
    ```bash
-   ./core/target/release/agent-orchestrator apply -f /tmp/test-workspace.yaml
+   ./core/target/release/agent-orchestrator apply -f fixtures/manifests/bundles/test-workspace.yaml
    ```
 
 5. Verify workspace WAS created:
@@ -299,7 +264,7 @@ Validate configuration validation catches invalid configurations.
       invalid-ws:
         root_path: ""
         qa_targets: []
-        ticket_dir: docs/ticket
+        ticket_dir: fixtures/ticket
    agents: {}
    workflows:
      test:
@@ -336,7 +301,7 @@ Validate configuration validation catches invalid configurations.
        root_path: "."
        qa_targets:
          - docs/qa
-       ticket_dir: docs/ticket
+       ticket_dir: fixtures/ticket
    agents:
      mock:
        metadata:
@@ -389,7 +354,7 @@ Validate task deletion requires --force flag.
 
 1. Create a task:
    ```bash
-   ./core/target/release/agent-orchestrator task create --name "delete-me" --goal "test" --no-start
+   ./core/target/release/agent-orchestrator task create --project "${QA_PROJECT}" --name "delete-me" --goal "test" --no-start
    ```
 
 2. Try to delete without force (should prompt):

@@ -36,4 +36,4 @@ When run from repo root, runtime paths are:
 - DB: `data/agent_orchestrator.db`
 - Logs: `data/logs/`
 
-Use `orchestrator config bootstrap --from <path>` to initialize config in SQLite.
+Use `orchestrator apply -f <path>` to initialize config in SQLite.

@@ -9,7 +9,8 @@ defaults:
 workspaces:
   default:
     root_path: .
-    qa_targets: []
+    qa_targets:
+      - docs/qa
     ticket_dir: docs/ticket
 agents:
   fast_agent:
@@ -53,3 +54,6 @@ workflows:
 
     loop:
       mode: once
+      guard:
+        enabled: false
+        stop_when_no_unresolved: false

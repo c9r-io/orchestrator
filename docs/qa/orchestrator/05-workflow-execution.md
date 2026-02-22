@@ -1,7 +1,7 @@
-# Orchestrator - Workflow Execution with Mock Agents
+# Orchestrator - Workflow Execution (Phases and Lifecycle)
 
 **Module**: orchestrator
-**Scope**: Validate complete workflow execution with various mock agent configurations
+**Scope**: Validate that workflow phases execute in the correct order and lifecycle states are accurate
 **Scenarios**: 5
 **Priority**: High
 
@@ -9,137 +9,24 @@
 
 ## Background
 
-This document tests complete workflow execution using mock bash agents. The orchestrator should execute each phase (qa, fix, retest) and handle the output correctly.
+This document tests workflow execution using a single deterministic mock agent
+(`mock_echo`). Every scenario uses `echo-workflow.yaml` (or `fail-workflow.yaml`
+for the error path), so results are fully reproducible — no random agent
+selection can change the outcome.
 
-### Common Preconditions (All Scenarios)
+### Common Preconditions
 
-**Every scenario** requires a clean environment to avoid cross-contamination:
-
-1. Fresh database with config bootstrapped from a YAML file that includes
-   the relevant mock agent(s) and all required workflows (`qa_only`, `qa_fix`,
-   `qa_fix_retest`, `loop_test`). A reference fixture is at
-   `fixtures/test-workflow-execution.yaml`.
-2. **Empty ticket directory** — remove all `.md` files from `docs/ticket/`
-   (except `README.md`) before running any scenario. Pre-existing tickets
-   will be picked up by the ticket scan / finalize rules and cause items to
-   be marked `unresolved`, which makes the task status `failed` even when the
-   agent exits with code 0.
+Every scenario starts from a clean slate:
 
 ```bash
-# Recommended setup (run once before all scenarios)
-rm -f data/agent_orchestrator.db
-./scripts/orchestrator.sh init
-./scripts/orchestrator.sh config bootstrap --from fixtures/test-workflow-execution.yaml --force
-find docs/ticket -name '*.md' ! -name 'README.md' -delete
+QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
 ```
 
-### Mock Agent Templates Reference
-
-#### Basic Echo Agent
-```yaml
-agents:
-  mock_echo:
-    metadata:
-      name: mock_echo
-    capabilities:
-    - qa
-    - fix
-    - retest
-    templates:
-      qa: "echo 'qa-phase: {rel_path}'"
-      fix: "echo 'fix-phase: {ticket_paths}'"
-      retest: "echo 'retest-phase: {rel_path}'"
-```
-
-#### Sleep Agent (for timing tests)
-```yaml
-agents:
-  mock_sleep:
-    metadata:
-      name: mock_sleep
-    capabilities:
-    - qa
-    - fix
-    templates:
-      qa: "sleep 0.5 && echo 'qa-complete'"
-      fix: "sleep 0.5 && echo 'fix-complete'"
-```
-
-#### Multi-line Output Agent
-```yaml
-agents:
-  mock_multiline:
-    metadata:
-      name: mock_multiline
-    capabilities:
-    - qa
-    templates:
-      qa: |
-        echo "=== QA Started ==="
-        echo "Testing: {rel_path}"
-        echo "=== QA Complete ==="
-```
-
-#### Error Agent (for failure testing)
-```yaml
-agents:
-  mock_fail:
-    metadata:
-      name: mock_fail
-    capabilities:
-    - qa
-    - fix
-    templates:
-      qa: "echo 'QA failed' && exit 1"
-      fix: "echo 'Fix attempted' && exit 0"
-```
-
-#### File Writer Agent (for file-based tests)
-```yaml
-agents:
-  mock_writer:
-    metadata:
-      name: mock_writer
-    capabilities:
-    - qa
-    - fix
-    templates:
-      qa: "echo 'result: {rel_path}' > /tmp/qa-result.txt"
-      fix: "echo 'fixed: {rel_path}' > /tmp/fix-result.txt"
-```
-
-#### Conditional Agent (with environment variables)
-```yaml
-agents:
-  mock_conditional:
-    metadata:
-      name: mock_conditional
-    capabilities:
-    - qa
-    templates:
-      qa: |
-        if [ -f /tmp/skip_qa ]; then
-          echo "SKIPPED"
-          exit 0
-        fi
-        echo "QA executed for {rel_path}"
-```
-
-#### Loop Guard Agent
-```yaml
-agents:
-  mock_loop_guard:
-    metadata:
-      name: mock_loop_guard
-    capabilities: []
-    templates:
-      default: |
-        if [ {unresolved_items} -eq 0 ]; then
-          echo "stop"
-        else
-          echo "continue"
-        fi
-```
+Scenario 4 uses a different fixture (`fail-workflow.yaml`) — see its own
+preconditions section.
 
 ---
 
@@ -147,37 +34,36 @@ agents:
 
 ### Preconditions
 
-- See **Common Preconditions** above (clean DB, bootstrapped config, empty ticket dir)
-- Config contains `mock_echo` agent with `qa` capability and `qa_only` workflow
-- QA target files exist under the workspace's `qa_targets` path
+- Common Preconditions (echo-workflow.yaml applied)
 
 ### Steps
 
-1. Create task with qa_only workflow:
+1. Create task:
    ```bash
-   orchestrator task create \
+   ./scripts/orchestrator.sh task create \
      --name "qa-only-test" \
      --goal "Test QA only workflow" \
+     --project "${QA_PROJECT}" \
      --workflow qa_only \
      --no-start
    ```
 
-2. Start task:
+2. Start task and wait for completion:
    ```bash
-   orchestrator task start {task_id}
+   ./scripts/orchestrator.sh task start {task_id}
    ```
 
-3. Check result:
+3. Inspect result:
    ```bash
-   orchestrator task info {task_id}
-   orchestrator task logs {task_id}
+   ./scripts/orchestrator.sh task info {task_id}
+   ./scripts/orchestrator.sh task logs {task_id}
    ```
 
 ### Expected
 
-- QA phase executes for each target file
-- Task completes with qa_passed or similar status
-- Logs show "qa-phase: {rel_path}" for each file
+- Task status: `completed`
+- Failed: 0
+- Every log line shows `qa-phase: {rel_path}`
 
 ---
 
@@ -185,35 +71,37 @@ agents:
 
 ### Preconditions
 
-- See **Common Preconditions** above (clean DB, bootstrapped config, empty ticket dir)
-- Config contains mock agents with `qa`/`fix` capabilities and `qa_fix` workflow
+- Common Preconditions (echo-workflow.yaml applied)
 
 ### Steps
 
-1. Create task with qa_fix workflow:
+1. Create task:
    ```bash
-   orchestrator task create \
+   ./scripts/orchestrator.sh task create \
      --name "qa-fix-test" \
      --goal "Test QA and fix workflow" \
+     --project "${QA_PROJECT}" \
      --workflow qa_fix \
      --no-start
    ```
 
 2. Start task:
    ```bash
-   orchestrator task start {task_id}
+   ./scripts/orchestrator.sh task start {task_id}
    ```
 
-3. Check result:
+3. Inspect result:
    ```bash
-   orchestrator task info {task_id}
+   ./scripts/orchestrator.sh task info {task_id}
+   ./scripts/orchestrator.sh task logs {task_id}
    ```
 
 ### Expected
 
-- QA phase runs first
-- If QA passes with no tickets, fix phase is skipped
-- Task status reflects final outcome
+- Task status: `completed`
+- Failed: 0
+- QA phase runs and passes for all items
+- Fix phase is skipped (QA produced no failures / tickets)
 
 ---
 
@@ -221,176 +109,135 @@ agents:
 
 ### Preconditions
 
-- See **Common Preconditions** above (clean DB, bootstrapped config, empty ticket dir)
-- Config contains mock agents with `qa`/`fix`/`retest` capabilities and `qa_fix_retest` workflow
+- Common Preconditions (echo-workflow.yaml applied)
 
 ### Steps
 
 1. Create task:
    ```bash
-   orchestrator task create \
+   ./scripts/orchestrator.sh task create \
      --name "qa-fix-retest-test" \
      --goal "Test full workflow" \
+     --project "${QA_PROJECT}" \
      --workflow qa_fix_retest \
      --no-start
    ```
 
 2. Start task:
    ```bash
-   orchestrator task start {task_id}
+   ./scripts/orchestrator.sh task start {task_id}
    ```
 
-3. Check execution:
+3. Inspect result:
    ```bash
-   orchestrator task info {task_id}
+   ./scripts/orchestrator.sh task info {task_id}
+   ./scripts/orchestrator.sh task logs {task_id}
    ```
 
 ### Expected
 
-- QA runs → Fix runs → Retest runs
-- All three phases execute in order
-- Final status reflects retest result
+- Task status: `completed`
+- Failed: 0
+- All three phases execute in order: QA → Fix → Retest
+- Logs contain both `qa-phase:` and `retest-phase:` entries
 
 ---
 
-## Scenario 4: Workflow with Ticket Creation
+## Scenario 4: QA Failure and Ticket Creation
 
 ### Preconditions
 
-- See **Common Preconditions** above (clean DB, bootstrapped config, empty ticket dir)
-- Config must include `mock_fail` agent whose QA template exits non-zero
-- The `mock_fail` agent must be the **only** agent with the `qa` capability so the
-  orchestrator selects it (remove or disable other QA-capable agents in the config)
+This scenario uses a **different fixture** with only the `mock_fail` agent:
+
+```bash
+QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/fail-workflow.yaml
+```
 
 ### Steps
 
-1. Bootstrap a config where only the `mock_fail` agent has `qa` capability:
+1. Create task:
    ```bash
-   # Use a dedicated fixture or edit the config YAML before bootstrap
-   ./scripts/orchestrator.sh config bootstrap --from <fail-config.yaml> --force
-   ```
-
-2. Create task:
-   ```bash
-   orchestrator task create \
+   ./scripts/orchestrator.sh task create \
      --name "ticket-test" \
      --goal "Test ticket creation" \
+     --project "${QA_PROJECT}" \
      --workflow qa_fix \
      --no-start
    ```
 
-3. Start task:
+2. Start task:
    ```bash
-   orchestrator task start {task_id}
+   ./scripts/orchestrator.sh task start {task_id}
    ```
 
-4. Check for tickets:
+3. Check task result and ticket directory:
    ```bash
-   ls docs/ticket/
+   ./scripts/orchestrator.sh task info {task_id}
+   ./scripts/orchestrator.sh task logs {task_id}
+   ls workspace/${QA_PROJECT}/docs/ticket/
    ```
 
 ### Expected
 
-- QA fails
-- Ticket is created in docs/ticket/
-- Fix phase may process the ticket
-- **Note**: If the only fix-capable agent becomes unhealthy (e.g. after QA failure), the task may report "No healthy agent found with capability: fix" — this is expected when agent health tracking marks the agent as diseased.
+- QA phase fails for every item (mock_fail exits 1)
+- Ticket files are created under `workspace/${QA_PROJECT}/docs/ticket/`
+- Fix phase executes after ticket scan
+- Logs show `QA failed` for QA steps and `Fix attempted` for fix steps
+- **Note**: If the agent becomes unhealthy after repeated QA failures, the task
+  may report "No healthy agent found with capability: fix" — this is expected
+  when health tracking marks the agent as diseased.
 
 ---
 
-## Scenario 5: Loop Mode Testing
+## Scenario 5: Loop Mode (max_cycles)
 
 ### Preconditions
 
-- See **Common Preconditions** above (clean DB, bootstrapped config, empty ticket dir)
-- Clean DB required: `rm -f data/agent_orchestrator.db` to avoid FK constraint violations from stale data
-- Config contains `loop_test` workflow with `mode: infinite` and `max_cycles: 3`
+- Common Preconditions (echo-workflow.yaml applied)
 
 ### Steps
 
-1. Verify loop_test workflow exists in config:
+1. Create task with loop_test workflow:
    ```bash
-   orchestrator config list-workflows
-   ```
-
-2. Create task with loop_test workflow:
-   ```bash
-   orchestrator task create \
+   ./scripts/orchestrator.sh task create \
      --name "loop-mode-test" \
      --goal "Test infinite loop with max_cycles" \
+     --project "${QA_PROJECT}" \
      --workflow loop_test \
      --no-start
    ```
 
-3. Start task:
+2. Start task:
    ```bash
-   orchestrator task start {task_id}
+   ./scripts/orchestrator.sh task start {task_id}
    ```
 
-4. Check execution cycles:
+3. Verify cycle count:
    ```bash
-   # Query database for cycle count
+   ./scripts/orchestrator.sh task info {task_id}
    sqlite3 data/agent_orchestrator.db \
-     "SELECT id, status, current_cycle FROM tasks WHERE id = '{task_id}'"
+     "SELECT current_cycle FROM tasks WHERE id = '{task_id}'"
    ```
 
 ### Expected
 
-- Task runs in infinite loop mode but stops after 3 cycles (max_cycles: 3)
-- Task completes with status "completed"
-- current_cycle = 3
-
-### Verification
-
-```bash
-# Check final status
-orchestrator task info {task_id}
-
-# Expected output:
-# Status: completed
-# Progress: 1/1 items
-
-# Check cycle count
-sqlite3 data/agent_orchestrator.db \
-  "SELECT current_cycle FROM tasks WHERE id = '{task_id}'"
-# Expected: 3
-```
-
-### Workflow Configuration Reference
-
-The loop_test workflow can be exported for inspection:
-
-```yaml
-workflows:
-  loop_test:
-    steps:
-    - id: run_qa
-      type: qa
-      required_capability: qa
-      enabled: true
-      repeatable: true
-      is_guard: false
-    loop:
-      mode: infinite
-      guard:
-        enabled: false
-        stop_when_no_unresolved: false
-        max_cycles: 3
-```
-
-Key points:
-- `mode: infinite` - enables infinite loop
-- `max_cycles: 3` - limits iterations to 3
-- `guard.enabled: false` - no guard agent needed
+- Task status: `completed`
+- Failed: 0
+- current_cycle >= 1 (the loop terminates early when all items pass in the
+  first cycle; `max_cycles` is an upper bound, not a forced iteration count)
+- Every log line shows `qa-phase: {rel_path}`
+- For forced multi-cycle verification, see Doc 07 Scenario 3 (repeatable-test)
+  or Doc 09 Scenario 3 (mixed-health)
 
 ---
 
 ## Checklist
 
-| # | Scenario | Status | Test Date | Tester | Notes |
-|---|----------|--------|-----------|--------|-------|
-| 1 | qa_only Workflow | ☐ | | | |
-| 2 | qa_fix Workflow | ☐ | | | |
-| 3 | qa_fix_retest Workflow | ☐ | | | |
-| 4 | Ticket Creation | ☐ | | | |
-| 5 | Loop Mode | ☐ | | | |
+| 1 | qa_only Workflow | ✅ | 2026-02-23 | chenhan | Status: completed, Failed: 0 |
+| 2 | qa_fix Workflow | ✅ | 2026-02-23 | chenhan | Status: completed, QA通过, Fix跳过 |
+| 3 | qa_fix_retest Workflow | ⚠️ | 2026-02-23 | chenhan | QA执行, fix/retest未运行(无tickets) |
+| 4 | QA Failure and Ticket Creation | ✅ | 2026-02-23 | chenhan | QA failed, tickets创建, Fix attempted |
+| 5 | Loop Mode (max_cycles) | ❌ | 2026-02-23 | chenhan | Status: failed(预期completed), Failed: 20 |

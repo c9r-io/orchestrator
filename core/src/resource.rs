@@ -103,6 +103,18 @@ fn metadata_with_name(name: &str) -> ResourceMetadata {
     }
 }
 
+fn metadata_from_parts(
+    name: &str,
+    labels: Option<std::collections::HashMap<String, String>>,
+    annotations: Option<std::collections::HashMap<String, String>>,
+) -> ResourceMetadata {
+    ResourceMetadata {
+        name: name.to_string(),
+        labels,
+        annotations,
+    }
+}
+
 fn manifest_yaml(
     kind: ResourceKind,
     metadata: &ResourceMetadata,
@@ -139,7 +151,15 @@ impl Resource for WorkspaceResource {
 
     fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
         let incoming = workspace_spec_to_config(&self.spec);
-        apply_to_map(&mut config.workspaces, self.name(), incoming)
+        let result = apply_to_map(&mut config.workspaces, self.name(), incoming);
+        config.resource_meta.workspaces.insert(
+            self.name().to_string(),
+            crate::config::ResourceStoredMetadata {
+                labels: self.metadata.labels.clone(),
+                annotations: self.metadata.annotations.clone(),
+            },
+        );
+        result
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -152,13 +172,22 @@ impl Resource for WorkspaceResource {
 
     fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
         config.workspaces.get(name).map(|workspace| Self {
-            metadata: metadata_with_name(name),
+            metadata: match config.resource_meta.workspaces.get(name) {
+                Some(stored) => {
+                    metadata_from_parts(name, stored.labels.clone(), stored.annotations.clone())
+                }
+                None => metadata_with_name(name),
+            },
             spec: workspace_config_to_spec(workspace),
         })
     }
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
-        config.workspaces.remove(name).is_some()
+        let removed = config.workspaces.remove(name).is_some();
+        if removed {
+            config.resource_meta.workspaces.remove(name);
+        }
+        removed
     }
 }
 
@@ -202,7 +231,15 @@ impl Resource for AgentResource {
 
     fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
         let incoming = agent_spec_to_config(&self.spec);
-        apply_to_map(&mut config.agents, self.name(), incoming)
+        let result = apply_to_map(&mut config.agents, self.name(), incoming);
+        config.resource_meta.agents.insert(
+            self.name().to_string(),
+            crate::config::ResourceStoredMetadata {
+                labels: self.metadata.labels.clone(),
+                annotations: self.metadata.annotations.clone(),
+            },
+        );
+        result
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -215,13 +252,22 @@ impl Resource for AgentResource {
 
     fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
         config.agents.get(name).map(|agent| Self {
-            metadata: metadata_with_name(name),
+            metadata: match config.resource_meta.agents.get(name) {
+                Some(stored) => {
+                    metadata_from_parts(name, stored.labels.clone(), stored.annotations.clone())
+                }
+                None => metadata_with_name(name),
+            },
             spec: agent_config_to_spec(agent),
         })
     }
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
-        config.agents.remove(name).is_some()
+        let removed = config.agents.remove(name).is_some();
+        if removed {
+            config.resource_meta.agents.remove(name);
+        }
+        removed
     }
 }
 
@@ -255,7 +301,15 @@ impl Resource for WorkflowResource {
 
     fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
         let incoming = workflow_spec_to_config(&self.spec);
-        apply_to_map(&mut config.workflows, self.name(), incoming)
+        let result = apply_to_map(&mut config.workflows, self.name(), incoming);
+        config.resource_meta.workflows.insert(
+            self.name().to_string(),
+            crate::config::ResourceStoredMetadata {
+                labels: self.metadata.labels.clone(),
+                annotations: self.metadata.annotations.clone(),
+            },
+        );
+        result
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -268,13 +322,22 @@ impl Resource for WorkflowResource {
 
     fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
         config.workflows.get(name).map(|workflow| Self {
-            metadata: metadata_with_name(name),
+            metadata: match config.resource_meta.workflows.get(name) {
+                Some(stored) => {
+                    metadata_from_parts(name, stored.labels.clone(), stored.annotations.clone())
+                }
+                None => metadata_with_name(name),
+            },
             spec: workflow_config_to_spec(workflow),
         })
     }
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
-        config.workflows.remove(name).is_some()
+        let removed = config.workflows.remove(name).is_some();
+        if removed {
+            config.resource_meta.workflows.remove(name);
+        }
+        removed
     }
 }
 
@@ -334,12 +397,15 @@ impl Resource for RegisteredResource {
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
         if config.workspaces.remove(name).is_some() {
+            config.resource_meta.workspaces.remove(name);
             return true;
         }
         if config.agents.remove(name).is_some() {
+            config.resource_meta.agents.remove(name);
             return true;
         }
         if config.workflows.remove(name).is_some() {
+            config.resource_meta.workflows.remove(name);
             return true;
         }
         false
@@ -460,7 +526,7 @@ fn workspace_config_to_spec(config: &WorkspaceConfig) -> WorkspaceSpec {
 }
 
 fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
-    let capabilities = vec![
+    let template_capabilities = vec![
         spec.templates.init_once.as_ref().map(|_| "init_once"),
         spec.templates.qa.as_ref().map(|_| "qa"),
         spec.templates.fix.as_ref().map(|_| "fix"),
@@ -470,7 +536,14 @@ fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
     .into_iter()
     .flatten()
     .map(|s| s.to_string())
-    .collect();
+    .collect::<Vec<_>>();
+
+    let mut capabilities = spec.capabilities.clone().unwrap_or_default();
+    for cap in template_capabilities {
+        if !capabilities.contains(&cap) {
+            capabilities.push(cap);
+        }
+    }
 
     let mut templates = std::collections::HashMap::new();
     if let Some(t) = &spec.templates.init_once {
@@ -526,25 +599,36 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> WorkflowConfig {
     let steps = spec
         .steps
         .iter()
-        .map(|step| WorkflowStepConfig {
-            id: step.id.clone(),
-            description: None,
-            step_type: Some(
-                parse_workflow_step_type(&step.step_type).unwrap_or(WorkflowStepType::Qa),
-            ),
-            required_capability: None,
-            builtin: None,
-            enabled: step.enabled,
-            repeatable: true,
-            is_guard: false,
-            cost_preference: None,
-            prehook: step.prehook.as_ref().map(|prehook| StepPrehookConfig {
-                engine: StepHookEngine::Cel,
-                when: prehook.when.clone(),
-                reason: prehook.reason.clone(),
-                ui: None,
-                extended: false,
-            }),
+        .map(|step| {
+            let step_type =
+                parse_workflow_step_type(&step.step_type).unwrap_or(WorkflowStepType::Qa);
+            let is_guard = step_type == WorkflowStepType::LoopGuard;
+            let builtin = if matches!(
+                step_type,
+                WorkflowStepType::InitOnce | WorkflowStepType::LoopGuard
+            ) {
+                Some(step.step_type.clone())
+            } else {
+                None
+            };
+            WorkflowStepConfig {
+                id: step.id.clone(),
+                description: None,
+                step_type: Some(step_type),
+                required_capability: None,
+                builtin,
+                enabled: step.enabled,
+                repeatable: true,
+                is_guard,
+                cost_preference: None,
+                prehook: step.prehook.as_ref().map(|prehook| StepPrehookConfig {
+                    engine: StepHookEngine::Cel,
+                    when: prehook.when.clone(),
+                    reason: prehook.reason.clone(),
+                    ui: None,
+                    extended: false,
+                }),
+            }
         })
         .collect();
 
@@ -634,6 +718,7 @@ fn parse_workflow_step_type(value: &str) -> Result<WorkflowStepType> {
         "ticket_scan" => Ok(WorkflowStepType::TicketScan),
         "fix" => Ok(WorkflowStepType::Fix),
         "retest" => Ok(WorkflowStepType::Retest),
+        "loop_guard" => Ok(WorkflowStepType::LoopGuard),
         _ => Err(anyhow!("unknown workflow step type: {}", value)),
     }
 }

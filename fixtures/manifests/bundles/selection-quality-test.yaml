@@ -1,0 +1,46 @@
+apiVersion: orchestrator.dev/v1
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v1
+kind: Agent
+metadata:
+  name: proven_agent
+spec:
+  metadata:
+    cost: 50
+  capabilities:
+    - qa
+  templates:
+    qa: "echo 'proven-qa'"
+    loop_guard: "echo 'continue'"
+---
+apiVersion: orchestrator.dev/v1
+kind: Agent
+metadata:
+  name: new_agent
+spec:
+  metadata:
+    cost: 20
+  capabilities:
+    - qa
+  templates:
+    qa: "echo 'new-qa'"
+---
+apiVersion: orchestrator.dev/v1
+kind: Workflow
+metadata:
+  name: quality_selection_test
+spec:
+  steps:
+    - id: do_qa
+      type: qa
+      enabled: true
+  loop:
+    mode: once

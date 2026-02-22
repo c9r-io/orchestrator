@@ -20,6 +20,7 @@ mod scheduler;
 mod selection;
 mod state;
 mod task_ops;
+mod task_repository;
 mod ticket;
 
 #[cfg(test)]
@@ -38,21 +39,19 @@ use crate::resource::{
 use crate::state::ManagedState;
 use anyhow::{Context, Result};
 use clap::Parser;
+use std::collections::BTreeSet;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tokio::sync::Mutex;
 
-fn init_state(cli_config_path: Option<String>) -> Result<ManagedState> {
+fn init_state() -> Result<ManagedState> {
     let app_root = detect_app_root();
-    let seed_config_path = cli_config_path
-        .as_ref()
-        .map(|p| resolve_input_path(&app_root, p));
     let (db_path, logs_dir) = initialize_runtime(&app_root)?;
 
-    let (config, _yaml, _version, _updated_at) =
-        load_or_seed_config(&db_path, seed_config_path.as_deref())?;
+    let (config, _yaml, _version, _updated_at) = load_or_seed_config(&db_path)?;
     let active = config_load::build_active_config(&app_root, config).with_context(|| {
-        "active config is not runnable; continue applying resources or use a complete config bootstrap"
+        "active config is not runnable; continue applying resources until configuration is complete"
     })?;
     let default_workspace = active
         .workspaces
@@ -141,8 +140,7 @@ fn initialize_runtime(app_root: &Path) -> Result<(PathBuf, PathBuf)> {
 
 fn run_apply_preflight(app_root: &Path, file: &str, dry_run: bool) -> Result<i32> {
     let (db_path, _logs_dir) = initialize_runtime(app_root)?;
-    let content = std::fs::read_to_string(file)
-        .with_context(|| format!("failed to read manifest file: {}", file))?;
+    let content = read_manifest_input(file)?;
     let resources = parse_resources_from_yaml(&content)?;
     let mut merged_config = load_raw_config_from_db(&db_path)?
         .map(|(cfg, _, _)| cfg)
@@ -204,11 +202,51 @@ fn run_apply_preflight(app_root: &Path, file: &str, dry_run: bool) -> Result<i32
     }
 
     if !dry_run && !applied_results.is_empty() {
+        autofill_defaults_for_manifest_mode(&mut merged_config);
         let overview = persist_raw_config(&db_path, merged_config, "cli-apply")?;
         println!("configuration version: {}", overview.version);
     }
 
     Ok(0)
+}
+
+fn read_manifest_input(file: &str) -> Result<String> {
+    if file == "-" {
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .context("failed to read manifest from stdin")?;
+        return Ok(buf);
+    }
+    std::fs::read_to_string(file).with_context(|| format!("failed to read manifest file: {}", file))
+}
+
+fn autofill_defaults_for_manifest_mode(config: &mut crate::config::OrchestratorConfig) {
+    if config.defaults.project.trim().is_empty() {
+        config.defaults.project = "default".to_string();
+    }
+
+    if config.defaults.workspace.trim().is_empty() {
+        if config.workspaces.contains_key("default") {
+            config.defaults.workspace = "default".to_string();
+        } else {
+            let workspaces: BTreeSet<_> = config.workspaces.keys().cloned().collect();
+            if let Some(first) = workspaces.into_iter().next() {
+                config.defaults.workspace = first;
+            }
+        }
+    }
+
+    if config.defaults.workflow.trim().is_empty() {
+        if config.workflows.contains_key("qa_only") {
+            config.defaults.workflow = "qa_only".to_string();
+        } else {
+            let workflows: BTreeSet<_> = config.workflows.keys().cloned().collect();
+            if let Some(first) = workflows.into_iter().next() {
+                config.defaults.workflow = first;
+            }
+        }
+    }
 }
 
 fn try_handle_preflight_command(cli: &Cli) -> Result<Option<i32>> {
@@ -229,24 +267,6 @@ fn try_handle_preflight_command(cli: &Cli) -> Result<Option<i32>> {
             );
             Ok(Some(0))
         }
-        Commands::Config(ConfigCommands::Bootstrap { from_file, force }) => {
-            let app_root = detect_app_root();
-            let (db_path, _logs_dir) = initialize_runtime(&app_root)?;
-            let source_path = resolve_input_path(&app_root, from_file);
-            let overview = config_load::bootstrap_config_from_file(
-                &app_root,
-                &db_path,
-                &source_path,
-                *force,
-                "cli-bootstrap",
-            )?;
-            println!(
-                "Configuration bootstrapped from {} (version {})",
-                source_path.display(),
-                overview.version
-            );
-            Ok(Some(0))
-        }
         Commands::Apply { file, dry_run } => {
             let app_root = detect_app_root();
             Ok(Some(run_apply_preflight(&app_root, file, *dry_run)?))
@@ -256,9 +276,8 @@ fn try_handle_preflight_command(cli: &Cli) -> Result<Option<i32>> {
             let content = std::fs::read_to_string(config_file)
                 .with_context(|| format!("cannot read config file: {}", config_file))?;
 
-            let validator =
-                crate::config_validation::validator::ConfigValidator::new(&app_root)
-                    .with_level(crate::config_validation::ValidationLevel::Full);
+            let validator = crate::config_validation::validator::ConfigValidator::new(&app_root)
+                .with_level(crate::config_validation::ValidationLevel::Full);
             let result = validator.validate_yaml(&content);
 
             if !result.warnings.is_empty() || !result.errors.is_empty() {
@@ -291,7 +310,7 @@ fn main() -> Result<()> {
     if let Some(exit_code) = try_handle_preflight_command(&cli)? {
         std::process::exit(exit_code);
     }
-    let state = init_state(cli.config.clone())?;
+    let state = init_state()?;
 
     // Ensure config can be loaded before command dispatch.
     drop(read_active_config(&state.inner)?);

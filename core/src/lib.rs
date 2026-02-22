@@ -16,6 +16,7 @@ pub mod scheduler;
 pub mod selection;
 pub mod state;
 pub mod task_ops;
+pub mod task_repository;
 pub mod ticket;
 
 #[cfg(test)]

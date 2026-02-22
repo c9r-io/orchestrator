@@ -1,0 +1,34 @@
+apiVersion: orchestrator.dev/v1
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa/orchestrator
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v1
+kind: Agent
+metadata:
+  name: format_agent
+spec:
+  metadata:
+    cost: 10
+  capabilities:
+    - qa
+  templates:
+    qa: "echo 'format-qa'"
+    loop_guard: "echo 'continue'"
+---
+apiVersion: orchestrator.dev/v1
+kind: Workflow
+metadata:
+  name: qa_only
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: once

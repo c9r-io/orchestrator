@@ -9,7 +9,8 @@ defaults:
 workspaces:
   default:
     root_path: .
-    qa_targets: []
+    qa_targets:
+      - docs/qa
     ticket_dir: docs/ticket
 agents:
   test_agent:
@@ -20,7 +21,7 @@ agents:
     - qa
     templates:
       qa: "echo 'qa-run'"
-      default: "echo 'stop'"
+      loop_guard: "echo 'stop'"
 
 workflows:
   guard_test:

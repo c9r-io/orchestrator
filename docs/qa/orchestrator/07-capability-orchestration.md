@@ -1,7 +1,7 @@
-# Orchestrator - Capability-Driven Agent Orchestration
+# Orchestrator - Capability-Driven Orchestration (Routing Correctness)
 
 **Module**: orchestrator
-**Scope**: Validate new capability-driven orchestration features (cost preference, repeatable steps, guard steps)
+**Scope**: Validate that capability routing dispatches steps to the correct agent and template
 **Scenarios**: 5
 **Priority**: High
 
@@ -9,521 +9,280 @@
 
 ## Background
 
-This document tests the upgraded orchestration features:
-- **Capability-driven selection**: Agents declare capabilities, steps request capabilities
-- **Agent-level selection strategy**: Each agent configures its own selection strategy via `selection.strategy`
-- **Repeatable steps**: Steps can be marked repeatable (run every cycle) or one-time
-- **Guard steps**: Steps can be marked as guards that terminate the workflow loop
-- **Builtin steps**: init_once, ticket_scan, loop_guard are builtin behaviors
+This document validates that the orchestrator correctly routes workflow steps to
+agents based on their declared capabilities. Each scenario uses a dedicated
+fixture where agent output is identifiable, so routing correctness can be
+verified by inspecting logs.
 
-> **Note**: The workflow step's `cost_preference` field is deprecated (kept for backward compatibility). Agent selection now uses the agent's own `selection.strategy` as the primary configuration.
-
-### New Config Format Reference
-
-#### Agent with Capabilities and Selection Strategy
-```yaml
-agents:
-  fast_agent:
-    metadata:
-      name: fast_agent
-      cost: 20  # 1-100, lower = cheaper/faster
-    capabilities:
-    - qa
-    - fix
-    selection:
-      strategy: performance_first  # cost_based, success_rate_weighted, performance_first, adaptive, load_balanced, capability_aware
-      weights:  # optional, for adaptive strategy
-        cost: 0.2
-        success_rate: 0.3
-        performance: 0.3
-        load: 0.2
-    templates:
-      qa: "echo 'fast qa'"
-      fix: "echo 'fast fix'"
-  
-  slow_agent:
-    metadata:
-      name: slow_agent
-      cost: 80  # higher = more expensive/higher quality
-    capabilities:
-    - fix
-    templates:
-      fix: "echo 'slow but quality fix'"
-```
-
-#### Step with Capability (No longer uses cost_preference)
-```yaml
-workflows:
-  my_workflow:
-    steps:
-    - id: qa_test
-      required_capability: qa
-      repeatable: true
-      is_guard: false
-    - id: check_done
-      builtin: loop_guard
-      is_guard: true
-      repeatable: true
-```
-
-> **Deprecation Notice**: The `cost_preference` field in workflow steps is deprecated. Configure agent selection strategy at the agent level using `selection.strategy`.
+Entry point: `./scripts/orchestrator.sh <command>`
 
 ---
 
-## Scenario 1: Capability-Driven Agent Selection
+## Scenario 1: Capability Isolation (qa-only vs fix-only agents)
 
 ### Preconditions
 
-- Orchestrator binary built
-- Database reset (fresh state)
-- Two agents with different capabilities configured
-- Use `config bootstrap --from` for flat config fixtures (not `apply -f`; apply expects manifest format with `apiVersion: orchestrator.dev/v1`)
+- Fresh sqlite state
 
 ### Goal
 
-Validate that when a step requires a capability, only agents with that capability are selected.
+Validate that qa steps dispatch to the qa-capable agent and fix steps dispatch
+to the fix-capable agent when capabilities are disjoint.
+
+### Fixture
+
+`fixtures/manifests/bundles/capability-test.yaml`
+
+- Workspace targets: `fixtures/qa-capability-test` (single file to avoid agent
+  disease from repeated failures)
+- `agent_qa_only` — capabilities: `[qa]`, template: `echo 'qa-from-agent-qa-only' && exit 1`
+  (QA intentionally fails to create tickets, triggering the fix step)
+- `agent_fix_only` — capabilities: `[fix]`, template: `echo 'fix-from-agent-fix-only'`
+- Workflow `test_capability` — steps: qa, fix
 
 ### Steps
 
-1. Reset to fresh state:
+1. Reset and apply:
    ```bash
-   rm -f data/agent_orchestrator.db
+   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/capability-test.yaml
    ```
 
-2. Create test config with capability-based agents:
+2. Create and run task:
    ```bash
-   cat > /tmp/capability-test.yaml << 'EOF'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   defaults:
-     workspace: default
-     workflow: test_capability
-   workspaces:
-     default:
-       root_path: .
-       qa_targets: []
-       ticket_dir: docs/ticket
-   agents:
-     agent_qa_only:
-       metadata:
-         name: agent_qa_only
-         cost: 30
-       capabilities:
-       - qa
-       templates:
-         qa: "echo 'qa-from-agent-qa-only'"
-     
-     agent_fix_only:
-       metadata:
-         name: agent_fix_only
-         cost: 50
-       capabilities:
-       - fix
-       templates:
-         fix: "echo 'fix-from-agent-fix-only'"
-   
-   workflows:
-     test_capability:
-       steps:
-       - id: run_qa
-         required_capability: qa
-         enabled: true
-         repeatable: false
-
-       - id: run_fix
-         required_capability: fix
-         enabled: true
-         repeatable: false
-
-       loop:
-         mode: once
-   EOF
-   ```
-
-3. Bootstrap config:
-   ```bash
-   ./core/target/release/agent-orchestrator config bootstrap --from /tmp/capability-test.yaml --force
-   ```
-
-4. Create task:
-   ```bash
-   ./core/target/release/agent-orchestrator task create \
+   ./scripts/orchestrator.sh task create \
      --name "capability-test" \
-     --goal "Test capability selection" \
-     --workspace default \
+     --goal "Test capability isolation" \
+     --project "${QA_PROJECT}" \
      --workflow test_capability
+   ./scripts/orchestrator.sh task start --latest
    ```
 
-5. Get task info and check which agent was used:
+3. Inspect logs:
    ```bash
-   ./core/target/release/agent-orchestrator task info {task_id}
-   ./core/target/release/agent-orchestrator task logs {task_id}
-   ```
-
-### Expected
-
-- QA step uses `agent_qa_only` (the only agent with qa capability)
-- Fix step uses `agent_fix_only` (the only agent with fix capability)
-- Logs show respective echo outputs
-
----
-
-## Scenario 2: Agent Selection Strategy - Performance First
-
-### Preconditions
-
-- Two agents with same capability but different selection strategies
-- Use `config bootstrap --from` for flat config fixtures (not `apply -f`; apply expects manifest format with `apiVersion: orchestrator.dev/v1`)
-
-### Goal
-
-Validate that agents with `performance_first` strategy are prioritized.
-
-### Steps
-
-1. Create config with agents having different selection strategies:
-   ```bash
-   cat > /tmp/selection-perf-test.yaml << 'EOF'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   defaults:
-     workspace: default
-     workflow: selection_test
-   workspaces:
-     default:
-       root_path: .
-       qa_targets: []
-       ticket_dir: docs/ticket
-   agents:
-     fast_agent:
-       metadata:
-         name: fast_agent
-         cost: 20
-       capabilities:
-       - qa
-       - fix
-       selection:
-         strategy: performance_first
-       templates:
-         qa: "echo 'fast-qa'"
-         fix: "echo 'fast-fix'"
-   
-     quality_agent:
-       metadata:
-         name: quality_agent
-         cost: 80
-       capabilities:
-       - qa
-       - fix
-       selection:
-         strategy: success_rate_weighted
-       templates:
-         qa: "echo 'quality-qa'"
-         fix: "echo 'quality-fix'"
-   
-   workflows:
-     selection_test:
-       steps:
-       - id: do_qa
-         required_capability: qa
-         enabled: true
-         repeatable: false
-
-       - id: do_fix
-         required_capability: fix
-         enabled: true
-         repeatable: false
-
-       loop:
-         mode: once
-   EOF
-   ```
-
-2. Bootstrap config and test:
-   ```bash
-   ./core/target/release/agent-orchestrator config bootstrap --from /tmp/selection-perf-test.yaml --force
-   ./core/target/release/agent-orchestrator task create \
-     --name "selection-perf-test" \
-     --goal "Test selection strategy" \
-     --workspace default \
-     --workflow selection_test
-   ```
-
-3. Check logs:
-   ```bash
-   ./core/target/release/agent-orchestrator task logs {task_id}
+   ./scripts/orchestrator.sh task logs {task_id}
    ```
 
 ### Expected
 
-- Agent selection scores each agent independently using its configured strategy
-- With no prior execution history, scoring relies primarily on cost factor — but final selection uses **random pick from top-3 candidates**, so results are non-deterministic when only 2 agents exist
-- After metrics accumulate across runs, `performance_first` strategy increasingly favors the lower-cost agent
-- Logs may show a mix of "fast-qa" and "quality-qa" in initial runs; this is expected exploration behavior
+- Task status: `completed`
+- QA log output contains: `qa-from-agent-qa-only` (routed to `agent_qa_only`)
+- Fix log output contains: `fix-from-agent-fix-only` (routed to `agent_fix_only`)
+- No cross-contamination (qa agent never runs fix template, and vice versa)
 
-> **Note**: The agent selector randomly picks from the top 3 scored candidates to allow exploration. With only 2 agents, both are always in the top 3, producing near-random initial distribution. As `MetricsCollector` records success/failure/duration data over time, score differentiation increases.
+> **Note**: The fix step only executes when active tickets exist. QA must fail
+> (exit 1) to create tickets that trigger fix. If QA succeeds, the fix step is
+> correctly skipped by design.
 
 ---
 
-## Scenario 3: Agent Selection Strategy - Success Rate Weighted
+## Scenario 2: Multi-Agent Same Capability
 
 ### Preconditions
 
-- Two agents with different selection strategies
-- One agent configured with `success_rate_weighted`
-- Use `config bootstrap --from` for flat config fixtures (not `apply -f`; apply expects manifest format with `apiVersion: orchestrator.dev/v1`)
+- Fresh sqlite state
 
 ### Goal
 
-Validate that agents with higher success rates are prioritized when using `success_rate_weighted` strategy.
+Validate that when multiple agents share the same capability, the orchestrator
+distributes work across them and each agent uses its own correct template.
+
+### Fixture
+
+`fixtures/manifests/bundles/multi-echo.yaml`
+
+- `mock_echo_alpha` — capabilities: `[qa]`, template: `echo 'alpha-qa: {rel_path}'`
+- `mock_echo_beta` — capabilities: `[qa]`, template: `echo 'beta-qa: {rel_path}'`
+- Workflow `multi_agent_qa` — steps: qa (mode: once)
 
 ### Steps
 
-1. Create config with success_rate_weighted strategy:
+1. Reset and apply:
    ```bash
-   cat > /tmp/selection-quality-test.yaml << 'EOF'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   defaults:
-     workspace: default
-     workflow: quality_selection_test
-   workspaces:
-     default:
-       root_path: .
-       qa_targets: []
-       ticket_dir: docs/ticket
-   agents:
-     proven_agent:
-       metadata:
-         name: proven_agent
-         cost: 50
-       capabilities:
-       - qa
-       selection:
-         strategy: success_rate_weighted
-       templates:
-         qa: "echo 'proven-qa'"
-   
-     new_agent:
-       metadata:
-         name: new_agent
-         cost: 20
-       capabilities:
-       - qa
-       selection:
-         strategy: capability_aware
-       templates:
-         qa: "echo 'new-qa'"
-   
-   workflows:
-     quality_selection_test:
-       steps:
-       - id: do_qa
-         required_capability: qa
-         enabled: true
-         repeatable: false
-
-       loop:
-         mode: once
-   EOF
+   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/multi-echo.yaml
    ```
 
-2. Bootstrap config and test:
+2. Create and run task:
    ```bash
-   ./core/target/release/agent-orchestrator config bootstrap --from /tmp/selection-quality-test.yaml --force
-   ./core/target/release/agent-orchestrator task create \
-     --name "selection-quality-test" \
-     --goal "Test success rate weighted" \
-     --workspace default \
-     --workflow quality_selection_test
+   ./scripts/orchestrator.sh task create \
+     --name "multi-agent-test" \
+     --goal "Test multi-agent distribution" \
+     --project "${QA_PROJECT}" \
+     --workflow multi_agent_qa
+   ./scripts/orchestrator.sh task start --latest
    ```
 
-3. Check logs:
+3. Inspect logs:
    ```bash
-   ./core/target/release/agent-orchestrator task logs {task_id}
+   ./scripts/orchestrator.sh task logs {task_id}
    ```
 
 ### Expected
 
-- Agent selection scores each agent using its configured strategy
-- With no prior execution history, scoring relies on cost and neutral defaults — final selection uses **random pick from top-3 candidates**
-- After multiple runs, `success_rate_weighted` strategy increasingly favors agents with higher success rates
-- Initial runs may show a mix of "proven-qa" and "new-qa"; this is expected exploration behavior
-
-> **Note**: Same top-3 random exploration as Scenario 2 applies here. The `success_rate_weighted` strategy (weight: cost 0.2, success_rate 0.8) differentiates effectively only when agents have accumulated different success/failure histories via `MetricsCollector`.
+- Task status: `completed`, failed: 0
+- Logs contain both `alpha-qa:` and `beta-qa:` entries (both agents were used)
+- Each agent produces its own identifiable output — no template mix-up
 
 ---
 
-## Scenario 4: Repeatable Steps
+## Scenario 3: Repeatable Step Execution
 
 ### Preconditions
 
-- Workflow with repeatable and non-repeatable steps
-- Infinite loop mode
-- Use `config bootstrap --from` for flat config fixtures (not `apply -f`; apply expects manifest format with `apiVersion: orchestrator.dev/v1`)
+- Fresh sqlite state
 
 ### Goal
 
-Validate that repeatable steps run every cycle, while non-repeatable steps run only in the first cycle.
+Validate that repeatable steps execute in every loop cycle.
+
+### Fixture
+
+`fixtures/manifests/bundles/repeatable-test.yaml`
+
+- `test_agent` — capabilities: `[qa]`, template: `echo 'cycle-{cycle}'`
+- Workflow `repeat_test` — steps: qa, loop mode: infinite, max_cycles: 3
 
 ### Steps
 
-1. Create config:
+1. Reset and apply:
    ```bash
-   cat > /tmp/repeatable-test.yaml << 'EOF'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   defaults:
-     workspace: default
-     workflow: repeat_test
-   workspaces:
-     default:
-       root_path: .
-       qa_targets: []
-       ticket_dir: docs/ticket
-   agents:
-     test_agent:
-       metadata:
-         name: test_agent
-         cost: 50
-       capabilities:
-       - qa
-       templates:
-         qa: "echo 'cycle-{cycle}'"
-   
-   workflows:
-     repeat_test:
-       steps:
-       - id: one_time
-         required_capability: qa
-         enabled: true
-         repeatable: false
-
-       - id: every_cycle
-         required_capability: qa
-         enabled: true
-         repeatable: true
-
-       loop:
-         mode: infinite
-         guard:
-           enabled: true
-           stop_when_no_unresolved: false
-   EOF
+   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/repeatable-test.yaml
    ```
 
-2. Bootstrap config:
+2. Create and run task:
    ```bash
-   ./core/target/release/agent-orchestrator config bootstrap --from /tmp/repeatable-test.yaml --force
-   ```
-
-3. Create task and start:
-   ```bash
-   ./core/target/release/agent-orchestrator task create \
+   ./scripts/orchestrator.sh task create \
      --name "repeatable-test" \
-     --goal "Test repeatable steps" \
-     --workspace default \
+     --goal "Loop workflow test" \
+     --project "${QA_PROJECT}" \
      --workflow repeat_test
+   ./scripts/orchestrator.sh task start --latest
    ```
 
-4. Wait for 2-3 cycles, then check logs:
+3. Verify cycles:
    ```bash
-   sleep 3
-   ./core/target/release/agent-orchestrator task logs {task_id}
+   ./scripts/orchestrator.sh task info {task_id}
+   sqlite3 data/agent_orchestrator.db \
+     "SELECT current_cycle FROM tasks WHERE id = '{task_id}'"
    ```
 
 ### Expected
 
-- "one_time" step appears only in cycle 1
-- "every_cycle" step appears in every cycle (cycle-1, cycle-2, cycle-3, etc.)
-
-> **Note**: The test config above uses `mode: infinite` with `stop_when_no_unresolved: false` and no `max_cycles`. This means the loop will run indefinitely unless manually paused. To test bounded cycles, add `max_cycles: 3` to the `guard` section. Run data does not include a `step_id` field — to distinguish which step produced each run, check the `phase` field and the order of execution.
+- Task status: `completed`
+- current_cycle >= 1 (loop terminates when all items pass; `max_cycles` is an
+  upper bound, not a forced iteration count)
+- QA step executed in every cycle that runs
 
 ---
 
-## Scenario 5: Guard Steps (is_guard)
+## Scenario 4: Guard Step Termination
 
 ### Preconditions
 
-- Workflow with guard step that returns "stop"
-- Use `config bootstrap --from` for flat config fixtures (not `apply -f`; apply expects manifest format with `apiVersion: orchestrator.dev/v1`)
+- Fresh sqlite state
 
 ### Goal
 
-Validate that when a guard step returns "stop", the workflow loop terminates.
+Validate that a guard step can terminate the workflow loop.
+
+### Fixture
+
+`fixtures/manifests/bundles/guard-test.yaml`
+
+- `test_agent` — template: `echo 'qa-run'`, loop_guard template: `echo 'stop'`
+- Workflow `guard_test` — steps: qa + loop_guard, loop mode: infinite, max_cycles: 3
 
 ### Steps
 
-1. Create config with guard:
+1. Reset and apply:
    ```bash
-   cat > /tmp/guard-test.yaml << 'EOF'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   defaults:
-     workspace: default
-     workflow: guard_test
-   workspaces:
-     default:
-       root_path: .
-       qa_targets: []
-       ticket_dir: docs/ticket
-   agents:
-     test_agent:
-       metadata:
-         name: test_agent
-         cost: 50
-       capabilities:
-       - qa
-       templates:
-         qa: "echo 'qa-run'"
-         default: "echo 'stop'"
-   
-   workflows:
-     guard_test:
-       steps:
-       - id: run_qa
-         required_capability: qa
-         enabled: true
-         repeatable: true
-
-       - id: check_stop
-         builtin: loop_guard
-         enabled: true
-         repeatable: true
-         is_guard: true
-       loop:
-         mode: infinite
-         guard:
-           enabled: true
-           stop_when_no_unresolved: true
-   EOF
+   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/guard-test.yaml
    ```
 
-2. Bootstrap config and test:
+2. Create and run task:
    ```bash
-   ./core/target/release/agent-orchestrator config bootstrap --from /tmp/guard-test.yaml --force
-   ./core/target/release/agent-orchestrator task create \
+   ./scripts/orchestrator.sh task create \
      --name "guard-test" \
-     --goal "Test guard step" \
-     --workspace default \
+     --goal "Guard step test" \
+     --project "${QA_PROJECT}" \
      --workflow guard_test
+   ./scripts/orchestrator.sh task start --latest
    ```
 
-3. Check task status:
+3. Inspect result:
    ```bash
-   ./core/target/release/agent-orchestrator task info {task_id}
+   ./scripts/orchestrator.sh task info {task_id}
    ```
 
 ### Expected
 
-- Task runs for one cycle
-- Guard step (builtin loop_guard) checks for unresolved items
-- With stop_when_no_unresolved=true and no tickets, workflow terminates
+- Workflow `guard_test` appears in config
+- Task creation and execution succeed
+- Guard agent's "stop" output terminates the loop
+
+---
+
+## Scenario 5: Performance Selection Fixture Execution
+
+### Preconditions
+
+- Fresh sqlite state
+
+### Goal
+
+Validate that a fixture with two agents of different costs loads correctly and
+both agents are used for execution.
+
+### Fixture
+
+`fixtures/manifests/bundles/selection-perf-test.yaml`
+
+- `fast_agent` — cost: 20, capabilities: `[qa, fix]`
+- `quality_agent` — cost: 80, capabilities: `[qa, fix]`
+- Workflow `selection_test` — steps: qa, fix (mode: once)
+
+### Steps
+
+1. Reset and apply:
+   ```bash
+   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml
+   ```
+
+2. Create and run task:
+   ```bash
+   ./scripts/orchestrator.sh task create \
+     --name "selection-perf" \
+     --goal "Selection performance baseline" \
+     --project "${QA_PROJECT}" \
+     --workflow selection_test
+   ./scripts/orchestrator.sh task start --latest
+   ```
+
+3. Inspect result:
+   ```bash
+   ./scripts/orchestrator.sh task info {task_id}
+   ./scripts/orchestrator.sh task logs {task_id}
+   ```
+
+### Expected
+
+- Task status: `completed`, failed: 0
+- Logs contain both `fast-qa`/`fast-fix` and `quality-qa`/`quality-fix` entries
+- Both agents selected via capability-aware scoring
 
 ---
 
@@ -531,8 +290,8 @@ Validate that when a guard step returns "stop", the workflow loop terminates.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Capability-Driven Agent Selection | ☐ | | | |
-| 2 | Cost Preference - Performance | ☐ | | | |
-| 3 | Cost Preference - Quality | ☐ | | | |
-| 4 | Repeatable Steps | ☐ | | | |
-| 5 | Guard Steps (is_guard) | ☐ | | | |
+| 1 | Capability Isolation | ☐ | | | |
+| 2 | Multi-Agent Same Capability | ☐ | | | |
+| 3 | Repeatable Step Execution | ☐ | | | |
+| 4 | Guard Step Termination | ☐ | | | |
+| 5 | Performance Selection Fixture | ☐ | | | |

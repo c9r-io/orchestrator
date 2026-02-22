@@ -16,10 +16,6 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
 
-    /// Optional seed config path for bootstrap-compatible workflows
-    #[arg(short, long, global = true)]
-    pub config: Option<String>,
-
     /// Enable verbose output
     #[arg(short, long, global = true)]
     pub verbose: bool,
@@ -54,6 +50,10 @@ pub enum Commands {
 
         #[arg(short, long, default_value = "table")]
         output: OutputFormat,
+
+        /// Label selector (e.g., env=prod,tier=backend) for list queries
+        #[arg(short = 'l', long = "selector")]
+        selector: Option<String>,
     },
 
     #[command(alias = "desc")]
@@ -82,6 +82,12 @@ pub enum Commands {
     #[command(alias = "ws", subcommand)]
     Workspace(WorkspaceCommands),
 
+    #[command(subcommand)]
+    Agent(AgentCommands),
+
+    #[command(subcommand)]
+    Workflow(WorkflowCommands),
+
     #[command(alias = "cfg", alias = "c", subcommand)]
     Config(ConfigCommands),
 
@@ -90,6 +96,9 @@ pub enum Commands {
 
     #[command(subcommand)]
     Db(DbCommands),
+
+    #[command(subcommand)]
+    Qa(QaCommands),
 
     #[command(alias = "comp", subcommand)]
     Completion(CompletionCommands),
@@ -195,11 +204,11 @@ pub enum TaskCommands {
         follow: bool,
 
         /// Show last N lines
-        #[arg(short, long, default_value = "100")]
+        #[arg(short = 'n', long, default_value = "100")]
         tail: usize,
 
         /// Include timestamps
-        #[arg(short, long)]
+        #[arg(long)]
         timestamps: bool,
     },
 
@@ -241,6 +250,99 @@ pub enum WorkspaceCommands {
         #[arg(short, long, default_value = "table")]
         output: OutputFormat,
     },
+
+    Create {
+        #[arg(value_name = "NAME")]
+        name: String,
+
+        #[arg(long = "root-path")]
+        root_path: String,
+
+        #[arg(long = "qa-target")]
+        qa_target: Vec<String>,
+
+        #[arg(long = "ticket-dir", default_value = "docs/ticket")]
+        ticket_dir: String,
+
+        #[arg(long = "label")]
+        labels: Vec<String>,
+
+        #[arg(long = "annotation")]
+        annotations: Vec<String>,
+
+        #[arg(long)]
+        dry_run: bool,
+
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum AgentCommands {
+    Create {
+        #[arg(value_name = "NAME")]
+        name: String,
+
+        #[arg(long = "template-init-once")]
+        template_init_once: Option<String>,
+
+        #[arg(long = "template-qa")]
+        template_qa: Option<String>,
+
+        #[arg(long = "template-fix")]
+        template_fix: Option<String>,
+
+        #[arg(long = "template-retest")]
+        template_retest: Option<String>,
+
+        #[arg(long = "template-loop-guard")]
+        template_loop_guard: Option<String>,
+
+        #[arg(long = "capability")]
+        capability: Vec<String>,
+
+        #[arg(long = "label")]
+        labels: Vec<String>,
+
+        #[arg(long = "annotation")]
+        annotations: Vec<String>,
+
+        #[arg(long)]
+        dry_run: bool,
+
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum WorkflowCommands {
+    Create {
+        #[arg(value_name = "NAME")]
+        name: String,
+
+        #[arg(long = "step", required = true)]
+        step: Vec<String>,
+
+        #[arg(long = "loop-mode", default_value = "once")]
+        loop_mode: String,
+
+        #[arg(long = "max-cycles")]
+        max_cycles: Option<u32>,
+
+        #[arg(long = "label")]
+        labels: Vec<String>,
+
+        #[arg(long = "annotation")]
+        annotations: Vec<String>,
+
+        #[arg(long)]
+        dry_run: bool,
+
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -268,14 +370,6 @@ pub enum ConfigCommands {
 
     Set {
         config_file: String,
-    },
-
-    Bootstrap {
-        #[arg(long = "from")]
-        from_file: String,
-
-        #[arg(short, long)]
-        force: bool,
     },
 
     Export {
@@ -312,6 +406,61 @@ pub enum DbCommands {
         /// Also clear config version history (preserves current active config)
         #[arg(long)]
         include_history: bool,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum QaCommands {
+    #[command(subcommand)]
+    Project(QaProjectCommands),
+
+    /// Validate QA concurrency guardrails and sqlite settings
+    Doctor {
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum QaProjectCommands {
+    /// Create or update an isolated QA project scaffold
+    Create {
+        #[arg(value_name = "PROJECT_ID")]
+        project_id: String,
+
+        #[arg(long, default_value = "default")]
+        from_workspace: String,
+
+        #[arg(long)]
+        workflow: Option<String>,
+
+        #[arg(long)]
+        workspace: Option<String>,
+
+        #[arg(long)]
+        root_path: Option<String>,
+
+        #[arg(long = "qa-target")]
+        qa_target: Vec<String>,
+
+        #[arg(long, default_value = "docs/ticket")]
+        ticket_dir: String,
+
+        #[arg(short, long)]
+        force: bool,
+    },
+
+    /// Reset one QA project data/resources without deleting the sqlite database
+    Reset {
+        #[arg(value_name = "PROJECT_ID")]
+        project_id: String,
+
+        /// Keep project config and only clean task/runtime rows
+        #[arg(long)]
+        keep_config: bool,
+
+        #[arg(short, long)]
+        force: bool,
     },
 }
 
@@ -435,6 +584,107 @@ mod tests {
     }
 
     #[test]
+    fn parse_workspace_create_command() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "workspace",
+            "create",
+            "new-ws",
+            "--root-path",
+            "workspace/new",
+            "--qa-target",
+            "docs/qa",
+            "--label",
+            "env=dev",
+            "--dry-run",
+            "-o",
+            "json",
+        ]);
+
+        match cli.command {
+            Commands::Workspace(WorkspaceCommands::Create {
+                name,
+                root_path,
+                qa_target,
+                labels,
+                dry_run,
+                output,
+                ..
+            }) => {
+                assert_eq!(name, "new-ws");
+                assert_eq!(root_path, "workspace/new");
+                assert_eq!(qa_target, vec!["docs/qa"]);
+                assert_eq!(labels, vec!["env=dev"]);
+                assert!(dry_run);
+                assert_eq!(output, OutputFormat::Json);
+            }
+            _ => panic!("expected workspace create command"),
+        }
+    }
+
+    #[test]
+    fn parse_agent_create_command() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "agent",
+            "create",
+            "qa-agent",
+            "--template-qa",
+            "echo qa",
+            "--capability",
+            "qa",
+        ]);
+
+        match cli.command {
+            Commands::Agent(AgentCommands::Create {
+                name,
+                template_qa,
+                capability,
+                ..
+            }) => {
+                assert_eq!(name, "qa-agent");
+                assert_eq!(template_qa, Some("echo qa".to_string()));
+                assert_eq!(capability, vec!["qa"]);
+            }
+            _ => panic!("expected agent create command"),
+        }
+    }
+
+    #[test]
+    fn parse_workflow_create_command() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "workflow",
+            "create",
+            "qa-flow",
+            "--step",
+            "qa",
+            "--step",
+            "fix",
+            "--loop-mode",
+            "infinite",
+            "--max-cycles",
+            "5",
+        ]);
+
+        match cli.command {
+            Commands::Workflow(WorkflowCommands::Create {
+                name,
+                step,
+                loop_mode,
+                max_cycles,
+                ..
+            }) => {
+                assert_eq!(name, "qa-flow");
+                assert_eq!(step, vec!["qa", "fix"]);
+                assert_eq!(loop_mode, "infinite");
+                assert_eq!(max_cycles, Some(5));
+            }
+            _ => panic!("expected workflow create command"),
+        }
+    }
+
+    #[test]
     fn parse_init_command() {
         let cli = Cli::parse_from(["orchestrator", "init"]);
 
@@ -465,9 +715,14 @@ mod tests {
         let cli = Cli::parse_from(["orchestrator", "get", "workspace/default"]);
 
         match cli.command {
-            Commands::Get { resource, output } => {
+            Commands::Get {
+                resource,
+                output,
+                selector,
+            } => {
                 assert_eq!(resource, "workspace/default");
                 assert_eq!(output, OutputFormat::Table);
+                assert_eq!(selector, None);
             }
             _ => panic!("expected get command"),
         }
@@ -478,9 +733,32 @@ mod tests {
         let cli = Cli::parse_from(["orchestrator", "get", "agent/echo", "-o", "yaml"]);
 
         match cli.command {
-            Commands::Get { resource, output } => {
+            Commands::Get {
+                resource,
+                output,
+                selector,
+            } => {
                 assert_eq!(resource, "agent/echo");
                 assert_eq!(output, OutputFormat::Yaml);
+                assert_eq!(selector, None);
+            }
+            _ => panic!("expected get command"),
+        }
+    }
+
+    #[test]
+    fn parse_get_list_with_selector() {
+        let cli = Cli::parse_from(["orchestrator", "get", "workspaces", "-l", "env=prod"]);
+
+        match cli.command {
+            Commands::Get {
+                resource,
+                output,
+                selector,
+            } => {
+                assert_eq!(resource, "workspaces");
+                assert_eq!(output, OutputFormat::Table);
+                assert_eq!(selector, Some("env=prod".to_string()));
             }
             _ => panic!("expected get command"),
         }
@@ -599,6 +877,76 @@ mod tests {
         match cli.command {
             Commands::Completion(CompletionCommands::Bash) => {}
             _ => panic!("expected completion bash command"),
+        }
+    }
+
+    #[test]
+    fn parse_qa_project_create_command() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "qa",
+            "project",
+            "create",
+            "qa-run-1",
+            "--workspace",
+            "ws-a",
+            "--workflow",
+            "qa_only",
+            "--force",
+        ]);
+
+        match cli.command {
+            Commands::Qa(QaCommands::Project(QaProjectCommands::Create {
+                project_id,
+                workspace,
+                workflow,
+                force,
+                ..
+            })) => {
+                assert_eq!(project_id, "qa-run-1");
+                assert_eq!(workspace, Some("ws-a".to_string()));
+                assert_eq!(workflow, Some("qa_only".to_string()));
+                assert!(force);
+            }
+            _ => panic!("expected qa project create command"),
+        }
+    }
+
+    #[test]
+    fn parse_qa_project_reset_command() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "qa",
+            "project",
+            "reset",
+            "qa-run-1",
+            "--keep-config",
+            "--force",
+        ]);
+
+        match cli.command {
+            Commands::Qa(QaCommands::Project(QaProjectCommands::Reset {
+                project_id,
+                keep_config,
+                force,
+            })) => {
+                assert_eq!(project_id, "qa-run-1");
+                assert!(keep_config);
+                assert!(force);
+            }
+            _ => panic!("expected qa project reset command"),
+        }
+    }
+
+    #[test]
+    fn parse_qa_doctor_command() {
+        let cli = Cli::parse_from(["orchestrator", "qa", "doctor", "-o", "json"]);
+
+        match cli.command {
+            Commands::Qa(QaCommands::Doctor { output }) => {
+                assert_eq!(output, OutputFormat::Json);
+            }
+            _ => panic!("expected qa doctor command"),
         }
     }
 
@@ -813,26 +1161,6 @@ mod tests {
                 assert_eq!(config_file, "/path/to/config.yaml");
             }
             _ => panic!("expected config validate command"),
-        }
-    }
-
-    #[test]
-    fn parse_config_bootstrap_command() {
-        let cli = Cli::parse_from([
-            "orchestrator",
-            "config",
-            "bootstrap",
-            "--from",
-            "/tmp/config.yaml",
-            "--force",
-        ]);
-
-        match cli.command {
-            Commands::Config(ConfigCommands::Bootstrap { from_file, force }) => {
-                assert_eq!(from_file, "/tmp/config.yaml");
-                assert!(force);
-            }
-            _ => panic!("expected config bootstrap command"),
         }
     }
 

@@ -1,7 +1,7 @@
 use agent_orchestrator::cli_types::ResourceKind;
 use agent_orchestrator::resource::{
-    delete_resource_by_kind, dispatch_resource, kind_as_str, parse_resources_from_yaml, ApplyResult,
-    Resource,
+    delete_resource_by_kind, dispatch_resource, kind_as_str, parse_resources_from_yaml,
+    ApplyResult, Resource,
 };
 
 fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
@@ -79,6 +79,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
             );
             workflows
         },
+        resource_meta: ResourceMetadataStore::default(),
     }
 }
 
@@ -239,7 +240,10 @@ spec:
     let registered = dispatch_resource(resources.into_iter().next().unwrap()).unwrap();
     let result = registered.validate();
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("at least one template"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("at least one template"));
 }
 
 #[test]
@@ -272,8 +276,8 @@ fn delete_removes_workspace_from_config() {
         },
     );
 
-    let deleted = delete_resource_by_kind(&mut config, "workspace", "to-delete")
-        .expect("should succeed");
+    let deleted =
+        delete_resource_by_kind(&mut config, "workspace", "to-delete").expect("should succeed");
     assert!(deleted);
     assert!(!config.workspaces.contains_key("to-delete"));
     assert!(config.workspaces.contains_key("default"));
@@ -282,8 +286,8 @@ fn delete_removes_workspace_from_config() {
 #[test]
 fn delete_returns_false_for_missing_resource() {
     let mut config = minimal_config();
-    let deleted = delete_resource_by_kind(&mut config, "workspace", "nonexistent")
-        .expect("should succeed");
+    let deleted =
+        delete_resource_by_kind(&mut config, "workspace", "nonexistent").expect("should succeed");
     assert!(!deleted);
 }
 
@@ -333,4 +337,41 @@ fn resource_to_yaml_roundtrip() {
     let re_parsed = parse_resources_from_yaml(&exported).unwrap();
     assert_eq!(re_parsed.len(), 1);
     assert_eq!(re_parsed[0].metadata.name, "roundtrip-ws");
+}
+
+#[test]
+fn apply_persists_labels_and_annotations_for_selector_usage() {
+    let mut config = minimal_config();
+    let yaml = r#"apiVersion: orchestrator.dev/v1
+kind: Workspace
+metadata:
+  name: labeled-ws
+  labels:
+    env: test
+  annotations:
+    owner: platform
+spec:
+  root_path: workspace/labeled
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+"#;
+
+    let resources = parse_resources_from_yaml(yaml).unwrap();
+    let registered = dispatch_resource(resources.into_iter().next().unwrap()).unwrap();
+    assert_eq!(registered.apply(&mut config), ApplyResult::Created);
+
+    let stored = config
+        .resource_meta
+        .workspaces
+        .get("labeled-ws")
+        .expect("metadata should be stored");
+    assert_eq!(
+        stored.labels.as_ref().and_then(|m| m.get("env")),
+        Some(&"test".to_string())
+    );
+    assert_eq!(
+        stored.annotations.as_ref().and_then(|m| m.get("owner")),
+        Some(&"platform".to_string())
+    );
 }

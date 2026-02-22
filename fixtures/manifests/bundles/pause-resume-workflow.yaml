@@ -1,0 +1,32 @@
+apiVersion: orchestrator.dev/v1
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - fixtures/qa
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v1
+kind: Agent
+metadata:
+  name: mock_sleep
+spec:
+  capabilities:
+    - qa
+  templates:
+    qa: "sleep 15 && echo 'qa-phase: {rel_path}'"
+    loop_guard: "echo 'continue'"
+---
+apiVersion: orchestrator.dev/v1
+kind: Workflow
+metadata:
+  name: qa_sleep
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: once

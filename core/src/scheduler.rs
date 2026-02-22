@@ -5,10 +5,7 @@ use crate::config::{
 use crate::config_load::{
     build_execution_plan, now_ts, read_active_config, resolve_workspace_path,
 };
-use crate::db::open_conn;
-use crate::dto::{
-    CommandRunDto, EventDto, LogChunk, TaskDetail, TaskItemDto, TaskSummary,
-};
+use crate::dto::{LogChunk, TaskDetail, TaskSummary};
 use crate::events::insert_event;
 use crate::health::{
     increment_consecutive_errors, mark_agent_diseased, reset_consecutive_errors,
@@ -18,12 +15,12 @@ use crate::metrics::MetricsCollector;
 use crate::prehook::{emit_item_finalize_event, evaluate_step_prehook};
 use crate::selection::{select_agent_advanced, select_agent_by_preference};
 use crate::state::{InnerState, TASK_SEMAPHORE};
+use crate::task_repository::{NewCommandRun, SqliteTaskRepository, TaskRepository};
 use crate::ticket::{
     create_ticket_for_qa_failure, list_existing_tickets_for_item,
     scan_active_tickets_for_task_items,
 };
 use anyhow::{Context, Result};
-use rusqlite::{params, OptionalExtension};
 
 pub use crate::state::RunningTask;
 use serde_json::json;
@@ -49,68 +46,14 @@ pub async fn kill_current_child(runtime: &RunningTask) {
 }
 
 pub fn resolve_task_id(state: &InnerState, task_id: &str) -> Result<String> {
-    let conn = open_conn(&state.db_path)?;
-    let mut stmt = conn.prepare("SELECT id FROM tasks WHERE id = ?1")?;
-    let exact_match: Option<String> = stmt
-        .query_row(params![task_id], |row| row.get(0))
-        .optional()?;
-
-    if let Some(id) = exact_match {
-        return Ok(id);
-    }
-
-    let pattern = format!("{}%", task_id);
-    let mut stmt = conn.prepare("SELECT id FROM tasks WHERE id LIKE ?1")?;
-    let matches: Vec<String> = stmt
-        .query_map(params![pattern], |row| row.get(0))?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-
-    match matches.len() {
-        1 => Ok(matches.into_iter().next().unwrap()),
-        0 => anyhow::bail!("task not found: {}", task_id),
-        _ => anyhow::bail!("multiple tasks match prefix '{}': {:?}", task_id, matches),
-    }
+    SqliteTaskRepository::new(state.db_path.clone()).resolve_task_id(task_id)
 }
 
 pub fn load_task_summary(state: &InnerState, task_id: &str) -> Result<TaskSummary> {
     let resolved_id = resolve_task_id(state, task_id)?;
-    let conn = open_conn(&state.db_path)?;
-    let mut stmt = conn.prepare(
-        "SELECT id, name, status, started_at, completed_at, goal, target_files_json, project_id, workspace_id, workflow_id, created_at, updated_at FROM tasks WHERE id = ?1",
-    )?;
-    let mut summary = stmt.query_row(params![resolved_id], |row| {
-        let target_raw: String = row.get(6)?;
-        let target_files = serde_json::from_str::<Vec<String>>(&target_raw).unwrap_or_default();
-        Ok(TaskSummary {
-            id: row.get(0)?,
-            name: row.get(1)?,
-            status: row.get(2)?,
-            started_at: row.get(3)?,
-            completed_at: row.get(4)?,
-            goal: row.get(5)?,
-            project_id: row.get(7)?,
-            workspace_id: row.get(8)?,
-            workflow_id: row.get(9)?,
-            target_files,
-            total_items: 0,
-            finished_items: 0,
-            failed_items: 0,
-            created_at: row.get(9)?,
-            updated_at: row.get(10)?,
-        })
-    })?;
-
-    let (total, finished, failed): (i64, i64, i64) = conn.query_row(
-        "SELECT COUNT(*), SUM(CASE WHEN status IN ('qa_passed','fixed','verified','skipped','unresolved') THEN 1 ELSE 0 END), SUM(CASE WHEN status IN ('qa_failed','unresolved') THEN 1 ELSE 0 END) FROM task_items WHERE task_id = ?1",
-        params![resolved_id],
-        |row| {
-            Ok((
-                row.get(0)?,
-                row.get::<_, Option<i64>>(1)?.unwrap_or(0),
-                row.get::<_, Option<i64>>(2)?.unwrap_or(0),
-            ))
-        },
-    )?;
+    let repo = SqliteTaskRepository::new(state.db_path.clone());
+    let mut summary = repo.load_task_summary(&resolved_id)?;
+    let (total, finished, failed) = repo.load_task_item_counts(&resolved_id)?;
 
     summary.total_items = total;
     summary.finished_items = finished;
@@ -119,11 +62,8 @@ pub fn load_task_summary(state: &InnerState, task_id: &str) -> Result<TaskSummar
 }
 
 pub fn list_tasks_impl(state: &InnerState) -> Result<Vec<TaskSummary>> {
-    let conn = open_conn(&state.db_path)?;
-    let mut stmt = conn.prepare("SELECT id FROM tasks ORDER BY created_at DESC")?;
-    let ids = stmt
-        .query_map([], |row| row.get::<_, String>(0))?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let repo = SqliteTaskRepository::new(state.db_path.clone());
+    let ids = repo.list_task_ids_ordered_by_created_desc()?;
 
     let mut result = Vec::new();
     for id in ids {
@@ -134,78 +74,8 @@ pub fn list_tasks_impl(state: &InnerState) -> Result<Vec<TaskSummary>> {
 
 pub fn get_task_details_impl(state: &InnerState, task_id: &str) -> Result<TaskDetail> {
     let task = load_task_summary(state, task_id)?;
-    let conn = open_conn(&state.db_path)?;
-    let resolved_id = &task.id;
-
-    let mut items_stmt = conn.prepare(
-        "SELECT id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, updated_at FROM task_items WHERE task_id = ?1 ORDER BY order_no",
-    )?;
-    let items = items_stmt
-        .query_map(params![resolved_id], |row| {
-            let ticket_files_raw: String = row.get(5)?;
-            let ticket_content_raw: String = row.get(6)?;
-            Ok(TaskItemDto {
-                id: row.get(0)?,
-                task_id: row.get(1)?,
-                order_no: row.get(2)?,
-                qa_file_path: row.get(3)?,
-                status: row.get(4)?,
-                ticket_files: serde_json::from_str(&ticket_files_raw).unwrap_or_default(),
-                ticket_content: serde_json::from_str(&ticket_content_raw).unwrap_or_default(),
-                fix_required: row.get::<_, i64>(7)? == 1,
-                fixed: row.get::<_, i64>(8)? == 1,
-                last_error: row.get(9)?,
-                started_at: row.get(10)?,
-                completed_at: row.get(11)?,
-                updated_at: row.get(12)?,
-            })
-        })?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-
-    let mut runs_stmt = conn.prepare(
-        "SELECT cr.id, cr.task_item_id, cr.phase, cr.command, cr.cwd, cr.workspace_id, cr.agent_id, cr.exit_code, cr.stdout_path, cr.stderr_path, cr.started_at, cr.ended_at, cr.interrupted
-         FROM command_runs cr
-         JOIN task_items ti ON ti.id = cr.task_item_id
-         WHERE ti.task_id = ?1
-         ORDER BY cr.started_at DESC
-         LIMIT 120",
-    )?;
-    let runs = runs_stmt
-        .query_map(params![resolved_id], |row| {
-            Ok(CommandRunDto {
-                id: row.get(0)?,
-                task_item_id: row.get(1)?,
-                phase: row.get(2)?,
-                command: row.get(3)?,
-                cwd: row.get(4)?,
-                workspace_id: row.get(5)?,
-                agent_id: row.get(6)?,
-                exit_code: row.get(7)?,
-                stdout_path: row.get(8)?,
-                stderr_path: row.get(9)?,
-                started_at: row.get(10)?,
-                ended_at: row.get(11)?,
-                interrupted: row.get::<_, i64>(12)? == 1,
-            })
-        })?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-
-    let mut events_stmt = conn.prepare(
-        "SELECT id, task_id, task_item_id, event_type, payload_json, created_at FROM events WHERE task_id = ?1 ORDER BY id DESC LIMIT 200",
-    )?;
-    let events = events_stmt
-        .query_map(params![resolved_id], |row| {
-            let payload_raw: String = row.get(4)?;
-            Ok(EventDto {
-                id: row.get(0)?,
-                task_id: row.get(1)?,
-                task_item_id: row.get(2)?,
-                event_type: row.get(3)?,
-                payload: serde_json::from_str(&payload_raw).unwrap_or_else(|_| json!({})),
-                created_at: row.get(5)?,
-            })
-        })?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let repo = SqliteTaskRepository::new(state.db_path.clone());
+    let (items, runs, events) = repo.load_task_detail_rows(&task.id)?;
 
     Ok(TaskDetail {
         task,
@@ -217,53 +87,8 @@ pub fn get_task_details_impl(state: &InnerState, task_id: &str) -> Result<TaskDe
 
 pub fn delete_task_impl(state: &InnerState, task_id: &str) -> Result<()> {
     let resolved_id = resolve_task_id(state, task_id)?;
-    let conn = open_conn(&state.db_path)?;
-
-    let exists = conn
-        .query_row(
-            "SELECT 1 FROM tasks WHERE id = ?1",
-            params![resolved_id],
-            |row| row.get::<_, i64>(0),
-        )
-        .optional()?;
-    if exists.is_none() {
-        anyhow::bail!("task not found: {}", task_id);
-    }
-
-    let mut log_paths = HashSet::new();
-    let mut runs_stmt = conn.prepare(
-        "SELECT cr.stdout_path, cr.stderr_path
-         FROM command_runs cr
-         JOIN task_items ti ON ti.id = cr.task_item_id
-         WHERE ti.task_id = ?1",
-    )?;
-    for row in runs_stmt.query_map(params![resolved_id], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    })? {
-        let (stdout_path, stderr_path) = row?;
-        if !stdout_path.trim().is_empty() {
-            log_paths.insert(stdout_path);
-        }
-        if !stderr_path.trim().is_empty() {
-            log_paths.insert(stderr_path);
-        }
-    }
-
-    let tx = conn.unchecked_transaction()?;
-    tx.execute(
-        "DELETE FROM events WHERE task_id = ?1",
-        params![resolved_id],
-    )?;
-    tx.execute(
-        "DELETE FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = ?1)",
-        params![resolved_id],
-    )?;
-    tx.execute(
-        "DELETE FROM task_items WHERE task_id = ?1",
-        params![resolved_id],
-    )?;
-    tx.execute("DELETE FROM tasks WHERE id = ?1", params![resolved_id])?;
-    tx.commit()?;
+    let repo = SqliteTaskRepository::new(state.db_path.clone());
+    let log_paths = repo.delete_task_and_collect_log_paths(&resolved_id)?;
 
     for path in log_paths {
         let _ = std::fs::remove_file(path);
@@ -275,35 +100,37 @@ pub fn delete_task_impl(state: &InnerState, task_id: &str) -> Result<()> {
 pub fn stream_task_logs_impl(
     state: &InnerState,
     task_id: &str,
-    line_limit: usize,
+    tail_count: usize,
+    show_timestamps: bool,
 ) -> Result<Vec<LogChunk>> {
+    const PER_FILE_LINE_LIMIT: usize = 150;
+
     let resolved_id = resolve_task_id(state, task_id)?;
-    let conn = open_conn(&state.db_path)?;
-    let mut stmt = conn.prepare(
-        "SELECT cr.id, cr.phase, cr.stdout_path, cr.stderr_path
-         FROM command_runs cr
-         JOIN task_items ti ON ti.id = cr.task_item_id
-         WHERE ti.task_id = ?1
-         ORDER BY cr.started_at DESC
-         LIMIT 14",
-    )?;
+    let repo = SqliteTaskRepository::new(state.db_path.clone());
+    let runs = repo.list_task_log_runs(&resolved_id, 14)?;
 
     let mut chunks = Vec::new();
-    for row in stmt.query_map(params![resolved_id], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, String>(2)?,
-            row.get::<_, String>(3)?,
-        ))
-    })? {
-        let (run_id, phase, stdout_path, stderr_path) = row?;
-        let stdout_tail = tail_lines(Path::new(&stdout_path), line_limit / 2).unwrap_or_default();
-        let stderr_tail = tail_lines(Path::new(&stderr_path), line_limit / 2).unwrap_or_default();
+    for row in runs {
+        let run_id = row.run_id;
+        let phase = row.phase;
+        let stdout_path = row.stdout_path;
+        let stderr_path = row.stderr_path;
+        let started_at = row.started_at;
+        let stdout_tail = tail_lines(Path::new(&stdout_path), PER_FILE_LINE_LIMIT)
+            .with_context(|| format!("read stdout tail for run_id={run_id} path={stdout_path}"))?;
+        let stderr_tail = tail_lines(Path::new(&stderr_path), PER_FILE_LINE_LIMIT)
+            .with_context(|| format!("read stderr tail for run_id={run_id} path={stderr_path}"))?;
+
+        let header = if show_timestamps {
+            let ts = started_at.as_deref().unwrap_or("unknown");
+            format!("[{}][{}][{}]", ts, run_id, phase)
+        } else {
+            format!("[{}][{}]", run_id, phase)
+        };
+
         let content = format!(
-            "[{}][{}]\n{}\n{}",
-            run_id,
-            phase,
+            "{}\n{}{}",
+            header,
             stdout_tail,
             if stderr_tail.is_empty() {
                 String::new()
@@ -317,14 +144,21 @@ pub fn stream_task_logs_impl(
             content,
             stdout_path,
             stderr_path,
+            started_at,
         });
     }
     chunks.reverse();
+
+    if tail_count < chunks.len() {
+        chunks = chunks.split_off(chunks.len() - tail_count);
+    }
+
     Ok(chunks)
 }
 
 fn tail_lines(path: &Path, limit: usize) -> Result<String> {
-    let content = std::fs::read_to_string(path).unwrap_or_default();
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read log file: {}", path.display()))?;
     let lines: Vec<&str> = content.lines().collect();
     let start = lines.len().saturating_sub(limit);
     Ok(lines[start..].join("\n"))
@@ -336,49 +170,11 @@ pub fn set_task_status(
     status: &str,
     set_completed: bool,
 ) -> Result<()> {
-    let conn = open_conn(&state.db_path)?;
-    let now = now_ts();
-    if set_completed {
-        conn.execute(
-            "UPDATE tasks SET status = ?2, completed_at = ?3, updated_at = ?4 WHERE id = ?1",
-            params![task_id, status, now.clone(), now],
-        )?;
-    } else if matches!(status, "pending" | "running" | "paused" | "interrupted") {
-        conn.execute(
-            "UPDATE tasks SET status = ?2, completed_at = NULL, updated_at = ?3 WHERE id = ?1",
-            params![task_id, status, now],
-        )?;
-    } else {
-        conn.execute(
-            "UPDATE tasks SET status = ?2, updated_at = ?3 WHERE id = ?1",
-            params![task_id, status, now],
-        )?;
-    }
-    Ok(())
+    SqliteTaskRepository::new(state.db_path.clone()).set_task_status(task_id, status, set_completed)
 }
 
 pub fn prepare_task_for_start(state: &InnerState, task_id: &str) -> Result<()> {
-    let conn = open_conn(&state.db_path)?;
-    let status: Option<String> = conn
-        .query_row(
-            "SELECT status FROM tasks WHERE id = ?1",
-            params![task_id],
-            |row| row.get(0),
-        )
-        .optional()?;
-
-    if status.is_none() {
-        anyhow::bail!("task not found: {}", task_id);
-    }
-
-    if matches!(status.as_deref(), Some("failed")) {
-        conn.execute(
-            "UPDATE task_items SET status='pending', ticket_files_json='[]', ticket_content_json='[]', fix_required=0, fixed=0, last_error='', completed_at=NULL, updated_at=?2 WHERE task_id=?1 AND status='unresolved'",
-            params![task_id, now_ts()],
-        )?;
-    }
-
-    set_task_status(state, task_id, "running", false)?;
+    SqliteTaskRepository::new(state.db_path.clone()).prepare_task_for_start_batch(task_id)?;
     insert_event(
         state,
         task_id,
@@ -389,10 +185,7 @@ pub fn prepare_task_for_start(state: &InnerState, task_id: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn spawn_task_runner(
-    state: Arc<InnerState>,
-    task_id: String,
-) -> Result<()> {
+pub async fn spawn_task_runner(state: Arc<InnerState>, task_id: String) -> Result<()> {
     {
         let mut running = state.running.lock().await;
         if running.contains_key(&task_id) {
@@ -516,48 +309,19 @@ pub fn find_latest_resumable_task_id(
     state: &InnerState,
     include_pending: bool,
 ) -> Result<Option<String>> {
-    let conn = open_conn(&state.db_path)?;
-    let mut stmt = conn.prepare("SELECT id, status FROM tasks ORDER BY updated_at DESC")?;
-    let rows = stmt.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    })?;
-
-    for row in rows {
-        let (id, status) = row?;
-        let resumable = matches!(status.as_str(), "running" | "interrupted" | "paused")
-            || (include_pending && status == "pending");
-        if resumable {
-            return Ok(Some(id));
-        }
-    }
-    Ok(None)
+    SqliteTaskRepository::new(state.db_path.clone()).find_latest_resumable_task_id(include_pending)
 }
 
 pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<TaskRuntimeContext> {
-    let conn = open_conn(&state.db_path)?;
-    let (
-        workspace_id,
-        workflow_id,
-        workspace_root_raw,
-        ticket_dir,
-        execution_plan_json,
-        current_cycle,
-        init_done,
-    ): (String, String, String, String, String, i64, i64) = conn.query_row(
-        "SELECT workspace_id, workflow_id, workspace_root, ticket_dir, execution_plan_json, current_cycle, init_done FROM tasks WHERE id = ?1",
-        params![task_id],
-        |row| {
-            Ok((
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-                row.get(4)?,
-                row.get(5)?,
-                row.get(6)?,
-            ))
-        },
-    )?;
+    let repo = SqliteTaskRepository::new(state.db_path.clone());
+    let runtime_row = repo.load_task_runtime_row(task_id)?;
+    let workspace_id = runtime_row.workspace_id;
+    let workflow_id = runtime_row.workflow_id;
+    let workspace_root_raw = runtime_row.workspace_root_raw;
+    let ticket_dir = runtime_row.ticket_dir;
+    let execution_plan_json = runtime_row.execution_plan_json;
+    let current_cycle = runtime_row.current_cycle;
+    let init_done = runtime_row.init_done;
 
     let active = read_active_config(state)?;
     let workflow = active
@@ -661,6 +425,10 @@ pub async fn run_task_loop(
     }
 
     'cycle: loop {
+        if is_task_paused_in_db(&state, task_id)? {
+            return Ok(());
+        }
+
         if runtime.stop_flag.load(Ordering::SeqCst) {
             set_task_status(&state, task_id, "paused", false)?;
             insert_event(
@@ -703,7 +471,7 @@ pub async fn run_task_loop(
                 &runtime,
             )
             .await?;
-            if runtime.stop_flag.load(Ordering::SeqCst) {
+            if runtime.stop_flag.load(Ordering::SeqCst) || is_task_paused_in_db(&state, task_id)? {
                 continue 'cycle;
             }
         }
@@ -717,7 +485,8 @@ pub async fn run_task_loop(
                 continue;
             }
 
-            let guard_result = execute_guard_step(&state, task_id, step, &task_ctx, &runtime).await?;
+            let guard_result =
+                execute_guard_step(&state, task_id, step, &task_ctx, &runtime).await?;
 
             if guard_result.should_stop {
                 insert_event(
@@ -737,6 +506,9 @@ pub async fn run_task_loop(
                     "workflow_terminated",
                     json!({"guard_step": step.id}),
                 );
+                set_task_status(&state, task_id, "completed", true)?;
+                insert_event(&state, task_id, None, "task_completed", json!({}))?;
+                state.emit_event(task_id, None, "task_completed", json!({}));
                 return Ok(());
             }
         }
@@ -799,6 +571,10 @@ pub async fn run_task_loop(
 
     let unresolved = count_unresolved_items(&state, task_id)?;
 
+    if is_task_paused_in_db(&state, task_id)? {
+        return Ok(());
+    }
+
     if unresolved > 0 {
         set_task_status(&state, task_id, "failed", true)?;
         insert_event(
@@ -808,7 +584,12 @@ pub async fn run_task_loop(
             "task_failed",
             json!({"unresolved_items": unresolved}),
         )?;
-        state.emit_event(task_id, None, "task_failed", json!({"unresolved_items": unresolved}));
+        state.emit_event(
+            task_id,
+            None,
+            "task_failed",
+            json!({"unresolved_items": unresolved}),
+        );
     } else {
         set_task_status(&state, task_id, "completed", true)?;
         insert_event(&state, task_id, None, "task_completed", json!({}))?;
@@ -840,49 +621,18 @@ pub fn evaluate_loop_guard_rules(
 }
 
 pub fn first_task_item_id(state: &InnerState, task_id: &str) -> Result<Option<String>> {
-    let conn = open_conn(&state.db_path)?;
-    conn.query_row(
-        "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
-        params![task_id],
-        |row| row.get(0),
-    )
-    .optional()
-    .context("query first task item")
+    SqliteTaskRepository::new(state.db_path.clone()).first_task_item_id(task_id)
 }
 
 pub fn count_unresolved_items(state: &InnerState, task_id: &str) -> Result<i64> {
-    let conn = open_conn(&state.db_path)?;
-    conn.query_row(
-        "SELECT COUNT(*) FROM task_items WHERE task_id = ?1 AND status IN ('unresolved','qa_failed')",
-        params![task_id],
-        |row| row.get(0),
-    )
-    .context("count unresolved items")
+    SqliteTaskRepository::new(state.db_path.clone()).count_unresolved_items(task_id)
 }
 
 pub fn list_task_items_for_cycle(
     state: &InnerState,
     task_id: &str,
 ) -> Result<Vec<crate::dto::TaskItemRow>> {
-    let conn = open_conn(&state.db_path)?;
-    let mut stmt = conn.prepare(
-        "SELECT id, qa_file_path
-         FROM task_items
-         WHERE task_id = ?1
-         ORDER BY order_no
-        ",
-    )?;
-
-    let rows = stmt
-        .query_map(params![task_id], |row| {
-            Ok(crate::dto::TaskItemRow {
-                id: row.get(0)?,
-                qa_file_path: row.get(1)?,
-            })
-        })
-        .context("query task items")?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-    Ok(rows)
+    SqliteTaskRepository::new(state.db_path.clone()).list_task_items_for_cycle(task_id)
 }
 
 pub fn update_task_cycle_state(
@@ -891,17 +641,16 @@ pub fn update_task_cycle_state(
     current_cycle: u32,
     init_done: bool,
 ) -> Result<()> {
-    let conn = open_conn(&state.db_path)?;
-    conn.execute(
-        "UPDATE tasks SET current_cycle = ?2, init_done = ?3, updated_at = ?4 WHERE id = ?1",
-        params![
-            task_id,
-            current_cycle as i64,
-            if init_done { 1 } else { 0 },
-            now_ts()
-        ],
-    )?;
-    Ok(())
+    SqliteTaskRepository::new(state.db_path.clone()).update_task_cycle_state(
+        task_id,
+        current_cycle,
+        init_done,
+    )
+}
+
+fn is_task_paused_in_db(state: &InnerState, task_id: &str) -> Result<bool> {
+    let status = SqliteTaskRepository::new(state.db_path.clone()).load_task_status(task_id)?;
+    Ok(matches!(status.as_deref(), Some("paused")))
 }
 
 pub async fn run_phase(
@@ -918,7 +667,6 @@ pub async fn run_phase(
     let now = now_ts();
     let run_id = Uuid::new_v4().to_string();
     let logs_dir = state.logs_dir.join(task_id);
-    std::fs::create_dir_all(&logs_dir).ok();
     let stdout_path = logs_dir.join(format!("{}_{}.stdout", phase, run_id));
     let stderr_path = logs_dir.join(format!("{}_{}.stderr", phase, run_id));
 
@@ -927,10 +675,32 @@ pub async fn run_phase(
         active.config.runner.clone()
     };
 
-    let stdout_file = std::fs::File::create(&stdout_path)
-        .with_context(|| format!("failed to create stdout log: {}", stdout_path.display()))?;
-    let stderr_file = std::fs::File::create(&stderr_path)
-        .with_context(|| format!("failed to create stderr log: {}", stderr_path.display()))?;
+    let logs_dir_for_create = logs_dir.clone();
+    let stdout_path_for_create = stdout_path.clone();
+    let stderr_path_for_create = stderr_path.clone();
+    let (stdout_file, stderr_file) = tokio::task::spawn_blocking(move || -> Result<_> {
+        std::fs::create_dir_all(&logs_dir_for_create).with_context(|| {
+            format!(
+                "failed to create logs dir: {}",
+                logs_dir_for_create.display()
+            )
+        })?;
+        let stdout_file = std::fs::File::create(&stdout_path_for_create).with_context(|| {
+            format!(
+                "failed to create stdout log: {}",
+                stdout_path_for_create.display()
+            )
+        })?;
+        let stderr_file = std::fs::File::create(&stderr_path_for_create).with_context(|| {
+            format!(
+                "failed to create stderr log: {}",
+                stderr_path_for_create.display()
+            )
+        })?;
+        Ok((stdout_file, stderr_file))
+    })
+    .await
+    .context("log file setup worker failed")??;
 
     let child = tokio::process::Command::new(&runner.shell)
         .arg(&runner.shell_arg)
@@ -975,25 +745,25 @@ pub async fn run_phase(
 
     let success = exit_code == 0;
 
-    let conn = open_conn(&state.db_path)?;
-    conn.execute(
-        "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, workspace_id, agent_id, exit_code, stdout_path, stderr_path, started_at, ended_at, interrupted) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-        params![
-            run_id,
-            item_id,
-            phase,
-            command,
-            workspace_root.to_string_lossy().to_string(),
-            workspace_id,
-            agent_id,
-            exit_code,
-            stdout_path.to_string_lossy().to_string(),
-            stderr_path.to_string_lossy().to_string(),
-            now,
-            now_ts(),
-            0
-        ],
-    )?;
+    let repo = SqliteTaskRepository::new(state.db_path.clone());
+    let insert_payload = NewCommandRun {
+        id: run_id.clone(),
+        task_item_id: item_id.to_string(),
+        phase: phase.to_string(),
+        command: command.clone(),
+        cwd: workspace_root.to_string_lossy().to_string(),
+        workspace_id: workspace_id.to_string(),
+        agent_id: agent_id.to_string(),
+        exit_code: exit_code as i64,
+        stdout_path: stdout_path.to_string_lossy().to_string(),
+        stderr_path: stderr_path.to_string_lossy().to_string(),
+        started_at: now,
+        ended_at: now_ts(),
+        interrupted: 0,
+    };
+    tokio::task::spawn_blocking(move || repo.insert_command_run(&insert_payload))
+        .await
+        .context("command run insert worker failed")??;
 
     update_capability_health(state, agent_id, Some(phase), success);
 
@@ -1043,11 +813,16 @@ pub async fn run_phase_with_rotation(
     cycle: u32,
     runtime: &RunningTask,
 ) -> Result<crate::dto::RunResult> {
+    let effective_capability = capability.or(match phase {
+        "qa" | "fix" | "retest" => Some(phase),
+        _ => None,
+    });
+
     let (agent_id, template) = {
         let active = read_active_config(state)?;
         let agents = active.config.agents.clone();
 
-        if let Some(cap) = capability {
+        if let Some(cap) = effective_capability {
             let health_map = state.agent_health.read().unwrap();
             let metrics_map = state.agent_metrics.read().unwrap();
             select_agent_advanced(cap, &agents, &health_map, &metrics_map, &HashSet::new())?
@@ -1157,7 +932,9 @@ pub async fn execute_guard_step(
     )
     .await?;
 
-    let output = std::fs::read_to_string(&result.stdout_path).unwrap_or_default();
+    let output = tokio::fs::read_to_string(&result.stdout_path)
+        .await
+        .with_context(|| format!("failed to read guard output: {}", result.stdout_path))?;
 
     let should_stop = output.trim().to_lowercase().starts_with("stop")
         || output.trim().to_lowercase().starts_with("false")
@@ -1253,7 +1030,9 @@ pub async fn process_item(
             qa_exit_code = Some(result.exit_code);
             qa_failed = result.exit_code != 0;
 
-            let stdout_content = std::fs::read_to_string(&result.stdout_path).unwrap_or_default();
+            let stdout_content = tokio::fs::read_to_string(&result.stdout_path)
+                .await
+                .with_context(|| format!("failed to read qa stdout: {}", result.stdout_path))?;
             let qa_artifacts = crate::collab::parse_artifacts_from_output(&stdout_content);
             if !qa_artifacts.is_empty() {
                 insert_event(
@@ -1313,16 +1092,8 @@ pub async fn process_item(
                 task_id,
                 item_id
             );
-            let task_name = open_conn(&state.db_path)
-                .ok()
-                .and_then(|conn| {
-                    conn.query_row(
-                        "SELECT name FROM tasks WHERE id = ?1",
-                        params![task_id],
-                        |row| row.get::<_, String>(0),
-                    )
-                    .ok()
-                })
+            let task_name = SqliteTaskRepository::new(state.db_path.clone())
+                .load_task_name(task_id)?
                 .unwrap_or_else(|| task_id.to_string());
             match create_ticket_for_qa_failure(
                 &task_ctx.workspace_root,
@@ -1431,7 +1202,11 @@ pub async fn process_item(
                     item_status = "fixed".to_string();
                 }
 
-                let fix_stdout = std::fs::read_to_string(&result.stdout_path).unwrap_or_default();
+                let fix_stdout = tokio::fs::read_to_string(&result.stdout_path)
+                    .await
+                    .with_context(|| {
+                        format!("failed to read fix stdout: {}", result.stdout_path)
+                    })?;
                 let fix_artifacts = crate::collab::parse_artifacts_from_output(&fix_stdout);
                 if !fix_artifacts.is_empty() {
                     insert_event(
@@ -1603,8 +1378,12 @@ pub async fn process_item(
         fix_confidence: None,
         fix_quality_score: None,
         total_artifacts: phase_artifacts.len() as i64,
-        has_ticket_artifacts: phase_artifacts.iter().any(|a| matches!(a.kind, crate::collab::ArtifactKind::Ticket { .. })),
-        has_code_change_artifacts: phase_artifacts.iter().any(|a| matches!(a.kind, crate::collab::ArtifactKind::CodeChange { .. })),
+        has_ticket_artifacts: phase_artifacts
+            .iter()
+            .any(|a| matches!(a.kind, crate::collab::ArtifactKind::Ticket { .. })),
+        has_code_change_artifacts: phase_artifacts
+            .iter()
+            .any(|a| matches!(a.kind, crate::collab::ArtifactKind::CodeChange { .. })),
     };
 
     if let Some(outcome) = crate::prehook::resolve_workflow_finalize_outcome(
@@ -1615,11 +1394,51 @@ pub async fn process_item(
         emit_item_finalize_event(state, &finalize_context, &outcome)?;
     }
 
-    let conn = open_conn(&state.db_path)?;
-    conn.execute(
-        "UPDATE task_items SET status = ?2, updated_at = ?3 WHERE id = ?1",
-        params![item_id, item_status, now_ts()],
-    )?;
+    SqliteTaskRepository::new(state.db_path.clone())
+        .update_task_item_status(item_id, &item_status)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::open_conn;
+    use crate::dto::CreateTaskPayload;
+    use crate::task_ops::create_task_impl;
+    use crate::test_utils::TestState;
+    use rusqlite::params;
+
+    #[test]
+    fn load_task_summary_maps_created_and_updated_at_correctly() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/mapping_check.md");
+        std::fs::write(&qa_file, "# mapping check\n").expect("seed qa file");
+        let created = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("mapping-check".to_string()),
+                goal: Some("validate summary timestamps".to_string()),
+                ..Default::default()
+            },
+        )
+        .expect("task should be created");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (workflow_id, created_at, updated_at): (String, String, String) = conn
+            .query_row(
+                "SELECT workflow_id, created_at, updated_at FROM tasks WHERE id = ?1",
+                params![created.id.clone()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("task row should exist");
+
+        let summary = load_task_summary(&state, &created.id).expect("summary should load");
+        assert_eq!(summary.workflow_id, workflow_id);
+        assert_eq!(summary.created_at, created_at);
+        assert_eq!(summary.updated_at, updated_at);
+    }
 }

@@ -2,7 +2,7 @@
 
 **Module**: orchestrator  
 **Scope**: Canonical CLI contract for all QA documents  
-**Scenarios**: 3  
+**Scenarios**: 4  
 **Priority**: Critical
 
 ---
@@ -38,9 +38,12 @@ Entry point: `./scripts/orchestrator.sh <command>` (recommended) or `./core/targ
    - `describe`
    - `task`
    - `workspace`
+   - `agent`
+   - `workflow`
    - `config`
    - `edit`
    - `db`
+   - `qa`
    - `completion`
    - `debug`
 
@@ -55,34 +58,39 @@ Entry point: `./scripts/orchestrator.sh <command>` (recommended) or `./core/targ
 
 ### Preconditions
 
-- Database initialized and config bootstrapped from a YAML file that defines a `default` workspace.
+- Database initialized and config applied from a YAML file that defines a `default` workspace.
   The `init` command only creates the DB schema; it does **not** load config or create workspaces.
-  You must run `config bootstrap --from <file>` (or pass `--config <file>` at runtime) so that
+  You must run `apply -f <manifest.yaml>` so that
   the `default` workspace is present in SQLite before running any workspace/task commands.
 
 ### Steps
 
-1. Bootstrap environment (if not already done):
+1. Apply manifest environment (if not already done):
    ```bash
-   rm -f data/agent_orchestrator.db
    ./scripts/orchestrator.sh init
-   ./scripts/orchestrator.sh config bootstrap --from <config.yaml>
+   ./scripts/orchestrator.sh apply -f <config.yaml>
    ```
 
-2. Validate workspace info positional argument:
+2. (Recommended for isolated QA reruns) Reset only the scenario project:
+   ```bash
+   ./scripts/orchestrator.sh qa project reset <qa-project-id> --keep-config --force
+   ```
+
+3. Validate workspace info positional argument:
    ```bash
    ./scripts/orchestrator.sh workspace info default
    ```
 
-2. Validate output format flags:
+4. Validate output format flags:
    ```bash
    ./scripts/orchestrator.sh task list -o json
    ./scripts/orchestrator.sh task info {task_id} -o yaml
+   ./scripts/orchestrator.sh get workspaces -o yaml
    ```
 
-3. Validate task create does not depend on `--format`:
+5. Validate task create does not depend on `--format`:
    ```bash
-   ./scripts/orchestrator.sh task create --name "contract-check" --goal "check" --no-start
+   ./scripts/orchestrator.sh task create --project <qa-project-id> --name "contract-check" --goal "check" --no-start
    ```
 
 ### Expected Result
@@ -93,7 +101,48 @@ Entry point: `./scripts/orchestrator.sh <command>` (recommended) or `./core/targ
 
 ---
 
-## Scenario 3: Banned Patterns Guard
+## Scenario 3: kubectl-Style Surface Contract
+
+### Preconditions
+
+- Database initialized.
+
+### Steps
+
+1. Validate list-style get:
+   ```bash
+   ./scripts/orchestrator.sh get workspaces
+   ./scripts/orchestrator.sh get agents
+   ./scripts/orchestrator.sh get workflows
+   ```
+
+2. Validate label selector syntax:
+   ```bash
+   ./scripts/orchestrator.sh get workspaces -l env=dev
+   ```
+
+3. Validate stdin apply contract:
+   ```bash
+   cat fixtures/manifests/bundles/output-formats.yaml | ./scripts/orchestrator.sh apply -f -
+   ```
+
+4. Validate create command surfaces:
+   ```bash
+   ./scripts/orchestrator.sh workspace create --help
+   ./scripts/orchestrator.sh agent create --help
+   ./scripts/orchestrator.sh workflow create --help
+   ```
+
+### Expected Result
+
+- `get <resource-type>` syntax works.
+- `-l key=value[,k=v]` is accepted on list get commands.
+- `apply -f -` reads from stdin.
+- `workspace/agent/workflow create` subcommands are exposed.
+
+---
+
+## Scenario 4: Banned Patterns Guard
 
 ### Preconditions
 
@@ -111,6 +160,7 @@ Entry point: `./scripts/orchestrator.sh <command>` (recommended) or `./core/targ
    - `--workspace-id`
    - `orchestrator agent health`
    - `orchestrator/config/default.yaml`
+   - `config bootstrap --from`
 
 ### Expected Result
 
@@ -123,6 +173,7 @@ Entry point: `./scripts/orchestrator.sh <command>` (recommended) or `./core/targ
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Valid Top-Level Command Surface | ☐ | | | |
-| 2 | Parameter Contract Check | ☐ | | | |
-| 3 | Banned Patterns Guard | ☐ | | | |
+| 1 | Valid Top-Level Command Surface | ✅ | 2026-02-23 | opencode | |
+| 2 | Parameter Contract Check | ✅ | 2026-02-23 | opencode | |
+| 3 | kubectl-Style Surface Contract | ✅ | 2026-02-23 | opencode | |
+| 4 | Banned Patterns Guard | ✅ | 2026-02-23 | opencode | |

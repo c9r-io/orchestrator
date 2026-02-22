@@ -43,7 +43,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
        root_path: "."
        qa_targets:
          - docs/qa
-       ticket_dir: docs/ticket
+       ticket_dir: fixtures/ticket
    agents:
      test-agent:
        metadata:
@@ -109,7 +109,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
      default:
        root_path: /tmp
        qa_targets: []
-       ticket_dir: docs/ticket
+       ticket_dir: fixtures/ticket
    agents:
      test-agent:
        metadata:
@@ -174,7 +174,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
        root_path: /tmp
        qa_targets:
          - docs/qa
-       ticket_dir: docs/ticket
+       ticket_dir: fixtures/ticket
    agents:
      test-agent:
        metadata:
@@ -235,7 +235,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
        root_path: /tmp
        qa_targets:
          - docs/qa
-       ticket_dir: docs/ticket
+       ticket_dir: fixtures/ticket
    agents:
      fix-only:
        metadata:

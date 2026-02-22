@@ -1,0 +1,43 @@
+apiVersion: orchestrator.dev/v1
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa/orchestrator
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v1
+kind: Agent
+metadata:
+  name: mock_echo
+spec:
+  capabilities:
+    - qa
+  templates:
+    qa: "echo 'echo-qa: {rel_path}'"
+    loop_guard: "echo 'continue'"
+---
+apiVersion: orchestrator.dev/v1
+kind: Agent
+metadata:
+  name: mock_fail
+spec:
+  capabilities:
+    - qa
+  templates:
+    qa: "echo 'QA failed' && exit 1"
+---
+apiVersion: orchestrator.dev/v1
+kind: Workflow
+metadata:
+  name: health_test
+spec:
+  steps:
+    - id: run_qa
+      type: qa
+      enabled: true
+  loop:
+    mode: infinite
+    max_cycles: 3

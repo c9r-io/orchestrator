@@ -13,6 +13,15 @@ This document is split from `05-workflow-execution.md` to keep each QA document 
 
 Entry point: `./scripts/orchestrator.sh task <command>`
 
+Project setup (run once):
+
+```bash
+QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
+```
+
 ---
 
 ## Scenario 1: Multiple Target Files
@@ -21,6 +30,7 @@ Entry point: `./scripts/orchestrator.sh task <command>`
 
 - Workspace and workflow are available.
 - Multiple target files exist in repository.
+- Project is prepared: `./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force`
 
 ### Steps
 
@@ -29,6 +39,7 @@ Entry point: `./scripts/orchestrator.sh task <command>`
    ./scripts/orchestrator.sh task create \
      --name "multi-file-test" \
      --goal "Test multiple files" \
+     --project "${QA_PROJECT}" \
      --target-file docs/qa/orchestrator/01-cli-agent-orchestration.md \
      --target-file docs/qa/orchestrator/02-cli-task-lifecycle.md \
      --no-start

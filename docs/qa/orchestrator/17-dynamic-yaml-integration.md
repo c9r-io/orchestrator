@@ -20,7 +20,7 @@ Entry point: `./scripts/orchestrator.sh config <command>`
 ### Preconditions
 
 - Orchestrator initialized: `./scripts/orchestrator.sh init --force`
-- Config bootstrapped: `./scripts/orchestrator.sh config bootstrap --from fixtures/output-formats.yaml --force` (or any valid config fixture)
+- Config applied: `./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/output-formats.yaml` (or any valid config fixture)
 
 ### Steps
 
@@ -56,4 +56,4 @@ Entry point: `./scripts/orchestrator.sh config <command>`
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | YAML Configuration Integration for Dynamic Fields | ☐ | | | |
+| 1 | YAML Configuration Integration for Dynamic Fields | ✅ | 2026-02-23 | opencode | PASS - exported YAML validates, dynamic_steps preserved |

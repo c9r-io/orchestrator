@@ -68,7 +68,7 @@ Entry point: `orchestrator edit <command>`
 
 ### Preconditions
 
-- Config must be bootstrapped first: `orchestrator config bootstrap --from fixtures/test-workflow-execution.yaml --force`
+- Config must be applied first: `orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml`
 - Workflow configured in configuration
 
 ### Steps

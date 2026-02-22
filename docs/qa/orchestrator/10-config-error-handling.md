@@ -1,7 +1,7 @@
-# Orchestrator - 配置缺失错误处理测试
+# Orchestrator - 配置缺失与 Manifest 错误处理
 
 **Module**: orchestrator
-**Scope**: 验证工具在配置缺失时的错误处理行为
+**Scope**: 验证 `init + apply -f` 路径下的配置缺失与错误处理
 **Scenarios**: 4
 **Priority**: High
 
@@ -9,44 +9,47 @@
 
 ## Background
 
-Orchestrator 运行时配置存储于 SQLite。初始化后若 SQLite 中尚无配置，CLI 会要求先执行 `config bootstrap --from <file>`。
-本测试验证“未初始化配置”“损坏配置”“空配置”等错误与边界场景。
+Orchestrator 运行时配置存储于 SQLite。`init` 只初始化目录和数据库，不会自动写入配置。
+配置必须通过 kubectl 风格命令 `apply -f <manifest.yaml>` 导入。
 
 Entry point: `./scripts/orchestrator.sh <command>`
 
 ---
 
-## Scenario 1: 无配置文件时启动 CLI
+## Scenario 1: 无配置时命令失败并给出修复建议
 
 ### Preconditions
 
-- 删除已有数据库（确保 sqlite 中没有已初始化配置）
+- sqlite 中无配置（空库）
 
 ### Goal
 
-验证在 sqlite 未初始化配置时，CLI 给出明确引导信息。
+验证未初始化配置时错误信息包含明确的 `apply -f` 指引。
 
 ### Steps
 
-1. 确保没有配置文件:
+1. 清理数据库：
    ```bash
-   rm -f data/agent_orchestrator.db
+   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
+   ./scripts/orchestrator.sh init
    ```
 
-2. 尝试运行任何 CLI 命令:
+2. 执行依赖配置的命令：
    ```bash
    ./scripts/orchestrator.sh task list
    ```
 
 ### Expected
 
-- 错误信息包含: `orchestrator config is not initialized in sqlite`
-- 错误信息包含: `run 'orchestrator config bootstrap --from <file>' first`
-- 工具正常退出 (非 panic)
+- 输出包含: `orchestrator config is not initialized in sqlite`
+- 输出包含: `run 'orchestrator apply -f <manifest.yaml>' first`
+- 命令非 0 退出，且无 panic
 
 ---
 
-## Scenario 2: 使用 init 初始化后仍需 bootstrap
+## Scenario 2: init 后必须 apply manifest
 
 ### Preconditions
 
@@ -54,149 +57,105 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 ### Goal
 
-验证 `init` 仅初始化目录和数据库，不会自动写入配置。
+验证 `init` 不会隐式创建工作区/工作流，必须显式 `apply -f`。
 
 ### Steps
 
-1. 初始化:
+1. 初始化并验证失败：
    ```bash
-   rm -f data/agent_orchestrator.db
+   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
    ./scripts/orchestrator.sh init
+   ./scripts/orchestrator.sh workspace list
    ```
 
-2. 验证初始化成功:
+2. 导入最小可运行 manifest：
    ```bash
-   ./scripts/orchestrator.sh task list
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/output-formats.yaml
    ```
 
-3. 使用最小配置 bootstrap:
+3. 再次验证：
    ```bash
-   cat > /tmp/bootstrap-minimal.yaml << 'EOF'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   resume:
-     auto: false
-   defaults:
-     workspace: default
-     workflow: basic
-   workspaces:
-     default:
-       root_path: .
-       qa_targets: [docs/qa]
-       ticket_dir: docs/ticket
-   agents:
-     echo:
-       capabilities: [qa]
-       templates:
-         qa: "echo qa"
-   workflows:
-     basic:
-       steps:
-         - id: qa
-           required_capability: qa
-           enabled: true
-       loop:
-         mode: once
-       finalize:
-         rules: []
-   EOF
-   ./scripts/orchestrator.sh config bootstrap --from /tmp/bootstrap-minimal.yaml
+   ./scripts/orchestrator.sh workspace list
    ./scripts/orchestrator.sh task list
    ```
 
 ### Expected
 
-- Step 1 输出: `Orchestrator initialized at ...`
-- Step 2 失败并提示需要先 bootstrap
-- Step 3 bootstrap 成功后，`task list` 可正常执行
+- Step 1 因配置缺失失败
+- Step 2 成功并输出资源 apply 结果与配置版本
+- Step 3 正常返回
 
 ---
 
-## Scenario 3: 配置文件为空时启动 CLI
+## Scenario 3: apply 非法 Manifest 失败
 
 ### Preconditions
 
-- 存在空的 `config/empty.yaml`:
-  ```yaml
-  runner:
-    shell: /bin/bash
-    shell_arg: -lc
-  resume:
-    auto: false
-  defaults:
-    project: ""
-    workspace: ""
-    workflow: ""
-  workspaces: {}
-  agents: {}
-  workflows: {}
-  ```
+- Orchestrator 已初始化
 
 ### Goal
 
-验证工具可以加载有效但为空的配置文件。
+验证 `apply` 对非法 manifest 提供清晰报错。
 
 ### Steps
 
-1. 创建空配置文件:
+1. 构造非法 manifest（错误 apiVersion）：
    ```bash
-   cat > /tmp/empty.yaml << 'EOF'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   resume:
-     auto: false
-   defaults:
-     project: ""
-     workspace: ""
-     workflow: ""
-   workspaces: {}
-   agents: {}
-   workflows: {}
-   EOF
+   cat > /tmp/invalid-manifest.yaml << 'EOF2'
+   apiVersion: wrong.version/v2
+   kind: Workspace
+   metadata:
+     name: bad
+   spec:
+     root_path: .
+     qa_targets:
+       - docs/qa
+     ticket_dir: fixtures/ticket
+   EOF2
    ```
 
-2. 使用空配置运行:
+2. 执行 apply：
    ```bash
-   ./scripts/orchestrator.sh -c /tmp/empty.yaml task list
+   ./scripts/orchestrator.sh apply -f /tmp/invalid-manifest.yaml
    ```
 
 ### Expected
 
-- 命令成功执行
-- 输出空的任务列表 (无 panic)
+- 命令非 0 退出
+- 输出包含 `Invalid apiVersion`
+- SQLite 中活动配置不被该非法文件覆盖
 
 ---
 
-## Scenario 4: 配置文件损坏时启动 CLI
+## Scenario 4: apply 语法损坏文件失败
 
 ### Preconditions
 
-- 存在损坏的 YAML 配置文件
-- To test `-c` with a broken file, ensure no SQLite config exists first (run `rm -f data/agent_orchestrator.db && orchestrator init` without bootstrap)
+- Orchestrator 已初始化
 
 ### Goal
 
-验证工具在配置文件格式错误时给出清晰的错误提示。
+验证 YAML 语法损坏时 `apply` 失败且错误可诊断。
 
 ### Steps
 
-1. 创建损坏的配置文件:
+1. 写入损坏 YAML：
    ```bash
-   echo "invalid: yaml: content: [" > /tmp/broken.yaml
+   echo "invalid: yaml: content: [" > /tmp/broken-manifest.yaml
    ```
 
-2. 尝试运行:
+2. 执行 apply：
    ```bash
-   ./scripts/orchestrator.sh -c /tmp/broken.yaml task list
+   ./scripts/orchestrator.sh apply -f /tmp/broken-manifest.yaml
    ```
 
 ### Expected
 
-- If SQLite already contains a bootstrapped config, the `-c` flag is ignored (SQLite config takes precedence)
-- 错误信息包含: `failed to parse` 或类似的解析错误
-- 工具正常退出
+- 命令非 0 退出
+- 输出包含 YAML 解析错误信息
+- 无 panic
 
 ---
 
@@ -204,7 +163,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | 无配置文件时启动 CLI | ☐ | | | |
-| 2 | 使用 init 命令初始化 | ☐ | | | |
-| 3 | 配置文件为空时启动 CLI | ☐ | | | |
-| 4 | 配置文件损坏时启动 CLI | ☐ | | | |
+| 1 | 无配置时命令失败并给出修复建议 | ☐ | | | |
+| 2 | init 后必须 apply manifest | ☐ | | | |
+| 3 | apply 非法 Manifest 失败 | ☐ | | | |
+| 4 | apply 语法损坏文件失败 | ☐ | | | |

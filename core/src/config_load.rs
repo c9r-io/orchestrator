@@ -70,14 +70,27 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
         WorkflowStepType::TicketScan,
         WorkflowStepType::Fix,
         WorkflowStepType::Retest,
+        WorkflowStepType::LoopGuard,
     ] {
         let key = step_type.as_str().to_string();
         if let Some(mut step) = by_type.remove(&key) {
             if step.step_type.is_none() {
                 step.step_type = Some(step_type.clone());
             }
+            if step.required_capability.is_none() && step.builtin.is_none() {
+                match step_type {
+                    WorkflowStepType::Qa | WorkflowStepType::Fix | WorkflowStepType::Retest => {
+                        step.required_capability = Some(step_type.as_str().to_string());
+                    }
+                    WorkflowStepType::LoopGuard => {
+                        step.builtin = Some("loop_guard".to_string());
+                        step.is_guard = true;
+                    }
+                    _ => {}
+                }
+            }
             normalized.push(step);
-        } else {
+        } else if step_type != WorkflowStepType::LoopGuard {
             normalized.push(WorkflowStepConfig {
                 id: step_type.as_str().to_string(),
                 description: None,
@@ -256,9 +269,7 @@ fn validate_workflow_config_with_agents(
             }
             continue;
         }
-        let has_agent = all_agents
-            .values()
-            .any(|a| a.get_template(key).is_some());
+        let has_agent = all_agents.values().any(|a| a.get_template(key).is_some());
         if !has_agent {
             anyhow::bail!(
                 "no agent has template for step '{}' used by workflow '{}'",
@@ -409,10 +420,7 @@ pub fn resolve_and_validate_workspaces(
         .values()
         .any(|p| p.workspaces.contains_key(default_ws));
     if !resolved.contains_key(default_ws) && !default_in_projects {
-        anyhow::bail!(
-            "defaults.workspace '{}' does not exist",
-            default_ws
-        );
+        anyhow::bail!("defaults.workspace '{}' does not exist", default_ws);
     }
     if !config.workflows.contains_key(&config.defaults.workflow) {
         anyhow::bail!(
@@ -479,10 +487,7 @@ pub fn resolve_and_validate_projects(
     Ok(resolved)
 }
 
-pub fn load_or_seed_config(
-    db_path: &Path,
-    seed_config_path: Option<&Path>,
-) -> Result<(OrchestratorConfig, String, i64, String)> {
+pub fn load_or_seed_config(db_path: &Path) -> Result<(OrchestratorConfig, String, i64, String)> {
     let conn = open_conn(db_path)?;
     let row: Option<(String, String, i64, String)> = conn
         .query_row(
@@ -501,28 +506,9 @@ pub fn load_or_seed_config(
         return Ok((config, yaml, version, updated_at));
     }
 
-    let config_path = match seed_config_path {
-        Some(path) => path,
-        None => {
-            anyhow::bail!(
-                "[CONFIG_NOT_INITIALIZED] orchestrator config is not initialized in sqlite\n  category: validation\n  suggested_fix: run 'orchestrator config bootstrap --from <file>' first"
-            )
-        }
-    };
-    let config = normalize_config(load_config(config_path)?);
-    let yaml =
-        serde_yaml::to_string(&config).context("failed to serialize initial config to yaml")?;
-    let json_raw = serde_json::to_string(&config).context("failed to serialize initial config")?;
-    let now = now_ts();
-    conn.execute(
-        "INSERT INTO orchestrator_config (id, config_yaml, config_json, version, updated_at) VALUES (1, ?1, ?2, 1, ?3)",
-        params![yaml, json_raw, now],
-    )?;
-    conn.execute(
-        "INSERT INTO orchestrator_config_versions (version, config_yaml, config_json, created_at, author) VALUES (1, ?1, ?2, ?3, 'bootstrap')",
-        params![yaml, serde_json::to_string(&config)?, now],
-    )?;
-    Ok((config, yaml, 1, now))
+    anyhow::bail!(
+        "[CONFIG_NOT_INITIALIZED] orchestrator config is not initialized in sqlite\n  category: validation\n  suggested_fix: run 'orchestrator apply -f <manifest.yaml>' first"
+    )
 }
 
 pub fn enforce_deletion_guards(
@@ -619,61 +605,6 @@ pub fn persist_config_and_reload(
         let mut active = crate::state::write_active_config(state)?;
         *active = candidate;
     }
-
-    Ok(ConfigOverview {
-        config: normalized,
-        yaml,
-        version: next_version,
-        updated_at: now,
-    })
-}
-
-pub fn bootstrap_config_from_file(
-    app_root: &Path,
-    db_path: &Path,
-    source_path: &Path,
-    force: bool,
-    author: &str,
-) -> Result<ConfigOverview> {
-    let raw = load_config(source_path)?;
-    let candidate = build_active_config(app_root, raw)?;
-    let normalized = candidate.config;
-    let yaml = serde_yaml::to_string(&normalized).context("failed to serialize config yaml")?;
-    let json_raw = serde_json::to_string(&normalized).context("failed to serialize config json")?;
-
-    let conn = open_conn(db_path)?;
-    let tx = conn.unchecked_transaction()?;
-    let exists: Option<i64> = tx
-        .query_row(
-            "SELECT version FROM orchestrator_config WHERE id = 1",
-            [],
-            |row| row.get(0),
-        )
-        .optional()?;
-    if exists.is_some() && !force {
-        anyhow::bail!("[CONFIG_EXISTS] sqlite config already exists\n  category: validation\n  suggested_fix: re-run with --force to replace it");
-    }
-
-    let current_version: i64 = tx
-        .query_row(
-            "SELECT COALESCE(MAX(version), 0) FROM orchestrator_config_versions",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-    let next_version = current_version + 1;
-    let now = now_ts();
-
-    tx.execute(
-        "INSERT INTO orchestrator_config (id, config_yaml, config_json, version, updated_at) VALUES (1, ?1, ?2, ?3, ?4)
-         ON CONFLICT(id) DO UPDATE SET config_yaml=excluded.config_yaml, config_json=excluded.config_json, version=excluded.version, updated_at=excluded.updated_at",
-        params![yaml, json_raw, next_version, now],
-    )?;
-    tx.execute(
-        "INSERT INTO orchestrator_config_versions (version, config_yaml, config_json, created_at, author) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![next_version, yaml, serde_json::to_string(&normalized)?, now, author],
-    )?;
-    tx.commit()?;
 
     Ok(ConfigOverview {
         config: normalized,

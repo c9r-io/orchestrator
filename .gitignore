@@ -5,3 +5,4 @@ config/default.yaml
 docs/ticket/*.md
 /core/target/
 data/logs/*
+fixtures/ticket/*.md

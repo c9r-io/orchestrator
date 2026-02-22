@@ -1,10 +1,13 @@
 use crate::collab::MessageBus;
 use crate::config::{
     AgentConfig, AgentMetadata, AgentSelectionConfig, ConfigDefaults, LoopMode, OrchestratorConfig,
-    ResumeConfig, RunnerConfig, WorkflowConfig, WorkflowFinalizeConfig, WorkflowLoopConfig,
-    WorkflowLoopGuardConfig, WorkflowStepConfig, WorkflowStepType, WorkspaceConfig,
+    ResourceMetadataStore, ResumeConfig, RunnerConfig, WorkflowConfig, WorkflowFinalizeConfig,
+    WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig, WorkflowStepType,
+    WorkspaceConfig,
 };
-use crate::config_load::{build_active_config, load_or_seed_config, read_active_config};
+use crate::config_load::{
+    build_active_config, load_raw_config_from_db, persist_raw_config, read_active_config,
+};
 use crate::db::init_schema;
 use crate::events::NoopSink;
 use crate::state::InnerState;
@@ -16,7 +19,6 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::config::ResolvedWorkspace;
-use crate::db::open_conn;
 
 fn backfill_legacy_data(
     _db_path: &Path,
@@ -109,6 +111,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
             );
             workflows
         },
+        resource_meta: ResourceMetadataStore::default(),
     }
 }
 
@@ -189,21 +192,18 @@ impl TestState {
 
         self.ensure_workspace_dirs();
 
-        let config_dir = self.temp_root.join("config");
         let data_dir = self.temp_root.join("data");
         let logs_dir = data_dir.join("logs");
-        std::fs::create_dir_all(&config_dir).expect("failed to create temp config dir");
         std::fs::create_dir_all(&logs_dir).expect("failed to create temp logs dir");
-
-        let seed_path = config_dir.join("default.yaml");
-        let yaml = serde_yaml::to_string(&self.config).expect("failed to serialize test config");
-        std::fs::write(&seed_path, yaml).expect("failed to write temp config");
 
         let db_path = data_dir.join("agent_orchestrator.db");
         init_schema(&db_path).expect("failed to initialize test schema");
+        persist_raw_config(&db_path, self.config.clone(), "test-seed")
+            .expect("failed to persist test config");
 
-        let (config, _yaml, _version, _updated_at) =
-            load_or_seed_config(&db_path, Some(&seed_path)).expect("failed to load test config");
+        let (config, _version, _updated_at) = load_raw_config_from_db(&db_path)
+            .expect("failed to load raw config from sqlite")
+            .expect("missing test config in sqlite");
         let active =
             build_active_config(&self.temp_root, config).expect("failed to build active config");
 

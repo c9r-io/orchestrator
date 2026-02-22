@@ -21,7 +21,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 - 有效的配置文件存在 (包含基本结构)
 - 数据库已初始化
-- Note: `workspace list` requires a bootstrapped config in SQLite. After `init` only (without bootstrap), commands that need config will fail with "config is not initialized"
+- Note: `workspace list` requires an applied config in SQLite. After `init` only (without apply), commands that need config will fail with "config is not initialized"
 - Dry-run apply (`apply --dry-run`) does NOT persist config
 
 ### Goal
@@ -41,7 +41,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
      root_path: /tmp/test-ws
      qa_targets:
        - docs/qa
-     ticket_dir: docs/ticket
+     ticket_dir: fixtures/ticket
    EOF
    ```
 
@@ -117,7 +117,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
    spec:
      root_path: /tmp/minimal
      qa_targets: []
-     ticket_dir: docs/ticket
+     ticket_dir: fixtures/ticket
    EOF
    
    mkdir -p /tmp/minimal
@@ -199,7 +199,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
      qa_targets:
        - docs/qa
        - docs/security
-     ticket_dir: docs/ticket
+     ticket_dir: fixtures/ticket
    EOF
    
    ./scripts/orchestrator.sh apply -f /tmp/update-ws.yaml

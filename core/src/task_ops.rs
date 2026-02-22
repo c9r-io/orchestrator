@@ -13,7 +13,10 @@ use chrono::Utc;
 use rusqlite::params;
 use uuid::Uuid;
 
-pub fn create_task_impl(state: &crate::state::InnerState, payload: CreateTaskPayload) -> Result<TaskSummary> {
+pub fn create_task_impl(
+    state: &crate::state::InnerState,
+    payload: CreateTaskPayload,
+) -> Result<TaskSummary> {
     let active = read_active_config(state)?;
 
     let project_id = payload
@@ -125,7 +128,10 @@ pub fn create_task_impl(state: &crate::state::InnerState, payload: CreateTaskPay
     load_task_summary(state, &task_id)
 }
 
-pub fn reset_task_item_for_retry(state: &crate::state::InnerState, task_item_id: &str) -> Result<String> {
+pub fn reset_task_item_for_retry(
+    state: &crate::state::InnerState,
+    task_item_id: &str,
+) -> Result<String> {
     let conn = open_conn(&state.db_path)?;
     let task_id: String = conn.query_row(
         "SELECT task_id FROM task_items WHERE id = ?1",

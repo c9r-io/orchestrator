@@ -21,7 +21,7 @@ Entry points:
 
 ### Preconditions
 
-- Runtime initialized and config bootstrapped (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions).
+- Runtime initialized and config applied (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions).
 
 ### Steps
 
@@ -41,7 +41,7 @@ Entry points:
        root_path: .
        qa_targets:
          - docs/qa
-       ticket_dir: docs/ticket
+       ticket_dir: fixtures/ticket
    agents:
      mock:
        metadata:
@@ -89,7 +89,7 @@ Entry points:
 
 ### Preconditions
 
-- Runtime initialized and config bootstrapped (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions).
+- Runtime initialized and config applied (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions).
 
 ### Steps
 
@@ -123,8 +123,8 @@ Entry points:
 
 ### Preconditions
 
-- Runtime initialized and config bootstrapped (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions).
-- Config must be bootstrapped: `./scripts/orchestrator.sh config bootstrap --from fixtures/test-workflow-execution.yaml --force`
+- Runtime initialized and config applied (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions).
+- Config must be applied: `./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml`
 - Current config contains `default` workspace.
 
 ### Steps
@@ -149,11 +149,11 @@ Entry points:
      default:
        root_path: .
        qa_targets: [docs/qa]
-       ticket_dir: docs/ticket
+       ticket_dir: fixtures/ticket
      new-workspace:
        root_path: /tmp/new-workspace
        qa_targets: [docs/qa]
-       ticket_dir: docs/ticket
+       ticket_dir: fixtures/ticket
    agents:
      mock:
        metadata:

@@ -13,12 +13,11 @@ Execute scenario-based QA testing driven by `docs/qa/**/*.md` documents.
 
 1. **Rebuild CLI** (REQUIRED - ensures latest code):
    ```bash
-   cd orchestrator/src-tauri && cargo build --release
+   cd core && cargo build --release
    ```
 
 2. **Initialize orchestrator if needed**:
    ```bash
-   cd orchestrator
    rm -f data/agent_orchestrator.db config/default.yaml
    ./scripts/orchestrator.sh init
    ```
@@ -85,9 +84,9 @@ Examples:
 For orchestrator CLI, check logs in `data/logs/` directory:
 
 ```bash
-ls -la orchestrator/data/logs/
+ls -la data/logs/
 # or check specific task logs
-./orchestrator/scripts/orchestrator.sh task logs <task-id>
+./scripts/orchestrator.sh task logs <task-id>
 ```
 
 ## Database Validation (Optional)
@@ -243,7 +242,6 @@ If tickets are lost, they can be reconstructed from subagent session transcripts
 ## Reset Guidance
 
 ```bash
-cd orchestrator
 rm -f data/agent_orchestrator.db config/default.yaml
 ./scripts/orchestrator.sh init
 ```
@@ -255,8 +253,6 @@ rm -f data/agent_orchestrator.db config/default.yaml
 The orchestrator no longer has hardcoded defaults. Use `init` command to create a minimal config:
 
 ```bash
-cd orchestrator
-
 # Full reset: remove DB and config
 rm -f data/agent_orchestrator.db config/default.yaml
 
@@ -306,7 +302,7 @@ This creates:
    - Always check git history to understand what changed
 
 4. **Project-specific entry points**:
-   - Not all projects use Docker — check `orchestrator/scripts/orchestrator.sh` for CLI tools
+   - Not all projects use Docker — check `scripts/orchestrator.sh` for CLI tools
    - Look for `scripts/*.sh` files in the project root
    - Check `package.json` scripts for test commands
 

@@ -15,7 +15,16 @@ This document tests the new agent collaboration features including:
 - Artifact parsing from agent stdout/stderr
 - Enhanced template rendering with upstream outputs
 
-Entry point: `orchestrator task <command>` with configured agents
+Entry point: `./scripts/orchestrator.sh task <command>` with configured agents
+
+### Project Isolation Setup
+
+```bash
+QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
+```
 
 ---
 
@@ -25,8 +34,8 @@ Entry point: `orchestrator task <command>` with configured agents
 
 - Orchestrator binary built and available
 - Test agent configured with JSON output capability
-- Full config must be bootstrapped first: `orchestrator config bootstrap --from fixtures/test-workflow-execution.yaml --force`
-- Then apply agent-specific manifests on top of the bootstrapped config
+- Full config must be applied first: `orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml`
+- Then apply agent-specific manifests on top of the applied config
 
 ### Steps
 
@@ -43,8 +52,8 @@ Entry point: `orchestrator task <command>` with configured agents
 
 2. Run task with qa workflow:
    ```bash
-   orchestrator task create --name "output-test" --workflow qa_only
-   orchestrator task start --latest
+   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "output-test" --workflow qa_only
+   ./scripts/orchestrator.sh task start --latest
    ```
 
 3. Check logs for parsed artifacts:
@@ -70,8 +79,8 @@ Entry point: `orchestrator task <command>` with configured agents
 
 - Orchestrator running
 - Test agent configured with plain text ticket markers
-- Full config must be bootstrapped first: `orchestrator config bootstrap --from fixtures/test-workflow-execution.yaml --force`
-- Then apply agent-specific manifests on top of the bootstrapped config
+- Full config must be applied first: `orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml`
+- Then apply agent-specific manifests on top of the applied config
 
 ### Steps
 
@@ -88,8 +97,8 @@ Entry point: `orchestrator task <command>` with configured agents
 
 2. Execute task:
    ```bash
-   orchestrator task create --name "marker-test" --workflow qa_only
-   orchestrator task start --latest
+   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "marker-test" --workflow qa_only
+   ./scripts/orchestrator.sh task start --latest
    ```
 
 3. Verify artifact extraction
@@ -111,13 +120,13 @@ Entry point: `orchestrator task <command>` with configured agents
 ### Preconditions
 
 - Orchestrator binary built and available
-- `config bootstrap` is required after `init` for debug and task commands
+- `apply` is required after `init` for debug and task commands
 
 ### Steps
 
 1. Use the new debug command to check MessageBus:
    ```bash
-   orchestrator debug --component messagebus
+   ./scripts/orchestrator.sh debug --component messagebus
    ```
 
 2. Check for message_bus in source code:
@@ -128,16 +137,16 @@ Entry point: `orchestrator task <command>` with configured agents
 3. Run a task and check logs for message events:
    ```bash
    # Create and run a task
-   orchestrator task create --name "msg-test" --goal "Test" --no-start
-   orchestrator task start --latest
+   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "msg-test" --goal "Test" --no-start
+   ./scripts/orchestrator.sh task start --latest
    
    # Check logs
-   orchestrator task logs {task_id}
+   ./scripts/orchestrator.sh task logs {task_id}
    ```
 
 ### Expected
 
-- `orchestrator debug --component messagebus` shows MessageBus debug info
+- `./scripts/orchestrator.sh debug --component messagebus` shows MessageBus debug info
 - `message_bus` field exists in InnerState (grep output)
 - Logs show message_bus related events if multiple agents communicate
 
@@ -147,21 +156,21 @@ The orchestrator provides a debug command:
 
 ```bash
 # Show all debug options
-orchestrator debug
+./scripts/orchestrator.sh debug
 
 # Show MessageBus information
-orchestrator debug --component messagebus
+./scripts/orchestrator.sh debug --component messagebus
 
 # Show active configuration
-orchestrator debug --component config
+./scripts/orchestrator.sh debug --component config
 
 # Show runtime state
-orchestrator debug --component state
+./scripts/orchestrator.sh debug --component state
 ```
 
 ### Important Note
 
-> **WARNING for QA Engineers**: MessageBus is an internal component. Use `orchestrator debug --component messagebus` to verify its status. The actual message passing happens internally and is logged via task logs.
+> **WARNING for QA Engineers**: MessageBus is an internal component. Use `./scripts/orchestrator.sh debug --component messagebus` to verify its status. The actual message passing happens internally and is logged via task logs.
 
 ---
 
@@ -229,7 +238,7 @@ orchestrator debug --component state
 
 ```bash
 # Delete test tasks
-orchestrator task delete <task_id> --force
+./scripts/orchestrator.sh task delete <task_id> --force
 
 # Clear test logs
 rm -f data/logs/qa-*.log

@@ -73,7 +73,6 @@ Key commands:
 orchestrator [global-options] <command> [command-options]
 
 Global Options:
-  --config <path>  Optional seed config path for first-time sqlite bootstrap
   --verbose, -v    Enable verbose output
 
 Commands:
@@ -83,7 +82,7 @@ Commands:
   describe <resource> [-o table|json|yaml]
   task list|create|info|start|pause|resume|logs|delete|retry
   workspace list|info
-  config view|validate|set|bootstrap|export|list-workflows|list-agents
+  config view|validate|set|export|list-workflows|list-agents
   edit export|open
   db reset
   completion bash|zsh|fish|powershell
@@ -118,7 +117,7 @@ Commands:
 
 3. **Task State Machine**: Tasks follow a deterministic state lifecycle: pending -> running -> (paused | completed | failed), enabling clear state verification.
 
-4. **SQLite-backed Runtime Config**: Runtime config is persisted in SQLite. YAML is used for bootstrap/apply/export workflow.
+4. **SQLite-backed Runtime Config**: Runtime config is persisted in SQLite. YAML manifests are applied via `apply -f`, and YAML is also used for export/edit workflows.
 
 ### Alternatives And Tradeoffs
 

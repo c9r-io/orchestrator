@@ -11,10 +11,19 @@
 
 This document tests that all CLI commands support proper JSON and YAML output formats for scripting and integration.
 
+Project setup (run once):
+
+```bash
+QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/output-formats.yaml
+```
+
 ### Common Preconditions (Scenarios 2, 3, 5)
 
-- Config must be bootstrapped: `orchestrator config bootstrap --from fixtures/output-formats.yaml --force`
-- Previous DB state must be cleared: `rm -f data/agent_orchestrator.db`
+- Config must be applied: `orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml`
+- Use isolated project reset: `./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force`
 
 ---
 

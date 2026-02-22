@@ -16,7 +16,9 @@ Shell scripts for executable QA scenarios.
 - Capabilities:
   - repo root detection
   - binary existence check
-  - common args parsing (`--workspace`, `--json`)
+  - common args parsing (`--workspace`, `--project`, `--json`)
+  - auto project isolation (`qa_resolve_project`)
+  - per-project cleanup (`qa_reset_project_data`)
 
 ## Prerequisites
 
@@ -39,8 +41,20 @@ Shell scripts for executable QA scenarios.
 ```bash
 ./docs/qa/script/test-task-pause-resume.sh
 ./docs/qa/script/test-task-retry.sh --json
-./docs/qa/script/test-three-phase-workflow.sh --workspace default
+./docs/qa/script/test-three-phase-workflow.sh --project qa-manual-1 --workspace qa-manual-1-ws
 ```
+
+## Determinism Notes
+
+- Each script uses an isolated QA project by default (auto-generated when `--project` is not provided).
+- Each script resets only that project's task/runtime rows with:
+  - `orchestrator qa project reset <project> --keep-config --force`
+- The SQLite DB file is preserved across runs.
+- Each script uses a dedicated fixture to avoid cross-scenario config drift:
+  - `test-task-pause-resume.sh` -> `fixtures/manifests/bundles/pause-resume-workflow.yaml`
+  - `test-task-retry.sh` -> `fixtures/manifests/bundles/retry-workflow.yaml`
+  - `test-three-phase-workflow.sh` -> `fixtures/manifests/bundles/three-phase-forced.yaml`
+- Parallel runs are supported when using distinct project IDs.
 
 ## Troubleshooting
 

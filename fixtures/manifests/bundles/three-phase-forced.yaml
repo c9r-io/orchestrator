@@ -1,0 +1,45 @@
+apiVersion: orchestrator.dev/v1
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - fixtures/qa
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v1
+kind: Agent
+metadata:
+  name: mock_three_phase
+spec:
+  capabilities:
+    - qa
+    - fix
+    - retest
+  templates:
+    qa: "echo '[TICKET: severity=high, category=regression]' && exit 1"
+    fix: "echo 'fix-phase: {ticket_paths}' && exit 0"
+    retest: "echo 'retest-phase: {rel_path}' && exit 0"
+    loop_guard: "echo 'continue'"
+---
+apiVersion: orchestrator.dev/v1
+kind: Workflow
+metadata:
+  name: qa_fix_retest_forced
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+    - id: ticket_scan
+      type: ticket_scan
+      enabled: true
+    - id: fix
+      type: fix
+      enabled: true
+    - id: retest
+      type: retest
+      enabled: true
+  loop:
+    mode: once
