@@ -50,7 +50,7 @@ cd core && cargo build && cargo test --lib --bins
 
 > 评分标准：10 分制（8-10 优秀，6-7 良好，4-5 可用但风险显著，≤3 不达标）
 
-## 2.1 功能完整性（评分：**8.2/10**）
+### 2.1 功能完整性（评分： **8.2/10**）
 
 ### 已具备能力
 - **端到端任务生命周期**完整：create/start/pause/resume/retry/logs/delete 等 CLI 操作齐备（`core/src/cli.rs`）。
@@ -67,7 +67,7 @@ cd core && cargo build && cargo test --lib --bins
 
 ---
 
-## 2.2 业务流程合理性（评分：**8.0/10**）
+### 2.2 业务流程合理性（评分： **8.0/10**）
 
 ### 优势
 - 流程设计符合 AI-native SDLC 典型闭环：QA 发现问题 → ticket 驱动修复 → retest 复核 → guard 判停。
@@ -83,7 +83,7 @@ cd core && cargo build && cargo test --lib --bins
 
 ---
 
-## 2.3 系统安全性（评分：**7.6/10**）
+### 2.3 系统安全性（评分： **7.6/10**）
 
 ### 已落地安全机制
 - **执行策略护栏**：`RunnerPolicy::Allowlist` 支持 shell / shell_arg allowlist 校验（`core/src/runner.rs` 85-106）。
@@ -102,7 +102,7 @@ cd core && cargo build && cargo test --lib --bins
 
 ---
 
-## 2.4 架构先进性（评分：**8.4/10**）
+### 2.4 架构先进性（评分： **8.4/10**）
 
 ### 先进性亮点
 - **能力驱动编排模型**（workflow step 声明 required capability，agent 声明 capabilities），具备良好的扩展抽象。
@@ -119,7 +119,7 @@ cd core && cargo build && cargo test --lib --bins
 
 ---
 
-## 2.5 性能优化（评分：**7.7/10**）
+### 2.5 性能优化（评分： **7.7/10**）
 
 ### 已有优化
 - **全局任务并发限制**：`MAX_CONCURRENT_TASKS = 10` + `TASK_SEMAPHORE`（`core/src/state.rs` 12-16；`core/src/scheduler.rs` 285-289）。
@@ -136,7 +136,7 @@ cd core && cargo build && cargo test --lib --bins
 
 ---
 
-## 2.6 技术负债（评分：**6.9/10**）
+### 2.6 技术负债（评分： **6.9/10**）
 
 ### 主要债务清单（按优先级）
 
