@@ -1,4 +1,4 @@
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
   name: default
@@ -8,7 +8,7 @@ spec:
     - docs/qa/orchestrator
   ticket_dir: fixtures/ticket
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: mock_fail
@@ -21,7 +21,7 @@ spec:
     fix: "echo '{\"confidence\":0.81,\"quality_score\":0.77,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"auto-fix.patch\"]}]}' && exit 0"
     loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workflow
 metadata:
   name: qa_fix

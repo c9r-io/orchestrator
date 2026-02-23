@@ -1,44 +1,35 @@
-runner:
-  shell: /bin/bash
-  shell_arg: -lc
-resume:
-  auto: false
-defaults:
-  workspace: default
-  workflow: repeat_test
-workspaces:
-  default:
-    root_path: .
-    qa_targets:
-      - docs/qa
-    ticket_dir: docs/ticket
-agents:
-  test_agent:
-    metadata:
-      name: test_agent
-      cost: 50
-    capabilities:
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: test_agent
+spec:
+  metadata:
+    cost: 50
+  capabilities:
     - qa
-    templates:
-      qa: "echo '{\"confidence\":0.88,\"quality_score\":0.84,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"cycle\",\"description\":\"cycle {cycle}\",\"severity\":\"info\"}]}]}'"
-      loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"guard-check\"}'"
-
-workflows:
-  repeat_test:
-    steps:
-    - id: one_time
-      required_capability: qa
+  templates:
+    qa: "echo '{\"confidence\":0.88,\"quality_score\":0.84,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"cycle\",\"description\":\"cycle {cycle}\",\"severity\":\"info\"}]}]}'"
+    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"guard-check\"}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: repeat_test
+spec:
+  steps:
+    - id: run_qa
+      type: qa
       enabled: true
-      repeatable: false
-
-    - id: every_cycle
-      required_capability: qa
-      enabled: true
-      repeatable: true
-
-    loop:
-      mode: infinite
-      guard:
-        enabled: true
-        stop_when_no_unresolved: false
-        max_cycles: 3
+  loop:
+    mode: infinite
+    max_cycles: 3

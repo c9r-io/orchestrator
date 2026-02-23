@@ -515,7 +515,7 @@ CLI 支持 `apply`、`get`、`describe` 等操作，配置有版本管理。
    - 实现 `AdaptivePlanner` 基于历史生成执行计划
 
 **配置文件更新：**
-- `config export` 导出的 YAML 可包含 `adaptive` workflow 示例，用于展示动态步骤配置
+- `manifest export` 导出的 YAML 可包含 `adaptive` workflow 示例，用于展示动态步骤配置
 
 **测试覆盖：**
 - `test_prehook_decision_from_bool`

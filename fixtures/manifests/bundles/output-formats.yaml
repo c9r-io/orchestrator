@@ -1,4 +1,4 @@
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
   name: default
@@ -8,7 +8,7 @@ spec:
     - docs/qa/orchestrator
   ticket_dir: fixtures/ticket
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: format_agent
@@ -21,7 +21,7 @@ spec:
     qa: "echo '{\"confidence\":0.92,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"format-qa\",\"description\":\"format qa run\",\"severity\":\"info\"}]}]}'"
     loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workflow
 metadata:
   name: qa_only

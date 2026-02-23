@@ -174,8 +174,8 @@ orchestrator describe workflow/basic
 orchestrator delete workspace/old-ws
 
 # Configuration
-orchestrator config view
-orchestrator config validate config.yaml
+orchestrator manifest export
+orchestrator manifest validate -f config.yaml
 ```
 
 ## Project Structure

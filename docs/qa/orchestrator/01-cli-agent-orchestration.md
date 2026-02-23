@@ -158,25 +158,25 @@ Validate workspace listing and configuration viewing work correctly.
 
 3. View current configuration:
    ```bash
-   ./core/target/release/agent-orchestrator config view
-   ./core/target/release/agent-orchestrator config view -o json
+   ./core/target/release/agent-orchestrator manifest export
+   ./core/target/release/agent-orchestrator manifest export -o json
    ```
 
 4. List available workflows:
    ```bash
-   ./core/target/release/agent-orchestrator config list-workflows
+   ./core/target/release/agent-orchestrator get workflows
    ```
 
 5. List available agents:
    ```bash
-   ./core/target/release/agent-orchestrator config list-agents
+   ./core/target/release/agent-orchestrator get agents
    ```
 
 ### Expected
 
 - Workspace list shows all configured workspaces
 - Workspace details show root_path, qa_targets, ticket_dir
-- Config view shows full configuration in YAML/JSON format
+- Manifest export shows full configuration bundle in YAML/JSON format
 - Workflow list shows all configured workflows
 - Agent list shows all agents with their phase templates
 
@@ -197,7 +197,7 @@ Validate apply command with dry-run mode doesn't persist changes.
 1. Create a test workspace manifest:
    ```bash
    cat > /tmp/test-workspace.yaml << 'EOF'
-   apiVersion: orchestrator.dev/v1
+   apiVersion: orchestrator.dev/v2
    kind: Workspace
    metadata:
      name: test-workspace
@@ -237,7 +237,7 @@ Validate apply command with dry-run mode doesn't persist changes.
 
 ---
 
-## Scenario 5: CLI Config Validate
+## Scenario 5: CLI Manifest Validate
 
 ### Preconditions
 
@@ -282,7 +282,7 @@ Validate configuration validation catches invalid configurations.
 
 2. Validate the invalid config:
    ```bash
-   ./core/target/release/agent-orchestrator config validate /tmp/invalid-config.yaml
+   ./core/target/release/agent-orchestrator manifest validate -f /tmp/invalid-config.yaml
    ```
 
 3. Create valid config:
@@ -329,7 +329,7 @@ Validate configuration validation catches invalid configurations.
 
 4. Validate the valid config:
    ```bash
-   ./core/target/release/agent-orchestrator config validate /tmp/valid-config.yaml
+   ./core/target/release/agent-orchestrator manifest validate -f /tmp/valid-config.yaml
    ```
 
 ### Expected
@@ -388,5 +388,5 @@ Validate task deletion requires --force flag.
 | 2 | CLI Task List with Status Filter | ☐ | | | |
 | 3 | CLI Workspace and Config Management | ☐ | | | |
 | 4 | CLI Apply with Dry-Run | ☐ | | | |
-| 5 | CLI Config Validate | ☐ | | | |
+| 5 | CLI Manifest Validate | ☐ | | | |
 | G1 | Task Delete with Force | ☐ | | | |

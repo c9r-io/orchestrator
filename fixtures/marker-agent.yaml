@@ -1,4 +1,4 @@
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: marker-agent

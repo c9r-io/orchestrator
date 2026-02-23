@@ -85,7 +85,7 @@ pub enum SelectionStrategy {
 }
 
 /// Weights for adaptive scoring
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SelectionWeights {
     /// Weight for cost factor (0.0 - 1.0)
     pub cost: f32,

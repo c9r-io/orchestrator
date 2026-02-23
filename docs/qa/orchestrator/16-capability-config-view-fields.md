@@ -1,7 +1,7 @@
-# Orchestrator - Capability Config View Fields
+# Orchestrator - Capability Manifest Export Fields
 
 **Module**: orchestrator
-**Scope**: Validate config view exposes capability-orchestration fields
+**Scope**: Validate manifest export exposes capability-orchestration fields
 **Scenarios**: 1
 **Priority**: Medium
 
@@ -11,11 +11,11 @@
 
 This document is split from `07-capability-orchestration.md` to keep each QA document within 5 scenarios.
 
-Entry point: `./scripts/orchestrator.sh config view`
+Entry point: `./scripts/orchestrator.sh manifest export`
 
 ---
 
-## Scenario 1: Config View Shows Capability Fields
+## Scenario 1: Manifest Export Shows Capability Fields
 
 ### Preconditions
 
@@ -26,17 +26,17 @@ Entry point: `./scripts/orchestrator.sh config view`
 
 1. Export current runtime config to a temporary YAML file:
    ```bash
-   ./scripts/orchestrator.sh config export -f /tmp/exported-config.yaml
+   ./scripts/orchestrator.sh manifest export -f /tmp/exported-config.yaml
    ```
 
 2. Inspect agent fields:
    ```bash
-   ./scripts/orchestrator.sh config view -o json | jq '.agents'
+   ./scripts/orchestrator.sh manifest export -o json | jq '.agents'
    ```
 
 3. Inspect workflow step fields:
    ```bash
-   ./scripts/orchestrator.sh config view -o json | jq '.workflows | to_entries[0].value.steps'
+   ./scripts/orchestrator.sh manifest export -o json | jq '.workflows | to_entries[0].value.steps'
    ```
 
 ### Expected
@@ -51,4 +51,4 @@ Entry point: `./scripts/orchestrator.sh config view`
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Config View Shows Capability Fields | ☐ | | | |
+| 1 | Manifest Export Shows Capability Fields | ☐ | | | |

@@ -86,7 +86,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
 
 fn workspace_yaml(name: &str, root_path: &str) -> String {
     format!(
-        r#"apiVersion: orchestrator.dev/v1
+        r#"apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
   name: {name}
@@ -101,7 +101,7 @@ spec:
 
 fn agent_yaml(name: &str, qa_template: &str) -> String {
     format!(
-        r#"apiVersion: orchestrator.dev/v1
+        r#"apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: {name}
@@ -212,7 +212,7 @@ fn multi_document_apply_all_to_config() {
 
 #[test]
 fn validation_rejects_empty_workspace_root_path() {
-    let yaml = r#"apiVersion: orchestrator.dev/v1
+    let yaml = r#"apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
   name: bad-ws
@@ -230,7 +230,7 @@ spec:
 
 #[test]
 fn validation_rejects_empty_agent_templates() {
-    let yaml = r#"apiVersion: orchestrator.dev/v1
+    let yaml = r#"apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: empty-agent
@@ -330,7 +330,7 @@ fn resource_to_yaml_roundtrip() {
     registered.apply(&mut config);
 
     let exported = registered.to_yaml().expect("should serialize to yaml");
-    assert!(exported.contains("apiVersion: orchestrator.dev/v1"));
+    assert!(exported.contains("apiVersion: orchestrator.dev/v2"));
     assert!(exported.contains("kind: Workspace"));
     assert!(exported.contains("name: roundtrip-ws"));
     assert!(exported.contains("workspace/roundtrip"));
@@ -343,7 +343,7 @@ fn resource_to_yaml_roundtrip() {
 #[test]
 fn apply_persists_labels_and_annotations_for_selector_usage() {
     let mut config = minimal_config();
-    let yaml = r#"apiVersion: orchestrator.dev/v1
+    let yaml = r#"apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
   name: labeled-ws

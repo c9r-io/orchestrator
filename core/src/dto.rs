@@ -45,16 +45,6 @@ pub struct ConfigOverview {
     pub updated_at: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct SaveConfigFormPayload {
-    pub config: crate::config::OrchestratorConfig,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SaveConfigYamlPayload {
-    pub yaml: String,
-}
-
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 pub struct SimulatePrehookContextPayload {
@@ -80,46 +70,6 @@ pub struct SimulatePrehookPayload {
 pub struct SimulatePrehookResult {
     pub result: bool,
     pub expression: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ConfigVersionSummary {
-    pub version: i64,
-    pub created_at: String,
-    pub author: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ConfigVersionDetail {
-    pub version: i64,
-    pub created_at: String,
-    pub author: String,
-    pub yaml: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ConfigValidationResult {
-    pub valid: bool,
-    pub normalized_yaml: String,
-    pub errors: Vec<ValidationErrorDto>,
-    pub warnings: Vec<ValidationWarningDto>,
-    pub summary: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ValidationErrorDto {
-    pub code: String,
-    pub message: String,
-    pub field: Option<String>,
-    pub context: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ValidationWarningDto {
-    pub code: String,
-    pub message: String,
-    pub field: Option<String>,
-    pub suggestion: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

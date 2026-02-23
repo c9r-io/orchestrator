@@ -1,51 +1,49 @@
-runner:
-  shell: /bin/bash
-  shell_arg: -lc
-resume:
-  auto: false
-defaults:
-  workspace: default
-  workflow: test_capability
-workspaces:
-  default:
-    root_path: .
-    qa_targets:
-      - docs/qa
-    ticket_dir: docs/ticket
-agents:
-  agent_qa_only:
-    metadata:
-      name: agent_qa_only
-      cost: 30
-    capabilities:
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - fixtures/qa-capability-test
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: agent_qa_only
+spec:
+  metadata:
+    cost: 30
+  capabilities:
     - qa
-    templates:
-      qa: "echo '{\"confidence\":0.58,\"quality_score\":0.52,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-from-agent-qa-only\",\"description\":\"capability qa only agent\",\"severity\":\"info\"}]}]}'"
-
-  agent_fix_only:
-    metadata:
-      name: agent_fix_only
-      cost: 50
-    capabilities:
+  templates:
+    qa: "echo '{\"confidence\":0.4,\"quality_score\":0.25,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"capability\",\"content\":{\"title\":\"qa-from-agent-qa-only\"}}]}' && exit 1"
+    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: agent_fix_only
+spec:
+  metadata:
+    cost: 50
+  capabilities:
     - fix
-    templates:
-      fix: "echo '{\"confidence\":0.8,\"quality_score\":0.76,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fix-from-agent-fix-only.patch\"]}]}'"
-
-workflows:
-  test_capability:
-    steps:
+  templates:
+    fix: "echo '{\"confidence\":0.8,\"quality_score\":0.76,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fix-from-agent-fix-only.patch\"]}]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: test_capability
+spec:
+  steps:
     - id: run_qa
-      required_capability: qa
+      type: qa
       enabled: true
-      repeatable: false
-
     - id: run_fix
-      required_capability: fix
+      type: fix
       enabled: true
-      repeatable: false
-
-    loop:
-      mode: once
-      guard:
-        enabled: false
-        stop_when_no_unresolved: false
+  loop:
+    mode: once

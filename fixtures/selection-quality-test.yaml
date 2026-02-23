@@ -1,50 +1,47 @@
-runner:
-  shell: /bin/bash
-  shell_arg: -lc
-resume:
-  auto: false
-defaults:
-  workspace: default
-  workflow: quality_selection_test
-workspaces:
-  default:
-    root_path: .
-    qa_targets:
-      - docs/qa
-    ticket_dir: docs/ticket
-agents:
-  proven_agent:
-    metadata:
-      name: proven_agent
-      cost: 50
-    capabilities:
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: proven_agent
+spec:
+  metadata:
+    cost: 50
+  capabilities:
     - qa
-    selection:
-      strategy: success_rate_weighted
-    templates:
-      qa: "echo '{\"confidence\":0.96,\"quality_score\":0.95,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"proven-qa\",\"description\":\"proven qa agent\",\"severity\":\"info\"}]}]}'"
-
-  new_agent:
-    metadata:
-      name: new_agent
-      cost: 20
-    capabilities:
+  templates:
+    qa: "echo '{\"confidence\":0.96,\"quality_score\":0.95,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"proven-qa\",\"description\":\"proven qa agent\",\"severity\":\"info\"}]}]}'"
+    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: new_agent
+spec:
+  metadata:
+    cost: 20
+  capabilities:
     - qa
-    selection:
-      strategy: capability_aware
-    templates:
-      qa: "echo '{\"confidence\":0.74,\"quality_score\":0.7,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"new-qa\",\"description\":\"new qa agent\",\"severity\":\"info\"}]}]}'"
-
-workflows:
-  quality_selection_test:
-    steps:
+  templates:
+    qa: "echo '{\"confidence\":0.74,\"quality_score\":0.7,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"new-qa\",\"description\":\"new qa agent\",\"severity\":\"info\"}]}]}'"
+    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: quality_selection_test
+spec:
+  steps:
     - id: do_qa
-      required_capability: qa
+      type: qa
       enabled: true
-      repeatable: false
-
-    loop:
-      mode: once
-      guard:
-        enabled: false
-        stop_when_no_unresolved: false
+  loop:
+    mode: once

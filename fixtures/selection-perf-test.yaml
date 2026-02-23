@@ -1,59 +1,53 @@
-runner:
-  shell: /bin/bash
-  shell_arg: -lc
-resume:
-  auto: false
-defaults:
-  workspace: default
-  workflow: selection_test
-workspaces:
-  default:
-    root_path: .
-    qa_targets:
-      - docs/qa
-    ticket_dir: docs/ticket
-agents:
-  fast_agent:
-    metadata:
-      name: fast_agent
-      cost: 20
-    capabilities:
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: fast_agent
+spec:
+  metadata:
+    cost: 20
+  capabilities:
     - qa
     - fix
-    selection:
-      strategy: performance_first
-    templates:
-      qa: "echo '{\"confidence\":0.9,\"quality_score\":0.82,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"fast-qa\",\"description\":\"fast qa agent\",\"severity\":\"info\"}]}]}'"
-      fix: "echo '{\"confidence\":0.82,\"quality_score\":0.76,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fast-fix.out\"]}]}'"
-
-  quality_agent:
-    metadata:
-      name: quality_agent
-      cost: 80
-    capabilities:
+  templates:
+    qa: "echo '{\"confidence\":0.9,\"quality_score\":0.82,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"fast-qa\",\"description\":\"fast qa agent\",\"severity\":\"info\"}]}]}'"
+    fix: "echo '{\"confidence\":0.82,\"quality_score\":0.76,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fast-fix.out\"]}]}'"
+    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: quality_agent
+spec:
+  metadata:
+    cost: 80
+  capabilities:
     - qa
     - fix
-    selection:
-      strategy: success_rate_weighted
-    templates:
-      qa: "echo '{\"confidence\":0.95,\"quality_score\":0.94,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"quality-qa\",\"description\":\"quality qa agent\",\"severity\":\"info\"}]}]}'"
-      fix: "echo '{\"confidence\":0.91,\"quality_score\":0.89,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"quality-fix.out\"]}]}'"
-
-workflows:
-  selection_test:
-    steps:
+  templates:
+    qa: "echo '{\"confidence\":0.95,\"quality_score\":0.94,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"quality-qa\",\"description\":\"quality qa agent\",\"severity\":\"info\"}]}]}'"
+    fix: "echo '{\"confidence\":0.91,\"quality_score\":0.89,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"quality-fix.out\"]}]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: selection_test
+spec:
+  steps:
     - id: do_qa
-      required_capability: qa
+      type: qa
       enabled: true
-      repeatable: false
-
     - id: do_fix
-      required_capability: fix
+      type: fix
       enabled: true
-      repeatable: false
-
-    loop:
-      mode: once
-      guard:
-        enabled: false
-        stop_when_no_unresolved: false
+  loop:
+    mode: once

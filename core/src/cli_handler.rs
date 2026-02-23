@@ -1,6 +1,6 @@
 use crate::cli::{
-    generate_completion, AgentCommands, Cli, Commands, CompletionCommands, ConfigCommands,
-    DbCommands, EditCommands, OutputFormat, QaCommands, QaProjectCommands, TaskCommands,
+    generate_completion, AgentCommands, Cli, Commands, CompletionCommands, DbCommands,
+    EditCommands, ManifestCommands, OutputFormat, QaCommands, QaProjectCommands, TaskCommands,
     TaskWorkerCommands, WorkflowCommands, WorkspaceCommands,
 };
 use crate::cli_types::{
@@ -8,13 +8,11 @@ use crate::cli_types::{
     ResourceSpec, WorkflowFinalizeSpec, WorkflowLoopSpec, WorkflowSpec, WorkflowStepSpec,
     WorkspaceSpec,
 };
-use crate::config::OrchestratorConfig;
 use crate::config::{
     AgentConfig, LoopMode, ProjectConfig, WorkflowConfig, WorkflowStepType, WorkspaceConfig,
 };
-use crate::config_load::{load_config_overview, persist_config_and_reload, read_active_config};
+use crate::config_load::{persist_config_and_reload, read_active_config};
 use crate::db::reset_db;
-use crate::dto::ConfigOverview;
 use crate::dto::{CreateTaskPayload, TaskDetail, TaskSummary};
 use crate::resource::{dispatch_resource, kind_as_str, ApplyResult, RegisteredResource, Resource};
 use crate::scheduler::{
@@ -75,7 +73,7 @@ impl CliHandler {
             Commands::Workspace(cmd) => self.handle_workspace(cmd),
             Commands::Agent(cmd) => self.handle_agent(cmd),
             Commands::Workflow(cmd) => self.handle_workflow(cmd),
-            Commands::Config(cmd) => self.handle_config(cmd),
+            Commands::Manifest(cmd) => self.handle_manifest(cmd),
             Commands::Edit(cmd) => self.handle_edit(cmd),
             Commands::Db(cmd) => self.handle_db(cmd),
             Commands::Qa(cmd) => self.handle_qa(cmd),
@@ -243,6 +241,7 @@ impl CliHandler {
                     .filter_map(|(name, ws)| {
                         let metadata = ResourceMetadata {
                             name: name.clone(),
+                            project: None,
                             labels: active
                                 .config
                                 .resource_meta
@@ -291,6 +290,7 @@ impl CliHandler {
                     .filter_map(|(name, agent)| {
                         let metadata = ResourceMetadata {
                             name: name.clone(),
+                            project: None,
                             labels: active
                                 .config
                                 .resource_meta
@@ -346,6 +346,7 @@ impl CliHandler {
                     .filter_map(|(name, workflow)| {
                         let metadata = ResourceMetadata {
                             name: name.clone(),
+                            project: None,
                             labels: active
                                 .config
                                 .resource_meta
@@ -901,7 +902,7 @@ impl CliHandler {
                     ticket_dir: ticket_dir.clone(),
                 };
                 let manifest = OrchestratorResource {
-                    api_version: "orchestrator.dev/v1".to_string(),
+                    api_version: "orchestrator.dev/v2".to_string(),
                     kind: ResourceKind::Workspace,
                     metadata,
                     spec: ResourceSpec::Workspace(spec),
@@ -934,6 +935,7 @@ impl CliHandler {
                         fix: template_fix.clone(),
                         retest: template_retest.clone(),
                         loop_guard: template_loop_guard.clone(),
+                        ticket_scan: None,
                     },
                     capabilities: if capability.is_empty() {
                         None
@@ -941,9 +943,10 @@ impl CliHandler {
                         Some(capability.clone())
                     },
                     metadata: None,
+                    selection: None,
                 };
                 let manifest = OrchestratorResource {
-                    api_version: "orchestrator.dev/v1".to_string(),
+                    api_version: "orchestrator.dev/v2".to_string(),
                     kind: ResourceKind::Agent,
                     metadata,
                     spec: ResourceSpec::Agent(spec),
@@ -974,7 +977,12 @@ impl CliHandler {
                     .map(|step_type| WorkflowStepSpec {
                         id: step_type.clone(),
                         step_type,
+                        required_capability: None,
+                        builtin: None,
                         enabled: true,
+                        repeatable: true,
+                        is_guard: false,
+                        cost_preference: None,
                         prehook: None,
                     })
                     .collect();
@@ -985,11 +993,15 @@ impl CliHandler {
                     loop_policy: WorkflowLoopSpec {
                         mode: loop_mode_normalized,
                         max_cycles: *max_cycles,
+                        enabled: true,
+                        stop_when_no_unresolved: true,
+                        agent_template: None,
                     },
                     finalize: WorkflowFinalizeSpec { rules: vec![] },
+                    dynamic_steps: vec![],
                 };
                 let manifest = OrchestratorResource {
-                    api_version: "orchestrator.dev/v1".to_string(),
+                    api_version: "orchestrator.dev/v2".to_string(),
                     kind: ResourceKind::Workflow,
                     metadata,
                     spec: ResourceSpec::Workflow(spec),
@@ -999,47 +1011,36 @@ impl CliHandler {
         }
     }
 
-    fn handle_config(&self, cmd: &ConfigCommands) -> Result<i32> {
+    fn handle_manifest(&self, cmd: &ManifestCommands) -> Result<i32> {
         match cmd {
-            ConfigCommands::View { output } => {
-                let overview = load_config_overview(&self.state)?;
-                self.print_config(&overview, *output)
+            ManifestCommands::Validate { .. } => {
+                anyhow::bail!("manifest validate is handled as a preflight command")
             }
-            ConfigCommands::Set { config_file } => {
-                let content = std::fs::read_to_string(config_file)?;
-                let config: OrchestratorConfig = serde_yaml::from_str(&content)?;
-                persist_config_and_reload(&self.state, config, content, "cli")?;
-                println!("Configuration updated");
-                Ok(0)
-            }
-            ConfigCommands::Export { output, file } => {
-                let overview = load_config_overview(&self.state)?;
+            ManifestCommands::Export { output, file } => {
+                if *output == OutputFormat::Table {
+                    anyhow::bail!("unsupported export output format: table");
+                }
+                let active = read_active_config(&self.state)?;
+                let resources = crate::resource::export_manifest_resources(&active.config);
                 let content = match output {
-                    OutputFormat::Yaml => overview.yaml,
-                    OutputFormat::Json => serde_json::to_string_pretty(&overview.config)?,
-                    OutputFormat::Table => {
-                        anyhow::bail!("unsupported export output format: table")
-                    }
+                    OutputFormat::Yaml => resources
+                        .iter()
+                        .map(Resource::to_yaml)
+                        .collect::<Result<Vec<_>>>()?
+                        .join("---\n"),
+                    OutputFormat::Json => serde_json::to_string_pretty(
+                        &crate::resource::export_manifest_documents(&active.config),
+                    )?,
+                    OutputFormat::Table => unreachable!(),
                 };
                 if let Some(path) = file {
                     std::fs::write(path, &content)
                         .with_context(|| format!("failed to write export file: {}", path))?;
-                    println!("Configuration exported to {}", path);
+                    println!("Manifest exported to {}", path);
                 } else {
                     println!("{}", content);
                 }
                 Ok(0)
-            }
-            ConfigCommands::Validate { .. } => {
-                anyhow::bail!("config validate is handled as a preflight command")
-            }
-            ConfigCommands::ListWorkflows { output } => {
-                let active = read_active_config(&self.state)?;
-                self.print_workflows(&active.config.workflows, *output)
-            }
-            ConfigCommands::ListAgents { output } => {
-                let active = read_active_config(&self.state)?;
-                self.print_agents(&active.config.agents, *output)
             }
         }
     }
@@ -1627,18 +1628,6 @@ impl CliHandler {
         Ok(0)
     }
 
-    fn print_config(&self, overview: &ConfigOverview, format: OutputFormat) -> Result<i32> {
-        match format {
-            OutputFormat::Json => {
-                println!("{}", serde_json::to_string_pretty(&overview.config)?);
-            }
-            OutputFormat::Yaml | OutputFormat::Table => {
-                println!("{}", overview.yaml);
-            }
-        }
-        Ok(0)
-    }
-
     fn print_workflows(
         &self,
         workflows: &std::collections::HashMap<String, WorkflowConfig>,
@@ -1743,6 +1732,7 @@ fn build_resource_metadata(
     let annotation_map = parse_key_value_pairs(annotations, "annotation")?;
     Ok(ResourceMetadata {
         name: name.to_string(),
+        project: None,
         labels: if label_map.is_empty() {
             None
         } else {
@@ -1889,7 +1879,7 @@ mod tests {
 
     fn workspace_manifest_yaml(name: &str, root_path: &str) -> String {
         format!(
-            "apiVersion: orchestrator.dev/v1\nkind: Workspace\nmetadata:\n  name: {name}\nspec:\n  root_path: {root_path}\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n"
+            "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: {name}\nspec:\n  root_path: {root_path}\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n"
         )
     }
 
@@ -2045,7 +2035,7 @@ mod tests {
         write_mock_editor_script(
             &editor_path,
             r#"cat <<'YAML' > "$1"
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
   name: default
@@ -2101,7 +2091,7 @@ printf "%s" "$count" > "$count_file"
 
 if [ "$count" -eq 1 ]; then
   cat <<'YAML' > "$1"
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
   name: default
@@ -2113,7 +2103,7 @@ spec:
 YAML
 else
   cat <<'YAML' > "$1"
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
   name: default
@@ -2181,7 +2171,7 @@ fi"#,
     #[test]
     fn multi_document_yaml_parses_all_documents() {
         let yaml = r#"
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
   name: ws-a
@@ -2191,7 +2181,7 @@ spec:
     - docs/qa
   ticket_dir: docs/ticket
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
   name: ws-b

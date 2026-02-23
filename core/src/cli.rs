@@ -88,8 +88,8 @@ pub enum Commands {
     #[command(subcommand)]
     Workflow(WorkflowCommands),
 
-    #[command(alias = "cfg", alias = "c", subcommand)]
-    Config(ConfigCommands),
+    #[command(alias = "m", subcommand)]
+    Manifest(ManifestCommands),
 
     #[command(alias = "e", subcommand)]
     Edit(EditCommands),
@@ -399,15 +399,10 @@ pub enum EditCommands {
 }
 
 #[derive(Subcommand, Debug, Clone)]
-pub enum ConfigCommands {
-    #[command(alias = "get")]
-    View {
-        #[arg(short, long, default_value = "yaml")]
-        output: OutputFormat,
-    },
-
-    Set {
-        config_file: String,
+pub enum ManifestCommands {
+    Validate {
+        #[arg(short = 'f', long = "file")]
+        file: String,
     },
 
     Export {
@@ -416,22 +411,6 @@ pub enum ConfigCommands {
 
         #[arg(short = 'f', long = "file")]
         file: Option<String>,
-    },
-
-    Validate {
-        config_file: String,
-    },
-
-    #[command(alias = "lw", alias = "list-wf")]
-    ListWorkflows {
-        #[arg(short, long, default_value = "table")]
-        output: OutputFormat,
-    },
-
-    #[command(alias = "la", alias = "list-agent")]
-    ListAgents {
-        #[arg(short, long, default_value = "table")]
-        output: OutputFormat,
     },
 }
 
@@ -1240,46 +1219,10 @@ mod tests {
     }
 
     #[test]
-    fn parse_config_view_command() {
-        let cli = Cli::parse_from(["orchestrator", "config", "view"]);
-
-        match cli.command {
-            Commands::Config(ConfigCommands::View { output }) => {
-                assert_eq!(output, OutputFormat::Yaml);
-            }
-            _ => panic!("expected config view command"),
-        }
-    }
-
-    #[test]
-    fn parse_config_view_json() {
-        let cli = Cli::parse_from(["orchestrator", "config", "view", "-o", "json"]);
-
-        match cli.command {
-            Commands::Config(ConfigCommands::View { output }) => {
-                assert_eq!(output, OutputFormat::Json);
-            }
-            _ => panic!("expected config view command"),
-        }
-    }
-
-    #[test]
-    fn parse_config_validate_command() {
-        let cli = Cli::parse_from(["orchestrator", "config", "validate", "/path/to/config.yaml"]);
-
-        match cli.command {
-            Commands::Config(ConfigCommands::Validate { config_file }) => {
-                assert_eq!(config_file, "/path/to/config.yaml");
-            }
-            _ => panic!("expected config validate command"),
-        }
-    }
-
-    #[test]
-    fn parse_config_export_command() {
+    fn parse_manifest_export_command() {
         let cli = Cli::parse_from([
             "orchestrator",
-            "config",
+            "manifest",
             "export",
             "-o",
             "json",
@@ -1288,35 +1231,29 @@ mod tests {
         ]);
 
         match cli.command {
-            Commands::Config(ConfigCommands::Export { output, file }) => {
+            Commands::Manifest(ManifestCommands::Export { output, file }) => {
                 assert_eq!(output, OutputFormat::Json);
                 assert_eq!(file, Some("/tmp/out.json".to_string()));
             }
-            _ => panic!("expected config export command"),
+            _ => panic!("expected manifest export command"),
         }
     }
 
     #[test]
-    fn parse_config_list_workflows_command() {
-        let cli = Cli::parse_from(["orchestrator", "config", "list-workflows"]);
+    fn parse_manifest_validate_command() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "manifest",
+            "validate",
+            "-f",
+            "/tmp/input.yaml",
+        ]);
 
         match cli.command {
-            Commands::Config(ConfigCommands::ListWorkflows { output }) => {
-                assert_eq!(output, OutputFormat::Table);
+            Commands::Manifest(ManifestCommands::Validate { file }) => {
+                assert_eq!(file, "/tmp/input.yaml");
             }
-            _ => panic!("expected config list-workflows command"),
-        }
-    }
-
-    #[test]
-    fn parse_config_list_agents_command() {
-        let cli = Cli::parse_from(["orchestrator", "config", "list-agents", "-o", "json"]);
-
-        match cli.command {
-            Commands::Config(ConfigCommands::ListAgents { output }) => {
-                assert_eq!(output, OutputFormat::Json);
-            }
-            _ => panic!("expected config list-agents command"),
+            _ => panic!("expected manifest validate command"),
         }
     }
 }

@@ -1,4 +1,4 @@
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
   name: default
@@ -8,7 +8,7 @@ spec:
     - docs/qa/orchestrator
   ticket_dir: fixtures/ticket
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: mock_echo
@@ -23,7 +23,7 @@ spec:
     retest: "echo '{\"confidence\":0.9,\"quality_score\":0.88,\"artifacts\":[{\"kind\":\"test_result\",\"passed\":1,\"failed\":0}]}'"
     loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workflow
 metadata:
   name: qa_only
@@ -35,7 +35,7 @@ spec:
   loop:
     mode: once
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workflow
 metadata:
   name: qa_fix
@@ -53,7 +53,7 @@ spec:
   loop:
     mode: once
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workflow
 metadata:
   name: qa_fix_retest
@@ -74,7 +74,7 @@ spec:
   loop:
     mode: once
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workflow
 metadata:
   name: loop_test

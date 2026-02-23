@@ -4,6 +4,7 @@ use crate::config::{
 };
 use crate::db::{count_tasks_by_workflow, count_tasks_by_workspace, open_conn};
 use crate::dto::ConfigOverview;
+use crate::resource::export_manifest_resources;
 use anyhow::{Context, Result};
 use rusqlite::{params, OptionalExtension, Transaction};
 use std::collections::HashMap;
@@ -30,13 +31,6 @@ pub fn detect_app_root() -> PathBuf {
         return candidate;
     }
     cwd
-}
-
-pub fn load_config(config_path: &Path) -> Result<OrchestratorConfig> {
-    let content = std::fs::read_to_string(config_path)
-        .with_context(|| format!("config file not found: {}", config_path.display()))?;
-    serde_yaml::from_str::<OrchestratorConfig>(&content)
-        .with_context(|| format!("failed to parse {}", config_path.display()))
 }
 
 pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
@@ -497,17 +491,20 @@ pub fn load_or_seed_config(db_path: &Path) -> Result<(OrchestratorConfig, String
         )
         .optional()?;
 
-    if let Some((yaml, json_raw, version, updated_at)) = row {
+    if let Some((_yaml, json_raw, version, updated_at)) = row {
         let config = serde_json::from_str::<OrchestratorConfig>(&json_raw)
-            .or_else(|_| serde_yaml::from_str::<OrchestratorConfig>(&yaml))
-            .context("failed to parse config from sqlite")?;
+            .context("failed to parse config_json from sqlite")?;
         let config = normalize_config(config);
-        let yaml = serde_yaml::to_string(&config).context("failed to normalize config yaml")?;
+        let yaml = export_manifest_resources(&config)
+            .iter()
+            .map(crate::resource::Resource::to_yaml)
+            .collect::<Result<Vec<_>>>()?
+            .join("---\n");
         return Ok((config, yaml, version, updated_at));
     }
 
     anyhow::bail!(
-        "[CONFIG_NOT_INITIALIZED] orchestrator config is not initialized in sqlite\n  category: validation\n  suggested_fix: run 'orchestrator apply -f <manifest.yaml>' first"
+        "[CONFIG_NOT_INITIALIZED] orchestrator manifest is not initialized in sqlite\n  category: validation\n  suggested_fix: run 'orchestrator apply -f <manifest.yaml>' first"
     )
 }
 
@@ -595,7 +592,11 @@ pub fn persist_config_and_reload(
 ) -> Result<ConfigOverview> {
     let candidate = build_active_config(&state.app_root, config.clone())?;
     let normalized = candidate.config.clone();
-    let yaml = serde_yaml::to_string(&normalized).context("failed to serialize config yaml")?;
+    let yaml = export_manifest_resources(&normalized)
+        .iter()
+        .map(crate::resource::Resource::to_yaml)
+        .collect::<Result<Vec<_>>>()?
+        .join("---\n");
     let json_raw = serde_json::to_string(&normalized).context("failed to serialize config json")?;
 
     let previous_config = {
@@ -622,23 +623,6 @@ pub fn persist_config_and_reload(
     })
 }
 
-pub fn load_config_overview(state: &crate::state::InnerState) -> Result<ConfigOverview> {
-    let conn = open_conn(&state.db_path)?;
-    let (yaml, version, updated_at): (String, i64, String) = conn.query_row(
-        "SELECT config_yaml, version, updated_at FROM orchestrator_config WHERE id = 1",
-        [],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-    )?;
-
-    let active = read_active_config(state)?;
-    Ok(ConfigOverview {
-        config: active.config.clone(),
-        yaml,
-        version,
-        updated_at,
-    })
-}
-
 pub fn load_raw_config_from_db(
     db_path: &Path,
 ) -> Result<Option<(OrchestratorConfig, i64, String)>> {
@@ -651,13 +635,12 @@ pub fn load_raw_config_from_db(
         )
         .optional()?;
 
-    let Some((yaml, json_raw, version, updated_at)) = row else {
+    let Some((_yaml, json_raw, version, updated_at)) = row else {
         return Ok(None);
     };
 
     let config = serde_json::from_str::<OrchestratorConfig>(&json_raw)
-        .or_else(|_| serde_yaml::from_str::<OrchestratorConfig>(&yaml))
-        .context("failed to parse config from sqlite")?;
+        .context("failed to parse config_json from sqlite")?;
     Ok(Some((normalize_config(config), version, updated_at)))
 }
 
@@ -667,7 +650,11 @@ pub fn persist_raw_config(
     author: &str,
 ) -> Result<ConfigOverview> {
     let normalized = normalize_config(config);
-    let yaml = serde_yaml::to_string(&normalized).context("failed to serialize config yaml")?;
+    let yaml = export_manifest_resources(&normalized)
+        .iter()
+        .map(crate::resource::Resource::to_yaml)
+        .collect::<Result<Vec<_>>>()?
+        .join("---\n");
     let json_raw = serde_json::to_string(&normalized).context("failed to serialize config json")?;
     let conn = open_conn(db_path)?;
     let tx = conn.unchecked_transaction()?;

@@ -48,7 +48,7 @@ qa_info "Applying fixture for throughput baseline..."
 "$BINARY" init --force >/dev/null 2>&1 || true
 "$BINARY" db reset --force --include-config >/dev/null 2>&1 || true
 "$BINARY" apply -f fixtures/manifests/bundles/output-formats.yaml >/dev/null
-DEFAULT_WORKFLOW="$("$BINARY" config view -o json 2>/dev/null | jq -r '.defaults.workflow // "qa_only"' 2>/dev/null || echo "qa_only")"
+DEFAULT_WORKFLOW="$("$BINARY" manifest export -o json 2>/dev/null | jq -r 'first(.[] | select(.kind=="Defaults") | .spec.workflow) // "qa_only"' 2>/dev/null || echo "qa_only")"
 if [[ -z "$DEFAULT_WORKFLOW" || "$DEFAULT_WORKFLOW" == "null" ]]; then
   DEFAULT_WORKFLOW="qa_only"
 fi

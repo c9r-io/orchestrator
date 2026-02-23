@@ -1,4 +1,4 @@
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
   name: default
@@ -8,7 +8,7 @@ spec:
     - docs/qa
   ticket_dir: fixtures/ticket
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: proven_agent
@@ -21,7 +21,7 @@ spec:
     qa: "echo '{\"confidence\":0.96,\"quality_score\":0.95,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"proven-qa\",\"description\":\"proven qa agent\",\"severity\":\"info\"}]}]}'"
     loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: new_agent
@@ -34,7 +34,7 @@ spec:
     qa: "echo '{\"confidence\":0.74,\"quality_score\":0.7,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"new-qa\",\"description\":\"new qa agent\",\"severity\":\"info\"}]}]}'"
     loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workflow
 metadata:
   name: quality_selection_test

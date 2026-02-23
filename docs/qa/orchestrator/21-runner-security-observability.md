@@ -77,7 +77,7 @@ Ensure `policy=allowlist` is rejected when `allowed_shells` or `allowed_shell_ar
    ```
 2. Validate config:
    ```bash
-   ./scripts/orchestrator.sh config validate /tmp/runner-allowlist-invalid.yaml
+   ./scripts/orchestrator.sh manifest validate -f /tmp/runner-allowlist-invalid.yaml
    ```
 
 ### Expected
@@ -150,7 +150,7 @@ Ensure run-phase command execution is denied by runner policy before process spa
        finalize:
          rules: []
    YAML
-   ./scripts/orchestrator.sh config set /tmp/runner-policy-deny.yaml
+   ./scripts/orchestrator.sh apply -f /tmp/runner-policy-deny.yaml
    ```
 2. Create and start task:
    ```bash
@@ -223,7 +223,7 @@ Ensure sensitive token is redacted in persisted structured output and in `task l
        finalize:
          rules: []
    YAML
-   ./scripts/orchestrator.sh config set /tmp/runner-redaction.yaml
+   ./scripts/orchestrator.sh apply -f /tmp/runner-redaction.yaml
    TASK_ID=$(./scripts/orchestrator.sh task create --project default --name "runner-redaction" --goal "redaction" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ./scripts/orchestrator.sh task start "${TASK_ID}" || true
    ```

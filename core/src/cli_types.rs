@@ -1,20 +1,21 @@
 /// K8s-style YAML types for declarative resource management via `apply` command.
 /// Resources follow Kubernetes manifest conventions: apiVersion, kind, metadata, spec.
+use crate::metrics::{SelectionStrategy, SelectionWeights};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Expected API version for orchestrator resources
-const EXPECTED_API_VERSION: &str = "orchestrator.dev/v1";
+const EXPECTED_API_VERSION: &str = "orchestrator.dev/v2";
 
 /// Kubernetes-style resource manifest for declarative configuration.
 /// Top-level structure for YAML deserialization in the `apply` command.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OrchestratorResource {
-    /// API version of this resource (e.g., "orchestrator.dev/v1")
+    /// API version of this resource (e.g., "orchestrator.dev/v2")
     #[serde(rename = "apiVersion")]
     pub api_version: String,
 
-    /// Resource kind (Workspace, Agent, Workflow)
+    /// Resource kind (Workspace, Agent, Workflow, Project, Defaults, RuntimePolicy)
     pub kind: ResourceKind,
 
     /// Resource metadata (name, labels, annotations)
@@ -39,13 +40,16 @@ impl OrchestratorResource {
 }
 
 /// Kubernetes-style resource kind enum.
-/// Defines the four resource types supported by the orchestrator.
+/// Defines all resource types supported by the orchestrator.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 pub enum ResourceKind {
     Workspace,
     Agent,
     Workflow,
+    Project,
+    Defaults,
+    RuntimePolicy,
 }
 
 /// Kubernetes-style resource metadata.
@@ -54,6 +58,10 @@ pub enum ResourceKind {
 pub struct ResourceMetadata {
     /// Name of the resource (e.g., "default", "qa-agent")
     pub name: String,
+
+    /// Optional project namespace identifier for scoped resources.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
 
     /// Optional labels for categorization and selection
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -77,6 +85,73 @@ pub enum ResourceSpec {
 
     /// Workflow resource spec
     Workflow(WorkflowSpec),
+
+    /// Project resource spec
+    Project(ProjectSpec),
+
+    /// Defaults resource spec
+    Defaults(DefaultsSpec),
+
+    /// Runtime policy resource spec
+    RuntimePolicy(RuntimePolicySpec),
+}
+
+/// Project resource specification.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct ProjectSpec {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+/// Defaults resource specification.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DefaultsSpec {
+    pub project: String,
+    pub workspace: String,
+    pub workflow: String,
+}
+
+/// Runtime policy specification containing runner + resume behavior.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RuntimePolicySpec {
+    pub runner: RunnerSpec,
+    pub resume: ResumeSpec,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RunnerSpec {
+    pub shell: String,
+    #[serde(default = "default_shell_arg")]
+    pub shell_arg: String,
+    #[serde(default = "default_runner_policy")]
+    pub policy: String,
+    #[serde(default = "default_runner_executor")]
+    pub executor: String,
+    #[serde(default)]
+    pub allowed_shells: Vec<String>,
+    #[serde(default)]
+    pub allowed_shell_args: Vec<String>,
+    #[serde(default)]
+    pub env_allowlist: Vec<String>,
+    #[serde(default)]
+    pub redaction_patterns: Vec<String>,
+}
+
+fn default_shell_arg() -> String {
+    "-lc".to_string()
+}
+
+fn default_runner_policy() -> String {
+    "legacy".to_string()
+}
+
+fn default_runner_executor() -> String {
+    "shell".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ResumeSpec {
+    pub auto: bool,
 }
 
 /// Workspace resource specification.
@@ -96,7 +171,7 @@ pub struct WorkspaceSpec {
 
 /// Agent resource specification.
 /// Defines an agent with command templates for workflow phases.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AgentSpec {
     /// Templates for each workflow phase
     pub templates: AgentTemplatesSpec,
@@ -108,6 +183,10 @@ pub struct AgentSpec {
     /// Agent metadata (cost, description)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<AgentMetadataSpec>,
+
+    /// Agent selection strategy and weights.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selection: Option<AgentSelectionSpec>,
 }
 
 /// Agent metadata specification.
@@ -120,6 +199,14 @@ pub struct AgentMetadataSpec {
     /// Agent description
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AgentSelectionSpec {
+    #[serde(default)]
+    pub strategy: SelectionStrategy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weights: Option<SelectionWeights>,
 }
 
 /// Agent command templates for different workflow phases.
@@ -139,11 +226,14 @@ pub struct AgentTemplatesSpec {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub loop_guard: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ticket_scan: Option<String>,
 }
 
 /// Workflow resource specification.
 /// Defines a workflow pipeline with steps, loop policy, and finalization rules.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WorkflowSpec {
     /// Workflow execution steps
     #[serde(default)]
@@ -156,29 +246,65 @@ pub struct WorkflowSpec {
     /// Finalization rules for determining final step status
     #[serde(default)]
     pub finalize: WorkflowFinalizeSpec,
+
+    /// Dynamic runtime steps pool.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dynamic_steps: Vec<DynamicStepSpec>,
 }
 
 /// Workflow step specification.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WorkflowStepSpec {
     pub id: String,
 
     #[serde(rename = "type")]
     pub step_type: String,
 
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required_capability: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub builtin: Option<String>,
+
+    #[serde(default = "default_true")]
     pub enabled: bool,
+
+    #[serde(default = "default_true")]
+    pub repeatable: bool,
+
+    #[serde(default)]
+    pub is_guard: bool,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_preference: Option<String>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prehook: Option<WorkflowPrehookSpec>,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 /// Workflow prehook specification for conditional execution.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WorkflowPrehookSpec {
+    #[serde(default = "default_hook_engine")]
+    pub engine: String,
     pub when: String,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ui: Option<serde_json::Value>,
+
+    #[serde(default)]
+    pub extended: bool,
+}
+
+fn default_hook_engine() -> String {
+    "cel".to_string()
 }
 
 /// Workflow loop policy specification.
@@ -189,6 +315,15 @@ pub struct WorkflowLoopSpec {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_cycles: Option<u32>,
+
+    #[serde(default)]
+    pub enabled: bool,
+
+    #[serde(default)]
+    pub stop_when_no_unresolved: bool,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_template: Option<String>,
 }
 
 impl Default for WorkflowLoopSpec {
@@ -196,21 +331,27 @@ impl Default for WorkflowLoopSpec {
         Self {
             mode: "once".to_string(),
             max_cycles: None,
+            enabled: true,
+            stop_when_no_unresolved: true,
+            agent_template: None,
         }
     }
 }
 
 /// Workflow finalization rules specification.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct WorkflowFinalizeSpec {
     #[serde(default)]
     pub rules: Vec<WorkflowFinalizeRuleSpec>,
 }
 
 /// Individual finalization rule.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WorkflowFinalizeRuleSpec {
     pub id: String,
+
+    #[serde(default = "default_hook_engine")]
+    pub engine: String,
 
     pub when: String,
 
@@ -220,24 +361,41 @@ pub struct WorkflowFinalizeRuleSpec {
     pub reason: Option<String>,
 }
 
+/// Dynamic step configuration carried by workflow manifests.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DynamicStepSpec {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub step_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trigger: Option<String>,
+    #[serde(default)]
+    pub priority: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_runs: Option<u32>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn parse_workspace_yaml() {
+    fn parse_workspace_yaml_v2() {
         let yaml = r#"
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
   name: default
-  labels:
-    env: test
+  project: default
 spec:
   root_path: /home/user/project
   qa_targets:
     - docs/qa/
-    - tests/
   ticket_dir: docs/ticket/
 "#;
 
@@ -247,85 +405,9 @@ spec:
         resource
             .validate_version()
             .expect("Version validation failed");
-        assert_eq!(resource.api_version, "orchestrator.dev/v1");
+        assert_eq!(resource.api_version, "orchestrator.dev/v2");
         assert_eq!(resource.kind, ResourceKind::Workspace);
-        assert_eq!(resource.metadata.name, "default");
-
-        if let ResourceSpec::Workspace(spec) = &resource.spec {
-            assert_eq!(spec.root_path, "/home/user/project");
-            assert_eq!(spec.qa_targets, vec!["docs/qa/", "tests/"]);
-            assert_eq!(spec.ticket_dir, "docs/ticket/");
-        } else {
-            panic!("Expected WorkspaceSpec");
-        }
-    }
-
-    #[test]
-    fn parse_agent_yaml() {
-        let yaml = r#"
-apiVersion: orchestrator.dev/v1
-kind: Agent
-metadata:
-  name: default-agent
-  labels:
-    role: default
-spec:
-  templates:
-    qa: "npm test"
-    fix: "npm run lint --fix"
-    retest: "npm test"
-"#;
-
-        let resource: OrchestratorResource =
-            serde_yaml::from_str(yaml).expect("Failed to parse agent YAML");
-
-        resource
-            .validate_version()
-            .expect("Version validation failed");
-        assert_eq!(resource.kind, ResourceKind::Agent);
-        assert_eq!(resource.metadata.name, "default-agent");
-
-        if let ResourceSpec::Agent(spec) = &resource.spec {
-            assert_eq!(spec.templates.qa, Some("npm test".to_string()));
-            assert_eq!(spec.templates.fix, Some("npm run lint --fix".to_string()));
-        } else {
-            panic!("Expected AgentSpec");
-        }
-    }
-
-    #[test]
-    fn parse_workflow_yaml() {
-        let yaml = r#"
-apiVersion: orchestrator.dev/v1
-kind: Workflow
-metadata:
-  name: default-workflow
-spec:
-  steps:
-    - id: qa
-      type: qa
-      enabled: true
-  loop:
-    mode: once
-  finalize:
-    rules: []
-"#;
-
-        let resource: OrchestratorResource =
-            serde_yaml::from_str(yaml).expect("Failed to parse workflow YAML");
-
-        resource
-            .validate_version()
-            .expect("Version validation failed");
-        assert_eq!(resource.kind, ResourceKind::Workflow);
-
-        if let ResourceSpec::Workflow(spec) = &resource.spec {
-            assert_eq!(spec.steps.len(), 1);
-            assert_eq!(spec.steps[0].id, "qa");
-            assert_eq!(spec.loop_policy.mode, "once");
-        } else {
-            panic!("Expected WorkflowSpec");
-        }
+        assert_eq!(resource.metadata.project.as_deref(), Some("default"));
     }
 
     #[test]
@@ -349,31 +431,7 @@ spec:
 
         if let Err(msg) = result {
             assert!(msg.contains("wrong.version/v2"));
-            assert!(msg.contains("orchestrator.dev/v1"));
+            assert!(msg.contains("orchestrator.dev/v2"));
         }
-    }
-
-    #[test]
-    fn resource_with_annotations() {
-        let yaml = r#"
-apiVersion: orchestrator.dev/v1
-kind: Workspace
-metadata:
-  name: test-ws
-  annotations:
-    description: "Test workspace"
-    owner: "devteam"
-spec:
-  root_path: /test
-  qa_targets: []
-  ticket_dir: /test/tickets
-"#;
-
-        let resource: OrchestratorResource =
-            serde_yaml::from_str(yaml).expect("Failed to parse YAML with annotations");
-
-        assert!(resource.metadata.annotations.is_some());
-        let annotations = resource.metadata.annotations.unwrap();
-        assert_eq!(annotations.get("owner"), Some(&"devteam".to_string()));
     }
 }

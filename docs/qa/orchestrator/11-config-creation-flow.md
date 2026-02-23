@@ -33,7 +33,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 1. 创建 workspace manifest:
    ```bash
    cat > /tmp/test-ws.yaml << 'EOF'
-   apiVersion: orchestrator.dev/v1
+   apiVersion: orchestrator.dev/v2
    kind: Workspace
    metadata:
      name: test-ws-dryrun
@@ -110,7 +110,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 1. 创建最小配置 manifest:
    ```bash
    cat > /tmp/minimal-config.yaml << 'EOF'
-   apiVersion: orchestrator.dev/v1
+   apiVersion: orchestrator.dev/v2
    kind: Workspace
    metadata:
      name: minimal-ws
@@ -127,7 +127,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 2. 创建 agent:
    ```bash
    cat > /tmp/test-agent.yaml << 'EOF'
-   apiVersion: orchestrator.dev/v1
+   apiVersion: orchestrator.dev/v2
    kind: Agent
    metadata:
      name: test-agent
@@ -144,7 +144,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 3. 创建 workflow:
    ```bash
    cat > /tmp/test-workflow.yaml << 'EOF'
-   apiVersion: orchestrator.dev/v1
+   apiVersion: orchestrator.dev/v2
    kind: Workflow
    metadata:
      name: test-workflow
@@ -164,8 +164,8 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 4. 验证配置:
    ```bash
-   ./scripts/orchestrator.sh config list-agents
-   ./scripts/orchestrator.sh config list-workflows
+   ./scripts/orchestrator.sh get agents
+   ./scripts/orchestrator.sh get workflows
    ```
 
 ### Expected
@@ -190,7 +190,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 1. 更新 workspace:
    ```bash
    cat > /tmp/update-ws.yaml << 'EOF'
-   apiVersion: orchestrator.dev/v1
+   apiVersion: orchestrator.dev/v2
    kind: Workspace
    metadata:
      name: minimal-ws

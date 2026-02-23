@@ -105,7 +105,7 @@ Validate that when project doesn't define a workflow, the `defaults.workflow` fr
 
 1. Check current default workflow:
    ```bash
-   ./scripts/orchestrator.sh config view | grep 'workflow:'
+   ./scripts/orchestrator.sh manifest export | grep 'workflow:'
    ```
 
 2. Create task without explicit workflow (should use default):
@@ -215,15 +215,15 @@ Validate that project resources are isolated from each other.
 
 1. Validate the two-projects fixture (projects define their own workspaces and agents; global workspaces/agents are empty):
    ```bash
-   ./scripts/orchestrator.sh config validate fixtures/two-projects.yaml
+   ./scripts/orchestrator.sh manifest validate -f fixtures/manifests/bundles/two-projects.yaml
    ```
 
 ### Expected
 
 - Config validates successfully (exit code 0)
-- Two projects (project-a, project-b) are recognized with project-level workspaces and agents
-- Validator resolves project-level workspaces for `defaults.workspace` reference
-- Validator resolves project-level agents for workflow step capability matching
+- Two project-tagged resource groups (project-a, project-b) are accepted in the manifest
+- Validator accepts project-tagged workspaces via `metadata.project`
+- Validator accepts project-tagged agents and workflow capability references
 
 ---
 
@@ -237,7 +237,7 @@ Validate that defaults.project is required and defaults to "default".
 
 1. Check current config:
    ```bash
-   ./core/target/release/agent-orchestrator config view | grep -A5 "defaults:"
+   ./core/target/release/agent-orchestrator manifest export | grep -A5 "defaults:"
    ```
 
 2. Verify project field exists in defaults

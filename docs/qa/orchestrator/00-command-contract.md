@@ -40,7 +40,7 @@ Entry point: `./scripts/orchestrator.sh <command>` (recommended) or `./core/targ
    - `workspace`
    - `agent`
    - `workflow`
-   - `config`
+  - `manifest`
    - `edit`
    - `db`
    - `qa`
@@ -69,7 +69,7 @@ Entry point: `./scripts/orchestrator.sh <command>` (recommended) or `./core/targ
 1. Apply manifest environment (if not already done):
    ```bash
    ./scripts/orchestrator.sh init
-   ./scripts/orchestrator.sh apply -f <config.yaml>
+   ./scripts/orchestrator.sh apply -f <manifest.yaml>
    ```
 
 2. (Recommended for isolated QA reruns) Reset only the scenario project:

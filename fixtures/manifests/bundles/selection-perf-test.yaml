@@ -1,4 +1,4 @@
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
   name: default
@@ -8,7 +8,7 @@ spec:
     - docs/qa
   ticket_dir: fixtures/ticket
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: fast_agent
@@ -23,7 +23,7 @@ spec:
     fix: "echo '{\"confidence\":0.82,\"quality_score\":0.76,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fast-fix.out\"]}]}'"
     loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: quality_agent
@@ -37,7 +37,7 @@ spec:
     qa: "echo '{\"confidence\":0.95,\"quality_score\":0.94,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"quality-qa\",\"description\":\"quality qa agent\",\"severity\":\"info\"}]}]}'"
     fix: "echo '{\"confidence\":0.91,\"quality_score\":0.89,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"quality-fix.out\"]}]}'"
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workflow
 metadata:
   name: selection_test

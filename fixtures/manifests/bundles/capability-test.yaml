@@ -1,4 +1,4 @@
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:
   name: default
@@ -8,7 +8,7 @@ spec:
     - fixtures/qa-capability-test
   ticket_dir: fixtures/ticket
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: agent_qa_only
@@ -21,7 +21,7 @@ spec:
     qa: "echo '{\"confidence\":0.4,\"quality_score\":0.25,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"capability\",\"content\":{\"title\":\"qa-from-agent-qa-only\"}}]}' && exit 1"
     loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: agent_fix_only
@@ -33,7 +33,7 @@ spec:
   templates:
     fix: "echo '{\"confidence\":0.8,\"quality_score\":0.76,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fix-from-agent-fix-only.patch\"]}]}'"
 ---
-apiVersion: orchestrator.dev/v1
+apiVersion: orchestrator.dev/v2
 kind: Workflow
 metadata:
   name: test_capability

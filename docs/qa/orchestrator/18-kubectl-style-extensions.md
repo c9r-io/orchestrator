@@ -130,7 +130,7 @@
 1. Apply manifest from stdin:
    ```bash
    cat <<'YAML' | ./scripts/orchestrator.sh apply -f -
-   apiVersion: orchestrator.dev/v1
+   apiVersion: orchestrator.dev/v2
    kind: Agent
    metadata:
      name: stdin-agent

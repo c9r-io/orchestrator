@@ -77,7 +77,7 @@ N/A - Unit test verification
 
 3. Check DynamicStepConfig in config:
    ```bash
-   ./scripts/orchestrator.sh config export -f /tmp/exported-config.yaml
+   ./scripts/orchestrator.sh manifest export -f /tmp/exported-config.yaml
    grep -A 10 "dynamic_steps:" /tmp/exported-config.yaml
    ```
 

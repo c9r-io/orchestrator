@@ -11,7 +11,7 @@
 
 This document is split from `13-dynamic-orchestration.md` to keep each QA document within 5 scenarios.
 
-Entry point: `./scripts/orchestrator.sh config <command>`
+Entry point: `./scripts/orchestrator.sh manifest <command>`
 
 ---
 
@@ -26,7 +26,7 @@ Entry point: `./scripts/orchestrator.sh config <command>`
 
 1. Export runtime config:
    ```bash
-   ./scripts/orchestrator.sh config export -f /tmp/exported-config.yaml
+   ./scripts/orchestrator.sh manifest export -f /tmp/exported-config.yaml
    ```
 
 2. Verify adaptive workflow snippet:
@@ -41,7 +41,7 @@ Entry point: `./scripts/orchestrator.sh config <command>`
 
 4. Validate exported YAML:
    ```bash
-   ./scripts/orchestrator.sh config validate /tmp/exported-config.yaml
+   ./scripts/orchestrator.sh manifest validate -f /tmp/exported-config.yaml
    ```
 
 ### Expected

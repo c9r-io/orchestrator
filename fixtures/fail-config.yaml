@@ -1,51 +1,40 @@
-runner:
-  shell: /bin/bash
-  shell_arg: "-lc"
-resume:
-  auto: false
-defaults:
-  project: default
-  workspace: default
-  workflow: qa_fix
-projects: {}
-workspaces:
-  default:
-    root_path: "."
-    qa_targets:
-      - docs/qa/orchestrator
-    ticket_dir: docs/ticket
-agents:
-  mock_fail:
-    metadata:
-      name: mock_fail
-    capabilities:
-      - qa
-      - fix
-    templates:
-      qa: "echo '{\"confidence\":0.35,\"quality_score\":0.2,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"regression\",\"content\":{\"title\":\"qa-failed\",\"qa_file\":\"target-file\"}}]}' && exit 1"
-      fix: "echo '{\"confidence\":0.81,\"quality_score\":0.77,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"auto-fix.patch\"]}]}' && exit 0"
-workflows:
-  qa_fix:
-    steps:
-      - id: qa
-        type: qa
-        required_capability: qa
-        enabled: true
-        repeatable: true
-        is_guard: false
-      - id: ticket_scan
-        type: ticket_scan
-        enabled: true
-        repeatable: true
-        is_guard: false
-      - id: fix
-        type: fix
-        required_capability: fix
-        enabled: true
-        repeatable: true
-        is_guard: false
-    loop:
-      mode: once
-      guard:
-        enabled: false
-        stop_when_no_unresolved: false
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa/orchestrator
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_fail
+spec:
+  capabilities:
+    - qa
+    - fix
+  templates:
+    qa: "echo '{\"confidence\":0.35,\"quality_score\":0.2,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"regression\",\"content\":{\"title\":\"qa-failed\",\"qa_file\":\"target-file\"}}]}' && exit 1"
+    fix: "echo '{\"confidence\":0.81,\"quality_score\":0.77,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"auto-fix.patch\"]}]}' && exit 0"
+    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: qa_fix
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+    - id: ticket_scan
+      type: ticket_scan
+      enabled: true
+    - id: fix
+      type: fix
+      enabled: true
+  loop:
+    mode: once

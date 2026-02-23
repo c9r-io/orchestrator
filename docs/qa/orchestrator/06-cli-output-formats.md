@@ -110,7 +110,7 @@ QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 
 ---
 
-## Scenario 4: Config View JSON/YAML
+## Scenario 4: Manifest Export JSON/YAML
 
 ### Preconditions
 
@@ -120,17 +120,17 @@ QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 
 1. Get config in JSON:
    ```bash
-   orchestrator config view -o json
+   orchestrator manifest export -o json
    ```
 
 2. Get config in YAML:
    ```bash
-   orchestrator config view -o yaml
+   orchestrator manifest export -o yaml
    ```
 
 3. Verify config can be parsed:
    ```bash
-   orchestrator config view -o json | jq '.workspaces'
+   orchestrator manifest export -o json | jq '.workspaces'
    ```
 
 ### Expected
@@ -151,12 +151,12 @@ QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 
 1. List workflows in JSON:
    ```bash
-   orchestrator config list-workflows -o json
+   orchestrator get workflows -o json
    ```
 
 2. List agents in JSON:
    ```bash
-   orchestrator config list-agents -o json
+   orchestrator get agents -o json
    ```
 
 ### Expected
@@ -173,5 +173,5 @@ QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 | 1 | Task List JSON/YAML | ☐ | | | |
 | 2 | Task Info JSON/YAML | ☐ | | | |
 | 3 | Workspace List JSON/YAML | ☐ | | | |
-| 4 | Config View JSON/YAML | ☐ | | | |
+| 4 | Manifest Export JSON/YAML | ☐ | | | |
 | 5 | Workflow/Agent List JSON/YAML | ☐ | | | |

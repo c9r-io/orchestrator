@@ -5,7 +5,7 @@ This directory contains reproducible, verifiable QA test documents.
 ## Source of Truth
 
 - Runtime state source: SQLite (`data/agent_orchestrator.db`)
-- YAML role: import/export/edit artifact (`apply`, `config export`, `edit export`)
+- YAML role: import/export/edit artifact (`apply`, `manifest export`, `edit export`)
 - QA docs must not assume a mandatory `default.yaml` file is auto-generated.
 
 ## QA Contract
@@ -58,7 +58,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/01-cli-agent-orchestration.md` | 5 | CLI lifecycle and apply dry-run |
 | orchestrator | `docs/qa/orchestrator/02-cli-task-lifecycle.md` | 5 | Start/pause/resume/logs/retry |
 | orchestrator | `docs/qa/orchestrator/03-cli-edit-export.md` | 4 | Edit and export commands |
-| orchestrator | `docs/qa/orchestrator/04-cli-config-db.md` | 4 | Config set and DB reset |
+| orchestrator | `docs/qa/orchestrator/04-cli-config-db.md` | 4 | Manifest apply and DB reset |
 | orchestrator | `docs/qa/orchestrator/05-workflow-execution.md` | 5 | Workflow execution core scenarios |
 | orchestrator | `docs/qa/orchestrator/06-cli-output-formats.md` | 5 | JSON/YAML output validation |
 | orchestrator | `docs/qa/orchestrator/07-capability-orchestration.md` | 5 | Capability-driven orchestration core |
@@ -67,7 +67,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/10-agent-collaboration.md` | 5 | AgentOutput and MessageBus |
 | orchestrator | `docs/qa/orchestrator/10-config-error-handling.md` | 4 | Config error paths |
 | orchestrator | `docs/qa/orchestrator/11-config-creation-flow.md` | 4 | Apply-based resource creation |
-| orchestrator | `docs/qa/orchestrator/12-config-validation.md` | 4 | Config validate command |
+| orchestrator | `docs/qa/orchestrator/12-config-validation.md` | 4 | Manifest validate command |
 | orchestrator | `docs/qa/orchestrator/13-dynamic-orchestration.md` | 5 | Dynamic orchestration unit-level validation |
 | orchestrator | `docs/qa/orchestrator/14-config-validation-enhanced.md` | 5 | Enhanced config validation |
 | orchestrator | `docs/qa/orchestrator/15-workflow-multi-target-files.md` | 1 | Split from doc 05 |

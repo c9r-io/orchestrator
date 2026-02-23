@@ -9,7 +9,7 @@
 
 ## Background
 
-测试 `config validate` 命令和配置错误检测。
+测试 `manifest validate` 命令和配置错误检测。
 
 Entry point: `./scripts/orchestrator.sh <command>`
 
@@ -71,7 +71,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 2. 验证配置:
    ```bash
-   ./scripts/orchestrator.sh config validate /tmp/valid-config.yaml
+   ./scripts/orchestrator.sh manifest validate -f /tmp/valid-config.yaml
    ```
 
 ### Expected
@@ -134,7 +134,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 2. 验证配置:
    ```bash
-   ./scripts/orchestrator.sh config validate /tmp/invalid-ws.yaml
+   ./scripts/orchestrator.sh manifest validate -f /tmp/invalid-ws.yaml
    ```
 
 ### Expected
@@ -196,7 +196,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 2. 验证配置:
    ```bash
-   ./scripts/orchestrator.sh config validate /tmp/invalid-workflow.yaml
+   ./scripts/orchestrator.sh manifest validate -f /tmp/invalid-workflow.yaml
    ```
 
 ### Expected
@@ -260,7 +260,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 2. 验证配置:
    ```bash
-   ./scripts/orchestrator.sh config validate /tmp/invalid-template.yaml
+   ./scripts/orchestrator.sh manifest validate -f /tmp/invalid-template.yaml
    ```
 
 ### Expected

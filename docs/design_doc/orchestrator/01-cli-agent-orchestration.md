@@ -21,7 +21,7 @@ The Agent Orchestrator provides a kubectl-like CLI interface for managing tasks,
 
 ### Goals
 
-- Validate all CLI command parsing (init, apply, get, describe, task, workspace, config, edit, db, completion, debug)
+- Validate all CLI command parsing (init, apply, get, describe, task, workspace, manifest, edit, db, completion, debug)
 - Verify task lifecycle state transitions (pending -> running -> paused -> completed/failed)
 - Test agent template rendering with placeholder substitution
 - Validate workflow execution with multiple agents and phases
@@ -60,7 +60,7 @@ Key commands:
 - `apply -f <file>` - Apply YAML manifests
 - `task list/create/info/start/pause/resume/logs/delete/retry` - Task management
 - `workspace list/info` - Workspace management
-- `config view/validate/set/list-workflows/list-agents` - Configuration
+- `manifest export/validate` - Manifest artifact operations
 - `edit export/open` - Resource editing
 - `db reset` - Database reset
 - `debug --component <name>` - Runtime diagnostics
@@ -82,7 +82,7 @@ Commands:
   describe <resource> [-o table|json|yaml]
   task list|create|info|start|pause|resume|logs|delete|retry
   workspace list|info
-  config view|validate|set|export|list-workflows|list-agents
+  manifest export|validate
   edit export|open
   db reset
   completion bash|zsh|fish|powershell

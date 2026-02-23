@@ -12,12 +12,12 @@
 This document validates config lifecycle commands and database reset behavior.
 
 Entry points:
-- `./scripts/orchestrator.sh config <command>`
+- `./scripts/orchestrator.sh apply|manifest <command>`
 - `./scripts/orchestrator.sh db reset`
 
 ---
 
-## Scenario 1: Config Set - Update Configuration
+## Scenario 1: Manifest Apply - Update Configuration
 
 ### Preconditions
 
@@ -68,14 +68,14 @@ Entry points:
 
 2. Apply config:
    ```bash
-   ./scripts/orchestrator.sh config set /tmp/updated-config.yaml
+   ./scripts/orchestrator.sh apply -f /tmp/updated-config.yaml
    ```
 
 3. Verify:
    ```bash
-   ./scripts/orchestrator.sh config view -o yaml
-   ./scripts/orchestrator.sh config list-workflows
-   ./scripts/orchestrator.sh config list-agents
+   ./scripts/orchestrator.sh manifest export -o yaml
+   ./scripts/orchestrator.sh get workflows
+   ./scripts/orchestrator.sh get agents
    ```
 
 ### Expected
@@ -85,7 +85,7 @@ Entry points:
 
 ---
 
-## Scenario 2: Config Set - Invalid Configuration
+## Scenario 2: Manifest Apply - Invalid Configuration
 
 ### Preconditions
 
@@ -109,7 +109,7 @@ Entry points:
 
 2. Apply invalid config:
    ```bash
-   ./scripts/orchestrator.sh config set /tmp/invalid-config.yaml
+   ./scripts/orchestrator.sh apply -f /tmp/invalid-config.yaml
    ```
 
 ### Expected
@@ -119,7 +119,7 @@ Entry points:
 
 ---
 
-## Scenario 3: Config Set - Add New Workspace
+## Scenario 3: Manifest Apply - Add New Workspace
 
 ### Preconditions
 
@@ -131,7 +131,7 @@ Entry points:
 
 1. Export current config:
    ```bash
-   ./scripts/orchestrator.sh config export -f /tmp/base-config.yaml
+   ./scripts/orchestrator.sh manifest export -f /tmp/base-config.yaml
    ```
 
 2. Create new config that adds a workspace:
@@ -175,7 +175,7 @@ Entry points:
        finalize:
          rules: []
    EOF2
-   ./scripts/orchestrator.sh config set /tmp/add-workspace.yaml
+   ./scripts/orchestrator.sh apply -f /tmp/add-workspace.yaml
    ```
 
 3. Verify workspace list:
@@ -225,7 +225,7 @@ Entry points:
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Config Set - Update Configuration | ☐ | | | |
-| 2 | Config Set - Invalid Configuration | ☐ | | | |
-| 3 | Config Set - Add New Workspace | ☐ | | | |
+| 1 | Manifest Apply - Update Configuration | ☐ | | | |
+| 2 | Manifest Apply - Invalid Configuration | ☐ | | | |
+| 3 | Manifest Apply - Add New Workspace | ☐ | | | |
 | 4 | Database Reset | ☐ | | | |

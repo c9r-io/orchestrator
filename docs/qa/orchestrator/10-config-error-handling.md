@@ -43,7 +43,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 ### Expected
 
-- 输出包含: `orchestrator config is not initialized in sqlite`
+- 输出包含: `orchestrator manifest is not initialized in sqlite`
 - 输出包含: `run 'orchestrator apply -f <manifest.yaml>' first`
 - 命令非 0 退出，且无 panic
 

@@ -6,7 +6,6 @@ mod cli_types;
 mod collab;
 mod config;
 mod config_load;
-mod config_validation;
 mod db;
 mod db_write;
 mod dto;
@@ -30,7 +29,7 @@ mod ticket;
 #[cfg(test)]
 mod test_utils;
 
-use crate::cli::{Cli, Commands, ConfigCommands};
+use crate::cli::{Cli, Commands, ManifestCommands};
 use crate::collab::MessageBus;
 use crate::config_load::read_active_config;
 use crate::config_load::{
@@ -216,6 +215,60 @@ fn run_apply_preflight(app_root: &Path, file: &str, dry_run: bool) -> Result<i32
     Ok(0)
 }
 
+fn run_manifest_validate_preflight(app_root: &Path, file: &str) -> Result<i32> {
+    let (db_path, _logs_dir) = initialize_runtime(app_root)?;
+    let content = read_manifest_input(file)?;
+    let resources = parse_resources_from_yaml(&content)?;
+    let mut merged_config = load_raw_config_from_db(&db_path)?
+        .map(|(cfg, _, _)| cfg)
+        .unwrap_or_default();
+
+    let mut has_errors = false;
+    for (index, manifest) in resources.into_iter().enumerate() {
+        if let Err(error) = manifest.validate_version() {
+            eprintln!("document {}: {}", index + 1, error);
+            has_errors = true;
+            continue;
+        }
+
+        let registered = match dispatch_resource(manifest) {
+            Ok(resource) => resource,
+            Err(error) => {
+                eprintln!("document {}: {}", index + 1, error);
+                has_errors = true;
+                continue;
+            }
+        };
+        if let Err(error) = registered.validate() {
+            eprintln!(
+                "{} / {} invalid: {}",
+                kind_as_str(registered.kind()),
+                registered.name(),
+                error
+            );
+            has_errors = true;
+            continue;
+        }
+        registered.apply(&mut merged_config);
+    }
+
+    if has_errors {
+        return Ok(1);
+    }
+
+    autofill_defaults_for_manifest_mode(&mut merged_config);
+    match config_load::build_active_config(app_root, merged_config) {
+        Ok(_) => {
+            println!("Manifest is valid");
+            Ok(0)
+        }
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            Ok(1)
+        }
+    }
+}
+
 fn read_manifest_input(file: &str) -> Result<String> {
     if file == "-" {
         let mut buf = String::new();
@@ -277,35 +330,9 @@ fn try_handle_preflight_command(cli: &Cli) -> Result<Option<i32>> {
             let app_root = detect_app_root();
             Ok(Some(run_apply_preflight(&app_root, file, *dry_run)?))
         }
-        Commands::Config(ConfigCommands::Validate { config_file }) => {
+        Commands::Manifest(ManifestCommands::Validate { file }) => {
             let app_root = detect_app_root();
-            let content = std::fs::read_to_string(config_file)
-                .with_context(|| format!("cannot read config file: {}", config_file))?;
-
-            let validator = crate::config_validation::validator::ConfigValidator::new(&app_root)
-                .with_level(crate::config_validation::ValidationLevel::Full);
-            let result = validator.validate_yaml(&content);
-
-            if !result.warnings.is_empty() || !result.errors.is_empty() {
-                eprintln!("{}", result.report());
-            }
-
-            if !result.is_valid {
-                return Ok(Some(1));
-            }
-
-            let config: crate::config::OrchestratorConfig = serde_yaml::from_str(&content)?;
-            match config_load::build_active_config(&app_root, config) {
-                Ok(candidate) => {
-                    let normalized = serde_yaml::to_string(&candidate.config)?;
-                    println!("Configuration is valid:\n{}", normalized);
-                    Ok(Some(0))
-                }
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    Ok(Some(1))
-                }
-            }
+            Ok(Some(run_manifest_validate_preflight(&app_root, file)?))
         }
         _ => Ok(None),
     }

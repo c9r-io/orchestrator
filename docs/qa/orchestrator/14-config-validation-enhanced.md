@@ -9,14 +9,14 @@
 
 ## Background
 
-测试新的 `config_validation` 模块提供的增强校验功能：
+测试新的 manifest 预检与语义校验能力：
 - YAML 语法预检（反序列化前检测）
-- 分层校验（SyntaxOnly, Schema, Full）
+- 分层校验（语法 + 资源语义）
 - 错误/警告聚合报告
 - 路径存在性检查（警告 vs 错误）
 - 路径安全检查（逃逸检测）
 
-**Primary Testing Method**: 单元测试 (CLI: `cargo test config_validation --lib`)
+**Primary Testing Method**: CLI 校验 + 资源单元测试
 
 ---
 
@@ -26,7 +26,7 @@
 
 ```bash
 cd core
-cargo test config_validation --lib
+cargo test cli_types::tests resource::tests --lib
 ```
 
 ### CLI 配置校验
@@ -38,7 +38,7 @@ cargo build --release
 
 # 使用 CLI 校验配置文件
 cd ..
-./core/target/release/agent-orchestrator config validate /tmp/test-config.yaml
+./core/target/release/agent-orchestrator manifest validate -f /tmp/test-config.yaml
 ```
 
 ---
@@ -59,7 +59,7 @@ cd ..
    ```
 2. 执行:
    ```bash
-   ./core/target/release/agent-orchestrator config validate /tmp/invalid-yaml.yaml
+   ./core/target/release/agent-orchestrator manifest validate -f /tmp/invalid-yaml.yaml
    ```
 
 ### Expected
@@ -100,7 +100,7 @@ cd ..
    ```
 2. 执行:
    ```bash
-   ./core/target/release/agent-orchestrator config validate /tmp/multi-error.yaml
+   ./core/target/release/agent-orchestrator manifest validate -f /tmp/multi-error.yaml
    ```
 
 ### Expected
@@ -150,7 +150,7 @@ cd ..
    ```
 2. 执行:
    ```bash
-   ./core/target/release/agent-orchestrator config validate /tmp/missing-path.yaml
+   ./core/target/release/agent-orchestrator manifest validate -f /tmp/missing-path.yaml
    ```
 
 ### Expected
@@ -200,7 +200,7 @@ cd ..
    ```
 2. 执行:
    ```bash
-   ./core/target/release/agent-orchestrator config validate /tmp/path-escape.yaml
+   ./core/target/release/agent-orchestrator manifest validate -f /tmp/path-escape.yaml
    ```
 
 ### Expected
@@ -220,8 +220,8 @@ cd ..
 
 1. 使用已有配置:
    ```bash
-   ./scripts/orchestrator.sh config export -f /tmp/exported-config.yaml
-   ./core/target/release/agent-orchestrator config validate /tmp/exported-config.yaml
+   ./scripts/orchestrator.sh manifest export -f /tmp/exported-config.yaml
+   ./core/target/release/agent-orchestrator manifest validate -f /tmp/exported-config.yaml
    ```
 
 ### Expected
