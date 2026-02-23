@@ -3,12 +3,13 @@
 //! Provides enhanced prehook capabilities, dynamic step execution,
 //! and DAG-based workflow orchestration for adaptive agent orchestration.
 
+#![allow(dead_code)]
+
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 // ============================================================================
 // Phase 1: Prehook 2.0 - Extended Return Types
@@ -17,8 +18,10 @@ use uuid::Uuid;
 /// Extended prehook decision that supports dynamic orchestration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "action", content = "data")]
+#[derive(Default)]
 pub enum PrehookDecision {
     /// Execute the step (default behavior)
+    #[default]
     Run,
     /// Skip the step with a reason
     Skip {
@@ -46,12 +49,6 @@ pub enum PrehookDecision {
         #[serde(default)]
         target_steps: Vec<String>,
     },
-}
-
-impl Default for PrehookDecision {
-    fn default() -> Self {
-        Self::Run
-    }
 }
 
 impl From<bool> for PrehookDecision {
@@ -243,10 +240,10 @@ fn evaluate_simple_condition(condition: &str, context: &StepPrehookContext) -> b
     }
 
     if condition.contains("qa_exit_code") {
-        if condition.contains("!= 0") && context.qa_exit_code.map_or(false, |c| c != 0) {
+        if condition.contains("!= 0") && context.qa_exit_code.is_some_and(|c| c != 0) {
             return true;
         }
-        if condition.contains("== 0") && context.qa_exit_code.map_or(false, |c| c == 0) {
+        if condition.contains("== 0") && (context.qa_exit_code == Some(0)) {
             return true;
         }
     }
@@ -389,7 +386,7 @@ impl DynamicExecutionPlan {
 
     /// Get nodes that have no incoming edges (starting points)
     pub fn get_entry_nodes(&self) -> Vec<&WorkflowNode> {
-        let mut has_incoming: HashSet<&str> = self.edges.iter().map(|e| e.to.as_str()).collect();
+        let has_incoming: HashSet<&str> = self.edges.iter().map(|e| e.to.as_str()).collect();
 
         self.nodes
             .values()
@@ -399,7 +396,7 @@ impl DynamicExecutionPlan {
 
     /// Get nodes that have no outgoing edges (endpoints)
     pub fn get_exit_nodes(&self) -> Vec<&WorkflowNode> {
-        let mut has_outgoing: HashSet<&str> = self.edges.iter().map(|e| e.from.as_str()).collect();
+        let has_outgoing: HashSet<&str> = self.edges.iter().map(|e| e.from.as_str()).collect();
 
         self.nodes
             .values()
@@ -447,10 +444,10 @@ impl DynamicExecutionPlan {
         }
 
         for node_id in self.nodes.keys() {
-            if !visited.contains(node_id) {
-                if dfs(node_id.clone(), self, &mut visited, &mut rec_stack) {
-                    return true;
-                }
+            if !visited.contains(node_id)
+                && dfs(node_id.clone(), self, &mut visited, &mut rec_stack)
+            {
+                return true;
             }
         }
 
@@ -534,7 +531,7 @@ impl DynamicExecutionPlan {
 }
 
 /// Execution state for the DAG engine
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DagExecutionState {
     /// Current node being executed
     pub current_node: Option<String>,
@@ -559,18 +556,6 @@ pub struct BranchRecord {
     pub condition: Option<String>,
     pub result: bool,
     pub timestamp: DateTime<Utc>,
-}
-
-impl Default for DagExecutionState {
-    fn default() -> Self {
-        Self {
-            current_node: None,
-            completed_nodes: HashSet::new(),
-            skipped_nodes: HashSet::new(),
-            context: HashMap::new(),
-            branch_history: Vec::new(),
-        }
-    }
 }
 
 // ============================================================================
@@ -690,7 +675,7 @@ impl AdaptivePlanner {
         }
 
         // Build prompt from context and history
-        let prompt = self.build_prompt(context);
+        let _prompt = self.build_prompt(context);
 
         // In a real implementation, this would call an LLM
         // For now, return a simple default plan

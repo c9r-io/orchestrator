@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::config::{
     ItemFinalizeContext, StepHookEngine, StepPrehookConfig, StepPrehookContext,
     WorkflowFinalizeConfig, WorkflowFinalizeRule,

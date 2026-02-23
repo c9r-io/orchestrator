@@ -12,16 +12,19 @@ pub struct CreateTaskPayload {
     pub target_files: Option<Vec<String>>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 pub struct BootstrapResponse {
     pub resumed_task_id: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 pub struct NamedOption {
     pub id: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 pub struct CreateTaskDefaults {
     pub project_id: String,
@@ -29,6 +32,7 @@ pub struct CreateTaskDefaults {
     pub workflow_id: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 pub struct CreateTaskOptions {
     pub defaults: CreateTaskDefaults,
@@ -45,6 +49,7 @@ pub struct ConfigOverview {
     pub updated_at: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 pub struct SimulatePrehookContextPayload {
@@ -58,6 +63,7 @@ pub struct SimulatePrehookContextPayload {
     pub fix_required: bool,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 pub struct SimulatePrehookPayload {
@@ -66,6 +72,7 @@ pub struct SimulatePrehookPayload {
     pub context: SimulatePrehookContextPayload,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 pub struct SimulatePrehookResult {
     pub result: bool,
@@ -143,6 +150,7 @@ pub struct TaskDetail {
     pub events: Vec<EventDto>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 pub struct DeleteTaskResponse {
     pub task_id: String,
@@ -167,7 +175,9 @@ pub struct TaskItemRow {
 
 #[derive(Debug, Clone)]
 pub struct TicketPreviewData {
+    #[allow(dead_code)]
     pub path: String,
+    #[allow(dead_code)]
     pub title: String,
     pub status: String,
     pub qa_document: String,
@@ -179,12 +189,17 @@ pub const UNASSIGNED_QA_FILE_PATH: &str = "__UNASSIGNED__";
 pub struct RunResult {
     pub success: bool,
     pub exit_code: i64,
+    #[allow(dead_code)]
     pub stdout_path: String,
+    #[allow(dead_code)]
     pub stderr_path: String,
     pub timed_out: bool,
+    #[allow(dead_code)]
     pub duration_ms: Option<u64>,
     pub output: Option<crate::collab::AgentOutput>,
+    #[allow(dead_code)]
     pub validation_status: String,
+    #[allow(dead_code)]
     pub validation_error: Option<String>,
 }
 
@@ -194,6 +209,7 @@ impl RunResult {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 pub struct AgentHealthInfo {
     pub agent_id: String,

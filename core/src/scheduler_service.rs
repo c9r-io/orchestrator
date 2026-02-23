@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::config_load::now_ts;
 use crate::events::insert_event;
 use crate::scheduler::set_task_status;

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::cli::{
     generate_completion, AgentCommands, Cli, Commands, CompletionCommands, DbCommands,
     EditCommands, ManifestCommands, OutputFormat, QaCommands, QaProjectCommands, TaskCommands,

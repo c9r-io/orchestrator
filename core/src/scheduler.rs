@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::config::{
     ItemFinalizeContext, LoopMode, StepPrehookContext, TaskExecutionStep, TaskRuntimeContext,
     WorkflowStepType,

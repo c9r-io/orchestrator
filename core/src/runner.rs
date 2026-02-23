@@ -4,6 +4,85 @@ use std::fs::File;
 use std::path::Path;
 use std::process::Stdio;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_runner_config() -> RunnerConfig {
+        RunnerConfig {
+            shell: "/bin/bash".to_string(),
+            shell_arg: "-lc".to_string(),
+            policy: RunnerPolicy::Legacy,
+            executor: RunnerExecutorKind::Shell,
+            allowed_shells: vec!["/bin/bash".to_string()],
+            allowed_shell_args: vec!["-lc".to_string()],
+            env_allowlist: vec!["PATH".to_string()],
+            redaction_patterns: vec!["password".to_string()],
+        }
+    }
+
+    #[test]
+    fn test_enforce_runner_policy_allows_valid_command() {
+        let runner = make_runner_config();
+        let result = enforce_runner_policy(&runner, "echo hello");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_enforce_runner_policy_rejects_empty_command() {
+        let runner = make_runner_config();
+        let result = enforce_runner_policy(&runner, "");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn test_enforce_runner_policy_rejects_newline_in_command() {
+        let runner = make_runner_config();
+        let result = enforce_runner_policy(&runner, "echo hello\nwhoami");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("control characters"));
+    }
+
+    #[test]
+    fn test_enforce_runner_policy_rejects_too_long_command() {
+        let runner = make_runner_config();
+        let long_command = "x".repeat(16385);
+        let result = enforce_runner_policy(&runner, &long_command);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("too long"));
+    }
+
+    #[test]
+    fn test_redact_text_removes_matching_patterns() {
+        let patterns = vec!["password".to_string(), "token".to_string()];
+        let input = "my password is [REDACTED] and token is [REDACTED]";
+        let result = redact_text(input, &patterns);
+        assert!(result.contains("[REDACTED]"));
+        assert!(!result.contains("password"));
+        assert!(!result.contains("token"));
+    }
+
+    #[test]
+    fn test_redact_text_handles_uppercase_patterns() {
+        let patterns = vec!["password".to_string()];
+        let input = "PASSWORD is secret";
+        let result = redact_text(input, &patterns);
+        assert!(result.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn test_redact_text_ignores_empty_patterns() {
+        let patterns = vec!["".to_string()];
+        let input = "hello world";
+        let result = redact_text(input, &patterns);
+        assert_eq!(result, "hello world");
+    }
+}
+
 pub trait RunnerExecutor {
     fn spawn(
         &self,

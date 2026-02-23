@@ -53,6 +53,12 @@ pub struct RunningTask {
     pub child: Arc<Mutex<Option<Child>>>,
 }
 
+impl Default for RunningTask {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RunningTask {
     pub fn new() -> Self {
         Self {

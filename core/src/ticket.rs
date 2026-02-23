@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::config::TaskRuntimeContext;
 use crate::config_load::resolve_workspace_path;
 use crate::dto::{TicketPreviewData, UNASSIGNED_QA_FILE_PATH};
@@ -5,8 +7,88 @@ use anyhow::Result;
 use chrono::Utc;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use walkdir::WalkDir;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_rel_path_for_match_trims_whitespace() {
+        let result = normalize_rel_path_for_match("  foo/bar  ");
+        assert_eq!(result, "foo/bar");
+    }
+
+    #[test]
+    fn test_normalize_rel_path_for_match_removes_backslashes() {
+        let result = normalize_rel_path_for_match("foo\\bar\\baz");
+        assert_eq!(result, "foo/bar/baz");
+    }
+
+    #[test]
+    fn test_normalize_rel_path_for_match_filters_empty_parts() {
+        let result = normalize_rel_path_for_match("foo//bar");
+        assert_eq!(result, "foo/bar");
+    }
+
+    #[test]
+    fn test_normalize_rel_path_for_match_filters_dot() {
+        let result = normalize_rel_path_for_match("foo/./bar");
+        assert_eq!(result, "foo/bar");
+    }
+
+    #[test]
+    fn test_normalize_rel_path_for_match_rejects_parent_traversal() {
+        let result = normalize_rel_path_for_match("foo/../bar");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_is_active_ticket_status_failed() {
+        assert!(is_active_ticket_status("FAILED"));
+        assert!(is_active_ticket_status("failed"));
+        assert!(is_active_ticket_status("FAILED "));
+    }
+
+    #[test]
+    fn test_is_active_ticket_status_open() {
+        assert!(is_active_ticket_status("OPEN"));
+        assert!(is_active_ticket_status("open"));
+    }
+
+    #[test]
+    fn test_is_active_ticket_status_empty() {
+        assert!(is_active_ticket_status(""));
+        assert!(is_active_ticket_status("   "));
+    }
+
+    #[test]
+    fn test_is_active_ticket_status_closed() {
+        assert!(!is_active_ticket_status("PASSED"));
+        assert!(!is_active_ticket_status("FIXED"));
+    }
+
+    #[test]
+    fn test_parse_ticket_preview_content_extracts_title() {
+        let content = r#"# Ticket: Test Issue
+
+**Status**: FAILED
+**QA Document**: `docs/qa/test.md`
+"#;
+        let result = parse_ticket_preview_content("test.md", content);
+        assert_eq!(result.title, "Test Issue");
+        assert_eq!(result.status, "FAILED");
+        assert_eq!(result.qa_document, "docs/qa/test.md");
+    }
+
+    #[test]
+    fn test_parse_ticket_preview_content_handles_empty() {
+        let result = parse_ticket_preview_content("test.md", "no content here");
+        assert!(result.title.is_empty());
+        assert!(result.status.is_empty());
+    }
+}
 
 pub fn normalize_rel_path_for_match(raw: &str) -> String {
     let value = raw.trim().trim_matches('`').replace('\\', "/");

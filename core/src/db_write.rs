@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::config_load::now_ts;
 use crate::db::open_conn;
 use crate::task_repository::NewCommandRun;
