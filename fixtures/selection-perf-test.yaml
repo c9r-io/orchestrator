@@ -23,8 +23,8 @@ agents:
     selection:
       strategy: performance_first
     templates:
-      qa: "echo 'fast-qa'"
-      fix: "echo 'fast-fix'"
+      qa: "echo '{\"confidence\":0.9,\"quality_score\":0.82,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"fast-qa\",\"description\":\"fast qa agent\",\"severity\":\"info\"}]}]}'"
+      fix: "echo '{\"confidence\":0.82,\"quality_score\":0.76,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fast-fix.out\"]}]}'"
 
   quality_agent:
     metadata:
@@ -36,8 +36,8 @@ agents:
     selection:
       strategy: success_rate_weighted
     templates:
-      qa: "echo 'quality-qa'"
-      fix: "echo 'quality-fix'"
+      qa: "echo '{\"confidence\":0.95,\"quality_score\":0.94,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"quality-qa\",\"description\":\"quality qa agent\",\"severity\":\"info\"}]}]}'"
+      fix: "echo '{\"confidence\":0.91,\"quality_score\":0.89,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"quality-fix.out\"]}]}'"
 
 workflows:
   selection_test:

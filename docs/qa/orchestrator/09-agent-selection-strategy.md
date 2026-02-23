@@ -35,8 +35,8 @@ lower-cost agent is selected more frequently by the scoring algorithm.
 
 `fixtures/manifests/bundles/selection-perf-test.yaml`
 
-- `fast_agent` — cost: 20, capabilities: `[qa, fix]`, templates: `fast-qa` / `fast-fix`
-- `quality_agent` — cost: 80, capabilities: `[qa, fix]`, templates: `quality-qa` / `quality-fix`
+- `fast_agent` — cost: 20, capabilities: `[qa, fix]`, templates emit structured JSON markers `fast-qa` / `fast-fix`
+- `quality_agent` — cost: 80, capabilities: `[qa, fix]`, templates emit structured JSON markers `quality-qa` / `quality-fix`
 - Workflow `selection_test` — steps: qa, fix (mode: once)
 
 ### Steps
@@ -62,7 +62,7 @@ lower-cost agent is selected more frequently by the scoring algorithm.
 3. Inspect logs to count agent selection:
    ```bash
    ./scripts/orchestrator.sh task logs {task_id}
-   # Count occurrences of "fast-qa" vs "quality-qa"
+   # Count occurrences of structured output markers "fast-qa" vs "quality-qa"
    ```
 
 ### Expected
@@ -89,8 +89,8 @@ both used successfully.
 
 `fixtures/manifests/bundles/selection-quality-test.yaml`
 
-- `proven_agent` — cost: 50, capabilities: `[qa]`, template: `echo 'proven-qa'`
-- `new_agent` — cost: 20, capabilities: `[qa]`, template: `echo 'new-qa'`
+- `proven_agent` — cost: 50, capabilities: `[qa]`, template emits structured marker `proven-qa`
+- `new_agent` — cost: 20, capabilities: `[qa]`, template emits structured marker `new-qa`
 - Workflow `quality_selection_test` — steps: qa (mode: once)
 
 ### Steps
@@ -141,8 +141,8 @@ and the healthy agent handles an increasing share of work across cycles.
 
 `fixtures/manifests/bundles/mixed-health.yaml`
 
-- `mock_echo` — capabilities: `[qa]`, template: `echo 'echo-qa: {rel_path}'` (always succeeds)
-- `mock_fail` — capabilities: `[qa]`, template: `echo 'QA failed' && exit 1` (always fails)
+- `mock_echo` — capabilities: `[qa]`, template emits structured analysis JSON (always succeeds)
+- `mock_fail` — capabilities: `[qa]`, template emits structured ticket JSON and `exit 1` (always fails)
 - Workflow `health_test` — steps: qa, loop mode: infinite, max_cycles: 3
 
 ### Steps
@@ -168,13 +168,13 @@ and the healthy agent handles an increasing share of work across cycles.
 3. Inspect logs across cycles:
    ```bash
    ./scripts/orchestrator.sh task logs {task_id}
-   # Count "echo-qa:" vs "QA failed" entries to observe health shift
+   # Count mock_echo vs mock_fail structured markers to observe health shift
    ```
 
 ### Expected
 
 - current_cycle = 3
-- Cycle 1: both agents selected (mix of `echo-qa:` and `QA failed`)
+- Cycle 1: both agents selected (mix of structured success and failure markers)
 - Later cycles: `mock_fail` is marked diseased after consecutive failures;
   `mock_echo` handles a larger proportion of items
 - Items assigned to `mock_echo` always pass; items assigned to `mock_fail`

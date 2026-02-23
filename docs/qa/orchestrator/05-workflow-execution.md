@@ -185,7 +185,7 @@ QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 - QA phase fails for every item (mock_fail exits 1)
 - Ticket files are created under `workspace/${QA_PROJECT}/docs/ticket/`
 - Fix phase executes after ticket scan
-- Logs show `QA failed` for QA steps and `Fix attempted` for fix steps
+- Logs and DB command_runs show structured JSON outputs (`output_json`/`artifacts_json`); failing QA runs are marked by non-success status and ticket artifacts
 - **Note**: If the agent becomes unhealthy after repeated QA failures, the task
   may report "No healthy agent found with capability: fix" — this is expected
   when health tracking marks the agent as diseased.
@@ -239,5 +239,5 @@ QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 | 1 | qa_only Workflow | ✅ | 2026-02-23 | chenhan | Status: completed, Failed: 0 |
 | 2 | qa_fix Workflow | ✅ | 2026-02-23 | chenhan | Status: completed, QA通过, Fix跳过 |
 | 3 | qa_fix_retest Workflow | ⚠️ | 2026-02-23 | chenhan | QA执行, fix/retest未运行(无tickets) |
-| 4 | QA Failure and Ticket Creation | ✅ | 2026-02-23 | chenhan | QA failed, tickets创建, Fix attempted |
+| 4 | QA Failure and Ticket Creation | ✅ | 2026-02-23 | chenhan | 结构化 QA 失败产物落库，tickets创建，Fix阶段执行 |
 | 5 | Loop Mode (max_cycles) | ❌ | 2026-02-23 | chenhan | Status: failed(预期completed), Failed: 20 |

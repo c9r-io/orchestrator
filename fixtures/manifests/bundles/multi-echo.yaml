@@ -16,8 +16,8 @@ spec:
   capabilities:
     - qa
   templates:
-    qa: "echo 'alpha-qa: {rel_path}'"
-    loop_guard: "echo 'continue'"
+    qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"alpha-qa\",\"description\":\"alpha qa for target-file\",\"severity\":\"info\"}]}]}'"
+    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
 ---
 apiVersion: orchestrator.dev/v1
 kind: Agent
@@ -27,7 +27,7 @@ spec:
   capabilities:
     - qa
   templates:
-    qa: "echo 'beta-qa: {rel_path}'"
+    qa: "echo '{\"confidence\":0.89,\"quality_score\":0.85,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"beta-qa\",\"description\":\"beta qa for target-file\",\"severity\":\"info\"}]}]}'"
 ---
 apiVersion: orchestrator.dev/v1
 kind: Workflow

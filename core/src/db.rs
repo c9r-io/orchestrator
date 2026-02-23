@@ -145,7 +145,6 @@ pub fn init_schema(db_path: &Path) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_task_items_status ON task_items(status);
         CREATE INDEX IF NOT EXISTS idx_command_runs_task_item_phase ON command_runs(task_item_id, phase);
         CREATE INDEX IF NOT EXISTS idx_command_runs_task_item_phase_started ON command_runs(task_item_id, phase, started_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_command_runs_validation_status ON command_runs(validation_status);
         CREATE INDEX IF NOT EXISTS idx_events_task_created_at ON events(task_id, created_at);
         CREATE INDEX IF NOT EXISTS idx_cfg_versions_version ON orchestrator_config_versions(version DESC);
         "#,
@@ -260,6 +259,11 @@ pub fn init_schema(db_path: &Path) -> Result<()> {
         "validation_status",
         "ALTER TABLE command_runs ADD COLUMN validation_status TEXT NOT NULL DEFAULT 'unknown'",
     )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_command_runs_validation_status ON command_runs(validation_status)",
+        [],
+    )
+    .context("failed to create command_runs validation_status index")?;
     Ok(())
 }
 

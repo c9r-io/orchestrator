@@ -18,10 +18,10 @@ spec:
     - fix
     - retest
   templates:
-    qa: "echo 'qa-phase: {rel_path}'"
-    fix: "echo 'fix-phase: {ticket_paths}'"
-    retest: "echo 'retest-phase: {rel_path}'"
-    loop_guard: "echo 'continue'"
+    qa: "echo '{\"confidence\":0.93,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-pass\",\"description\":\"qa passed for target-file\",\"severity\":\"info\"}]}]}'"
+    fix: "echo '{\"confidence\":0.84,\"quality_score\":0.8,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"target-file\"]}]}'"
+    retest: "echo '{\"confidence\":0.9,\"quality_score\":0.88,\"artifacts\":[{\"kind\":\"test_result\",\"passed\":1,\"failed\":0}]}'"
+    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
 ---
 apiVersion: orchestrator.dev/v1
 kind: Workflow

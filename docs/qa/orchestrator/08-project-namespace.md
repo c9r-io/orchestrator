@@ -33,7 +33,7 @@ projects:
       my-agent:
         capabilities: [qa]
         templates:
-          qa: echo "qa"
+          qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-project\",\"description\":\"project qa\",\"severity\":\"info\"}]}]}'"
     workflows:
       my-workflow:
         steps: [...]

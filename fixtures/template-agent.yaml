@@ -8,5 +8,5 @@ spec:
   capabilities:
     - qa
   templates:
-    qa: 'echo "phase={phase} cycle={cycle}"'
-    loop_guard: "echo 'continue'"
+    qa: "echo '{\"confidence\":0.87,\"quality_score\":0.83,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"template-phase\",\"description\":\"phase={phase} cycle={cycle}\",\"severity\":\"info\"}]}]}'"
+    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"

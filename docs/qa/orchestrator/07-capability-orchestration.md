@@ -35,9 +35,9 @@ to the fix-capable agent when capabilities are disjoint.
 
 - Workspace targets: `fixtures/qa-capability-test` (single file to avoid agent
   disease from repeated failures)
-- `agent_qa_only` — capabilities: `[qa]`, template: `echo 'qa-from-agent-qa-only' && exit 1`
+- `agent_qa_only` — capabilities: `[qa]`, template emits structured ticket JSON and `exit 1`
   (QA intentionally fails to create tickets, triggering the fix step)
-- `agent_fix_only` — capabilities: `[fix]`, template: `echo 'fix-from-agent-fix-only'`
+- `agent_fix_only` — capabilities: `[fix]`, template emits structured code-change JSON
 - Workflow `test_capability` — steps: qa, fix
 
 ### Steps
@@ -68,8 +68,8 @@ to the fix-capable agent when capabilities are disjoint.
 ### Expected
 
 - Task status: `completed`
-- QA log output contains: `qa-from-agent-qa-only` (routed to `agent_qa_only`)
-- Fix log output contains: `fix-from-agent-fix-only` (routed to `agent_fix_only`)
+- QA phase run contains structured ticket artifact output from `agent_qa_only`
+- Fix phase run contains structured code-change artifact output from `agent_fix_only`
 - No cross-contamination (qa agent never runs fix template, and vice versa)
 
 > **Note**: The fix step only executes when active tickets exist. QA must fail
@@ -93,8 +93,8 @@ distributes work across them and each agent uses its own correct template.
 
 `fixtures/manifests/bundles/multi-echo.yaml`
 
-- `mock_echo_alpha` — capabilities: `[qa]`, template: `echo 'alpha-qa: {rel_path}'`
-- `mock_echo_beta` — capabilities: `[qa]`, template: `echo 'beta-qa: {rel_path}'`
+- `mock_echo_alpha` — capabilities: `[qa]`, template emits structured analysis JSON tagged `alpha-qa`
+- `mock_echo_beta` — capabilities: `[qa]`, template emits structured analysis JSON tagged `beta-qa`
 - Workflow `multi_agent_qa` — steps: qa (mode: once)
 
 ### Steps
@@ -125,7 +125,7 @@ distributes work across them and each agent uses its own correct template.
 ### Expected
 
 - Task status: `completed`, failed: 0
-- Logs contain both `alpha-qa:` and `beta-qa:` entries (both agents were used)
+- Logs / persisted `output_json` contain both `alpha-qa` and `beta-qa` markers (both agents were used)
 - Each agent produces its own identifiable output — no template mix-up
 
 ---
@@ -144,7 +144,7 @@ Validate that repeatable steps execute in every loop cycle.
 
 `fixtures/manifests/bundles/repeatable-test.yaml`
 
-- `test_agent` — capabilities: `[qa]`, template: `echo 'cycle-{cycle}'`
+- `test_agent` — capabilities: `[qa]`, template emits structured JSON containing `cycle {cycle}`
 - Workflow `repeat_test` — steps: qa, loop mode: infinite, max_cycles: 3
 
 ### Steps
@@ -197,7 +197,7 @@ Validate that a guard step can terminate the workflow loop.
 
 `fixtures/manifests/bundles/guard-test.yaml`
 
-- `test_agent` — template: `echo 'qa-run'`, loop_guard template: `echo 'stop'`
+- `test_agent` — QA template emits structured analysis JSON; loop_guard emits structured stop JSON (`{\"should_stop\":true}`)
 - Workflow `guard_test` — steps: qa + loop_guard, loop mode: infinite, max_cycles: 3
 
 ### Steps
@@ -229,7 +229,7 @@ Validate that a guard step can terminate the workflow loop.
 
 - Workflow `guard_test` appears in config
 - Task creation and execution succeed
-- Guard agent's "stop" output terminates the loop
+- Guard agent's structured stop output (`should_stop=true`) terminates the loop
 
 ---
 

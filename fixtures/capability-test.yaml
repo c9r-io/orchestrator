@@ -20,7 +20,7 @@ agents:
     capabilities:
     - qa
     templates:
-      qa: "echo 'qa-from-agent-qa-only'"
+      qa: "echo '{\"confidence\":0.58,\"quality_score\":0.52,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-from-agent-qa-only\",\"description\":\"capability qa only agent\",\"severity\":\"info\"}]}]}'"
 
   agent_fix_only:
     metadata:
@@ -29,7 +29,7 @@ agents:
     capabilities:
     - fix
     templates:
-      fix: "echo 'fix-from-agent-fix-only'"
+      fix: "echo '{\"confidence\":0.8,\"quality_score\":0.76,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fix-from-agent-fix-only.patch\"]}]}'"
 
 workflows:
   test_capability:

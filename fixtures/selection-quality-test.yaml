@@ -22,7 +22,7 @@ agents:
     selection:
       strategy: success_rate_weighted
     templates:
-      qa: "echo 'proven-qa'"
+      qa: "echo '{\"confidence\":0.96,\"quality_score\":0.95,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"proven-qa\",\"description\":\"proven qa agent\",\"severity\":\"info\"}]}]}'"
 
   new_agent:
     metadata:
@@ -33,7 +33,7 @@ agents:
     selection:
       strategy: capability_aware
     templates:
-      qa: "echo 'new-qa'"
+      qa: "echo '{\"confidence\":0.74,\"quality_score\":0.7,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"new-qa\",\"description\":\"new qa agent\",\"severity\":\"info\"}]}]}'"
 
 workflows:
   quality_selection_test:

@@ -139,7 +139,7 @@ cd ..
      echo:
        capabilities: [qa]
        templates:
-         qa: "echo test"
+         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
    workflows:
      basic:
        steps:
@@ -189,7 +189,7 @@ cd ..
      echo:
        capabilities: [qa]
        templates:
-         qa: "echo test"
+         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
    workflows:
      basic:
        steps:

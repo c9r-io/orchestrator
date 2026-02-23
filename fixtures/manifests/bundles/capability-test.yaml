@@ -18,8 +18,8 @@ spec:
   capabilities:
     - qa
   templates:
-    qa: "echo 'qa-from-agent-qa-only' && exit 1"
-    loop_guard: "echo 'continue'"
+    qa: "echo '{\"confidence\":0.4,\"quality_score\":0.25,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"capability\",\"content\":{\"title\":\"qa-from-agent-qa-only\"}}]}' && exit 1"
+    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
 ---
 apiVersion: orchestrator.dev/v1
 kind: Agent
@@ -31,7 +31,7 @@ spec:
   capabilities:
     - fix
   templates:
-    fix: "echo 'fix-from-agent-fix-only'"
+    fix: "echo '{\"confidence\":0.8,\"quality_score\":0.76,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fix-from-agent-fix-only.patch\"]}]}'"
 ---
 apiVersion: orchestrator.dev/v1
 kind: Workflow

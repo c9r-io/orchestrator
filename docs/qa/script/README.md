@@ -54,7 +54,9 @@ Shell scripts for executable QA scenarios.
   - `test-task-pause-resume.sh` -> `fixtures/manifests/bundles/pause-resume-workflow.yaml`
   - `test-task-retry.sh` -> `fixtures/manifests/bundles/retry-workflow.yaml`
   - `test-three-phase-workflow.sh` -> `fixtures/manifests/bundles/three-phase-forced.yaml`
-- Parallel runs are supported when using distinct project IDs.
+- Fixtures now use structured JSON outputs for strict phase validation (`qa`/`fix`/`retest`/`guard`).
+- Scripts perform config-level isolation with `db reset --include-config` before applying their fixture.
+- Run scripts serially. They update shared active config via `apply`, so parallel runs can overwrite each other's fixture setup.
 
 ## Troubleshooting
 
