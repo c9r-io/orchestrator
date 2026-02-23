@@ -257,6 +257,10 @@ pub enum TaskWorkerCommands {
         /// Polling interval in milliseconds
         #[arg(long, default_value = "1000")]
         poll_ms: u64,
+
+        /// Number of concurrent worker consumers
+        #[arg(long, default_value = "1")]
+        workers: usize,
     },
     /// Signal worker to stop
     Stop,
@@ -689,6 +693,47 @@ mod tests {
     }
 
     #[test]
+    fn parse_task_worker_start_workers_flag() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "task",
+            "worker",
+            "start",
+            "--poll-ms",
+            "250",
+            "--workers",
+            "6",
+        ]);
+
+        match cli.command {
+            Commands::Task(TaskCommands::Worker(TaskWorkerCommands::Start {
+                poll_ms,
+                workers,
+            })) => {
+                assert_eq!(poll_ms, 250);
+                assert_eq!(workers, 6);
+            }
+            _ => panic!("expected task worker start command"),
+        }
+    }
+
+    #[test]
+    fn parse_task_worker_start_workers_default() {
+        let cli = Cli::parse_from(["orchestrator", "task", "worker", "start"]);
+
+        match cli.command {
+            Commands::Task(TaskCommands::Worker(TaskWorkerCommands::Start {
+                poll_ms,
+                workers,
+            })) => {
+                assert_eq!(poll_ms, 1000);
+                assert_eq!(workers, 1);
+            }
+            _ => panic!("expected task worker start command"),
+        }
+    }
+
+    #[test]
     fn parse_workflow_create_command() {
         let cli = Cli::parse_from([
             "orchestrator",
@@ -916,13 +961,7 @@ mod tests {
 
     #[test]
     fn parse_db_reset_include_config() {
-        let cli = Cli::parse_from([
-            "orchestrator",
-            "db",
-            "reset",
-            "--force",
-            "--include-config",
-        ]);
+        let cli = Cli::parse_from(["orchestrator", "db", "reset", "--force", "--include-config"]);
 
         match cli.command {
             Commands::Db(DbCommands::Reset {
@@ -1037,9 +1076,7 @@ mod tests {
 
         match cli.command {
             Commands::Task(TaskCommands::Start {
-                task_id,
-                latest,
-                ..
+                task_id, latest, ..
             }) => {
                 assert_eq!(task_id, Some("task-123".to_string()));
                 assert!(!latest);
@@ -1054,9 +1091,7 @@ mod tests {
 
         match cli.command {
             Commands::Task(TaskCommands::Start {
-                task_id,
-                latest,
-                ..
+                task_id, latest, ..
             }) => {
                 assert_eq!(task_id, None);
                 assert!(latest);

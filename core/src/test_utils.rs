@@ -221,6 +221,9 @@ impl TestState {
         )
         .expect("failed to backfill test data");
 
+        let writer = Arc::new(
+            crate::db_write::DbWriteCoordinator::new(&db_path).expect("failed to init db writer"),
+        );
         let state = Arc::new(InnerState {
             app_root: self.temp_root.clone(),
             db_path,
@@ -231,6 +234,7 @@ impl TestState {
             agent_metrics: std::sync::RwLock::new(HashMap::new()),
             message_bus: Arc::new(MessageBus::new()),
             event_sink: std::sync::RwLock::new(Arc::new(NoopSink)),
+            db_writer: writer,
         });
         self.state = Some(state.clone());
         state

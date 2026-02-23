@@ -37,3 +37,4 @@ docs/design_doc/
 | orchestrator | `docs/design_doc/orchestrator/08-project-namespace.md` | `docs/qa/orchestrator/08-project-namespace.md` | Project namespace for resource isolation |
 | orchestrator | `docs/design_doc/orchestrator/09-scheduler-repository-refactor.md` | `docs/qa/orchestrator/19-scheduler-repository-refactor-regression.md` | P0/P1 scheduler data-layer refactor and error observability |
 | orchestrator | `docs/design_doc/orchestrator/10-structured-output-worker-scheduler.md` | `docs/qa/orchestrator/20-structured-output-worker-scheduler.md` | Structured output scheduler mainline + detach worker model |
+| orchestrator | `docs/design_doc/orchestrator/11-performance-io-queue-optimizations.md` | `docs/qa/orchestrator/22-performance-io-queue-optimizations.md` | Single-write command runs, bounded IO reads, true tail, and atomic multi-worker claim |

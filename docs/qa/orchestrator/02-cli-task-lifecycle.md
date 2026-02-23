@@ -111,6 +111,10 @@ WHERE id = '{task_id}';
    ```bash
    ./scripts/orchestrator.sh task worker start --poll-ms 500
    ```
+   Optional (parallel consumers):
+   ```bash
+   ./scripts/orchestrator.sh task worker start --poll-ms 500 --workers 3
+   ```
 2. In terminal B, check status:
    ```bash
    ./scripts/orchestrator.sh task worker status
@@ -126,6 +130,7 @@ WHERE id = '{task_id}';
 
 ### Expected
 - Worker consumes pending tasks while running.
+- With `--workers N`, pending tasks can be consumed concurrently by N consumers.
 - Stop signal terminates worker loop gracefully.
 - `task worker status` reflects pending count and stop-signal state.
 

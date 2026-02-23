@@ -8,6 +8,7 @@ mod config;
 mod config_load;
 mod config_validation;
 mod db;
+mod db_write;
 mod dto;
 mod dynamic_orchestration;
 mod events;
@@ -67,6 +68,7 @@ fn init_state() -> Result<ManagedState> {
         default_workspace,
     )?;
 
+    let db_writer = Arc::new(crate::db_write::DbWriteCoordinator::new(&db_path)?);
     Ok(ManagedState {
         inner: Arc::new(crate::state::InnerState {
             app_root,
@@ -78,6 +80,7 @@ fn init_state() -> Result<ManagedState> {
             agent_metrics: std::sync::RwLock::new(std::collections::HashMap::new()),
             message_bus: Arc::new(MessageBus::new()),
             event_sink: std::sync::RwLock::new(Arc::new(crate::events::NoopSink)),
+            db_writer,
         }),
     })
 }

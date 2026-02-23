@@ -4,6 +4,7 @@ pub mod config;
 pub mod config_load;
 pub mod config_validation;
 pub mod db;
+pub mod db_write;
 pub mod dto;
 pub mod dynamic_orchestration;
 pub mod events;

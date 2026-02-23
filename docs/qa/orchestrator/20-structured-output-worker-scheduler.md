@@ -197,7 +197,7 @@ Verify worker loop consumes pending tasks and honors stop signal.
 ### Steps
 1. Start worker in terminal A:
    ```bash
-   ./scripts/orchestrator.sh task worker start --poll-ms 500
+   ./scripts/orchestrator.sh task worker start --poll-ms 500 --workers 3
    ```
 2. In terminal B, monitor queue:
    ```bash
@@ -215,6 +215,7 @@ Verify worker loop consumes pending tasks and honors stop signal.
 
 ### Expected
 - Worker consumes pending tasks and updates task status to terminal state.
+- Pending queue claim is atomic under parallel consumers (no duplicate pending-task execution).
 - `task worker stop` triggers graceful loop termination.
 - `stop_signal` returns `false` after worker exits and clears marker file.
 

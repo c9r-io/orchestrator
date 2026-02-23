@@ -27,6 +27,7 @@ use anyhow::{Context, Result};
 pub use crate::state::RunningTask;
 use serde_json::json;
 use std::collections::HashSet;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 fn shell_escape(s: &str) -> String {
@@ -34,11 +35,17 @@ fn shell_escape(s: &str) -> String {
 }
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio::time::Instant;
 use uuid::Uuid;
 
 #[allow(dead_code)]
 const IDLE_TIMEOUT_SECS: u64 = 600;
+
+struct LimitedOutput {
+    text: String,
+    truncated_prefix_bytes: u64,
+}
 
 pub async fn kill_current_child(runtime: &RunningTask) {
     let mut child_lock = runtime.child.lock().await;
@@ -166,11 +173,53 @@ pub fn stream_task_logs_impl(
 }
 
 fn tail_lines(path: &Path, limit: usize) -> Result<String> {
-    let content = std::fs::read_to_string(path)
+    if limit == 0 {
+        return Ok(String::new());
+    }
+    const CHUNK_SIZE: usize = 8192;
+
+    let mut file = std::fs::File::open(path)
         .with_context(|| format!("failed to read log file: {}", path.display()))?;
-    let lines: Vec<&str> = content.lines().collect();
-    let start = lines.len().saturating_sub(limit);
-    Ok(lines[start..].join("\n"))
+    let mut pos = file
+        .seek(std::io::SeekFrom::End(0))
+        .with_context(|| format!("failed to seek log file: {}", path.display()))?;
+    if pos == 0 {
+        return Ok(String::new());
+    }
+
+    let mut chunks: Vec<Vec<u8>> = Vec::new();
+    let mut newline_count = 0usize;
+    while pos > 0 && newline_count <= limit {
+        let chunk_len = (pos as usize).min(CHUNK_SIZE);
+        let start = pos - chunk_len as u64;
+        file.seek(std::io::SeekFrom::Start(start))
+            .with_context(|| format!("failed to seek log file: {}", path.display()))?;
+        let mut buf = vec![0u8; chunk_len];
+        file.read_exact(&mut buf)
+            .with_context(|| format!("failed to read log file: {}", path.display()))?;
+        newline_count += buf.iter().filter(|b| **b == b'\n').count();
+        chunks.push(buf);
+        pos = start;
+    }
+
+    let mut data = Vec::new();
+    for chunk in chunks.iter().rev() {
+        data.extend_from_slice(chunk);
+    }
+
+    if newline_count > limit {
+        let mut to_skip = newline_count - limit;
+        let mut idx = 0usize;
+        while idx < data.len() && to_skip > 0 {
+            if data[idx] == b'\n' {
+                to_skip -= 1;
+            }
+            idx += 1;
+        }
+        data = data[idx..].to_vec();
+    }
+
+    Ok(String::from_utf8_lossy(&data).trim_end().to_string())
 }
 
 fn persist_task_execution_metric(
@@ -207,7 +256,9 @@ pub fn set_task_status(
     status: &str,
     set_completed: bool,
 ) -> Result<()> {
-    SqliteTaskRepository::new(state.db_path.clone()).set_task_status(task_id, status, set_completed)
+    state
+        .db_writer
+        .set_task_status(task_id, status, set_completed)
 }
 
 pub fn prepare_task_for_start(state: &InnerState, task_id: &str) -> Result<()> {
@@ -429,7 +480,12 @@ pub async fn run_task_loop(
             "task_failed",
             json!({"error": e.to_string()}),
         );
-        state.emit_event(task_id, None, "task_failed", json!({"error": e.to_string()}));
+        state.emit_event(
+            task_id,
+            None,
+            "task_failed",
+            json!({"error": e.to_string()}),
+        );
         let unresolved = count_unresolved_items(&state, task_id).unwrap_or(0);
         let _ = persist_task_execution_metric(&state, task_id, "failed", 0, unresolved);
     }
@@ -738,11 +794,9 @@ pub fn update_task_cycle_state(
     current_cycle: u32,
     init_done: bool,
 ) -> Result<()> {
-    SqliteTaskRepository::new(state.db_path.clone()).update_task_cycle_state(
-        task_id,
-        current_cycle,
-        init_done,
-    )
+    state
+        .db_writer
+        .update_task_cycle_state(task_id, current_cycle, init_done)
 }
 
 fn is_task_paused_in_db(state: &InnerState, task_id: &str) -> Result<bool> {
@@ -750,25 +804,30 @@ fn is_task_paused_in_db(state: &InnerState, task_id: &str) -> Result<bool> {
     Ok(matches!(status.as_deref(), Some("paused")))
 }
 
-fn persist_structured_output(
-    state: &InnerState,
-    run_id: &str,
-    output: &crate::collab::AgentOutput,
-    validation_status: &str,
-) -> Result<()> {
-    let conn = crate::db::open_conn(&state.db_path)?;
-    conn.execute(
-        "UPDATE command_runs SET output_json = ?2, artifacts_json = ?3, confidence = ?4, quality_score = ?5, validation_status = ?6 WHERE id = ?1",
-        rusqlite::params![
-            run_id,
-            serde_json::to_string(output)?,
-            serde_json::to_string(&output.artifacts)?,
-            output.confidence,
-            output.quality_score,
-            validation_status
-        ],
-    )?;
-    Ok(())
+async fn read_output_with_limit(path: &Path, max_bytes: u64) -> Result<LimitedOutput> {
+    let mut file = tokio::fs::File::open(path)
+        .await
+        .with_context(|| format!("failed to open output log: {}", path.display()))?;
+    let file_len = file
+        .metadata()
+        .await
+        .with_context(|| format!("failed to stat output log: {}", path.display()))?
+        .len();
+
+    let start = file_len.saturating_sub(max_bytes);
+    if start > 0 {
+        file.seek(SeekFrom::Start(start))
+            .await
+            .with_context(|| format!("failed to seek output log: {}", path.display()))?;
+    }
+    let mut buf = Vec::new();
+    file.read_to_end(&mut buf)
+        .await
+        .with_context(|| format!("failed to read output log: {}", path.display()))?;
+    Ok(LimitedOutput {
+        text: String::from_utf8_lossy(&buf).into_owned(),
+        truncated_prefix_bytes: start,
+    })
 }
 
 pub async fn run_phase(
@@ -862,12 +921,15 @@ pub async fn run_phase(
         }
     };
 
-    let stdout_content = tokio::fs::read_to_string(&stdout_path)
+    const MAX_PHASE_OUTPUT_BYTES: u64 = 256 * 1024;
+    let stdout_output = read_output_with_limit(&stdout_path, MAX_PHASE_OUTPUT_BYTES)
         .await
         .with_context(|| format!("failed to read stdout log: {}", stdout_path.display()))?;
-    let stderr_content = tokio::fs::read_to_string(&stderr_path)
+    let stderr_output = read_output_with_limit(&stderr_path, MAX_PHASE_OUTPUT_BYTES)
         .await
         .with_context(|| format!("failed to read stderr log: {}", stderr_path.display()))?;
+    let stdout_content = stdout_output.text;
+    let stderr_content = stderr_output.text;
 
     let validation = validate_phase_output(
         phase,
@@ -878,18 +940,25 @@ pub async fn run_phase(
         &stderr_content,
     )?;
     let mut success = exit_code == 0;
+    let mut validation_event_payload_json: Option<String> = None;
     if validation.status == "failed" {
         success = false;
-        insert_event(
-            state,
-            task_id,
-            Some(item_id),
-            "output_validation_failed",
-            json!({"phase":phase,"run_id":run_id,"error":validation.error.clone()}),
-        )?;
+        validation_event_payload_json = Some(serde_json::to_string(&json!({
+            "phase": phase,
+            "run_id": run_id.clone(),
+            "error": validation.error.clone(),
+            "stdout_truncated_prefix_bytes": stdout_output.truncated_prefix_bytes,
+            "stderr_truncated_prefix_bytes": stderr_output.truncated_prefix_bytes
+        }))?);
     }
 
-    let repo = SqliteTaskRepository::new(state.db_path.clone());
+    let mut redacted_output = validation.output.clone();
+    redacted_output.stdout = redact_text(&redacted_output.stdout, &redaction_patterns);
+    redacted_output.stderr = redact_text(&redacted_output.stderr, &redaction_patterns);
+
+    let writer = state.db_writer.clone();
+    let task_id_owned = task_id.to_string();
+    let item_id_owned = item_id.to_string();
     let insert_payload = NewCommandRun {
         id: run_id.clone(),
         task_item_id: item_id.to_string(),
@@ -904,15 +973,12 @@ pub async fn run_phase(
         started_at: now,
         ended_at: now_ts(),
         interrupted: 0,
+        output_json: serde_json::to_string(&redacted_output)?,
+        artifacts_json: serde_json::to_string(&redacted_output.artifacts)?,
+        confidence: Some(redacted_output.confidence),
+        quality_score: Some(redacted_output.quality_score),
+        validation_status: validation.status.to_string(),
     };
-    tokio::task::spawn_blocking(move || repo.insert_command_run(&insert_payload))
-        .await
-        .context("command run insert worker failed")??;
-    let mut redacted_output = validation.output.clone();
-    redacted_output.stdout = redact_text(&redacted_output.stdout, &redaction_patterns);
-    redacted_output.stderr = redact_text(&redacted_output.stderr, &redaction_patterns);
-    persist_structured_output(state, &run_id, &redacted_output, validation.status)?;
-
     let sender = crate::collab::AgentEndpoint::for_task_item(agent_id, task_id, item_id);
     let msg = crate::collab::AgentMessage::publish(
         sender,
@@ -923,23 +989,40 @@ pub async fn run_phase(
             error: validation.error.clone(),
         }),
     );
-    if let Err(err) = state.message_bus.publish(msg).await {
-        insert_event(
-            state,
-            task_id,
-            Some(item_id),
+    let (publish_event_type, publish_event_payload_json) = if let Err(err) =
+        state.message_bus.publish(msg).await
+    {
+        (
             "bus_publish_failed",
-            json!({"phase":phase,"run_id":run_id,"error":err.to_string()}),
-        )?;
+            serde_json::to_string(&json!({"phase":phase,"run_id":run_id,"error":err.to_string()}))?,
+        )
     } else {
-        insert_event(
-            state,
-            task_id,
-            Some(item_id),
+        (
             "phase_output_published",
-            json!({"phase":phase,"run_id":run_id}),
-        )?;
-    }
+            serde_json::to_string(&json!({"phase":phase,"run_id":run_id}))?,
+        )
+    };
+
+    tokio::task::spawn_blocking(move || {
+        let mut events = Vec::with_capacity(2);
+        if let Some(payload_json) = validation_event_payload_json.as_deref() {
+            events.push(crate::db_write::DbEventRecord {
+                task_id: task_id_owned.as_str(),
+                task_item_id: Some(item_id_owned.as_str()),
+                event_type: "output_validation_failed",
+                payload_json,
+            });
+        }
+        events.push(crate::db_write::DbEventRecord {
+            task_id: task_id_owned.as_str(),
+            task_item_id: Some(item_id_owned.as_str()),
+            event_type: publish_event_type,
+            payload_json: publish_event_payload_json.as_str(),
+        });
+        writer.persist_phase_result_with_events(&insert_payload, &events)
+    })
+    .await
+    .context("command run insert worker failed")??;
 
     update_capability_health(state, agent_id, Some(phase), success);
 
@@ -1598,7 +1681,8 @@ pub async fn process_item(
         emit_item_finalize_event(state, &finalize_context, &outcome)?;
     }
 
-    SqliteTaskRepository::new(state.db_path.clone())
+    state
+        .db_writer
         .update_task_item_status(item_id, &item_status)?;
 
     Ok(())

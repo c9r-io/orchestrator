@@ -9,6 +9,8 @@ Shell scripts for executable QA scenarios.
 | `test-task-pause-resume.sh` | Tests task pause and resume functionality |
 | `test-task-retry.sh` | Tests task item retry functionality |
 | `test-three-phase-workflow.sh` | Tests QA + Fix + Retest workflow execution |
+| `test-worker-throughput.sh` | Baseline detached queue throughput and multi-worker drain time |
+| `test-log-tail-latency.sh` | Baseline `task logs --tail` latency on large log files |
 
 ## Shared Library
 
@@ -42,6 +44,8 @@ Shell scripts for executable QA scenarios.
 ./docs/qa/script/test-task-pause-resume.sh
 ./docs/qa/script/test-task-retry.sh --json
 ./docs/qa/script/test-three-phase-workflow.sh --project qa-manual-1 --workspace qa-manual-1-ws
+./docs/qa/script/test-worker-throughput.sh --workers 6 --tasks 30 --json
+./docs/qa/script/test-log-tail-latency.sh --append-lines 120000 --samples 5 --json
 ```
 
 ## Determinism Notes

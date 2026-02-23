@@ -77,4 +77,5 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/19-scheduler-repository-refactor-regression.md` | 5 | P0/P1 scheduler repository refactor regression and observability checks |
 | orchestrator | `docs/qa/orchestrator/20-structured-output-worker-scheduler.md` | 5 | Structured output validation + detach/worker scheduling mainline |
 | orchestrator | `docs/qa/orchestrator/21-runner-security-observability.md` | 5 | Runner allowlist boundary, redaction, and task execution metrics observability |
-| orchestrator | `docs/qa/script/` | 3 | Executable QA scripts |
+| orchestrator | `docs/qa/orchestrator/22-performance-io-queue-optimizations.md` | 5 | Transactional phase-result persistence, bounded output reads, true tail, and atomic multi-worker queue checks |
+| orchestrator | `docs/qa/script/` | 5 | Executable QA scripts |

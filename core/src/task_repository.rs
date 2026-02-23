@@ -73,6 +73,11 @@ pub struct NewCommandRun {
     pub started_at: String,
     pub ended_at: String,
     pub interrupted: i64,
+    pub output_json: String,
+    pub artifacts_json: String,
+    pub confidence: Option<f32>,
+    pub quality_score: Option<f32>,
+    pub validation_status: String,
 }
 
 impl SqliteTaskRepository {
@@ -506,7 +511,7 @@ impl TaskRepository for SqliteTaskRepository {
     fn insert_command_run(&self, run: &NewCommandRun) -> Result<()> {
         let conn = open_conn(&self.db_path)?;
         conn.execute(
-            "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, workspace_id, agent_id, exit_code, stdout_path, stderr_path, started_at, ended_at, interrupted) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, workspace_id, agent_id, exit_code, stdout_path, stderr_path, output_json, artifacts_json, confidence, quality_score, validation_status, started_at, ended_at, interrupted) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
             params![
                 run.id,
                 run.task_item_id,
@@ -518,6 +523,11 @@ impl TaskRepository for SqliteTaskRepository {
                 run.exit_code,
                 run.stdout_path,
                 run.stderr_path,
+                run.output_json,
+                run.artifacts_json,
+                run.confidence,
+                run.quality_score,
+                run.validation_status,
                 run.started_at,
                 run.ended_at,
                 run.interrupted
@@ -661,6 +671,11 @@ mod tests {
             started_at: now_ts(),
             ended_at: now_ts(),
             interrupted: 0,
+            output_json: "{}".to_string(),
+            artifacts_json: "[]".to_string(),
+            confidence: None,
+            quality_score: None,
+            validation_status: "unknown".to_string(),
         };
         repo.insert_command_run(&run).expect("insert command run");
 
@@ -704,6 +719,11 @@ mod tests {
             started_at: now_ts(),
             ended_at: now_ts(),
             interrupted: 0,
+            output_json: "{}".to_string(),
+            artifacts_json: "[]".to_string(),
+            confidence: None,
+            quality_score: None,
+            validation_status: "unknown".to_string(),
         };
         repo.insert_command_run(&run).expect("insert command run");
 

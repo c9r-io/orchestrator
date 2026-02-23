@@ -159,7 +159,7 @@ Ensure `command_runs` records persist both legacy execution fields and structure
 ### Expected
 - `command_runs` row count is greater than zero.
 - `phase/stdout_path/stderr_path/started_at` are populated.
-- `validation_status` is populated and `output_json`/`artifacts_json` are persisted.
+- `validation_status` is populated and `output_json`/`artifacts_json` are persisted in the same run record.
 
 ### Expected Data State
 ```sql
@@ -167,6 +167,13 @@ SELECT phase, validation_status, output_json, artifacts_json
 FROM command_runs
 WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}');
 -- Expected: >= 1 row with non-empty phase/validation_status and structured JSON payload fields
+
+SELECT COUNT(*)
+FROM command_runs
+WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
+  AND phase IN ('qa','fix','retest','guard')
+  AND (validation_status = 'unknown' OR output_json = '{}' OR artifacts_json = '[]');
+-- Expected: 0
 ```
 
 ---

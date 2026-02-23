@@ -1,8 +1,5 @@
-use crate::config_load::now_ts;
-use crate::db::open_conn;
 use crate::state::InnerState;
 use anyhow::Result;
-use rusqlite::params;
 use serde_json::Value;
 
 /// Trait for emitting real-time events to listeners (UI, logging, etc.)
@@ -32,16 +29,10 @@ pub fn insert_event(
     event_type: &str,
     payload: Value,
 ) -> Result<()> {
-    let conn = open_conn(&state.db_path)?;
-    conn.execute(
-        "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![
-            task_id,
-            task_item_id,
-            event_type,
-            serde_json::to_string(&payload)?,
-            now_ts()
-        ],
-    )?;
-    Ok(())
+    state.db_writer.insert_event(
+        task_id,
+        task_item_id,
+        event_type,
+        &serde_json::to_string(&payload)?,
+    )
 }

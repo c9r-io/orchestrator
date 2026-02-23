@@ -90,15 +90,8 @@ mod tests {
 
     #[test]
     fn strict_phase_requires_json() {
-        let outcome = validate_phase_output(
-            "qa",
-            Uuid::new_v4(),
-            "agent",
-            0,
-            "plain-text",
-            "",
-        )
-        .expect("validation should return outcome");
+        let outcome = validate_phase_output("qa", Uuid::new_v4(), "agent", 0, "plain-text", "")
+            .expect("validation should return outcome");
         assert_eq!(outcome.status, "failed");
         assert!(outcome.error.is_some());
     }

@@ -30,6 +30,7 @@ pub struct InnerState {
     pub agent_metrics: std::sync::RwLock<HashMap<String, crate::metrics::AgentMetrics>>,
     pub message_bus: Arc<MessageBus>,
     pub event_sink: std::sync::RwLock<Arc<dyn EventSink>>,
+    pub db_writer: Arc<crate::db_write::DbWriteCoordinator>,
 }
 
 impl InnerState {
