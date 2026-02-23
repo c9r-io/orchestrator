@@ -5,7 +5,7 @@ use crate::config::{
 use crate::db::{count_tasks_by_workflow, count_tasks_by_workspace, open_conn};
 use crate::dto::ConfigOverview;
 use anyhow::{Context, Result};
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, OptionalExtension, Transaction};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -560,6 +560,33 @@ pub fn enforce_deletion_guards(
     Ok(())
 }
 
+fn persist_config_versioned(
+    tx: &Transaction<'_>,
+    yaml: &str,
+    json_raw: &str,
+    author: &str,
+) -> Result<(i64, String)> {
+    let current_version: i64 = tx.query_row(
+        "SELECT COALESCE(MAX(version), 0) FROM orchestrator_config_versions",
+        [],
+        |row| row.get(0),
+    )?;
+    let next_version = current_version + 1;
+    let now = now_ts();
+
+    tx.execute(
+        "INSERT INTO orchestrator_config (id, config_yaml, config_json, version, updated_at) VALUES (1, ?1, ?2, ?3, ?4)
+         ON CONFLICT(id) DO UPDATE SET config_yaml=excluded.config_yaml, config_json=excluded.config_json, version=excluded.version, updated_at=excluded.updated_at",
+        params![yaml, json_raw, next_version, now],
+    )?;
+    tx.execute(
+        "INSERT INTO orchestrator_config_versions (version, config_yaml, config_json, created_at, author) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![next_version, yaml, json_raw, now, author],
+    )?;
+
+    Ok((next_version, now))
+}
+
 pub fn persist_config_and_reload(
     state: &crate::state::InnerState,
     config: OrchestratorConfig,
@@ -579,26 +606,7 @@ pub fn persist_config_and_reload(
     let conn = open_conn(&state.db_path)?;
     let tx = conn.unchecked_transaction()?;
     enforce_deletion_guards(&tx, &previous_config, &normalized)?;
-    let current_version: i64 = tx
-        .query_row(
-            "SELECT COALESCE(MAX(version), 0) FROM orchestrator_config_versions",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-    let next_version = current_version + 1;
-    let now = now_ts();
-
-    tx.execute(
-        "INSERT INTO orchestrator_config (id, config_yaml, config_json, version, updated_at) VALUES (1, ?1, ?2, ?3, ?4)
-         ON CONFLICT(id) DO UPDATE SET config_yaml=excluded.config_yaml, config_json=excluded.config_json, version=excluded.version, updated_at=excluded.updated_at",
-        params![yaml, json_raw, next_version, now],
-    )?;
-    tx.execute(
-        "INSERT INTO orchestrator_config_versions (version, config_yaml, config_json, created_at, author) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![next_version, yaml, serde_json::to_string(&normalized)?, now, author],
-    )?;
-
+    let (next_version, now) = persist_config_versioned(&tx, &yaml, &json_raw, author)?;
     tx.commit()?;
 
     {
@@ -661,28 +669,9 @@ pub fn persist_raw_config(
     let normalized = normalize_config(config);
     let yaml = serde_yaml::to_string(&normalized).context("failed to serialize config yaml")?;
     let json_raw = serde_json::to_string(&normalized).context("failed to serialize config json")?;
-    let now = now_ts();
-
     let conn = open_conn(db_path)?;
     let tx = conn.unchecked_transaction()?;
-    let current_version: i64 = tx
-        .query_row(
-            "SELECT COALESCE(MAX(version), 0) FROM orchestrator_config_versions",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-    let next_version = current_version + 1;
-
-    tx.execute(
-        "INSERT INTO orchestrator_config (id, config_yaml, config_json, version, updated_at) VALUES (1, ?1, ?2, ?3, ?4)
-         ON CONFLICT(id) DO UPDATE SET config_yaml=excluded.config_yaml, config_json=excluded.config_json, version=excluded.version, updated_at=excluded.updated_at",
-        params![yaml, json_raw, next_version, now],
-    )?;
-    tx.execute(
-        "INSERT INTO orchestrator_config_versions (version, config_yaml, config_json, created_at, author) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![next_version, yaml, serde_json::to_string(&normalized)?, now, author],
-    )?;
+    let (next_version, now) = persist_config_versioned(&tx, &yaml, &json_raw, author)?;
     tx.commit()?;
 
     Ok(ConfigOverview {

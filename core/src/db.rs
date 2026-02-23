@@ -13,6 +13,18 @@ pub struct ProjectResetStats {
     pub events: u64,
 }
 
+#[derive(Debug, Clone)]
+pub struct TaskExecutionMetric {
+    pub task_id: String,
+    pub status: String,
+    pub current_cycle: u32,
+    pub unresolved_items: i64,
+    pub total_items: i64,
+    pub failed_items: i64,
+    pub command_runs: i64,
+    pub created_at: String,
+}
+
 pub fn open_conn(db_path: &Path) -> Result<Connection> {
     let conn = Connection::open(db_path).context("failed to open sqlite db")?;
     conn.busy_timeout(Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS))
@@ -140,6 +152,18 @@ pub fn init_schema(db_path: &Path) -> Result<()> {
             author TEXT NOT NULL DEFAULT 'system'
         );
 
+        CREATE TABLE IF NOT EXISTS task_execution_metrics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            current_cycle INTEGER NOT NULL,
+            unresolved_items INTEGER NOT NULL,
+            total_items INTEGER NOT NULL,
+            failed_items INTEGER NOT NULL,
+            command_runs INTEGER NOT NULL,
+            created_at TEXT NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
         CREATE INDEX IF NOT EXISTS idx_task_items_task_order ON task_items(task_id, order_no);
         CREATE INDEX IF NOT EXISTS idx_task_items_status ON task_items(status);
@@ -147,6 +171,7 @@ pub fn init_schema(db_path: &Path) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_command_runs_task_item_phase_started ON command_runs(task_item_id, phase, started_at DESC);
         CREATE INDEX IF NOT EXISTS idx_events_task_created_at ON events(task_id, created_at);
         CREATE INDEX IF NOT EXISTS idx_cfg_versions_version ON orchestrator_config_versions(version DESC);
+        CREATE INDEX IF NOT EXISTS idx_task_exec_metrics_task_created ON task_execution_metrics(task_id, created_at DESC);
         "#,
     )
     .context("failed to initialize schema")?;
@@ -295,6 +320,7 @@ pub fn reset_db(
     conn.execute("DELETE FROM command_runs", [])?;
     conn.execute("DELETE FROM task_items", [])?;
     conn.execute("DELETE FROM tasks", [])?;
+    conn.execute("DELETE FROM task_execution_metrics", [])?;
     if include_config {
         conn.execute("DELETE FROM orchestrator_config", [])?;
         conn.execute("DELETE FROM orchestrator_config_versions", [])?;
@@ -304,6 +330,25 @@ pub fn reset_db(
             [],
         )?;
     }
+    Ok(())
+}
+
+pub fn insert_task_execution_metric(db_path: &Path, metric: &TaskExecutionMetric) -> Result<()> {
+    let conn = open_conn(db_path)?;
+    conn.execute(
+        "INSERT INTO task_execution_metrics (task_id, status, current_cycle, unresolved_items, total_items, failed_items, command_runs, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![
+            metric.task_id,
+            metric.status,
+            metric.current_cycle as i64,
+            metric.unresolved_items,
+            metric.total_items,
+            metric.failed_items,
+            metric.command_runs,
+            metric.created_at
+        ],
+    )?;
     Ok(())
 }
 
@@ -353,6 +398,10 @@ pub fn reset_project_data(
     )?;
     tx.execute(
         "DELETE FROM task_items WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?1)",
+        params![project_id],
+    )?;
+    tx.execute(
+        "DELETE FROM task_execution_metrics WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?1)",
         params![project_id],
     )?;
     tx.execute(

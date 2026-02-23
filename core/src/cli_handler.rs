@@ -9,7 +9,9 @@ use crate::cli_types::{
     WorkspaceSpec,
 };
 use crate::config::OrchestratorConfig;
-use crate::config::{AgentConfig, ProjectConfig, WorkflowConfig, WorkspaceConfig};
+use crate::config::{
+    AgentConfig, LoopMode, ProjectConfig, WorkflowConfig, WorkflowStepType, WorkspaceConfig,
+};
 use crate::config_load::{load_config_overview, persist_config_and_reload, read_active_config};
 use crate::db::reset_db;
 use crate::dto::ConfigOverview;
@@ -643,8 +645,11 @@ impl CliHandler {
                 } else {
                     prepare_task_for_start(&self.state, &resolved_id)?;
                     let runtime = RunningTask::new();
-                    cli_runtime()
-                        .block_on(run_task_loop(self.state.clone(), &resolved_id, runtime))?;
+                    cli_runtime().block_on(run_task_loop(
+                        self.state.clone(),
+                        &resolved_id,
+                        runtime,
+                    ))?;
                     let summary = load_task_summary(&self.state, &resolved_id)?;
                     println!("Task finished: {} status={}", summary.id, summary.status);
                 }
@@ -713,7 +718,11 @@ impl CliHandler {
                     if let Some(task_id) = next_pending_task_id(&self.state)? {
                         prepare_task_for_start(&self.state, &task_id)?;
                         let runtime = RunningTask::new();
-                        cli_runtime().block_on(run_task_loop(self.state.clone(), &task_id, runtime))?;
+                        cli_runtime().block_on(run_task_loop(
+                            self.state.clone(),
+                            &task_id,
+                            runtime,
+                        ))?;
                         let summary = load_task_summary(&self.state, &task_id)?;
                         println!(
                             "Worker finished task: {} status={}",
@@ -1239,12 +1248,36 @@ impl CliHandler {
         let busy_timeout_ms: i64 = conn
             .query_row("PRAGMA busy_timeout;", [], |row| row.get(0))
             .unwrap_or(0);
+        let total_task_metrics: i64 =
+            conn.query_row("SELECT COUNT(*) FROM task_execution_metrics", [], |row| {
+                row.get(0)
+            })?;
+        let completed_task_metrics: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM task_execution_metrics WHERE status = 'completed'",
+            [],
+            |row| row.get(0),
+        )?;
+        let recent24_task_metrics: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM task_execution_metrics WHERE datetime(created_at) >= datetime('now', '-1 day')",
+            [],
+            |row| row.get(0),
+        )?;
+        let completion_rate = if total_task_metrics > 0 {
+            (completed_task_metrics as f64) / (total_task_metrics as f64)
+        } else {
+            0.0
+        };
 
         let active = read_active_config(&self.state)?;
         let checks = json!({
             "sqlite": {
                 "journal_mode": journal_mode,
                 "busy_timeout_ms": busy_timeout_ms,
+            },
+            "observability": {
+                "task_execution_metrics_total": total_task_metrics,
+                "task_execution_metrics_last_24h": recent24_task_metrics,
+                "task_completion_rate": completion_rate,
             },
             "config": {
                 "default_project": active.default_project_id,
@@ -1276,6 +1309,20 @@ impl CliHandler {
                 println!(
                     "config.project_count: {}",
                     checks["config"]["project_count"].as_u64().unwrap_or(0)
+                );
+                println!(
+                    "observability.task_execution_metrics_total: {}",
+                    checks["observability"]["task_execution_metrics_total"]
+                );
+                println!(
+                    "observability.task_execution_metrics_last_24h: {}",
+                    checks["observability"]["task_execution_metrics_last_24h"]
+                );
+                println!(
+                    "observability.task_completion_rate: {:.3}",
+                    checks["observability"]["task_completion_rate"]
+                        .as_f64()
+                        .unwrap_or(0.0)
                 );
             }
         }
@@ -1658,26 +1705,27 @@ fn string_map_to_csv(map: &serde_json::Map<String, serde_json::Value>) -> String
 }
 
 fn normalize_loop_mode(loop_mode: &str) -> Result<String> {
-    match loop_mode {
-        "once" => Ok("once".to_string()),
-        "infinite" => Ok("infinite".to_string()),
-        _ => anyhow::bail!(
+    let parsed = loop_mode.parse::<LoopMode>().map_err(|_| {
+        anyhow::anyhow!(
             "invalid --loop-mode '{}': expected one of once|infinite",
             loop_mode
-        ),
-    }
+        )
+    })?;
+    let normalized = match parsed {
+        LoopMode::Once => "once",
+        LoopMode::Infinite => "infinite",
+    };
+    Ok(normalized.to_string())
 }
 
 fn validate_workflow_step_type(value: &str) -> Result<String> {
-    match value {
-        "init_once" | "qa" | "ticket_scan" | "fix" | "retest" | "loop_guard" => {
-            Ok(value.to_string())
-        }
-        _ => anyhow::bail!(
+    let parsed = value.parse::<WorkflowStepType>().map_err(|_| {
+        anyhow::anyhow!(
             "invalid --step '{}': expected init_once|qa|ticket_scan|fix|retest|loop_guard",
             value
-        ),
-    }
+        )
+    })?;
+    Ok(parsed.as_str().to_string())
 }
 
 fn write_to_temp_file(content: &str) -> Result<std::path::PathBuf> {

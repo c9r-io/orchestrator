@@ -12,6 +12,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
         runner: RunnerConfig {
             shell: "/bin/bash".to_string(),
             shell_arg: "-lc".to_string(),
+            ..RunnerConfig::default()
         },
         resume: ResumeConfig { auto: false },
         defaults: ConfigDefaults {

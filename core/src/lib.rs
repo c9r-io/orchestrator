@@ -13,6 +13,7 @@ pub mod output_validation;
 pub mod prehook;
 pub mod qa_utils;
 pub mod resource;
+pub mod runner;
 pub mod scheduler;
 pub mod scheduler_service;
 pub mod selection;

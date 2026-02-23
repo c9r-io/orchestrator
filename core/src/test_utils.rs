@@ -34,6 +34,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
         runner: RunnerConfig {
             shell: "/bin/bash".to_string(),
             shell_arg: "-lc".to_string(),
+            ..RunnerConfig::default()
         },
         resume: ResumeConfig { auto: false },
         defaults: ConfigDefaults {

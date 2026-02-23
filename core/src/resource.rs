@@ -9,7 +9,6 @@ use crate::config::{
     WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig, WorkflowStepType,
     WorkspaceConfig,
 };
-use crate::config_load::read_active_config;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
@@ -296,11 +295,16 @@ impl Resource for WorkflowResource {
         {
             return Err(anyhow!("workflow.spec.steps[].type cannot be empty"));
         }
+        for step in &self.spec.steps {
+            parse_workflow_step_type(&step.step_type)?;
+        }
+        parse_loop_mode(&self.spec.loop_policy.mode)?;
         Ok(())
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
-        let incoming = workflow_spec_to_config(&self.spec);
+        let incoming = workflow_spec_to_config(&self.spec)
+            .expect("validated workflow spec must be convertible");
         let result = apply_to_map(&mut config.workflows, self.name(), incoming);
         config.resource_meta.workflows.insert(
             self.name().to_string(),
@@ -595,13 +599,12 @@ fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
     }
 }
 
-fn workflow_spec_to_config(spec: &WorkflowSpec) -> WorkflowConfig {
+fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
     let steps = spec
         .steps
         .iter()
         .map(|step| {
-            let step_type =
-                parse_workflow_step_type(&step.step_type).unwrap_or(WorkflowStepType::Qa);
+            let step_type = parse_workflow_step_type(&step.step_type)?;
             let is_guard = step_type == WorkflowStepType::LoopGuard;
             let builtin = if matches!(
                 step_type,
@@ -611,7 +614,7 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> WorkflowConfig {
             } else {
                 None
             };
-            WorkflowStepConfig {
+            Ok(WorkflowStepConfig {
                 id: step.id.clone(),
                 description: None,
                 step_type: Some(step_type),
@@ -628,12 +631,12 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> WorkflowConfig {
                     ui: None,
                     extended: false,
                 }),
-            }
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>>>()?;
 
     let loop_policy = WorkflowLoopConfig {
-        mode: parse_loop_mode(&spec.loop_policy.mode),
+        mode: parse_loop_mode(&spec.loop_policy.mode)?,
         guard: WorkflowLoopGuardConfig {
             max_cycles: spec.loop_policy.max_cycles,
             ..Default::default()
@@ -655,7 +658,7 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> WorkflowConfig {
             .collect(),
     };
 
-    WorkflowConfig {
+    Ok(WorkflowConfig {
         steps,
         loop_policy,
         finalize,
@@ -663,7 +666,7 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> WorkflowConfig {
         fix: None,
         retest: None,
         dynamic_steps: vec![],
-    }
+    })
 }
 
 fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
@@ -712,22 +715,11 @@ fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
 }
 
 fn parse_workflow_step_type(value: &str) -> Result<WorkflowStepType> {
-    match value {
-        "init_once" => Ok(WorkflowStepType::InitOnce),
-        "qa" => Ok(WorkflowStepType::Qa),
-        "ticket_scan" => Ok(WorkflowStepType::TicketScan),
-        "fix" => Ok(WorkflowStepType::Fix),
-        "retest" => Ok(WorkflowStepType::Retest),
-        "loop_guard" => Ok(WorkflowStepType::LoopGuard),
-        _ => Err(anyhow!("unknown workflow step type: {}", value)),
-    }
+    value.parse::<WorkflowStepType>().map_err(|e| anyhow!(e))
 }
 
-fn parse_loop_mode(value: &str) -> LoopMode {
-    match value {
-        "infinite" => LoopMode::Infinite,
-        _ => LoopMode::Once,
-    }
+fn parse_loop_mode(value: &str) -> Result<LoopMode> {
+    value.parse::<LoopMode>().map_err(|e| anyhow!(e))
 }
 
 fn loop_mode_as_str(mode: &LoopMode) -> &'static str {
@@ -761,6 +753,7 @@ pub fn parse_resources_from_yaml(content: &str) -> Result<Vec<OrchestratorResour
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config_load::read_active_config;
     use crate::test_utils::TestState;
 
     fn workspace_manifest(name: &str, root_path: &str) -> OrchestratorResource {
@@ -1070,7 +1063,7 @@ fn parse_workflow_step_type_invalid() {
 
 #[test]
 fn parse_loop_mode_infinite() {
-    let mode = parse_loop_mode("infinite");
+    let mode = parse_loop_mode("infinite").expect("infinite should parse");
     match mode {
         LoopMode::Infinite => (), // pass
         _ => panic!("expected Infinite"),
@@ -1078,13 +1071,10 @@ fn parse_loop_mode_infinite() {
 }
 
 #[test]
-fn parse_loop_mode_default() {
-    let mode1 = parse_loop_mode("once");
-    let mode2 = parse_loop_mode("anything_else");
-    match (mode1, mode2) {
-        (LoopMode::Once, LoopMode::Once) => (), // pass
-        _ => panic!("expected Once for both"),
-    }
+fn parse_loop_mode_rejects_invalid() {
+    assert!(matches!(parse_loop_mode("once"), Ok(LoopMode::Once)));
+    let invalid = parse_loop_mode("anything_else").expect_err("invalid mode should fail");
+    assert!(invalid.to_string().contains("unknown loop mode"));
 }
 
 #[test]

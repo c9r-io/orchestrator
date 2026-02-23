@@ -4,6 +4,7 @@
 use crate::metrics::{SelectionStrategy, SelectionWeights};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::str::FromStr;
 
 /// Main orchestrator configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,10 +27,7 @@ pub struct OrchestratorConfig {
 impl Default for OrchestratorConfig {
     fn default() -> Self {
         Self {
-            runner: RunnerConfig {
-                shell: "/bin/bash".to_string(),
-                shell_arg: "-lc".to_string(),
-            },
+            runner: RunnerConfig::default(),
             resume: ResumeConfig { auto: false },
             defaults: ConfigDefaults {
                 project: String::new(),
@@ -104,10 +102,89 @@ fn default_project() -> String {
 }
 
 /// Shell runner configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RunnerPolicy {
+    #[default]
+    Legacy,
+    Allowlist,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RunnerExecutorKind {
+    #[default]
+    Shell,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunnerConfig {
     pub shell: String,
+    #[serde(default = "default_shell_arg")]
     pub shell_arg: String,
+    #[serde(default)]
+    pub policy: RunnerPolicy,
+    #[serde(default)]
+    pub executor: RunnerExecutorKind,
+    #[serde(default = "default_allowed_shells")]
+    pub allowed_shells: Vec<String>,
+    #[serde(default = "default_allowed_shell_args")]
+    pub allowed_shell_args: Vec<String>,
+    #[serde(default = "default_env_allowlist")]
+    pub env_allowlist: Vec<String>,
+    #[serde(default = "default_redaction_patterns")]
+    pub redaction_patterns: Vec<String>,
+}
+
+fn default_shell_arg() -> String {
+    "-lc".to_string()
+}
+
+fn default_allowed_shells() -> Vec<String> {
+    vec![
+        "/bin/bash".to_string(),
+        "/bin/zsh".to_string(),
+        "/bin/sh".to_string(),
+    ]
+}
+
+fn default_allowed_shell_args() -> Vec<String> {
+    vec!["-lc".to_string(), "-c".to_string()]
+}
+
+fn default_env_allowlist() -> Vec<String> {
+    vec![
+        "PATH".to_string(),
+        "HOME".to_string(),
+        "USER".to_string(),
+        "LANG".to_string(),
+        "TERM".to_string(),
+    ]
+}
+
+fn default_redaction_patterns() -> Vec<String> {
+    vec![
+        "token".to_string(),
+        "password".to_string(),
+        "secret".to_string(),
+        "api_key".to_string(),
+        "authorization".to_string(),
+    ]
+}
+
+impl Default for RunnerConfig {
+    fn default() -> Self {
+        Self {
+            shell: "/bin/bash".to_string(),
+            shell_arg: default_shell_arg(),
+            policy: RunnerPolicy::Legacy,
+            executor: RunnerExecutorKind::Shell,
+            allowed_shells: default_allowed_shells(),
+            allowed_shell_args: default_allowed_shell_args(),
+            env_allowlist: default_env_allowlist(),
+            redaction_patterns: default_redaction_patterns(),
+        }
+    }
 }
 
 /// Resume behavior configuration
@@ -220,6 +297,25 @@ impl WorkflowStepType {
     }
 }
 
+impl FromStr for WorkflowStepType {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "init_once" => Ok(Self::InitOnce),
+            "qa" => Ok(Self::Qa),
+            "ticket_scan" => Ok(Self::TicketScan),
+            "fix" => Ok(Self::Fix),
+            "retest" => Ok(Self::Retest),
+            "loop_guard" => Ok(Self::LoopGuard),
+            _ => Err(format!(
+                "unknown workflow step type: {} (expected init_once|qa|ticket_scan|fix|retest|loop_guard)",
+                value
+            )),
+        }
+    }
+}
+
 /// Step hook engine type
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -287,6 +383,21 @@ pub enum LoopMode {
     #[default]
     Once,
     Infinite,
+}
+
+impl FromStr for LoopMode {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "once" => Ok(Self::Once),
+            "infinite" => Ok(Self::Infinite),
+            _ => Err(format!(
+                "unknown loop mode: {} (expected once|infinite)",
+                value
+            )),
+        }
+    }
 }
 
 /// Workflow loop guard configuration

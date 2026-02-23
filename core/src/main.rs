@@ -17,6 +17,7 @@ mod output_validation;
 mod prehook;
 mod qa_utils;
 mod resource;
+mod runner;
 mod scheduler;
 mod scheduler_service;
 mod selection;

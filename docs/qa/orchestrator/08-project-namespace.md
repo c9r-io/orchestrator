@@ -142,21 +142,24 @@ Validate workspace resolution within project context.
 
 ### Steps
 
-1. List workspaces via API:
+1. List workspaces via CLI:
    ```bash
-   ./core/target/release/agent-orchestrator workspace list
+   ./scripts/orchestrator.sh workspace list --project default
    ```
 
-2. Check get_create_task_options returns project workspaces:
+2. Create task without explicit workspace (should resolve project/default workspace):
    ```bash
-   # This tests the API response structure
-   curl -s http://localhost:1423/api/task-options | jq '.'
+   ./scripts/orchestrator.sh task create \
+     --name "test-project-workspace-resolution" \
+     --goal "verify project workspace resolution" \
+     --project default \
+     --no-start
    ```
 
 ### Expected
 
 - Workspace list shows workspaces from default project
-- Project workspaces are included in available options
+- Task is created successfully without explicit `--workspace`
 
 ---
 

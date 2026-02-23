@@ -67,6 +67,25 @@ fn validate_runner(runner: &crate::config::RunnerConfig, result: &mut Validation
             suggestion: Some("Add shell argument (e.g., '-lc')".to_string()),
         });
     }
+    if runner.policy == crate::config::RunnerPolicy::Allowlist {
+        if runner.allowed_shells.is_empty() {
+            result.add_error(ValidationError {
+                code: ErrorCode::MissingRequiredField,
+                message: "runner.allowed_shells cannot be empty when policy=allowlist".to_string(),
+                field: Some("runner.allowed_shells".to_string()),
+                context: None,
+            });
+        }
+        if runner.allowed_shell_args.is_empty() {
+            result.add_error(ValidationError {
+                code: ErrorCode::MissingRequiredField,
+                message: "runner.allowed_shell_args cannot be empty when policy=allowlist"
+                    .to_string(),
+                field: Some("runner.allowed_shell_args".to_string()),
+                context: None,
+            });
+        }
+    }
 }
 
 fn validate_defaults(

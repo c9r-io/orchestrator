@@ -14,6 +14,7 @@ use crate::health::{
 use crate::metrics::MetricsCollector;
 use crate::output_validation::validate_phase_output;
 use crate::prehook::{emit_item_finalize_event, evaluate_step_prehook};
+use crate::runner::{redact_text, spawn_with_runner};
 use crate::selection::{select_agent_advanced, select_agent_by_preference};
 use crate::state::{InnerState, TASK_SEMAPHORE};
 use crate::task_repository::{NewCommandRun, SqliteTaskRepository, TaskRepository};
@@ -109,6 +110,10 @@ pub fn stream_task_logs_impl(
     let resolved_id = resolve_task_id(state, task_id)?;
     let repo = SqliteTaskRepository::new(state.db_path.clone());
     let runs = repo.list_task_log_runs(&resolved_id, 14)?;
+    let redaction_patterns = {
+        let active = read_active_config(state)?;
+        active.config.runner.redaction_patterns.clone()
+    };
 
     let mut chunks = Vec::new();
     for row in runs {
@@ -132,11 +137,14 @@ pub fn stream_task_logs_impl(
         let content = format!(
             "{}\n{}{}",
             header,
-            stdout_tail,
+            redact_text(&stdout_tail, &redaction_patterns),
             if stderr_tail.is_empty() {
                 String::new()
             } else {
-                format!("\n[stderr]\n{}", stderr_tail)
+                format!(
+                    "\n[stderr]\n{}",
+                    redact_text(&stderr_tail, &redaction_patterns)
+                )
             }
         );
         chunks.push(LogChunk {
@@ -163,6 +171,34 @@ fn tail_lines(path: &Path, limit: usize) -> Result<String> {
     let lines: Vec<&str> = content.lines().collect();
     let start = lines.len().saturating_sub(limit);
     Ok(lines[start..].join("\n"))
+}
+
+fn persist_task_execution_metric(
+    state: &InnerState,
+    task_id: &str,
+    status: &str,
+    current_cycle: u32,
+    unresolved_items: i64,
+) -> Result<()> {
+    let repo = SqliteTaskRepository::new(state.db_path.clone());
+    let (total_items, _finished_items, failed_items) = repo.load_task_item_counts(task_id)?;
+    let conn = crate::db::open_conn(&state.db_path)?;
+    let command_runs: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = ?1)",
+        rusqlite::params![task_id],
+        |row| row.get(0),
+    )?;
+    let metric = crate::db::TaskExecutionMetric {
+        task_id: task_id.to_string(),
+        status: status.to_string(),
+        current_cycle,
+        unresolved_items,
+        total_items,
+        failed_items,
+        command_runs,
+        created_at: now_ts(),
+    };
+    crate::db::insert_task_execution_metric(&state.db_path, &metric)
 }
 
 pub fn set_task_status(
@@ -383,6 +419,28 @@ pub async fn run_task_loop(
     runtime: RunningTask,
 ) -> Result<()> {
     set_task_status(&state, task_id, "running", false)?;
+    let result = run_task_loop_core(state.clone(), task_id, runtime).await;
+    if let Err(ref e) = result {
+        let _ = set_task_status(&state, task_id, "failed", false);
+        let _ = insert_event(
+            &state,
+            task_id,
+            None,
+            "task_failed",
+            json!({"error": e.to_string()}),
+        );
+        state.emit_event(task_id, None, "task_failed", json!({"error": e.to_string()}));
+        let unresolved = count_unresolved_items(&state, task_id).unwrap_or(0);
+        let _ = persist_task_execution_metric(&state, task_id, "failed", 0, unresolved);
+    }
+    result
+}
+
+async fn run_task_loop_core(
+    state: Arc<InnerState>,
+    task_id: &str,
+    runtime: RunningTask,
+) -> Result<()> {
     let mut task_ctx = load_task_runtime_context(&state, task_id)?;
 
     if !task_ctx.init_done {
@@ -427,6 +485,14 @@ pub async fn run_task_loop(
 
     'cycle: loop {
         if is_task_paused_in_db(&state, task_id)? {
+            let unresolved = count_unresolved_items(&state, task_id)?;
+            persist_task_execution_metric(
+                &state,
+                task_id,
+                "paused",
+                task_ctx.current_cycle,
+                unresolved,
+            )?;
             return Ok(());
         }
 
@@ -440,6 +506,14 @@ pub async fn run_task_loop(
                 json!({"reason":"stop_flag"}),
             )?;
             state.emit_event(task_id, None, "task_paused", json!({}));
+            let unresolved = count_unresolved_items(&state, task_id)?;
+            persist_task_execution_metric(
+                &state,
+                task_id,
+                "paused",
+                task_ctx.current_cycle,
+                unresolved,
+            )?;
             return Ok(());
         }
 
@@ -510,6 +584,14 @@ pub async fn run_task_loop(
                 set_task_status(&state, task_id, "completed", true)?;
                 insert_event(&state, task_id, None, "task_completed", json!({}))?;
                 state.emit_event(task_id, None, "task_completed", json!({}));
+                let unresolved = count_unresolved_items(&state, task_id)?;
+                persist_task_execution_metric(
+                    &state,
+                    task_id,
+                    "completed",
+                    task_ctx.current_cycle,
+                    unresolved,
+                )?;
                 return Ok(());
             }
         }
@@ -591,10 +673,24 @@ pub async fn run_task_loop(
             "task_failed",
             json!({"unresolved_items": unresolved}),
         );
+        persist_task_execution_metric(
+            &state,
+            task_id,
+            "failed",
+            task_ctx.current_cycle,
+            unresolved,
+        )?;
     } else {
         set_task_status(&state, task_id, "completed", true)?;
         insert_event(&state, task_id, None, "task_completed", json!({}))?;
         state.emit_event(task_id, None, "task_completed", json!({}));
+        persist_task_execution_metric(
+            &state,
+            task_id,
+            "completed",
+            task_ctx.current_cycle,
+            unresolved,
+        )?;
     }
 
     Ok(())
@@ -697,6 +793,13 @@ pub async fn run_phase(
         let active = read_active_config(state)?;
         active.config.runner.clone()
     };
+    let redaction_patterns = runner.redaction_patterns.clone();
+    if !logs_dir.starts_with(&state.logs_dir) {
+        return Err(anyhow::anyhow!(
+            "logs dir escapes managed root: {}",
+            logs_dir.display()
+        ));
+    }
 
     let logs_dir_for_create = logs_dir.clone();
     let stdout_path_for_create = stdout_path.clone();
@@ -725,14 +828,7 @@ pub async fn run_phase(
     .await
     .context("log file setup worker failed")??;
 
-    let child = tokio::process::Command::new(&runner.shell)
-        .arg(&runner.shell_arg)
-        .arg(command.clone())
-        .current_dir(workspace_root)
-        .stdout(stdout_file)
-        .stderr(stderr_file)
-        .kill_on_drop(true)
-        .spawn()?;
+    let child = spawn_with_runner(&runner, &command, workspace_root, stdout_file, stderr_file)?;
 
     {
         let mut child_lock = runtime.child.lock().await;
@@ -812,14 +908,17 @@ pub async fn run_phase(
     tokio::task::spawn_blocking(move || repo.insert_command_run(&insert_payload))
         .await
         .context("command run insert worker failed")??;
-    persist_structured_output(state, &run_id, &validation.output, validation.status)?;
+    let mut redacted_output = validation.output.clone();
+    redacted_output.stdout = redact_text(&redacted_output.stdout, &redaction_patterns);
+    redacted_output.stderr = redact_text(&redacted_output.stderr, &redaction_patterns);
+    persist_structured_output(state, &run_id, &redacted_output, validation.status)?;
 
     let sender = crate::collab::AgentEndpoint::for_task_item(agent_id, task_id, item_id);
     let msg = crate::collab::AgentMessage::publish(
         sender,
         crate::collab::MessagePayload::ExecutionResult(crate::collab::ExecutionResult {
             run_id: run_uuid,
-            output: validation.output.clone(),
+            output: redacted_output.clone(),
             success,
             error: validation.error.clone(),
         }),
@@ -874,9 +973,11 @@ pub async fn run_phase(
         stderr_path: stderr_path.to_string_lossy().to_string(),
         timed_out: false,
         duration_ms: Some(duration_ms),
-        output: Some(validation.output),
+        output: Some(redacted_output),
         validation_status: validation.status.to_string(),
-        validation_error: validation.error,
+        validation_error: validation
+            .error
+            .map(|value| redact_text(&value, &redaction_patterns)),
     })
 }
 
