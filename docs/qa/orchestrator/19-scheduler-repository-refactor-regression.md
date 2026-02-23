@@ -41,6 +41,11 @@ Entry point: `./scripts/orchestrator.sh`
 | stderr_path | TEXT | stderr file path |
 | started_at | TEXT | run start timestamp |
 | ended_at | TEXT | run end timestamp |
+| output_json | TEXT | Structured `AgentOutput` payload |
+| artifacts_json | TEXT | Structured artifact payload |
+| confidence | REAL | Parsed confidence value |
+| quality_score | REAL | Parsed quality score value |
+| validation_status | TEXT | Structured output validation result |
 
 ---
 
@@ -137,7 +142,7 @@ WHERE task_id = '{task_id}';
 - Echo workflow fixture applied.
 
 ### Goal
-Ensure `command_runs` records are still inserted with key fields after scheduler DB-write path refactor.
+Ensure `command_runs` records persist both legacy execution fields and structured output fields after scheduler mainline integration.
 
 ### Steps
 1. Create and start task:
@@ -148,19 +153,20 @@ Ensure `command_runs` records are still inserted with key fields after scheduler
 2. Verify run records:
    ```bash
    sqlite3 data/agent_orchestrator.db "SELECT COUNT(*) FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='${TASK_ID}');"
-   sqlite3 data/agent_orchestrator.db "SELECT phase, stdout_path, stderr_path, started_at, ended_at FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='${TASK_ID}') ORDER BY started_at DESC LIMIT 5;"
+   sqlite3 data/agent_orchestrator.db "SELECT phase, stdout_path, stderr_path, validation_status, confidence, quality_score, started_at, ended_at FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='${TASK_ID}') ORDER BY started_at DESC LIMIT 5;"
    ```
 
 ### Expected
 - `command_runs` row count is greater than zero.
 - `phase/stdout_path/stderr_path/started_at` are populated.
+- `validation_status` is populated and `output_json`/`artifacts_json` are persisted.
 
 ### Expected Data State
 ```sql
-SELECT phase, stdout_path, stderr_path, started_at, ended_at
+SELECT phase, validation_status, output_json, artifacts_json
 FROM command_runs
 WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}');
--- Expected: >= 1 row with non-empty phase/stdout_path/stderr_path/started_at
+-- Expected: >= 1 row with non-empty phase/validation_status and structured JSON payload fields
 ```
 
 ---

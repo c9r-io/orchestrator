@@ -12,6 +12,7 @@ use crate::health::{
     update_capability_health,
 };
 use crate::metrics::MetricsCollector;
+use crate::output_validation::validate_phase_output;
 use crate::prehook::{emit_item_finalize_event, evaluate_step_prehook};
 use crate::selection::{select_agent_advanced, select_agent_by_preference};
 use crate::state::{InnerState, TASK_SEMAPHORE};
@@ -653,6 +654,27 @@ fn is_task_paused_in_db(state: &InnerState, task_id: &str) -> Result<bool> {
     Ok(matches!(status.as_deref(), Some("paused")))
 }
 
+fn persist_structured_output(
+    state: &InnerState,
+    run_id: &str,
+    output: &crate::collab::AgentOutput,
+    validation_status: &str,
+) -> Result<()> {
+    let conn = crate::db::open_conn(&state.db_path)?;
+    conn.execute(
+        "UPDATE command_runs SET output_json = ?2, artifacts_json = ?3, confidence = ?4, quality_score = ?5, validation_status = ?6 WHERE id = ?1",
+        rusqlite::params![
+            run_id,
+            serde_json::to_string(output)?,
+            serde_json::to_string(&output.artifacts)?,
+            output.confidence,
+            output.quality_score,
+            validation_status
+        ],
+    )?;
+    Ok(())
+}
+
 pub async fn run_phase(
     state: &Arc<InnerState>,
     task_id: &str,
@@ -665,7 +687,8 @@ pub async fn run_phase(
     runtime: &RunningTask,
 ) -> Result<crate::dto::RunResult> {
     let now = now_ts();
-    let run_id = Uuid::new_v4().to_string();
+    let run_uuid = Uuid::new_v4();
+    let run_id = run_uuid.to_string();
     let logs_dir = state.logs_dir.join(task_id);
     let stdout_path = logs_dir.join(format!("{}_{}.stdout", phase, run_id));
     let stderr_path = logs_dir.join(format!("{}_{}.stderr", phase, run_id));
@@ -743,7 +766,32 @@ pub async fn run_phase(
         }
     };
 
-    let success = exit_code == 0;
+    let stdout_content = tokio::fs::read_to_string(&stdout_path)
+        .await
+        .with_context(|| format!("failed to read stdout log: {}", stdout_path.display()))?;
+    let stderr_content = tokio::fs::read_to_string(&stderr_path)
+        .await
+        .with_context(|| format!("failed to read stderr log: {}", stderr_path.display()))?;
+
+    let validation = validate_phase_output(
+        phase,
+        run_uuid,
+        agent_id,
+        exit_code as i64,
+        &stdout_content,
+        &stderr_content,
+    )?;
+    let mut success = exit_code == 0;
+    if validation.status == "failed" {
+        success = false;
+        insert_event(
+            state,
+            task_id,
+            Some(item_id),
+            "output_validation_failed",
+            json!({"phase":phase,"run_id":run_id,"error":validation.error.clone()}),
+        )?;
+    }
 
     let repo = SqliteTaskRepository::new(state.db_path.clone());
     let insert_payload = NewCommandRun {
@@ -764,6 +812,35 @@ pub async fn run_phase(
     tokio::task::spawn_blocking(move || repo.insert_command_run(&insert_payload))
         .await
         .context("command run insert worker failed")??;
+    persist_structured_output(state, &run_id, &validation.output, validation.status)?;
+
+    let sender = crate::collab::AgentEndpoint::for_task_item(agent_id, task_id, item_id);
+    let msg = crate::collab::AgentMessage::publish(
+        sender,
+        crate::collab::MessagePayload::ExecutionResult(crate::collab::ExecutionResult {
+            run_id: run_uuid,
+            output: validation.output.clone(),
+            success,
+            error: validation.error.clone(),
+        }),
+    );
+    if let Err(err) = state.message_bus.publish(msg).await {
+        insert_event(
+            state,
+            task_id,
+            Some(item_id),
+            "bus_publish_failed",
+            json!({"phase":phase,"run_id":run_id,"error":err.to_string()}),
+        )?;
+    } else {
+        insert_event(
+            state,
+            task_id,
+            Some(item_id),
+            "phase_output_published",
+            json!({"phase":phase,"run_id":run_id}),
+        )?;
+    }
 
     update_capability_health(state, agent_id, Some(phase), success);
 
@@ -797,6 +874,9 @@ pub async fn run_phase(
         stderr_path: stderr_path.to_string_lossy().to_string(),
         timed_out: false,
         duration_ms: Some(duration_ms),
+        output: Some(validation.output),
+        validation_status: validation.status.to_string(),
+        validation_error: validation.error,
     })
 }
 
@@ -932,17 +1012,27 @@ pub async fn execute_guard_step(
     )
     .await?;
 
-    let output = tokio::fs::read_to_string(&result.stdout_path)
-        .await
-        .with_context(|| format!("failed to read guard output: {}", result.stdout_path))?;
-
-    let should_stop = output.trim().to_lowercase().starts_with("stop")
-        || output.trim().to_lowercase().starts_with("false")
-        || output.trim().to_lowercase().starts_with("no");
+    let guard_output = result
+        .output
+        .as_ref()
+        .map(|o| o.stdout.clone())
+        .unwrap_or_default();
+    let parsed: serde_json::Value =
+        serde_json::from_str(&guard_output).unwrap_or(serde_json::Value::Null);
+    let should_stop = parsed
+        .get("should_stop")
+        .and_then(|v| v.as_bool())
+        .or_else(|| parsed.get("continue").and_then(|v| v.as_bool()).map(|v| !v))
+        .unwrap_or(false);
+    let reason = parsed
+        .get("reason")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "guard_json".to_string());
 
     Ok(GuardResult {
         should_stop,
-        reason: output.trim().to_string(),
+        reason,
     })
 }
 
@@ -1030,10 +1120,11 @@ pub async fn process_item(
             qa_exit_code = Some(result.exit_code);
             qa_failed = result.exit_code != 0;
 
-            let stdout_content = tokio::fs::read_to_string(&result.stdout_path)
-                .await
-                .with_context(|| format!("failed to read qa stdout: {}", result.stdout_path))?;
-            let qa_artifacts = crate::collab::parse_artifacts_from_output(&stdout_content);
+            let qa_artifacts = result
+                .output
+                .as_ref()
+                .map(|o| o.artifacts.clone())
+                .unwrap_or_default();
             if !qa_artifacts.is_empty() {
                 insert_event(
                     state,
@@ -1146,6 +1237,19 @@ pub async fn process_item(
         new_ticket_count = active_tickets.len() as i64;
     }
 
+    if active_tickets.is_empty() {
+        let ticket_artifacts = phase_artifacts
+            .iter()
+            .filter(|a| matches!(a.kind, crate::collab::ArtifactKind::Ticket { .. }))
+            .count();
+        if ticket_artifacts > 0 {
+            active_tickets = (0..ticket_artifacts)
+                .map(|idx| format!("artifact://ticket/{}", idx))
+                .collect();
+            new_ticket_count = active_tickets.len() as i64;
+        }
+    }
+
     if let Some(fix_step) = fix_step {
         if fix_step.enabled && !active_tickets.is_empty() {
             let should_run_fix = evaluate_step_prehook(
@@ -1202,12 +1306,11 @@ pub async fn process_item(
                     item_status = "fixed".to_string();
                 }
 
-                let fix_stdout = tokio::fs::read_to_string(&result.stdout_path)
-                    .await
-                    .with_context(|| {
-                        format!("failed to read fix stdout: {}", result.stdout_path)
-                    })?;
-                let fix_artifacts = crate::collab::parse_artifacts_from_output(&fix_stdout);
+                let fix_artifacts = result
+                    .output
+                    .as_ref()
+                    .map(|o| o.artifacts.clone())
+                    .unwrap_or_default();
                 if !fix_artifacts.is_empty() {
                     insert_event(
                         state,

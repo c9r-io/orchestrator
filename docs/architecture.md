@@ -106,10 +106,21 @@ A **Task** is the unit of execution, binding a Workspace and Workflow to a set o
         *   **Agent Selection**: The system dynamically selects an Agent that satisfies the step's `required_capability`.
         *   **Command Execution**: The agent's template is rendered and executed as a shell command.
         *   **Result Capture**: Exit codes, stdout/stderr, and artifacts are captured.
+        *   **Structured Output Validation**: For `qa`/`fix`/`retest`/`guard`, agent stdout must be valid JSON and is normalized into `AgentOutput` before downstream decisions are made.
+        *   **Message Bus Publication**: Each phase publishes `ExecutionResult` to the collaboration bus so downstream logic can consume a consistent structured payload.
     *   **Loop Guard**: At the end of a cycle, the loop policy checks if another cycle is needed (e.g., if unresolved tickets remain).
 3.  **State Management**:
     *   State is persisted in a local SQLite database (`tasks`, `task_items`, `command_runs`, `events`).
     *   Events are emitted for real-time observability.
+
+#### Scheduler Layer
+
+- **Dual Mode Execution**:
+  - Foreground: `task create/start/resume/retry` runs inline and waits for completion.
+  - Background: `--detach` enqueues tasks; `task worker start` drains pending tasks.
+- **Queue State**:
+  - Pending tasks are tracked via task status (`pending`) in SQLite.
+  - Worker emits scheduling lifecycle events such as `scheduler_enqueued`.
 
 ## 4. Tech Stack
 

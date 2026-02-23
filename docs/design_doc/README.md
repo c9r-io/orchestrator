@@ -36,3 +36,4 @@ docs/design_doc/
 | orchestrator | `docs/design_doc/orchestrator/01-cli-agent-orchestration.md` | `docs/qa/orchestrator/01-cli-agent-orchestration.md` | CLI testing with mock agents |
 | orchestrator | `docs/design_doc/orchestrator/08-project-namespace.md` | `docs/qa/orchestrator/08-project-namespace.md` | Project namespace for resource isolation |
 | orchestrator | `docs/design_doc/orchestrator/09-scheduler-repository-refactor.md` | `docs/qa/orchestrator/19-scheduler-repository-refactor-regression.md` | P0/P1 scheduler data-layer refactor and error observability |
+| orchestrator | `docs/design_doc/orchestrator/10-structured-output-worker-scheduler.md` | `docs/qa/orchestrator/20-structured-output-worker-scheduler.md` | Structured output scheduler mainline + detach worker model |

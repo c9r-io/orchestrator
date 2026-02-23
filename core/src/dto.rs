@@ -233,6 +233,9 @@ pub struct RunResult {
     pub stderr_path: String,
     pub timed_out: bool,
     pub duration_ms: Option<u64>,
+    pub output: Option<crate::collab::AgentOutput>,
+    pub validation_status: String,
+    pub validation_error: Option<String>,
 }
 
 impl RunResult {

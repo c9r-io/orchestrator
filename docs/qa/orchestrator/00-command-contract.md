@@ -50,7 +50,8 @@ Entry point: `./scripts/orchestrator.sh <command>` (recommended) or `./core/targ
 ### Expected Result
 
 - Help output includes all commands above.
-- Deprecated/removed command groups (for example `daemon`, `agent`) are not documented in QA steps.
+- `task worker` subcommands are visible under `task --help`.
+- Deprecated/removed command groups are not documented in QA steps.
 
 ---
 
@@ -93,11 +94,19 @@ Entry point: `./scripts/orchestrator.sh <command>` (recommended) or `./core/targ
    ./scripts/orchestrator.sh task create --project <qa-project-id> --name "contract-check" --goal "check" --no-start
    ```
 
+6. Validate new scheduling flags and worker commands:
+   ```bash
+   ./scripts/orchestrator.sh task create --help | rg -- "--detach"
+   ./scripts/orchestrator.sh task start --help | rg -- "--detach"
+   ./scripts/orchestrator.sh task worker --help
+   ```
+
 ### Expected Result
 
 - `workspace info` accepts positional workspace id.
 - Output format flags work for commands that support `-o`.
 - `task create --format ...` is never required in QA docs.
+- `--detach` flags and `task worker` command family are part of the CLI contract.
 
 ---
 

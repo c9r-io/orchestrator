@@ -1,7 +1,7 @@
 # Orchestrator - CLI Task Lifecycle
 
 **Module**: orchestrator
-**Scope**: Validate task lifecycle operations (start, pause, resume, logs, retry)
+**Scope**: Validate foreground task execution, detach queue mode, worker lifecycle control, logs, and retry
 **Scenarios**: 5
 **Priority**: High
 
@@ -9,7 +9,12 @@
 
 ## Background
 
-This document tests the task lifecycle commands including starting, pausing, resuming tasks, viewing logs, and retrying failed items.
+This document validates task lifecycle behavior after scheduler refactor:
+
+- foreground execution path (`task start/resume/retry`)
+- detached queue execution (`--detach`)
+- worker commands (`task worker start|stop|status`)
+- task logs and retry behavior
 
 Entry point: `./scripts/orchestrator.sh task <command>`
 
@@ -26,223 +31,182 @@ QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 
 ---
 
-## Scenario 1: Task Start
+## Scenario 1: Foreground Task Start
 
 ### Preconditions
-
-- Orchestrator binary available
-- Runtime initialized and mock config applied (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions)
-- Workspace configured with mock agents that produce exit-code 0 (e.g. `echo 'done'`)
-- Project-isolated reset: `./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force`
+- Runtime initialized and config applied.
+- Task created with `--no-start`.
 
 ### Steps
-
-1. Create a task without auto-start:
+1. Create task:
    ```bash
-   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "pause-test" --goal "Test pause/resume" --no-start
+   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "fg-start" --goal "foreground" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
-
-2. Verify task status is pending:
+2. Start task in foreground:
    ```bash
-   ./scripts/orchestrator.sh task list
+   ./scripts/orchestrator.sh task start "${TASK_ID}" || true
    ```
-
-3. Start the task:
+3. Inspect result:
    ```bash
-   ./scripts/orchestrator.sh task start {task_id}
-   ```
-
-4. Check task status:
-   ```bash
-   ./scripts/orchestrator.sh task info {task_id}
+   ./scripts/orchestrator.sh task info "${TASK_ID}" -o json
    ```
 
 ### Expected
+- Command blocks until run loop reaches terminal status.
+- Task transitions through `running` to `completed` or `failed`.
 
-- Task starts and transitions through "running" to a terminal status ("completed" or "failed")
-- With mock agents (echo commands), task typically ends as "failed" because finalize rules detect unresolved tickets in the ticket directory — this is expected workflow behavior, not a CLI bug
-- Task details show progress (items processed count)
+### Expected Data State
+```sql
+SELECT status
+FROM tasks
+WHERE id = '{task_id}';
+-- Expected: terminal status (completed/failed)
+```
 
 ---
 
-## Scenario 2: Task Start with --latest
+## Scenario 2: Detach Enqueue Mode
 
 ### Preconditions
+- Runtime initialized.
 
-- At least one paused or pending task exists
+### Goal
+Verify `--detach` does not execute inline and enqueues task.
 
 ### Steps
-
-1. Create and pause a task:
+1. Create in detach mode:
    ```bash
-   TASK_CREATE_OUTPUT=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "latest-test" --goal "Test" --no-start)
-   TASK_ID=$(echo "$TASK_CREATE_OUTPUT" | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "detach-mode" --goal "queue" --detach | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
-
-2. Start with --latest flag:
+2. Check task state:
    ```bash
-   ./scripts/orchestrator.sh task start --latest
+   ./scripts/orchestrator.sh task info "${TASK_ID}" -o json
+   ```
+3. Re-enqueue with start detach:
+   ```bash
+   ./scripts/orchestrator.sh task start "${TASK_ID}" --detach
    ```
 
 ### Expected
+- Task remains `pending` before worker consumption.
+- `scheduler_enqueued` event is recorded.
 
-- Latest resumable task is started automatically
+### Expected Data State
+```sql
+SELECT status
+FROM tasks
+WHERE id = '{task_id}';
+-- Expected: pending (before worker consumes)
+```
 
 ---
 
-## Scenario 3: Task Pause and Resume
+## Scenario 3: Worker Start/Status/Stop
 
 ### Preconditions
-
-- Orchestrator initialized and config applied (see Scenario 1 preconditions)
-- A running task exists (or create one that runs for a while using the mock config below)
+- At least one pending task exists.
 
 ### Steps
-
-1. Create a task that runs for some time:
+1. Start worker in terminal A:
    ```bash
-   # First update config to use mock_sleep agent
-   cat > /tmp/mock-config.yaml << 'EOF'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   resume:
-     auto: false
-   defaults:
-     workspace: default
-     workflow: qa_only
-   workspaces:
-     default:
-       root_path: "."
-       qa_targets:
-         - docs/qa
-       ticket_dir: fixtures/ticket
-   agents:
-     mock_sleep:
-       metadata:
-         name: mock_sleep
-       capabilities:
-         - qa
-       templates:
-         qa: "sleep 10 && echo 'done'"
-   workflows:
-     qa_only:
-       steps:
-         - id: qa
-           required_capability: qa
-           enabled: true
-           repeatable: false
-       loop:
-         mode: once
-         guard:
-           enabled: false
-           stop_when_no_unresolved: false
-       finalize:
-         rules: []
-   EOF
-    ```
-
-2. Start task in background:
-   ```bash
-   ./scripts/orchestrator.sh task start {task_id} &
-   sleep 1
+   ./scripts/orchestrator.sh task worker start --poll-ms 500
    ```
-
-3. Pause the task:
+2. In terminal B, check status:
    ```bash
-   ./scripts/orchestrator.sh task pause {task_id}
+   ./scripts/orchestrator.sh task worker status
    ```
-
-4. Verify task is paused:
+3. Stop worker:
    ```bash
-   ./scripts/orchestrator.sh task info {task_id}
+   ./scripts/orchestrator.sh task worker stop
    ```
-
-5. Resume the task:
+4. Re-check status:
    ```bash
-   ./scripts/orchestrator.sh task resume {task_id}
+   ./scripts/orchestrator.sh task worker status
    ```
 
 ### Expected
+- Worker consumes pending tasks while running.
+- Stop signal terminates worker loop gracefully.
+- `task worker status` reflects pending count and stop-signal state.
 
-- Task can be paused mid-execution
-- Task can be resumed and continues from where it stopped
+### Expected Data State
+```sql
+SELECT event_type
+FROM events
+WHERE task_id = '{task_id}'
+  AND event_type = 'scheduler_enqueued'
+ORDER BY id DESC
+LIMIT 5;
+-- Expected: enqueue events exist for detached submissions
+```
 
 ---
 
 ## Scenario 4: Task Logs
 
 ### Preconditions
-
-- Runtime initialized and mock config applied (see QA doc `01-cli-agent-orchestration.md` Scenario 1 preconditions)
-- A task has been executed **successfully** at least once (task must reach running state so that command_runs are recorded)
-- Task must have been started and executed (not just created) for command_runs to exist in the database
+- A task has executed at least one phase (`command_runs` exists).
 
 ### Steps
-
-1. Get task ID:
-   ```bash
-   ./scripts/orchestrator.sh task list
-   ```
-
-2. View task logs:
+1. View logs:
    ```bash
    ./scripts/orchestrator.sh task logs {task_id}
    ```
-
-3. View last 10 lines:
+2. View last lines:
    ```bash
    ./scripts/orchestrator.sh task logs {task_id} --tail 10
    ```
-
-4. View logs with timestamps:
+3. View with timestamps:
    ```bash
    ./scripts/orchestrator.sh task logs {task_id} --timestamps
    ```
 
 ### Expected
+- Logs show run output chunks grouped by phase/run id.
+- Missing/corrupted log paths produce explicit read errors.
+- Tail and timestamp flags behave as documented.
 
-- Logs display command output when command_runs and log files are valid
-- Empty output is expected only when the task had no command_runs (for example it failed before phase execution)
-- If `command_runs` exists but referenced log files are missing/corrupted, the command should surface a clear read error (no silent empty fallback)
-- Tail limit works correctly
-- Timestamps are shown when requested
+### Expected Data State
+```sql
+SELECT phase, stdout_path, stderr_path
+FROM command_runs
+WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
+ORDER BY started_at DESC;
+-- Expected: non-empty rows for executed task
+```
 
 ---
 
-## Scenario 5: Task Retry
+## Scenario 5: Task Retry (Foreground and Detach)
 
 ### Preconditions
-
-- Orchestrator initialized and config applied with a failing agent (e.g. `exit 1`)
-- A task with failed items exists
+- A task has at least one failed or unresolved item.
 
 ### Steps
-
-1. Create a task that will fail:
+1. Find retry target item:
    ```bash
-   # First create a config with failing agent
+   ./scripts/orchestrator.sh task info {task_id} -o json
    ```
-
-2. After task fails, identify failed item:
+2. Retry in foreground:
    ```bash
-   ./scripts/orchestrator.sh task info {task_id}
+   ./scripts/orchestrator.sh task retry {task_item_id} || true
    ```
-
-3. Get the task item ID:
+3. Retry in detach mode:
    ```bash
-   # Find failed item ID from task info
-   ```
-
-4. Retry the failed item:
-   ```bash
-   ./scripts/orchestrator.sh task retry {task_item_id}
+   ./scripts/orchestrator.sh task retry {task_item_id} --detach
    ```
 
 ### Expected
+- Foreground retry runs immediately and returns terminal result.
+- Detach retry enqueues associated task and returns without inline execution.
 
-- Failed task item is retried
-- Retry updates the item status
+### Expected Data State
+```sql
+SELECT status, updated_at
+FROM task_items
+WHERE id = '{task_item_id}';
+-- Expected: status/updated_at changed after retry execution
+```
 
 ---
 
@@ -250,8 +214,8 @@ QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Task Start | ☐ | | | |
-| 2 | Task Start --latest | ☐ | | | |
-| 3 | Task Pause and Resume | ☐ | | | |
+| 1 | Foreground Task Start | ☐ | | | |
+| 2 | Detach Enqueue Mode | ☐ | | | |
+| 3 | Worker Start/Status/Stop | ☐ | | | |
 | 4 | Task Logs | ☐ | | | |
-| 5 | Task Retry | ☐ | | | |
+| 5 | Task Retry (Foreground and Detach) | ☐ | | | |

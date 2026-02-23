@@ -1,7 +1,7 @@
 use crate::cli::{
     generate_completion, AgentCommands, Cli, Commands, CompletionCommands, ConfigCommands,
     DbCommands, EditCommands, OutputFormat, QaCommands, QaProjectCommands, TaskCommands,
-    WorkflowCommands, WorkspaceCommands,
+    TaskWorkerCommands, WorkflowCommands, WorkspaceCommands,
 };
 use crate::cli_types::{
     AgentSpec, AgentTemplatesSpec, OrchestratorResource, ResourceKind, ResourceMetadata,
@@ -20,6 +20,10 @@ use crate::scheduler::{
     load_task_summary, prepare_task_for_start, resolve_task_id, run_task_loop, stop_task_runtime,
     stop_task_runtime_for_delete, stream_task_logs_impl, RunningTask,
 };
+use crate::scheduler_service::{
+    clear_worker_stop_signal, enqueue_task, next_pending_task_id, pending_task_count,
+    signal_worker_stop, worker_stop_signal_path,
+};
 use crate::state::InnerState;
 use crate::task_ops::{create_task_impl, reset_task_item_for_retry};
 use anyhow::{Context, Result};
@@ -27,7 +31,17 @@ use clap_complete::Shell;
 use serde_json::json;
 use std::path::Path;
 use std::process::{Command, ExitStatus};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+
+fn cli_runtime() -> &'static tokio::runtime::Runtime {
+    static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+    RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("failed to initialize shared tokio runtime for CLI")
+    })
+}
 
 pub struct CliHandler {
     state: Arc<InnerState>,
@@ -102,7 +116,7 @@ impl CliHandler {
                     "It is initialized in InnerState and used for publishing/subscribing messages."
                 );
                 println!();
-                println!("Implementation location: src/message_bus.rs");
+                println!("Implementation location: src/collab.rs (MessageBus)");
                 println!();
                 println!("To verify MessageBus is working:");
                 println!("  1. Run a task with multiple agents");
@@ -548,6 +562,7 @@ impl CliHandler {
                 workflow,
                 target_file,
                 no_start,
+                detach,
             } => {
                 let payload = CreateTaskPayload {
                     name: name.clone(),
@@ -564,12 +579,20 @@ impl CliHandler {
                 let created = create_task_impl(&self.state, payload)?;
                 println!("Task created: {}", created.id);
                 if !no_start {
-                    prepare_task_for_start(&self.state, &created.id)?;
-                    let runtime = RunningTask::new();
-                    let rt = tokio::runtime::Runtime::new()?;
-                    rt.block_on(run_task_loop(self.state.clone(), &created.id, runtime))?;
-                    let summary = load_task_summary(&self.state, &created.id)?;
-                    println!("Task finished: {} status={}", summary.id, summary.status);
+                    if *detach {
+                        enqueue_task(&self.state, &created.id)?;
+                        println!("Task enqueued: {}", created.id);
+                    } else {
+                        prepare_task_for_start(&self.state, &created.id)?;
+                        let runtime = RunningTask::new();
+                        cli_runtime().block_on(run_task_loop(
+                            self.state.clone(),
+                            &created.id,
+                            runtime,
+                        ))?;
+                        let summary = load_task_summary(&self.state, &created.id)?;
+                        println!("Task finished: {} status={}", summary.id, summary.status);
+                    }
                 }
                 Ok(0)
             }
@@ -577,7 +600,11 @@ impl CliHandler {
                 let detail = get_task_details_impl(&self.state, task_id)?;
                 self.print_task_detail(&detail, *output)
             }
-            TaskCommands::Start { task_id, latest } => {
+            TaskCommands::Start {
+                task_id,
+                latest,
+                detach,
+            } => {
                 let id = if let Some(id) = task_id {
                     resolve_task_id(&self.state, id)?
                 } else if *latest {
@@ -586,18 +613,21 @@ impl CliHandler {
                 } else {
                     anyhow::bail!("task_id or --latest required")
                 };
-                prepare_task_for_start(&self.state, &id)?;
-                let runtime = RunningTask::new();
-                let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(run_task_loop(self.state.clone(), &id, runtime))?;
-                let summary = load_task_summary(&self.state, &id)?;
-                println!("Task finished: {} status={}", summary.id, summary.status);
+                if *detach {
+                    enqueue_task(&self.state, &id)?;
+                    println!("Task enqueued: {}", id);
+                } else {
+                    prepare_task_for_start(&self.state, &id)?;
+                    let runtime = RunningTask::new();
+                    cli_runtime().block_on(run_task_loop(self.state.clone(), &id, runtime))?;
+                    let summary = load_task_summary(&self.state, &id)?;
+                    println!("Task finished: {} status={}", summary.id, summary.status);
+                }
                 Ok(0)
             }
             TaskCommands::Pause { task_id } => {
                 let resolved_id = resolve_task_id(&self.state, task_id)?;
-                let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(stop_task_runtime(
+                cli_runtime().block_on(stop_task_runtime(
                     self.state.clone(),
                     &resolved_id,
                     "paused",
@@ -605,14 +635,19 @@ impl CliHandler {
                 println!("Task paused: {}", resolved_id);
                 Ok(0)
             }
-            TaskCommands::Resume { task_id } => {
+            TaskCommands::Resume { task_id, detach } => {
                 let resolved_id = resolve_task_id(&self.state, task_id)?;
-                prepare_task_for_start(&self.state, &resolved_id)?;
-                let runtime = RunningTask::new();
-                let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(run_task_loop(self.state.clone(), &resolved_id, runtime))?;
-                let summary = load_task_summary(&self.state, &resolved_id)?;
-                println!("Task finished: {} status={}", summary.id, summary.status);
+                if *detach {
+                    enqueue_task(&self.state, &resolved_id)?;
+                    println!("Task enqueued: {}", resolved_id);
+                } else {
+                    prepare_task_for_start(&self.state, &resolved_id)?;
+                    let runtime = RunningTask::new();
+                    cli_runtime()
+                        .block_on(run_task_loop(self.state.clone(), &resolved_id, runtime))?;
+                    let summary = load_task_summary(&self.state, &resolved_id)?;
+                    println!("Task finished: {} status={}", summary.id, summary.status);
+                }
                 Ok(0)
             }
             TaskCommands::Logs {
@@ -634,8 +669,7 @@ impl CliHandler {
                     return Ok(0);
                 }
                 let resolved_id = resolve_task_id(&self.state, task_id)?;
-                let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(stop_task_runtime_for_delete(
+                cli_runtime().block_on(stop_task_runtime_for_delete(
                     self.state.clone(),
                     &resolved_id,
                 ))?;
@@ -643,14 +677,64 @@ impl CliHandler {
                 println!("Task deleted: {}", resolved_id);
                 Ok(0)
             }
-            TaskCommands::Retry { task_item_id } => {
+            TaskCommands::Retry {
+                task_item_id,
+                detach,
+            } => {
                 let task_id = reset_task_item_for_retry(&self.state, task_item_id)?;
-                prepare_task_for_start(&self.state, &task_id)?;
-                let runtime = RunningTask::new();
-                let rt = tokio::runtime::Runtime::new()?;
-                rt.block_on(run_task_loop(self.state.clone(), &task_id, runtime))?;
-                let summary = load_task_summary(&self.state, &task_id)?;
-                println!("Retry finished: {} status={}", summary.id, summary.status);
+                if *detach {
+                    enqueue_task(&self.state, &task_id)?;
+                    println!("Task enqueued: {}", task_id);
+                } else {
+                    prepare_task_for_start(&self.state, &task_id)?;
+                    let runtime = RunningTask::new();
+                    cli_runtime().block_on(run_task_loop(self.state.clone(), &task_id, runtime))?;
+                    let summary = load_task_summary(&self.state, &task_id)?;
+                    println!("Retry finished: {} status={}", summary.id, summary.status);
+                }
+                Ok(0)
+            }
+            TaskCommands::Worker(cmd) => self.handle_task_worker(cmd),
+        }
+    }
+
+    fn handle_task_worker(&self, cmd: &TaskWorkerCommands) -> Result<i32> {
+        match cmd {
+            TaskWorkerCommands::Start { poll_ms } => {
+                clear_worker_stop_signal(&self.state)?;
+                println!("Worker started (poll={}ms)", poll_ms);
+                let stop_file = worker_stop_signal_path(&self.state);
+                loop {
+                    if stop_file.exists() {
+                        clear_worker_stop_signal(&self.state)?;
+                        println!("Worker stopped");
+                        break;
+                    }
+                    if let Some(task_id) = next_pending_task_id(&self.state)? {
+                        prepare_task_for_start(&self.state, &task_id)?;
+                        let runtime = RunningTask::new();
+                        cli_runtime().block_on(run_task_loop(self.state.clone(), &task_id, runtime))?;
+                        let summary = load_task_summary(&self.state, &task_id)?;
+                        println!(
+                            "Worker finished task: {} status={}",
+                            summary.id, summary.status
+                        );
+                    } else {
+                        std::thread::sleep(std::time::Duration::from_millis(*poll_ms));
+                    }
+                }
+                Ok(0)
+            }
+            TaskWorkerCommands::Stop => {
+                signal_worker_stop(&self.state)?;
+                println!("Worker stop signal written");
+                Ok(0)
+            }
+            TaskWorkerCommands::Status => {
+                let pending = pending_task_count(&self.state)?;
+                let stop_signal = worker_stop_signal_path(&self.state).exists();
+                println!("pending_tasks: {}", pending);
+                println!("stop_signal: {}", stop_signal);
                 Ok(0)
             }
         }
@@ -2155,6 +2239,7 @@ spec:
                 workflow: Some("basic".to_string()),
                 target_file: vec![],
                 no_start: true,
+                detach: false,
             }),
             verbose: false,
         };

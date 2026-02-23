@@ -158,6 +158,10 @@ pub enum TaskCommands {
         /// Don't auto-start the task after creation
         #[arg(long)]
         no_start: bool,
+
+        /// Enqueue task for background worker instead of running inline
+        #[arg(long)]
+        detach: bool,
     },
 
     /// Get task details
@@ -179,6 +183,10 @@ pub enum TaskCommands {
         /// Auto-select latest resumable task
         #[arg(long, short)]
         latest: bool,
+
+        /// Enqueue task for background worker instead of running inline
+        #[arg(long)]
+        detach: bool,
     },
 
     /// Pause a running task
@@ -191,6 +199,10 @@ pub enum TaskCommands {
     Resume {
         /// Task ID to resume
         task_id: String,
+
+        /// Enqueue task for background worker instead of running inline
+        #[arg(long)]
+        detach: bool,
     },
 
     /// View task logs
@@ -227,7 +239,29 @@ pub enum TaskCommands {
     Retry {
         /// Task item ID to retry
         task_item_id: String,
+
+        /// Enqueue task for background worker instead of running inline
+        #[arg(long)]
+        detach: bool,
     },
+
+    /// Worker control commands
+    #[command(subcommand)]
+    Worker(TaskWorkerCommands),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum TaskWorkerCommands {
+    /// Start scheduler worker loop
+    Start {
+        /// Polling interval in milliseconds
+        #[arg(long, default_value = "1000")]
+        poll_ms: u64,
+    },
+    /// Signal worker to stop
+    Stop,
+    /// Show worker-related queue status
+    Status,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -1002,7 +1036,11 @@ mod tests {
         let cli = Cli::parse_from(["orchestrator", "task", "start", "task-123"]);
 
         match cli.command {
-            Commands::Task(TaskCommands::Start { task_id, latest }) => {
+            Commands::Task(TaskCommands::Start {
+                task_id,
+                latest,
+                ..
+            }) => {
                 assert_eq!(task_id, Some("task-123".to_string()));
                 assert!(!latest);
             }
@@ -1015,7 +1053,11 @@ mod tests {
         let cli = Cli::parse_from(["orchestrator", "task", "start", "--latest"]);
 
         match cli.command {
-            Commands::Task(TaskCommands::Start { task_id, latest }) => {
+            Commands::Task(TaskCommands::Start {
+                task_id,
+                latest,
+                ..
+            }) => {
                 assert_eq!(task_id, None);
                 assert!(latest);
             }
@@ -1131,7 +1173,7 @@ mod tests {
         let cli = Cli::parse_from(["orchestrator", "task", "retry", "item-123"]);
 
         match cli.command {
-            Commands::Task(TaskCommands::Retry { task_item_id }) => {
+            Commands::Task(TaskCommands::Retry { task_item_id, .. }) => {
                 assert_eq!(task_item_id, "item-123");
             }
             _ => panic!("expected task retry command"),
@@ -1155,7 +1197,7 @@ mod tests {
         let cli = Cli::parse_from(["orchestrator", "task", "resume", "task-123"]);
 
         match cli.command {
-            Commands::Task(TaskCommands::Resume { task_id }) => {
+            Commands::Task(TaskCommands::Resume { task_id, .. }) => {
                 assert_eq!(task_id, "task-123");
             }
             _ => panic!("expected task resume command"),
