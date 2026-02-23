@@ -22,7 +22,7 @@ agents:
     capabilities:
       - qa
     templates:
-      qa: "echo 'format-qa'"
+      qa: "echo '{\"confidence\":0.92,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"format-qa\",\"description\":\"format qa run\",\"severity\":\"info\"}]}]}'"
 workflows:
   qa_only:
     steps:

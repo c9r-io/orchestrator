@@ -16,8 +16,8 @@ spec:
   capabilities:
     - qa
   templates:
-    qa: "echo 'echo-qa: {rel_path}'"
-    loop_guard: "echo 'continue'"
+    qa: "echo '{\"confidence\":0.91,\"quality_score\":0.88,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"echo-qa\",\"description\":\"echo qa for target-file\",\"severity\":\"info\"}]}]}'"
+    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
 ---
 apiVersion: orchestrator.dev/v1
 kind: Agent
@@ -27,8 +27,8 @@ spec:
   capabilities:
     - qa
   templates:
-    qa: "echo 'QA failed' && exit 1"
-    loop_guard: "echo 'continue'"
+    qa: "echo '{\"confidence\":0.35,\"quality_score\":0.2,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"regression\",\"content\":{\"title\":\"qa-failed\",\"qa_file\":\"target-file\"}}]}' && exit 1"
+    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
 ---
 apiVersion: orchestrator.dev/v1
 kind: Workflow

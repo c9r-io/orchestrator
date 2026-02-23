@@ -33,9 +33,9 @@ agents:
       - fix
       - retest
     templates:
-      qa: "echo 'qa-global'"
-      fix: "echo 'fix-global'"
-      retest: "echo 'retest-global'"
+      qa: "echo '{\"confidence\":0.9,\"quality_score\":0.88,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-global\",\"description\":\"project namespace qa global\",\"severity\":\"info\"}]}]}'"
+      fix: "echo '{\"confidence\":0.82,\"quality_score\":0.79,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fix-global.patch\"]}]}'"
+      retest: "echo '{\"confidence\":0.9,\"quality_score\":0.87,\"artifacts\":[{\"kind\":\"test_result\",\"passed\":1,\"failed\":0}]}'"
 workflows:
   test_capability:
     steps:

@@ -17,9 +17,9 @@ spec:
     - qa
     - fix
   templates:
-    qa: "echo 'QA failed' && exit 1"
-    fix: "echo 'Fix attempted' && exit 0"
-    loop_guard: "echo 'continue'"
+    qa: "echo '{\"confidence\":0.35,\"quality_score\":0.2,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"regression\",\"content\":{\"title\":\"qa-failed\",\"qa_file\":\"target-file\"}}]}' && exit 1"
+    fix: "echo '{\"confidence\":0.81,\"quality_score\":0.77,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"auto-fix.patch\"]}]}' && exit 0"
+    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
 ---
 apiVersion: orchestrator.dev/v1
 kind: Workflow

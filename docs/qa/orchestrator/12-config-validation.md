@@ -52,7 +52,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
        capabilities:
          - qa
        templates:
-         qa: "echo 'test'"
+         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
    workflows:
      test:
        steps:
@@ -118,7 +118,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
        capabilities:
          - qa
        templates:
-         qa: "echo 'test'"
+         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
    workflows:
      test:
        steps:
@@ -183,7 +183,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
        capabilities:
          - qa
        templates:
-         qa: "echo 'test'"
+         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
    workflows:
      test:
        steps: []
@@ -244,7 +244,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
        capabilities:
          - fix
        templates:
-         fix: "echo 'fix'"
+         fix: "echo '{\"confidence\":0.82,\"quality_score\":0.78,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fix-sample.patch\"]}]}'"
    workflows:
      test:
        steps:

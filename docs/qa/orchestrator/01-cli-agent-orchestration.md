@@ -1,7 +1,7 @@
 # Orchestrator - CLI Agent Orchestration Testing
 
 **Module**: orchestrator
-**Scope**: Validate CLI interface and agent orchestration with mock bash commands
+**Scope**: Validate CLI interface and agent orchestration with structured JSON mock outputs
 **Scenarios**: 5
 **Priority**: High
 
@@ -9,13 +9,13 @@
 
 ## Background
 
-The Agent Orchestrator CLI provides kubectl-like command interface for task orchestration. This document tests the CLI interface using simple bash commands (echo, sleep) as mock agents to validate the full agent orchestration pipeline.
+The Agent Orchestrator CLI provides kubectl-like command interface for task orchestration. This document tests the CLI interface using structured JSON mock outputs (including sleep-delayed outputs) to validate the full agent orchestration pipeline under strict phase validation.
 
 Entry point: `./scripts/orchestrator.sh <command>` or `./core/target/release/agent-orchestrator <command>`
 
 ### Test Agent Configuration
 
-For testing purposes, use mock agents with bash commands:
+For testing purposes, use mock agents with structured JSON outputs:
 
 ```yaml
 agents:
@@ -27,9 +27,9 @@ agents:
     - fix
     - retest
     templates:
-      qa: "echo 'qa-phase: {rel_path}'"
-      fix: "echo 'fix-phase: {ticket_paths}'"
-      retest: "echo 'retest-phase: {rel_path}'"
+      qa: "echo '{\"confidence\":0.93,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-pass\",\"description\":\"qa passed for {rel_path}\",\"severity\":\"info\"}]}]}'"
+      fix: "echo '{\"confidence\":0.84,\"quality_score\":0.8,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"{rel_path}\"]}]}'"
+      retest: "echo '{\"confidence\":0.9,\"quality_score\":0.88,\"artifacts\":[{\"kind\":\"test_result\",\"passed\":1,\"failed\":0}]}'"
   mock_sleep:
     metadata:
       name: mock_sleep
@@ -37,8 +37,8 @@ agents:
     - qa
     - fix
     templates:
-      qa: "sleep 0.1 && echo 'qa-complete'"
-      fix: "sleep 0.1 && echo 'fix-complete'"
+      qa: "sleep 0.1 && echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-complete\",\"description\":\"qa complete\",\"severity\":\"info\"}]}]}'"
+      fix: "sleep 0.1 && echo '{\"confidence\":0.8,\"quality_score\":0.76,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"sleep-fix.out\"]}]}'"
 ```
 
 ---
@@ -309,7 +309,7 @@ Validate configuration validation catches invalid configurations.
        capabilities:
          - qa
        templates:
-         qa: "echo test"
+         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
    workflows:
      qa_only:
        steps:

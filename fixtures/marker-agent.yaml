@@ -8,5 +8,5 @@ spec:
   capabilities:
     - qa
   templates:
-    qa: 'echo "[TICKET: severity=critical, category=security]"'
-    loop_guard: "echo 'continue'"
+    qa: "echo '{\"confidence\":0.3,\"quality_score\":0.2,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"critical\",\"category\":\"security\",\"content\":{\"title\":\"security-ticket\"}}]}' && exit 1"
+    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"

@@ -138,7 +138,7 @@
        source: stdin
    spec:
      templates:
-       qa: "echo from-stdin"
+       qa: "echo '{\"confidence\":0.91,\"quality_score\":0.87,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"stdin-qa\",\"description\":\"qa from stdin\",\"severity\":\"info\"}]}]}'"
    YAML
    ```
 

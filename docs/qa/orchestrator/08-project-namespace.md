@@ -19,7 +19,7 @@ Entry point: `./core/target/release/agent-orchestrator <command>`
 defaults:
   project: default
   workspace: default
-  workflow: test_capability
+  workflow: qa_only
 
 projects:
   my-project:
@@ -33,7 +33,7 @@ projects:
       my-agent:
         capabilities: [qa]
         templates:
-          qa: echo "qa"
+          qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-project\",\"description\":\"project qa\",\"severity\":\"info\"}]}]}'"
     workflows:
       my-workflow:
         steps: [...]
@@ -92,25 +92,32 @@ Validate task creation with explicit project specification stores project_id in 
 
 ### Preconditions
 
-- Global workflow "test_capability" exists in config
+- At least one workflow exists in the global config
+- `defaults.workflow` is set (auto-filled to `qa_only` if present, or the first workflow alphabetically)
 - Default project exists without custom workflows
 - Use `./scripts/orchestrator.sh` (wrapper) for all commands, not the direct binary
 
 ### Goal
 
-Validate that when project doesn't define a workflow, global workflow is used.
+Validate that when project doesn't define a workflow, the `defaults.workflow` from the global config is used.
 
 ### Steps
 
-1. Create task without explicit workflow (should use default):
+1. Check current default workflow:
    ```bash
-   ./core/target/release/agent-orchestrator task create \
-     --name "test-fallback-workflow" \
-     --goal "Test fallback" \
-     --project default
+   ./scripts/orchestrator.sh config view | grep 'workflow:'
    ```
 
-2. Verify task uses global workflow:
+2. Create task without explicit workflow (should use default):
+   ```bash
+   ./scripts/orchestrator.sh task create \
+     --name "test-fallback-workflow" \
+     --goal "Test fallback" \
+     --project default \
+     --no-start
+   ```
+
+3. Verify task uses the default workflow:
    ```bash
    sqlite3 data/agent_orchestrator.db "SELECT workflow_id FROM tasks WHERE name = 'test-fallback-workflow';"
    ```
@@ -118,7 +125,7 @@ Validate that when project doesn't define a workflow, global workflow is used.
 ### Expected
 
 - Task created successfully
-- workflow_id is "test_capability" (from global config)
+- workflow_id matches the value shown in `defaults.workflow` (typically `qa_only`)
 
 ---
 

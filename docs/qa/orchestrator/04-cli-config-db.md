@@ -49,7 +49,7 @@ Entry points:
        capabilities:
          - qa
        templates:
-         qa: "echo test"
+         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
    workflows:
      qa_only:
        steps:
@@ -160,7 +160,7 @@ Entry points:
          name: mock
        capabilities: [qa]
        templates:
-         qa: "echo test"
+         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
    workflows:
      qa_only:
        steps:

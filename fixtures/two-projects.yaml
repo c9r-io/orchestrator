@@ -20,7 +20,7 @@ projects:
         capabilities:
           - qa
         templates:
-          qa: "echo 'qa-project-a'"
+          qa: "echo '{\"confidence\":0.86,\"quality_score\":0.82,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-project-a\",\"description\":\"qa project a\",\"severity\":\"info\"}]}]}'"
     workflows: {}
   project-b:
     workspaces:
@@ -34,7 +34,7 @@ projects:
         capabilities:
           - qa
         templates:
-          qa: "echo 'qa-project-b'"
+          qa: "echo '{\"confidence\":0.85,\"quality_score\":0.8,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-project-b\",\"description\":\"qa project b\",\"severity\":\"info\"}]}]}'"
     workflows: {}
 workspaces: {}
 agents: {}

@@ -102,10 +102,10 @@ Commands:
 | Phase | Purpose | Typical Command |
 |-------|---------|----------------|
 | init_once | One-time initialization | `echo "init"` |
-| qa | Run QA tests | `echo "qa: {rel_path}"` |
-| fix | Fix tickets | `echo "fix: {ticket_paths}"` |
-| retest | Re-run QA after fix | `echo "retest: {rel_path}"` |
-| loop_guard | Decide loop continuation | `echo "continue"` |
+| qa | Run QA tests | `echo '{"confidence":0.9,"quality_score":0.86,"artifacts":[{"kind":"analysis","findings":[{"title":"qa","description":"qa for {rel_path}","severity":"info"}]}]}'` |
+| fix | Fix tickets | `echo '{"confidence":0.82,"quality_score":0.78,"artifacts":[{"kind":"code_change","files":["fix.patch"]}]}'` |
+| retest | Re-run QA after fix | `echo '{"confidence":0.9,"quality_score":0.88,"artifacts":[{"kind":"test_result","passed":1,"failed":0}]}'` |
+| loop_guard | Decide loop continuation | `echo '{"continue":true,"should_stop":false,"reason":"continue"}'` |
 
 ## Key Design And Tradeoffs
 

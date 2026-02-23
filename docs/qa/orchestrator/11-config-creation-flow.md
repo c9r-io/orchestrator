@@ -135,7 +135,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
      capabilities:
        - qa
      templates:
-       qa: "echo 'test-qa'"
+       qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"test-qa\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
    EOF
    
    ./scripts/orchestrator.sh apply -f /tmp/test-agent.yaml

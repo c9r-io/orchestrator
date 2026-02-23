@@ -18,8 +18,8 @@ spec:
   capabilities:
     - qa
   templates:
-    qa: "echo 'qa-run'"
-    loop_guard: "echo 'stop'"
+    qa: "echo '{\"confidence\":0.9,\"quality_score\":0.88,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-run\",\"description\":\"guard test qa run\",\"severity\":\"info\"}]}]}'"
+    loop_guard: "echo '{\"continue\":false,\"should_stop\":true,\"reason\":\"stop\"}'"
 ---
 apiVersion: orchestrator.dev/v1
 kind: Workflow
