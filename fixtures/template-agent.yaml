@@ -1,0 +1,12 @@
+apiVersion: orchestrator.dev/v1
+kind: Agent
+metadata:
+  name: template-agent
+spec:
+  metadata:
+    cost: 10
+  capabilities:
+    - qa
+  templates:
+    qa: 'echo "phase={phase} cycle={cycle}"'
+    loop_guard: "echo 'continue'"

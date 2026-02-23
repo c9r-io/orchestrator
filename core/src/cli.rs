@@ -406,6 +406,10 @@ pub enum DbCommands {
         /// Also clear config version history (preserves current active config)
         #[arg(long)]
         include_history: bool,
+
+        /// Delete ALL config versions (full reset for test isolation)
+        #[arg(long)]
+        include_config: bool,
     },
 }
 
@@ -824,9 +828,11 @@ mod tests {
             Commands::Db(DbCommands::Reset {
                 force,
                 include_history,
+                include_config,
             }) => {
                 assert!(!force);
                 assert!(!include_history);
+                assert!(!include_config);
             }
             _ => panic!("expected db reset command"),
         }
@@ -840,9 +846,11 @@ mod tests {
             Commands::Db(DbCommands::Reset {
                 force,
                 include_history,
+                include_config,
             }) => {
                 assert!(force);
                 assert!(!include_history);
+                assert!(!include_config);
             }
             _ => panic!("expected db reset command"),
         }
@@ -862,9 +870,35 @@ mod tests {
             Commands::Db(DbCommands::Reset {
                 force,
                 include_history,
+                include_config,
             }) => {
                 assert!(force);
                 assert!(include_history);
+                assert!(!include_config);
+            }
+            _ => panic!("expected db reset command"),
+        }
+    }
+
+    #[test]
+    fn parse_db_reset_include_config() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "db",
+            "reset",
+            "--force",
+            "--include-config",
+        ]);
+
+        match cli.command {
+            Commands::Db(DbCommands::Reset {
+                force,
+                include_history,
+                include_config,
+            }) => {
+                assert!(force);
+                assert!(!include_history);
+                assert!(include_config);
             }
             _ => panic!("expected db reset command"),
         }

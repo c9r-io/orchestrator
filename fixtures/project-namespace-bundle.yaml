@@ -1,0 +1,71 @@
+apiVersion: orchestrator.dev/v1
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa/orchestrator
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v1
+kind: Agent
+metadata:
+  name: global_agent
+spec:
+  metadata:
+    name: global_agent
+  capabilities:
+    - qa
+    - fix
+    - retest
+  templates:
+    qa: "echo 'qa-global'"
+    fix: "echo 'fix-global'"
+    retest: "echo 'retest-global'"
+    loop_guard: "echo 'continue'"
+---
+apiVersion: orchestrator.dev/v1
+kind: Workflow
+metadata:
+  name: test_capability
+spec:
+  steps:
+    - id: qa
+      type: qa
+      required_capability: qa
+      enabled: true
+      repeatable: false
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v1
+kind: Workflow
+metadata:
+  name: qa_fix_retest
+spec:
+  steps:
+    - id: qa
+      type: qa
+      required_capability: qa
+      enabled: true
+      repeatable: false
+    - id: ticket_scan
+      type: ticket_scan
+      enabled: true
+      repeatable: false
+    - id: fix
+      type: fix
+      required_capability: fix
+      enabled: true
+      repeatable: false
+    - id: retest
+      type: retest
+      required_capability: retest
+      enabled: false
+      repeatable: false
+  loop:
+    mode: once
+    guard:
+      enabled: false
+      stop_when_no_unresolved: false

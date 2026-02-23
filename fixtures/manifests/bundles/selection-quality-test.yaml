@@ -32,6 +32,7 @@ spec:
     - qa
   templates:
     qa: "echo 'new-qa'"
+    loop_guard: "echo 'continue'"
 ---
 apiVersion: orchestrator.dev/v1
 kind: Workflow

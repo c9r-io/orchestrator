@@ -958,14 +958,17 @@ impl CliHandler {
             DbCommands::Reset {
                 force,
                 include_history,
+                include_config,
             } => {
                 if !force {
                     eprintln!("Use --force to confirm database reset");
                     return Ok(1);
                 }
-                reset_db(&self.state, *include_history)?;
+                reset_db(&self.state, *include_history, *include_config)?;
                 println!("Database reset completed");
-                if *include_history {
+                if *include_config {
+                    println!("All config versions deleted (next apply starts from blank)");
+                } else if *include_history {
                     println!("Config version history cleared (active version preserved)");
                 }
                 Ok(0)

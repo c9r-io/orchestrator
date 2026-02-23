@@ -1,0 +1,12 @@
+apiVersion: orchestrator.dev/v1
+kind: Agent
+metadata:
+  name: json-agent
+spec:
+  metadata:
+    cost: 10
+  capabilities:
+    - qa
+  templates:
+    qa: 'echo "{\"kind\": \"ticket\", \"severity\": \"high\", \"category\": \"bug\", \"content\": {\"title\": \"test\"}}"'
+    loop_guard: "echo 'continue'"

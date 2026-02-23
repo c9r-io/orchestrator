@@ -28,6 +28,7 @@ spec:
     - qa
   templates:
     qa: "echo 'QA failed' && exit 1"
+    loop_guard: "echo 'continue'"
 ---
 apiVersion: orchestrator.dev/v1
 kind: Workflow

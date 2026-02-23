@@ -1,0 +1,12 @@
+apiVersion: orchestrator.dev/v1
+kind: Agent
+metadata:
+  name: marker-agent
+spec:
+  metadata:
+    cost: 10
+  capabilities:
+    - qa
+  templates:
+    qa: 'echo "[TICKET: severity=critical, category=security]"'
+    loop_guard: "echo 'continue'"
