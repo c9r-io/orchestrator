@@ -30,6 +30,7 @@ From the confirmed plan and merged implementation, extract:
 - **Behavior**: Normal flow, error cases, edge cases
 - **Behavior deltas**: What changed compared to old docs (auth rules, token types, permission boundaries, UI routes, API contracts, redirects)
 - **UI interactions**: Pages, buttons, forms involved
+- **UI entry points**: Navigation links, quick links, sidebar items, or buttons that lead to the feature
 - **API endpoints**: If applicable, include method, path, request/response
 - **Database changes**: New tables/columns, expected data states
 - **Acceptance criteria**: What constitutes correct behavior
@@ -91,6 +92,17 @@ Read `references/qa-doc-template.md` for the exact format template.
 6. **SQL verification**: Every scenario with data mutations needs an "Expected Data State" section with verification SQL
 7. **Checklist**: End with a checklist table listing all scenarios (including any optional "General Scenario")
 
+### UI Entry Visibility Rule (Mandatory for UI-facing changes)
+
+If a change adds or modifies user-facing UI behavior, include at least one scenario that verifies users can discover and reach the feature from visible entry points.
+
+Required checks:
+
+1. **New feature entry**: Verify the entry exists and is visible in normal navigation flow (sidebar/tab/menu/button/quick links), not only via direct URL.
+2. **Redirect/navigation changes**: Verify updated routes and redirects from the old and new entry paths.
+3. **Entry consistency**: If entry UI shows counters/status badges, verify they match destination page state.
+4. **Navigation-first UI steps**: Subsequent CRUD scenarios should navigate from visible entry points before performing actions.
+
 ### Scenario design guidelines
 
 For each feature behavior in the plan, generate scenarios covering:
@@ -103,8 +115,9 @@ For each feature behavior in the plan, generate scenarios covering:
 | Permission | Unauthorized user attempts action |
 | Boundary | Max length, empty string, special chars |
 | Cascade effects | Delete with dependent data |
+| UI entry point | Verify navigation entry exists and reaches the target page |
 
-Not every type is needed for every feature - select the relevant ones.
+Not every type is needed for every feature. UI entry point is mandatory for UI-facing changes.
 
 ## Step 5: Run Cross-Doc Impact Analysis (Mandatory)
 

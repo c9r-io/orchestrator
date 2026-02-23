@@ -50,7 +50,7 @@ Notes:
 
 **IMPORTANT: This skill is strictly for testing and reporting. NEVER attempt to fix, patch, or modify any source code during QA testing. If a test fails, create a ticket immediately and move on to the next scenario.**
 
-1. Confirm which QA document(s) to execute under `docs/qa/`.
+1. Confirm which QA document(s) to execute under `docs/qa/` (never assume when request is ambiguous).
 2. Parse scenarios and required setup (test data, environment, expected DB state).
 3. For each scenario:
    - Execute UI steps (if applicable) with browser automation.
@@ -61,6 +61,14 @@ Notes:
 4. Report a summary: pass/fail counts, created tickets, and any follow-up actions.
 
 **Ticket creation rule**: Create the ticket the moment a scenario is confirmed as FAIL — before starting the next scenario. This ensures no failure is lost if the session is interrupted, and gives the user real-time visibility into issues as they surface.
+
+## Step 1: Discover and Confirm Test Document
+
+1. Discover QA docs:
+   - `rg --files docs/qa | rg '\.md$'`
+2. Exclude index/meta docs (`docs/qa/README.md`, `docs/qa/_*.md`, manifest-like files).
+3. If user request is vague, present concise options and ask which doc/module to execute.
+4. Only start execution after the target doc(s) are explicit.
 
 ## UI Automation (Optional)
 
@@ -114,6 +122,14 @@ This ensures:
 - No failures are lost if the session is interrupted or context is compressed
 - User has real-time visibility into each issue as it surfaces
 - Ticket evidence is freshest at the moment of failure (logs, DB state haven't been polluted by subsequent tests)
+
+UI visibility/accessibility failures must also create tickets for UIUX test documents, even if backend behavior is correct.
+Examples:
+- Hidden or unreachable controls
+- Missing or misleading ARIA semantics
+- Keyboard navigation/focus failures
+- Truncated critical content
+- Touch targets too small for mobile use
 
 Naming:
 - `{module}_{document}_scenario{N}_{YYMMDD_HHMMSS}.md`
@@ -306,3 +322,6 @@ This creates:
    - Look for `scripts/*.sh` files in the project root
    - Check `package.json` scripts for test commands
 
+## Optional Reference Cookbook
+
+If the repository includes `qa-testing/references/api-testing-cookbook.md`, use it as the first reference for repeatable API/gRPC/webhook recipes and known pitfalls.

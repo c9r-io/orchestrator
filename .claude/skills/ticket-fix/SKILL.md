@@ -22,7 +22,14 @@ Resolve QA tickets end-to-end: read the ticket, confirm the issue, fix or dismis
    - If the implementation is correct and the ticket stems from incorrect or outdated QA expectations:
      - Mark the ticket as a false positive.
      - Identify the root cause of the misreport (e.g., outdated expected values, missing preconditions, ambiguous acceptance criteria).
+     - Use common false-positive patterns as a checklist:
+       - Missing required authentication/signature headers in QA commands.
+       - Prerequisites incomplete or ambiguous.
+       - Environment assumptions wrong for default local setup.
+       - Test data references entities that do not exist.
      - Update the relevant QA test document(s) under `docs/qa/` to correct expectations, clarify steps, or add notes that prevent future engineers from raising the same false positive.
+     - Ensure updated QA commands are copy-paste-ready for the default local environment.
+     - Add a troubleshooting table when the failure mode is easy to repeat.
      - Proceed to step 4 (reset) and step 5 (re-run) to confirm the implementation is indeed correct.
      - In step 6, delete the ticket and summarize why it was a false positive and what QA docs were updated.
 
@@ -49,6 +56,7 @@ Resolve QA tickets end-to-end: read the ticket, confirm the issue, fix or dismis
 - If issue cannot be reproduced, explain why and still re-test.
 - If re-test fails, keep the ticket and report remaining issue.
 - When a ticket is identified as a false positive, always update the relevant QA doc under `docs/qa/` to correct the expectation, add clarifying notes, or fix preconditions so the same false positive is not raised again.
+- Keep false-positive doc updates scoped to the failing scenario; avoid broad rewrites of unrelated sections.
 
 ## Notes
 
