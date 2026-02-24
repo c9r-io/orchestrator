@@ -219,6 +219,9 @@ pub struct AgentTemplatesSpec {
     pub qa: Option<String>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fix: Option<String>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -280,6 +283,9 @@ pub struct WorkflowStepSpec {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prehook: Option<WorkflowPrehookSpec>,
+
+    #[serde(default)]
+    pub tty: bool,
 }
 
 fn default_true() -> bool {

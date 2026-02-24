@@ -837,6 +837,7 @@ fn workspace_config_to_spec(config: &WorkspaceConfig) -> WorkspaceSpec {
 fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
     let template_capabilities = vec![
         spec.templates.init_once.as_ref().map(|_| "init_once"),
+        spec.templates.plan.as_ref().map(|_| "plan"),
         spec.templates.qa.as_ref().map(|_| "qa"),
         spec.templates.ticket_scan.as_ref().map(|_| "ticket_scan"),
         spec.templates.fix.as_ref().map(|_| "fix"),
@@ -861,6 +862,9 @@ fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
     }
     if let Some(t) = &spec.templates.qa {
         templates.insert("qa".to_string(), t.clone());
+    }
+    if let Some(t) = &spec.templates.plan {
+        templates.insert("plan".to_string(), t.clone());
     }
     if let Some(t) = &spec.templates.ticket_scan {
         templates.insert("ticket_scan".to_string(), t.clone());
@@ -894,6 +898,7 @@ fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
     AgentSpec {
         templates: AgentTemplatesSpec {
             init_once: config.templates.get("init_once").cloned(),
+            plan: config.templates.get("plan").cloned(),
             qa: config.templates.get("qa").cloned(),
             ticket_scan: config.templates.get("ticket_scan").cloned(),
             fix: config.templates.get("fix").cloned(),
@@ -961,6 +966,7 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
                 is_guard: step.is_guard || is_guard,
                 cost_preference: parse_cost_preference(step.cost_preference.as_deref())?,
                 prehook,
+                tty: step.tty,
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -1047,6 +1053,7 @@ fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
                     .map(|value| serde_json::to_value(value).unwrap_or(serde_json::Value::Null)),
                 extended: prehook.extended,
             }),
+            tty: step.tty,
         })
         .collect();
 
@@ -1349,6 +1356,7 @@ mod tests {
             spec: ResourceSpec::Agent(AgentSpec {
                 templates: AgentTemplatesSpec {
                     init_once: None,
+                    plan: None,
                     qa: Some(qa_command.to_string()),
                     fix: None,
                     retest: None,
@@ -1383,6 +1391,7 @@ mod tests {
                     is_guard: false,
                     cost_preference: None,
                     prehook: None,
+                    tty: false,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "once".to_string(),
@@ -1427,6 +1436,7 @@ mod tests {
             spec: ResourceSpec::Agent(AgentSpec {
                 templates: AgentTemplatesSpec {
                     init_once: None,
+                    plan: None,
                     qa: Some("run".to_string()),
                     fix: None,
                     retest: None,
@@ -1619,6 +1629,10 @@ fn parse_workflow_step_type_valid() {
         WorkflowStepType::Qa
     );
     assert_eq!(
+        parse_workflow_step_type("plan").unwrap(),
+        WorkflowStepType::Plan
+    );
+    assert_eq!(
         parse_workflow_step_type("ticket_scan").unwrap(),
         WorkflowStepType::TicketScan
     );
@@ -1676,6 +1690,7 @@ fn agent_validation_rejects_empty_templates() {
         spec: AgentSpec {
             templates: AgentTemplatesSpec {
                 init_once: None,
+                plan: None,
                 qa: None,
                 fix: None,
                 retest: None,
@@ -1756,6 +1771,7 @@ fn agent_to_yaml_includes_templates() {
         spec: AgentSpec {
             templates: AgentTemplatesSpec {
                 init_once: Some("init".to_string()),
+                plan: None,
                 qa: Some("test".to_string()),
                 fix: Some("fix".to_string()),
                 retest: Some("retest".to_string()),

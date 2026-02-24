@@ -46,6 +46,7 @@ Entry point: `./scripts/orchestrator.sh <command>` (recommended) or `./core/targ
    - `qa`
    - `completion`
    - `debug`
+   - `exec`
 
 ### Expected Result
 
@@ -100,6 +101,11 @@ Entry point: `./scripts/orchestrator.sh <command>` (recommended) or `./core/targ
    ./scripts/orchestrator.sh task start --help | rg -- "--detach"
    ./scripts/orchestrator.sh task worker --help
    ```
+7. Validate task edit and exec command families:
+   ```bash
+   ./scripts/orchestrator.sh task edit --help
+   ./scripts/orchestrator.sh exec --help
+   ```
 
 ### Expected Result
 
@@ -107,6 +113,7 @@ Entry point: `./scripts/orchestrator.sh <command>` (recommended) or `./core/targ
 - Output format flags work for commands that support `-o`.
 - `task create --format ...` is never required in QA docs.
 - `--detach` flags and `task worker` command family are part of the CLI contract.
+- `task edit` and `exec` are part of the CLI contract.
 
 ---
 

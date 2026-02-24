@@ -196,4 +196,21 @@ impl DbWriteCoordinator {
         )?;
         Ok(())
     }
+
+    pub fn update_task_item_tickets(
+        &self,
+        task_item_id: &str,
+        ticket_files_json: &str,
+        ticket_content_json: &str,
+    ) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        conn.execute(
+            "UPDATE task_items SET ticket_files_json = ?2, ticket_content_json = ?3, updated_at = ?4 WHERE id = ?1",
+            params![task_item_id, ticket_files_json, ticket_content_json, now_ts()],
+        )?;
+        Ok(())
+    }
 }

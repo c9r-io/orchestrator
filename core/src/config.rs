@@ -277,6 +277,7 @@ fn default_selection_strategy() -> SelectionStrategy {
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowStepType {
     InitOnce,
+    Plan,
     Qa,
     TicketScan,
     Fix,
@@ -288,6 +289,7 @@ impl WorkflowStepType {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::InitOnce => "init_once",
+            Self::Plan => "plan",
             Self::Qa => "qa",
             Self::TicketScan => "ticket_scan",
             Self::Fix => "fix",
@@ -303,13 +305,14 @@ impl FromStr for WorkflowStepType {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "init_once" => Ok(Self::InitOnce),
+            "plan" => Ok(Self::Plan),
             "qa" => Ok(Self::Qa),
             "ticket_scan" => Ok(Self::TicketScan),
             "fix" => Ok(Self::Fix),
             "retest" => Ok(Self::Retest),
             "loop_guard" => Ok(Self::LoopGuard),
             _ => Err(format!(
-                "unknown workflow step type: {} (expected init_once|qa|ticket_scan|fix|retest|loop_guard)",
+                "unknown workflow step type: {} (expected init_once|plan|qa|ticket_scan|fix|retest|loop_guard)",
                 value
             )),
         }
@@ -460,6 +463,8 @@ pub struct WorkflowStepConfig {
     pub cost_preference: Option<CostPreference>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prehook: Option<StepPrehookConfig>,
+    #[serde(default)]
+    pub tty: bool,
 }
 
 fn default_true() -> bool {
@@ -486,6 +491,8 @@ pub struct TaskExecutionStep {
     pub cost_preference: Option<CostPreference>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prehook: Option<StepPrehookConfig>,
+    #[serde(default)]
+    pub tty: bool,
 }
 
 /// Task execution plan
@@ -663,6 +670,20 @@ pub fn default_workflow_steps(
             is_guard: false,
             cost_preference: None,
             prehook: None,
+            tty: false,
+        },
+        WorkflowStepConfig {
+            id: "plan".to_string(),
+            description: None,
+            step_type: Some(WorkflowStepType::Plan),
+            required_capability: Some("plan".to_string()),
+            builtin: None,
+            enabled: false,
+            repeatable: false,
+            is_guard: false,
+            cost_preference: None,
+            prehook: None,
+            tty: true,
         },
         WorkflowStepConfig {
             id: "qa".to_string(),
@@ -675,6 +696,7 @@ pub fn default_workflow_steps(
             is_guard: false,
             cost_preference: None,
             prehook: None,
+            tty: false,
         },
         WorkflowStepConfig {
             id: "ticket_scan".to_string(),
@@ -687,6 +709,7 @@ pub fn default_workflow_steps(
             is_guard: false,
             cost_preference: None,
             prehook: None,
+            tty: false,
         },
         WorkflowStepConfig {
             id: "fix".to_string(),
@@ -699,6 +722,7 @@ pub fn default_workflow_steps(
             is_guard: false,
             cost_preference: None,
             prehook: None,
+            tty: false,
         },
         WorkflowStepConfig {
             id: "retest".to_string(),
@@ -711,6 +735,7 @@ pub fn default_workflow_steps(
             is_guard: false,
             cost_preference: None,
             prehook: None,
+            tty: false,
         },
     ]
 }

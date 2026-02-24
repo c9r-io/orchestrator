@@ -1232,6 +1232,7 @@ pub async fn process_item(
 ) -> Result<()> {
     let item_id = item.id.as_str();
     let qa_step = task_ctx.execution_plan.step(WorkflowStepType::Qa);
+    let plan_step = task_ctx.execution_plan.step(WorkflowStepType::Plan);
     let ticket_scan_step = task_ctx.execution_plan.step(WorkflowStepType::TicketScan);
     let fix_step = task_ctx.execution_plan.step(WorkflowStepType::Fix);
     let retest_step = task_ctx.execution_plan.step(WorkflowStepType::Retest);
@@ -1253,6 +1254,49 @@ pub async fn process_item(
     let mut new_ticket_count = 0_i64;
     let mut item_status = "pending".to_string();
     let mut phase_artifacts: Vec<crate::collab::Artifact> = Vec::new();
+    let mut qa_stdout_path: Option<String> = None;
+    let mut qa_stderr_path: Option<String> = None;
+    let mut created_ticket_files: Vec<String> = Vec::new();
+
+    if let Some(plan_step) = plan_step {
+        if plan_step.enabled && (plan_step.repeatable || task_ctx.current_cycle <= 1) {
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "step_started",
+                json!({"step":"plan"}),
+            )?;
+            let result = run_phase_with_rotation(
+                state,
+                task_id,
+                item_id,
+                "plan",
+                plan_step.required_capability.as_deref(),
+                &item.qa_file_path,
+                &active_tickets,
+                &task_ctx.workspace_root,
+                &task_ctx.workspace_id,
+                task_ctx.current_cycle,
+                runtime,
+            )
+            .await?;
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "step_finished",
+                json!({"step":"plan","exit_code":result.exit_code,"success":result.exit_code == 0}),
+            )?;
+            if result.exit_code != 0 {
+                item_status = "unresolved".to_string();
+                state
+                    .db_writer
+                    .update_task_item_status(item_id, &item_status)?;
+                return Ok(());
+            }
+        }
+    }
 
     if let Some(qa_step) = qa_step {
         let should_run_qa = evaluate_step_prehook(
@@ -1305,6 +1349,8 @@ pub async fn process_item(
             .await?;
             qa_exit_code = Some(result.exit_code);
             qa_failed = result.exit_code != 0;
+            qa_stdout_path = Some(result.stdout_path.clone());
+            qa_stderr_path = Some(result.stderr_path.clone());
 
             let qa_artifacts = result
                 .output
@@ -1357,18 +1403,8 @@ pub async fn process_item(
 
     if qa_failed {
         if let Some(qa_exit) = qa_exit_code {
-            let stdout_path = format!(
-                "{}/data/runs/{}/{}/qa/stdout.log",
-                task_ctx.workspace_root.display(),
-                task_id,
-                item_id
-            );
-            let stderr_path = format!(
-                "{}/data/runs/{}/{}/qa/stderr.log",
-                task_ctx.workspace_root.display(),
-                task_id,
-                item_id
-            );
+            let stdout_path = qa_stdout_path.clone().unwrap_or_default();
+            let stderr_path = qa_stderr_path.clone().unwrap_or_default();
             let task_name = SqliteTaskRepository::new(state.db_path.clone())
                 .load_task_name(task_id)?
                 .unwrap_or_else(|| task_id.to_string());
@@ -1382,6 +1418,7 @@ pub async fn process_item(
                 &stderr_path,
             ) {
                 Ok(Some(ticket_path)) => {
+                    created_ticket_files.push(ticket_path.clone());
                     insert_event(
                         state,
                         task_id,
@@ -1681,6 +1718,25 @@ pub async fn process_item(
     )? {
         item_status = outcome.status.clone();
         emit_item_finalize_event(state, &finalize_context, &outcome)?;
+    }
+
+    let has_ticket_artifacts_for_persist = !created_ticket_files.is_empty()
+        || phase_artifacts
+            .iter()
+            .any(|a| matches!(a.kind, crate::collab::ArtifactKind::Ticket { .. }));
+    if has_ticket_artifacts_for_persist {
+        let ticket_content: Vec<&serde_json::Value> = phase_artifacts
+            .iter()
+            .filter(|a| matches!(a.kind, crate::collab::ArtifactKind::Ticket { .. }))
+            .filter_map(|a| a.content.as_ref())
+            .collect();
+        let files_json =
+            serde_json::to_string(&created_ticket_files).unwrap_or_else(|_| "[]".to_string());
+        let content_json =
+            serde_json::to_string(&ticket_content).unwrap_or_else(|_| "[]".to_string());
+        state
+            .db_writer
+            .update_task_item_tickets(item_id, &files_json, &content_json)?;
     }
 
     state

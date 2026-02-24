@@ -108,6 +108,24 @@ pub enum Commands {
         #[arg(long)]
         component: Option<String>,
     },
+
+    /// Execute a command in a task step context (use -it for interactive mode)
+    Exec {
+        /// Keep stdin open
+        #[arg(short = 'i', long)]
+        stdin: bool,
+
+        /// Allocate interactive terminal behavior
+        #[arg(short = 't', long)]
+        tty: bool,
+
+        /// Target selector: task/<task_id>/step/<step_id>
+        target: String,
+
+        /// Command to execute in the selected step context
+        #[arg(trailing_var_arg = true)]
+        command: Vec<String>,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -245,6 +263,32 @@ pub enum TaskCommands {
         detach: bool,
     },
 
+    /// Edit a task execution plan by inserting a step before another step
+    Edit {
+        /// Task ID
+        task_id: String,
+
+        /// Insert before this existing step ID
+        #[arg(long = "insert-before")]
+        insert_before: String,
+
+        /// Step type to insert (init_once|plan|qa|ticket_scan|fix|retest|loop_guard)
+        #[arg(long)]
+        step: String,
+
+        /// Optional required capability for the inserted step
+        #[arg(long)]
+        capability: Option<String>,
+
+        /// Enable interactive tty for this step
+        #[arg(long)]
+        tty: bool,
+
+        /// Whether the inserted step is repeatable
+        #[arg(long)]
+        repeatable: bool,
+    },
+
     /// Worker control commands
     #[command(subcommand)]
     Worker(TaskWorkerCommands),
@@ -327,6 +371,9 @@ pub enum AgentCommands {
 
         #[arg(long = "template-qa")]
         template_qa: Option<String>,
+
+        #[arg(long = "template-plan")]
+        template_plan: Option<String>,
 
         #[arg(long = "template-fix")]
         template_fix: Option<String>,
@@ -1215,6 +1262,67 @@ mod tests {
                 assert_eq!(task_id, "task-123");
             }
             _ => panic!("expected task resume command"),
+        }
+    }
+
+    #[test]
+    fn parse_task_edit_command() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "task",
+            "edit",
+            "task-123",
+            "--insert-before",
+            "qa",
+            "--step",
+            "plan",
+            "--tty",
+        ]);
+
+        match cli.command {
+            Commands::Task(TaskCommands::Edit {
+                task_id,
+                insert_before,
+                step,
+                tty,
+                repeatable,
+                ..
+            }) => {
+                assert_eq!(task_id, "task-123");
+                assert_eq!(insert_before, "qa");
+                assert_eq!(step, "plan");
+                assert!(tty);
+                assert!(!repeatable);
+            }
+            _ => panic!("expected task edit command"),
+        }
+    }
+
+    #[test]
+    fn parse_exec_interactive_command() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "exec",
+            "-it",
+            "task/task-123/step/plan-1",
+            "--",
+            "echo",
+            "hello",
+        ]);
+
+        match cli.command {
+            Commands::Exec {
+                stdin,
+                tty,
+                target,
+                command,
+            } => {
+                assert!(stdin);
+                assert!(tty);
+                assert_eq!(target, "task/task-123/step/plan-1");
+                assert_eq!(command, vec!["echo".to_string(), "hello".to_string()]);
+            }
+            _ => panic!("expected exec command"),
         }
     }
 

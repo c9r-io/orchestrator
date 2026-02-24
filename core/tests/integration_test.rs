@@ -66,6 +66,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                         is_guard: false,
                         cost_preference: None,
                         prehook: None,
+                        tty: false,
                     }],
                     loop_policy: WorkflowLoopConfig {
                         mode: LoopMode::Once,

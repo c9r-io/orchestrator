@@ -11,6 +11,7 @@ Shell scripts for executable QA scenarios.
 | `test-three-phase-workflow.sh` | Tests QA + Fix + Retest workflow execution |
 | `test-worker-throughput.sh` | Baseline detached queue throughput and multi-worker drain time |
 | `test-log-tail-latency.sh` | Baseline `task logs --tail` latency on large log files |
+| `test-exec-interactive.sh` | Simulate `exec -it` interaction via pipe and here-doc, and verify non-tty rejection |
 
 ## Shared Library
 
@@ -46,6 +47,7 @@ Shell scripts for executable QA scenarios.
 ./docs/qa/script/test-three-phase-workflow.sh --project qa-manual-1 --workspace qa-manual-1-ws
 ./docs/qa/script/test-worker-throughput.sh --workers 6 --tasks 30 --json
 ./docs/qa/script/test-log-tail-latency.sh --append-lines 120000 --samples 5 --json
+./docs/qa/script/test-exec-interactive.sh --json
 ```
 
 ## Determinism Notes
@@ -61,6 +63,7 @@ Shell scripts for executable QA scenarios.
 - Fixtures now use structured JSON outputs for strict phase validation (`qa`/`fix`/`retest`/`guard`).
 - Scripts perform config-level isolation with `db reset --include-config` before applying their fixture.
 - Run scripts serially. They update shared active config via `apply`, so parallel runs can overwrite each other's fixture setup.
+- `test-exec-interactive.sh` applies an inline temporary manifest (`/tmp/exec-interactive-flow.yaml`) for deterministic `plan` + `qa` capability coverage.
 
 ## Troubleshooting
 

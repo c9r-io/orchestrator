@@ -60,6 +60,7 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
     }
     for step_type in [
         WorkflowStepType::InitOnce,
+        WorkflowStepType::Plan,
         WorkflowStepType::Qa,
         WorkflowStepType::TicketScan,
         WorkflowStepType::Fix,
@@ -75,6 +76,9 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                 match step_type {
                     WorkflowStepType::Qa | WorkflowStepType::Fix | WorkflowStepType::Retest => {
                         step.required_capability = Some(step_type.as_str().to_string());
+                    }
+                    WorkflowStepType::Plan => {
+                        step.required_capability = Some("plan".to_string());
                     }
                     WorkflowStepType::LoopGuard => {
                         step.builtin = Some("loop_guard".to_string());
@@ -96,6 +100,7 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                 is_guard: false,
                 cost_preference: None,
                 prehook: None,
+                tty: false,
             });
         }
     }
@@ -699,6 +704,7 @@ pub fn build_execution_plan(
             is_guard: step.is_guard,
             cost_preference: step.cost_preference.clone(),
             prehook: step.prehook.clone(),
+            tty: step.tty,
         });
     }
     let loop_policy = workflow.loop_policy.clone();

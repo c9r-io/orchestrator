@@ -16,9 +16,15 @@ selection can change the outcome.
 
 ### Common Preconditions
 
-Every scenario starts from a clean slate:
+Every scenario starts from a clean slate. Because the echo-workflow fixture
+uses `ticket_dir: fixtures/ticket`, stale auto-generated tickets from previous
+runs can cause items to be marked "unresolved" even when QA passes. Always
+remove them before starting:
 
 ```bash
+# Clean stale auto-generated tickets (preserves README.md and manually created tickets)
+rm -f fixtures/ticket/auto_*.md
+
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
 ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
@@ -27,6 +33,12 @@ QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 
 Scenario 4 uses a different fixture (`fail-workflow.yaml`) — see its own
 preconditions section.
+
+### Troubleshooting
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| qa_only/loop_test tasks fail with "unresolved" items despite QA exit 0 | Stale ticket files in `fixtures/ticket/` match item QA docs; finalize rules mark items with active tickets as "unresolved" when no fix step is present | Run `rm -f fixtures/ticket/auto_*.md` before testing |
 
 ---
 

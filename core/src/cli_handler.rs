@@ -11,9 +11,11 @@ use crate::cli_types::{
     WorkspaceSpec,
 };
 use crate::config::{
-    AgentConfig, LoopMode, ProjectConfig, WorkflowConfig, WorkflowStepType, WorkspaceConfig,
+    AgentConfig, LoopMode, ProjectConfig, TaskExecutionPlan, TaskExecutionStep, WorkflowConfig,
+    WorkflowStepType, WorkspaceConfig,
 };
-use crate::config_load::{persist_config_and_reload, read_active_config};
+use crate::config_load::{now_ts, persist_config_and_reload, read_active_config};
+use crate::db::open_conn;
 use crate::db::reset_db;
 use crate::dto::{CreateTaskPayload, TaskDetail, TaskSummary};
 use crate::resource::{dispatch_resource, kind_as_str, ApplyResult, RegisteredResource, Resource};
@@ -28,6 +30,7 @@ use crate::scheduler_service::{
 };
 use crate::state::{InnerState, TASK_SEMAPHORE};
 use crate::task_ops::{create_task_impl, reset_task_item_for_retry};
+use crate::task_repository::{SqliteTaskRepository, TaskRepository};
 use anyhow::{Context, Result};
 use clap_complete::Shell;
 use serde_json::json;
@@ -81,6 +84,12 @@ impl CliHandler {
             Commands::Qa(cmd) => self.handle_qa(cmd),
             Commands::Completion(cmd) => self.handle_completion(cmd),
             Commands::Debug { component } => self.handle_debug(component.as_deref()),
+            Commands::Exec {
+                stdin,
+                tty,
+                target,
+                command,
+            } => self.handle_exec(*stdin, *tty, target, command),
         }
     }
 
@@ -704,7 +713,204 @@ impl CliHandler {
                 Ok(0)
             }
             TaskCommands::Worker(cmd) => self.handle_task_worker(cmd),
+            TaskCommands::Edit {
+                task_id,
+                insert_before,
+                step,
+                capability,
+                tty,
+                repeatable,
+            } => self.handle_task_edit(
+                task_id,
+                insert_before,
+                step,
+                capability.as_deref(),
+                *tty,
+                *repeatable,
+            ),
         }
+    }
+
+    fn handle_task_edit(
+        &self,
+        task_id: &str,
+        insert_before: &str,
+        step: &str,
+        capability: Option<&str>,
+        tty: bool,
+        repeatable: bool,
+    ) -> Result<i32> {
+        let resolved_id = resolve_task_id(&self.state, task_id)?;
+        let parsed_step_type = step.parse::<WorkflowStepType>().map_err(|_| {
+            anyhow::anyhow!(
+                "invalid --step '{}': expected init_once|plan|qa|ticket_scan|fix|retest|loop_guard",
+                step
+            )
+        })?;
+
+        let repo = SqliteTaskRepository::new(self.state.db_path.clone());
+        let runtime_row = repo.load_task_runtime_row(&resolved_id)?;
+        let mut plan = serde_json::from_str::<TaskExecutionPlan>(&runtime_row.execution_plan_json)
+            .with_context(|| format!("failed to parse execution plan for task {}", resolved_id))?;
+
+        let insert_idx = plan
+            .steps
+            .iter()
+            .position(|s| s.id == insert_before)
+            .with_context(|| {
+                format!(
+                    "step '{}' not found in task '{}' execution plan",
+                    insert_before, resolved_id
+                )
+            })?;
+
+        let mut new_id = format!("{}-{}", parsed_step_type.as_str(), plan.steps.len() + 1);
+        if !plan.steps.iter().any(|s| s.id == new_id) {
+            // keep generated id
+        } else {
+            new_id = format!("{}-{}", parsed_step_type.as_str(), uuid::Uuid::new_v4());
+        }
+
+        let builtin = match parsed_step_type {
+            WorkflowStepType::InitOnce => Some("init_once".to_string()),
+            WorkflowStepType::TicketScan => Some("ticket_scan".to_string()),
+            WorkflowStepType::LoopGuard => Some("loop_guard".to_string()),
+            _ => None,
+        };
+        let required_capability = capability.map(|v| v.to_string()).or_else(|| {
+            if matches!(
+                parsed_step_type,
+                WorkflowStepType::Plan
+                    | WorkflowStepType::Qa
+                    | WorkflowStepType::Fix
+                    | WorkflowStepType::Retest
+            ) {
+                Some(parsed_step_type.as_str().to_string())
+            } else {
+                None
+            }
+        });
+        let inserted_step = TaskExecutionStep {
+            id: new_id.clone(),
+            step_type: Some(parsed_step_type.clone()),
+            required_capability,
+            builtin,
+            enabled: true,
+            repeatable,
+            is_guard: parsed_step_type == WorkflowStepType::LoopGuard,
+            cost_preference: None,
+            prehook: None,
+            tty,
+        };
+        plan.steps.insert(insert_idx, inserted_step);
+
+        let conn = open_conn(&self.state.db_path)?;
+        let updated_plan = serde_json::to_string(&plan)?;
+        conn.execute(
+            "UPDATE tasks SET execution_plan_json = ?2, updated_at = ?3 WHERE id = ?1",
+            rusqlite::params![resolved_id, updated_plan, now_ts()],
+        )?;
+
+        println!(
+            "Task plan updated: {} inserted step '{}' before '{}'",
+            task_id, new_id, insert_before
+        );
+        Ok(0)
+    }
+
+    fn handle_exec(
+        &self,
+        _stdin: bool,
+        tty: bool,
+        target: &str,
+        command: &[String],
+    ) -> Result<i32> {
+        let (task_ref, step_id) = parse_task_step_target(target)?;
+        let task_id = resolve_task_id(&self.state, task_ref)?;
+        let repo = SqliteTaskRepository::new(self.state.db_path.clone());
+        let runtime_row = repo.load_task_runtime_row(&task_id)?;
+        let plan = serde_json::from_str::<TaskExecutionPlan>(&runtime_row.execution_plan_json)
+            .with_context(|| format!("failed to parse execution plan for task {}", task_id))?;
+        let step = plan
+            .steps
+            .iter()
+            .find(|s| s.id == step_id)
+            .with_context(|| format!("step '{}' not found in task '{}'", step_id, task_id))?;
+        if !step.tty && tty {
+            anyhow::bail!(
+                "step '{}' has tty disabled; enable it via `orchestrator task edit ... --tty`",
+                step_id
+            );
+        }
+        let (workspace_root, qa_file_path) = {
+            let items = repo.list_task_items_for_cycle(&task_id)?;
+            let first = items
+                .first()
+                .with_context(|| format!("task '{}' has no task items", task_id))?;
+            (
+                std::path::PathBuf::from(runtime_row.workspace_root_raw.clone()),
+                first.qa_file_path.clone(),
+            )
+        };
+
+        let (agent_id, template) = {
+            let active = read_active_config(&self.state)?;
+            if let Some(cap) = step.required_capability.as_deref() {
+                let found = active.config.agents.iter().find_map(|(id, cfg)| {
+                    cfg.get_template(cap).map(|t| (id.clone(), t.clone()))
+                });
+                found.with_context(|| {
+                    format!("no agent template found for capability '{}'", cap)
+                })?
+            } else {
+                let cap = step
+                    .step_type
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or("qa")
+                    .to_string();
+                let found = active.config.agents.iter().find_map(|(id, cfg)| {
+                    cfg.get_template(&cap).map(|t| (id.clone(), t.clone()))
+                });
+                found.with_context(|| format!("no agent template found for '{}'", cap))?
+            }
+        };
+
+        let rendered = template
+            .replace("{rel_path}", &qa_file_path)
+            .replace("{ticket_paths}", "")
+            .replace("{phase}", step_id)
+            .replace("{cycle}", &runtime_row.current_cycle.to_string())
+            .replace("{task_id}", &task_id);
+
+        let to_run = if command.is_empty() {
+            rendered
+        } else {
+            command.join(" ")
+        };
+        if tty {
+            let status = Command::new("/bin/bash")
+                .arg("-lc")
+                .arg(&to_run)
+                .current_dir(workspace_root)
+                .status()
+                .with_context(|| format!("failed to execute interactive command for {}", agent_id))?;
+            return Ok(status.code().unwrap_or(1));
+        }
+
+        let output = Command::new("/bin/bash")
+            .arg("-lc")
+            .arg(&to_run)
+            .current_dir(workspace_root)
+            .output()
+            .with_context(|| format!("failed to execute command for {}", agent_id))?;
+        if !output.stdout.is_empty() {
+            println!("{}", String::from_utf8_lossy(&output.stdout));
+        }
+        if !output.stderr.is_empty() {
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+        }
+        Ok(output.status.code().unwrap_or(1))
     }
 
     fn handle_task_worker(&self, cmd: &TaskWorkerCommands) -> Result<i32> {
@@ -761,12 +967,12 @@ impl CliHandler {
                             if stop_file.exists() {
                                 break;
                             }
+                            let permit = cli_runtime()
+                                .block_on(TASK_SEMAPHORE.clone().acquire_owned())
+                                .map_err(|e| {
+                                    anyhow::anyhow!("Failed to acquire semaphore: {}", e)
+                                })?;
                             if let Some(task_id) = claim_next_pending_task(&state)? {
-                                let permit = cli_runtime()
-                                    .block_on(TASK_SEMAPHORE.clone().acquire_owned())
-                                    .map_err(|e| {
-                                        anyhow::anyhow!("Failed to acquire semaphore: {}", e)
-                                    })?;
                                 println!("Worker-{} claimed task: {}", worker_idx + 1, task_id);
                                 let runtime = RunningTask::new();
                                 let run_res = cli_runtime().block_on(run_task_loop(
@@ -796,6 +1002,7 @@ impl CliHandler {
                                     }
                                 }
                             } else {
+                                drop(permit);
                                 let (lock, cv) = &*wake_pair;
                                 let mut version = lock
                                     .lock()
@@ -920,6 +1127,7 @@ impl CliHandler {
                 name,
                 template_init_once,
                 template_qa,
+                template_plan,
                 template_fix,
                 template_retest,
                 template_loop_guard,
@@ -934,6 +1142,7 @@ impl CliHandler {
                     templates: AgentTemplatesSpec {
                         init_once: template_init_once.clone(),
                         qa: template_qa.clone(),
+                        plan: template_plan.clone(),
                         fix: template_fix.clone(),
                         retest: template_retest.clone(),
                         loop_guard: template_loop_guard.clone(),
@@ -986,6 +1195,7 @@ impl CliHandler {
                         is_guard: false,
                         cost_preference: None,
                         prehook: None,
+                        tty: false,
                     })
                     .collect();
 
@@ -1702,6 +1912,26 @@ fn parse_resource_selector(selector: &str) -> Result<(&str, &str)> {
     }
 }
 
+fn parse_task_step_target(target: &str) -> Result<(&str, &str)> {
+    let mut parts = target.split('/');
+    let kind = parts.next().unwrap_or_default();
+    let task_id = parts.next().unwrap_or_default();
+    let step_keyword = parts.next().unwrap_or_default();
+    let step_id = parts.next().unwrap_or_default();
+    if kind != "task"
+        || task_id.trim().is_empty()
+        || step_keyword != "step"
+        || step_id.trim().is_empty()
+        || parts.next().is_some()
+    {
+        anyhow::bail!(
+            "invalid exec target '{}': expected task/<task_id>/step/<step_id>",
+            target
+        );
+    }
+    Ok((task_id, step_id))
+}
+
 fn parse_key_value_pairs(
     values: &[String],
     field_name: &str,
@@ -1816,7 +2046,7 @@ fn normalize_loop_mode(loop_mode: &str) -> Result<String> {
 fn validate_workflow_step_type(value: &str) -> Result<String> {
     let parsed = value.parse::<WorkflowStepType>().map_err(|_| {
         anyhow::anyhow!(
-            "invalid --step '{}': expected init_once|qa|ticket_scan|fix|retest|loop_guard",
+            "invalid --step '{}': expected init_once|plan|qa|ticket_scan|fix|retest|loop_guard",
             value
         )
     })?;
@@ -1965,6 +2195,22 @@ mod tests {
         let err = parse_resource_selector("workspace-default")
             .expect_err("should reject missing separator");
         assert!(err.to_string().contains("invalid resource selector"));
+    }
+
+    #[test]
+    fn parse_task_step_target_valid() {
+        let (task_id, step_id) =
+            parse_task_step_target("task/task-1/step/plan-1").expect("parsing should succeed");
+        assert_eq!(task_id, "task-1");
+        assert_eq!(step_id, "plan-1");
+    }
+
+    #[test]
+    fn parse_task_step_target_rejects_invalid_shape() {
+        let err = parse_task_step_target("task/task-1").expect_err("should reject invalid target");
+        assert!(err
+            .to_string()
+            .contains("expected task/<task_id>/step/<step_id>"));
     }
 
     #[test]
