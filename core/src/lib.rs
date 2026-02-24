@@ -17,6 +17,7 @@ pub mod runner;
 pub mod scheduler;
 pub mod scheduler_service;
 pub mod selection;
+pub mod session_store;
 pub mod state;
 pub mod task_ops;
 pub mod task_repository;

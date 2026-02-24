@@ -1,7 +1,7 @@
 # Orchestrator - Dynamic Plan Step Injection and Exec TTY
 
 **Module**: orchestrator  
-**Scope**: Validate `task edit` insertion of `plan` step and `orchestrator exec [-it] task/<task_id>/step/<step_id>` behavior  
+**Scope**: Validate `task edit` insertion of `plan` step and `orchestrator exec [-it]` target behavior (`task/<task_id>/step/<step_id>` and `session/<session_id>`)  
 **Scenarios**: 5  
 **Priority**: High
 
@@ -13,7 +13,7 @@ This document validates the new interactive planning workflow:
 
 - `task edit` can insert a `plan` step before an existing step (for example `qa`)
 - workflow step supports `tty` flag
-- `exec` supports target selector `task/<task_id>/step/<step_id>`
+- `exec` supports target selector `task/<task_id>/step/<step_id>` and `session/<session_id>`
 - `exec -it` requires step `tty=true`
 
 Entry point: `./scripts/orchestrator.sh`
@@ -46,7 +46,7 @@ Entry point: `./scripts/orchestrator.sh`
 
 - Root help shows `exec`.
 - `task --help` shows `edit`.
-- `exec --help` includes `-i/-t` and target format `task/<task_id>/step/<step_id>`.
+- `exec --help` includes `-i/-t` and target formats `task/<task_id>/step/<step_id>` and `session/<session_id>`.
 
 ### Expected Data State
 ```sql

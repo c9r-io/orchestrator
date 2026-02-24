@@ -15,6 +15,12 @@ Entry points:
 - `./scripts/orchestrator.sh apply|manifest <command>`
 - `./scripts/orchestrator.sh db reset`
 
+> **Note**: `apply` and `manifest validate` accept multi-document YAML with
+> `apiVersion`/`kind`/`metadata`/`spec` resources. The flat config format
+> (runner/defaults/workspaces/…) is the internal serialization and is **not**
+> accepted by these commands. If any resource in a manifest has a validation
+> error, the entire apply is aborted and no changes are persisted.
+
 ---
 
 ## Scenario 1: Manifest Apply - Update Configuration
@@ -25,53 +31,12 @@ Entry points:
 
 ### Steps
 
-1. Create a valid config file:
+1. Apply an existing valid manifest bundle:
    ```bash
-   cat > /tmp/updated-config.yaml << 'EOF2'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   resume:
-     auto: false
-   defaults:
-     workspace: default
-     workflow: qa_only
-   workspaces:
-     default:
-       root_path: .
-       qa_targets:
-         - docs/qa
-       ticket_dir: fixtures/ticket
-   agents:
-     mock:
-       metadata:
-         name: mock
-       capabilities:
-         - qa
-       templates:
-         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
-   workflows:
-     qa_only:
-       steps:
-         - id: qa
-           required_capability: qa
-           enabled: true
-       loop:
-         mode: once
-         guard:
-           enabled: false
-           stop_when_no_unresolved: false
-       finalize:
-         rules: []
-   EOF2
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
    ```
 
-2. Apply config:
-   ```bash
-   ./scripts/orchestrator.sh apply -f /tmp/updated-config.yaml
-   ```
-
-3. Verify:
+2. Verify:
    ```bash
    ./scripts/orchestrator.sh manifest export -o yaml
    ./scripts/orchestrator.sh get workflows
@@ -80,7 +45,7 @@ Entry points:
 
 ### Expected
 
-- Config update succeeds.
+- Config update succeeds (prints `configuration version: N`).
 - Workflow and agent lists include newly configured entries.
 
 ---
@@ -93,28 +58,33 @@ Entry points:
 
 ### Steps
 
-1. Create invalid config:
+1. Create invalid manifest (empty workspace name):
    ```bash
    cat > /tmp/invalid-config.yaml << 'EOF2'
-   runner:
-     shell: /bin/bash
-   defaults:
-     workspace: nonexistent
-     workflow: missing
-   workspaces: {}
-   agents: {}
-   workflows: {}
+   apiVersion: orchestrator.dev/v2
+   kind: Workspace
+   metadata:
+     name: ""
+   spec:
+     root_path: .
+     qa_targets: [docs/qa]
+     ticket_dir: fixtures/ticket
    EOF2
    ```
 
-2. Apply invalid config:
+2. Apply invalid manifest:
    ```bash
    ./scripts/orchestrator.sh apply -f /tmp/invalid-config.yaml
    ```
 
+3. Verify existing config is unchanged:
+   ```bash
+   ./scripts/orchestrator.sh workspace list
+   ```
+
 ### Expected
 
-- Command fails with validation error.
+- Command fails with validation error (e.g. `metadata.name cannot be empty`).
 - Existing runtime config remains unchanged.
 
 ---
@@ -134,46 +104,48 @@ Entry points:
    ./scripts/orchestrator.sh manifest export -f /tmp/base-config.yaml
    ```
 
-2. Create new config that adds a workspace:
+2. Create manifest that adds a new workspace:
    ```bash
+   mkdir -p /tmp/new-workspace
    cat > /tmp/add-workspace.yaml << 'EOF2'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   resume:
-     auto: false
-   defaults:
-     workspace: default
-     workflow: qa_only
-   workspaces:
-     default:
-       root_path: .
-       qa_targets: [docs/qa]
-       ticket_dir: fixtures/ticket
-     new-workspace:
-       root_path: /tmp/new-workspace
-       qa_targets: [docs/qa]
-       ticket_dir: fixtures/ticket
-   agents:
-     mock:
-       metadata:
-         name: mock
-       capabilities: [qa]
-       templates:
-         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
-   workflows:
-     qa_only:
-       steps:
-         - id: qa
-           required_capability: qa
-           enabled: true
-       loop:
-         mode: once
-         guard:
-           enabled: false
-           stop_when_no_unresolved: false
-       finalize:
-         rules: []
+   apiVersion: orchestrator.dev/v2
+   kind: Workspace
+   metadata:
+     name: default
+   spec:
+     root_path: .
+     qa_targets: [docs/qa]
+     ticket_dir: fixtures/ticket
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Workspace
+   metadata:
+     name: new-workspace
+   spec:
+     root_path: /tmp/new-workspace
+     qa_targets: [docs/qa]
+     ticket_dir: fixtures/ticket
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Agent
+   metadata:
+     name: mock
+   spec:
+     capabilities: [qa]
+     templates:
+       qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Workflow
+   metadata:
+     name: qa_only
+   spec:
+     steps:
+       - id: qa
+         type: qa
+         enabled: true
+     loop:
+       mode: once
    EOF2
    ./scripts/orchestrator.sh apply -f /tmp/add-workspace.yaml
    ```
@@ -186,7 +158,7 @@ Entry points:
 
 ### Expected
 
-- New workspace is persisted.
+- New workspace is persisted (`workspace/new-workspace created`).
 - Existing workspace remains available.
 
 ---

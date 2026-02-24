@@ -1,0 +1,14 @@
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: simple_prehook_test
+spec:
+  steps:
+  - id: qa
+    type: qa
+    enabled: true
+  - id: fix
+    type: fix
+    enabled: true
+  loop:
+    mode: once

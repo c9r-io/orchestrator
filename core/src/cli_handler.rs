@@ -3,7 +3,7 @@
 use crate::cli::{
     generate_completion, AgentCommands, Cli, Commands, CompletionCommands, DbCommands,
     EditCommands, ManifestCommands, OutputFormat, QaCommands, QaProjectCommands, TaskCommands,
-    TaskWorkerCommands, WorkflowCommands, WorkspaceCommands,
+    TaskSessionCommands, TaskWorkerCommands, WorkflowCommands, WorkspaceCommands,
 };
 use crate::cli_types::{
     AgentSpec, AgentTemplatesSpec, OrchestratorResource, ResourceKind, ResourceMetadata,
@@ -24,6 +24,7 @@ use crate::scheduler::{
     load_task_summary, prepare_task_for_start, resolve_task_id, run_task_loop, stop_task_runtime,
     stop_task_runtime_for_delete, stream_task_logs_impl, RunningTask,
 };
+use crate::session_store;
 use crate::scheduler_service::{
     claim_next_pending_task, clear_worker_stop_signal, enqueue_task, pending_task_count,
     signal_worker_stop, worker_stop_signal_path, worker_wake_signal_path,
@@ -713,6 +714,7 @@ impl CliHandler {
                 Ok(0)
             }
             TaskCommands::Worker(cmd) => self.handle_task_worker(cmd),
+            TaskCommands::Session(cmd) => self.handle_task_session(cmd),
             TaskCommands::Edit {
                 task_id,
                 insert_before,
@@ -728,6 +730,86 @@ impl CliHandler {
                 *tty,
                 *repeatable,
             ),
+        }
+    }
+
+    fn handle_task_session(&self, cmd: &TaskSessionCommands) -> Result<i32> {
+        match cmd {
+            TaskSessionCommands::List { task_id, output } => {
+                let task_id = resolve_task_id(&self.state, task_id)?;
+                let rows = session_store::list_task_sessions(&self.state.db_path, &task_id)?;
+                match output {
+                    OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&rows)?),
+                    OutputFormat::Yaml => println!("{}", serde_yaml::to_string(&rows)?),
+                    OutputFormat::Table => {
+                        if rows.is_empty() {
+                            println!("No sessions for task {}", task_id);
+                        } else {
+                            println!(
+                                "{:<38} {:<18} {:<8} {:<10} {:<12} {:<8}",
+                                "SESSION_ID", "STEP", "PHASE", "STATE", "WRITER", "PID"
+                            );
+                            for s in rows {
+                                println!(
+                                    "{:<38} {:<18} {:<8} {:<10} {:<12} {:<8}",
+                                    s.id,
+                                    s.step_id,
+                                    s.phase,
+                                    s.state,
+                                    s.writer_client_id.unwrap_or_else(|| "-".to_string()),
+                                    s.pid
+                                );
+                            }
+                        }
+                    }
+                }
+                Ok(0)
+            }
+            TaskSessionCommands::Info { session_id, output } => {
+                let row = session_store::load_session(&self.state.db_path, session_id)?
+                    .with_context(|| format!("session not found: {}", session_id))?;
+                match output {
+                    OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&row)?),
+                    OutputFormat::Yaml => println!("{}", serde_yaml::to_string(&row)?),
+                    OutputFormat::Table => {
+                        println!("id: {}", row.id);
+                        println!("task_id: {}", row.task_id);
+                        println!("step_id: {}", row.step_id);
+                        println!("phase: {}", row.phase);
+                        println!("state: {}", row.state);
+                        println!("agent_id: {}", row.agent_id);
+                        println!("pid: {}", row.pid);
+                        println!("fifo: {}", row.input_fifo_path);
+                        println!("stdout: {}", row.stdout_path);
+                        println!("stderr: {}", row.stderr_path);
+                        println!(
+                            "writer: {}",
+                            row.writer_client_id.unwrap_or_else(|| "-".to_string())
+                        );
+                    }
+                }
+                Ok(0)
+            }
+            TaskSessionCommands::Close { session_id, force } => {
+                let row = session_store::load_session(&self.state.db_path, session_id)?
+                    .with_context(|| format!("session not found: {}", session_id))?;
+                if row.pid > 0 {
+                    let sig = if *force { "-9" } else { "-15" };
+                    let _ = Command::new("kill")
+                        .arg(sig)
+                        .arg(row.pid.to_string())
+                        .status();
+                }
+                session_store::update_session_state(
+                    &self.state.db_path,
+                    session_id,
+                    "closed",
+                    None,
+                    true,
+                )?;
+                println!("Session closed: {}", session_id);
+                Ok(0)
+            }
         }
     }
 
@@ -825,24 +907,21 @@ impl CliHandler {
         target: &str,
         command: &[String],
     ) -> Result<i32> {
-        let (task_ref, step_id) = parse_task_step_target(target)?;
-        let task_id = resolve_task_id(&self.state, task_ref)?;
-        let repo = SqliteTaskRepository::new(self.state.db_path.clone());
-        let runtime_row = repo.load_task_runtime_row(&task_id)?;
-        let plan = serde_json::from_str::<TaskExecutionPlan>(&runtime_row.execution_plan_json)
-            .with_context(|| format!("failed to parse execution plan for task {}", task_id))?;
-        let step = plan
-            .steps
-            .iter()
-            .find(|s| s.id == step_id)
-            .with_context(|| format!("step '{}' not found in task '{}'", step_id, task_id))?;
-        if !step.tty && tty {
+        let resolved = resolve_exec_target(&self.state, target)?;
+        if let Some(sess) = &resolved.session {
+            return self.exec_against_session(sess, tty, command);
+        }
+        let task_id = resolved.task_id;
+        let step_id = resolved.step_id;
+        if !resolved.step_tty && tty {
             anyhow::bail!(
                 "step '{}' has tty disabled; enable it via `orchestrator task edit ... --tty`",
                 step_id
             );
         }
         let (workspace_root, qa_file_path) = {
+            let repo = SqliteTaskRepository::new(self.state.db_path.clone());
+            let runtime_row = repo.load_task_runtime_row(&task_id)?;
             let items = repo.list_task_items_for_cycle(&task_id)?;
             let first = items
                 .first()
@@ -854,6 +933,16 @@ impl CliHandler {
         };
 
         let (agent_id, template) = {
+            let repo = SqliteTaskRepository::new(self.state.db_path.clone());
+            let runtime_row = repo.load_task_runtime_row(&task_id)?;
+            let plan =
+                serde_json::from_str::<TaskExecutionPlan>(&runtime_row.execution_plan_json)
+                    .with_context(|| format!("failed to parse execution plan for task {}", task_id))?;
+            let step = plan
+                .steps
+                .iter()
+                .find(|s| s.id == step_id)
+                .with_context(|| format!("step '{}' not found in task '{}'", step_id, task_id))?;
             let active = read_active_config(&self.state)?;
             if let Some(cap) = step.required_capability.as_deref() {
                 let found = active.config.agents.iter().find_map(|(id, cfg)| {
@@ -876,10 +965,12 @@ impl CliHandler {
             }
         };
 
+        let runtime_row = SqliteTaskRepository::new(self.state.db_path.clone())
+            .load_task_runtime_row(&task_id)?;
         let rendered = template
             .replace("{rel_path}", &qa_file_path)
             .replace("{ticket_paths}", "")
-            .replace("{phase}", step_id)
+            .replace("{phase}", &step_id)
             .replace("{cycle}", &runtime_row.current_cycle.to_string())
             .replace("{task_id}", &task_id);
 
@@ -909,6 +1000,102 @@ impl CliHandler {
         }
         if !output.stderr.is_empty() {
             eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+        }
+        Ok(output.status.code().unwrap_or(1))
+    }
+
+    fn exec_against_session(
+        &self,
+        sess: &session_store::SessionRow,
+        tty: bool,
+        command: &[String],
+    ) -> Result<i32> {
+        if sess.state != "active" && sess.state != "detached" {
+            anyhow::bail!(
+                "session '{}' is not attachable (state={})",
+                sess.id,
+                sess.state
+            );
+        }
+        let client_id = format!("cli-{}", std::process::id());
+        if tty {
+            // When a command is specified (e.g. `exec -it session/<id> -- cat`),
+            // run that command in the session's cwd with inherited stdio, similar
+            // to `docker exec -it`.  Without a command, attach to the session's
+            // FIFO/stdout stream.
+            if !command.is_empty() {
+                session_store::acquire_writer(&self.state.db_path, &sess.id, &client_id)?;
+                let cmdline = command.join(" ");
+                let status = Command::new("/bin/bash")
+                    .arg("-lc")
+                    .arg(&cmdline)
+                    .current_dir(&sess.cwd)
+                    .status()
+                    .context("exec interactive command in session context")?;
+                session_store::release_attachment(
+                    &self.state.db_path, &sess.id, &client_id, "detach",
+                )?;
+                return Ok(status.code().unwrap_or(1));
+            }
+
+            let writable =
+                session_store::acquire_writer(&self.state.db_path, &sess.id, &client_id)?;
+            if !writable {
+                session_store::attach_reader(&self.state.db_path, &sess.id, &client_id)?;
+            }
+            let status_res = if writable {
+                Command::new("/bin/bash")
+                    .arg("-lc")
+                    .arg(format!(
+                        "tail -n +1 -f {} & TPID=$!; cat > {}; kill $TPID",
+                        shell_quote(&sess.stdout_path),
+                        shell_quote(&sess.input_fifo_path),
+                    ))
+                    .status()
+                    .context("attach writable session")
+            } else {
+                Command::new("tail")
+                    .arg("-n")
+                    .arg("+1")
+                    .arg("-f")
+                    .arg(&sess.stdout_path)
+                    .status()
+                    .context("attach read-only session")
+            };
+            session_store::release_attachment(&self.state.db_path, &sess.id, &client_id, "detach")?;
+            let status = status_res?;
+            return Ok(status.code().unwrap_or(1));
+        }
+
+        if command.is_empty() {
+            anyhow::bail!(
+                "active session exists for step '{}'; provide command args or use -it",
+                sess.step_id
+            );
+        }
+        // Run the command directly in the session's working directory rather
+        // than writing to the FIFO (the FIFO feeds stdin of the session
+        // process, which may not be an interactive shell).
+        let cmdline = command.join(" ");
+        let output = Command::new("/bin/bash")
+            .arg("-lc")
+            .arg(&cmdline)
+            .current_dir(&sess.cwd)
+            .output()
+            .context("exec command in session context")?;
+        if !output.stdout.is_empty() {
+            // Also append to session stdout so tailing readers can observe it
+            use std::io::Write as _;
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .append(true)
+                .open(&sess.stdout_path)
+            {
+                let _ = f.write_all(&output.stdout);
+            }
+            print!("{}", String::from_utf8_lossy(&output.stdout));
+        }
+        if !output.stderr.is_empty() {
+            eprint!("{}", String::from_utf8_lossy(&output.stderr));
         }
         Ok(output.status.code().unwrap_or(1))
     }
@@ -1912,24 +2099,94 @@ fn parse_resource_selector(selector: &str) -> Result<(&str, &str)> {
     }
 }
 
-fn parse_task_step_target(target: &str) -> Result<(&str, &str)> {
+#[derive(Debug)]
+enum ExecTargetRef<'a> {
+    TaskStep { task_id: &'a str, step_id: &'a str },
+    SessionId { session_id: &'a str },
+}
+
+struct ResolvedExecTarget {
+    task_id: String,
+    step_id: String,
+    step_tty: bool,
+    session: Option<crate::session_store::SessionRow>,
+}
+
+fn parse_exec_target(target: &str) -> Result<ExecTargetRef<'_>> {
     let mut parts = target.split('/');
     let kind = parts.next().unwrap_or_default();
-    let task_id = parts.next().unwrap_or_default();
-    let step_keyword = parts.next().unwrap_or_default();
-    let step_id = parts.next().unwrap_or_default();
-    if kind != "task"
-        || task_id.trim().is_empty()
-        || step_keyword != "step"
-        || step_id.trim().is_empty()
-        || parts.next().is_some()
-    {
-        anyhow::bail!(
-            "invalid exec target '{}': expected task/<task_id>/step/<step_id>",
+    match kind {
+        "task" => {
+            let task_id = parts.next().unwrap_or_default();
+            let step_keyword = parts.next().unwrap_or_default();
+            let step_id = parts.next().unwrap_or_default();
+            if task_id.trim().is_empty()
+                || step_keyword != "step"
+                || step_id.trim().is_empty()
+                || parts.next().is_some()
+            {
+                anyhow::bail!(
+                    "invalid exec target '{}': expected task/<task_id>/step/<step_id>",
+                    target
+                );
+            }
+            Ok(ExecTargetRef::TaskStep { task_id, step_id })
+        }
+        "session" => {
+            let session_id = parts.next().unwrap_or_default();
+            if session_id.trim().is_empty() || parts.next().is_some() {
+                anyhow::bail!(
+                    "invalid exec target '{}': expected session/<session_id>",
+                    target
+                );
+            }
+            Ok(ExecTargetRef::SessionId { session_id })
+        }
+        _ => anyhow::bail!(
+            "invalid exec target '{}': expected task/<task_id>/step/<step_id> or session/<session_id>",
             target
-        );
+        ),
     }
-    Ok((task_id, step_id))
+}
+
+fn resolve_exec_target(state: &crate::state::InnerState, target: &str) -> Result<ResolvedExecTarget> {
+    match parse_exec_target(target)? {
+        ExecTargetRef::SessionId { session_id } => {
+            let sess = session_store::load_session(&state.db_path, session_id)?
+                .with_context(|| format!("session not found: {}", session_id))?;
+            Ok(ResolvedExecTarget {
+                task_id: sess.task_id.clone(),
+                step_id: sess.step_id.clone(),
+                step_tty: true,
+                session: Some(sess),
+            })
+        }
+        ExecTargetRef::TaskStep { task_id, step_id } => {
+            let task_id = resolve_task_id(state, task_id)?;
+            let repo = SqliteTaskRepository::new(state.db_path.clone());
+            let runtime_row = repo.load_task_runtime_row(&task_id)?;
+            let plan = serde_json::from_str::<TaskExecutionPlan>(&runtime_row.execution_plan_json)
+                .with_context(|| format!("failed to parse execution plan for task {}", task_id))?;
+            let step = plan
+                .steps
+                .iter()
+                .find(|s| s.id == step_id)
+                .with_context(|| format!("step '{}' not found in task '{}'", step_id, task_id))?;
+            let session =
+                session_store::load_active_session_for_task_step(&state.db_path, &task_id, step_id)?;
+            Ok(ResolvedExecTarget {
+                task_id,
+                step_id: step_id.to_string(),
+                step_tty: step.tty,
+                session,
+            })
+        }
+    }
+}
+
+fn shell_quote(input: &str) -> String {
+    let escaped = input.replace('\'', "'\"'\"'");
+    format!("'{}'", escaped)
 }
 
 fn parse_key_value_pairs(
@@ -2198,16 +2455,29 @@ mod tests {
     }
 
     #[test]
-    fn parse_task_step_target_valid() {
-        let (task_id, step_id) =
-            parse_task_step_target("task/task-1/step/plan-1").expect("parsing should succeed");
-        assert_eq!(task_id, "task-1");
-        assert_eq!(step_id, "plan-1");
+    fn parse_exec_target_task_step_valid() {
+        let parsed = parse_exec_target("task/task-1/step/plan-1").expect("parsing should succeed");
+        match parsed {
+            ExecTargetRef::TaskStep { task_id, step_id } => {
+                assert_eq!(task_id, "task-1");
+                assert_eq!(step_id, "plan-1");
+            }
+            _ => panic!("expected task-step target"),
+        }
     }
 
     #[test]
-    fn parse_task_step_target_rejects_invalid_shape() {
-        let err = parse_task_step_target("task/task-1").expect_err("should reject invalid target");
+    fn parse_exec_target_session_valid() {
+        let parsed = parse_exec_target("session/sess-1").expect("parsing should succeed");
+        match parsed {
+            ExecTargetRef::SessionId { session_id } => assert_eq!(session_id, "sess-1"),
+            _ => panic!("expected session target"),
+        }
+    }
+
+    #[test]
+    fn parse_exec_target_rejects_invalid_shape() {
+        let err = parse_exec_target("task/task-1").expect_err("should reject invalid target");
         assert!(err
             .to_string()
             .contains("expected task/<task_id>/step/<step_id>"));

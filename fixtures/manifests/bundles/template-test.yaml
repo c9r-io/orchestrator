@@ -1,0 +1,24 @@
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: template_test
+spec:
+  steps:
+  - id: qa
+    type: qa
+    required_capability: qa
+    enabled: true
+    repeatable: true
+    is_guard: false
+    tty: false
+  loop:
+    mode: once
+    enabled: false
+    stop_when_no_unresolved: false
+  finalize:
+    rules:
+    - id: fallback_qa_passed
+      engine: cel
+      when: active_ticket_count == 0
+      status: qa_passed
+      reason: no active tickets

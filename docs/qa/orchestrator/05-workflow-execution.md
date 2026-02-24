@@ -163,10 +163,13 @@ preconditions section.
 This scenario uses a **different fixture** with only the `mock_fail` agent:
 
 ```bash
+rm -f data/agent_orchestrator.db config/default.yaml
+./scripts/orchestrator.sh init
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/fail-workflow.yaml
+
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
 ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/fail-workflow.yaml
 ```
 
 ### Steps
@@ -190,18 +193,30 @@ QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
    ```bash
    ./scripts/orchestrator.sh task info {task_id}
    ./scripts/orchestrator.sh task logs {task_id}
-   ls workspace/${QA_PROJECT}/docs/ticket/
+   ls fixtures/ticket/auto_*.md
    ```
 
 ### Expected
 
 - QA phase fails for every item (mock_fail exits 1)
-- Ticket files are created under `workspace/${QA_PROJECT}/docs/ticket/`
-- Fix phase executes after ticket scan
-- Logs and DB command_runs show structured JSON outputs (`output_json`/`artifacts_json`); failing QA runs are marked by non-success status and ticket artifacts
+- Ticket files are created as `fixtures/ticket/auto_*.md` (the ticket_dir
+  of the workspace the task runs against — the global `default` workspace
+  has `ticket_dir: fixtures/ticket`)
+- Fix phase executes after ticket scan; because the mock fix agent exits 0,
+  every item transitions from `qa_failed` → `fixed`
+- Task completes with `Failed: 0` (items are "fixed", not "qa_failed")
+- Logs show structured JSON outputs (`output_json`/`artifacts_json`);
+  failing QA runs are marked by non-success status and ticket artifacts
 - **Note**: If the agent becomes unhealthy after repeated QA failures, the task
   may report "No healthy agent found with capability: fix" — this is expected
   when health tracking marks the agent as diseased.
+
+### Troubleshooting
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| No ticket files found in `workspace/${QA_PROJECT}/docs/ticket/` | The task uses the global `default` workspace (ticket_dir: `fixtures/ticket`), not the project workspace | Check `fixtures/ticket/auto_*.md` instead |
+| `Failed: 0` when expecting failures | Fix phase succeeds (exit 0), transitioning items from `qa_failed` to `fixed` | This is correct behavior; "Failed" counts only items whose final status is a failure state |
 
 ---
 

@@ -247,96 +247,41 @@ Validate apply command with dry-run mode doesn't persist changes.
 
 Validate configuration validation catches invalid configurations.
 
+> **Note**: `manifest validate` accepts multi-document YAML with
+> `apiVersion`/`kind`/`metadata`/`spec` (the same format used by `apply`).
+> The flat config format (runner/defaults/workspaces/…) is the internal
+> serialization format and is **not** accepted by `manifest validate`.
+
 ### Steps
 
-1. Create invalid config (empty root_path):
+1. Create invalid manifest (empty root_path):
    ```bash
    cat > /tmp/invalid-config.yaml << 'EOF'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   resume:
-     auto: true
-   defaults:
-     workspace: default
-     workflow: qa_only
-   workspaces:
-      invalid-ws:
-        root_path: ""
-        qa_targets: []
-        ticket_dir: fixtures/ticket
-   agents: {}
-   workflows:
-     test:
-       steps:
-         - id: qa
-           required_capability: qa
-           enabled: true
-           repeatable: false
-       loop:
-         mode: once
-       finalize:
-         rules: []
-    EOF
-    ```
+   apiVersion: orchestrator.dev/v2
+   kind: Workspace
+   metadata:
+     name: invalid-ws
+   spec:
+     root_path: ""
+     qa_targets: []
+     ticket_dir: fixtures/ticket
+   EOF
+   ```
 
-2. Validate the invalid config:
+2. Validate the invalid manifest:
    ```bash
    ./core/target/release/agent-orchestrator manifest validate -f /tmp/invalid-config.yaml
    ```
 
-3. Create valid config:
+3. Validate a known-good manifest:
    ```bash
-   cat > /tmp/valid-config.yaml << 'EOF'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   resume:
-     auto: true
-   defaults:
-     workspace: default
-     workflow: qa_only
-   workspaces:
-     default:
-       root_path: "."
-       qa_targets:
-         - docs/qa
-       ticket_dir: fixtures/ticket
-   agents:
-     mock:
-       metadata:
-         name: mock
-       capabilities:
-         - qa
-       templates:
-         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
-   workflows:
-     qa_only:
-       steps:
-         - id: qa
-           required_capability: qa
-           enabled: true
-           repeatable: false
-       loop:
-         mode: once
-         guard:
-           enabled: false
-           stop_when_no_unresolved: false
-       finalize:
-         rules: []
-   EOF
-   ```
-
-4. Validate the valid config:
-   ```bash
-   ./core/target/release/agent-orchestrator manifest validate -f /tmp/valid-config.yaml
+   ./core/target/release/agent-orchestrator manifest validate -f fixtures/manifests/bundles/echo-workflow.yaml
    ```
 
 ### Expected
 
-- Invalid config validation fails with error message (e.g. empty root_path)
-- Absolute paths outside app root are rejected by the validator
-- Valid config with `root_path: "."` validation succeeds and shows normalized YAML
+- Invalid manifest validation fails with `workspace.spec.root_path cannot be empty`
+- Valid manifest validation succeeds with `Manifest is valid`
 
 ---
 

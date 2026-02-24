@@ -164,6 +164,40 @@ pub fn init_schema(db_path: &Path) -> Result<()> {
             created_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS agent_sessions (
+            id TEXT PRIMARY KEY,
+            task_id TEXT NOT NULL,
+            task_item_id TEXT,
+            step_id TEXT NOT NULL,
+            phase TEXT NOT NULL,
+            agent_id TEXT NOT NULL,
+            state TEXT NOT NULL,
+            pid INTEGER NOT NULL,
+            pty_backend TEXT NOT NULL,
+            cwd TEXT NOT NULL,
+            command TEXT NOT NULL,
+            input_fifo_path TEXT NOT NULL,
+            stdout_path TEXT NOT NULL,
+            stderr_path TEXT NOT NULL,
+            transcript_path TEXT NOT NULL,
+            output_json_path TEXT,
+            writer_client_id TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            ended_at TEXT,
+            exit_code INTEGER
+        );
+
+        CREATE TABLE IF NOT EXISTS session_attachments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            client_id TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            attached_at TEXT NOT NULL,
+            detached_at TEXT,
+            reason TEXT
+        );
+
         CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
         CREATE INDEX IF NOT EXISTS idx_task_items_task_order ON task_items(task_id, order_no);
         CREATE INDEX IF NOT EXISTS idx_task_items_status ON task_items(status);
@@ -172,6 +206,9 @@ pub fn init_schema(db_path: &Path) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_events_task_created_at ON events(task_id, created_at);
         CREATE INDEX IF NOT EXISTS idx_cfg_versions_version ON orchestrator_config_versions(version DESC);
         CREATE INDEX IF NOT EXISTS idx_task_exec_metrics_task_created ON task_execution_metrics(task_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_agent_sessions_task_step_state ON agent_sessions(task_id, step_id, state);
+        CREATE INDEX IF NOT EXISTS idx_agent_sessions_pid_state ON agent_sessions(pid, state);
+        CREATE INDEX IF NOT EXISTS idx_session_attachments_session_attached ON session_attachments(session_id, attached_at DESC);
         "#,
     )
     .context("failed to initialize schema")?;
@@ -283,6 +320,24 @@ pub fn init_schema(db_path: &Path) -> Result<()> {
         "command_runs",
         "validation_status",
         "ALTER TABLE command_runs ADD COLUMN validation_status TEXT NOT NULL DEFAULT 'unknown'",
+    )?;
+    ensure_column(
+        &conn,
+        "command_runs",
+        "session_id",
+        "ALTER TABLE command_runs ADD COLUMN session_id TEXT",
+    )?;
+    ensure_column(
+        &conn,
+        "command_runs",
+        "machine_output_source",
+        "ALTER TABLE command_runs ADD COLUMN machine_output_source TEXT NOT NULL DEFAULT 'stdout'",
+    )?;
+    ensure_column(
+        &conn,
+        "command_runs",
+        "output_json_path",
+        "ALTER TABLE command_runs ADD COLUMN output_json_path TEXT",
     )?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_command_runs_validation_status ON command_runs(validation_status)",

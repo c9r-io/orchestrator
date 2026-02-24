@@ -21,6 +21,7 @@ mod runner;
 mod scheduler;
 mod scheduler_service;
 mod selection;
+mod session_store;
 mod state;
 mod task_ops;
 mod task_repository;

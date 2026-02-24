@@ -18,6 +18,7 @@ use crate::output_validation::validate_phase_output;
 use crate::prehook::{emit_item_finalize_event, evaluate_step_prehook};
 use crate::runner::{redact_text, spawn_with_runner};
 use crate::selection::{select_agent_advanced, select_agent_by_preference};
+use crate::session_store;
 use crate::state::{InnerState, TASK_SEMAPHORE};
 use crate::task_repository::{NewCommandRun, SqliteTaskRepository, TaskRepository};
 use crate::ticket::{
@@ -515,7 +516,9 @@ async fn run_task_loop_core(
                     &state,
                     task_id,
                     &anchor_item_id,
+                    &step.id,
                     "init_once",
+                    step.tty,
                     step.required_capability.as_deref(),
                     ".",
                     &[],
@@ -836,7 +839,9 @@ pub async fn run_phase(
     state: &Arc<InnerState>,
     task_id: &str,
     item_id: &str,
+    step_id: &str,
     phase: &str,
+    tty: bool,
     command: String,
     workspace_root: &Path,
     workspace_id: &str,
@@ -889,7 +894,92 @@ pub async fn run_phase(
     .await
     .context("log file setup worker failed")??;
 
-    let child = spawn_with_runner(&runner, &command, workspace_root, stdout_file, stderr_file)?;
+    let mut session_id: Option<String> = None;
+    let command_to_run = if tty {
+        let sid = Uuid::new_v4().to_string();
+        let session_dir = state.logs_dir.join("sessions").join(&sid);
+        std::fs::create_dir_all(&session_dir).with_context(|| {
+            format!("failed to create session dir: {}", session_dir.display())
+        })?;
+        let input_fifo = session_dir.join("input.fifo");
+        let transcript_path = session_dir.join("transcript.log");
+        let output_json_path = session_dir.join("output.json");
+        if !input_fifo.exists() {
+            let status = std::process::Command::new("mkfifo")
+                .arg(&input_fifo)
+                .status()
+                .with_context(|| format!("failed to spawn mkfifo for {}", input_fifo.display()))?;
+            if !status.success() {
+                anyhow::bail!("mkfifo failed for {}", input_fifo.display());
+            }
+        }
+        let inner = format!(
+            "ORCH_OUTPUT_JSON_PATH={} ORCH_SESSION_ID={} ORCH_STEP_ID={} {}",
+            shell_escape(&output_json_path.to_string_lossy()),
+            shell_escape(&sid),
+            shell_escape(step_id),
+            command
+        );
+        let wrapped = format!(
+            "{} < {}",
+            inner,
+            shell_escape(&input_fifo.to_string_lossy())
+        );
+        session_id = Some(sid.clone());
+        session_store::insert_session(
+            &state.db_path,
+            &session_store::NewSession {
+                id: &sid,
+                task_id,
+                task_item_id: Some(item_id),
+                step_id,
+                phase,
+                agent_id,
+                state: "active",
+                pid: 0,
+                pty_backend: "script",
+                cwd: &workspace_root.to_string_lossy(),
+                command: &command,
+                input_fifo_path: &input_fifo.to_string_lossy(),
+                stdout_path: &stdout_path.to_string_lossy(),
+                stderr_path: &stderr_path.to_string_lossy(),
+                transcript_path: &transcript_path.to_string_lossy(),
+                output_json_path: Some(&output_json_path.to_string_lossy()),
+            },
+        )?;
+        wrapped
+    } else {
+        command.clone()
+    };
+    let child =
+        spawn_with_runner(&runner, &command_to_run, workspace_root, stdout_file, stderr_file)?;
+    if let Some(sid) = session_id.as_deref() {
+        if let Some(pid) = child.id() {
+            let _ = session_store::update_session_pid(&state.db_path, sid, pid as i64);
+        }
+    }
+
+    // TTY sessions run in the background – return immediately so the user
+    // can attach via `exec -it`.  The child process reads from a FIFO and
+    // would block indefinitely if we waited here.
+    if tty && session_id.is_some() {
+        // Leak the child handle to prevent kill_on_drop from sending SIGKILL
+        // when the CLI process (and tokio runtime) exits.  The session process
+        // PID is already persisted in agent_sessions and can be managed via
+        // `task session close`.
+        std::mem::forget(child);
+        return Ok(crate::dto::RunResult {
+            success: true,
+            exit_code: 0,
+            stdout_path: stdout_path.to_string_lossy().to_string(),
+            stderr_path: stderr_path.to_string_lossy().to_string(),
+            timed_out: false,
+            duration_ms: Some(0),
+            output: None,
+            validation_status: "passed".to_string(),
+            validation_error: None,
+        });
+    }
 
     {
         let mut child_lock = runtime.child.lock().await;
@@ -980,6 +1070,16 @@ pub async fn run_phase(
         confidence: Some(redacted_output.confidence),
         quality_score: Some(redacted_output.quality_score),
         validation_status: validation.status.to_string(),
+        session_id: session_id.clone(),
+        machine_output_source: if tty {
+            "output_json_path".to_string()
+        } else {
+            "stdout".to_string()
+        },
+        output_json_path: session_id
+            .as_ref()
+            .map(|sid| state.logs_dir.join("sessions").join(sid).join("output.json"))
+            .map(|p| p.to_string_lossy().to_string()),
     };
     let sender = crate::collab::AgentEndpoint::for_task_item(agent_id, task_id, item_id);
     let msg = crate::collab::AgentMessage::publish(
@@ -1050,6 +1150,15 @@ pub async fn run_phase(
     } else {
         reset_consecutive_errors(state, agent_id);
     }
+    if let Some(sid) = session_id.as_deref() {
+        let _ = session_store::update_session_state(
+            &state.db_path,
+            sid,
+            "closed",
+            Some(exit_code as i64),
+            true,
+        );
+    }
 
     Ok(crate::dto::RunResult {
         success,
@@ -1070,7 +1179,9 @@ pub async fn run_phase_with_rotation(
     state: &Arc<InnerState>,
     task_id: &str,
     item_id: &str,
+    step_id: &str,
     phase: &str,
+    tty: bool,
     capability: Option<&str>,
     rel_path: &str,
     ticket_paths: &[String],
@@ -1116,7 +1227,9 @@ pub async fn run_phase_with_rotation(
         state,
         task_id,
         item_id,
+        step_id,
         phase,
+        tty,
         command,
         workspace_root,
         workspace_id,
@@ -1189,7 +1302,9 @@ pub async fn execute_guard_step(
         state,
         task_id,
         task_id,
+        &step.id,
         "guard",
+        step.tty,
         command,
         &task_ctx.workspace_root,
         &task_ctx.workspace_id,
@@ -1271,7 +1386,9 @@ pub async fn process_item(
                 state,
                 task_id,
                 item_id,
+                &plan_step.id,
                 "plan",
+                plan_step.tty,
                 plan_step.required_capability.as_deref(),
                 &item.qa_file_path,
                 &active_tickets,
@@ -1337,7 +1454,9 @@ pub async fn process_item(
                 state,
                 task_id,
                 item_id,
+                &qa_step.id,
                 "qa",
+                qa_step.tty,
                 qa_step.required_capability.as_deref(),
                 &item.qa_file_path,
                 &active_tickets,
@@ -1513,7 +1632,9 @@ pub async fn process_item(
                     state,
                     task_id,
                     item_id,
+                    &fix_step.id,
                     "fix",
+                    fix_step.tty,
                     fix_step.required_capability.as_deref(),
                     &item.qa_file_path,
                     &active_tickets,
@@ -1570,7 +1691,9 @@ pub async fn process_item(
                 state,
                 task_id,
                 item_id,
+                &retest_step.id,
                 "retest",
+                retest_step.tty,
                 retest_step.required_capability.as_deref(),
                 &item.qa_file_path,
                 &retest_new_tickets,
@@ -1637,7 +1760,9 @@ pub async fn process_item(
                 state,
                 task_id,
                 item_id,
+                &ds.id,
                 &ds.step_type,
+                false,
                 cap,
                 &item.qa_file_path,
                 &active_tickets,

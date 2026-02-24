@@ -80,6 +80,9 @@ pub struct NewCommandRun {
     pub confidence: Option<f32>,
     pub quality_score: Option<f32>,
     pub validation_status: String,
+    pub session_id: Option<String>,
+    pub machine_output_source: String,
+    pub output_json_path: Option<String>,
 }
 
 impl SqliteTaskRepository {
@@ -513,7 +516,7 @@ impl TaskRepository for SqliteTaskRepository {
     fn insert_command_run(&self, run: &NewCommandRun) -> Result<()> {
         let conn = open_conn(&self.db_path)?;
         conn.execute(
-            "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, workspace_id, agent_id, exit_code, stdout_path, stderr_path, output_json, artifacts_json, confidence, quality_score, validation_status, started_at, ended_at, interrupted) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, workspace_id, agent_id, exit_code, stdout_path, stderr_path, output_json, artifacts_json, confidence, quality_score, validation_status, started_at, ended_at, interrupted, session_id, machine_output_source, output_json_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
             params![
                 run.id,
                 run.task_item_id,
@@ -532,7 +535,10 @@ impl TaskRepository for SqliteTaskRepository {
                 run.validation_status,
                 run.started_at,
                 run.ended_at,
-                run.interrupted
+                run.interrupted,
+                run.session_id,
+                run.machine_output_source,
+                run.output_json_path
             ],
         )?;
         Ok(())
@@ -678,6 +684,9 @@ mod tests {
             confidence: None,
             quality_score: None,
             validation_status: "unknown".to_string(),
+            session_id: None,
+            machine_output_source: "stdout".to_string(),
+            output_json_path: None,
         };
         repo.insert_command_run(&run).expect("insert command run");
 
@@ -726,6 +735,9 @@ mod tests {
             confidence: None,
             quality_score: None,
             validation_status: "unknown".to_string(),
+            session_id: None,
+            machine_output_source: "stdout".to_string(),
+            output_json_path: None,
         };
         repo.insert_command_run(&run).expect("insert command run");
 

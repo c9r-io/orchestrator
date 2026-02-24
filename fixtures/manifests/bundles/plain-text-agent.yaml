@@ -1,0 +1,40 @@
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: plain_text_agent
+spec:
+  templates:
+    qa: echo "This is plain text output, not JSON"
+    fix: echo "Plain text fix output"
+    retest: echo "Plain text retest output"
+  capabilities:
+  - qa
+  - fix
+  - retest
+  selection:
+    strategy: cost_based
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: plain_text_test
+spec:
+  steps:
+  - id: qa
+    type: qa
+    required_capability: qa
+    enabled: true
+    repeatable: true
+    is_guard: false
+    tty: false
+  loop:
+    mode: once
+    enabled: false
+    stop_when_no_unresolved: false
+  finalize:
+    rules:
+    - id: fallback_qa_passed
+      engine: cel
+      when: active_ticket_count == 0
+      status: qa_passed
+      reason: no active tickets

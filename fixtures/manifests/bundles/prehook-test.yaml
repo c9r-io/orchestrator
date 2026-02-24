@@ -1,0 +1,37 @@
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: prehook_test
+spec:
+  steps:
+  - id: qa
+    type: qa
+    required_capability: qa
+    enabled: true
+    repeatable: true
+    is_guard: false
+    tty: false
+    prehook:
+      engine: cel
+      expression: "qa_confidence != null && qa_confidence > 0.5"
+  - id: fix
+    type: fix
+    required_capability: fix
+    enabled: true
+    repeatable: true
+    is_guard: false
+    tty: false
+    prehook:
+      engine: cel
+      expression: "qa_confidence != null && qa_confidence < 0.8"
+  loop:
+    mode: once
+    enabled: false
+    stop_when_no_unresolved: false
+  finalize:
+    rules:
+    - id: fallback_qa_passed
+      engine: cel
+      when: active_ticket_count == 0
+      status: qa_passed
+      reason: no active tickets

@@ -119,7 +119,7 @@ pub enum Commands {
         #[arg(short = 't', long)]
         tty: bool,
 
-        /// Target selector: task/<task_id>/step/<step_id>
+        /// Target selector: task/<task_id>/step/<step_id> or session/<session_id>
         target: String,
 
         /// Command to execute in the selected step context
@@ -292,6 +292,10 @@ pub enum TaskCommands {
     /// Worker control commands
     #[command(subcommand)]
     Worker(TaskWorkerCommands),
+
+    /// Session control commands
+    #[command(subcommand)]
+    Session(TaskSessionCommands),
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -310,6 +314,34 @@ pub enum TaskWorkerCommands {
     Stop,
     /// Show worker-related queue status
     Status,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum TaskSessionCommands {
+    /// List sessions for a task
+    List {
+        /// Task ID
+        task_id: String,
+        /// Output format
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+    /// Show a specific session
+    Info {
+        /// Session ID
+        session_id: String,
+        /// Output format
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+    /// Close a running session
+    Close {
+        /// Session ID
+        session_id: String,
+        /// Force kill the backing process
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -1295,6 +1327,69 @@ mod tests {
                 assert!(!repeatable);
             }
             _ => panic!("expected task edit command"),
+        }
+    }
+
+    #[test]
+    fn parse_task_session_list_command() {
+        let cli = Cli::parse_from(["orchestrator", "task", "session", "list", "task-123"]);
+
+        match cli.command {
+            Commands::Task(TaskCommands::Session(TaskSessionCommands::List {
+                task_id,
+                output,
+            })) => {
+                assert_eq!(task_id, "task-123");
+                assert_eq!(output, OutputFormat::Table);
+            }
+            _ => panic!("expected task session list command"),
+        }
+    }
+
+    #[test]
+    fn parse_task_session_info_command() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "task",
+            "session",
+            "info",
+            "sess-123",
+            "-o",
+            "json",
+        ]);
+
+        match cli.command {
+            Commands::Task(TaskCommands::Session(TaskSessionCommands::Info {
+                session_id,
+                output,
+            })) => {
+                assert_eq!(session_id, "sess-123");
+                assert_eq!(output, OutputFormat::Json);
+            }
+            _ => panic!("expected task session info command"),
+        }
+    }
+
+    #[test]
+    fn parse_task_session_close_force_command() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "task",
+            "session",
+            "close",
+            "sess-123",
+            "--force",
+        ]);
+
+        match cli.command {
+            Commands::Task(TaskCommands::Session(TaskSessionCommands::Close {
+                session_id,
+                force,
+            })) => {
+                assert_eq!(session_id, "sess-123");
+                assert!(force);
+            }
+            _ => panic!("expected task session close command"),
         }
     }
 
