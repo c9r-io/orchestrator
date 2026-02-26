@@ -20,9 +20,10 @@ use crate::db::reset_db;
 use crate::dto::{CreateTaskPayload, TaskDetail, TaskSummary};
 use crate::resource::{dispatch_resource, kind_as_str, ApplyResult, RegisteredResource, Resource};
 use crate::scheduler::{
-    delete_task_impl, find_latest_resumable_task_id, get_task_details_impl, list_tasks_impl,
-    load_task_summary, prepare_task_for_start, resolve_task_id, run_task_loop, stop_task_runtime,
-    stop_task_runtime_for_delete, stream_task_logs_impl, RunningTask,
+    delete_task_impl, find_latest_resumable_task_id, follow_task_logs, get_task_details_impl,
+    list_tasks_impl, load_task_summary, prepare_task_for_start, resolve_task_id, run_task_loop,
+    stop_task_runtime, stop_task_runtime_for_delete, stream_task_logs_impl, watch_task,
+    RunningTask,
 };
 use crate::session_store;
 use crate::scheduler_service::{
@@ -671,7 +672,7 @@ impl CliHandler {
             }
             TaskCommands::Logs {
                 task_id,
-                follow: _,
+                follow,
                 tail,
                 timestamps,
             } => {
@@ -680,6 +681,14 @@ impl CliHandler {
                 for chunk in logs {
                     println!("{}", chunk.content);
                 }
+                if *follow {
+                    cli_runtime().block_on(follow_task_logs(&self.state, &resolved_id))?;
+                }
+                Ok(0)
+            }
+            TaskCommands::Watch { task_id, interval } => {
+                let resolved_id = resolve_task_id(&self.state, task_id)?;
+                cli_runtime().block_on(watch_task(&self.state, &resolved_id, *interval))?;
                 Ok(0)
             }
             TaskCommands::Delete { task_id, force } => {

@@ -108,7 +108,7 @@ mod tests {
 
         let result = select_agent_by_preference(&agents);
         assert!(result.is_ok());
-        let (agent_id, template) = result.unwrap();
+        let (agent_id, _template) = result.unwrap();
         assert!(agent_id == "agent1" || agent_id == "agent2");
     }
 }

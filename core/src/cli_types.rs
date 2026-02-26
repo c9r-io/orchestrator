@@ -294,6 +294,9 @@ pub struct SafetySpec {
     pub auto_rollback: bool,
     #[serde(default)]
     pub checkpoint_strategy: String,
+    /// Per-step timeout in seconds (default: 1800 = 30 min)
+    #[serde(default)]
+    pub step_timeout_secs: Option<u64>,
 }
 
 fn default_max_consecutive_failures() -> u32 {

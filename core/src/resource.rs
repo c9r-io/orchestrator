@@ -1062,6 +1062,7 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
                 "git_stash" => crate::config::CheckpointStrategy::GitStash,
                 _ => crate::config::CheckpointStrategy::None,
             },
+            step_timeout_secs: spec.safety.step_timeout_secs,
         },
     })
 }

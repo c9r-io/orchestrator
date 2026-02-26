@@ -187,7 +187,7 @@ spec:
       required_capability: plan
       enabled: true
       repeatable: false
-      tty: true
+      tty: false
 
     # Phase 2: QA Doc Generation — produce executable test docs from plan (architect/opus)
     - id: qa_doc_gen
@@ -195,7 +195,7 @@ spec:
       required_capability: qa_doc_gen
       enabled: true
       repeatable: false
-      tty: true
+      tty: false
 
     # Phase 3: Implementation — write code + unit tests (coder/sonnet)
     - id: implement
@@ -203,7 +203,7 @@ spec:
       required_capability: implement
       enabled: true
       repeatable: true
-      tty: true
+      tty: false
 
     # Phase 4: QA Testing — rebuild CLI + execute QA scenarios + create tickets (tester/sonnet)
     - id: qa_testing
@@ -211,7 +211,7 @@ spec:
       required_capability: qa_testing
       enabled: true
       repeatable: true
-      tty: true
+      tty: false
 
     # Phase 5: Ticket Fix — fix QA failures (coder/sonnet, prehook: only when tickets exist)
     - id: ticket_fix
@@ -219,7 +219,7 @@ spec:
       required_capability: ticket_fix
       enabled: true
       repeatable: true
-      tty: true
+      tty: false
       prehook:
         engine: cel
         when: "active_ticket_count > 0"
@@ -231,7 +231,7 @@ spec:
       required_capability: align_tests
       enabled: true
       repeatable: true
-      tty: true
+      tty: false
 
     # Phase 7: Doc Governance — audit and remediate doc quality (reviewer/haiku)
     - id: doc_governance
@@ -239,7 +239,7 @@ spec:
       required_capability: doc_governance
       enabled: true
       repeatable: false
-      tty: true
+      tty: false
 
     # Phase 8: Loop guard (reviewer/haiku)
     - id: loop_guard

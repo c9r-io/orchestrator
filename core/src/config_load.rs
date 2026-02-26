@@ -88,7 +88,12 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                     | WorkflowStepType::Lint
                     | WorkflowStepType::Implement
                     | WorkflowStepType::Review
-                    | WorkflowStepType::GitOps => {
+                    | WorkflowStepType::GitOps
+                    | WorkflowStepType::QaDocGen
+                    | WorkflowStepType::QaTesting
+                    | WorkflowStepType::TicketFix
+                    | WorkflowStepType::DocGovernance
+                    | WorkflowStepType::AlignTests => {
                         step.required_capability = Some(st.as_str().to_string());
                     }
                     WorkflowStepType::LoopGuard => {

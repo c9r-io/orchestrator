@@ -42,8 +42,11 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio::time::Instant;
 use uuid::Uuid;
 
-#[allow(dead_code)]
-const IDLE_TIMEOUT_SECS: u64 = 600;
+/// Default step timeout: 30 minutes.  Can be overridden by
+/// `safety.step_timeout_secs` in the workflow config.
+const DEFAULT_STEP_TIMEOUT_SECS: u64 = 1800;
+/// Interval between heartbeat events while a step is running.
+const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 
 struct LimitedOutput {
     text: String,
@@ -173,6 +176,290 @@ pub fn stream_task_logs_impl(
     }
 
     Ok(chunks)
+}
+
+/// Follow task logs in real-time by tailing the most recent step's stdout/stderr.
+pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
+    use tokio::io::AsyncSeekExt;
+    let mut stdout_pos: u64 = 0;
+    let mut stderr_pos: u64 = 0;
+    let mut current_phase = String::new();
+
+    loop {
+        // Find the latest running step from events
+        let latest = crate::events::query_latest_step_log_paths(
+            &state.db_path,
+            task_id,
+        );
+        let (phase, stdout_path, stderr_path) = match latest {
+            Ok(Some(info)) => info,
+            Ok(None) => {
+                // Check if task is still running
+                let repo = SqliteTaskRepository::new(state.db_path.clone());
+                if let Ok(Some(status)) = repo.load_task_status(task_id) {
+                    if status == "completed" || status == "failed" {
+                        eprintln!("\n--- task {} ---", status);
+                        return Ok(());
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                continue;
+            }
+            Err(_) => {
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                continue;
+            }
+        };
+
+        // Reset positions when step changes
+        if phase != current_phase {
+            if !current_phase.is_empty() {
+                eprintln!("\n--- step changed: {} → {} ---", current_phase, phase);
+            }
+            current_phase = phase;
+            stdout_pos = 0;
+            stderr_pos = 0;
+        }
+
+        // Tail stdout
+        if let Ok(mut f) = tokio::fs::File::open(&stdout_path).await {
+            if let Ok(meta) = f.metadata().await {
+                if meta.len() > stdout_pos {
+                    let _ = f.seek(tokio::io::SeekFrom::Start(stdout_pos)).await;
+                    let mut buf = vec![0u8; (meta.len() - stdout_pos) as usize];
+                    if let Ok(n) = tokio::io::AsyncReadExt::read(&mut f, &mut buf).await {
+                        if n > 0 {
+                            print!("{}", String::from_utf8_lossy(&buf[..n]));
+                            stdout_pos += n as u64;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Tail stderr (with prefix)
+        if let Ok(mut f) = tokio::fs::File::open(&stderr_path).await {
+            if let Ok(meta) = f.metadata().await {
+                if meta.len() > stderr_pos {
+                    let _ = f.seek(tokio::io::SeekFrom::Start(stderr_pos)).await;
+                    let mut buf = vec![0u8; (meta.len() - stderr_pos) as usize];
+                    if let Ok(n) = tokio::io::AsyncReadExt::read(&mut f, &mut buf).await {
+                        if n > 0 {
+                            eprint!("{}", String::from_utf8_lossy(&buf[..n]));
+                            stderr_pos += n as u64;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check if task ended
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        if let Ok(Some(status)) = repo.load_task_status(task_id) {
+            if status == "completed" || status == "failed" {
+                // Final flush
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                eprintln!("\n--- task {} ---", status);
+                return Ok(());
+            }
+        }
+
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+}
+
+/// Watch task execution with a real-time status panel.
+pub async fn watch_task(state: &InnerState, task_id: &str, interval_secs: u64) -> Result<()> {
+    let interval = std::time::Duration::from_secs(interval_secs);
+
+    loop {
+        // Clear screen
+        print!("\x1b[2J\x1b[H");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let task = repo.load_task_summary(task_id)?;
+
+        // Header
+        println!(
+            "Task: {}  Status: {}  Workflow: {}",
+            &task_id[..8.min(task_id.len())],
+            colorize_status(&task.status),
+            &task.workflow_id,
+        );
+
+        // Query events for this task
+        let events = crate::events::query_step_events(&state.db_path, task_id)?;
+        let active_tickets: i64 = 0; // TODO: implement ticket counting when workspace context is available
+
+        // Count cycles
+        let cycle_count = events
+            .iter()
+            .filter(|e| e.event_type == "cycle_started")
+            .count();
+
+        println!(
+            "Cycle: {}  Tickets: {}",
+            cycle_count,
+            active_tickets
+        );
+        println!("{}", "━".repeat(72));
+        println!(
+            " {:<15} {:<12} {:<10} {:<9} {}",
+            "Step", "Agent", "Status", "Duration", "Details"
+        );
+        println!(
+            " {:<15} {:<12} {:<10} {:<9} {}",
+            "───────────────",
+            "────────────",
+            "──────────",
+            "─────────",
+            "──────────────────"
+        );
+
+        // Build step status from events
+        let mut step_states: Vec<StepWatchInfo> = Vec::new();
+        for ev in &events {
+            match ev.event_type.as_str() {
+                "step_started" => {
+                    let step = ev.step.clone().unwrap_or_default();
+                    let agent = ev.agent_id.clone().unwrap_or_default();
+                    // Update or create
+                    if let Some(existing) = step_states.iter_mut().find(|s| s.step == step) {
+                        existing.status = "running".to_string();
+                        existing.agent_id = agent;
+                        existing.started_at = Some(ev.created_at.clone());
+                    } else {
+                        step_states.push(StepWatchInfo {
+                            step,
+                            agent_id: agent,
+                            status: "running".to_string(),
+                            duration_ms: None,
+                            details: String::new(),
+                            started_at: Some(ev.created_at.clone()),
+                        });
+                    }
+                }
+                "step_finished" => {
+                    let step = ev.step.clone().unwrap_or_default();
+                    if let Some(existing) = step_states.iter_mut().find(|s| s.step == step) {
+                        let success = ev.success.unwrap_or(false);
+                        existing.status = if success { "done".to_string() } else { "failed".to_string() };
+                        existing.duration_ms = ev.duration_ms;
+                        existing.agent_id = ev.agent_id.clone().unwrap_or(existing.agent_id.clone());
+                        if let Some(conf) = ev.confidence {
+                            existing.details = format!("conf={:.2}", conf);
+                        }
+                    }
+                }
+                "step_skipped" => {
+                    let step = ev.step.clone().unwrap_or_default();
+                    step_states.push(StepWatchInfo {
+                        step,
+                        agent_id: String::new(),
+                        status: "skipped".to_string(),
+                        duration_ms: None,
+                        details: ev.reason.clone().unwrap_or_default(),
+                        started_at: None,
+                    });
+                }
+                "step_heartbeat" => {
+                    let step = ev.step.clone().unwrap_or_default();
+                    if let Some(existing) = step_states.iter_mut().find(|s| s.step == step && s.status == "running") {
+                        let stdout_b = ev.stdout_bytes.unwrap_or(0);
+                        let pid = ev.pid.unwrap_or(0);
+                        let alive = ev.pid_alive.unwrap_or(false);
+                        existing.details = format!(
+                            "pid={} {} stdout={}",
+                            pid,
+                            if alive { "alive" } else { "DEAD" },
+                            format_bytes(stdout_b)
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        for s in &step_states {
+            let duration_str = match s.duration_ms {
+                Some(ms) => format_duration(ms),
+                None if s.status == "running" => {
+                    // Calculate from started_at
+                    if let Some(ref ts) = s.started_at {
+                        format!("{}...", ts.chars().skip(11).take(8).collect::<String>())
+                    } else {
+                        "-".to_string()
+                    }
+                }
+                _ => "-".to_string(),
+            };
+            let status_icon = match s.status.as_str() {
+                "done" => "\x1b[32m✓ done\x1b[0m",
+                "failed" => "\x1b[31m✗ fail\x1b[0m",
+                "running" => "\x1b[33m● run\x1b[0m",
+                "skipped" => "\x1b[90m○ skip\x1b[0m",
+                _ => &s.status,
+            };
+            println!(
+                " {:<15} {:<12} {:<18} {:<9} {}",
+                s.step,
+                if s.agent_id.is_empty() { "-" } else { &s.agent_id },
+                status_icon,
+                duration_str,
+                s.details
+            );
+        }
+
+        println!();
+
+        if task.status == "completed" || task.status == "failed" {
+            println!("Task finished: {}", colorize_status(&task.status));
+            return Ok(());
+        }
+
+        tokio::time::sleep(interval).await;
+    }
+}
+
+struct StepWatchInfo {
+    step: String,
+    agent_id: String,
+    status: String,
+    duration_ms: Option<u64>,
+    details: String,
+    started_at: Option<String>,
+}
+
+fn colorize_status(status: &str) -> String {
+    match status {
+        "completed" => format!("\x1b[32m{}\x1b[0m", status),
+        "failed" => format!("\x1b[31m{}\x1b[0m", status),
+        "running" => format!("\x1b[33m{}\x1b[0m", status),
+        "paused" => format!("\x1b[90m{}\x1b[0m", status),
+        _ => status.to_string(),
+    }
+}
+
+fn format_duration(ms: u64) -> String {
+    if ms < 1000 {
+        format!("{}ms", ms)
+    } else if ms < 60_000 {
+        format!("{:.1}s", ms as f64 / 1000.0)
+    } else {
+        let mins = ms / 60_000;
+        let secs = (ms % 60_000) / 1000;
+        format!("{}m {}s", mins, secs)
+    }
+}
+
+fn format_bytes(bytes: u64) -> String {
+    if bytes < 1024 {
+        format!("{}B", bytes)
+    } else if bytes < 1024 * 1024 {
+        format!("{:.1}KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{:.1}MB", bytes as f64 / (1024.0 * 1024.0))
+    }
 }
 
 fn tail_lines(path: &Path, limit: usize) -> Result<String> {
@@ -1213,7 +1500,30 @@ pub async fn run_phase(
             output: None,
             validation_status: "passed".to_string(),
             validation_error: None,
+            agent_id: agent_id.to_string(),
+            run_id: run_id.clone(),
         });
+    }
+
+    let child_pid = child.id();
+
+    // Emit step_spawned event with PID and command preview
+    {
+        let preview: String = command.chars().take(120).collect();
+        insert_event(
+            state,
+            task_id,
+            Some(item_id),
+            "step_spawned",
+            json!({
+                "step": phase,
+                "step_id": step_id,
+                "agent_id": agent_id,
+                "run_id": run_id,
+                "pid": child_pid,
+                "command_preview": preview,
+            }),
+        )?;
     }
 
     {
@@ -1221,32 +1531,118 @@ pub async fn run_phase(
         *child_lock = Some(child);
     }
 
+    // Resolve step timeout from workflow safety config (fallback to default)
+    let step_timeout_secs = {
+        let active = read_active_config(state)?;
+        active
+            .config
+            .workflows
+            .values()
+            .next()
+            .and_then(|w| w.safety.step_timeout_secs)
+            .unwrap_or(DEFAULT_STEP_TIMEOUT_SECS)
+    };
+
     let start = Instant::now();
-    let status = {
-        let mut child_lock = runtime.child.lock().await;
-        if let Some(ref mut child) = *child_lock {
-            child.wait().await
-        } else {
-            return Err(anyhow::anyhow!("child process not found in runtime"));
+    let deadline = start + std::time::Duration::from_secs(step_timeout_secs);
+    let heartbeat_interval = std::time::Duration::from_secs(HEARTBEAT_INTERVAL_SECS);
+    let mut timed_out = false;
+
+    let exit_code: i32 = loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            // Timeout — kill the child process
+            let mut child_lock = runtime.child.lock().await;
+            if let Some(ref mut child) = *child_lock {
+                let _ = child.kill().await;
+            }
+            timed_out = true;
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "step_timeout",
+                json!({
+                    "step": phase,
+                    "step_id": step_id,
+                    "timeout_secs": step_timeout_secs,
+                    "pid": child_pid,
+                }),
+            )?;
+            break -4;
+        }
+
+        let wait_duration = heartbeat_interval.min(remaining);
+        let wait_result = {
+            let mut child_lock = runtime.child.lock().await;
+            if let Some(ref mut child) = *child_lock {
+                tokio::time::timeout(wait_duration, child.wait()).await
+            } else {
+                break -3;
+            }
+        };
+
+        match wait_result {
+            Ok(Ok(status)) => {
+                // Child exited normally
+                break status.code().unwrap_or(-1);
+            }
+            Ok(Err(e)) => {
+                // IO error waiting for child
+                break if e.kind() == std::io::ErrorKind::NotFound {
+                    -2
+                } else {
+                    -3
+                };
+            }
+            Err(_) => {
+                // Timeout on this interval → emit heartbeat
+                let elapsed = start.elapsed();
+                let stdout_bytes = tokio::fs::metadata(&stdout_path)
+                    .await
+                    .map(|m| m.len())
+                    .unwrap_or(0);
+                let stderr_bytes = tokio::fs::metadata(&stderr_path)
+                    .await
+                    .map(|m| m.len())
+                    .unwrap_or(0);
+                let pid_alive = child_pid
+                    .map(|pid| {
+                        // Check if process exists by sending signal 0
+                        std::process::Command::new("kill")
+                            .args(["-0", &pid.to_string()])
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::null())
+                            .status()
+                            .map(|s| s.success())
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false);
+
+                insert_event(
+                    state,
+                    task_id,
+                    Some(item_id),
+                    "step_heartbeat",
+                    json!({
+                        "step": phase,
+                        "step_id": step_id,
+                        "elapsed_secs": elapsed.as_secs(),
+                        "stdout_bytes": stdout_bytes,
+                        "stderr_bytes": stderr_bytes,
+                        "pid": child_pid,
+                        "pid_alive": pid_alive,
+                    }),
+                )?;
+            }
         }
     };
-    let duration = start.elapsed();
 
+    let duration = start.elapsed();
     {
         let mut child_lock = runtime.child.lock().await;
         *child_lock = None;
     }
-
-    let exit_code = match status {
-        Ok(s) => s.code().unwrap_or(-1),
-        Err(e) => {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                -2
-            } else {
-                -3
-            }
-        }
-    };
 
     const MAX_PHASE_OUTPUT_BYTES: u64 = 256 * 1024;
     let stdout_output = read_output_with_limit(&stdout_path, MAX_PHASE_OUTPUT_BYTES)
@@ -1400,13 +1796,15 @@ pub async fn run_phase(
         exit_code: exit_code as i64,
         stdout_path: stdout_path.to_string_lossy().to_string(),
         stderr_path: stderr_path.to_string_lossy().to_string(),
-        timed_out: false,
+        timed_out,
         duration_ms: Some(duration_ms),
         output: Some(redacted_output),
         validation_status: validation.status.to_string(),
         validation_error: validation
             .error
             .map(|value| redact_text(&value, &redaction_patterns)),
+        agent_id: agent_id.to_string(),
+        run_id,
     })
 }
 
@@ -2090,20 +2488,31 @@ pub async fn process_item(
             _ => {}
         }
 
-        insert_event(
-            state,
-            task_id,
-            Some(item_id),
-            "step_finished",
-            json!({
-                "step": step_type,
-                "step_id": step.id,
-                "exit_code": result.exit_code,
-                "success": result.is_success(),
-                "build_errors": pipeline_vars.build_errors.len(),
-                "test_failures": pipeline_vars.test_failures.len(),
-            }),
-        )?;
+        {
+            let confidence = result.output.as_ref().map(|o| o.confidence).unwrap_or(0.0);
+            let quality = result.output.as_ref().map(|o| o.quality_score).unwrap_or(0.0);
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "step_finished",
+                json!({
+                    "step": step_type,
+                    "step_id": step.id,
+                    "agent_id": result.agent_id,
+                    "run_id": result.run_id,
+                    "exit_code": result.exit_code,
+                    "success": result.is_success(),
+                    "timed_out": result.timed_out,
+                    "duration_ms": result.duration_ms,
+                    "build_errors": pipeline_vars.build_errors.len(),
+                    "test_failures": pipeline_vars.test_failures.len(),
+                    "confidence": confidence,
+                    "quality_score": quality,
+                    "validation_status": result.validation_status,
+                }),
+            )?;
+        }
     }
 
     if !task_ctx.dynamic_steps.is_empty() {

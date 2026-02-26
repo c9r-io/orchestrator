@@ -37,9 +37,16 @@ mod tests {
     }
 
     #[test]
-    fn test_enforce_runner_policy_rejects_newline_in_command() {
+    fn test_enforce_runner_policy_allows_newline_in_command() {
         let runner = make_runner_config();
         let result = enforce_runner_policy(&runner, "echo hello\nwhoami");
+        assert!(result.is_ok(), "newlines are valid in bash -c commands");
+    }
+
+    #[test]
+    fn test_enforce_runner_policy_rejects_cr_in_command() {
+        let runner = make_runner_config();
+        let result = enforce_runner_policy(&runner, "echo hello\rwhoami");
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -125,6 +132,10 @@ impl RunnerExecutor for ShellRunnerExecutor {
             }
         }
 
+        // Remove CLAUDECODE env var so spawned `claude -p` processes don't
+        // refuse to start due to nested session detection.
+        cmd.env_remove("CLAUDECODE");
+
         cmd.spawn().with_context(|| {
             format!(
                 "failed to spawn runner shell={} shell_arg={}",
@@ -152,9 +163,9 @@ pub fn enforce_runner_policy(runner: &RunnerConfig, command: &str) -> Result<()>
     if command.trim().is_empty() {
         return Err(anyhow!("runner command cannot be empty"));
     }
-    if command.contains('\0') || command.contains('\n') || command.contains('\r') {
+    if command.contains('\0') || command.contains('\r') {
         return Err(anyhow!(
-            "runner command contains blocked control characters (NUL/newline)"
+            "runner command contains blocked control characters (NUL/CR)"
         ));
     }
     if command.len() > 16_384 {

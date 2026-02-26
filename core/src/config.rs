@@ -216,6 +216,9 @@ pub struct SafetyConfig {
     /// Strategy for creating checkpoints
     #[serde(default)]
     pub checkpoint_strategy: CheckpointStrategy,
+    /// Per-step timeout in seconds (default: 1800 = 30 min)
+    #[serde(default)]
+    pub step_timeout_secs: Option<u64>,
 }
 
 fn default_max_consecutive_failures() -> u32 {
@@ -228,6 +231,7 @@ impl Default for SafetyConfig {
             max_consecutive_failures: 3,
             auto_rollback: false,
             checkpoint_strategy: CheckpointStrategy::default(),
+            step_timeout_secs: None,
         }
     }
 }
@@ -413,6 +417,7 @@ impl WorkflowStepType {
     }
 
     /// Returns true if this step type produces structured output for pipeline variables
+    #[allow(dead_code)]
     pub fn has_structured_output(&self) -> bool {
         matches!(
             self,
@@ -734,6 +739,7 @@ pub struct TaskRuntimeContext {
     /// Safety configuration
     pub safety: SafetyConfig,
     /// Whether the workspace is self-referential
+    #[allow(dead_code)]
     pub self_referential: bool,
     /// Consecutive failure counter for auto-rollback
     pub consecutive_failures: u32,

@@ -242,6 +242,16 @@ pub enum TaskCommands {
         timestamps: bool,
     },
 
+    /// Watch task execution in real-time (auto-refreshing status panel)
+    Watch {
+        /// Task ID
+        task_id: String,
+
+        /// Refresh interval in seconds
+        #[arg(short, long, default_value = "2")]
+        interval: u64,
+    },
+
     /// Delete a task
     #[command(alias = "rm")]
     Delete {

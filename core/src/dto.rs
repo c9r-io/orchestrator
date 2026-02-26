@@ -189,18 +189,16 @@ pub const UNASSIGNED_QA_FILE_PATH: &str = "__UNASSIGNED__";
 pub struct RunResult {
     pub success: bool,
     pub exit_code: i64,
-    #[allow(dead_code)]
     pub stdout_path: String,
-    #[allow(dead_code)]
     pub stderr_path: String,
     pub timed_out: bool,
-    #[allow(dead_code)]
     pub duration_ms: Option<u64>,
     pub output: Option<crate::collab::AgentOutput>,
-    #[allow(dead_code)]
     pub validation_status: String,
     #[allow(dead_code)]
     pub validation_error: Option<String>,
+    pub agent_id: String,
+    pub run_id: String,
 }
 
 impl RunResult {
