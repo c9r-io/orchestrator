@@ -167,6 +167,10 @@ pub struct WorkspaceSpec {
 
     /// Directory for ticket files
     pub ticket_dir: String,
+
+    /// When true, the workspace points to the orchestrator's own source tree
+    #[serde(default)]
+    pub self_referential: bool,
 }
 
 /// Agent resource specification.
@@ -232,6 +236,28 @@ pub struct AgentTemplatesSpec {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ticket_scan: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub test: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lint: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub implement: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_ops: Option<String>,
+
+    /// Extra templates for custom/SDLC step types (qa_doc_gen, qa_testing, ticket_fix, etc.)
+    #[serde(flatten, default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub extra: std::collections::HashMap<String, String>,
 }
 
 /// Workflow resource specification.
@@ -253,6 +279,25 @@ pub struct WorkflowSpec {
     /// Dynamic runtime steps pool.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dynamic_steps: Vec<DynamicStepSpec>,
+
+    /// Safety configuration for self-bootstrap scenarios
+    #[serde(default)]
+    pub safety: SafetySpec,
+}
+
+/// Safety configuration specification for YAML
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct SafetySpec {
+    #[serde(default = "default_max_consecutive_failures")]
+    pub max_consecutive_failures: u32,
+    #[serde(default)]
+    pub auto_rollback: bool,
+    #[serde(default)]
+    pub checkpoint_strategy: String,
+}
+
+fn default_max_consecutive_failures() -> u32 {
+    3
 }
 
 /// Workflow step specification.
@@ -286,6 +331,10 @@ pub struct WorkflowStepSpec {
 
     #[serde(default)]
     pub tty: bool,
+
+    /// Build command for builtin build/test/lint steps
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
 }
 
 fn default_true() -> bool {

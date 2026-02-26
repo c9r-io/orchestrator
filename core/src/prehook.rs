@@ -225,6 +225,42 @@ fn build_step_prehook_cel_context(context: &StepPrehookContext) -> Result<CelCon
                 err
             )
         })?;
+    cel_context
+        .add_variable("build_errors", context.build_error_count)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("test_failures", context.test_failure_count)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("build_exit_code", context.build_exit_code)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("test_exit_code", context.test_exit_code)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
     Ok(cel_context)
 }
 
@@ -416,6 +452,10 @@ pub fn simulate_prehook_impl(
         qa_quality_score: None,
         fix_has_changes: None,
         upstream_artifacts: vec![],
+        build_error_count: 0,
+        test_failure_count: 0,
+        build_exit_code: None,
+        test_exit_code: None,
     };
     let result = evaluate_step_prehook_expression(&expression, &context)?;
     Ok(crate::dto::SimulatePrehookResult { result, expression })
@@ -652,6 +692,10 @@ mod tests {
             qa_quality_score: None,
             fix_has_changes: None,
             upstream_artifacts: vec![],
+            build_error_count: 0,
+            test_failure_count: 0,
+            build_exit_code: None,
+            test_exit_code: None,
         };
         let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
         assert!(result.is_ok());
@@ -679,6 +723,10 @@ mod tests {
             qa_quality_score: None,
             fix_has_changes: None,
             upstream_artifacts: vec![],
+            build_error_count: 0,
+            test_failure_count: 0,
+            build_exit_code: None,
+            test_exit_code: None,
         };
         let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
         assert!(result.is_ok());
@@ -706,6 +754,10 @@ mod tests {
             qa_quality_score: None,
             fix_has_changes: None,
             upstream_artifacts: vec![],
+            build_error_count: 0,
+            test_failure_count: 0,
+            build_exit_code: None,
+            test_exit_code: None,
         };
         let result = evaluate_step_prehook_expression("invalid @#$ expression", &context);
         assert!(result.is_err());
@@ -732,6 +784,10 @@ mod tests {
             qa_quality_score: None,
             fix_has_changes: None,
             upstream_artifacts: vec![],
+            build_error_count: 0,
+            test_failure_count: 0,
+            build_exit_code: None,
+            test_exit_code: None,
         };
         let result = evaluate_step_prehook_expression("qa_failed == true", &context);
         assert!(result.is_ok());
@@ -759,6 +815,10 @@ mod tests {
             qa_quality_score: None,
             fix_has_changes: None,
             upstream_artifacts: vec![],
+            build_error_count: 0,
+            test_failure_count: 0,
+            build_exit_code: None,
+            test_exit_code: None,
         };
         let result = evaluate_step_prehook_expression(
             "active_ticket_count > 0 && cycle >= 2 && qa_exit_code == 0",
@@ -766,5 +826,50 @@ mod tests {
         );
         assert!(result.is_ok());
         assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_build_errors_prehook_expression() {
+        // Test the expression used by self-bootstrap fix step prehook
+        let context_with_errors = StepPrehookContext {
+            task_id: "task-1".to_string(),
+            task_item_id: "item-1".to_string(),
+            cycle: 2,
+            step: "fix".to_string(),
+            qa_file_path: ".".to_string(),
+            item_status: "build_failed".to_string(),
+            task_status: "running".to_string(),
+            qa_exit_code: None,
+            fix_exit_code: None,
+            retest_exit_code: None,
+            active_ticket_count: 0,
+            new_ticket_count: 0,
+            qa_failed: false,
+            fix_required: false,
+            qa_confidence: None,
+            qa_quality_score: None,
+            fix_has_changes: None,
+            upstream_artifacts: vec![],
+            build_error_count: 3,
+            test_failure_count: 0,
+            build_exit_code: Some(1),
+            test_exit_code: Some(0),
+        };
+        let result =
+            evaluate_step_prehook_expression("build_errors > 0 || test_failures > 0", &context_with_errors);
+        assert!(result.is_ok());
+        assert!(result.unwrap(), "should trigger fix when build errors exist");
+
+        let context_no_errors = StepPrehookContext {
+            build_error_count: 0,
+            test_failure_count: 0,
+            build_exit_code: Some(0),
+            test_exit_code: Some(0),
+            ..context_with_errors
+        };
+        let result =
+            evaluate_step_prehook_expression("build_errors > 0 || test_failures > 0", &context_no_errors);
+        assert!(result.is_ok());
+        assert!(!result.unwrap(), "should not trigger fix when no errors");
     }
 }

@@ -51,6 +51,7 @@ pub struct TaskRuntimeRow {
     pub execution_plan_json: String,
     pub current_cycle: i64,
     pub init_done: i64,
+    pub goal: String,
 }
 
 pub struct TaskLogRunRow {
@@ -283,7 +284,7 @@ impl TaskRepository for SqliteTaskRepository {
     fn load_task_runtime_row(&self, task_id: &str) -> Result<TaskRuntimeRow> {
         let conn = open_conn(&self.db_path)?;
         let row = conn.query_row(
-            "SELECT workspace_id, workflow_id, workspace_root, ticket_dir, execution_plan_json, current_cycle, init_done FROM tasks WHERE id = ?1",
+            "SELECT workspace_id, workflow_id, workspace_root, ticket_dir, execution_plan_json, current_cycle, init_done, COALESCE(goal,'') FROM tasks WHERE id = ?1",
             params![task_id],
             |row| {
                 Ok(TaskRuntimeRow {
@@ -294,6 +295,7 @@ impl TaskRepository for SqliteTaskRepository {
                     execution_plan_json: row.get(4)?,
                     current_cycle: row.get(5)?,
                     init_done: row.get(6)?,
+                    goal: row.get(7)?,
                 })
             },
         )?;

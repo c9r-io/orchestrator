@@ -34,6 +34,12 @@ pub struct AgentOutput {
     pub confidence: f32,
     pub quality_score: f32,
     pub created_at: DateTime<Utc>,
+    /// Structured build errors (populated for build/lint phases)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub build_errors: Vec<crate::config::BuildError>,
+    /// Structured test failures (populated for test phases)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub test_failures: Vec<crate::config::TestFailure>,
 }
 
 impl AgentOutput {
@@ -57,6 +63,8 @@ impl AgentOutput {
             confidence: 1.0,
             quality_score: 1.0,
             created_at: Utc::now(),
+            build_errors: Vec::new(),
+            test_failures: Vec::new(),
         }
     }
 
@@ -596,6 +604,15 @@ impl AgentContext {
 
     /// Render template with context variables
     pub fn render_template(&self, template: &str) -> String {
+        self.render_template_with_pipeline(template, None)
+    }
+
+    /// Render template with context variables and optional pipeline variables
+    pub fn render_template_with_pipeline(
+        &self,
+        template: &str,
+        pipeline: Option<&crate::config::PipelineVariables>,
+    ) -> String {
         let mut result = template.to_string();
 
         // Basic placeholders
@@ -604,6 +621,37 @@ impl AgentContext {
         result = result.replace("{cycle}", &self.cycle.to_string());
         result = result.replace("{phase}", &self.phase);
         result = result.replace("{workspace_root}", &self.workspace_root.to_string_lossy());
+        // Self-bootstrap variables: {source_tree} is an alias for {workspace_root}
+        result = result.replace("{source_tree}", &self.workspace_root.to_string_lossy());
+
+        // Pipeline variables from previous steps
+        if let Some(pipeline) = pipeline {
+            result = result.replace("{build_output}", &pipeline.prev_stdout);
+            result = result.replace("{test_output}", &pipeline.prev_stdout);
+            result = result.replace("{diff}", &pipeline.diff);
+
+            // Build errors as JSON for AI agents to parse
+            if !pipeline.build_errors.is_empty() {
+                let errors_json = serde_json::to_string(&pipeline.build_errors).unwrap_or_default();
+                result = result.replace("{build_errors}", &errors_json);
+            } else {
+                result = result.replace("{build_errors}", "[]");
+            }
+
+            // Test failures as JSON
+            if !pipeline.test_failures.is_empty() {
+                let failures_json =
+                    serde_json::to_string(&pipeline.test_failures).unwrap_or_default();
+                result = result.replace("{test_failures}", &failures_json);
+            } else {
+                result = result.replace("{test_failures}", "[]");
+            }
+
+            // Custom pipeline vars
+            for (key, value) in &pipeline.vars {
+                result = result.replace(&format!("{{{}}}", key), value);
+            }
+        }
 
         // Upstream outputs
         for (i, output) in self.upstream_outputs.iter().enumerate() {

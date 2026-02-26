@@ -1,0 +1,216 @@
+# Orchestrator - Self-Bootstrap & AI Native SDLC Workflow
+
+**Module**: orchestrator
+**Scope**: Validate self-bootstrap workflow with AI native SDLC closed-loop: plan → qa_doc_gen → implement → qa_testing → ticket_fix → align_tests → doc_governance, pipeline variable propagation, prehook-gated steps, and checkpoint/rollback safety
+**Scenarios**: 10
+**Priority**: High
+
+---
+
+## Background
+
+Self-bootstrap workflows allow the orchestrator to orchestrate AI agents that
+develop its own codebase. The simplified AI native SDLC closed-loop:
+
+```
+plan → qa_doc_gen → implement → qa_testing → ticket_fix → align_tests → doc_governance → loop_guard
+```
+
+Key design decisions:
+- **No separate build/test/lint steps** — these are covered by skill internals:
+  - `implement` agent runs `cargo check` before finishing
+  - `qa-testing` skill rebuilds CLI (`cargo build --release`) as prerequisite
+  - `align-tests` skill runs `cargo test` + `cargo clippy` + `cargo build`, iterates until stable
+- **ticket_fix is prehook-gated**: only runs when `active_ticket_count > 0`
+- **Pipeline variables** flow between steps (`{goal}`, `{plan_output}`, `{source_tree}`, `{diff}`)
+- **Safety config**: checkpoint via git tag, max consecutive failures
+
+Fixture: `fixtures/manifests/bundles/self-bootstrap-test.yaml`
+
+### Common Preconditions
+
+```bash
+rm -f fixtures/ticket/auto_*.md
+
+QA_PROJECT="qa-bootstrap-${USER}-$(date +%Y%m%d%H%M%S)"
+./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml
+```
+
+---
+
+## Scenario 1: Basic Bootstrap Workflow (plan → implement → build → test)
+
+### Preconditions
+- Common Preconditions applied
+
+### Steps
+1. Create task with `bootstrap_basic` workflow
+2. Start task and wait for completion
+
+### Expected
+- Task status: `completed`
+- Events include `step_started`/`step_finished` for: `plan`, `implement`, `build`, `test`
+
+---
+
+## Scenario 2: Build Failure Triggers Fix via Prehook
+
+### Preconditions
+- Common Preconditions applied
+
+### Steps
+1. Create task with `bootstrap_with_fix` workflow (build exits non-zero)
+
+### Expected
+- Build step `success: false`, `build_errors > 0`
+- Fix step prehook `build_errors > 0 || test_failures > 0` → true → fix runs
+
+---
+
+## Scenario 3: Successful Build Skips Fix Step
+
+### Preconditions
+- Common Preconditions applied
+
+### Steps
+1. Create task with `bootstrap_skip_fix` workflow (build + test succeed)
+
+### Expected
+- Fix step `step_skipped` with `reason: prehook_false`
+
+---
+
+## Scenario 4: Checkpoint Created at Cycle Start
+
+### Preconditions
+- Common Preconditions applied, workspace in git repo
+
+### Steps
+1. Create task with `bootstrap_checkpoint` workflow (`checkpoint_strategy: git_tag`)
+
+### Expected
+- `checkpoint_created` event with tag `checkpoint/{task_id}/1`
+- Git tag exists in repository
+
+---
+
+## Scenario 5: Self-Bootstrap Manifest Applies Successfully
+
+### Preconditions
+- Clean runtime state
+
+### Steps
+1. Apply `fixtures/self-bootstrap.yaml` (dry-run + real)
+2. Verify resources
+
+### Expected
+- Workspace `self` with `self_referential: true`
+- Agent `claude-code` with capabilities: plan, implement, qa_doc_gen, qa_testing, ticket_fix, align_tests, doc_governance, review, loop_guard
+- Workflow `self-bootstrap` with simplified SDLC steps: plan, qa_doc_gen, implement, qa_testing, ticket_fix, align_tests, doc_governance, loop_guard
+- Safety: `max_consecutive_failures: 3`, `checkpoint_strategy: git_tag`
+
+---
+
+## Scenario 6: Full Simplified SDLC Pipeline
+
+### Preconditions
+- Common Preconditions applied
+
+### Steps
+1. Create task with `sdlc_full_pipeline` workflow
+
+### Expected
+- Task status: `completed`
+- 6 steps execute in order: plan → qa_doc_gen → implement → qa_testing → align_tests → doc_governance
+- ticket_fix is skipped (no active tickets, prehook `active_ticket_count > 0` is false)
+
+### Expected Data State
+```sql
+SELECT json_extract(payload_json, '$.step') AS step
+FROM events WHERE task_id = '{task_id}' AND event_type = 'step_started'
+ORDER BY created_at;
+-- Expected: plan, qa_doc_gen, implement, qa_testing, align_tests, doc_governance
+
+SELECT COUNT(*) FROM events WHERE task_id = '{task_id}'
+  AND event_type = 'step_skipped'
+  AND json_extract(payload_json, '$.step') = 'ticket_fix';
+-- Expected: 1
+```
+
+---
+
+## Scenario 7: QA Testing → Ticket Fix Chain
+
+### Preconditions
+- Common Preconditions applied, no ticket files
+
+### Steps
+1. Create task with `sdlc_qa_ticket_chain` workflow
+   - qa_testing creates a ticket file
+   - ticket_fix removes the ticket file
+
+### Expected
+- Both `qa_testing` and `ticket_fix` execute (`step_started` events)
+
+---
+
+## Scenario 8: Clean QA Testing → Ticket Fix Skipped
+
+### Preconditions
+- Common Preconditions applied, no ticket files
+
+### Steps
+1. Create task with `sdlc_ticket_skip` workflow
+   - qa_testing succeeds cleanly
+   - ticket_fix has prehook: `active_ticket_count > 0`
+
+### Expected
+- `qa_testing` executes, `ticket_fix` is skipped (`step_skipped`, `reason: prehook_false`)
+
+---
+
+## Scenario 9: Pipeline Variable Propagation
+
+### Preconditions
+- Common Preconditions applied
+
+### Steps
+1. Create task with `sdlc_pipeline_vars` workflow
+   - align_tests command references `{source_tree}`
+
+### Expected
+- plan → implement → align_tests all execute
+- `{source_tree}` rendered to actual workspace path
+
+---
+
+## Scenario 10: Align Tests as Safety Net After Implement
+
+### Preconditions
+- Common Preconditions applied
+
+### Steps
+1. Create task with `sdlc_align_after_implement` workflow
+
+### Expected
+- Task status: `completed`
+- Steps execute: implement → qa_testing → align_tests → doc_governance
+- align_tests serves as the build+test+lint safety net (no separate builtin steps needed)
+
+---
+
+## Checklist
+
+| # | Scenario | Status | Date | Tester | Notes |
+|---|----------|--------|------|--------|-------|
+| 1 | Basic Bootstrap Workflow | | | | |
+| 2 | Build Failure Triggers Fix | | | | |
+| 3 | Successful Build Skips Fix | | | | |
+| 4 | Checkpoint Created at Cycle Start | | | | |
+| 5 | Self-Bootstrap Manifest Applies | | | | |
+| 6 | Full Simplified SDLC Pipeline | | | | |
+| 7 | QA Testing → Ticket Fix Chain | | | | |
+| 8 | Clean QA Testing → Ticket Fix Skipped | | | | |
+| 9 | Pipeline Variable Propagation | | | | |
+| 10 | Align Tests as Safety Net | | | | |

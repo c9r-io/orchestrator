@@ -1,9 +1,9 @@
 use crate::collab::MessageBus;
 use crate::config::{
     AgentConfig, AgentMetadata, AgentSelectionConfig, ConfigDefaults, LoopMode, OrchestratorConfig,
-    ResourceMetadataStore, ResumeConfig, RunnerConfig, WorkflowConfig, WorkflowFinalizeConfig,
-    WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig, WorkflowStepType,
-    WorkspaceConfig,
+    ResourceMetadataStore, ResumeConfig, RunnerConfig, SafetyConfig, WorkflowConfig,
+    WorkflowFinalizeConfig, WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
+    WorkflowStepType, WorkspaceConfig,
 };
 use crate::config_load::{
     build_active_config, load_raw_config_from_db, persist_raw_config, read_active_config,
@@ -51,6 +51,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                     root_path: "workspace/default".to_string(),
                     qa_targets: vec!["docs/qa".to_string()],
                     ticket_dir: "docs/ticket".to_string(),
+                    self_referential: false,
                 },
             );
             ws
@@ -94,6 +95,9 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                         cost_preference: None,
                         prehook: None,
                         tty: false,
+                        outputs: Vec::new(),
+                        pipe_to: None,
+                        command: None,
                     }],
                     loop_policy: WorkflowLoopConfig {
                         mode: LoopMode::Once,
@@ -109,6 +113,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                     fix: None,
                     retest: None,
                     dynamic_steps: vec![],
+                    safety: SafetyConfig::default(),
                 },
             );
             workflows
@@ -156,6 +161,7 @@ impl TestState {
                 root_path: path.into(),
                 qa_targets: vec!["docs/qa".to_string(), "docs/security".to_string()],
                 ticket_dir: "docs/ticket".to_string(),
+                self_referential: false,
             },
         );
         if !self

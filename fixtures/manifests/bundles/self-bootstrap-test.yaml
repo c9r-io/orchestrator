@@ -1,0 +1,437 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: bootstrap-ws
+spec:
+  root_path: "."
+  qa_targets:
+    - fixtures/bootstrap-qa
+  ticket_dir: fixtures/ticket
+  self_referential: true
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_planner
+spec:
+  capabilities:
+    - plan
+  templates:
+    plan: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"plan-ok\",\"description\":\"implementation plan generated\",\"severity\":\"info\"}]}]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_implementer
+spec:
+  capabilities:
+    - implement
+  templates:
+    implement: "echo '{\"confidence\":0.88,\"quality_score\":0.85,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"src/main.rs\"]}]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_builder
+spec:
+  capabilities:
+    - build
+    - test
+    - lint
+  templates:
+    build: "echo 'Compiling agent-orchestrator v0.1.0' && echo 'Finished dev [unoptimized] target(s)'"
+    test: "echo 'running 5 tests' && echo 'test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'"
+    lint: "echo 'Checking agent-orchestrator v0.1.0' && echo 'Finished dev [unoptimized] target(s)'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_fixer
+spec:
+  capabilities:
+    - fix
+  templates:
+    fix: "echo '{\"confidence\":0.85,\"quality_score\":0.8,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"src/main.rs\"]}]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_git
+spec:
+  capabilities:
+    - git_ops
+  templates:
+    git_ops: "echo '{\"confidence\":1.0,\"quality_score\":1.0,\"artifacts\":[]}'"
+---
+# Mock agent for SDLC extended capabilities (qa_doc_gen, qa_testing, ticket_fix, doc_governance, align_tests)
+# Agent templates used as fallback when workflow steps don't have a `command` override.
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_sdlc
+spec:
+  capabilities:
+    - qa_doc_gen
+    - qa_testing
+    - ticket_fix
+    - doc_governance
+    - align_tests
+  templates:
+    qa_doc_gen: "echo '{\"confidence\":0.9,\"quality_score\":0.88,\"artifacts\":[{\"kind\":\"qa_doc\",\"files\":[\"docs/qa/new-feature.md\"]}]}'"
+    qa_testing: "echo '{\"confidence\":0.95,\"quality_score\":0.92,\"artifacts\":[{\"kind\":\"qa_result\",\"findings\":[]}]}'"
+    ticket_fix: "echo '{\"confidence\":0.88,\"quality_score\":0.85,\"artifacts\":[{\"kind\":\"fix\",\"files\":[\"src/handler.rs\"]}]}'"
+    doc_governance: "echo '{\"confidence\":0.92,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"doc_audit\",\"findings\":[]}]}'"
+    align_tests: "echo '{\"confidence\":0.9,\"quality_score\":0.88,\"artifacts\":[{\"kind\":\"test_alignment\",\"findings\":[]}]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: bootstrap_basic
+spec:
+  steps:
+    - id: plan
+      type: plan
+      enabled: true
+      repeatable: false
+    - id: implement
+      type: implement
+      enabled: true
+      repeatable: true
+    - id: build
+      type: build
+      enabled: true
+      repeatable: true
+      builtin: build
+      command: "echo 'Compiling agent-orchestrator v0.1.0' && echo 'Finished dev [unoptimized] target(s)'"
+    - id: test
+      type: test
+      enabled: true
+      repeatable: true
+      builtin: test
+      command: "echo 'running 5 tests' && echo 'test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'"
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: once
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: bootstrap_with_fix
+spec:
+  steps:
+    - id: plan
+      type: plan
+      enabled: true
+      repeatable: false
+    - id: implement
+      type: implement
+      enabled: true
+      repeatable: true
+    - id: build
+      type: build
+      enabled: true
+      repeatable: true
+      builtin: build
+      command: "echo 'error[E0308]: mismatched types' >&2 && echo '  --> src/main.rs:10:5' >&2 && exit 1"
+    - id: fix
+      type: fix
+      enabled: true
+      repeatable: true
+      prehook:
+        engine: cel
+        when: "build_errors > 0 || test_failures > 0"
+        reason: "Only fix when build/test failed"
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: once
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: bootstrap_skip_fix
+spec:
+  steps:
+    - id: implement
+      type: implement
+      enabled: true
+      repeatable: true
+    - id: build
+      type: build
+      enabled: true
+      repeatable: true
+      builtin: build
+      command: "echo 'Compiling ok' && echo 'Finished dev [unoptimized] target(s)'"
+    - id: test
+      type: test
+      enabled: true
+      repeatable: true
+      builtin: test
+      command: "echo 'running 3 tests' && echo 'test result: ok. 3 passed; 0 failed'"
+    - id: fix
+      type: fix
+      enabled: true
+      repeatable: true
+      prehook:
+        engine: cel
+        when: "build_errors > 0 || test_failures > 0"
+        reason: "Only fix when build/test failed"
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: once
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: bootstrap_checkpoint
+spec:
+  steps:
+    - id: implement
+      type: implement
+      enabled: true
+      repeatable: true
+    - id: build
+      type: build
+      enabled: true
+      repeatable: true
+      builtin: build
+      command: "echo 'Compiling ok' && echo 'Finished dev [unoptimized] target(s)'"
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: once
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: git_tag
+---
+# S6: Full simplified SDLC pipeline — plan→qa_doc_gen→implement→qa_testing→align_tests→doc_governance
+# No separate build/test/lint steps — covered by qa_testing (rebuilds CLI) and align_tests (test+clippy+build)
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: sdlc_full_pipeline
+spec:
+  steps:
+    - id: plan
+      type: plan
+      enabled: true
+      repeatable: false
+    - id: qa_doc_gen
+      type: qa_doc_gen
+      enabled: true
+      repeatable: false
+    - id: implement
+      type: implement
+      enabled: true
+      repeatable: true
+    - id: qa_testing
+      type: qa_testing
+      enabled: true
+      repeatable: true
+      command: "echo 'QA testing: rebuilt CLI, all 5 scenarios passed'"
+    - id: ticket_fix
+      type: ticket_fix
+      enabled: true
+      repeatable: true
+      command: "echo 'This should not run'"
+      prehook:
+        engine: cel
+        when: "active_ticket_count > 0"
+        reason: "Only fix tickets when there are active tickets"
+    - id: align_tests
+      type: align_tests
+      enabled: true
+      repeatable: true
+      command: "echo 'Align tests: cargo test ok, cargo clippy ok, cargo build ok'"
+    - id: doc_governance
+      type: doc_governance
+      enabled: true
+      repeatable: false
+      command: "echo 'Doc governance: all QA docs compliant'"
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: once
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
+---
+# S7: QA testing creates tickets, ticket_fix resolves them
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: sdlc_qa_ticket_chain
+spec:
+  steps:
+    - id: implement
+      type: implement
+      enabled: true
+      repeatable: true
+    - id: qa_testing
+      type: qa_testing
+      enabled: true
+      repeatable: true
+      command: "mkdir -p fixtures/ticket && printf '# Auto Ticket\\nQA scenario 3 failed\\n' > fixtures/ticket/auto_s7_qa_fail.md && echo 'QA testing found 1 failure'"
+    - id: ticket_fix
+      type: ticket_fix
+      enabled: true
+      repeatable: true
+      command: "rm -f fixtures/ticket/auto_s7_qa_fail.md && echo 'Ticket fixed and removed'"
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: once
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
+---
+# S8: QA testing clean → ticket_fix skipped via prehook
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: sdlc_ticket_skip
+spec:
+  steps:
+    - id: implement
+      type: implement
+      enabled: true
+      repeatable: true
+    - id: qa_testing
+      type: qa_testing
+      enabled: true
+      repeatable: true
+      command: "echo 'All QA scenarios passed — no tickets created'"
+    - id: ticket_fix
+      type: ticket_fix
+      enabled: true
+      repeatable: true
+      command: "echo 'This should not run'"
+      prehook:
+        engine: cel
+        when: "active_ticket_count > 0"
+        reason: "Only fix when there are active tickets"
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: once
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
+---
+# S9: Pipeline variable propagation — plan_output flows to implement, {source_tree} rendered
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: sdlc_pipeline_vars
+spec:
+  steps:
+    - id: plan
+      type: plan
+      enabled: true
+      repeatable: false
+    - id: implement
+      type: implement
+      enabled: true
+      repeatable: true
+    - id: align_tests
+      type: align_tests
+      enabled: true
+      repeatable: true
+      command: "echo 'align-marker: tests aligned for {source_tree}'"
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: once
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
+---
+# S10: Align tests runs after implement as the safety net for build+test+lint
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: sdlc_align_after_implement
+spec:
+  steps:
+    - id: implement
+      type: implement
+      enabled: true
+      repeatable: true
+    - id: qa_testing
+      type: qa_testing
+      enabled: true
+      repeatable: true
+      command: "echo 'QA testing: all scenarios passed'"
+    - id: align_tests
+      type: align_tests
+      enabled: true
+      repeatable: true
+      command: "echo 'Align: cargo test --lib ok, cargo test ok, cargo clippy ok, cargo build ok'"
+    - id: doc_governance
+      type: doc_governance
+      enabled: true
+      repeatable: false
+      command: "echo 'Doc governance: docs compliant'"
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: once
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none

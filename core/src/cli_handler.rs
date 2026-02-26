@@ -7,8 +7,8 @@ use crate::cli::{
 };
 use crate::cli_types::{
     AgentSpec, AgentTemplatesSpec, OrchestratorResource, ResourceKind, ResourceMetadata,
-    ResourceSpec, WorkflowFinalizeSpec, WorkflowLoopSpec, WorkflowSpec, WorkflowStepSpec,
-    WorkspaceSpec,
+    ResourceSpec, SafetySpec, WorkflowFinalizeSpec, WorkflowLoopSpec, WorkflowSpec,
+    WorkflowStepSpec, WorkspaceSpec,
 };
 use crate::config::{
     AgentConfig, LoopMode, ProjectConfig, TaskExecutionPlan, TaskExecutionStep, WorkflowConfig,
@@ -883,6 +883,9 @@ impl CliHandler {
             cost_preference: None,
             prehook: None,
             tty,
+            outputs: Vec::new(),
+            pipe_to: None,
+            command: None,
         };
         plan.steps.insert(insert_idx, inserted_step);
 
@@ -1296,6 +1299,7 @@ impl CliHandler {
                         qa_target.clone()
                     },
                     ticket_dir: ticket_dir.clone(),
+                    self_referential: false,
                 };
                 let manifest = OrchestratorResource {
                     api_version: "orchestrator.dev/v2".to_string(),
@@ -1334,6 +1338,13 @@ impl CliHandler {
                         retest: template_retest.clone(),
                         loop_guard: template_loop_guard.clone(),
                         ticket_scan: None,
+                        build: None,
+                        test: None,
+                        lint: None,
+                        implement: None,
+                        review: None,
+                        git_ops: None,
+                        extra: std::collections::HashMap::new(),
                     },
                     capabilities: if capability.is_empty() {
                         None
@@ -1383,6 +1394,7 @@ impl CliHandler {
                         cost_preference: None,
                         prehook: None,
                         tty: false,
+                        command: None,
                     })
                     .collect();
 
@@ -1398,6 +1410,7 @@ impl CliHandler {
                     },
                     finalize: WorkflowFinalizeSpec { rules: vec![] },
                     dynamic_steps: vec![],
+                    safety: SafetySpec::default(),
                 };
                 let manifest = OrchestratorResource {
                     api_version: "orchestrator.dev/v2".to_string(),
@@ -1637,6 +1650,7 @@ impl CliHandler {
                     root_path: resolved_root_path.clone(),
                     qa_targets: resolved_qa_targets,
                     ticket_dir: ticket_dir.clone(),
+                    self_referential: false,
                 };
 
                 let project = config

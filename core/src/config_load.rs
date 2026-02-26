@@ -7,7 +7,8 @@ use crate::dto::ConfigOverview;
 use crate::resource::export_manifest_resources;
 use anyhow::{Context, Result};
 use rusqlite::{params, OptionalExtension, Transaction};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 use std::path::{Path, PathBuf};
 
 pub fn now_ts() -> String {
@@ -47,8 +48,11 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
         );
     }
     let mut normalized: Vec<WorkflowStepConfig> = Vec::new();
-    let mut by_type: HashMap<String, WorkflowStepConfig> = HashMap::new();
-    for step in workflow.steps.drain(..) {
+
+    // Preserve original YAML order: apply defaults to each step in place,
+    // then add missing standard steps as disabled placeholders.
+    let mut seen_types: HashSet<String> = HashSet::new();
+    for mut step in workflow.steps.drain(..) {
         let key = step
             .step_type
             .as_ref()
@@ -56,29 +60,36 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
             .or_else(|| step.builtin.clone())
             .or_else(|| step.required_capability.clone())
             .unwrap_or(step.id.clone());
-        by_type.entry(key).or_insert(step);
-    }
-    for step_type in [
-        WorkflowStepType::InitOnce,
-        WorkflowStepType::Plan,
-        WorkflowStepType::Qa,
-        WorkflowStepType::TicketScan,
-        WorkflowStepType::Fix,
-        WorkflowStepType::Retest,
-        WorkflowStepType::LoopGuard,
-    ] {
-        let key = step_type.as_str().to_string();
-        if let Some(mut step) = by_type.remove(&key) {
-            if step.step_type.is_none() {
-                step.step_type = Some(step_type.clone());
-            }
-            if step.required_capability.is_none() && step.builtin.is_none() {
-                match step_type {
-                    WorkflowStepType::Qa | WorkflowStepType::Fix | WorkflowStepType::Retest => {
-                        step.required_capability = Some(step_type.as_str().to_string());
-                    }
-                    WorkflowStepType::Plan => {
-                        step.required_capability = Some("plan".to_string());
+
+        // Skip duplicate types (keep first occurrence)
+        if seen_types.contains(&key) {
+            continue;
+        }
+        seen_types.insert(key.clone());
+
+        // Resolve step_type from key if not set
+        if step.step_type.is_none() {
+            step.step_type = WorkflowStepType::from_str(&key).ok();
+        }
+
+        // Apply defaults based on step type
+        if let Some(ref st) = step.step_type {
+            if step.required_capability.is_none()
+                && step.builtin.is_none()
+                && step.command.is_none()
+            {
+                match st {
+                    WorkflowStepType::Qa
+                    | WorkflowStepType::Fix
+                    | WorkflowStepType::Retest
+                    | WorkflowStepType::Plan
+                    | WorkflowStepType::Build
+                    | WorkflowStepType::Test
+                    | WorkflowStepType::Lint
+                    | WorkflowStepType::Implement
+                    | WorkflowStepType::Review
+                    | WorkflowStepType::GitOps => {
+                        step.required_capability = Some(st.as_str().to_string());
                     }
                     WorkflowStepType::LoopGuard => {
                         step.builtin = Some("loop_guard".to_string());
@@ -87,12 +98,27 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                     _ => {}
                 }
             }
-            normalized.push(step);
-        } else if step_type != WorkflowStepType::LoopGuard {
+        }
+
+        normalized.push(step);
+    }
+
+    // Add missing standard steps as disabled placeholders (except LoopGuard)
+    let standard_step_types = [
+        WorkflowStepType::InitOnce,
+        WorkflowStepType::Plan,
+        WorkflowStepType::Qa,
+        WorkflowStepType::TicketScan,
+        WorkflowStepType::Fix,
+        WorkflowStepType::Retest,
+    ];
+    for step_type in &standard_step_types {
+        let key = step_type.as_str().to_string();
+        if !seen_types.contains(&key) {
             normalized.push(WorkflowStepConfig {
-                id: step_type.as_str().to_string(),
+                id: key,
                 description: None,
-                step_type: Some(step_type),
+                step_type: Some(step_type.clone()),
                 required_capability: None,
                 builtin: None,
                 enabled: false,
@@ -101,6 +127,9 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                 cost_preference: None,
                 prehook: None,
                 tty: false,
+                outputs: Vec::new(),
+                pipe_to: None,
+                command: None,
             });
         }
     }
@@ -188,16 +217,20 @@ pub fn validate_workflow_config(
             }
             continue;
         }
-        let has_agent = config
-            .agents
-            .values()
-            .any(|a| a.get_template(key).is_some());
-        if !has_agent {
-            anyhow::bail!(
-                "no agent has template for step '{}' used by workflow '{}'",
-                key,
-                workflow_id
-            );
+        // Steps with a builtin or command are self-contained and don't need an agent template
+        let is_self_contained = step.builtin.is_some() || step.command.is_some();
+        if !is_self_contained {
+            let has_agent = config
+                .agents
+                .values()
+                .any(|a| a.get_template(key).is_some());
+            if !has_agent {
+                anyhow::bail!(
+                    "no agent has template for step '{}' used by workflow '{}'",
+                    key,
+                    workflow_id
+                );
+            }
         }
         if let Some(prehook) = step.prehook.as_ref() {
             crate::prehook::validate_step_prehook(prehook, workflow_id, key)?;
@@ -268,13 +301,16 @@ fn validate_workflow_config_with_agents(
             }
             continue;
         }
-        let has_agent = all_agents.values().any(|a| a.get_template(key).is_some());
-        if !has_agent {
-            anyhow::bail!(
-                "no agent has template for step '{}' used by workflow '{}'",
-                key,
-                workflow_id
-            );
+        let is_self_contained = step.builtin.is_some() || step.command.is_some();
+        if !is_self_contained {
+            let has_agent = all_agents.values().any(|a| a.get_template(key).is_some());
+            if !has_agent {
+                anyhow::bail!(
+                    "no agent has template for step '{}' used by workflow '{}'",
+                    key,
+                    workflow_id
+                );
+            }
         }
         if let Some(prehook) = step.prehook.as_ref() {
             crate::prehook::validate_step_prehook(prehook, workflow_id, key)?;
@@ -705,6 +741,9 @@ pub fn build_execution_plan(
             cost_preference: step.cost_preference.clone(),
             prehook: step.prehook.clone(),
             tty: step.tty,
+            outputs: step.outputs.clone(),
+            pipe_to: step.pipe_to.clone(),
+            command: step.command.clone(),
         });
     }
     let loop_policy = workflow.loop_policy.clone();

@@ -29,6 +29,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                     root_path: "workspace/default".to_string(),
                     qa_targets: vec!["docs/qa".to_string()],
                     ticket_dir: "docs/ticket".to_string(),
+                    self_referential: false,
                 },
             );
             ws
@@ -67,6 +68,9 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                         cost_preference: None,
                         prehook: None,
                         tty: false,
+                        outputs: Vec::new(),
+                        pipe_to: None,
+                        command: None,
                     }],
                     loop_policy: WorkflowLoopConfig {
                         mode: LoopMode::Once,
@@ -77,6 +81,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                     fix: None,
                     retest: None,
                     dynamic_steps: vec![],
+                    safety: agent_orchestrator::config::SafetyConfig::default(),
                 },
             );
             workflows
@@ -275,6 +280,7 @@ fn delete_removes_workspace_from_config() {
             root_path: "workspace/to-delete".to_string(),
             qa_targets: vec!["docs/qa".to_string()],
             ticket_dir: "docs/ticket".to_string(),
+            self_referential: false,
         },
     );
 

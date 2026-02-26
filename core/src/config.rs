@@ -199,6 +199,97 @@ pub struct WorkspaceConfig {
     pub root_path: String,
     pub qa_targets: Vec<String>,
     pub ticket_dir: String,
+    /// When true, the workspace points to the orchestrator's own source tree
+    #[serde(default)]
+    pub self_referential: bool,
+}
+
+/// Safety configuration for self-bootstrap and dangerous operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SafetyConfig {
+    /// Maximum consecutive failures before auto-rollback
+    #[serde(default = "default_max_consecutive_failures")]
+    pub max_consecutive_failures: u32,
+    /// Automatically rollback on repeated failures
+    #[serde(default)]
+    pub auto_rollback: bool,
+    /// Strategy for creating checkpoints
+    #[serde(default)]
+    pub checkpoint_strategy: CheckpointStrategy,
+}
+
+fn default_max_consecutive_failures() -> u32 {
+    3
+}
+
+impl Default for SafetyConfig {
+    fn default() -> Self {
+        Self {
+            max_consecutive_failures: 3,
+            auto_rollback: false,
+            checkpoint_strategy: CheckpointStrategy::default(),
+        }
+    }
+}
+
+/// Checkpoint strategy for rollback support
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum CheckpointStrategy {
+    #[default]
+    None,
+    GitTag,
+    GitStash,
+}
+
+/// Build error with source location
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildError {
+    pub file: Option<String>,
+    pub line: Option<u32>,
+    pub column: Option<u32>,
+    pub message: String,
+    pub level: BuildErrorLevel,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BuildErrorLevel {
+    Error,
+    Warning,
+}
+
+/// Test failure with source location
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestFailure {
+    pub test_name: String,
+    pub file: Option<String>,
+    pub line: Option<u32>,
+    pub message: String,
+    pub stdout: Option<String>,
+}
+
+/// Pipeline variables passed between steps
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PipelineVariables {
+    /// Key-value store of pipeline variables
+    #[serde(default)]
+    pub vars: HashMap<String, String>,
+    /// Build errors from the last build step
+    #[serde(default)]
+    pub build_errors: Vec<BuildError>,
+    /// Test failures from the last test step
+    #[serde(default)]
+    pub test_failures: Vec<TestFailure>,
+    /// Raw stdout from previous step
+    #[serde(default)]
+    pub prev_stdout: String,
+    /// Raw stderr from previous step
+    #[serde(default)]
+    pub prev_stderr: String,
+    /// Git diff of current cycle
+    #[serde(default)]
+    pub diff: String,
 }
 
 /// Agent metadata
@@ -283,6 +374,18 @@ pub enum WorkflowStepType {
     Fix,
     Retest,
     LoopGuard,
+    Build,
+    Test,
+    Lint,
+    Implement,
+    Review,
+    GitOps,
+    // AI SDLC closed-loop step types
+    QaDocGen,
+    QaTesting,
+    TicketFix,
+    DocGovernance,
+    AlignTests,
 }
 
 impl WorkflowStepType {
@@ -295,7 +398,26 @@ impl WorkflowStepType {
             Self::Fix => "fix",
             Self::Retest => "retest",
             Self::LoopGuard => "loop_guard",
+            Self::Build => "build",
+            Self::Test => "test",
+            Self::Lint => "lint",
+            Self::Implement => "implement",
+            Self::Review => "review",
+            Self::GitOps => "git_ops",
+            Self::QaDocGen => "qa_doc_gen",
+            Self::QaTesting => "qa_testing",
+            Self::TicketFix => "ticket_fix",
+            Self::DocGovernance => "doc_governance",
+            Self::AlignTests => "align_tests",
         }
+    }
+
+    /// Returns true if this step type produces structured output for pipeline variables
+    pub fn has_structured_output(&self) -> bool {
+        matches!(
+            self,
+            Self::Build | Self::Test | Self::Lint | Self::QaTesting
+        )
     }
 }
 
@@ -311,8 +433,19 @@ impl FromStr for WorkflowStepType {
             "fix" => Ok(Self::Fix),
             "retest" => Ok(Self::Retest),
             "loop_guard" => Ok(Self::LoopGuard),
+            "build" => Ok(Self::Build),
+            "test" => Ok(Self::Test),
+            "lint" => Ok(Self::Lint),
+            "implement" => Ok(Self::Implement),
+            "review" => Ok(Self::Review),
+            "git_ops" => Ok(Self::GitOps),
+            "qa_doc_gen" => Ok(Self::QaDocGen),
+            "qa_testing" => Ok(Self::QaTesting),
+            "ticket_fix" => Ok(Self::TicketFix),
+            "doc_governance" => Ok(Self::DocGovernance),
+            "align_tests" => Ok(Self::AlignTests),
             _ => Err(format!(
-                "unknown workflow step type: {} (expected init_once|plan|qa|ticket_scan|fix|retest|loop_guard)",
+                "unknown workflow step type: {}",
                 value
             )),
         }
@@ -465,6 +598,15 @@ pub struct WorkflowStepConfig {
     pub prehook: Option<StepPrehookConfig>,
     #[serde(default)]
     pub tty: bool,
+    /// Named outputs this step produces (for pipeline variable passing)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<String>,
+    /// Pipe this step's output to the named step as input
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pipe_to: Option<String>,
+    /// Build command for builtin build/test/lint steps
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -493,6 +635,15 @@ pub struct TaskExecutionStep {
     pub prehook: Option<StepPrehookConfig>,
     #[serde(default)]
     pub tty: bool,
+    /// Named outputs this step produces (for pipeline variable passing)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<String>,
+    /// Pipe this step's output to the named step as input
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pipe_to: Option<String>,
+    /// Build command for builtin build/test/lint steps
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
 }
 
 /// Task execution plan
@@ -535,6 +686,9 @@ pub struct WorkflowConfig {
     pub retest: Option<String>,
     #[serde(default)]
     pub dynamic_steps: Vec<crate::dynamic_orchestration::DynamicStepConfig>,
+    /// Safety configuration for self-bootstrap scenarios
+    #[serde(default)]
+    pub safety: SafetyConfig,
 }
 
 /// Resolved workspace (with absolute paths)
@@ -575,6 +729,14 @@ pub struct TaskRuntimeContext {
     pub current_cycle: u32,
     pub init_done: bool,
     pub dynamic_steps: Vec<crate::dynamic_orchestration::DynamicStepConfig>,
+    /// Pipeline variables accumulated across steps in the current cycle
+    pub pipeline_vars: PipelineVariables,
+    /// Safety configuration
+    pub safety: SafetyConfig,
+    /// Whether the workspace is self-referential
+    pub self_referential: bool,
+    /// Consecutive failure counter for auto-rollback
+    pub consecutive_failures: u32,
 }
 
 /// Step prehook context for evaluation
@@ -598,6 +760,14 @@ pub struct StepPrehookContext {
     pub qa_quality_score: Option<f32>,
     pub fix_has_changes: Option<bool>,
     pub upstream_artifacts: Vec<ArtifactSummary>,
+    /// Number of build errors from the last build step
+    pub build_error_count: i64,
+    /// Number of test failures from the last test step
+    pub test_failure_count: i64,
+    /// Exit code of the last build step
+    pub build_exit_code: Option<i64>,
+    /// Exit code of the last test step
+    pub test_exit_code: Option<i64>,
 }
 
 /// Artifact summary
@@ -651,6 +821,34 @@ pub struct WorkflowFinalizeOutcome {
     pub reason: String,
 }
 
+/// Helper to create a WorkflowStepConfig with new fields defaulted
+fn step_config(
+    id: &str,
+    step_type: Option<WorkflowStepType>,
+    required_capability: Option<&str>,
+    builtin: Option<&str>,
+    enabled: bool,
+    repeatable: bool,
+    tty: bool,
+) -> WorkflowStepConfig {
+    WorkflowStepConfig {
+        id: id.to_string(),
+        description: None,
+        step_type,
+        required_capability: required_capability.map(String::from),
+        builtin: builtin.map(String::from),
+        enabled,
+        repeatable,
+        is_guard: false,
+        cost_preference: None,
+        prehook: None,
+        tty,
+        outputs: Vec::new(),
+        pipe_to: None,
+        command: None,
+    }
+}
+
 /// Default workflow steps builder
 pub fn default_workflow_steps(
     qa: Option<&str>,
@@ -659,84 +857,12 @@ pub fn default_workflow_steps(
     retest: Option<&str>,
 ) -> Vec<WorkflowStepConfig> {
     vec![
-        WorkflowStepConfig {
-            id: "init_once".to_string(),
-            description: None,
-            step_type: Some(WorkflowStepType::InitOnce),
-            required_capability: None,
-            builtin: Some("init_once".to_string()),
-            enabled: false,
-            repeatable: false,
-            is_guard: false,
-            cost_preference: None,
-            prehook: None,
-            tty: false,
-        },
-        WorkflowStepConfig {
-            id: "plan".to_string(),
-            description: None,
-            step_type: Some(WorkflowStepType::Plan),
-            required_capability: Some("plan".to_string()),
-            builtin: None,
-            enabled: false,
-            repeatable: false,
-            is_guard: false,
-            cost_preference: None,
-            prehook: None,
-            tty: true,
-        },
-        WorkflowStepConfig {
-            id: "qa".to_string(),
-            description: None,
-            step_type: Some(WorkflowStepType::Qa),
-            required_capability: Some("qa".to_string()),
-            builtin: None,
-            enabled: qa.is_some(),
-            repeatable: true,
-            is_guard: false,
-            cost_preference: None,
-            prehook: None,
-            tty: false,
-        },
-        WorkflowStepConfig {
-            id: "ticket_scan".to_string(),
-            description: None,
-            step_type: Some(WorkflowStepType::TicketScan),
-            required_capability: None,
-            builtin: Some("ticket_scan".to_string()),
-            enabled: ticket_scan,
-            repeatable: true,
-            is_guard: false,
-            cost_preference: None,
-            prehook: None,
-            tty: false,
-        },
-        WorkflowStepConfig {
-            id: "fix".to_string(),
-            description: None,
-            step_type: Some(WorkflowStepType::Fix),
-            required_capability: Some("fix".to_string()),
-            builtin: None,
-            enabled: fix.is_some(),
-            repeatable: true,
-            is_guard: false,
-            cost_preference: None,
-            prehook: None,
-            tty: false,
-        },
-        WorkflowStepConfig {
-            id: "retest".to_string(),
-            description: None,
-            step_type: Some(WorkflowStepType::Retest),
-            required_capability: Some("retest".to_string()),
-            builtin: None,
-            enabled: retest.is_some(),
-            repeatable: true,
-            is_guard: false,
-            cost_preference: None,
-            prehook: None,
-            tty: false,
-        },
+        step_config("init_once", Some(WorkflowStepType::InitOnce), None, Some("init_once"), false, false, false),
+        step_config("plan", Some(WorkflowStepType::Plan), Some("plan"), None, false, false, true),
+        step_config("qa", Some(WorkflowStepType::Qa), Some("qa"), None, qa.is_some(), true, false),
+        step_config("ticket_scan", Some(WorkflowStepType::TicketScan), None, Some("ticket_scan"), ticket_scan, true, false),
+        step_config("fix", Some(WorkflowStepType::Fix), Some("fix"), None, fix.is_some(), true, false),
+        step_config("retest", Some(WorkflowStepType::Retest), Some("retest"), None, retest.is_some(), true, false),
     ]
 }
 

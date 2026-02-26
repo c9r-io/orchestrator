@@ -1,7 +1,7 @@
 use crate::cli_types::{
     AgentMetadataSpec, AgentSelectionSpec, AgentSpec, AgentTemplatesSpec, DefaultsSpec,
     DynamicStepSpec, OrchestratorResource, ProjectSpec, ResourceKind, ResourceMetadata,
-    ResourceSpec, ResumeSpec, RunnerSpec, RuntimePolicySpec, WorkflowFinalizeRuleSpec,
+    ResourceSpec, ResumeSpec, RunnerSpec, RuntimePolicySpec, SafetySpec, WorkflowFinalizeRuleSpec,
     WorkflowFinalizeSpec, WorkflowLoopSpec, WorkflowPrehookSpec, WorkflowSpec, WorkflowStepSpec,
     WorkspaceSpec,
 };
@@ -244,26 +244,40 @@ impl Resource for AgentResource {
     fn validate(&self) -> Result<()> {
         validate_resource_name(self.name())?;
         let templates = &self.spec.templates;
-        if templates.init_once.is_none()
-            && templates.qa.is_none()
-            && templates.fix.is_none()
-            && templates.retest.is_none()
-            && templates.loop_guard.is_none()
-        {
+        let all_templates: Vec<Option<&str>> = vec![
+            templates.init_once.as_deref(),
+            templates.qa.as_deref(),
+            templates.plan.as_deref(),
+            templates.fix.as_deref(),
+            templates.retest.as_deref(),
+            templates.loop_guard.as_deref(),
+            templates.ticket_scan.as_deref(),
+            templates.build.as_deref(),
+            templates.test.as_deref(),
+            templates.lint.as_deref(),
+            templates.implement.as_deref(),
+            templates.review.as_deref(),
+            templates.git_ops.as_deref(),
+        ];
+        let has_named_template = all_templates.iter().any(|t| t.is_some());
+        let has_extra_template = !templates.extra.is_empty();
+        if !has_named_template && !has_extra_template {
             return Err(anyhow!(
                 "agent.spec.templates must define at least one template"
             ));
         }
-        for value in [
-            templates.init_once.as_deref(),
-            templates.qa.as_deref(),
-            templates.fix.as_deref(),
-            templates.retest.as_deref(),
-            templates.loop_guard.as_deref(),
-        ] {
+        for value in &all_templates {
             if matches!(value, Some(raw) if raw.trim().is_empty()) {
                 return Err(anyhow!(
                     "agent.spec.templates entries cannot be empty strings"
+                ));
+            }
+        }
+        for (name, value) in &templates.extra {
+            if value.trim().is_empty() {
+                return Err(anyhow!(
+                    "agent.spec.templates.{} cannot be an empty string",
+                    name
                 ));
             }
         }
@@ -823,6 +837,7 @@ fn workspace_spec_to_config(spec: &WorkspaceSpec) -> WorkspaceConfig {
         root_path: spec.root_path.clone(),
         qa_targets: spec.qa_targets.clone(),
         ticket_dir: spec.ticket_dir.clone(),
+        self_referential: spec.self_referential,
     }
 }
 
@@ -831,23 +846,31 @@ fn workspace_config_to_spec(config: &WorkspaceConfig) -> WorkspaceSpec {
         root_path: config.root_path.clone(),
         qa_targets: config.qa_targets.clone(),
         ticket_dir: config.ticket_dir.clone(),
+        self_referential: config.self_referential,
     }
 }
 
 fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
-    let template_capabilities = vec![
-        spec.templates.init_once.as_ref().map(|_| "init_once"),
-        spec.templates.plan.as_ref().map(|_| "plan"),
-        spec.templates.qa.as_ref().map(|_| "qa"),
-        spec.templates.ticket_scan.as_ref().map(|_| "ticket_scan"),
-        spec.templates.fix.as_ref().map(|_| "fix"),
-        spec.templates.retest.as_ref().map(|_| "retest"),
-        spec.templates.loop_guard.as_ref().map(|_| "loop_guard"),
-    ]
-    .into_iter()
-    .flatten()
-    .map(|s| s.to_string())
-    .collect::<Vec<_>>();
+    let named_templates: Vec<(&str, &Option<String>)> = vec![
+        ("init_once", &spec.templates.init_once),
+        ("plan", &spec.templates.plan),
+        ("qa", &spec.templates.qa),
+        ("ticket_scan", &spec.templates.ticket_scan),
+        ("fix", &spec.templates.fix),
+        ("retest", &spec.templates.retest),
+        ("loop_guard", &spec.templates.loop_guard),
+        ("build", &spec.templates.build),
+        ("test", &spec.templates.test),
+        ("lint", &spec.templates.lint),
+        ("implement", &spec.templates.implement),
+        ("review", &spec.templates.review),
+        ("git_ops", &spec.templates.git_ops),
+    ];
+
+    let template_capabilities: Vec<String> = named_templates
+        .iter()
+        .filter_map(|(name, opt)| opt.as_ref().map(|_| name.to_string()))
+        .collect();
 
     let mut capabilities = spec.capabilities.clone().unwrap_or_default();
     for cap in template_capabilities {
@@ -857,26 +880,19 @@ fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
     }
 
     let mut templates = std::collections::HashMap::new();
-    if let Some(t) = &spec.templates.init_once {
-        templates.insert("init_once".to_string(), t.clone());
+    for (name, opt) in &named_templates {
+        if let Some(t) = opt {
+            templates.insert(name.to_string(), t.clone());
+        }
     }
-    if let Some(t) = &spec.templates.qa {
-        templates.insert("qa".to_string(), t.clone());
-    }
-    if let Some(t) = &spec.templates.plan {
-        templates.insert("plan".to_string(), t.clone());
-    }
-    if let Some(t) = &spec.templates.ticket_scan {
-        templates.insert("ticket_scan".to_string(), t.clone());
-    }
-    if let Some(t) = &spec.templates.fix {
-        templates.insert("fix".to_string(), t.clone());
-    }
-    if let Some(t) = &spec.templates.retest {
-        templates.insert("retest".to_string(), t.clone());
-    }
-    if let Some(t) = &spec.templates.loop_guard {
-        templates.insert("loop_guard".to_string(), t.clone());
+    // Include extra/custom templates (qa_doc_gen, qa_testing, ticket_fix, etc.)
+    for (name, t) in &spec.templates.extra {
+        if !templates.contains_key(name) {
+            templates.insert(name.clone(), t.clone());
+            if !capabilities.contains(name) {
+                capabilities.push(name.clone());
+            }
+        }
     }
 
     AgentConfig {
@@ -904,6 +920,22 @@ fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
             fix: config.templates.get("fix").cloned(),
             retest: config.templates.get("retest").cloned(),
             loop_guard: config.templates.get("loop_guard").cloned(),
+            build: config.templates.get("build").cloned(),
+            test: config.templates.get("test").cloned(),
+            lint: config.templates.get("lint").cloned(),
+            implement: config.templates.get("implement").cloned(),
+            review: config.templates.get("review").cloned(),
+            git_ops: config.templates.get("git_ops").cloned(),
+            extra: {
+                let named_keys: std::collections::HashSet<&str> = [
+                    "init_once", "plan", "qa", "ticket_scan", "fix", "retest",
+                    "loop_guard", "build", "test", "lint", "implement", "review", "git_ops",
+                ].into_iter().collect();
+                config.templates.iter()
+                    .filter(|(k, _)| !named_keys.contains(k.as_str()))
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect()
+            },
         },
         capabilities: if config.capabilities.is_empty() {
             None
@@ -967,6 +999,9 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
                 cost_preference: parse_cost_preference(step.cost_preference.as_deref())?,
                 prehook,
                 tty: step.tty,
+                outputs: Vec::new(),
+                pipe_to: None,
+                command: step.command.clone(),
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -1019,6 +1054,15 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
                 },
             )
             .collect(),
+        safety: crate::config::SafetyConfig {
+            max_consecutive_failures: spec.safety.max_consecutive_failures,
+            auto_rollback: spec.safety.auto_rollback,
+            checkpoint_strategy: match spec.safety.checkpoint_strategy.as_str() {
+                "git_tag" => crate::config::CheckpointStrategy::GitTag,
+                "git_stash" => crate::config::CheckpointStrategy::GitStash,
+                _ => crate::config::CheckpointStrategy::None,
+            },
+        },
     })
 }
 
@@ -1054,6 +1098,7 @@ fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
                 extended: prehook.extended,
             }),
             tty: step.tty,
+            command: step.command.clone(),
         })
         .collect();
 
@@ -1098,6 +1143,7 @@ fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
                 max_runs: dynamic_step.max_runs,
             })
             .collect(),
+        safety: SafetySpec::default(),
     }
 }
 
@@ -1339,6 +1385,7 @@ mod tests {
                 root_path: root_path.to_string(),
                 qa_targets: vec!["docs/qa".to_string()],
                 ticket_dir: "docs/ticket".to_string(),
+                self_referential: false,
             }),
         }
     }
@@ -1362,6 +1409,13 @@ mod tests {
                     retest: None,
                     loop_guard: None,
                     ticket_scan: None,
+                    build: None,
+                    test: None,
+                    lint: None,
+                    implement: None,
+                    review: None,
+                    git_ops: None,
+                    extra: std::collections::HashMap::new(),
                 },
                 capabilities: None,
                 metadata: None,
@@ -1392,6 +1446,7 @@ mod tests {
                     cost_preference: None,
                     prehook: None,
                     tty: false,
+                    command: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "once".to_string(),
@@ -1410,6 +1465,7 @@ mod tests {
                     }],
                 },
                 dynamic_steps: vec![],
+                safety: SafetySpec::default(),
             }),
         }
     }
@@ -1442,6 +1498,13 @@ mod tests {
                     retest: None,
                     loop_guard: None,
                     ticket_scan: None,
+                    build: None,
+                    test: None,
+                    lint: None,
+                    implement: None,
+                    review: None,
+                    git_ops: None,
+                    extra: std::collections::HashMap::new(),
                 },
                 capabilities: None,
                 metadata: None,
@@ -1555,6 +1618,7 @@ mod tests {
                 root_path: "workspace/yaml-roundtrip".to_string(),
                 qa_targets: vec!["docs/qa".to_string()],
                 ticket_dir: "docs/ticket".to_string(),
+                self_referential: false,
             },
         };
 
@@ -1696,6 +1760,13 @@ fn agent_validation_rejects_empty_templates() {
                 retest: None,
                 loop_guard: None,
                 ticket_scan: None,
+                build: None,
+                test: None,
+                lint: None,
+                implement: None,
+                review: None,
+                git_ops: None,
+                extra: std::collections::HashMap::new(),
             },
             capabilities: None,
             metadata: None,
@@ -1730,6 +1801,7 @@ fn workflow_validation_rejects_empty_steps() {
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
+            safety: SafetySpec::default(),
         },
     };
     let result = workflow.validate();
@@ -1750,6 +1822,7 @@ fn workspace_to_yaml_includes_all_fields() {
             root_path: "/path/to/workspace".to_string(),
             qa_targets: vec!["docs/qa".to_string(), "tests".to_string()],
             ticket_dir: "tickets".to_string(),
+            self_referential: false,
         },
     };
     let yaml = workspace.to_yaml().expect("should serialize");
@@ -1777,6 +1850,13 @@ fn agent_to_yaml_includes_templates() {
                 retest: Some("retest".to_string()),
                 loop_guard: Some("guard".to_string()),
                 ticket_scan: None,
+                build: None,
+                test: None,
+                lint: None,
+                implement: None,
+                review: None,
+                git_ops: None,
+                extra: std::collections::HashMap::new(),
             },
             capabilities: None,
             metadata: None,

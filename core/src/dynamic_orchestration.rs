@@ -214,6 +214,12 @@ pub struct StepPrehookContext {
     pub fix_has_changes: Option<bool>,
     #[serde(default)]
     pub upstream_artifacts: Vec<ArtifactSummary>,
+    #[serde(default)]
+    pub build_error_count: i64,
+    #[serde(default)]
+    pub test_failure_count: i64,
+    pub build_exit_code: Option<i64>,
+    pub test_exit_code: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -775,6 +781,11 @@ mod tests {
 
         let context = StepPrehookContext {
             active_ticket_count: 5,
+            upstream_artifacts: Vec::new(),
+            build_error_count: 0,
+            test_failure_count: 0,
+            build_exit_code: None,
+            test_exit_code: None,
             ..Default::default()
         };
 
@@ -939,6 +950,11 @@ mod tests {
 
         let context = StepPrehookContext {
             active_ticket_count: 5,
+            upstream_artifacts: Vec::new(),
+            build_error_count: 0,
+            test_failure_count: 0,
+            build_exit_code: None,
+            test_exit_code: None,
             ..Default::default()
         };
 
@@ -1002,6 +1018,11 @@ mod tests {
 
         let context = StepPrehookContext {
             active_ticket_count: 0,
+            upstream_artifacts: Vec::new(),
+            build_error_count: 0,
+            test_failure_count: 0,
+            build_exit_code: None,
+            test_exit_code: None,
             ..Default::default()
         };
 

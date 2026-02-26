@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
 use crate::config::{
-    ItemFinalizeContext, LoopMode, StepPrehookContext, TaskExecutionStep, TaskRuntimeContext,
-    WorkflowStepType,
+    ItemFinalizeContext, LoopMode, PipelineVariables, StepPrehookContext, TaskExecutionStep,
+    TaskRuntimeContext, WorkflowStepType,
 };
 use crate::config_load::{
     build_execution_plan, now_ts, read_active_config, resolve_workspace_path,
@@ -414,6 +414,8 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
     let current_cycle = runtime_row.current_cycle;
     let init_done = runtime_row.init_done;
 
+    let task_goal = runtime_row.goal;
+
     let active = read_active_config(state)?;
     let workflow = active
         .config
@@ -455,6 +457,13 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
     resolve_workspace_path(&workspace_root, &ticket_dir, "task.ticket_dir")?;
 
     let dynamic_steps = workflow.dynamic_steps.clone();
+    let safety = workflow.safety.clone();
+    let self_referential = active
+        .config
+        .workspaces
+        .get(&workspace_id)
+        .map(|ws| ws.self_referential)
+        .unwrap_or(false);
 
     Ok(TaskRuntimeContext {
         workspace_id,
@@ -464,6 +473,16 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
         current_cycle: current_cycle.max(0) as u32,
         init_done: init_done == 1,
         dynamic_steps,
+        pipeline_vars: {
+            let mut pv = crate::config::PipelineVariables::default();
+            if !task_goal.is_empty() {
+                pv.vars.insert("goal".to_string(), task_goal);
+            }
+            pv
+        },
+        safety,
+        self_referential,
+        consecutive_failures: 0,
     })
 }
 
@@ -526,6 +545,7 @@ async fn run_task_loop_core(
                     &task_ctx.workspace_id,
                     task_ctx.current_cycle,
                     &runtime,
+                    None,
                 )
                 .await?;
                 if !init_result.is_success() {
@@ -594,6 +614,31 @@ async fn run_task_loop_core(
             json!({"cycle": task_ctx.current_cycle}),
         );
 
+        // Create checkpoint at cycle start when safety config requires it
+        if matches!(
+            task_ctx.safety.checkpoint_strategy,
+            crate::config::CheckpointStrategy::GitTag
+        ) {
+            let ws_path = Path::new(&task_ctx.workspace_root);
+            match create_checkpoint(ws_path, task_id, task_ctx.current_cycle).await {
+                Ok(tag) => {
+                    insert_event(
+                        &state,
+                        task_id,
+                        None,
+                        "checkpoint_created",
+                        json!({"cycle": task_ctx.current_cycle, "tag": tag}),
+                    )?;
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[warn] failed to create checkpoint for cycle {}: {}",
+                        task_ctx.current_cycle, e
+                    );
+                }
+            }
+        }
+
         let items = list_task_items_for_cycle(&state, task_id)?;
         let task_item_paths: Vec<String> =
             items.iter().map(|item| item.qa_file_path.clone()).collect();
@@ -609,6 +654,60 @@ async fn run_task_loop_core(
             .await?;
             if runtime.stop_flag.load(Ordering::SeqCst) || is_task_paused_in_db(&state, task_id)? {
                 continue 'cycle;
+            }
+        }
+
+        // Track consecutive failures for auto-rollback
+        let cycle_unresolved = count_unresolved_items(&state, task_id)?;
+        if cycle_unresolved > 0 {
+            task_ctx.consecutive_failures += 1;
+        } else {
+            task_ctx.consecutive_failures = 0;
+        }
+
+        // Auto-rollback when consecutive failures exceed threshold
+        if task_ctx.safety.auto_rollback
+            && task_ctx.consecutive_failures >= task_ctx.safety.max_consecutive_failures
+            && matches!(
+                task_ctx.safety.checkpoint_strategy,
+                crate::config::CheckpointStrategy::GitTag
+            )
+        {
+            let rollback_cycle =
+                task_ctx.current_cycle.saturating_sub(task_ctx.consecutive_failures);
+            let rollback_tag = format!("checkpoint/{}/{}", task_id, rollback_cycle.max(1));
+            let ws_path = Path::new(&task_ctx.workspace_root);
+            match rollback_to_checkpoint(ws_path, &rollback_tag).await {
+                Ok(()) => {
+                    insert_event(
+                        &state,
+                        task_id,
+                        None,
+                        "auto_rollback",
+                        json!({
+                            "cycle": task_ctx.current_cycle,
+                            "rollback_to": rollback_tag,
+                            "consecutive_failures": task_ctx.consecutive_failures,
+                        }),
+                    )?;
+                    state.emit_event(
+                        task_id,
+                        None,
+                        "auto_rollback",
+                        json!({"rollback_to": rollback_tag}),
+                    );
+                    task_ctx.consecutive_failures = 0;
+                }
+                Err(e) => {
+                    eprintln!("[warn] auto-rollback failed: {}", e);
+                    insert_event(
+                        &state,
+                        task_id,
+                        None,
+                        "auto_rollback_failed",
+                        json!({"error": e.to_string()}),
+                    )?;
+                }
             }
         }
 
@@ -802,6 +901,142 @@ pub fn update_task_cycle_state(
     state
         .db_writer
         .update_task_cycle_state(task_id, current_cycle, init_done)
+}
+
+/// Execute a builtin build/test/lint step and produce structured output.
+///
+/// This runs the command from `step.command` (or falls back to the agent template),
+/// captures stdout/stderr, parses build errors / test failures, and updates pipeline
+/// variables so downstream steps can reference them via `{build_output}`, `{test_output}`,
+/// `{build_errors}`, `{test_failures}`.
+pub async fn execute_builtin_step(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    item_id: &str,
+    step: &TaskExecutionStep,
+    task_ctx: &TaskRuntimeContext,
+    runtime: &RunningTask,
+) -> Result<(crate::dto::RunResult, PipelineVariables)> {
+    let phase = step
+        .step_type
+        .as_ref()
+        .map(|t| t.as_str())
+        .unwrap_or(&step.id);
+
+    // Use step.command if available (builtin), otherwise dispatch to agent
+    let result = if let Some(ref _command) = step.command {
+        // Render command with pipeline variables
+        let ctx = crate::collab::AgentContext::new(
+            task_id.to_string(),
+            item_id.to_string(),
+            task_ctx.current_cycle,
+            phase.to_string(),
+            task_ctx.workspace_root.clone(),
+            task_ctx.workspace_id.clone(),
+        );
+        let rendered_command =
+            ctx.render_template_with_pipeline(_command, Some(&task_ctx.pipeline_vars));
+
+        run_phase(
+            state,
+            task_id,
+            item_id,
+            &step.id,
+            phase,
+            step.tty,
+            rendered_command,
+            &task_ctx.workspace_root,
+            &task_ctx.workspace_id,
+            "builtin",
+            runtime,
+        )
+        .await?
+    } else {
+        run_phase_with_rotation(
+            state,
+            task_id,
+            item_id,
+            &step.id,
+            phase,
+            step.tty,
+            step.required_capability.as_deref(),
+            ".",
+            &[],
+            &task_ctx.workspace_root,
+            &task_ctx.workspace_id,
+            task_ctx.current_cycle,
+            runtime,
+            Some(&task_ctx.pipeline_vars),
+        )
+        .await?
+    };
+
+    // Build pipeline variables from the result
+    let mut pipeline = task_ctx.pipeline_vars.clone();
+    if let Some(ref output) = result.output {
+        pipeline.prev_stdout = output.stdout.clone();
+        pipeline.prev_stderr = output.stderr.clone();
+        pipeline.build_errors = output.build_errors.clone();
+        pipeline.test_failures = output.test_failures.clone();
+
+        // Store named step outputs for downstream template variables
+        // e.g., plan step output → {plan_output}, build step → {build_output}
+        let output_key = format!("{}_output", phase);
+        if !output.stdout.is_empty() {
+            pipeline.vars.insert(output_key, output.stdout.clone());
+        }
+    }
+
+    // Capture git diff for the current cycle (full diff, not just cached)
+    if let Ok(diff_output) = tokio::process::Command::new("git")
+        .args(["diff", "HEAD"])
+        .current_dir(&task_ctx.workspace_root)
+        .output()
+        .await
+    {
+        pipeline.diff = String::from_utf8_lossy(&diff_output.stdout).to_string();
+    }
+
+    Ok((result, pipeline))
+}
+
+/// Create a git checkpoint (tag) for rollback support.
+/// Called at the start of each cycle when safety.checkpoint_strategy is GitTag.
+pub async fn create_checkpoint(
+    workspace_root: &Path,
+    task_id: &str,
+    cycle: u32,
+) -> Result<String> {
+    let tag_name = format!("checkpoint/{}/{}", task_id, cycle);
+    let output = tokio::process::Command::new("git")
+        .args(["tag", "-f", &tag_name])
+        .current_dir(workspace_root)
+        .output()
+        .await
+        .context("failed to create git checkpoint tag")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("git tag failed: {}", stderr);
+    }
+    Ok(tag_name)
+}
+
+/// Rollback to a previous checkpoint.
+pub async fn rollback_to_checkpoint(
+    workspace_root: &Path,
+    tag_name: &str,
+) -> Result<()> {
+    let output = tokio::process::Command::new("git")
+        .args(["reset", "--hard", tag_name])
+        .current_dir(workspace_root)
+        .output()
+        .await
+        .context("failed to rollback to checkpoint")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("git reset failed: {}", stderr);
+    }
+    Ok(())
 }
 
 fn is_task_paused_in_db(state: &InnerState, task_id: &str) -> Result<bool> {
@@ -1189,6 +1424,7 @@ pub async fn run_phase_with_rotation(
     workspace_id: &str,
     cycle: u32,
     runtime: &RunningTask,
+    pipeline_vars: Option<&PipelineVariables>,
 ) -> Result<crate::dto::RunResult> {
     let effective_capability = capability.or(match phase {
         "qa" | "fix" | "retest" => Some(phase),
@@ -1217,11 +1453,24 @@ pub async fn run_phase_with_rotation(
     }
 
     let escaped_paths: Vec<String> = ticket_paths.iter().map(|p| shell_escape(p)).collect();
-    let command = template
+    let mut command = template
         .replace("{rel_path}", &shell_escape(rel_path))
         .replace("{ticket_paths}", &escaped_paths.join(" "))
         .replace("{phase}", phase)
         .replace("{cycle}", &cycle.to_string());
+
+    // Render pipeline variables (source_tree, build_errors, goal, etc.) into agent template
+    if pipeline_vars.is_some() || command.contains("{source_tree}") || command.contains("{workspace_root}") {
+        let ctx = crate::collab::AgentContext::new(
+            task_id.to_string(),
+            item_id.to_string(),
+            cycle,
+            phase.to_string(),
+            workspace_root.to_path_buf(),
+            workspace_id.to_string(),
+        );
+        command = ctx.render_template_with_pipeline(&command, pipeline_vars);
+    }
 
     run_phase(
         state,
@@ -1372,6 +1621,9 @@ pub async fn process_item(
     let mut qa_stdout_path: Option<String> = None;
     let mut qa_stderr_path: Option<String> = None;
     let mut created_ticket_files: Vec<String> = Vec::new();
+    let mut pipeline_vars = task_ctx.pipeline_vars.clone();
+    let mut build_exit_code: Option<i64> = None;
+    let mut test_exit_code: Option<i64> = None;
 
     if let Some(plan_step) = plan_step {
         if plan_step.enabled && (plan_step.repeatable || task_ctx.current_cycle <= 1) {
@@ -1396,6 +1648,7 @@ pub async fn process_item(
                 &task_ctx.workspace_id,
                 task_ctx.current_cycle,
                 runtime,
+                Some(&task_ctx.pipeline_vars),
             )
             .await?;
             insert_event(
@@ -1438,6 +1691,10 @@ pub async fn process_item(
                 qa_quality_score: None,
                 fix_has_changes: None,
                 upstream_artifacts: vec![],
+                build_error_count: 0,
+                test_failure_count: 0,
+                build_exit_code: None,
+                test_exit_code: None,
             },
         )?;
 
@@ -1464,6 +1721,7 @@ pub async fn process_item(
                 &task_ctx.workspace_id,
                 task_ctx.current_cycle,
                 runtime,
+                None,
             )
             .await?;
             qa_exit_code = Some(result.exit_code);
@@ -1616,6 +1874,10 @@ pub async fn process_item(
                     qa_quality_score: None,
                     fix_has_changes: None,
                     upstream_artifacts: vec![],
+                    build_error_count: 0,
+                    test_failure_count: 0,
+                    build_exit_code: None,
+                    test_exit_code: None,
                 },
             )?;
 
@@ -1642,6 +1904,7 @@ pub async fn process_item(
                     &task_ctx.workspace_id,
                     task_ctx.current_cycle,
                     runtime,
+                    None,
                 )
                 .await?;
                 fix_exit_code = Some(result.exit_code);
@@ -1701,6 +1964,7 @@ pub async fn process_item(
                 &task_ctx.workspace_id,
                 task_ctx.current_cycle,
                 runtime,
+                None,
             )
             .await?;
             retest_exit_code = Some(result.exit_code);
@@ -1716,6 +1980,130 @@ pub async fn process_item(
                 json!({"step":"retest","exit_code":result.exit_code,"success":retest_success}),
             )?;
         }
+    }
+
+    // Process extended step types — any step that isn't handled by the standard
+    // (init_once, plan, qa, ticket_scan, retest, loop_guard) path above.
+    // This includes Build, Test, Lint, Implement, GitOps, Review, QaDocGen,
+    // QaTesting, TicketFix, DocGovernance, AlignTests, and any future custom types.
+    // Fix is also handled here when the ticket-based fix path didn't run.
+    // Steps are iterated in execution plan order for pipeline variable propagation.
+    for step in &task_ctx.execution_plan.steps {
+        if step.is_guard {
+            continue;
+        }
+        let step_type = step.step_type.as_ref().map(|t| t.as_str()).unwrap_or("");
+        let is_standard_step = matches!(
+            step_type,
+            "" | "init_once" | "plan" | "qa" | "ticket_scan" | "retest" | "loop_guard"
+        );
+        // Handle fix in extended loop when it hasn't been handled by the ticket-based path.
+        let is_fix_in_pipeline = step_type == "fix" && !fix_ran;
+        if is_standard_step && !is_fix_in_pipeline {
+            continue;
+        }
+        if !step.enabled {
+            continue;
+        }
+        if !step.repeatable && task_ctx.current_cycle > 1 {
+            continue;
+        }
+
+        // Evaluate prehook if present
+        let should_run = evaluate_step_prehook(
+            state,
+            step.prehook.as_ref(),
+            &StepPrehookContext {
+                task_id: task_id.to_string(),
+                task_item_id: item_id.to_string(),
+                cycle: task_ctx.current_cycle,
+                step: step_type.to_string(),
+                qa_file_path: item.qa_file_path.clone(),
+                item_status: item_status.clone(),
+                task_status: "running".to_string(),
+                qa_exit_code,
+                fix_exit_code,
+                retest_exit_code,
+                active_ticket_count: active_tickets.len() as i64,
+                new_ticket_count,
+                qa_failed,
+                fix_required: qa_failed || !active_tickets.is_empty(),
+                qa_confidence: None,
+                qa_quality_score: None,
+                fix_has_changes: None,
+                upstream_artifacts: vec![],
+                build_error_count: pipeline_vars.build_errors.len() as i64,
+                test_failure_count: pipeline_vars.test_failures.len() as i64,
+                build_exit_code,
+                test_exit_code,
+            },
+        )?;
+
+        if !should_run {
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "step_skipped",
+                json!({"step": step_type, "reason": "prehook_false"}),
+            )?;
+            continue;
+        }
+
+        insert_event(
+            state,
+            task_id,
+            Some(item_id),
+            "step_started",
+            json!({"step": step_type, "step_id": step.id}),
+        )?;
+
+        // Build a temporary task_ctx with updated pipeline vars for this step
+        let mut step_ctx = task_ctx.clone();
+        step_ctx.pipeline_vars = pipeline_vars.clone();
+
+        let (result, new_pipeline) =
+            execute_builtin_step(state, task_id, item_id, step, &step_ctx, runtime).await?;
+
+        // Update pipeline variables for downstream steps
+        pipeline_vars = new_pipeline;
+
+        // Track build/test exit codes for prehook evaluation
+        match step_type {
+            "build" => {
+                build_exit_code = Some(result.exit_code);
+                if !result.is_success() {
+                    item_status = "build_failed".to_string();
+                }
+            }
+            "test" => {
+                test_exit_code = Some(result.exit_code);
+                if !result.is_success() {
+                    item_status = "test_failed".to_string();
+                }
+            }
+            "implement" => {
+                if !result.is_success() {
+                    item_status = "implement_failed".to_string();
+                }
+            }
+            _ => {}
+        }
+
+        insert_event(
+            state,
+            task_id,
+            Some(item_id),
+            "step_finished",
+            json!({
+                "step": step_type,
+                "step_id": step.id,
+                "exit_code": result.exit_code,
+                "success": result.is_success(),
+                "build_errors": pipeline_vars.build_errors.len(),
+                "test_failures": pipeline_vars.test_failures.len(),
+            }),
+        )?;
     }
 
     if !task_ctx.dynamic_steps.is_empty() {
@@ -1745,6 +2133,10 @@ pub async fn process_item(
             qa_quality_score: None,
             fix_has_changes: None,
             upstream_artifacts: vec![],
+            build_error_count: 0,
+            test_failure_count: 0,
+            build_exit_code: None,
+            test_exit_code: None,
         };
         let matched = pool.find_matching_steps(&dyn_ctx);
         for ds in matched {
@@ -1770,6 +2162,7 @@ pub async fn process_item(
                 &task_ctx.workspace_id,
                 task_ctx.current_cycle,
                 runtime,
+                None,
             )
             .await?;
             insert_event(

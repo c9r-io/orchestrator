@@ -81,4 +81,5 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/23-dynamic-plan-step-exec-tty.md` | 5 | Dynamic `plan` step insertion, step-level `tty`, and `exec` target contract |
 | orchestrator | `docs/qa/orchestrator/24-exec-interactive-simulation.md` | 5 | Interactive execution simulation via stdin pipe/here-doc and reusable QA script |
 | orchestrator | `docs/qa/orchestrator/25-session-attach-reattach.md` | 5 | Real session lifecycle: task session list/info/close, attach, re-attach, and close rejection checks |
-| orchestrator | `docs/qa/script/` | 6 | Executable QA scripts |
+| orchestrator | `docs/qa/orchestrator/26-self-bootstrap-workflow.md` | 5 | Self-bootstrap workflow: extended steps, pipeline variables, prehook-gated fix, checkpoint/rollback |
+| orchestrator | `docs/qa/script/` | 7 | Executable QA scripts |
