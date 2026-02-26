@@ -2049,6 +2049,17 @@ pub async fn process_item(
                 Some(&task_ctx.pipeline_vars),
             )
             .await?;
+            if let Some(ref output) = result.output {
+                // Propagate plan stdout to downstream template variables
+                // so steps like qa_doc_gen/implement can consume {plan_output}.
+                pipeline_vars.prev_stdout = output.stdout.clone();
+                pipeline_vars.prev_stderr = output.stderr.clone();
+                if !output.stdout.is_empty() {
+                    pipeline_vars
+                        .vars
+                        .insert("plan_output".to_string(), output.stdout.clone());
+                }
+            }
             insert_event(
                 state,
                 task_id,
@@ -2676,11 +2687,17 @@ pub async fn process_item(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{
+        AgentConfig, AgentMetadata, AgentSelectionConfig, LoopMode, WorkflowConfig,
+        WorkflowFinalizeConfig, WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
+        WorkflowStepType,
+    };
     use crate::db::open_conn;
     use crate::dto::CreateTaskPayload;
     use crate::task_ops::create_task_impl;
     use crate::test_utils::TestState;
     use rusqlite::params;
+    use std::collections::HashMap;
 
     #[test]
     fn load_task_summary_maps_created_and_updated_at_correctly() {
@@ -2713,5 +2730,159 @@ mod tests {
         assert_eq!(summary.workflow_id, workflow_id);
         assert_eq!(summary.created_at, created_at);
         assert_eq!(summary.updated_at, updated_at);
+    }
+
+    #[tokio::test]
+    async fn plan_output_is_propagated_to_qa_doc_gen_template() {
+        let mut fixture = TestState::new()
+            .with_agent(
+                "planner",
+                AgentConfig {
+                    metadata: AgentMetadata {
+                        name: "planner".to_string(),
+                        description: Some("plan propagation test agent".to_string()),
+                        version: None,
+                        cost: Some(1),
+                    },
+                    capabilities: vec!["plan".to_string(), "qa_doc_gen".to_string()],
+                    templates: {
+                        let mut t = HashMap::new();
+                        t.insert("plan".to_string(), "echo PLAN_MARKER_SB_SMOKE".to_string());
+                        t.insert(
+                            "qa_doc_gen".to_string(),
+                            "echo QA_DOC_FROM_PLAN:{plan_output}".to_string(),
+                        );
+                        t.insert(
+                            "loop_guard".to_string(),
+                            "echo '{\"continue\":false,\"should_stop\":true}'".to_string(),
+                        );
+                        t
+                    },
+                    selection: AgentSelectionConfig::default(),
+                },
+            )
+            .with_workflow(
+                "plan-propagation",
+                WorkflowConfig {
+                    steps: vec![
+                        WorkflowStepConfig {
+                            id: "plan".to_string(),
+                            description: None,
+                            step_type: Some(WorkflowStepType::Plan),
+                            builtin: None,
+                            required_capability: Some("plan".to_string()),
+                            enabled: true,
+                            repeatable: false,
+                            is_guard: false,
+                            cost_preference: None,
+                            prehook: None,
+                            tty: false,
+                            outputs: Vec::new(),
+                            pipe_to: None,
+                            command: None,
+                        },
+                        WorkflowStepConfig {
+                            id: "qa_doc_gen".to_string(),
+                            description: None,
+                            step_type: Some(WorkflowStepType::QaDocGen),
+                            builtin: None,
+                            required_capability: Some("qa_doc_gen".to_string()),
+                            enabled: true,
+                            repeatable: false,
+                            is_guard: false,
+                            cost_preference: None,
+                            prehook: None,
+                            tty: false,
+                            outputs: Vec::new(),
+                            pipe_to: None,
+                            command: None,
+                        },
+                        WorkflowStepConfig {
+                            id: "loop_guard".to_string(),
+                            description: None,
+                            step_type: Some(WorkflowStepType::LoopGuard),
+                            builtin: Some("loop_guard".to_string()),
+                            required_capability: None,
+                            enabled: true,
+                            repeatable: true,
+                            is_guard: true,
+                            cost_preference: None,
+                            prehook: None,
+                            tty: false,
+                            outputs: Vec::new(),
+                            pipe_to: None,
+                            command: None,
+                        },
+                    ],
+                    loop_policy: WorkflowLoopConfig {
+                        mode: LoopMode::Once,
+                        guard: WorkflowLoopGuardConfig {
+                            enabled: true,
+                            stop_when_no_unresolved: true,
+                            max_cycles: Some(1),
+                            agent_template: None,
+                        },
+                    },
+                    finalize: WorkflowFinalizeConfig { rules: vec![] },
+                    qa: None,
+                    fix: None,
+                    retest: None,
+                    dynamic_steps: vec![],
+                    safety: crate::config::SafetyConfig::default(),
+                },
+            );
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/plan_propagation.md");
+        std::fs::write(&qa_file, "# plan propagation\n").expect("seed qa file");
+
+        let created = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("plan-propagation".to_string()),
+                goal: Some("verify plan output propagation".to_string()),
+                workflow_id: Some("plan-propagation".to_string()),
+                target_files: Some(vec!["docs/qa/plan_propagation.md".to_string()]),
+                ..Default::default()
+            },
+        )
+        .expect("task should be created");
+
+        prepare_task_for_start(&state, &created.id).expect("prepare task");
+        run_task_loop(state.clone(), &created.id, RunningTask::new())
+            .await
+            .expect("task should run");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (qa_command, qa_stdout): (String, String) = conn
+            .query_row(
+                "SELECT command, json_extract(output_json, '$.stdout')
+                 FROM command_runs
+                 WHERE task_item_id = (
+                   SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1
+                 ) AND phase = 'qa_doc_gen'
+                 ORDER BY started_at DESC LIMIT 1",
+                params![created.id.clone()],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("qa_doc_gen run should exist");
+
+        assert!(
+            qa_command.contains("PLAN_MARKER_SB_SMOKE"),
+            "expected qa_doc_gen command to include propagated plan output, got: {}",
+            qa_command
+        );
+        assert!(
+            !qa_command.contains("{plan_output}"),
+            "expected qa_doc_gen command to resolve {{plan_output}}, got: {}",
+            qa_command
+        );
+        assert!(
+            qa_stdout.contains("QA_DOC_FROM_PLAN:PLAN_MARKER_SB_SMOKE"),
+            "expected qa_doc_gen stdout to reflect propagated plan output, got: {}",
+            qa_stdout
+        );
     }
 }
