@@ -6,25 +6,19 @@ spec:
   root_path: "."
   qa_targets:
     - docs/qa
-  ticket_dir: fixtures/ticket
+  ticket_dir: docs/ticket
   self_referential: true
 ---
+# Architect agent (opus) — deep reasoning for planning and QA doc design
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
-  name: claude-code
-  description: "Claude Code AI agent — sole agent for self-bootstrap workflow"
+  name: architect
+  description: "Opus-powered architect agent — planning and QA doc generation"
 spec:
   capabilities:
     - plan
-    - implement
     - qa_doc_gen
-    - qa_testing
-    - ticket_fix
-    - align_tests
-    - doc_governance
-    - review
-    - loop_guard
   templates:
     # Plan: arch-guidance + rust-conventions, outputs implementation plan
     plan: >-
@@ -43,7 +37,7 @@ spec:
 
       Current diff in this cycle: {diff}"
       --dangerously-skip-permissions --verbose --output-format stream-json
-      --model sonnet
+      --model opus
 
     # QA doc generation: produce executable QA test documents from the plan
     qa_doc_gen: >-
@@ -57,8 +51,20 @@ spec:
       Generate executable QA test documents for the planned changes.
       Place them under docs/qa/ following existing conventions."
       --dangerously-skip-permissions --verbose --output-format stream-json
-      --model sonnet
-
+      --model opus
+---
+# Coder agent (sonnet) — code generation, fixing, and test alignment
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: coder
+  description: "Sonnet-powered coder agent — implementation, ticket fixing, and test alignment"
+spec:
+  capabilities:
+    - implement
+    - ticket_fix
+    - align_tests
+  templates:
     # Implement: write code + unit tests, run cargo check before finishing
     implement: >-
       claude -p
@@ -73,20 +79,6 @@ spec:
 
       Implement the changes. After writing code, run 'cd {source_tree}/core && cargo check'
       to verify compilation before finishing."
-      --dangerously-skip-permissions --verbose --output-format stream-json
-      --model sonnet
-
-    # QA testing: rebuild CLI, execute QA scenarios, create tickets for failures
-    qa_testing: >-
-      claude -p
-      "/qa-testing
-
-      Project: {source_tree}
-      QA targets: docs/qa/
-      Ticket dir: fixtures/ticket/
-
-      Execute the QA test scenarios. For each scenario, follow the steps
-      and verify expected outcomes. Create tickets for failures."
       --dangerously-skip-permissions --verbose --output-format stream-json
       --model sonnet
 
@@ -114,7 +106,43 @@ spec:
       Also fix all clippy warnings and compilation warnings."
       --dangerously-skip-permissions --verbose --output-format stream-json
       --model sonnet
+---
+# Tester agent (sonnet) — QA testing requires reliable tool-use and judgment
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: tester
+  description: "Sonnet-powered tester agent — QA scenario execution and ticket creation"
+spec:
+  capabilities:
+    - qa_testing
+  templates:
+    # QA testing: rebuild CLI, execute QA scenarios, create tickets for failures
+    qa_testing: >-
+      claude -p
+      "/qa-testing
 
+      Project: {source_tree}
+      QA targets: docs/qa/
+      Ticket dir: docs/ticket/
+
+      Execute the QA test scenarios. For each scenario, follow the steps
+      and verify expected outcomes. Create tickets for failures."
+      --dangerously-skip-permissions --verbose --output-format stream-json
+      --model sonnet
+---
+# Reviewer agent (haiku) — lightweight pattern matching for doc audit and code review
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: reviewer
+  description: "Haiku-powered reviewer agent — doc governance and code review"
+spec:
+  capabilities:
+    - doc_governance
+    - review
+    - loop_guard
+  templates:
     # Doc governance: audit QA doc quality
     doc_governance: >-
       claude -p
@@ -153,7 +181,7 @@ metadata:
   name: self-bootstrap
 spec:
   steps:
-    # Phase 1: Planning — create implementation plan
+    # Phase 1: Planning — create implementation plan (architect/opus)
     - id: plan
       type: plan
       required_capability: plan
@@ -161,7 +189,7 @@ spec:
       repeatable: false
       tty: true
 
-    # Phase 2: QA Doc Generation — produce executable test docs from plan
+    # Phase 2: QA Doc Generation — produce executable test docs from plan (architect/opus)
     - id: qa_doc_gen
       type: qa_doc_gen
       required_capability: qa_doc_gen
@@ -169,7 +197,7 @@ spec:
       repeatable: false
       tty: true
 
-    # Phase 3: Implementation — write code + unit tests (agent runs cargo check)
+    # Phase 3: Implementation — write code + unit tests (coder/sonnet)
     - id: implement
       type: implement
       required_capability: implement
@@ -177,7 +205,7 @@ spec:
       repeatable: true
       tty: true
 
-    # Phase 4: QA Testing — rebuild CLI + execute QA scenarios + create tickets
+    # Phase 4: QA Testing — rebuild CLI + execute QA scenarios + create tickets (tester/sonnet)
     - id: qa_testing
       type: qa_testing
       required_capability: qa_testing
@@ -185,7 +213,7 @@ spec:
       repeatable: true
       tty: true
 
-    # Phase 5: Ticket Fix — fix QA failures (prehook: only when tickets exist)
+    # Phase 5: Ticket Fix — fix QA failures (coder/sonnet, prehook: only when tickets exist)
     - id: ticket_fix
       type: ticket_fix
       required_capability: ticket_fix
@@ -197,7 +225,7 @@ spec:
         when: "active_ticket_count > 0"
         reason: "Only fix tickets when there are active tickets"
 
-    # Phase 6: Align Tests — cargo test + clippy + build, iterate until stable
+    # Phase 6: Align Tests — cargo test + clippy + build, iterate until stable (coder/sonnet)
     - id: align_tests
       type: align_tests
       required_capability: align_tests
@@ -205,7 +233,7 @@ spec:
       repeatable: true
       tty: true
 
-    # Phase 7: Doc Governance — audit and remediate doc quality
+    # Phase 7: Doc Governance — audit and remediate doc quality (reviewer/haiku)
     - id: doc_governance
       type: doc_governance
       required_capability: doc_governance
@@ -213,7 +241,7 @@ spec:
       repeatable: false
       tty: true
 
-    # Phase 8: Loop guard
+    # Phase 8: Loop guard (reviewer/haiku)
     - id: loop_guard
       type: loop_guard
       enabled: true

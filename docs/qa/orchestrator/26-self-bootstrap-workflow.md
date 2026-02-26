@@ -101,12 +101,16 @@ QA_PROJECT="qa-bootstrap-${USER}-$(date +%Y%m%d%H%M%S)"
 - Clean runtime state
 
 ### Steps
-1. Apply `fixtures/self-bootstrap.yaml` (dry-run + real)
+1. Apply `docs/workflow/self-bootstrap.yaml` (dry-run + real)
 2. Verify resources
 
 ### Expected
 - Workspace `self` with `self_referential: true`
-- Agent `claude-code` with capabilities: plan, implement, qa_doc_gen, qa_testing, ticket_fix, align_tests, doc_governance, review, loop_guard
+- 4 agents registered with model-optimized capability split:
+  - `architect` (opus): plan, qa_doc_gen — deep reasoning for planning and QA doc design
+  - `coder` (sonnet): implement, ticket_fix, align_tests — code generation, fixing, test alignment
+  - `tester` (sonnet): qa_testing — QA scenario execution requiring reliable tool-use
+  - `reviewer` (haiku): doc_governance, review, loop_guard — lightweight pattern matching
 - Workflow `self-bootstrap` with simplified SDLC steps: plan, qa_doc_gen, implement, qa_testing, ticket_fix, align_tests, doc_governance, loop_guard
 - Safety: `max_consecutive_failures: 3`, `checkpoint_strategy: git_tag`
 

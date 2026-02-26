@@ -219,21 +219,24 @@ echo ""
 bold "Scenario 5: Self-Bootstrap Manifest Applies Successfully"
 bold "--------------------------------------------------------------"
 
-S5_DRYRUN=$($ORCH apply -f fixtures/self-bootstrap.yaml --dry-run 2>&1) || true
-S5_APPLY=$($ORCH apply -f fixtures/self-bootstrap.yaml 2>&1) || true
+S5_DRYRUN=$($ORCH apply -f docs/workflow/self-bootstrap.yaml --dry-run 2>&1) || true
+S5_APPLY=$($ORCH apply -f docs/workflow/self-bootstrap.yaml 2>&1) || true
 
 echo "  Dry-run output: $(echo "$S5_DRYRUN" | head -5)"
 
 # Check resources exist
 S5_WS=$($ORCH get workspaces 2>&1 | grep -c "self" || true)
 S5_AGENTS=$($ORCH get agents 2>&1)
-S5_CLAUDE=$(echo "$S5_AGENTS" | grep -c "claude-code" || true)
+S5_ARCHITECT=$(echo "$S5_AGENTS" | grep -c "architect" || true)
+S5_CODER=$(echo "$S5_AGENTS" | grep -c "coder" || true)
+S5_TESTER=$(echo "$S5_AGENTS" | grep -c "tester" || true)
+S5_REVIEWER=$(echo "$S5_AGENTS" | grep -c "reviewer" || true)
 S5_WF=$($ORCH get workflows 2>&1 | grep -c "self-bootstrap" || true)
 
-echo "  Workspace 'self': ${S5_WS}, claude-code: ${S5_CLAUDE}, workflow: ${S5_WF}"
+echo "  Workspace 'self': ${S5_WS}, agents: architect=${S5_ARCHITECT} coder=${S5_CODER} tester=${S5_TESTER} reviewer=${S5_REVIEWER}, workflow: ${S5_WF}"
 
-if [ "$S5_WS" -ge 1 ] && [ "$S5_CLAUDE" -ge 1 ] && [ "$S5_WF" -ge 1 ]; then
-  pass "S5: Self-bootstrap manifest applied — all resources registered"
+if [ "$S5_WS" -ge 1 ] && [ "$S5_ARCHITECT" -ge 1 ] && [ "$S5_CODER" -ge 1 ] && [ "$S5_TESTER" -ge 1 ] && [ "$S5_REVIEWER" -ge 1 ] && [ "$S5_WF" -ge 1 ]; then
+  pass "S5: Self-bootstrap manifest applied — 4 agents (architect/coder/tester/reviewer) + workflow registered"
 else
   fail "S5" "Some resources missing after apply"
 fi
