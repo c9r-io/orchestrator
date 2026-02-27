@@ -15,6 +15,34 @@ use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+/// Escape a string for safe embedding inside a bash double-quoted string.
+///
+/// Inside bash double quotes, the characters `\`, `$`, `` ` ``, `"`, and `!`
+/// are special. This function escapes them so that the shell passes the
+/// literal content to the target program without interpretation.
+///
+/// This is critical for pipeline variables (plan_output, build_output, diff,
+/// etc.) whose content may contain markdown with backticks, dollar signs, or
+/// other shell metacharacters.
+fn escape_for_bash_dquote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + s.len() / 8);
+    for ch in s.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '$' => out.push_str("\\$"),
+            '`' => out.push_str("\\`"),
+            '"' => out.push_str("\\\""),
+            '!' => out.push_str("\\!"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+// ============================================================================
 // Core Data Structures
 // ============================================================================
 
@@ -601,6 +629,10 @@ impl AgentContext {
     }
 
     /// Render template with context variables
+    ///
+    /// Note: Pipeline variable values are escaped for safe use inside
+    /// bash double-quoted strings. This prevents content like markdown
+    /// backticks from triggering shell command substitution.
     pub fn render_template(&self, template: &str) -> String {
         self.render_template_with_pipeline(template, None)
     }
@@ -624,9 +656,11 @@ impl AgentContext {
 
         // Pipeline variables from previous steps
         if let Some(pipeline) = pipeline {
-            result = result.replace("{build_output}", &pipeline.prev_stdout);
-            result = result.replace("{test_output}", &pipeline.prev_stdout);
-            result = result.replace("{diff}", &pipeline.diff);
+            result =
+                result.replace("{build_output}", &escape_for_bash_dquote(&pipeline.prev_stdout));
+            result =
+                result.replace("{test_output}", &escape_for_bash_dquote(&pipeline.prev_stdout));
+            result = result.replace("{diff}", &escape_for_bash_dquote(&pipeline.diff));
 
             // Build errors as JSON for AI agents to parse
             if !pipeline.build_errors.is_empty() {
@@ -647,7 +681,8 @@ impl AgentContext {
 
             // Custom pipeline vars
             for (key, value) in &pipeline.vars {
-                result = result.replace(&format!("{{{}}}", key), value);
+                result =
+                    result.replace(&format!("{{{}}}", key), &escape_for_bash_dquote(value));
             }
         }
 
@@ -1197,5 +1232,68 @@ mod tests {
         let entries = dag.get_entry_nodes();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0], "start");
+    }
+
+    #[test]
+    fn test_escape_for_bash_dquote() {
+        // Backticks (the exact issue: markdown with `resource.rs` etc.)
+        assert_eq!(
+            escape_for_bash_dquote("`resource.rs`"),
+            "\\`resource.rs\\`"
+        );
+
+        // Dollar signs (prevent variable expansion)
+        assert_eq!(escape_for_bash_dquote("$HOME"), "\\$HOME");
+
+        // Double quotes
+        assert_eq!(escape_for_bash_dquote(r#"say "hello""#), r#"say \"hello\""#);
+
+        // Backslashes
+        assert_eq!(escape_for_bash_dquote(r"path\to"), r"path\\to");
+
+        // History expansion
+        assert_eq!(escape_for_bash_dquote("wow!"), "wow\\!");
+
+        // Plain text passes through unchanged
+        assert_eq!(escape_for_bash_dquote("hello world"), "hello world");
+
+        // Combined: realistic markdown plan output
+        let plan = "| `mod.rs` | ~200 | Core types, `pub(super)` |\n| $cost | ~$5 |";
+        let escaped = escape_for_bash_dquote(plan);
+        // Verify specific escaped sequences are present
+        assert!(escaped.contains("\\`mod.rs\\`"));
+        assert!(escaped.contains("\\`pub(super)\\`"));
+        assert!(escaped.contains("\\$cost"));
+        assert!(escaped.contains("\\$5"));
+        // No unescaped shell metacharacters (backtick not preceded by backslash)
+        assert!(!escaped.contains(" `m")); // would mean unescaped backtick
+    }
+
+    #[test]
+    fn test_pipeline_vars_escaped_in_template() {
+        let ctx = AgentContext::new(
+            "task1".to_string(),
+            "item1".to_string(),
+            1,
+            "plan".to_string(),
+            PathBuf::from("/workspace"),
+            "ws1".to_string(),
+        );
+
+        let mut pipeline = crate::config::PipelineVariables::default();
+        pipeline.vars.insert(
+            "plan_output".to_string(),
+            "Split `resource.rs` into `mod.rs` and `api.rs`".to_string(),
+        );
+
+        let template = r#"claude "Plan: {plan_output}""#;
+        let rendered = ctx.render_template_with_pipeline(template, Some(&pipeline));
+
+        // Backticks must be escaped so bash doesn't run command substitution
+        assert!(rendered.contains("\\`resource.rs\\`"));
+        assert!(rendered.contains("\\`mod.rs\\`"));
+        assert!(rendered.contains("\\`api.rs\\`"));
+        // Must NOT contain raw backticks (except in the escaped form)
+        assert!(!rendered.contains(" `resource.rs` "));
     }
 }
