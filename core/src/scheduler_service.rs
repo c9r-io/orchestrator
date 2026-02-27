@@ -2,7 +2,6 @@
 
 use crate::config_load::now_ts;
 use crate::events::insert_event;
-use crate::scheduler::set_task_status;
 use crate::state::InnerState;
 use anyhow::Result;
 use rusqlite::OptionalExtension;
@@ -10,7 +9,7 @@ use serde_json::json;
 use std::path::PathBuf;
 
 pub fn enqueue_task(state: &InnerState, task_id: &str) -> Result<()> {
-    set_task_status(state, task_id, "pending", false)?;
+    state.db_writer.set_task_status(task_id, "pending", false)?;
     touch_worker_wake_signal(state)?;
     insert_event(
         state,
