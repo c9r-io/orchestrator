@@ -456,6 +456,8 @@ pub fn simulate_prehook_impl(
         test_failure_count: 0,
         build_exit_code: None,
         test_exit_code: None,
+        self_test_exit_code: None,
+        self_test_passed: false,
     };
     let result = evaluate_step_prehook_expression(&expression, &context)?;
     Ok(crate::dto::SimulatePrehookResult { result, expression })
@@ -696,6 +698,8 @@ mod tests {
             test_failure_count: 0,
             build_exit_code: None,
             test_exit_code: None,
+            self_test_exit_code: None,
+            self_test_passed: false,
         };
         let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
         assert!(result.is_ok());
@@ -727,6 +731,8 @@ mod tests {
             test_failure_count: 0,
             build_exit_code: None,
             test_exit_code: None,
+            self_test_exit_code: None,
+            self_test_passed: false,
         };
         let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
         assert!(result.is_ok());
@@ -758,6 +764,8 @@ mod tests {
             test_failure_count: 0,
             build_exit_code: None,
             test_exit_code: None,
+            self_test_exit_code: None,
+            self_test_passed: false,
         };
         let result = evaluate_step_prehook_expression("invalid @#$ expression", &context);
         assert!(result.is_err());
@@ -788,6 +796,8 @@ mod tests {
             test_failure_count: 0,
             build_exit_code: None,
             test_exit_code: None,
+            self_test_exit_code: None,
+            self_test_passed: false,
         };
         let result = evaluate_step_prehook_expression("qa_failed == true", &context);
         assert!(result.is_ok());
@@ -819,6 +829,8 @@ mod tests {
             test_failure_count: 0,
             build_exit_code: None,
             test_exit_code: None,
+            self_test_exit_code: None,
+            self_test_passed: false,
         };
         let result = evaluate_step_prehook_expression(
             "active_ticket_count > 0 && cycle >= 2 && qa_exit_code == 0",
@@ -854,6 +866,8 @@ mod tests {
             test_failure_count: 0,
             build_exit_code: Some(1),
             test_exit_code: Some(0),
+            self_test_exit_code: None,
+            self_test_passed: false,
         };
         let result =
             evaluate_step_prehook_expression("build_errors > 0 || test_failures > 0", &context_with_errors);

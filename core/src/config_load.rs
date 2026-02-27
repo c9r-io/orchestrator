@@ -100,6 +100,9 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                         step.builtin = Some("loop_guard".to_string());
                         step.is_guard = true;
                     }
+                    WorkflowStepType::SelfTest => {
+                        step.builtin = Some("self_test".to_string());
+                    }
                     _ => {}
                 }
             }
@@ -757,4 +760,49 @@ pub fn build_execution_plan(
         loop_policy,
         finalize: workflow.finalize.clone(),
     })
+}
+
+/// Validate safety configuration for self-referential workspaces.
+/// Hard-errors if checkpoint_strategy is None; warns on missing auto_rollback or self_test step.
+pub fn validate_self_referential_safety(
+    workflow: &WorkflowConfig,
+    workspace_id: &str,
+) -> Result<()> {
+    // Hard error: checkpoint_strategy must not be None
+    if matches!(
+        workflow.safety.checkpoint_strategy,
+        crate::config::CheckpointStrategy::None
+    ) {
+        anyhow::bail!(
+            "[SELF_REF_UNSAFE] workspace '{}' is self_referential but checkpoint_strategy is 'none'. \
+             Self-referential workspaces MUST have a checkpoint strategy (e.g. git_tag) to enable rollback.",
+            workspace_id
+        );
+    }
+
+    // Warning: auto_rollback should be enabled
+    if !workflow.safety.auto_rollback {
+        eprintln!(
+            "[warn] workspace '{}' is self_referential but auto_rollback is disabled. \
+             Consider enabling auto_rollback for self-referential workspaces.",
+            workspace_id
+        );
+    }
+
+    // Warning: no self_test step in workflow
+    let has_self_test = workflow.steps.iter().any(|s| {
+        s.step_type
+            .as_ref()
+            .map(|t| matches!(t, WorkflowStepType::SelfTest))
+            .unwrap_or(false)
+    });
+    if !has_self_test {
+        eprintln!(
+            "[warn] workspace '{}' is self_referential but has no 'self_test' step in its workflow. \
+             Consider adding a self_test step after 'implement' to catch breaking changes early.",
+            workspace_id
+        );
+    }
+
+    Ok(())
 }

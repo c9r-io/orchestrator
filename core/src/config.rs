@@ -219,6 +219,9 @@ pub struct SafetyConfig {
     /// Per-step timeout in seconds (default: 1800 = 30 min)
     #[serde(default)]
     pub step_timeout_secs: Option<u64>,
+    /// Snapshot the release binary at cycle start for rollback
+    #[serde(default)]
+    pub binary_snapshot: bool,
 }
 
 fn default_max_consecutive_failures() -> u32 {
@@ -232,6 +235,7 @@ impl Default for SafetyConfig {
             auto_rollback: false,
             checkpoint_strategy: CheckpointStrategy::default(),
             step_timeout_secs: None,
+            binary_snapshot: false,
         }
     }
 }
@@ -390,6 +394,7 @@ pub enum WorkflowStepType {
     TicketFix,
     DocGovernance,
     AlignTests,
+    SelfTest,
 }
 
 impl WorkflowStepType {
@@ -413,6 +418,7 @@ impl WorkflowStepType {
             Self::TicketFix => "ticket_fix",
             Self::DocGovernance => "doc_governance",
             Self::AlignTests => "align_tests",
+            Self::SelfTest => "self_test",
         }
     }
 
@@ -421,7 +427,7 @@ impl WorkflowStepType {
     pub fn has_structured_output(&self) -> bool {
         matches!(
             self,
-            Self::Build | Self::Test | Self::Lint | Self::QaTesting
+            Self::Build | Self::Test | Self::Lint | Self::QaTesting | Self::SelfTest
         )
     }
 }
@@ -449,6 +455,7 @@ impl FromStr for WorkflowStepType {
             "ticket_fix" => Ok(Self::TicketFix),
             "doc_governance" => Ok(Self::DocGovernance),
             "align_tests" => Ok(Self::AlignTests),
+            "self_test" => Ok(Self::SelfTest),
             _ => Err(format!(
                 "unknown workflow step type: {}",
                 value
@@ -739,7 +746,6 @@ pub struct TaskRuntimeContext {
     /// Safety configuration
     pub safety: SafetyConfig,
     /// Whether the workspace is self-referential
-    #[allow(dead_code)]
     pub self_referential: bool,
     /// Consecutive failure counter for auto-rollback
     pub consecutive_failures: u32,
@@ -774,6 +780,10 @@ pub struct StepPrehookContext {
     pub build_exit_code: Option<i64>,
     /// Exit code of the last test step
     pub test_exit_code: Option<i64>,
+    /// Exit code of the last self_test step
+    pub self_test_exit_code: Option<i64>,
+    /// Whether the last self_test step passed
+    pub self_test_passed: bool,
 }
 
 /// Artifact summary

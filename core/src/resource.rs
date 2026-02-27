@@ -1063,6 +1063,7 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
                 _ => crate::config::CheckpointStrategy::None,
             },
             step_timeout_secs: spec.safety.step_timeout_secs,
+            binary_snapshot: spec.safety.binary_snapshot,
         },
     })
 }

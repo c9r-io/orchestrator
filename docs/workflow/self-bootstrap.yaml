@@ -197,6 +197,13 @@ spec:
       repeatable: true
       tty: false
 
+    # Phase 3.5: Self-Test — cargo check + cargo test --lib + manifest validate
+    - id: self_test
+      type: self_test
+      enabled: true
+      repeatable: true
+      tty: false
+
     # Phase 4: QA Testing — rebuild CLI + execute QA scenarios + create tickets (tester/minimax)
     - id: qa_testing
       type: qa_testing
@@ -249,5 +256,6 @@ spec:
 
   safety:
     max_consecutive_failures: 3
-    auto_rollback: false
+    auto_rollback: true
     checkpoint_strategy: git_tag
+    binary_snapshot: true

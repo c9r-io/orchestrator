@@ -297,6 +297,9 @@ pub struct SafetySpec {
     /// Per-step timeout in seconds (default: 1800 = 30 min)
     #[serde(default)]
     pub step_timeout_secs: Option<u64>,
+    /// Snapshot the release binary at cycle start for rollback
+    #[serde(default)]
+    pub binary_snapshot: bool,
 }
 
 fn default_max_consecutive_failures() -> u32 {

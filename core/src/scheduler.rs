@@ -752,6 +752,10 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
         .map(|ws| ws.self_referential)
         .unwrap_or(false);
 
+    if self_referential {
+        crate::config_load::validate_self_referential_safety(workflow, &workspace_id)?;
+    }
+
     Ok(TaskRuntimeContext {
         workspace_id,
         workspace_root,
@@ -916,6 +920,27 @@ async fn run_task_loop_core(
                         "checkpoint_created",
                         json!({"cycle": task_ctx.current_cycle, "tag": tag}),
                     )?;
+
+                    // Binary snapshot: copy release binary to .stable when self-referential
+                    if task_ctx.safety.binary_snapshot && task_ctx.self_referential {
+                        match snapshot_binary(&task_ctx.workspace_root).await {
+                            Ok(path) => {
+                                insert_event(
+                                    &state,
+                                    task_id,
+                                    None,
+                                    "binary_snapshot_created",
+                                    json!({"cycle": task_ctx.current_cycle, "path": path.display().to_string()}),
+                                )?;
+                            }
+                            Err(e) => {
+                                eprintln!(
+                                    "[warn] failed to create binary snapshot for cycle {}: {}",
+                                    task_ctx.current_cycle, e
+                                );
+                            }
+                        }
+                    }
                 }
                 Err(e) => {
                     eprintln!(
@@ -983,6 +1008,25 @@ async fn run_task_loop_core(
                         "auto_rollback",
                         json!({"rollback_to": rollback_tag}),
                     );
+
+                    // Restore binary snapshot after source rollback
+                    if task_ctx.safety.binary_snapshot && task_ctx.self_referential {
+                        match restore_binary_snapshot(&task_ctx.workspace_root).await {
+                            Ok(()) => {
+                                insert_event(
+                                    &state,
+                                    task_id,
+                                    None,
+                                    "binary_snapshot_restored",
+                                    json!({"cycle": task_ctx.current_cycle}),
+                                )?;
+                            }
+                            Err(e) => {
+                                eprintln!("[warn] failed to restore binary snapshot: {}", e);
+                            }
+                        }
+                    }
+
                     task_ctx.consecutive_failures = 0;
                 }
                 Err(e) => {
@@ -1324,6 +1368,157 @@ pub async fn rollback_to_checkpoint(
         anyhow::bail!("git reset failed: {}", stderr);
     }
     Ok(())
+}
+
+/// Snapshot the release binary to `.stable` for rollback.
+pub async fn snapshot_binary(workspace_root: &Path) -> Result<PathBuf> {
+    let binary_path = workspace_root.join("core/target/release/agent-orchestrator");
+    let stable_path = workspace_root.join(".stable");
+
+    if !binary_path.exists() {
+        anyhow::bail!(
+            "release binary not found at {}; skipping binary snapshot",
+            binary_path.display()
+        );
+    }
+
+    tokio::fs::copy(&binary_path, &stable_path)
+        .await
+        .with_context(|| {
+            format!(
+                "failed to snapshot binary from {} to {}",
+                binary_path.display(),
+                stable_path.display()
+            )
+        })?;
+
+    Ok(stable_path)
+}
+
+/// Restore the `.stable` binary snapshot over the live release binary.
+pub async fn restore_binary_snapshot(workspace_root: &Path) -> Result<()> {
+    let stable_path = workspace_root.join(".stable");
+    let binary_path = workspace_root.join("core/target/release/agent-orchestrator");
+
+    if !stable_path.exists() {
+        anyhow::bail!(
+            "no .stable binary snapshot found at {}",
+            stable_path.display()
+        );
+    }
+
+    tokio::fs::copy(&stable_path, &binary_path)
+        .await
+        .with_context(|| {
+            format!(
+                "failed to restore binary snapshot from {} to {}",
+                stable_path.display(),
+                binary_path.display()
+            )
+        })?;
+
+    Ok(())
+}
+
+/// Execute the self_test builtin step: cargo check, cargo test --lib, and optionally manifest validate.
+pub async fn execute_self_test_step(
+    workspace_root: &Path,
+    state: &InnerState,
+    task_id: &str,
+    item_id: &str,
+) -> Result<i64> {
+    let core_dir = workspace_root.join("core");
+
+    // Phase 1: cargo check
+    state.emit_event(task_id, Some(item_id), "self_test_phase", json!({"phase": "cargo_check"}));
+    let check_output = tokio::process::Command::new("cargo")
+        .args(["check", "--message-format=short"])
+        .current_dir(&core_dir)
+        .output()
+        .await
+        .context("failed to run cargo check")?;
+
+    if !check_output.status.success() {
+        let stderr = String::from_utf8_lossy(&check_output.stderr);
+        eprintln!("[self_test] cargo check failed:\n{}", stderr);
+        state.emit_event(
+            task_id,
+            Some(item_id),
+            "self_test_phase",
+            json!({"phase": "cargo_check", "passed": false}),
+        );
+        return Ok(check_output.status.code().unwrap_or(1) as i64);
+    }
+    state.emit_event(
+        task_id,
+        Some(item_id),
+        "self_test_phase",
+        json!({"phase": "cargo_check", "passed": true}),
+    );
+
+    // Phase 2: cargo test --lib
+    state.emit_event(task_id, Some(item_id), "self_test_phase", json!({"phase": "cargo_test_lib"}));
+    let test_output = tokio::process::Command::new("cargo")
+        .args(["test", "--lib"])
+        .current_dir(&core_dir)
+        .output()
+        .await
+        .context("failed to run cargo test --lib")?;
+
+    if !test_output.status.success() {
+        let stderr = String::from_utf8_lossy(&test_output.stderr);
+        eprintln!("[self_test] cargo test --lib failed:\n{}", stderr);
+        state.emit_event(
+            task_id,
+            Some(item_id),
+            "self_test_phase",
+            json!({"phase": "cargo_test_lib", "passed": false}),
+        );
+        return Ok(test_output.status.code().unwrap_or(1) as i64);
+    }
+    state.emit_event(
+        task_id,
+        Some(item_id),
+        "self_test_phase",
+        json!({"phase": "cargo_test_lib", "passed": true}),
+    );
+
+    // Phase 3: manifest validate (if orchestrator.sh exists)
+    let script_path = workspace_root.join("scripts/orchestrator.sh");
+    if script_path.exists() {
+        state.emit_event(
+            task_id,
+            Some(item_id),
+            "self_test_phase",
+            json!({"phase": "manifest_validate"}),
+        );
+        let validate_output = tokio::process::Command::new(&script_path)
+            .args(["manifest", "validate", "-f", "docs/workflow/self-bootstrap.yaml"])
+            .current_dir(workspace_root)
+            .output()
+            .await
+            .context("failed to run manifest validate")?;
+
+        if !validate_output.status.success() {
+            let stderr = String::from_utf8_lossy(&validate_output.stderr);
+            eprintln!("[self_test] manifest validate failed:\n{}", stderr);
+            state.emit_event(
+                task_id,
+                Some(item_id),
+                "self_test_phase",
+                json!({"phase": "manifest_validate", "passed": false}),
+            );
+            return Ok(validate_output.status.code().unwrap_or(1) as i64);
+        }
+        state.emit_event(
+            task_id,
+            Some(item_id),
+            "self_test_phase",
+            json!({"phase": "manifest_validate", "passed": true}),
+        );
+    }
+
+    Ok(0)
 }
 
 fn is_task_paused_in_db(state: &InnerState, task_id: &str) -> Result<bool> {
@@ -2104,6 +2299,8 @@ pub async fn process_item(
                 test_failure_count: 0,
                 build_exit_code: None,
                 test_exit_code: None,
+                self_test_exit_code: None,
+                self_test_passed: false,
             },
         )?;
 
@@ -2287,6 +2484,8 @@ pub async fn process_item(
                     test_failure_count: 0,
                     build_exit_code: None,
                     test_exit_code: None,
+                    self_test_exit_code: None,
+                    self_test_passed: false,
                 },
             )?;
 
@@ -2445,6 +2644,8 @@ pub async fn process_item(
                 test_failure_count: pipeline_vars.test_failures.len() as i64,
                 build_exit_code,
                 test_exit_code,
+                self_test_exit_code: pipeline_vars.vars.get("self_test_exit_code").and_then(|v| v.parse::<i64>().ok()),
+                self_test_passed: pipeline_vars.vars.get("self_test_passed").map(|v| v == "true").unwrap_or(false),
             },
         )?;
 
@@ -2466,6 +2667,39 @@ pub async fn process_item(
             "step_started",
             json!({"step": step_type, "step_id": step.id}),
         )?;
+
+        // Self-test builtin: run cargo check + cargo test --lib + manifest validate
+        if step.builtin.as_deref() == Some("self_test") {
+            let exit_code = execute_self_test_step(
+                &task_ctx.workspace_root,
+                state,
+                task_id,
+                item_id,
+            )
+            .await
+            .unwrap_or(1);
+
+            let passed = exit_code == 0;
+            pipeline_vars
+                .vars
+                .insert("self_test_exit_code".to_string(), exit_code.to_string());
+            pipeline_vars
+                .vars
+                .insert("self_test_passed".to_string(), passed.to_string());
+
+            if !passed {
+                item_status = "self_test_failed".to_string();
+            }
+
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "step_finished",
+                json!({"step": "self_test", "exit_code": exit_code, "success": passed}),
+            )?;
+            continue;
+        }
 
         // Build a temporary task_ctx with updated pipeline vars for this step
         let mut step_ctx = task_ctx.clone();
@@ -2557,6 +2791,8 @@ pub async fn process_item(
             test_failure_count: 0,
             build_exit_code: None,
             test_exit_code: None,
+            self_test_exit_code: None,
+            self_test_passed: false,
         };
         let matched = pool.find_matching_steps(&dyn_ctx);
         for ds in matched {

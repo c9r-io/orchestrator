@@ -220,6 +220,10 @@ pub struct StepPrehookContext {
     pub test_failure_count: i64,
     pub build_exit_code: Option<i64>,
     pub test_exit_code: Option<i64>,
+    #[serde(default)]
+    pub self_test_exit_code: Option<i64>,
+    #[serde(default)]
+    pub self_test_passed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
