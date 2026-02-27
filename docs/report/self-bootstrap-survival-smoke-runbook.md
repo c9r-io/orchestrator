@@ -293,13 +293,57 @@ Expected:
 ### 5.2 Fail — Broken Code
 
 ```bash
-# Inject compile error
-echo 'fn _smoke_break() { let x: i32 = "bad"; }' >> core/src/lib.rs
+cat > /tmp/smoke-selfbreak.yaml <<'YAML'
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: smoke-breaker
+spec:
+  capabilities:
+    - smoke_break
+  templates:
+    smoke_break: >-
+      sh -lc 'printf "\nfn _smoke_break() { let x: i32 = \"bad\"; }\n" >> "{source_tree}/core/src/lib.rs"'
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: smoke-selfbreak
+spec:
+  steps:
+    - id: implement
+      type: implement
+      required_capability: smoke_break
+      enabled: true
+      repeatable: false
+      tty: false
+    - id: self_test
+      type: self_test
+      enabled: true
+      repeatable: false
+      tty: false
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: once
+    enabled: true
+    stop_when_no_unresolved: true
+  safety:
+    checkpoint_strategy: git_tag
+    auto_rollback: true
+YAML
+
+./scripts/orchestrator.sh apply -f /tmp/smoke-selfbreak.yaml
 
 ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" \
-  -w self -W smoke-selftest \
+  -w self -W smoke-selfbreak \
   --no-start \
-  -g "SURVIVAL SMOKE: self_test should fail on broken code"
+  -g "SURVIVAL SMOKE: real agent self-modify should be caught by self_test" \
+  -t docs/qa/orchestrator/27-self-test-step.md
 
 TASK_ID=$(./scripts/orchestrator.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
 ./scripts/orchestrator.sh task start "$TASK_ID"
@@ -316,12 +360,21 @@ WHERE task_id='${TASK_ID}'
   AND json_extract(payload_json, '\$.step') = 'self_test';
 "
 
-# Revert the error
-sed -i '' '/_smoke_break/d' core/src/lib.rs
+# Revert the injected error precisely
+python - <<'PY'
+from pathlib import Path
+p = Path("core/src/lib.rs")
+needle = '\nfn _smoke_break() { let x: i32 = "bad"; }\n'
+text = p.read_text()
+idx = text.rfind(needle)
+assert idx != -1, "marker not found"
+p.write_text(text[:idx] + text[idx + len(needle):])
+PY
 cd core && cargo check && cd ..
 ```
 
 Expected:
+- `step_finished` for `implement` has `exit_code: 0`, `success: true`
 - `step_finished` for `self_test` has `exit_code != 0`, `success: false`
 - After reverting, `cargo check` passes clean
 
