@@ -429,6 +429,14 @@ pub fn evaluate_loop_guard_rules(
 ) -> Option<(bool, String)> {
     match loop_policy.mode {
         LoopMode::Once => Some((false, "once_mode".to_string())),
+        LoopMode::Fixed => {
+            let max = loop_policy.guard.max_cycles.unwrap_or(1);
+            if current_cycle >= max {
+                Some((false, "fixed_cycles_complete".to_string()))
+            } else {
+                Some((true, "fixed_cycle_continue".to_string()))
+            }
+        }
         LoopMode::Infinite => {
             if let Some(max_cycles) = loop_policy.guard.max_cycles {
                 if current_cycle >= max_cycles {
@@ -440,5 +448,59 @@ pub fn evaluate_loop_guard_rules(
             }
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{WorkflowLoopConfig, WorkflowLoopGuardConfig};
+
+    fn make_loop_policy(mode: LoopMode, max_cycles: Option<u32>) -> WorkflowLoopConfig {
+        WorkflowLoopConfig {
+            mode,
+            guard: WorkflowLoopGuardConfig {
+                max_cycles,
+                ..Default::default()
+            },
+        }
+    }
+
+    #[test]
+    fn fixed_mode_stops_at_max_cycles() {
+        let policy = make_loop_policy(LoopMode::Fixed, Some(2));
+        // cycle 1 < 2 → continue
+        let result = evaluate_loop_guard_rules(&policy, 1, 0);
+        assert_eq!(result, Some((true, "fixed_cycle_continue".to_string())));
+        // cycle 2 >= 2 → stop
+        let result = evaluate_loop_guard_rules(&policy, 2, 0);
+        assert_eq!(result, Some((false, "fixed_cycles_complete".to_string())));
+        // cycle 3 >= 2 → stop
+        let result = evaluate_loop_guard_rules(&policy, 3, 0);
+        assert_eq!(result, Some((false, "fixed_cycles_complete".to_string())));
+    }
+
+    #[test]
+    fn fixed_mode_defaults_to_one_cycle() {
+        let policy = make_loop_policy(LoopMode::Fixed, None);
+        // cycle 1 >= 1 → stop immediately (acts like once)
+        let result = evaluate_loop_guard_rules(&policy, 1, 0);
+        assert_eq!(result, Some((false, "fixed_cycles_complete".to_string())));
+    }
+
+    #[test]
+    fn once_mode_always_stops() {
+        let policy = make_loop_policy(LoopMode::Once, None);
+        let result = evaluate_loop_guard_rules(&policy, 1, 0);
+        assert_eq!(result, Some((false, "once_mode".to_string())));
+    }
+
+    #[test]
+    fn infinite_mode_respects_max_cycles() {
+        let policy = make_loop_policy(LoopMode::Infinite, Some(3));
+        let result = evaluate_loop_guard_rules(&policy, 2, 0);
+        assert_eq!(result, None); // guard enabled, no decision yet
+        let result = evaluate_loop_guard_rules(&policy, 3, 0);
+        assert_eq!(result, Some((false, "max_cycles_reached".to_string())));
     }
 }

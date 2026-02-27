@@ -443,6 +443,8 @@ pub async fn process_item(
                 test_exit_code: None,
                 self_test_exit_code: None,
                 self_test_passed: false,
+                max_cycles: task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
+                is_last_cycle: task_ctx.current_cycle >= task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
             },
         )?;
 
@@ -619,6 +621,8 @@ pub async fn process_item(
                     test_exit_code: None,
                     self_test_exit_code: None,
                     self_test_passed: false,
+                    max_cycles: task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
+                    is_last_cycle: task_ctx.current_cycle >= task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
                 },
             )?;
 
@@ -784,6 +788,8 @@ pub async fn process_item(
                     .get("self_test_passed")
                     .map(|v| v == "true")
                     .unwrap_or(false),
+                max_cycles: task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
+                is_last_cycle: task_ctx.current_cycle >= task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
             },
         )?;
 
@@ -985,6 +991,8 @@ pub async fn process_item(
             test_exit_code: None,
             self_test_exit_code: None,
             self_test_passed: false,
+            max_cycles: task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
+            is_last_cycle: task_ctx.current_cycle >= task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
         };
         let matched = pool.find_matching_steps(&dyn_ctx);
         for ds in matched {

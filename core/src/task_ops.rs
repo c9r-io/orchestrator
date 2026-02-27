@@ -63,6 +63,7 @@ pub fn create_task_impl(
         serde_json::to_string(&execution_plan).context("serialize execution plan")?;
     let loop_mode = match execution_plan.loop_policy.mode {
         LoopMode::Once => "once",
+        LoopMode::Fixed => "fixed",
         LoopMode::Infinite => "infinite",
     };
 

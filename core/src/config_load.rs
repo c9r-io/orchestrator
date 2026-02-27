@@ -259,6 +259,14 @@ pub fn validate_workflow_config(
             );
         }
     }
+    if matches!(workflow.loop_policy.mode, crate::config::LoopMode::Fixed)
+        && workflow.loop_policy.guard.max_cycles.is_none()
+    {
+        anyhow::bail!(
+            "workflow '{}' loop.mode=fixed requires guard.max_cycles > 0",
+            workflow_id
+        );
+    }
     if workflow.loop_policy.guard.enabled {
         let has_loop_guard = config
             .agents
@@ -339,6 +347,14 @@ fn validate_workflow_config_with_agents(
                 workflow_id
             );
         }
+    }
+    if matches!(workflow.loop_policy.mode, crate::config::LoopMode::Fixed)
+        && workflow.loop_policy.guard.max_cycles.is_none()
+    {
+        anyhow::bail!(
+            "workflow '{}' loop.mode=fixed requires guard.max_cycles > 0",
+            workflow_id
+        );
     }
     if workflow.loop_policy.guard.enabled {
         let has_loop_guard = all_agents

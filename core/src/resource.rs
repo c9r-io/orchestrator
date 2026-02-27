@@ -357,7 +357,15 @@ impl Resource for WorkflowResource {
         for step in &self.spec.steps {
             parse_workflow_step_type(&step.step_type)?;
         }
-        parse_loop_mode(&self.spec.loop_policy.mode)?;
+        let loop_mode = parse_loop_mode(&self.spec.loop_policy.mode)?;
+        if matches!(loop_mode, LoopMode::Fixed) {
+            match self.spec.loop_policy.max_cycles {
+                None | Some(0) => {
+                    return Err(anyhow!("workflow loop.mode=fixed requires max_cycles > 0"));
+                }
+                _ => {}
+            }
+        }
         Ok(())
     }
 
@@ -1237,6 +1245,7 @@ fn parse_loop_mode(value: &str) -> Result<LoopMode> {
 fn loop_mode_as_str(mode: &LoopMode) -> &'static str {
     match mode {
         LoopMode::Once => "once",
+        LoopMode::Fixed => "fixed",
         LoopMode::Infinite => "infinite",
     }
 }
@@ -1752,8 +1761,15 @@ fn parse_loop_mode_infinite() {
 }
 
 #[test]
+fn parse_loop_mode_fixed() {
+    let mode = parse_loop_mode("fixed").expect("fixed should parse");
+    assert!(matches!(mode, LoopMode::Fixed));
+}
+
+#[test]
 fn parse_loop_mode_rejects_invalid() {
     assert!(matches!(parse_loop_mode("once"), Ok(LoopMode::Once)));
+    assert!(matches!(parse_loop_mode("fixed"), Ok(LoopMode::Fixed)));
     let invalid = parse_loop_mode("anything_else").expect_err("invalid mode should fail");
     assert!(invalid.to_string().contains("unknown loop mode"));
 }
@@ -1761,6 +1777,7 @@ fn parse_loop_mode_rejects_invalid() {
 #[test]
 fn loop_mode_as_str_returns_correct_values() {
     assert_eq!(loop_mode_as_str(&LoopMode::Once), "once");
+    assert_eq!(loop_mode_as_str(&LoopMode::Fixed), "fixed");
     assert_eq!(loop_mode_as_str(&LoopMode::Infinite), "infinite");
 }
 

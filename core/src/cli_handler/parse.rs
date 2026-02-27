@@ -221,12 +221,13 @@ pub(super) fn normalize_loop_mode(loop_mode: &str) -> Result<String> {
     use crate::config::LoopMode;
     let parsed = loop_mode.parse::<LoopMode>().map_err(|_| {
         anyhow::anyhow!(
-            "invalid --loop-mode '{}': expected one of once|infinite",
+            "invalid --loop-mode '{}': expected one of once|fixed|infinite",
             loop_mode
         )
     })?;
     let normalized = match parsed {
         LoopMode::Once => "once",
+        LoopMode::Fixed => "fixed",
         LoopMode::Infinite => "infinite",
     };
     Ok(normalized.to_string())

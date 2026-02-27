@@ -125,6 +125,24 @@ fn build_step_prehook_cel_context(context: &StepPrehookContext) -> Result<CelCon
             )
         })?;
     cel_context
+        .add_variable("max_cycles", context.max_cycles as i64)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("is_last_cycle", context.is_last_cycle)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
         .add_variable("step", context.step.clone())
         .map_err(|err| {
             anyhow::anyhow!(
@@ -650,6 +668,8 @@ mod tests {
             test_exit_code: None,
             self_test_exit_code: None,
             self_test_passed: false,
+            max_cycles: 1,
+            is_last_cycle: true,
         };
         let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
         assert!(result.is_ok());
@@ -683,6 +703,8 @@ mod tests {
             test_exit_code: None,
             self_test_exit_code: None,
             self_test_passed: false,
+            max_cycles: 1,
+            is_last_cycle: true,
         };
         let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
         assert!(result.is_ok());
@@ -716,6 +738,8 @@ mod tests {
             test_exit_code: None,
             self_test_exit_code: None,
             self_test_passed: false,
+            max_cycles: 1,
+            is_last_cycle: true,
         };
         let result = evaluate_step_prehook_expression("invalid @#$ expression", &context);
         assert!(result.is_err());
@@ -748,6 +772,8 @@ mod tests {
             test_exit_code: None,
             self_test_exit_code: None,
             self_test_passed: false,
+            max_cycles: 1,
+            is_last_cycle: true,
         };
         let result = evaluate_step_prehook_expression("qa_failed == true", &context);
         assert!(result.is_ok());
@@ -781,6 +807,8 @@ mod tests {
             test_exit_code: None,
             self_test_exit_code: None,
             self_test_passed: false,
+            max_cycles: 1,
+            is_last_cycle: true,
         };
         let result = evaluate_step_prehook_expression(
             "active_ticket_count > 0 && cycle >= 2 && qa_exit_code == 0",
@@ -818,6 +846,8 @@ mod tests {
             test_exit_code: Some(0),
             self_test_exit_code: None,
             self_test_passed: false,
+            max_cycles: 1,
+            is_last_cycle: true,
         };
         let result = evaluate_step_prehook_expression(
             "build_errors > 0 || test_failures > 0",
@@ -842,5 +872,55 @@ mod tests {
         );
         assert!(result.is_ok());
         assert!(!result.unwrap(), "should not trigger fix when no errors");
+    }
+
+    #[test]
+    fn test_max_cycles_and_is_last_cycle_cel_variables() {
+        let context = StepPrehookContext {
+            task_id: "task-1".to_string(),
+            task_item_id: "item-1".to_string(),
+            cycle: 1,
+            step: "qa_testing".to_string(),
+            qa_file_path: "test.md".to_string(),
+            item_status: "pending".to_string(),
+            task_status: "running".to_string(),
+            qa_exit_code: None,
+            fix_exit_code: None,
+            retest_exit_code: None,
+            active_ticket_count: 0,
+            new_ticket_count: 0,
+            qa_failed: false,
+            fix_required: false,
+            qa_confidence: None,
+            qa_quality_score: None,
+            fix_has_changes: None,
+            upstream_artifacts: vec![],
+            build_error_count: 0,
+            test_failure_count: 0,
+            build_exit_code: None,
+            test_exit_code: None,
+            self_test_exit_code: None,
+            self_test_passed: false,
+            max_cycles: 2,
+            is_last_cycle: false,
+        };
+        // cycle 1 of 2: not last cycle, skip qa_testing
+        let result = evaluate_step_prehook_expression("is_last_cycle", &context);
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+
+        let result = evaluate_step_prehook_expression("max_cycles == 2", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+
+        // cycle 2 of 2: is last cycle, run qa_testing
+        let last_ctx = StepPrehookContext {
+            cycle: 2,
+            is_last_cycle: true,
+            ..context
+        };
+        let result = evaluate_step_prehook_expression("is_last_cycle", &last_ctx);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
     }
 }

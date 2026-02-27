@@ -222,6 +222,10 @@ pub struct StepPrehookContext {
     pub self_test_exit_code: Option<i64>,
     #[serde(default)]
     pub self_test_passed: bool,
+    #[serde(default)]
+    pub max_cycles: u32,
+    #[serde(default)]
+    pub is_last_cycle: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

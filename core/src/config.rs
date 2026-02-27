@@ -518,6 +518,7 @@ pub struct WorkflowFinalizeConfig {
 pub enum LoopMode {
     #[default]
     Once,
+    Fixed,
     Infinite,
 }
 
@@ -527,9 +528,10 @@ impl FromStr for LoopMode {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "once" => Ok(Self::Once),
+            "fixed" => Ok(Self::Fixed),
             "infinite" => Ok(Self::Infinite),
             _ => Err(format!(
-                "unknown loop mode: {} (expected once|infinite)",
+                "unknown loop mode: {} (expected once|fixed|infinite)",
                 value
             )),
         }
@@ -772,6 +774,10 @@ pub struct StepPrehookContext {
     pub self_test_exit_code: Option<i64>,
     /// Whether the last self_test step passed
     pub self_test_passed: bool,
+    /// Maximum number of cycles configured for this workflow
+    pub max_cycles: u32,
+    /// Whether this is the last cycle (cycle == max_cycles)
+    pub is_last_cycle: bool,
 }
 
 /// Artifact summary
