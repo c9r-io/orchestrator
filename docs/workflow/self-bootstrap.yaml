@@ -208,14 +208,19 @@ spec:
       tty: false
 
     # Phase 4: QA Testing — rebuild CLI + execute QA scenarios + create tickets (tester/minimax)
+    # Deferred to Cycle 2 (last cycle) so Cycle 1 stays focused on production code
     - id: qa_testing
       type: qa_testing
       required_capability: qa_testing
       enabled: true
       repeatable: true
       tty: false
+      prehook:
+        engine: cel
+        when: "is_last_cycle"
+        reason: "QA testing deferred to final cycle"
 
-    # Phase 5: Ticket Fix — fix QA failures (coder/minimax, prehook: only when tickets exist)
+    # Phase 5: Ticket Fix — fix QA failures (coder/minimax, prehook: last cycle + tickets exist)
     - id: ticket_fix
       type: ticket_fix
       required_capability: ticket_fix
@@ -224,24 +229,34 @@ spec:
       tty: false
       prehook:
         engine: cel
-        when: "active_ticket_count > 0"
-        reason: "Only fix tickets when there are active tickets"
+        when: "is_last_cycle && active_ticket_count > 0"
+        reason: "Only fix tickets on last cycle when there are active tickets"
 
     # Phase 6: Align Tests — cargo test + clippy + build, iterate until stable (coder/minimax)
+    # Deferred to Cycle 2 so Cycle 1 only runs self_test for fast feedback
     - id: align_tests
       type: align_tests
       required_capability: align_tests
       enabled: true
       repeatable: true
       tty: false
+      prehook:
+        engine: cel
+        when: "is_last_cycle"
+        reason: "Test alignment deferred to final cycle"
 
     # Phase 7: Doc Governance — audit and remediate doc quality (reviewer/minimax)
+    # Deferred to Cycle 2 for full validation pass
     - id: doc_governance
       type: doc_governance
       required_capability: doc_governance
       enabled: true
-      repeatable: false
+      repeatable: true
       tty: false
+      prehook:
+        engine: cel
+        when: "is_last_cycle"
+        reason: "Doc governance deferred to final cycle"
 
     # Phase 8: Loop guard (reviewer/minimax)
     - id: loop_guard
@@ -251,9 +266,12 @@ spec:
       is_guard: true
       builtin: loop_guard
 
+  # 2-cycle strategy:
+  #   Cycle 1 — production:  plan → qa_doc_gen → implement → self_test
+  #   Cycle 2 — validation:  implement → self_test → qa_testing → ticket_fix → align_tests → doc_governance
   loop:
-    mode: infinite
-    max_cycles: 5
+    mode: fixed
+    max_cycles: 2
     enabled: true
     stop_when_no_unresolved: true
 
