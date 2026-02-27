@@ -6,6 +6,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
 
+/// Maximum byte length for a pipeline variable value to remain inline.
+/// Values exceeding this are spilled to a file and the inline value is truncated.
+/// 4 KB leaves headroom for bash escaping inflation (~1.5-2x) plus template
+/// boilerplate within the 16 KB runner safety limit.
+pub const PIPELINE_VAR_INLINE_LIMIT: usize = 4096;
+
 /// Main orchestrator configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrchestratorConfig {

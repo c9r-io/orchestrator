@@ -1,6 +1,6 @@
 use crate::config::{
     ItemFinalizeContext, PipelineVariables, StepPrehookContext, TaskExecutionStep,
-    TaskRuntimeContext, WorkflowStepType,
+    TaskRuntimeContext, WorkflowStepType, PIPELINE_VAR_INLINE_LIMIT,
 };
 use crate::events::insert_event;
 use crate::prehook::{emit_item_finalize_event, evaluate_step_prehook};
@@ -14,6 +14,7 @@ use crate::ticket::{
 use anyhow::Result;
 use serde_json::json;
 use std::collections::HashSet;
+use std::path::Path;
 use std::sync::Arc;
 
 use super::phase_runner::{
@@ -22,6 +23,60 @@ use super::phase_runner::{
 use super::safety::execute_self_test_step;
 use super::task_state::count_unresolved_items;
 use super::RunningTask;
+
+/// Insert a pipeline variable, spilling to a file when the value exceeds
+/// [`PIPELINE_VAR_INLINE_LIMIT`].  When spilled the inline value is truncated
+/// and a companion `{key}_path` variable is set pointing to the full-content file.
+fn spill_large_var(
+    logs_dir: &Path,
+    task_id: &str,
+    key: &str,
+    value: String,
+    pipeline: &mut PipelineVariables,
+) {
+    if value.len() <= PIPELINE_VAR_INLINE_LIMIT {
+        pipeline.vars.insert(key.to_string(), value);
+    } else {
+        let dir = logs_dir.join(task_id);
+        std::fs::create_dir_all(&dir).ok();
+        let path = dir.join(format!("{}.txt", key));
+        std::fs::write(&path, &value).ok();
+
+        let truncated = format!(
+            "{}...\n[truncated — full content at {}]",
+            &value[..PIPELINE_VAR_INLINE_LIMIT.min(value.len())],
+            path.display()
+        );
+        pipeline.vars.insert(key.to_string(), truncated);
+        pipeline
+            .vars
+            .insert(format!("{}_path", key), path.to_string_lossy().to_string());
+    }
+}
+
+/// Write a large value to a spill file and return `(truncated_value, path_string)`.
+/// Returns `None` if the value fits within the inline limit.
+fn spill_to_file(
+    logs_dir: &Path,
+    task_id: &str,
+    key: &str,
+    value: &str,
+) -> Option<(String, String)> {
+    if value.len() <= PIPELINE_VAR_INLINE_LIMIT {
+        return None;
+    }
+    let dir = logs_dir.join(task_id);
+    std::fs::create_dir_all(&dir).ok();
+    let path = dir.join(format!("{}.txt", key));
+    std::fs::write(&path, value.as_bytes()).ok();
+
+    let truncated = format!(
+        "{}...\n[truncated — full content at {}]",
+        &value[..PIPELINE_VAR_INLINE_LIMIT.min(value.len())],
+        path.display()
+    );
+    Some((truncated, path.to_string_lossy().to_string()))
+}
 
 pub async fn execute_builtin_step(
     state: &Arc<InnerState>,
@@ -93,12 +148,30 @@ pub async fn execute_builtin_step(
     if let Some(ref output) = result.output {
         pipeline.prev_stdout = output.stdout.clone();
         pipeline.prev_stderr = output.stderr.clone();
+        if let Some((trunc, path)) =
+            spill_to_file(&state.logs_dir, task_id, "prev_stdout", &pipeline.prev_stdout)
+        {
+            pipeline.prev_stdout = trunc;
+            pipeline.vars.insert("prev_stdout_path".to_string(), path);
+        }
+        if let Some((trunc, path)) =
+            spill_to_file(&state.logs_dir, task_id, "prev_stderr", &pipeline.prev_stderr)
+        {
+            pipeline.prev_stderr = trunc;
+            pipeline.vars.insert("prev_stderr_path".to_string(), path);
+        }
         pipeline.build_errors = output.build_errors.clone();
         pipeline.test_failures = output.test_failures.clone();
 
         let output_key = format!("{}_output", phase);
         if !output.stdout.is_empty() {
-            pipeline.vars.insert(output_key, output.stdout.clone());
+            spill_large_var(
+                &state.logs_dir,
+                task_id,
+                &output_key,
+                output.stdout.clone(),
+                &mut pipeline,
+            );
         }
     }
 
@@ -109,6 +182,12 @@ pub async fn execute_builtin_step(
         .await
     {
         pipeline.diff = String::from_utf8_lossy(&diff_output.stdout).to_string();
+        if let Some((trunc, path)) =
+            spill_to_file(&state.logs_dir, task_id, "diff", &pipeline.diff)
+        {
+            pipeline.diff = trunc;
+            pipeline.vars.insert("diff_path".to_string(), path);
+        }
     }
 
     Ok((result, pipeline))
@@ -286,10 +365,36 @@ pub async fn process_item(
             if let Some(ref output) = result.output {
                 pipeline_vars.prev_stdout = output.stdout.clone();
                 pipeline_vars.prev_stderr = output.stderr.clone();
-                if !output.stdout.is_empty() {
+                if let Some((trunc, path)) = spill_to_file(
+                    &state.logs_dir,
+                    task_id,
+                    "prev_stdout",
+                    &pipeline_vars.prev_stdout,
+                ) {
+                    pipeline_vars.prev_stdout = trunc;
                     pipeline_vars
                         .vars
-                        .insert("plan_output".to_string(), output.stdout.clone());
+                        .insert("prev_stdout_path".to_string(), path);
+                }
+                if let Some((trunc, path)) = spill_to_file(
+                    &state.logs_dir,
+                    task_id,
+                    "prev_stderr",
+                    &pipeline_vars.prev_stderr,
+                ) {
+                    pipeline_vars.prev_stderr = trunc;
+                    pipeline_vars
+                        .vars
+                        .insert("prev_stderr_path".to_string(), path);
+                }
+                if !output.stdout.is_empty() {
+                    spill_large_var(
+                        &state.logs_dir,
+                        task_id,
+                        "plan_output",
+                        output.stdout.clone(),
+                        &mut pipeline_vars,
+                    );
                 }
             }
             insert_event(
@@ -750,9 +855,13 @@ pub async fn process_item(
 
                 if let Some(ref output) = result.output {
                     if !output.stdout.is_empty() {
-                        pipeline_vars
-                            .vars
-                            .insert("plan_output".to_string(), output.stdout.clone());
+                        spill_large_var(
+                            &state.logs_dir,
+                            task_id,
+                            "plan_output",
+                            output.stdout.clone(),
+                            &mut pipeline_vars,
+                        );
                     }
                 }
 

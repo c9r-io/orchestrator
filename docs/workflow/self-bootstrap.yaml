@@ -10,6 +10,7 @@ spec:
   self_referential: true
 ---
 # Architect agent (MiniMax-M2.5-highspeed) — planning and QA doc design
+# Experiment: all agents use MiniMax for cost efficiency
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
@@ -44,8 +45,9 @@ spec:
       "/qa-doc-gen
 
       Project: {source_tree}
-      Plan:
+      Plan (summary):
       {plan_output}
+      Full plan file: {plan_output_path}
 
       Generate executable QA test documents for the planned changes.
       Place them under docs/qa/ following existing conventions."
@@ -72,8 +74,9 @@ spec:
       Use /rust-conventions for all Rust code.
       Use /test-authoring — add unit tests for new logic.
 
-      Plan from previous step:
+      Plan (summary):
       {plan_output}
+      Full plan file: {plan_output_path}
 
       Implement the changes. After writing code, run 'cd {source_tree}/core && cargo check'
       to verify compilation before finishing."
@@ -173,7 +176,7 @@ metadata:
   name: self-bootstrap
 spec:
   steps:
-    # Phase 1: Planning — create implementation plan (architect/minimax)
+    # Phase 1: Planning — create implementation plan (architect/opus)
     - id: plan
       type: plan
       required_capability: plan
@@ -181,7 +184,7 @@ spec:
       repeatable: false
       tty: false
 
-    # Phase 2: QA Doc Generation — produce executable test docs from plan (architect/minimax)
+    # Phase 2: QA Doc Generation — produce executable test docs from plan (architect/opus)
     - id: qa_doc_gen
       type: qa_doc_gen
       required_capability: qa_doc_gen

@@ -34,7 +34,7 @@ mod tests {
     use crate::config::{
         AgentConfig, AgentMetadata, AgentSelectionConfig, LoopMode, WorkflowConfig,
         WorkflowFinalizeConfig, WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
-        WorkflowStepType,
+        WorkflowStepType, PIPELINE_VAR_INLINE_LIMIT,
     };
     use crate::db::open_conn;
     use crate::dto::CreateTaskPayload;
@@ -303,6 +303,196 @@ mod tests {
     // The SmokeChain chain_steps execution path in item_executor.rs needs
     // proper wiring before this test can pass. Re-add when SmokeChain feature
     // is intentionally developed.
+
+    #[tokio::test]
+    async fn large_plan_output_spills_to_file() {
+        // Generate a plan output that exceeds the inline limit
+        let large_plan = "X".repeat(PIPELINE_VAR_INLINE_LIMIT + 1024);
+        let plan_echo = format!("echo '{}'", large_plan);
+
+        let mut fixture = TestState::new()
+            .with_agent(
+                "planner",
+                AgentConfig {
+                    metadata: AgentMetadata {
+                        name: "planner".to_string(),
+                        description: Some("large plan spill test".to_string()),
+                        version: None,
+                        cost: Some(1),
+                    },
+                    capabilities: vec!["plan".to_string(), "qa_doc_gen".to_string()],
+                    templates: {
+                        let mut t = HashMap::new();
+                        t.insert("plan".to_string(), plan_echo);
+                        t.insert(
+                            "qa_doc_gen".to_string(),
+                            "echo PLAN:{plan_output} PATH:{plan_output_path}".to_string(),
+                        );
+                        t.insert(
+                            "loop_guard".to_string(),
+                            "echo '{\"continue\":false,\"should_stop\":true}'".to_string(),
+                        );
+                        t
+                    },
+                    selection: AgentSelectionConfig::default(),
+                },
+            )
+            .with_workflow(
+                "spill-test",
+                WorkflowConfig {
+                    steps: vec![
+                        WorkflowStepConfig {
+                            id: "plan".to_string(),
+                            description: None,
+                            step_type: Some(WorkflowStepType::Plan),
+                            builtin: None,
+                            required_capability: Some("plan".to_string()),
+                            enabled: true,
+                            repeatable: false,
+                            is_guard: false,
+                            cost_preference: None,
+                            prehook: None,
+                            tty: false,
+                            outputs: Vec::new(),
+                            pipe_to: None,
+                            command: None,
+                            chain_steps: vec![],
+                        },
+                        WorkflowStepConfig {
+                            id: "qa_doc_gen".to_string(),
+                            description: None,
+                            step_type: Some(WorkflowStepType::QaDocGen),
+                            builtin: None,
+                            required_capability: Some("qa_doc_gen".to_string()),
+                            enabled: true,
+                            repeatable: false,
+                            is_guard: false,
+                            cost_preference: None,
+                            prehook: None,
+                            tty: false,
+                            outputs: Vec::new(),
+                            pipe_to: None,
+                            command: None,
+                            chain_steps: vec![],
+                        },
+                        WorkflowStepConfig {
+                            id: "loop_guard".to_string(),
+                            description: None,
+                            step_type: Some(WorkflowStepType::LoopGuard),
+                            builtin: Some("loop_guard".to_string()),
+                            required_capability: None,
+                            enabled: true,
+                            repeatable: true,
+                            is_guard: true,
+                            cost_preference: None,
+                            prehook: None,
+                            tty: false,
+                            outputs: Vec::new(),
+                            pipe_to: None,
+                            command: None,
+                            chain_steps: vec![],
+                        },
+                    ],
+                    loop_policy: WorkflowLoopConfig {
+                        mode: LoopMode::Once,
+                        guard: WorkflowLoopGuardConfig {
+                            enabled: true,
+                            stop_when_no_unresolved: true,
+                            max_cycles: Some(1),
+                            agent_template: None,
+                        },
+                    },
+                    finalize: WorkflowFinalizeConfig { rules: vec![] },
+                    qa: None,
+                    fix: None,
+                    retest: None,
+                    dynamic_steps: vec![],
+                    safety: crate::config::SafetyConfig::default(),
+                },
+            );
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/spill_test.md");
+        std::fs::write(&qa_file, "# spill test\n").expect("seed qa file");
+
+        let created = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("spill-test".to_string()),
+                goal: Some("verify large plan output spills to file".to_string()),
+                workflow_id: Some("spill-test".to_string()),
+                target_files: Some(vec!["docs/qa/spill_test.md".to_string()]),
+                ..Default::default()
+            },
+        )
+        .expect("task should be created");
+
+        prepare_task_for_start(&state, &created.id).expect("prepare task");
+        run_task_loop(state.clone(), &created.id, RunningTask::new())
+            .await
+            .expect("task should run");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let qa_command: String = conn
+            .query_row(
+                "SELECT command
+                 FROM command_runs
+                 WHERE task_item_id = (
+                   SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1
+                 ) AND phase = 'qa_doc_gen'
+                 ORDER BY started_at DESC LIMIT 1",
+                params![created.id.clone()],
+                |row| row.get(0),
+            )
+            .expect("qa_doc_gen run should exist");
+
+        // The plan_output in the qa_doc_gen command should be truncated (not the full large output)
+        assert!(
+            !qa_command.contains(&large_plan),
+            "full plan output should NOT appear inline in the command"
+        );
+        // The inline plan_output should contain the truncation marker
+        assert!(
+            qa_command.contains("truncated"),
+            "command should contain truncation marker, actual command (first 500 chars): {}",
+            &qa_command[..qa_command.len().min(500)]
+        );
+
+        // plan_output_path should be expanded in the command (not left as placeholder)
+        assert!(
+            qa_command.contains("plan_output.txt"),
+            "command should reference the spill file path"
+        );
+        assert!(
+            !qa_command.contains("{plan_output_path}"),
+            "plan_output_path placeholder should be expanded"
+        );
+
+        // The rendered command should be within the 16KB runner limit
+        assert!(
+            qa_command.len() < 16384,
+            "rendered command ({} bytes) should be under 16KB limit",
+            qa_command.len()
+        );
+
+        // Verify the spill file exists and contains the full content
+        let spill_file = state
+            .logs_dir
+            .join(&created.id)
+            .join("plan_output.txt");
+        assert!(
+            spill_file.exists(),
+            "spill file should exist at {}",
+            spill_file.display()
+        );
+        let spill_content = std::fs::read_to_string(&spill_file).expect("read spill file");
+        assert!(
+            spill_content.len() > PIPELINE_VAR_INLINE_LIMIT,
+            "spill file should contain the full content"
+        );
+    }
 
     #[tokio::test]
     async fn self_test_survives_smoke_test() {
