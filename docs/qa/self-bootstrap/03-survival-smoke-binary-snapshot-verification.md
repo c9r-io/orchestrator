@@ -2,7 +2,7 @@
 
 **Module**: self-bootstrap
 **Scope**: Verify new binary snapshot verification function and end-to-end integration test for snapshot → modify → restore → verify workflow
-**Scenarios**: 3
+**Scenarios**: 5
 **Priority**: High
 
 ---
@@ -110,6 +110,46 @@ assert!(result.verified);
 
 ---
 
+## Scenario 4: verify_binary_snapshot Errors When Stable Missing
+
+### Preconditions
+- Temporary workspace directory exists
+- Release binary exists at `core/target/release/agent-orchestrator`
+- No `.stable` file exists in workspace
+
+### Goal
+Verify that `verify_binary_snapshot` returns an error when the `.stable` snapshot file is missing.
+
+### Steps
+1. Create temp workspace dir
+2. Create `core/target/release/agent-orchestrator` with test content
+3. Ensure no `.stable` file exists
+4. Call `verify_binary_snapshot(&workspace_root).await`
+
+### Expected
+- Returns error with message containing "no .stable binary snapshot found"
+
+---
+
+## Scenario 5: verify_binary_snapshot Errors When Binary Missing
+
+### Preconditions
+- Temporary workspace directory exists
+- No release binary exists at `core/target/release/agent-orchestrator`
+- `.stable` file may or may not exist
+
+### Goal
+Verify that `verify_binary_snapshot` returns an error when the release binary is missing.
+
+### Steps
+1. Create temp workspace dir (empty, no binary)
+2. Call `verify_binary_snapshot(&workspace_root).await`
+
+### Expected
+- Returns error with message containing "release binary not found"
+
+---
+
 ## Checklist
 
 | # | Scenario | Status | Test Date | Tester | Notes |
@@ -117,3 +157,5 @@ assert!(result.verified);
 | 1 | verify_binary_snapshot Returns Match When Binaries Are Identical | ☐ | | | |
 | 2 | verify_binary_snapshot Detects Modified Binary | ☐ | | | |
 | 3 | Integration Test - Full Snapshot → Modify → Restore → Verify Cycle | ☐ | | | |
+| 4 | verify_binary_snapshot Errors When Stable Missing | ☐ | | | |
+| 5 | verify_binary_snapshot Errors When Binary Missing | ☐ | | | |
