@@ -3,8 +3,6 @@
 //! Provides enhanced prehook capabilities, dynamic step execution,
 //! and DAG-based workflow orchestration for adaptive agent orchestration.
 
-#![allow(dead_code)]
-
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{anyhow, Result};

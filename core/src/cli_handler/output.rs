@@ -1,5 +1,5 @@
 use crate::cli::OutputFormat;
-use crate::config::{AgentConfig, WorkflowConfig, WorkspaceConfig};
+use crate::config::WorkspaceConfig;
 use crate::dto::{TaskDetail, TaskSummary};
 use anyhow::Result;
 use std::path::Path;
@@ -67,7 +67,11 @@ impl CliHandler {
         Ok(0)
     }
 
-    pub(super) fn print_task_detail(&self, detail: &TaskDetail, format: OutputFormat) -> Result<i32> {
+    pub(super) fn print_task_detail(
+        &self,
+        detail: &TaskDetail,
+        format: OutputFormat,
+    ) -> Result<i32> {
         match format {
             OutputFormat::Json => {
                 println!("{}", serde_json::to_string_pretty(detail)?);
@@ -151,58 +155,6 @@ impl CliHandler {
                 println!("  Root Path: {}", ws.root_path);
                 println!("  QA Targets: {:?}", ws.qa_targets);
                 println!("  Ticket Dir: {}", ws.ticket_dir);
-            }
-        }
-        Ok(0)
-    }
-
-    pub(super) fn print_workflows(
-        &self,
-        workflows: &std::collections::HashMap<String, WorkflowConfig>,
-        format: OutputFormat,
-    ) -> Result<i32> {
-        match format {
-            OutputFormat::Json => {
-                println!("{}", serde_json::to_string_pretty(workflows)?);
-            }
-            OutputFormat::Yaml => {
-                println!("{}", serde_yaml::to_string(workflows)?);
-            }
-            OutputFormat::Table => {
-                println!("{:<20} {:<30}", "ID", "STEPS");
-                println!("{:-<20} {:-<30}", "", "");
-                for (id, wf) in workflows {
-                    let steps: Vec<_> = wf
-                        .steps
-                        .iter()
-                        .filter(|s| s.enabled)
-                        .map(|s| s.id.as_str())
-                        .collect();
-                    println!("{:<20} {:<30}", id, steps.join(", "));
-                }
-            }
-        }
-        Ok(0)
-    }
-
-    pub(super) fn print_agents(
-        &self,
-        agents: &std::collections::HashMap<String, AgentConfig>,
-        format: OutputFormat,
-    ) -> Result<i32> {
-        match format {
-            OutputFormat::Json => {
-                println!("{}", serde_json::to_string_pretty(agents)?);
-            }
-            OutputFormat::Yaml => {
-                println!("{}", serde_yaml::to_string(agents)?);
-            }
-            OutputFormat::Table => {
-                println!("{:<20} {:<20}", "ID", "CAPABILITIES");
-                println!("{:-<20} {:-<20}", "", "");
-                for (id, cfg) in agents {
-                    println!("{:<20} {:<20}", id, cfg.capabilities.join(", "));
-                }
             }
         }
         Ok(0)

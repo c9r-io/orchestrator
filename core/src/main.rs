@@ -1,31 +1,25 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// Binary-only modules (stay as mod)
 mod cli;
 mod cli_handler;
-mod cli_types;
-mod collab;
-mod config;
-mod config_load;
-mod db;
-mod db_write;
-mod dto;
-mod dynamic_orchestration;
-mod events;
-mod health;
-mod metrics;
-mod output_validation;
-mod prehook;
-mod qa_utils;
-mod resource;
-mod runner;
-mod scheduler;
-mod scheduler_service;
-mod selection;
-mod session_store;
-mod state;
-mod task_ops;
-mod task_repository;
-mod ticket;
+
+// Re-export library modules — makes `crate::X` paths work in cli/cli_handler
+use agent_orchestrator::cli_types;
+use agent_orchestrator::collab;
+use agent_orchestrator::config;
+use agent_orchestrator::config_load;
+use agent_orchestrator::db;
+use agent_orchestrator::db_write;
+use agent_orchestrator::dto;
+use agent_orchestrator::events;
+use agent_orchestrator::resource;
+use agent_orchestrator::scheduler;
+use agent_orchestrator::scheduler_service;
+use agent_orchestrator::session_store;
+use agent_orchestrator::state;
+use agent_orchestrator::task_ops;
+use agent_orchestrator::task_repository;
 
 #[cfg(test)]
 mod test_utils;

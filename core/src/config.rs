@@ -76,18 +76,6 @@ pub struct ProjectConfig {
     pub workflows: HashMap<String, WorkflowConfig>,
 }
 
-impl ProjectConfig {
-    #[allow(dead_code)]
-    pub fn empty() -> Self {
-        Self {
-            description: None,
-            workspaces: HashMap::new(),
-            agents: HashMap::new(),
-            workflows: HashMap::new(),
-        }
-    }
-}
-
 /// Default configuration values
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigDefaults {
@@ -340,16 +328,6 @@ impl AgentConfig {
     pub fn supports_capability(&self, capability: &str) -> bool {
         self.capabilities.contains(&capability.to_string())
     }
-
-    #[allow(dead_code)]
-    pub fn get_selection_strategy(&self) -> SelectionStrategy {
-        self.selection.strategy
-    }
-
-    #[allow(dead_code)]
-    pub fn get_selection_weights(&self) -> SelectionWeights {
-        self.selection.weights.clone().unwrap_or_default()
-    }
 }
 
 impl Default for AgentConfig {
@@ -425,7 +403,6 @@ impl WorkflowStepType {
     }
 
     /// Returns true if this step type produces structured output for pipeline variables
-    #[allow(dead_code)]
     pub fn has_structured_output(&self) -> bool {
         matches!(
             self,
@@ -685,11 +662,6 @@ impl TaskExecutionPlan {
             .iter()
             .find(|step| step.step_type.as_ref() == Some(&step_type))
     }
-
-    #[allow(dead_code)]
-    pub fn step_by_id(&self, id: &str) -> Option<&TaskExecutionStep> {
-        self.steps.iter().find(|step| step.id == id)
-    }
 }
 
 /// Workflow configuration
@@ -724,7 +696,6 @@ pub struct ResolvedWorkspace {
 
 /// Resolved project
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct ResolvedProject {
     pub workspaces: HashMap<String, ResolvedWorkspace>,
     pub agents: HashMap<String, AgentConfig>,

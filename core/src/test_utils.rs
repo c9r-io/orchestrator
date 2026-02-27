@@ -175,12 +175,14 @@ impl TestState {
         self
     }
 
+    #[allow(dead_code)] // test builder helper
     pub(crate) fn with_agent(mut self, name: impl Into<String>, config: AgentConfig) -> Self {
         let agent_id = name.into();
         self.config.agents.insert(agent_id, config);
         self
     }
 
+    #[allow(dead_code)] // test builder helper
     pub(crate) fn with_workflow(mut self, name: impl Into<String>, config: WorkflowConfig) -> Self {
         let workflow_id = name.into();
         self.config.workflows.insert(workflow_id.clone(), config);

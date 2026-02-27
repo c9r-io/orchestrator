@@ -3,8 +3,6 @@
 //! Provides structured agent-to-agent communication, message bus,
 //! shared context, and DAG-based workflow execution.
 
-#![allow(dead_code)]
-
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;

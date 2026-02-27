@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod definition;
 mod edit;
 mod output;

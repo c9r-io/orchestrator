@@ -12,71 +12,12 @@ pub struct CreateTaskPayload {
     pub target_files: Option<Vec<String>>,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Serialize)]
-pub struct BootstrapResponse {
-    pub resumed_task_id: Option<String>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Serialize)]
-pub struct NamedOption {
-    pub id: String,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Serialize)]
-pub struct CreateTaskDefaults {
-    pub project_id: String,
-    pub workspace_id: String,
-    pub workflow_id: String,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Serialize)]
-pub struct CreateTaskOptions {
-    pub defaults: CreateTaskDefaults,
-    pub projects: Vec<NamedOption>,
-    pub workspaces: Vec<NamedOption>,
-    pub workflows: Vec<NamedOption>,
-}
-
 #[derive(Debug, Serialize)]
 pub struct ConfigOverview {
     pub config: crate::config::OrchestratorConfig,
     pub yaml: String,
     pub version: i64,
     pub updated_at: String,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Default)]
-#[serde(default)]
-pub struct SimulatePrehookContextPayload {
-    pub cycle: i64,
-    pub active_ticket_count: i64,
-    pub new_ticket_count: i64,
-    pub qa_exit_code: Option<i64>,
-    pub fix_exit_code: Option<i64>,
-    pub retest_exit_code: Option<i64>,
-    pub qa_failed: bool,
-    pub fix_required: bool,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Default)]
-#[serde(default)]
-pub struct SimulatePrehookPayload {
-    pub expression: String,
-    pub step: Option<String>,
-    pub context: SimulatePrehookContextPayload,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Serialize)]
-pub struct SimulatePrehookResult {
-    pub result: bool,
-    pub expression: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -150,13 +91,6 @@ pub struct TaskDetail {
     pub events: Vec<EventDto>,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Serialize)]
-pub struct DeleteTaskResponse {
-    pub task_id: String,
-    pub deleted: bool,
-}
-
 #[derive(Debug, Serialize)]
 pub struct LogChunk {
     pub run_id: String,
@@ -175,10 +109,6 @@ pub struct TaskItemRow {
 
 #[derive(Debug, Clone)]
 pub struct TicketPreviewData {
-    #[allow(dead_code)]
-    pub path: String,
-    #[allow(dead_code)]
-    pub title: String,
     pub status: String,
     pub qa_document: String,
 }
@@ -195,8 +125,6 @@ pub struct RunResult {
     pub duration_ms: Option<u64>,
     pub output: Option<crate::collab::AgentOutput>,
     pub validation_status: String,
-    #[allow(dead_code)]
-    pub validation_error: Option<String>,
     pub agent_id: String,
     pub run_id: String,
 }
@@ -205,13 +133,4 @@ impl RunResult {
     pub fn is_success(&self) -> bool {
         self.success && !self.timed_out && self.exit_code == 0
     }
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Clone, Serialize)]
-pub struct AgentHealthInfo {
-    pub agent_id: String,
-    pub healthy: bool,
-    pub diseased_until: Option<String>,
-    pub consecutive_errors: u32,
 }

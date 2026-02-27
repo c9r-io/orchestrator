@@ -4,7 +4,9 @@ use crate::config_load::{persist_config_and_reload, read_active_config};
 use anyhow::{Context, Result};
 use serde_json::json;
 
-use super::parse::{matches_selector, parse_label_selector, parse_resource_selector, string_map_to_csv};
+use super::parse::{
+    matches_selector, parse_label_selector, parse_resource_selector, string_map_to_csv,
+};
 use super::CliHandler;
 
 impl CliHandler {

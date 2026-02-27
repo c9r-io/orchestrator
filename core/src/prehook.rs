@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::config::{
     ItemFinalizeContext, StepHookEngine, StepPrehookConfig, StepPrehookContext,
     WorkflowFinalizeConfig, WorkflowFinalizeRule,
@@ -413,54 +411,6 @@ pub fn resolve_workflow_finalize_outcome(
         }));
     }
     Ok(None)
-}
-
-pub fn simulate_prehook_impl(
-    payload: crate::dto::SimulatePrehookPayload,
-) -> Result<crate::dto::SimulatePrehookResult> {
-    let expression = payload.expression.trim().to_string();
-    if expression.is_empty() {
-        anyhow::bail!("prehook expression cannot be empty");
-    }
-    let step_name = payload
-        .step
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("simulation")
-        .to_string();
-    let context = StepPrehookContext {
-        task_id: "simulation".to_string(),
-        task_item_id: "simulation".to_string(),
-        cycle: if payload.context.cycle < 0 {
-            0
-        } else {
-            payload.context.cycle as u32
-        },
-        step: step_name,
-        qa_file_path: "simulation.md".to_string(),
-        item_status: "pending".to_string(),
-        task_status: "running".to_string(),
-        qa_exit_code: payload.context.qa_exit_code,
-        fix_exit_code: payload.context.fix_exit_code,
-        retest_exit_code: payload.context.retest_exit_code,
-        active_ticket_count: payload.context.active_ticket_count,
-        new_ticket_count: payload.context.new_ticket_count,
-        qa_failed: payload.context.qa_failed,
-        fix_required: payload.context.fix_required,
-        qa_confidence: None,
-        qa_quality_score: None,
-        fix_has_changes: None,
-        upstream_artifacts: vec![],
-        build_error_count: 0,
-        test_failure_count: 0,
-        build_exit_code: None,
-        test_exit_code: None,
-        self_test_exit_code: None,
-        self_test_passed: false,
-    };
-    let result = evaluate_step_prehook_expression(&expression, &context)?;
-    Ok(crate::dto::SimulatePrehookResult { result, expression })
 }
 
 pub fn evaluate_step_prehook(

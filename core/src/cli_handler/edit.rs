@@ -141,7 +141,11 @@ impl CliHandler {
         }
     }
 
-    pub(super) fn run_editor(&self, editor: &str, temp_file: &std::path::Path) -> Result<ExitStatus> {
+    pub(super) fn run_editor(
+        &self,
+        editor: &str,
+        temp_file: &std::path::Path,
+    ) -> Result<ExitStatus> {
         std::process::Command::new(editor)
             .arg(temp_file)
             .status()

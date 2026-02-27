@@ -140,7 +140,6 @@ impl Default for SelectionRequirement {
 
 /// Result of agent scoring
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct AgentScore {
     pub agent_id: String,
     pub total_score: f32,
@@ -315,29 +314,6 @@ fn is_agent_globally_healthy(health: &AgentHealthState) -> bool {
         None => true,
         Some(until) => Utc::now() >= until,
     }
-}
-
-/// Check if agent is healthy for a specific capability
-#[allow(dead_code)]
-pub fn is_capability_healthy(
-    health: &Option<AgentHealthState>,
-    _agent_id: &str,
-    capability: &str,
-) -> bool {
-    // First check global health
-    if let Some(h) = health {
-        if !is_agent_globally_healthy(h) {
-            // Check if we should use capability-specific health
-            if let Some(cap_health) = h.capability_health.get(capability) {
-                // If capability-specific health is good, allow it
-                if cap_health.success_rate() >= 0.5 {
-                    return true;
-                }
-            }
-            return false;
-        }
-    }
-    true
 }
 
 #[cfg(test)]

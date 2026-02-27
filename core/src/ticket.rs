@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::config::TaskRuntimeContext;
 use crate::config_load::resolve_workspace_path;
 use crate::dto::{TicketPreviewData, UNASSIGNED_QA_FILE_PATH};
@@ -33,14 +31,11 @@ pub fn is_active_ticket_status(status: &str) -> bool {
     normalized.is_empty() || matches!(normalized.as_str(), "FAILED" | "OPEN")
 }
 
-pub fn parse_ticket_preview_content(rel_path: &str, content: &str) -> TicketPreviewData {
-    let mut title = String::new();
+pub fn parse_ticket_preview_content(content: &str) -> TicketPreviewData {
     let mut status = String::new();
     let mut qa_doc = String::new();
     for line in content.lines().take(80) {
-        if line.starts_with("# Ticket:") {
-            title = line.trim_start_matches("# Ticket:").trim().to_string();
-        } else if line.starts_with("**Status**:") {
+        if line.starts_with("**Status**:") {
             status = line.trim_start_matches("**Status**:").trim().to_string();
         } else if line.starts_with("**QA Document**:") {
             qa_doc = line
@@ -51,8 +46,6 @@ pub fn parse_ticket_preview_content(rel_path: &str, content: &str) -> TicketPrev
         }
     }
     TicketPreviewData {
-        path: rel_path.to_string(),
-        title,
         status,
         qa_document: qa_doc,
     }
@@ -66,15 +59,13 @@ pub fn read_ticket_preview_from_workspace(
         Ok(value) => value,
         Err(_) => {
             return TicketPreviewData {
-                path: rel_path.to_string(),
-                title: String::new(),
                 status: String::new(),
                 qa_document: String::new(),
             };
         }
     };
     let content = std::fs::read_to_string(abs).unwrap_or_default();
-    parse_ticket_preview_content(rel_path, &content)
+    parse_ticket_preview_content(&content)
 }
 
 pub fn list_ticket_files_in_workspace(
@@ -183,8 +174,7 @@ pub fn scan_active_tickets_for_task_items(
 pub fn read_ticket_preview(task_ctx: &TaskRuntimeContext, rel_path: &str) -> serde_json::Value {
     let preview = read_ticket_preview_from_workspace(&task_ctx.workspace_root, rel_path);
     json!({
-        "path": preview.path,
-        "title": preview.title,
+        "path": rel_path,
         "status": preview.status,
         "qa_document": preview.qa_document
     })
@@ -466,16 +456,14 @@ mod tests {
 **Status**: FAILED
 **QA Document**: `docs/qa/test.md`
 "#;
-        let result = parse_ticket_preview_content("test.md", content);
-        assert_eq!(result.title, "Test Issue");
+        let result = parse_ticket_preview_content(content);
         assert_eq!(result.status, "FAILED");
         assert_eq!(result.qa_document, "docs/qa/test.md");
     }
 
     #[test]
     fn test_parse_ticket_preview_content_handles_empty() {
-        let result = parse_ticket_preview_content("test.md", "no content here");
-        assert!(result.title.is_empty());
+        let result = parse_ticket_preview_content("no content here");
         assert!(result.status.is_empty());
     }
 }

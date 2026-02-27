@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::metrics::{AgentHealthState, CapabilityHealth};
 use crate::state::InnerState;
 use chrono::Utc;

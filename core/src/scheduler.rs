@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused_imports)]
-
 mod item_executor;
 mod loop_engine;
 mod phase_runner;

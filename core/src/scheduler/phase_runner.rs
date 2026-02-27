@@ -239,7 +239,6 @@ async fn run_phase_with_timeout(
             duration_ms: Some(0),
             output: None,
             validation_status: "passed".to_string(),
-            validation_error: None,
             agent_id: agent_id.to_string(),
             run_id: run_id.clone(),
         });
@@ -524,9 +523,6 @@ async fn run_phase_with_timeout(
         duration_ms: Some(duration_ms),
         output: Some(redacted_output),
         validation_status: validation.status.to_string(),
-        validation_error: validation
-            .error
-            .map(|value| redact_text(&value, &redaction_patterns)),
         agent_id: agent_id.to_string(),
         run_id,
     })
