@@ -163,8 +163,6 @@ preconditions section.
 This scenario uses a **different fixture** with only the `mock_fail` agent:
 
 ```bash
-rm -f data/agent_orchestrator.db config/default.yaml
-./scripts/orchestrator.sh init
 ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/fail-workflow.yaml
 
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"

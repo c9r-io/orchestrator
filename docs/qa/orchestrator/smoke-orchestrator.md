@@ -2,7 +2,7 @@
 
 **Marker:** ORC_SMOKE_20260227
 
-## Minimal Checklist
+## Checklist
 
 - [ ] CLI binary builds successfully (`cargo build --release`)
 - [ ] Database schema initializes at `data/agent_orchestrator.db`

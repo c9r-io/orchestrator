@@ -1,7 +1,57 @@
 use crate::state::InnerState;
 use anyhow::{Context, Result};
+use md5::{Md5, Digest};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BinaryVerificationResult {
+    pub verified: bool,
+    pub original_checksum: String,
+    pub current_checksum: String,
+    pub stable_path: PathBuf,
+    pub binary_path: PathBuf,
+}
+
+pub async fn verify_binary_snapshot(workspace_root: &Path) -> Result<BinaryVerificationResult> {
+    let stable_path = workspace_root.join(".stable");
+    let binary_path = workspace_root.join("core/target/release/agent-orchestrator");
+
+    if !stable_path.exists() {
+        anyhow::bail!(
+            "no .stable binary snapshot found at {}",
+            stable_path.display()
+        );
+    }
+
+    if !binary_path.exists() {
+        anyhow::bail!(
+            "release binary not found at {}",
+            binary_path.display()
+        );
+    }
+
+    let stable_content = tokio::fs::read(&stable_path)
+        .await
+        .with_context(|| format!("failed to read stable binary at {}", stable_path.display()))?;
+    let binary_content = tokio::fs::read(&binary_path)
+        .await
+        .with_context(|| format!("failed to read binary at {}", binary_path.display()))?;
+
+    let stable_checksum = format!("{:x}", Md5::digest(&stable_content));
+    let binary_checksum = format!("{:x}", Md5::digest(&binary_content));
+
+    let verified = stable_checksum == binary_checksum;
+
+    Ok(BinaryVerificationResult {
+        verified,
+        original_checksum: stable_checksum,
+        current_checksum: binary_checksum,
+        stable_path,
+        binary_path,
+    })
+}
 
 pub async fn create_checkpoint(workspace_root: &Path, task_id: &str, cycle: u32) -> Result<String> {
     let tag_name = format!("checkpoint/{}/{}", task_id, cycle);
@@ -326,6 +376,107 @@ mod tests {
 
         let final_content = std::fs::read(&binary_path).unwrap();
         assert_eq!(final_content, original_content);
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[tokio::test]
+    async fn test_verify_binary_snapshot_matches() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "safety-test-verify-match-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let binary_path = temp_dir.join("core/target/release/agent-orchestrator");
+        let stable_path = temp_dir.join(".stable");
+        let test_content = b"binary content for verification test";
+        create_mock_binary(&binary_path, test_content).unwrap();
+        create_mock_binary(&stable_path, test_content).unwrap();
+
+        let result = verify_binary_snapshot(&temp_dir).await;
+
+        assert!(result.is_ok());
+        let verification = result.unwrap();
+        assert!(verification.verified);
+        assert_eq!(verification.original_checksum, verification.current_checksum);
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[tokio::test]
+    async fn test_verify_binary_snapshot_mismatch() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "safety-test-verify-mismatch-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let binary_path = temp_dir.join("core/target/release/agent-orchestrator");
+        let stable_path = temp_dir.join(".stable");
+        let original_content = b"original binary content";
+        let modified_content = b"modified binary content";
+        create_mock_binary(&binary_path, modified_content).unwrap();
+        create_mock_binary(&stable_path, original_content).unwrap();
+
+        let result = verify_binary_snapshot(&temp_dir).await;
+
+        assert!(result.is_ok());
+        let verification = result.unwrap();
+        assert!(!verification.verified);
+        assert_ne!(verification.original_checksum, verification.current_checksum);
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[tokio::test]
+    async fn test_verify_binary_snapshot_missing_stable() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "safety-test-verify-no-stable-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let binary_path = temp_dir.join("core/target/release/agent-orchestrator");
+        create_mock_binary(&binary_path, b"test").unwrap();
+
+        let result = verify_binary_snapshot(&temp_dir).await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("no .stable binary snapshot found"));
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[tokio::test]
+    async fn test_verify_binary_snapshot_missing_binary() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "safety-test-verify-no-binary-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let stable_path = temp_dir.join(".stable");
+        create_mock_binary(&stable_path, b"test").unwrap();
+
+        let result = verify_binary_snapshot(&temp_dir).await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("release binary not found"));
 
         std::fs::remove_dir_all(&temp_dir).ok();
     }

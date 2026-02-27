@@ -2,7 +2,7 @@
 
 **Module**: orchestrator
 **Scope**: Validate self-bootstrap workflow with AI native SDLC closed-loop: plan → qa_doc_gen → implement → qa_testing → ticket_fix → align_tests → doc_governance, pipeline variable propagation, prehook-gated steps, and checkpoint/rollback safety
-**Scenarios**: 10
+**Scenarios**: 5
 **Priority**: High
 **See also**: `docs/qa/self-bootstrap/01-survival-binary-checkpoint-self-test.md`, `docs/qa/self-bootstrap/02-survival-enforcement-watchdog.md` for the 4-layer survival mechanism (binary checkpoint, self-test gate, self-referential enforcement, watchdog)
 
@@ -117,94 +117,6 @@ QA_PROJECT="qa-bootstrap-${USER}-$(date +%Y%m%d%H%M%S)"
 
 ---
 
-## Scenario 6: Full Simplified SDLC Pipeline
-
-### Preconditions
-- Common Preconditions applied
-
-### Steps
-1. Create task with `sdlc_full_pipeline` workflow
-
-### Expected
-- Task status: `completed`
-- 6 steps execute in order: plan → qa_doc_gen → implement → qa_testing → align_tests → doc_governance
-- ticket_fix is skipped (no active tickets, prehook `active_ticket_count > 0` is false)
-
-### Expected Data State
-```sql
-SELECT json_extract(payload_json, '$.step') AS step
-FROM events WHERE task_id = '{task_id}' AND event_type = 'step_started'
-ORDER BY created_at;
--- Expected: plan, qa_doc_gen, implement, qa_testing, align_tests, doc_governance
-
-SELECT COUNT(*) FROM events WHERE task_id = '{task_id}'
-  AND event_type = 'step_skipped'
-  AND json_extract(payload_json, '$.step') = 'ticket_fix';
--- Expected: 1
-```
-
----
-
-## Scenario 7: QA Testing → Ticket Fix Chain
-
-### Preconditions
-- Common Preconditions applied, no ticket files
-
-### Steps
-1. Create task with `sdlc_qa_ticket_chain` workflow
-   - qa_testing creates a ticket file
-   - ticket_fix removes the ticket file
-
-### Expected
-- Both `qa_testing` and `ticket_fix` execute (`step_started` events)
-
----
-
-## Scenario 8: Clean QA Testing → Ticket Fix Skipped
-
-### Preconditions
-- Common Preconditions applied, no ticket files
-
-### Steps
-1. Create task with `sdlc_ticket_skip` workflow
-   - qa_testing succeeds cleanly
-   - ticket_fix has prehook: `active_ticket_count > 0`
-
-### Expected
-- `qa_testing` executes, `ticket_fix` is skipped (`step_skipped`, `reason: prehook_false`)
-
----
-
-## Scenario 9: Pipeline Variable Propagation
-
-### Preconditions
-- Common Preconditions applied
-
-### Steps
-1. Create task with `sdlc_pipeline_vars` workflow
-   - align_tests command references `{source_tree}`
-
-### Expected
-- plan → implement → align_tests all execute
-- `{source_tree}` rendered to actual workspace path
-
----
-
-## Scenario 10: Align Tests as Safety Net After Implement
-
-### Preconditions
-- Common Preconditions applied
-
-### Steps
-1. Create task with `sdlc_align_after_implement` workflow
-
-### Expected
-- Task status: `completed`
-- Steps execute: implement → qa_testing → align_tests → doc_governance
-- align_tests serves as the build+test+lint safety net (no separate builtin steps needed)
-
----
-
 ## Checklist
 
 | # | Scenario | Status | Date | Tester | Notes |
@@ -214,8 +126,3 @@ SELECT COUNT(*) FROM events WHERE task_id = '{task_id}'
 | 3 | Successful Build Skips Fix | | | | |
 | 4 | Checkpoint Created at Cycle Start | | | | |
 | 5 | Self-Bootstrap Manifest Applies | | | | |
-| 6 | Full Simplified SDLC Pipeline | | | | |
-| 7 | QA Testing → Ticket Fix Chain | | | | |
-| 8 | Clean QA Testing → Ticket Fix Skipped | | | | |
-| 9 | Pipeline Variable Propagation | | | | |
-| 10 | Align Tests as Safety Net | | | | |

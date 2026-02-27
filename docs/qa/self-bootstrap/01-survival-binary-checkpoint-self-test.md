@@ -48,7 +48,7 @@ Verify that a `.stable` binary copy is created at the start of each cycle when b
    ```
 2. Create and start a task using the `self-bootstrap` workflow:
    ```bash
-   ./scripts/orchestrator.sh task create "${QA_PROJECT}" --workflow self-bootstrap --goal "test binary snapshot"
+   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workflow self-bootstrap --goal "test binary snapshot"
    TASK_ID=$(./scripts/orchestrator.sh task list "${QA_PROJECT}" --json | jq -r '.[0].id')
    ./scripts/orchestrator.sh task start "${QA_PROJECT}" "${TASK_ID}"
    ```

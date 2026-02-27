@@ -69,7 +69,7 @@ Verify that starting a task on a self-referential workspace with `checkpoint_str
    ```
 2. Create a task and attempt to start it:
    ```bash
-   ./scripts/orchestrator.sh task create "${QA_PROJECT}" --workflow unsafe-workflow --goal "test unsafe"
+   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workflow unsafe-workflow --goal "test unsafe"
    TASK_ID=$(./scripts/orchestrator.sh task list "${QA_PROJECT}" --json | jq -r '.[0].id')
    ./scripts/orchestrator.sh task start "${QA_PROJECT}" "${TASK_ID}" 2>&1
    ```
@@ -122,7 +122,7 @@ Verify that a warning is emitted (not a hard error) when `auto_rollback: false` 
    ```
 2. Create a task and start it, capturing stderr:
    ```bash
-   ./scripts/orchestrator.sh task create "${QA_PROJECT}" --workflow warn-workflow --goal "test warn"
+   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workflow warn-workflow --goal "test warn"
    TASK_ID=$(./scripts/orchestrator.sh task list "${QA_PROJECT}" --json | jq -r '.[0].id')
    ./scripts/orchestrator.sh task start "${QA_PROJECT}" "${TASK_ID}" 2>/tmp/warn-stderr.txt
    cat /tmp/warn-stderr.txt
@@ -180,7 +180,7 @@ Verify that a warning is emitted when a self-referential workspace workflow has 
    ```
 2. Create a task and start it, capturing stderr:
    ```bash
-   ./scripts/orchestrator.sh task create "${QA_PROJECT}" --workflow notest-workflow --goal "test no self_test"
+   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workflow notest-workflow --goal "test no self_test"
    TASK_ID=$(./scripts/orchestrator.sh task list "${QA_PROJECT}" --json | jq -r '.[0].id')
    ./scripts/orchestrator.sh task start "${QA_PROJECT}" "${TASK_ID}" 2>/tmp/notest-stderr.txt
    cat /tmp/notest-stderr.txt

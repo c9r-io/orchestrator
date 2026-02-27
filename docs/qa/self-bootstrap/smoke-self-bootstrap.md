@@ -2,7 +2,7 @@
 
 **Marker:** SB_SMOKE_20260226
 
-## Minimal Checklist
+## Checklist
 
 - [ ] Agent orchestrator binary builds successfully
 - [ ] Database initializes at `data/agent_orchestrator.db`

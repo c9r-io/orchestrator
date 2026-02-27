@@ -884,3 +884,57 @@ fn sdlc_full_pipeline_workflow_parses_from_fixture() {
         "sdlc_full_pipeline should have doc_governance step"
     );
 }
+
+#[test]
+fn binary_snapshot_smoke_verify_integration() {
+    use agent_orchestrator::scheduler::safety::{
+        snapshot_binary, verify_binary_snapshot, restore_binary_snapshot,
+    };
+    use std::io::Write;
+    use tokio::runtime::Runtime;
+
+    let temp_dir = std::env::temp_dir().join(format!(
+        "smoke-verify-integration-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let binary_path = temp_dir.join("core/target/release/agent-orchestrator");
+    let original_content = vec![0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE];
+    {
+        let parent = binary_path.parent().unwrap();
+        std::fs::create_dir_all(parent).unwrap();
+        let mut file = std::fs::File::create(&binary_path).unwrap();
+        file.write_all(&original_content).unwrap();
+    }
+
+    let rt = Runtime::new().unwrap();
+    let result: std::path::PathBuf = rt.block_on(async {
+        snapshot_binary(&temp_dir).await.unwrap()
+    });
+    assert!(result.exists(), "stable snapshot should exist");
+
+    {
+        let mut file = std::fs::File::create(&binary_path).unwrap();
+        file.write_all(b"modified content").unwrap();
+    }
+
+    let verification_result = rt.block_on(async {
+        verify_binary_snapshot(&temp_dir).await.unwrap()
+    });
+    assert!(!verification_result.verified, "should detect mismatch after modification");
+
+    rt.block_on(async {
+        restore_binary_snapshot(&temp_dir).await.unwrap()
+    });
+
+    let final_verification = rt.block_on(async {
+        verify_binary_snapshot(&temp_dir).await.unwrap()
+    });
+    assert!(final_verification.verified, "binary should match after restore");
+
+    std::fs::remove_dir_all(&temp_dir).ok();
+}

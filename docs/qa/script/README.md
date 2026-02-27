@@ -74,3 +74,14 @@ Shell scripts for executable QA scenarios.
   - force delete stale task if needed.
 - DB lock:
   - stop concurrent runs and retry.
+
+## Checklist
+
+| # | Item | Status | Date | Tester | Notes |
+|---|------|--------|------|--------|-------|
+| 1 | test-task-pause-resume.sh runs successfully | | | | |
+| 2 | test-task-retry.sh runs successfully | | | | |
+| 3 | test-three-phase-workflow.sh runs successfully | | | | |
+| 4 | test-worker-throughput.sh runs successfully | | | | |
+| 5 | test-log-tail-latency.sh runs successfully | | | | |
+| 6 | test-exec-interactive.sh runs successfully | | | | |

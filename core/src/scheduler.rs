@@ -6,7 +6,7 @@ mod loop_engine;
 mod phase_runner;
 mod query;
 mod runtime;
-mod safety;
+pub mod safety;
 mod task_state;
 
 pub use crate::state::RunningTask;
