@@ -61,10 +61,6 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
             .or_else(|| step.required_capability.clone())
             .unwrap_or(step.id.clone());
 
-        // Skip duplicate types (keep first occurrence)
-        if seen_types.contains(&key) {
-            continue;
-        }
         seen_types.insert(key.clone());
 
         // Resolve step_type from key if not set
@@ -199,8 +195,15 @@ pub fn validate_workflow_config(
     }
 
     let mut enabled_count = 0usize;
-    let mut seen: HashMap<String, bool> = HashMap::new();
+    let mut seen_ids: HashSet<String> = HashSet::new();
     for step in &workflow.steps {
+        if !seen_ids.insert(step.id.clone()) {
+            anyhow::bail!(
+                "workflow '{}' has duplicate step id '{}'",
+                workflow_id,
+                step.id
+            );
+        }
         let key = step
             .step_type
             .as_ref()
@@ -208,13 +211,6 @@ pub fn validate_workflow_config(
             .or(step.builtin.as_deref())
             .or(step.required_capability.as_deref())
             .unwrap_or(&step.id);
-        if seen.insert(key.to_string(), true).is_some() {
-            anyhow::bail!(
-                "workflow '{}' has duplicate step type '{}'",
-                workflow_id,
-                key
-            );
-        }
         if !step.enabled {
             continue;
         }
@@ -283,8 +279,15 @@ fn validate_workflow_config_with_agents(
     }
 
     let mut enabled_count = 0usize;
-    let mut seen: HashMap<String, bool> = HashMap::new();
+    let mut seen_ids: HashSet<String> = HashSet::new();
     for step in &workflow.steps {
+        if !seen_ids.insert(step.id.clone()) {
+            anyhow::bail!(
+                "workflow '{}' has duplicate step id '{}'",
+                workflow_id,
+                step.id
+            );
+        }
         let key = step
             .step_type
             .as_ref()
@@ -292,13 +295,6 @@ fn validate_workflow_config_with_agents(
             .or(step.builtin.as_deref())
             .or(step.required_capability.as_deref())
             .unwrap_or(&step.id);
-        if seen.insert(key.to_string(), true).is_some() {
-            anyhow::bail!(
-                "workflow '{}' has duplicate step type '{}'",
-                workflow_id,
-                key
-            );
-        }
         if !step.enabled {
             continue;
         }
@@ -835,7 +831,10 @@ mod tests {
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
-                guard: WorkflowLoopGuardConfig::default(),
+                guard: WorkflowLoopGuardConfig {
+                    enabled: false,
+                    ..WorkflowLoopGuardConfig::default()
+                },
             },
             finalize: WorkflowFinalizeConfig { rules: vec![] },
             qa: None,
@@ -856,6 +855,252 @@ mod tests {
             self_test_step.builtin.as_deref(),
             Some("self_test"),
             "builtin should be set to 'self_test' for SelfTest step type"
+        );
+    }
+
+    #[test]
+    fn normalize_workflow_preserves_multiple_self_test_steps() {
+        let mut workflow = WorkflowConfig {
+            steps: vec![
+                WorkflowStepConfig {
+                    id: "self_test_fail".to_string(),
+                    description: None,
+                    step_type: Some(WorkflowStepType::SelfTest),
+                    builtin: None,
+                    required_capability: None,
+                    enabled: true,
+                    repeatable: false,
+                    is_guard: false,
+                    cost_preference: None,
+                    prehook: None,
+                    tty: false,
+                    outputs: vec![],
+                    pipe_to: None,
+                    command: None,
+                },
+                WorkflowStepConfig {
+                    id: "self_test_recover".to_string(),
+                    description: None,
+                    step_type: Some(WorkflowStepType::SelfTest),
+                    builtin: None,
+                    required_capability: None,
+                    enabled: true,
+                    repeatable: false,
+                    is_guard: false,
+                    cost_preference: None,
+                    prehook: None,
+                    tty: false,
+                    outputs: vec![],
+                    pipe_to: None,
+                    command: None,
+                },
+            ],
+            loop_policy: WorkflowLoopConfig {
+                mode: LoopMode::Once,
+                guard: WorkflowLoopGuardConfig {
+                    enabled: false,
+                    ..WorkflowLoopGuardConfig::default()
+                },
+            },
+            finalize: WorkflowFinalizeConfig { rules: vec![] },
+            qa: None,
+            fix: None,
+            retest: None,
+            dynamic_steps: vec![],
+            safety: crate::config::SafetyConfig::default(),
+        };
+
+        normalize_workflow_config(&mut workflow);
+
+        let self_test_ids: Vec<&str> = workflow
+            .steps
+            .iter()
+            .filter(|s| s.step_type.as_ref() == Some(&WorkflowStepType::SelfTest))
+            .map(|s| s.id.as_str())
+            .collect();
+        assert_eq!(self_test_ids, vec!["self_test_fail", "self_test_recover"]);
+    }
+
+    #[test]
+    fn validate_workflow_config_allows_multiple_self_test_steps() {
+        let workflow = WorkflowConfig {
+            steps: vec![
+                WorkflowStepConfig {
+                    id: "self_test_fail".to_string(),
+                    description: None,
+                    step_type: Some(WorkflowStepType::SelfTest),
+                    builtin: Some("self_test".to_string()),
+                    required_capability: None,
+                    enabled: true,
+                    repeatable: false,
+                    is_guard: false,
+                    cost_preference: None,
+                    prehook: None,
+                    tty: false,
+                    outputs: vec![],
+                    pipe_to: None,
+                    command: None,
+                },
+                WorkflowStepConfig {
+                    id: "self_test_recover".to_string(),
+                    description: None,
+                    step_type: Some(WorkflowStepType::SelfTest),
+                    builtin: Some("self_test".to_string()),
+                    required_capability: None,
+                    enabled: true,
+                    repeatable: false,
+                    is_guard: false,
+                    cost_preference: None,
+                    prehook: None,
+                    tty: false,
+                    outputs: vec![],
+                    pipe_to: None,
+                    command: None,
+                },
+            ],
+            loop_policy: WorkflowLoopConfig {
+                mode: LoopMode::Once,
+                guard: WorkflowLoopGuardConfig {
+                    enabled: false,
+                    ..WorkflowLoopGuardConfig::default()
+                },
+            },
+            finalize: WorkflowFinalizeConfig { rules: vec![] },
+            qa: None,
+            fix: None,
+            retest: None,
+            dynamic_steps: vec![],
+            safety: crate::config::SafetyConfig::default(),
+        };
+
+        let config = OrchestratorConfig::default();
+        let result = validate_workflow_config(&config, &workflow, "test-workflow");
+        assert!(
+            result.is_ok(),
+            "validation should allow multiple self_test steps"
+        );
+    }
+
+    #[test]
+    fn validate_workflow_config_allows_multiple_implement_steps() {
+        let workflow = WorkflowConfig {
+            steps: vec![
+                WorkflowStepConfig {
+                    id: "implement_phase_one".to_string(),
+                    description: None,
+                    step_type: Some(WorkflowStepType::Implement),
+                    builtin: None,
+                    required_capability: None,
+                    enabled: true,
+                    repeatable: false,
+                    is_guard: false,
+                    cost_preference: None,
+                    prehook: None,
+                    tty: false,
+                    outputs: vec![],
+                    pipe_to: None,
+                    command: Some("echo phase-one".to_string()),
+                },
+                WorkflowStepConfig {
+                    id: "implement_phase_two".to_string(),
+                    description: None,
+                    step_type: Some(WorkflowStepType::Implement),
+                    builtin: None,
+                    required_capability: None,
+                    enabled: true,
+                    repeatable: false,
+                    is_guard: false,
+                    cost_preference: None,
+                    prehook: None,
+                    tty: false,
+                    outputs: vec![],
+                    pipe_to: None,
+                    command: Some("echo phase-two".to_string()),
+                },
+            ],
+            loop_policy: WorkflowLoopConfig {
+                mode: LoopMode::Once,
+                guard: WorkflowLoopGuardConfig {
+                    enabled: false,
+                    ..WorkflowLoopGuardConfig::default()
+                },
+            },
+            finalize: WorkflowFinalizeConfig { rules: vec![] },
+            qa: None,
+            fix: None,
+            retest: None,
+            dynamic_steps: vec![],
+            safety: crate::config::SafetyConfig::default(),
+        };
+
+        let config = OrchestratorConfig::default();
+        let result = validate_workflow_config(&config, &workflow, "test-workflow");
+        assert!(
+            result.is_ok(),
+            "validation should allow multiple implement steps when step ids are unique"
+        );
+    }
+
+    #[test]
+    fn validate_workflow_config_rejects_duplicate_step_ids() {
+        let workflow = WorkflowConfig {
+            steps: vec![
+                WorkflowStepConfig {
+                    id: "duplicate_step".to_string(),
+                    description: None,
+                    step_type: Some(WorkflowStepType::SelfTest),
+                    builtin: Some("self_test".to_string()),
+                    required_capability: None,
+                    enabled: true,
+                    repeatable: false,
+                    is_guard: false,
+                    cost_preference: None,
+                    prehook: None,
+                    tty: false,
+                    outputs: vec![],
+                    pipe_to: None,
+                    command: None,
+                },
+                WorkflowStepConfig {
+                    id: "duplicate_step".to_string(),
+                    description: None,
+                    step_type: Some(WorkflowStepType::Implement),
+                    builtin: None,
+                    required_capability: None,
+                    enabled: true,
+                    repeatable: false,
+                    is_guard: false,
+                    cost_preference: None,
+                    prehook: None,
+                    tty: false,
+                    outputs: vec![],
+                    pipe_to: None,
+                    command: Some("echo duplicate".to_string()),
+                },
+            ],
+            loop_policy: WorkflowLoopConfig {
+                mode: LoopMode::Once,
+                guard: WorkflowLoopGuardConfig {
+                    enabled: false,
+                    ..WorkflowLoopGuardConfig::default()
+                },
+            },
+            finalize: WorkflowFinalizeConfig { rules: vec![] },
+            qa: None,
+            fix: None,
+            retest: None,
+            dynamic_steps: vec![],
+            safety: crate::config::SafetyConfig::default(),
+        };
+
+        let config = OrchestratorConfig::default();
+        let result = validate_workflow_config(&config, &workflow, "test-workflow");
+        assert!(result.is_err(), "validation should reject duplicate step ids");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("duplicate step id 'duplicate_step'"),
+            "unexpected error: {}",
+            err
         );
     }
 
