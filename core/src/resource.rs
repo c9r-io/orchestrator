@@ -1018,6 +1018,7 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
                 outputs: Vec::new(),
                 pipe_to: None,
                 command: step.command.clone(),
+                chain_steps: vec![],
             })
         })
         .collect::<Result<Vec<_>>>()?;

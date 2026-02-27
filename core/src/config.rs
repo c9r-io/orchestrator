@@ -395,6 +395,7 @@ pub enum WorkflowStepType {
     DocGovernance,
     AlignTests,
     SelfTest,
+    SmokeChain,
 }
 
 impl WorkflowStepType {
@@ -419,6 +420,7 @@ impl WorkflowStepType {
             Self::DocGovernance => "doc_governance",
             Self::AlignTests => "align_tests",
             Self::SelfTest => "self_test",
+            Self::SmokeChain => "smoke_chain",
         }
     }
 
@@ -427,7 +429,12 @@ impl WorkflowStepType {
     pub fn has_structured_output(&self) -> bool {
         matches!(
             self,
-            Self::Build | Self::Test | Self::Lint | Self::QaTesting | Self::SelfTest
+            Self::Build
+                | Self::Test
+                | Self::Lint
+                | Self::QaTesting
+                | Self::SelfTest
+                | Self::SmokeChain
         )
     }
 }
@@ -456,6 +463,7 @@ impl FromStr for WorkflowStepType {
             "doc_governance" => Ok(Self::DocGovernance),
             "align_tests" => Ok(Self::AlignTests),
             "self_test" => Ok(Self::SelfTest),
+            "smoke_chain" => Ok(Self::SmokeChain),
             _ => Err(format!("unknown workflow step type: {}", value)),
         }
     }
@@ -616,6 +624,9 @@ pub struct WorkflowStepConfig {
     /// Build command for builtin build/test/lint steps
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
+    /// Sub-steps to execute in sequence for smoke_chain step
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chain_steps: Vec<WorkflowStepConfig>,
 }
 
 fn default_true() -> bool {
@@ -653,6 +664,9 @@ pub struct TaskExecutionStep {
     /// Build command for builtin build/test/lint steps
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
+    /// Sub-steps to execute in sequence for smoke_chain step
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chain_steps: Vec<TaskExecutionStep>,
 }
 
 /// Task execution plan
@@ -859,6 +873,7 @@ fn step_config(
         outputs: Vec::new(),
         pipe_to: None,
         command: None,
+        chain_steps: vec![],
     }
 }
 

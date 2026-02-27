@@ -99,6 +99,9 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                     WorkflowStepType::SelfTest => {
                         step.builtin = Some("self_test".to_string());
                     }
+                    WorkflowStepType::SmokeChain => {
+                        step.required_capability = Some(st.as_str().to_string());
+                    }
                     _ => {}
                 }
             }
@@ -134,6 +137,7 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                 outputs: Vec::new(),
                 pipe_to: None,
                 command: None,
+                chain_steps: vec![],
             });
         }
     }
@@ -221,8 +225,9 @@ pub fn validate_workflow_config(
             }
             continue;
         }
-        // Steps with a builtin or command are self-contained and don't need an agent template
-        let is_self_contained = step.builtin.is_some() || step.command.is_some();
+        // Steps with a builtin, command, or chain_steps are self-contained
+        let is_self_contained =
+            step.builtin.is_some() || step.command.is_some() || !step.chain_steps.is_empty();
         if !is_self_contained {
             let has_agent = config
                 .agents
@@ -305,7 +310,8 @@ fn validate_workflow_config_with_agents(
             }
             continue;
         }
-        let is_self_contained = step.builtin.is_some() || step.command.is_some();
+        let is_self_contained =
+            step.builtin.is_some() || step.command.is_some() || !step.chain_steps.is_empty();
         if !is_self_contained {
             let has_agent = all_agents.values().any(|a| a.get_template(key).is_some());
             if !has_agent {
@@ -748,6 +754,26 @@ pub fn build_execution_plan(
             outputs: step.outputs.clone(),
             pipe_to: step.pipe_to.clone(),
             command: step.command.clone(),
+            chain_steps: step
+                .chain_steps
+                .iter()
+                .map(|cs| crate::config::TaskExecutionStep {
+                    id: cs.id.clone(),
+                    step_type: cs.step_type.clone(),
+                    required_capability: cs.required_capability.clone(),
+                    builtin: cs.builtin.clone(),
+                    enabled: cs.enabled,
+                    repeatable: cs.repeatable,
+                    is_guard: cs.is_guard,
+                    cost_preference: cs.cost_preference.clone(),
+                    prehook: cs.prehook.clone(),
+                    tty: cs.tty,
+                    outputs: cs.outputs.clone(),
+                    pipe_to: cs.pipe_to.clone(),
+                    command: cs.command.clone(),
+                    chain_steps: vec![],
+                })
+                .collect(),
         });
     }
     let loop_policy = workflow.loop_policy.clone();
@@ -828,6 +854,7 @@ mod tests {
                 outputs: vec![],
                 pipe_to: None,
                 command: None,
+                chain_steps: vec![],
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -877,6 +904,7 @@ mod tests {
                     outputs: vec![],
                     pipe_to: None,
                     command: None,
+                    chain_steps: vec![],
                 },
                 WorkflowStepConfig {
                     id: "self_test_recover".to_string(),
@@ -893,6 +921,7 @@ mod tests {
                     outputs: vec![],
                     pipe_to: None,
                     command: None,
+                    chain_steps: vec![],
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -940,6 +969,7 @@ mod tests {
                     outputs: vec![],
                     pipe_to: None,
                     command: None,
+                    chain_steps: vec![],
                 },
                 WorkflowStepConfig {
                     id: "self_test_recover".to_string(),
@@ -956,6 +986,7 @@ mod tests {
                     outputs: vec![],
                     pipe_to: None,
                     command: None,
+                    chain_steps: vec![],
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -1000,6 +1031,7 @@ mod tests {
                     outputs: vec![],
                     pipe_to: None,
                     command: Some("echo phase-one".to_string()),
+                    chain_steps: vec![],
                 },
                 WorkflowStepConfig {
                     id: "implement_phase_two".to_string(),
@@ -1016,6 +1048,7 @@ mod tests {
                     outputs: vec![],
                     pipe_to: None,
                     command: Some("echo phase-two".to_string()),
+                    chain_steps: vec![],
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -1060,6 +1093,7 @@ mod tests {
                     outputs: vec![],
                     pipe_to: None,
                     command: None,
+                    chain_steps: vec![],
                 },
                 WorkflowStepConfig {
                     id: "duplicate_step".to_string(),
@@ -1076,6 +1110,7 @@ mod tests {
                     outputs: vec![],
                     pipe_to: None,
                     command: Some("echo duplicate".to_string()),
+                    chain_steps: vec![],
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -1095,7 +1130,10 @@ mod tests {
 
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-workflow");
-        assert!(result.is_err(), "validation should reject duplicate step ids");
+        assert!(
+            result.is_err(),
+            "validation should reject duplicate step ids"
+        );
         let err = result.unwrap_err().to_string();
         assert!(
             err.contains("duplicate step id 'duplicate_step'"),
@@ -1122,6 +1160,7 @@ mod tests {
                 outputs: vec![],
                 pipe_to: None,
                 command: None,
+                chain_steps: vec![],
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -1167,6 +1206,7 @@ mod tests {
                     outputs: vec![],
                     pipe_to: None,
                     command: None,
+                    chain_steps: vec![],
                 },
                 WorkflowStepConfig {
                     id: "self_test".to_string(),
@@ -1183,6 +1223,7 @@ mod tests {
                     outputs: vec![],
                     pipe_to: None,
                     command: None,
+                    chain_steps: vec![],
                 },
             ],
             loop_policy: WorkflowLoopConfig {

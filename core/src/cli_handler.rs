@@ -895,6 +895,7 @@ impl CliHandler {
             outputs: Vec::new(),
             pipe_to: None,
             command: None,
+            chain_steps: vec![],
         };
         plan.steps.insert(insert_idx, inserted_step);
 

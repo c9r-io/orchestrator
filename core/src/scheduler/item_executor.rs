@@ -729,6 +729,69 @@ pub async fn process_item(
             continue;
         }
 
+        if step.step_type == Some(WorkflowStepType::SmokeChain) && !step.chain_steps.is_empty() {
+            let mut smoke_chain_passed = true;
+            for chain_step in &step.chain_steps {
+                insert_event(
+                    state,
+                    task_id,
+                    Some(item_id),
+                    "chain_step_started",
+                    json!({"step": step_type, "chain_step": chain_step.id}),
+                )?;
+
+                let mut step_ctx = task_ctx.clone();
+                step_ctx.pipeline_vars = pipeline_vars.clone();
+
+                let (result, new_pipeline) = execute_builtin_step(
+                    state,
+                    task_id,
+                    item_id,
+                    chain_step,
+                    &step_ctx,
+                    runtime,
+                )
+                .await?;
+                pipeline_vars = new_pipeline;
+
+                if let Some(ref output) = result.output {
+                    if !output.stdout.is_empty() {
+                        pipeline_vars
+                            .vars
+                            .insert("plan_output".to_string(), output.stdout.clone());
+                    }
+                }
+
+                insert_event(
+                    state,
+                    task_id,
+                    Some(item_id),
+                    "chain_step_finished",
+                    json!({
+                        "step": step_type,
+                        "chain_step": chain_step.id,
+                        "exit_code": result.exit_code,
+                        "success": result.is_success()
+                    }),
+                )?;
+
+                if !result.is_success() {
+                    smoke_chain_passed = false;
+                    item_status = format!("{}_failed", chain_step.id);
+                    break;
+                }
+            }
+
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "step_finished",
+                json!({"step": "smoke_chain", "success": smoke_chain_passed}),
+            )?;
+            continue;
+        }
+
         let mut step_ctx = task_ctx.clone();
         step_ctx.pipeline_vars = pipeline_vars.clone();
 

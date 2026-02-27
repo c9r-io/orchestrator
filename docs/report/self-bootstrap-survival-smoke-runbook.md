@@ -380,34 +380,65 @@ Expected:
 
 ---
 
-## 6. Basic Workflow Execution Chain (from V1)
+## 6. Deterministic Workflow Execution Chain (from V1)
 
-This section validates the end-to-end agent execution chain and pipeline
-variable propagation — the same concerns as the original V1 smoke test.
+This section validates phase ordering and `plan_output` propagation without
+letting live LLM agents mutate the main repository during the default smoke run.
+Use the extended runbooks for live high-cost LLM validation.
 
 ```bash
 cat > /tmp/smoke-chain.yaml <<'YAML'
 apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: smoke-local-plan
+spec:
+  capabilities:
+    - smoke_plan
+  templates:
+    smoke_plan: "sh -lc 'printf \"PLAN_LOCAL_OK\"'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: smoke-local-doc
+spec:
+  capabilities:
+    - smoke_doc
+  templates:
+    smoke_doc: "sh -lc 'printf \"QA_SEES:%s\" \"{plan_output}\"'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: smoke-local-impl
+spec:
+  capabilities:
+    - smoke_impl
+  templates:
+    smoke_impl: "sh -lc 'printf \"IMPL_SEES:%s\" \"{plan_output}\"'"
+---
+apiVersion: orchestrator.dev/v2
 kind: Workflow
 metadata:
-  name: smoke-chain
+  name: smoke-chain-local
 spec:
   steps:
     - id: plan
       type: plan
-      required_capability: plan
+      required_capability: smoke_plan
       enabled: true
       repeatable: false
       tty: false
     - id: qa_doc_gen
       type: qa_doc_gen
-      required_capability: qa_doc_gen
+      required_capability: smoke_doc
       enabled: true
       repeatable: false
       tty: false
     - id: implement
       type: implement
-      required_capability: implement
+      required_capability: smoke_impl
       enabled: true
       repeatable: false
       tty: false
@@ -434,10 +465,10 @@ YAML
 ./scripts/orchestrator.sh apply -f /tmp/smoke-chain.yaml
 
 ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" \
-  -n survival-smoke-chain \
-  -w self -W smoke-chain \
+  -n survival-smoke-chain-local \
+  -w self -W smoke-chain-local \
   --no-start \
-  -g "SMOKE CHAIN: verify plan -> qa_doc_gen -> implement -> self_test with plan_output propagation" \
+  -g "SMOKE CHAIN LOCAL: verify plan -> qa_doc_gen -> implement -> self_test with plan_output propagation" \
   -t docs/qa/orchestrator/26-self-bootstrap-workflow.md
 
 TASK_ID=$(./scripts/orchestrator.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
@@ -477,7 +508,8 @@ ORDER BY started_at;
 ```
 
 Expected:
-- `qa_doc_gen` and `implement` commands contain concrete plan text
+- `qa_doc_gen` contains `PLAN_LOCAL_OK`
+- `implement` contains `PLAN_LOCAL_OK`
 - Commands do NOT contain literal `{plan_output}`
 
 ### 6.3 Validate Run Details
@@ -493,7 +525,7 @@ ORDER BY started_at;
 ```
 
 Expected:
-- Each phase has a `command_runs` row with `exit_code=0` and `validation_status=passed`
+- Each command-backed phase (`plan`, `qa_doc_gen`, `implement`) has a `command_runs` row with `exit_code=0` and `validation_status=passed`
 - `stdout_path` and `stderr_path` point to existing log files under `data/logs/`
 
 ---
