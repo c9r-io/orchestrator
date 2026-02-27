@@ -155,31 +155,30 @@ Verify that the `self_test` builtin step executes all three phases successfully 
 ### Steps
 1. Create and start a task using the `self-bootstrap` workflow.
 2. Wait for the `self_test` step to execute (after `implement` step).
-3. Query events for `self_test_phase` entries and the `step_finished` event for `self_test`.
+3. Query the `step_finished` event for `self_test` in the events table.
 
 ### Expected
-- Three `self_test_phase` events emitted in order:
+- Three `self_test_phase` in-memory events emitted in order (visible in SSE stream, not persisted to SQLite):
   1. `{"phase": "cargo_check", "passed": true}`
   2. `{"phase": "cargo_test_lib", "passed": true}`
   3. `{"phase": "manifest_validate", "passed": true}`
-- `step_finished` event with `{"step": "self_test", "exit_code": 0, "success": true}`
+- `step_finished` event persisted to SQLite with `{"step": "self_test", "exit_code": 0, "success": true}`
 - Pipeline variable `self_test_passed` is `"true"`
 - Pipeline variable `self_test_exit_code` is `"0"`
 - Task continues to `qa_testing` step (self_test does not block)
 
 ### Expected Data State
 ```sql
-SELECT json_extract(payload_json, '$.phase') AS phase,
-       json_extract(payload_json, '$.passed') AS passed
-FROM events WHERE task_id = '{task_id}' AND event_type = 'self_test_phase'
-ORDER BY created_at;
--- Expected: cargo_check/true, cargo_test_lib/true, manifest_validate/true
-
+-- step_finished is persisted to the events table via insert_event()
 SELECT json_extract(payload_json, '$.exit_code') AS exit_code,
        json_extract(payload_json, '$.success') AS success
 FROM events WHERE task_id = '{task_id}' AND event_type = 'step_finished'
   AND json_extract(payload_json, '$.step') = 'self_test';
 -- Expected: exit_code=0, success=true
+
+-- NOTE: self_test_phase events are emitted via emit_event() (in-memory/SSE only)
+-- and are NOT persisted to the events table. Verify them via the SSE event stream
+-- or process logs, not via SQL queries.
 ```
 
 ---
@@ -208,25 +207,23 @@ Verify that when `cargo check` fails in the self-test step, the step returns a n
    ```
 
 ### Expected
-- `self_test_phase` event with `{"phase": "cargo_check", "passed": false}`
+- `self_test_phase` in-memory event with `{"phase": "cargo_check", "passed": false}` (visible in SSE stream, not in SQLite)
 - No `cargo_test_lib` or `manifest_validate` phase events (execution stops at first failure)
-- `step_finished` event with `exit_code != 0` and `success: false`
+- `step_finished` event persisted to SQLite with `exit_code != 0` and `success: false`
 - Item status set to `self_test_failed`
 - Pipeline variable `self_test_passed` is `"false"`
 - Subsequent `qa_testing` step may still run (self_test failure does not hard-abort the pipeline, but the item is marked failed)
 
 ### Expected Data State
 ```sql
-SELECT json_extract(payload_json, '$.phase') AS phase,
-       json_extract(payload_json, '$.passed') AS passed
-FROM events WHERE task_id = '{task_id}' AND event_type = 'self_test_phase'
-ORDER BY created_at;
--- Expected: only cargo_check/false (no further phases)
-
+-- step_finished is persisted to the events table
 SELECT json_extract(payload_json, '$.exit_code') AS exit_code
 FROM events WHERE task_id = '{task_id}' AND event_type = 'step_finished'
   AND json_extract(payload_json, '$.step') = 'self_test';
 -- Expected: exit_code != 0
+
+-- NOTE: self_test_phase events use emit_event() (in-memory/SSE only).
+-- Verify cargo_check failure via SSE stream or process logs, not SQL.
 ```
 
 ---

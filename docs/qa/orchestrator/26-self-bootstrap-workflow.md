@@ -4,6 +4,7 @@
 **Scope**: Validate self-bootstrap workflow with AI native SDLC closed-loop: plan → qa_doc_gen → implement → qa_testing → ticket_fix → align_tests → doc_governance, pipeline variable propagation, prehook-gated steps, and checkpoint/rollback safety
 **Scenarios**: 10
 **Priority**: High
+**See also**: `docs/qa/self-bootstrap/01-survival-binary-checkpoint-self-test.md`, `docs/qa/self-bootstrap/02-survival-enforcement-watchdog.md` for the 4-layer survival mechanism (binary checkpoint, self-test gate, self-referential enforcement, watchdog)
 
 ---
 
