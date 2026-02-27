@@ -232,6 +232,16 @@ cd core && cargo check && cargo test --lib && cd ..
 
 cat > /tmp/smoke-selftest.yaml <<'YAML'
 apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: smoke-noop
+spec:
+  capabilities:
+    - smoke_noop
+  templates:
+    smoke_noop: "sh -lc 'printf \"NOOP_OK\"'"
+---
+apiVersion: orchestrator.dev/v2
 kind: Workflow
 metadata:
   name: smoke-selftest
@@ -239,7 +249,7 @@ spec:
   steps:
     - id: implement
       type: implement
-      required_capability: implement
+      required_capability: smoke_noop
       enabled: true
       repeatable: false
       tty: false
@@ -268,7 +278,8 @@ YAML
 ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" \
   -w self -W smoke-selftest \
   --no-start \
-  -g "SURVIVAL SMOKE: self_test should pass on clean codebase"
+  -g "SURVIVAL SMOKE: self_test should pass on clean codebase" \
+  -t core/src/lib.rs
 
 TASK_ID=$(./scripts/orchestrator.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
 ./scripts/orchestrator.sh task start "$TASK_ID"
@@ -469,7 +480,7 @@ YAML
   -w self -W smoke-chain-local \
   --no-start \
   -g "SMOKE CHAIN LOCAL: verify plan -> qa_doc_gen -> implement -> self_test with plan_output propagation" \
-  -t docs/qa/orchestrator/26-self-bootstrap-workflow.md
+  -t core/src/lib.rs
 
 TASK_ID=$(./scripts/orchestrator.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
 ./scripts/orchestrator.sh task start "$TASK_ID"
@@ -606,14 +617,38 @@ Expected:
 done
 
 # Remove temp manifests
-rm -f /tmp/smoke-unsafe.yaml /tmp/smoke-warn.yaml /tmp/smoke-selftest.yaml /tmp/smoke-chain.yaml
+rm -f /tmp/smoke-unsafe.yaml /tmp/smoke-warn.yaml /tmp/smoke-selftest.yaml \
+      /tmp/smoke-selfbreak.yaml /tmp/smoke-chain.yaml
 
 # Remove .stable snapshot
 rm -f .stable
 
+# Remove smoke agents (smoke-noop, smoke-local-*, smoke-breaker)
+for agent in smoke-noop smoke-local-plan smoke-local-doc smoke-local-impl smoke-breaker; do
+  ./scripts/orchestrator.sh delete agent "$agent" 2>/dev/null
+done
+
+# Remove smoke workspaces and workflows
+for ws in smoke-unsafe smoke-warn; do
+  ./scripts/orchestrator.sh delete workspace "$ws" 2>/dev/null
+done
+for wf in smoke-selftest smoke-selfbreak smoke-chain-local smoke-unsafe-wf smoke-warn-wf; do
+  ./scripts/orchestrator.sh delete workflow "$wf" 2>/dev/null
+done
+
 # Optional full reset (cold-start safe)
-rm -f data/agent_orchestrator.db config/default.yaml
+rm -f data/agent_orchestrator.db data/agent_orchestrator.db-wal data/agent_orchestrator.db-shm
+rm -f config/default.yaml
 ./scripts/orchestrator.sh init -f
+
+# Verify no dirty state left in the repository
+if [ -n "$(git status --porcelain)" ]; then
+  echo "[WARN] Repository has uncommitted changes after smoke cleanup:"
+  git status --short
+  echo "Run 'git checkout -- .' to revert if these are smoke artifacts."
+else
+  echo "[OK] Repository is clean after smoke cleanup."
+fi
 ```
 
 ---
