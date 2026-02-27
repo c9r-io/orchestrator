@@ -197,3 +197,136 @@ pub async fn execute_self_test_step(
 
     Ok(0)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn create_mock_binary(path: &Path, content: &[u8]) -> std::io::Result<()> {
+        let parent = path.parent().unwrap();
+        std::fs::create_dir_all(parent)?;
+        let mut file = std::fs::File::create(path)?;
+        file.write_all(content)?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_snapshot_binary_success() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "safety-test-snapshot-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let binary_path = temp_dir.join("core/target/release/agent-orchestrator");
+        let test_content = b"mock binary content for testing";
+        create_mock_binary(&binary_path, test_content).unwrap();
+
+        let result = snapshot_binary(&temp_dir).await;
+
+        assert!(result.is_ok());
+        let stable_path = result.unwrap();
+        assert!(stable_path.exists());
+        let restored_content = std::fs::read(&stable_path).unwrap();
+        assert_eq!(restored_content, test_content);
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[tokio::test]
+    async fn test_snapshot_binary_missing_release() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "safety-test-missing-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let result = snapshot_binary(&temp_dir).await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("release binary not found"));
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[tokio::test]
+    async fn test_restore_binary_snapshot_success() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "safety-test-restore-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let stable_path = temp_dir.join(".stable");
+        let binary_path = temp_dir.join("core/target/release");
+        std::fs::create_dir_all(&binary_path).unwrap();
+        
+        let test_content = b"stable binary snapshot content";
+        create_mock_binary(&stable_path, test_content).unwrap();
+
+        let result = restore_binary_snapshot(&temp_dir).await;
+
+        assert!(result.is_ok());
+        let restored_binary_path = binary_path.join("agent-orchestrator");
+        assert!(restored_binary_path.exists());
+        let restored_content = std::fs::read(&restored_binary_path).unwrap();
+        assert_eq!(restored_content, test_content);
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[tokio::test]
+    async fn test_restore_binary_snapshot_missing_stable() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "safety-test-restore-missing-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let result = restore_binary_snapshot(&temp_dir).await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("no .stable binary snapshot found"));
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[tokio::test]
+    async fn test_snapshot_restore_content_integrity() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "safety-test-integrity-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let binary_path = temp_dir.join("core/target/release/agent-orchestrator");
+        let original_content = vec![0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE];
+        create_mock_binary(&binary_path, &original_content).unwrap();
+
+        snapshot_binary(&temp_dir).await.unwrap();
+        restore_binary_snapshot(&temp_dir).await.unwrap();
+
+        let final_content = std::fs::read(&binary_path).unwrap();
+        assert_eq!(final_content, original_content);
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+}
