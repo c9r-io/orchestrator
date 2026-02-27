@@ -118,14 +118,14 @@ spec:
     # QA testing: rebuild CLI, execute QA scenarios, create tickets for failures
     qa_testing: >-
       opencode run
-      "/qa-testing
+      "读取文档：{rel_path}，执行QA测试
 
       Project: {source_tree}
-      QA targets: docs/qa/
+      QA file: {rel_path}
       Ticket dir: docs/ticket/
 
-      Execute the QA test scenarios. For each scenario, follow the steps
-      and verify expected outcomes. Create tickets for failures."
+      Read the QA document at {rel_path}, then execute each scenario step by step.
+      Verify expected outcomes. Create tickets under docs/ticket/ for any failures."
       --model minimax-coding-plan/MiniMax-M2.5-highspeed
 ---
 # Reviewer agent (MiniMax-M2.5-highspeed) — doc audit and code review
