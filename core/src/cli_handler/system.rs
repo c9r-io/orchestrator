@@ -1,8 +1,11 @@
-use crate::cli::{generate_completion, CompletionCommands, DbCommands};
+use crate::cli::{generate_completion, CompletionCommands, DbCommands, VerifyCommands};
+use crate::cli_handler::cli_runtime;
 use crate::config_load::read_active_config;
 use crate::db::reset_db;
+use crate::scheduler::safety::verify_binary_snapshot;
 use anyhow::Result;
 use clap_complete::Shell;
+use std::path::PathBuf;
 
 use super::CliHandler;
 
@@ -89,5 +92,41 @@ impl CliHandler {
         };
         generate_completion(shell);
         Ok(0)
+    }
+
+    pub(super) fn handle_verify(&self, cmd: &VerifyCommands) -> Result<i32> {
+        match cmd {
+            VerifyCommands::BinarySnapshot { root } => {
+                let workspace_root = match root {
+                    Some(path) => PathBuf::from(path),
+                    None => std::env::current_dir()?,
+                };
+
+                let rt = cli_runtime();
+                let result = rt.block_on(verify_binary_snapshot(&workspace_root))?;
+
+                if result.verified {
+                    println!("✓ Binary snapshot verified");
+                    println!("  Original (stable): {}", result.original_checksum);
+                    println!("  Current (release): {}", result.current_checksum);
+                    println!("  Stable path: {}", result.stable_path.display());
+                    println!("  Binary path: {}", result.binary_path.display());
+                    Ok(0)
+                } else {
+                    println!("✗ Binary snapshot MISMATCH");
+                    println!("  Original (stable): {}", result.original_checksum);
+                    println!("  Current (release): {}", result.current_checksum);
+                    println!("  Stable path: {}", result.stable_path.display());
+                    println!("  Binary path: {}", result.binary_path.display());
+                    eprintln!("\nTo restore the stable binary, run:");
+                    eprintln!(
+                        "  cp {} {}",
+                        result.stable_path.display(),
+                        result.binary_path.display()
+                    );
+                    Ok(1)
+                }
+            }
+        }
     }
 }

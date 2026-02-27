@@ -66,6 +66,7 @@ impl CliHandler {
                 target,
                 command,
             } => self.handle_exec(*stdin, *tty, target, command),
+            Commands::Verify(cmd) => self.handle_verify(cmd),
         }
     }
 }

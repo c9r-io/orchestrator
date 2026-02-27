@@ -126,6 +126,9 @@ pub enum Commands {
         #[arg(trailing_var_arg = true)]
         command: Vec<String>,
     },
+
+    #[command(subcommand)]
+    Verify(VerifyCommands),
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -580,6 +583,16 @@ pub enum CompletionCommands {
     Zsh,
     Fish,
     PowerShell,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum VerifyCommands {
+    /// Verify binary snapshot matches current binary (survival smoke test)
+    BinarySnapshot {
+        /// Workspace root path (default: current directory)
+        #[arg(short, long)]
+        root: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
@@ -1473,6 +1486,54 @@ mod tests {
                 assert_eq!(file, "/tmp/input.yaml");
             }
             _ => panic!("expected manifest validate command"),
+        }
+    }
+
+    #[test]
+    fn parse_verify_binary_snapshot_default() {
+        let cli = Cli::parse_from(["orchestrator", "verify", "binary-snapshot"]);
+
+        match cli.command {
+            Commands::Verify(VerifyCommands::BinarySnapshot { root }) => {
+                assert_eq!(root, None);
+            }
+            _ => panic!("expected verify binary-snapshot command"),
+        }
+    }
+
+    #[test]
+    fn parse_verify_binary_snapshot_with_root() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "verify",
+            "binary-snapshot",
+            "--root",
+            "/path/to/workspace",
+        ]);
+
+        match cli.command {
+            Commands::Verify(VerifyCommands::BinarySnapshot { root }) => {
+                assert_eq!(root, Some("/path/to/workspace".to_string()));
+            }
+            _ => panic!("expected verify binary-snapshot command"),
+        }
+    }
+
+    #[test]
+    fn parse_verify_binary_snapshot_short_flag() {
+        let cli = Cli::parse_from([
+            "orchestrator",
+            "verify",
+            "binary-snapshot",
+            "-r",
+            "/another/path",
+        ]);
+
+        match cli.command {
+            Commands::Verify(VerifyCommands::BinarySnapshot { root }) => {
+                assert_eq!(root, Some("/another/path".to_string()));
+            }
+            _ => panic!("expected verify binary-snapshot command"),
         }
     }
 }
