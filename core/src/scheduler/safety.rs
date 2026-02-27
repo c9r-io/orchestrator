@@ -1,6 +1,6 @@
 use crate::state::InnerState;
 use anyhow::{Context, Result};
-use md5::{Md5, Digest};
+use md5::{Digest, Md5};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -26,10 +26,7 @@ pub async fn verify_binary_snapshot(workspace_root: &Path) -> Result<BinaryVerif
     }
 
     if !binary_path.exists() {
-        anyhow::bail!(
-            "release binary not found at {}",
-            binary_path.display()
-        );
+        anyhow::bail!("release binary not found at {}", binary_path.display());
     }
 
     let stable_content = tokio::fs::read(&stable_path)
@@ -321,7 +318,7 @@ mod tests {
         let stable_path = temp_dir.join(".stable");
         let binary_path = temp_dir.join("core/target/release");
         std::fs::create_dir_all(&binary_path).unwrap();
-        
+
         let test_content = b"stable binary snapshot content";
         create_mock_binary(&stable_path, test_content).unwrap();
 
@@ -402,7 +399,10 @@ mod tests {
         assert!(result.is_ok());
         let verification = result.unwrap();
         assert!(verification.verified);
-        assert_eq!(verification.original_checksum, verification.current_checksum);
+        assert_eq!(
+            verification.original_checksum,
+            verification.current_checksum
+        );
 
         std::fs::remove_dir_all(&temp_dir).ok();
     }
@@ -430,7 +430,10 @@ mod tests {
         assert!(result.is_ok());
         let verification = result.unwrap();
         assert!(!verification.verified);
-        assert_ne!(verification.original_checksum, verification.current_checksum);
+        assert_ne!(
+            verification.original_checksum,
+            verification.current_checksum
+        );
 
         std::fs::remove_dir_all(&temp_dir).ok();
     }

@@ -13,8 +13,8 @@ The binary snapshot mechanism provides a safety layer for self-referential works
 
 ### New Functions Being Tested
 
-- `verify_binary_snapshot(workspace_root: &Path) -> Result<BinarySnapshotResult>` - Verifies that the release binary matches the `.stable` snapshot
-- `BinarySnapshotResult` struct - Contains verification results (matches, differences, file sizes)
+- `verify_binary_snapshot(workspace_root: &Path) -> Result<BinaryVerificationResult>` - Verifies that the release binary matches the `.stable` snapshot
+- `BinaryVerificationResult` struct - Contains verification results (verified, checksums, paths)
 
 Module: `core/src/scheduler/safety.rs`
 
@@ -35,13 +35,12 @@ Verify that `verify_binary_snapshot` returns a successful result indicating bina
 2. Create `core/target/release/agent-orchestrator` with content: "BINARY_v1.0"
 3. Call `snapshot_binary(&workspace_root).await`
 4. Call `verify_binary_snapshot(&workspace_root).await`
-5. Check the returned `BinarySnapshotResult`
+5. Check the returned `BinaryVerificationResult`
 
 ### Expected
 - `verify_binary_snapshot` returns `Ok(result)`
-- `result.matches` is `true`
-- `result.differences` is empty
-- `result.original_size` equals `result.snapshot_size`
+- `result.verified` is `true`
+- `result.original_checksum` equals `result.current_checksum`
 
 ---
 
@@ -65,9 +64,8 @@ Verify that `verify_binary_snapshot` correctly detects when the release binary d
 
 ### Expected
 - `verify_binary_snapshot` returns `Ok(result)`
-- `result.matches` is `false`
-- `result.differences` contains indication of content mismatch
-- `result.original_size` differs from `result.snapshot_size`
+- `result.verified` is `false`
+- `result.original_checksum` differs from `result.current_checksum`
 
 ---
 
@@ -91,8 +89,8 @@ End-to-end verification that the entire snapshot/restore workflow maintains bina
 
 ### Expected
 - After step 3: `.stable` file exists with original content
-- After step 5: `result.matches` is `false` (binary was modified)
-- After step 7: `result.matches` is `true` (binary restored to original)
+- After step 5: `result.verified` is `false` (binary was modified)
+- After step 7: `result.verified` is `true` (binary restored to original)
 - Final binary content equals original: `vec![0xDE, 0xAD, 0xBE, 0xEF]`
 
 ### Expected Data State
@@ -103,11 +101,11 @@ assert_eq!(stable_content, vec![0xDE, 0xAD, 0xBE, 0xEF]);
 
 // Step 5: After modification, verify reports mismatch
 let result = verify_binary_snapshot(&workspace_root).await?;
-assert!(!result.matches);
+assert!(!result.verified);
 
 // Step 7: After restore, verify reports match
 let result = verify_binary_snapshot(&workspace_root).await?;
-assert!(result.matches);
+assert!(result.verified);
 ```
 
 ---

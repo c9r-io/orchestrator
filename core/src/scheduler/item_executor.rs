@@ -743,15 +743,9 @@ pub async fn process_item(
                 let mut step_ctx = task_ctx.clone();
                 step_ctx.pipeline_vars = pipeline_vars.clone();
 
-                let (result, new_pipeline) = execute_builtin_step(
-                    state,
-                    task_id,
-                    item_id,
-                    chain_step,
-                    &step_ctx,
-                    runtime,
-                )
-                .await?;
+                let (result, new_pipeline) =
+                    execute_builtin_step(state, task_id, item_id, chain_step, &step_ctx, runtime)
+                        .await?;
                 pipeline_vars = new_pipeline;
 
                 if let Some(ref output) = result.output {

@@ -7,7 +7,7 @@ spec:
   qa_targets:
     - fixtures/bootstrap-qa
   ticket_dir: fixtures/ticket
-  self_referential: true
+  self_referential: false
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent

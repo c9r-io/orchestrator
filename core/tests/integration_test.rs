@@ -563,7 +563,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             outputs: Vec::new(),
                             pipe_to: None,
                             command: None,
-                        chain_steps: vec![],
+                            chain_steps: vec![],
                         },
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
@@ -580,7 +580,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             outputs: Vec::new(),
                             pipe_to: None,
                             command: None,
-                        chain_steps: vec![],
+                            chain_steps: vec![],
                         },
                         WorkflowStepConfig {
                             id: "implement".to_string(),
@@ -597,7 +597,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             outputs: Vec::new(),
                             pipe_to: None,
                             command: None,
-                        chain_steps: vec![],
+                            chain_steps: vec![],
                         },
                         WorkflowStepConfig {
                             id: "qa_testing".to_string(),
@@ -614,7 +614,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             outputs: Vec::new(),
                             pipe_to: None,
                             command: None,
-                        chain_steps: vec![],
+                            chain_steps: vec![],
                         },
                         WorkflowStepConfig {
                             id: "ticket_fix".to_string(),
@@ -631,7 +631,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             outputs: Vec::new(),
                             pipe_to: None,
                             command: None,
-                        chain_steps: vec![],
+                            chain_steps: vec![],
                         },
                         WorkflowStepConfig {
                             id: "align_tests".to_string(),
@@ -648,7 +648,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             outputs: Vec::new(),
                             pipe_to: None,
                             command: None,
-                        chain_steps: vec![],
+                            chain_steps: vec![],
                         },
                         WorkflowStepConfig {
                             id: "doc_governance".to_string(),
@@ -665,7 +665,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             outputs: Vec::new(),
                             pipe_to: None,
                             command: None,
-                        chain_steps: vec![],
+                            chain_steps: vec![],
                         },
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
@@ -682,7 +682,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             outputs: Vec::new(),
                             pipe_to: None,
                             command: None,
-                        chain_steps: vec![],
+                            chain_steps: vec![],
                         },
                     ],
                     loop_policy: WorkflowLoopConfig {
@@ -781,7 +781,7 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
                 outputs: Vec::new(),
                 pipe_to: None,
                 command: None,
-                        chain_steps: vec![],
+                chain_steps: vec![],
             },
             WorkflowStepConfig {
                 id: "align_tests".to_string(),
@@ -798,7 +798,7 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
                 outputs: Vec::new(),
                 pipe_to: None,
                 command: None,
-                        chain_steps: vec![],
+                chain_steps: vec![],
             },
         ],
         loop_policy: WorkflowLoopConfig {
@@ -888,7 +888,7 @@ fn sdlc_full_pipeline_workflow_parses_from_fixture() {
 #[test]
 fn binary_snapshot_smoke_verify_integration() {
     use agent_orchestrator::scheduler::safety::{
-        snapshot_binary, verify_binary_snapshot, restore_binary_snapshot,
+        restore_binary_snapshot, snapshot_binary, verify_binary_snapshot,
     };
     use std::io::Write;
     use tokio::runtime::Runtime;
@@ -912,9 +912,8 @@ fn binary_snapshot_smoke_verify_integration() {
     }
 
     let rt = Runtime::new().unwrap();
-    let result: std::path::PathBuf = rt.block_on(async {
-        snapshot_binary(&temp_dir).await.unwrap()
-    });
+    let result: std::path::PathBuf =
+        rt.block_on(async { snapshot_binary(&temp_dir).await.unwrap() });
     assert!(result.exists(), "stable snapshot should exist");
 
     {
@@ -922,19 +921,21 @@ fn binary_snapshot_smoke_verify_integration() {
         file.write_all(b"modified content").unwrap();
     }
 
-    let verification_result = rt.block_on(async {
-        verify_binary_snapshot(&temp_dir).await.unwrap()
-    });
-    assert!(!verification_result.verified, "should detect mismatch after modification");
+    let verification_result =
+        rt.block_on(async { verify_binary_snapshot(&temp_dir).await.unwrap() });
+    assert!(
+        !verification_result.verified,
+        "should detect mismatch after modification"
+    );
 
-    rt.block_on(async {
-        restore_binary_snapshot(&temp_dir).await.unwrap()
-    });
+    rt.block_on(async { restore_binary_snapshot(&temp_dir).await.unwrap() });
 
-    let final_verification = rt.block_on(async {
-        verify_binary_snapshot(&temp_dir).await.unwrap()
-    });
-    assert!(final_verification.verified, "binary should match after restore");
+    let final_verification =
+        rt.block_on(async { verify_binary_snapshot(&temp_dir).await.unwrap() });
+    assert!(
+        final_verification.verified,
+        "binary should match after restore"
+    );
 
     std::fs::remove_dir_all(&temp_dir).ok();
 }
