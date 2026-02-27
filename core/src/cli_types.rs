@@ -81,7 +81,7 @@ pub enum ResourceSpec {
     Workspace(WorkspaceSpec),
 
     /// Agent resource spec
-    Agent(AgentSpec),
+    Agent(Box<AgentSpec>),
 
     /// Workflow resource spec
     Workflow(WorkflowSpec),

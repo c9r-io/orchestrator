@@ -8,14 +8,17 @@ use crate::selection::{select_agent_advanced, select_agent_by_preference};
 use crate::state::InnerState;
 use crate::task_repository::{SqliteTaskRepository, TaskRepository};
 use crate::ticket::{
-    create_ticket_for_qa_failure, list_existing_tickets_for_item, scan_active_tickets_for_task_items,
+    create_ticket_for_qa_failure, list_existing_tickets_for_item,
+    scan_active_tickets_for_task_items,
 };
 use anyhow::Result;
 use serde_json::json;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use super::phase_runner::{run_phase, run_phase_with_rotation, shell_escape};
+use super::phase_runner::{
+    run_phase, run_phase_with_rotation, shell_escape, PhaseRunRequest, RotatingPhaseRunRequest,
+};
 use super::safety::execute_self_test_step;
 use super::task_state::count_unresolved_items;
 use super::RunningTask;
@@ -43,39 +46,45 @@ pub async fn execute_builtin_step(
             task_ctx.workspace_root.clone(),
             task_ctx.workspace_id.clone(),
         );
-        let rendered_command = ctx.render_template_with_pipeline(command, Some(&task_ctx.pipeline_vars));
+        let rendered_command =
+            ctx.render_template_with_pipeline(command, Some(&task_ctx.pipeline_vars));
 
         run_phase(
             state,
-            task_id,
-            item_id,
-            &step.id,
-            phase,
-            step.tty,
-            rendered_command,
-            &task_ctx.workspace_root,
-            &task_ctx.workspace_id,
-            "builtin",
-            runtime,
+            PhaseRunRequest {
+                task_id,
+                item_id,
+                step_id: &step.id,
+                phase,
+                tty: step.tty,
+                command: rendered_command,
+                workspace_root: &task_ctx.workspace_root,
+                workspace_id: &task_ctx.workspace_id,
+                agent_id: "builtin",
+                runtime,
+                step_timeout_secs: None,
+            },
         )
         .await?
     } else {
         run_phase_with_rotation(
             state,
-            task_id,
-            item_id,
-            &step.id,
-            phase,
-            step.tty,
-            step.required_capability.as_deref(),
-            ".",
-            &[],
-            &task_ctx.workspace_root,
-            &task_ctx.workspace_id,
-            task_ctx.current_cycle,
-            runtime,
-            Some(&task_ctx.pipeline_vars),
-            task_ctx.safety.step_timeout_secs,
+            RotatingPhaseRunRequest {
+                task_id,
+                item_id,
+                step_id: &step.id,
+                phase,
+                tty: step.tty,
+                capability: step.required_capability.as_deref(),
+                rel_path: ".",
+                ticket_paths: &[],
+                workspace_root: &task_ctx.workspace_root,
+                workspace_id: &task_ctx.workspace_id,
+                cycle: task_ctx.current_cycle,
+                runtime,
+                pipeline_vars: Some(&task_ctx.pipeline_vars),
+                step_timeout_secs: task_ctx.safety.step_timeout_secs,
+            },
         )
         .await?
     };
@@ -159,20 +168,26 @@ pub async fn execute_guard_step(
 
     let command = template
         .replace("{task_id}", &shell_escape(task_id))
-        .replace("{cycle}", &shell_escape(&task_ctx.current_cycle.to_string()));
+        .replace(
+            "{cycle}",
+            &shell_escape(&task_ctx.current_cycle.to_string()),
+        );
 
     let result = run_phase(
         state,
-        task_id,
-        task_id,
-        &step.id,
-        "guard",
-        step.tty,
-        command,
-        &task_ctx.workspace_root,
-        &task_ctx.workspace_id,
-        &agent_id,
-        runtime,
+        PhaseRunRequest {
+            task_id,
+            item_id: task_id,
+            step_id: &step.id,
+            phase: "guard",
+            tty: step.tty,
+            command,
+            workspace_root: &task_ctx.workspace_root,
+            workspace_id: &task_ctx.workspace_id,
+            agent_id: &agent_id,
+            runtime,
+            step_timeout_secs: None,
+        },
     )
     .await?;
 
@@ -194,7 +209,10 @@ pub async fn execute_guard_step(
         .map(|s| s.to_string())
         .unwrap_or_else(|| "guard_json".to_string());
 
-    Ok(GuardResult { should_stop, reason })
+    Ok(GuardResult {
+        should_stop,
+        reason,
+    })
 }
 
 pub async fn process_item(
@@ -238,30 +256,40 @@ pub async fn process_item(
 
     if let Some(plan_step) = plan_step {
         if plan_step.enabled && (plan_step.repeatable || task_ctx.current_cycle <= 1) {
-            insert_event(state, task_id, Some(item_id), "step_started", json!({"step":"plan"}))?;
-            let result = run_phase_with_rotation(
+            insert_event(
                 state,
                 task_id,
-                item_id,
-                &plan_step.id,
-                "plan",
-                plan_step.tty,
-                plan_step.required_capability.as_deref(),
-                &item.qa_file_path,
-                &active_tickets,
-                &task_ctx.workspace_root,
-                &task_ctx.workspace_id,
-                task_ctx.current_cycle,
-                runtime,
-                Some(&task_ctx.pipeline_vars),
-                task_ctx.safety.step_timeout_secs,
+                Some(item_id),
+                "step_started",
+                json!({"step":"plan"}),
+            )?;
+            let result = run_phase_with_rotation(
+                state,
+                RotatingPhaseRunRequest {
+                    task_id,
+                    item_id,
+                    step_id: &plan_step.id,
+                    phase: "plan",
+                    tty: plan_step.tty,
+                    capability: plan_step.required_capability.as_deref(),
+                    rel_path: &item.qa_file_path,
+                    ticket_paths: &active_tickets,
+                    workspace_root: &task_ctx.workspace_root,
+                    workspace_id: &task_ctx.workspace_id,
+                    cycle: task_ctx.current_cycle,
+                    runtime,
+                    pipeline_vars: Some(&task_ctx.pipeline_vars),
+                    step_timeout_secs: task_ctx.safety.step_timeout_secs,
+                },
             )
             .await?;
             if let Some(ref output) = result.output {
                 pipeline_vars.prev_stdout = output.stdout.clone();
                 pipeline_vars.prev_stderr = output.stderr.clone();
                 if !output.stdout.is_empty() {
-                    pipeline_vars.vars.insert("plan_output".to_string(), output.stdout.clone());
+                    pipeline_vars
+                        .vars
+                        .insert("plan_output".to_string(), output.stdout.clone());
                 }
             }
             insert_event(
@@ -273,7 +301,9 @@ pub async fn process_item(
             )?;
             if result.exit_code != 0 {
                 item_status = "unresolved".to_string();
-                state.db_writer.update_task_item_status(item_id, &item_status)?;
+                state
+                    .db_writer
+                    .update_task_item_status(item_id, &item_status)?;
                 return Ok(());
             }
         }
@@ -313,23 +343,31 @@ pub async fn process_item(
 
         if should_run_qa {
             qa_ran = true;
-            insert_event(state, task_id, Some(item_id), "step_started", json!({"step":"qa"}))?;
-            let result = run_phase_with_rotation(
+            insert_event(
                 state,
                 task_id,
-                item_id,
-                &qa_step.id,
-                "qa",
-                qa_step.tty,
-                qa_step.required_capability.as_deref(),
-                &item.qa_file_path,
-                &active_tickets,
-                &task_ctx.workspace_root,
-                &task_ctx.workspace_id,
-                task_ctx.current_cycle,
-                runtime,
-                None,
-                task_ctx.safety.step_timeout_secs,
+                Some(item_id),
+                "step_started",
+                json!({"step":"qa"}),
+            )?;
+            let result = run_phase_with_rotation(
+                state,
+                RotatingPhaseRunRequest {
+                    task_id,
+                    item_id,
+                    step_id: &qa_step.id,
+                    phase: "qa",
+                    tty: qa_step.tty,
+                    capability: qa_step.required_capability.as_deref(),
+                    rel_path: &item.qa_file_path,
+                    ticket_paths: &active_tickets,
+                    workspace_root: &task_ctx.workspace_root,
+                    workspace_id: &task_ctx.workspace_id,
+                    cycle: task_ctx.current_cycle,
+                    runtime,
+                    pipeline_vars: None,
+                    step_timeout_secs: task_ctx.safety.step_timeout_secs,
+                },
             )
             .await?;
             qa_exit_code = Some(result.exit_code);
@@ -337,7 +375,11 @@ pub async fn process_item(
             qa_stdout_path = Some(result.stdout_path.clone());
             qa_stderr_path = Some(result.stderr_path.clone());
 
-            let qa_artifacts = result.output.as_ref().map(|o| o.artifacts.clone()).unwrap_or_default();
+            let qa_artifacts = result
+                .output
+                .as_ref()
+                .map(|o| o.artifacts.clone())
+                .unwrap_or_default();
             if !qa_artifacts.is_empty() {
                 insert_event(
                     state,
@@ -358,7 +400,13 @@ pub async fn process_item(
             )?;
         } else {
             qa_skipped = true;
-            insert_event(state, task_id, Some(item_id), "step_skipped", json!({"step":"qa"}))?;
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "step_skipped",
+                json!({"step":"qa"}),
+            )?;
         }
     }
 
@@ -400,7 +448,13 @@ pub async fn process_item(
 
     if let Some(scan_step) = ticket_scan_step {
         if scan_step.enabled {
-            insert_event(state, task_id, Some(item_id), "step_started", json!({"step":"ticket_scan"}))?;
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "step_started",
+                json!({"step":"ticket_scan"}),
+            )?;
             let tickets = scan_active_tickets_for_task_items(task_ctx, task_item_paths)?;
             active_tickets = tickets.get(&item.qa_file_path).cloned().unwrap_or_default();
             new_ticket_count = active_tickets.len() as i64;
@@ -465,23 +519,31 @@ pub async fn process_item(
 
             if should_run_fix {
                 fix_ran = true;
-                insert_event(state, task_id, Some(item_id), "step_started", json!({"step":"fix"}))?;
-                let result = run_phase_with_rotation(
+                insert_event(
                     state,
                     task_id,
-                    item_id,
-                    &fix_step.id,
-                    "fix",
-                    fix_step.tty,
-                    fix_step.required_capability.as_deref(),
-                    &item.qa_file_path,
-                    &active_tickets,
-                    &task_ctx.workspace_root,
-                    &task_ctx.workspace_id,
-                    task_ctx.current_cycle,
-                    runtime,
-                    None,
-                    task_ctx.safety.step_timeout_secs,
+                    Some(item_id),
+                    "step_started",
+                    json!({"step":"fix"}),
+                )?;
+                let result = run_phase_with_rotation(
+                    state,
+                    RotatingPhaseRunRequest {
+                        task_id,
+                        item_id,
+                        step_id: &fix_step.id,
+                        phase: "fix",
+                        tty: fix_step.tty,
+                        capability: fix_step.required_capability.as_deref(),
+                        rel_path: &item.qa_file_path,
+                        ticket_paths: &active_tickets,
+                        workspace_root: &task_ctx.workspace_root,
+                        workspace_id: &task_ctx.workspace_id,
+                        cycle: task_ctx.current_cycle,
+                        runtime,
+                        pipeline_vars: None,
+                        step_timeout_secs: task_ctx.safety.step_timeout_secs,
+                    },
                 )
                 .await?;
                 fix_exit_code = Some(result.exit_code);
@@ -490,7 +552,11 @@ pub async fn process_item(
                     item_status = "fixed".to_string();
                 }
 
-                let fix_artifacts = result.output.as_ref().map(|o| o.artifacts.clone()).unwrap_or_default();
+                let fix_artifacts = result
+                    .output
+                    .as_ref()
+                    .map(|o| o.artifacts.clone())
+                    .unwrap_or_default();
                 if !fix_artifacts.is_empty() {
                     insert_event(
                         state,
@@ -516,23 +582,31 @@ pub async fn process_item(
     if let Some(retest_step) = retest_step {
         if retest_step.enabled && fix_success {
             retest_ran = true;
-            insert_event(state, task_id, Some(item_id), "step_started", json!({"step":"retest"}))?;
-            let result = run_phase_with_rotation(
+            insert_event(
                 state,
                 task_id,
-                item_id,
-                &retest_step.id,
-                "retest",
-                retest_step.tty,
-                retest_step.required_capability.as_deref(),
-                &item.qa_file_path,
-                &retest_new_tickets,
-                &task_ctx.workspace_root,
-                &task_ctx.workspace_id,
-                task_ctx.current_cycle,
-                runtime,
-                None,
-                task_ctx.safety.step_timeout_secs,
+                Some(item_id),
+                "step_started",
+                json!({"step":"retest"}),
+            )?;
+            let result = run_phase_with_rotation(
+                state,
+                RotatingPhaseRunRequest {
+                    task_id,
+                    item_id,
+                    step_id: &retest_step.id,
+                    phase: "retest",
+                    tty: retest_step.tty,
+                    capability: retest_step.required_capability.as_deref(),
+                    rel_path: &item.qa_file_path,
+                    ticket_paths: &retest_new_tickets,
+                    workspace_root: &task_ctx.workspace_root,
+                    workspace_id: &task_ctx.workspace_id,
+                    cycle: task_ctx.current_cycle,
+                    runtime,
+                    pipeline_vars: None,
+                    step_timeout_secs: task_ctx.safety.step_timeout_secs,
+                },
             )
             .await?;
             retest_exit_code = Some(result.exit_code);
@@ -596,8 +670,15 @@ pub async fn process_item(
                 test_failure_count: pipeline_vars.test_failures.len() as i64,
                 build_exit_code,
                 test_exit_code,
-                self_test_exit_code: pipeline_vars.vars.get("self_test_exit_code").and_then(|v| v.parse::<i64>().ok()),
-                self_test_passed: pipeline_vars.vars.get("self_test_passed").map(|v| v == "true").unwrap_or(false),
+                self_test_exit_code: pipeline_vars
+                    .vars
+                    .get("self_test_exit_code")
+                    .and_then(|v| v.parse::<i64>().ok()),
+                self_test_passed: pipeline_vars
+                    .vars
+                    .get("self_test_passed")
+                    .map(|v| v == "true")
+                    .unwrap_or(false),
             },
         )?;
 
@@ -621,9 +702,10 @@ pub async fn process_item(
         )?;
 
         if step.builtin.as_deref() == Some("self_test") {
-            let exit_code = execute_self_test_step(&task_ctx.workspace_root, state, task_id, item_id)
-                .await
-                .unwrap_or(1);
+            let exit_code =
+                execute_self_test_step(&task_ctx.workspace_root, state, task_id, item_id)
+                    .await
+                    .unwrap_or(1);
 
             let passed = exit_code == 0;
             pipeline_vars
@@ -676,7 +758,11 @@ pub async fn process_item(
         }
 
         let confidence = result.output.as_ref().map(|o| o.confidence).unwrap_or(0.0);
-        let quality = result.output.as_ref().map(|o| o.quality_score).unwrap_or(0.0);
+        let quality = result
+            .output
+            .as_ref()
+            .map(|o| o.quality_score)
+            .unwrap_or(0.0);
         insert_event(
             state,
             task_id,
@@ -746,20 +832,22 @@ pub async fn process_item(
             let cap = Some(ds.step_type.as_str());
             let result = run_phase_with_rotation(
                 state,
-                task_id,
-                item_id,
-                &ds.id,
-                &ds.step_type,
-                false,
-                cap,
-                &item.qa_file_path,
-                &active_tickets,
-                &task_ctx.workspace_root,
-                &task_ctx.workspace_id,
-                task_ctx.current_cycle,
-                runtime,
-                None,
-                task_ctx.safety.step_timeout_secs,
+                RotatingPhaseRunRequest {
+                    task_id,
+                    item_id,
+                    step_id: &ds.id,
+                    phase: &ds.step_type,
+                    tty: false,
+                    capability: cap,
+                    rel_path: &item.qa_file_path,
+                    ticket_paths: &active_tickets,
+                    workspace_root: &task_ctx.workspace_root,
+                    workspace_id: &task_ctx.workspace_id,
+                    cycle: task_ctx.current_cycle,
+                    runtime,
+                    pipeline_vars: None,
+                    step_timeout_secs: task_ctx.safety.step_timeout_secs,
+                },
             )
             .await?;
             insert_event(
@@ -827,9 +915,10 @@ pub async fn process_item(
             .any(|a| matches!(a.kind, crate::collab::ArtifactKind::CodeChange { .. })),
     };
 
-    if let Some(outcome) =
-        crate::prehook::resolve_workflow_finalize_outcome(&task_ctx.execution_plan.finalize, &finalize_context)?
-    {
+    if let Some(outcome) = crate::prehook::resolve_workflow_finalize_outcome(
+        &task_ctx.execution_plan.finalize,
+        &finalize_context,
+    )? {
         item_status = outcome.status.clone();
         emit_item_finalize_event(state, &finalize_context, &outcome)?;
     }
@@ -844,13 +933,17 @@ pub async fn process_item(
             .filter(|a| matches!(a.kind, crate::collab::ArtifactKind::Ticket { .. }))
             .filter_map(|a| a.content.as_ref())
             .collect();
-        let files_json = serde_json::to_string(&created_ticket_files).unwrap_or_else(|_| "[]".to_string());
-        let content_json = serde_json::to_string(&ticket_content).unwrap_or_else(|_| "[]".to_string());
+        let files_json =
+            serde_json::to_string(&created_ticket_files).unwrap_or_else(|_| "[]".to_string());
+        let content_json =
+            serde_json::to_string(&ticket_content).unwrap_or_else(|_| "[]".to_string());
         state
             .db_writer
             .update_task_item_tickets(item_id, &files_json, &content_json)?;
     }
 
-    state.db_writer.update_task_item_status(item_id, &item_status)?;
+    state
+        .db_writer
+        .update_task_item_status(item_id, &item_status)?;
     Ok(())
 }

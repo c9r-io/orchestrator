@@ -231,16 +231,12 @@ pub async fn watch_task(state: &InnerState, task_id: &str, interval_secs: u64) -
         println!("Cycle: {}  Tickets: {}", cycle_count, active_tickets);
         println!("{}", "━".repeat(72));
         println!(
-            " {:<15} {:<12} {:<10} {:<9} {}",
-            "Step", "Agent", "Status", "Duration", "Details"
+            " {:<15} {:<12} {:<10} {:<9} Details",
+            "Step", "Agent", "Status", "Duration"
         );
         println!(
-            " {:<15} {:<12} {:<10} {:<9} {}",
-            "───────────────",
-            "────────────",
-            "──────────",
-            "─────────",
-            "──────────────────"
+            " {:<15} {:<12} {:<10} {:<9} ──────────────────",
+            "───────────────", "────────────", "──────────", "─────────"
         );
 
         let mut step_states: Vec<StepWatchInfo> = Vec::new();
@@ -335,7 +331,11 @@ pub async fn watch_task(state: &InnerState, task_id: &str, interval_secs: u64) -
             println!(
                 " {:<15} {:<12} {:<18} {:<9} {}",
                 s.step,
-                if s.agent_id.is_empty() { "-" } else { &s.agent_id },
+                if s.agent_id.is_empty() {
+                    "-"
+                } else {
+                    &s.agent_id
+                },
                 status_icon,
                 duration_str,
                 s.details

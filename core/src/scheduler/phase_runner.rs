@@ -31,6 +31,37 @@ struct LimitedOutput {
     truncated_prefix_bytes: u64,
 }
 
+pub struct PhaseRunRequest<'a> {
+    pub task_id: &'a str,
+    pub item_id: &'a str,
+    pub step_id: &'a str,
+    pub phase: &'a str,
+    pub tty: bool,
+    pub command: String,
+    pub workspace_root: &'a Path,
+    pub workspace_id: &'a str,
+    pub agent_id: &'a str,
+    pub runtime: &'a RunningTask,
+    pub step_timeout_secs: Option<u64>,
+}
+
+pub struct RotatingPhaseRunRequest<'a> {
+    pub task_id: &'a str,
+    pub item_id: &'a str,
+    pub step_id: &'a str,
+    pub phase: &'a str,
+    pub tty: bool,
+    pub capability: Option<&'a str>,
+    pub rel_path: &'a str,
+    pub ticket_paths: &'a [String],
+    pub workspace_root: &'a Path,
+    pub workspace_id: &'a str,
+    pub cycle: u32,
+    pub runtime: &'a RunningTask,
+    pub pipeline_vars: Option<&'a PipelineVariables>,
+    pub step_timeout_secs: Option<u64>,
+}
+
 pub(crate) fn shell_escape(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
@@ -67,18 +98,21 @@ async fn read_output_with_limit(path: &Path, max_bytes: u64) -> Result<LimitedOu
 
 async fn run_phase_with_timeout(
     state: &Arc<InnerState>,
-    task_id: &str,
-    item_id: &str,
-    step_id: &str,
-    phase: &str,
-    tty: bool,
-    command: String,
-    workspace_root: &Path,
-    workspace_id: &str,
-    agent_id: &str,
-    runtime: &RunningTask,
-    step_timeout_secs: Option<u64>,
+    request: PhaseRunRequest<'_>,
 ) -> Result<crate::dto::RunResult> {
+    let PhaseRunRequest {
+        task_id,
+        item_id,
+        step_id,
+        phase,
+        tty,
+        command,
+        workspace_root,
+        workspace_id,
+        agent_id,
+        runtime,
+        step_timeout_secs,
+    } = request;
     let now = now_ts();
     let run_uuid = Uuid::new_v4();
     let run_id = run_uuid.to_string();
@@ -103,12 +137,23 @@ async fn run_phase_with_timeout(
     let stderr_path_for_create = stderr_path.clone();
     let (stdout_file, stderr_file) = tokio::task::spawn_blocking(move || -> Result<_> {
         std::fs::create_dir_all(&logs_dir_for_create).with_context(|| {
-            format!("failed to create logs dir: {}", logs_dir_for_create.display())
+            format!(
+                "failed to create logs dir: {}",
+                logs_dir_for_create.display()
+            )
         })?;
-        let stdout_file = std::fs::File::create(&stdout_path_for_create)
-            .with_context(|| format!("failed to create stdout log: {}", stdout_path_for_create.display()))?;
-        let stderr_file = std::fs::File::create(&stderr_path_for_create)
-            .with_context(|| format!("failed to create stderr log: {}", stderr_path_for_create.display()))?;
+        let stdout_file = std::fs::File::create(&stdout_path_for_create).with_context(|| {
+            format!(
+                "failed to create stdout log: {}",
+                stdout_path_for_create.display()
+            )
+        })?;
+        let stderr_file = std::fs::File::create(&stderr_path_for_create).with_context(|| {
+            format!(
+                "failed to create stderr log: {}",
+                stderr_path_for_create.display()
+            )
+        })?;
         Ok((stdout_file, stderr_file))
     })
     .await
@@ -139,7 +184,11 @@ async fn run_phase_with_timeout(
             shell_escape(step_id),
             command
         );
-        let wrapped = format!("{} < {}", inner, shell_escape(&input_fifo.to_string_lossy()));
+        let wrapped = format!(
+            "{} < {}",
+            inner,
+            shell_escape(&input_fifo.to_string_lossy())
+        );
         session_id = Some(sid.clone());
         session_store::insert_session(
             &state.db_path,
@@ -166,7 +215,13 @@ async fn run_phase_with_timeout(
     } else {
         command.clone()
     };
-    let child = spawn_with_runner(&runner, &command_to_run, workspace_root, stdout_file, stderr_file)?;
+    let child = spawn_with_runner(
+        &runner,
+        &command_to_run,
+        workspace_root,
+        stdout_file,
+        stderr_file,
+    )?;
     if let Some(sid) = session_id.as_deref() {
         if let Some(pid) = child.id() {
             let _ = session_store::update_session_pid(&state.db_path, sid, pid as i64);
@@ -254,12 +309,22 @@ async fn run_phase_with_timeout(
         match wait_result {
             Ok(Ok(status)) => break status.code().unwrap_or(-1),
             Ok(Err(e)) => {
-                break if e.kind() == std::io::ErrorKind::NotFound { -2 } else { -3 };
+                break if e.kind() == std::io::ErrorKind::NotFound {
+                    -2
+                } else {
+                    -3
+                };
             }
             Err(_) => {
                 let elapsed = start.elapsed();
-                let stdout_bytes = tokio::fs::metadata(&stdout_path).await.map(|m| m.len()).unwrap_or(0);
-                let stderr_bytes = tokio::fs::metadata(&stderr_path).await.map(|m| m.len()).unwrap_or(0);
+                let stdout_bytes = tokio::fs::metadata(&stdout_path)
+                    .await
+                    .map(|m| m.len())
+                    .unwrap_or(0);
+                let stderr_bytes = tokio::fs::metadata(&stderr_path)
+                    .await
+                    .map(|m| m.len())
+                    .unwrap_or(0);
                 let pid_alive = child_pid
                     .map(|pid| {
                         std::process::Command::new("kill")
@@ -362,7 +427,13 @@ async fn run_phase_with_timeout(
         },
         output_json_path: session_id
             .as_ref()
-            .map(|sid| state.logs_dir.join("sessions").join(sid).join("output.json"))
+            .map(|sid| {
+                state
+                    .logs_dir
+                    .join("sessions")
+                    .join(sid)
+                    .join("output.json")
+            })
             .map(|p| p.to_string_lossy().to_string()),
     };
     let sender = crate::collab::AgentEndpoint::for_task_item(agent_id, task_id, item_id);
@@ -463,51 +534,31 @@ async fn run_phase_with_timeout(
 
 pub async fn run_phase(
     state: &Arc<InnerState>,
-    task_id: &str,
-    item_id: &str,
-    step_id: &str,
-    phase: &str,
-    tty: bool,
-    command: String,
-    workspace_root: &Path,
-    workspace_id: &str,
-    agent_id: &str,
-    runtime: &RunningTask,
+    request: PhaseRunRequest<'_>,
 ) -> Result<crate::dto::RunResult> {
-    run_phase_with_timeout(
-        state,
+    run_phase_with_timeout(state, request).await
+}
+
+pub async fn run_phase_with_rotation(
+    state: &Arc<InnerState>,
+    request: RotatingPhaseRunRequest<'_>,
+) -> Result<crate::dto::RunResult> {
+    let RotatingPhaseRunRequest {
         task_id,
         item_id,
         step_id,
         phase,
         tty,
-        command,
+        capability,
+        rel_path,
+        ticket_paths,
         workspace_root,
         workspace_id,
-        agent_id,
+        cycle,
         runtime,
-        None,
-    )
-    .await
-}
-
-pub async fn run_phase_with_rotation(
-    state: &Arc<InnerState>,
-    task_id: &str,
-    item_id: &str,
-    step_id: &str,
-    phase: &str,
-    tty: bool,
-    capability: Option<&str>,
-    rel_path: &str,
-    ticket_paths: &[String],
-    workspace_root: &Path,
-    workspace_id: &str,
-    cycle: u32,
-    runtime: &RunningTask,
-    pipeline_vars: Option<&PipelineVariables>,
-    step_timeout_secs: Option<u64>,
-) -> Result<crate::dto::RunResult> {
+        pipeline_vars,
+        step_timeout_secs,
+    } = request;
     let effective_capability = capability.or(match phase {
         "qa" | "fix" | "retest" => Some(phase),
         _ => None,
@@ -541,7 +592,10 @@ pub async fn run_phase_with_rotation(
         .replace("{phase}", phase)
         .replace("{cycle}", &cycle.to_string());
 
-    if pipeline_vars.is_some() || command.contains("{source_tree}") || command.contains("{workspace_root}") {
+    if pipeline_vars.is_some()
+        || command.contains("{source_tree}")
+        || command.contains("{workspace_root}")
+    {
         let ctx = crate::collab::AgentContext::new(
             task_id.to_string(),
             item_id.to_string(),
@@ -555,17 +609,19 @@ pub async fn run_phase_with_rotation(
 
     run_phase_with_timeout(
         state,
-        task_id,
-        item_id,
-        step_id,
-        phase,
-        tty,
-        command,
-        workspace_root,
-        workspace_id,
-        &agent_id,
-        runtime,
-        step_timeout_secs,
+        PhaseRunRequest {
+            task_id,
+            item_id,
+            step_id,
+            phase,
+            tty,
+            command,
+            workspace_root,
+            workspace_id,
+            agent_id: &agent_id,
+            runtime,
+            step_timeout_secs,
+        },
     )
     .await
 }

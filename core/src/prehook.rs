@@ -869,10 +869,15 @@ mod tests {
             self_test_exit_code: None,
             self_test_passed: false,
         };
-        let result =
-            evaluate_step_prehook_expression("build_errors > 0 || test_failures > 0", &context_with_errors);
+        let result = evaluate_step_prehook_expression(
+            "build_errors > 0 || test_failures > 0",
+            &context_with_errors,
+        );
         assert!(result.is_ok());
-        assert!(result.unwrap(), "should trigger fix when build errors exist");
+        assert!(
+            result.unwrap(),
+            "should trigger fix when build errors exist"
+        );
 
         let context_no_errors = StepPrehookContext {
             build_error_count: 0,
@@ -881,8 +886,10 @@ mod tests {
             test_exit_code: Some(0),
             ..context_with_errors
         };
-        let result =
-            evaluate_step_prehook_expression("build_errors > 0 || test_failures > 0", &context_no_errors);
+        let result = evaluate_step_prehook_expression(
+            "build_errors > 0 || test_failures > 0",
+            &context_no_errors,
+        );
         assert!(result.is_ok());
         assert!(!result.unwrap(), "should not trigger fix when no errors");
     }

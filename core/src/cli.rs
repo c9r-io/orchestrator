@@ -594,6 +594,12 @@ pub fn generate_completion(shell: Shell) {
     clap_complete::generate(shell, &mut app, "orchestrator", &mut std::io::stdout());
 }
 
+pub fn run_cli_mode(state: Arc<InnerState>, cli: Cli) -> Result<()> {
+    let handler = CliHandler::new(state);
+    let exit_code = handler.execute(&cli)?;
+    std::process::exit(exit_code);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1469,10 +1475,4 @@ mod tests {
             _ => panic!("expected manifest validate command"),
         }
     }
-}
-
-pub fn run_cli_mode(state: Arc<InnerState>, cli: Cli) -> Result<()> {
-    let handler = CliHandler::new(state);
-    let exit_code = handler.execute(&cli)?;
-    std::process::exit(exit_code);
 }

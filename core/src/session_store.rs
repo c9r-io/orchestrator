@@ -254,7 +254,12 @@ pub fn attach_reader(db_path: &Path, session_id: &str, client_id: &str) -> Resul
     Ok(())
 }
 
-pub fn release_attachment(db_path: &Path, session_id: &str, client_id: &str, reason: &str) -> Result<()> {
+pub fn release_attachment(
+    db_path: &Path,
+    session_id: &str,
+    client_id: &str,
+    reason: &str,
+) -> Result<()> {
     let conn = open_conn(db_path)?;
     conn.execute(
         "UPDATE session_attachments SET detached_at = ?3, reason = ?4 WHERE session_id = ?1 AND client_id = ?2 AND detached_at IS NULL",

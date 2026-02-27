@@ -25,11 +25,11 @@ use crate::scheduler::{
     stop_task_runtime, stop_task_runtime_for_delete, stream_task_logs_impl, watch_task,
     RunningTask,
 };
-use crate::session_store;
 use crate::scheduler_service::{
     claim_next_pending_task, clear_worker_stop_signal, enqueue_task, pending_task_count,
     signal_worker_stop, worker_stop_signal_path, worker_wake_signal_path,
 };
+use crate::session_store;
 use crate::state::{InnerState, TASK_SEMAPHORE};
 use crate::task_ops::{create_task_impl, reset_task_item_for_retry};
 use crate::task_repository::{SqliteTaskRepository, TaskRepository};
@@ -947,9 +947,8 @@ impl CliHandler {
         let (agent_id, template) = {
             let repo = SqliteTaskRepository::new(self.state.db_path.clone());
             let runtime_row = repo.load_task_runtime_row(&task_id)?;
-            let plan =
-                serde_json::from_str::<TaskExecutionPlan>(&runtime_row.execution_plan_json)
-                    .with_context(|| format!("failed to parse execution plan for task {}", task_id))?;
+            let plan = serde_json::from_str::<TaskExecutionPlan>(&runtime_row.execution_plan_json)
+                .with_context(|| format!("failed to parse execution plan for task {}", task_id))?;
             let step = plan
                 .steps
                 .iter()
@@ -957,12 +956,12 @@ impl CliHandler {
                 .with_context(|| format!("step '{}' not found in task '{}'", step_id, task_id))?;
             let active = read_active_config(&self.state)?;
             if let Some(cap) = step.required_capability.as_deref() {
-                let found = active.config.agents.iter().find_map(|(id, cfg)| {
-                    cfg.get_template(cap).map(|t| (id.clone(), t.clone()))
-                });
-                found.with_context(|| {
-                    format!("no agent template found for capability '{}'", cap)
-                })?
+                let found =
+                    active.config.agents.iter().find_map(|(id, cfg)| {
+                        cfg.get_template(cap).map(|t| (id.clone(), t.clone()))
+                    });
+                found
+                    .with_context(|| format!("no agent template found for capability '{}'", cap))?
             } else {
                 let cap = step
                     .step_type
@@ -970,9 +969,10 @@ impl CliHandler {
                     .map(|s| s.as_str())
                     .unwrap_or("qa")
                     .to_string();
-                let found = active.config.agents.iter().find_map(|(id, cfg)| {
-                    cfg.get_template(&cap).map(|t| (id.clone(), t.clone()))
-                });
+                let found =
+                    active.config.agents.iter().find_map(|(id, cfg)| {
+                        cfg.get_template(&cap).map(|t| (id.clone(), t.clone()))
+                    });
                 found.with_context(|| format!("no agent template found for '{}'", cap))?
             }
         };
@@ -997,7 +997,9 @@ impl CliHandler {
                 .arg(&to_run)
                 .current_dir(workspace_root)
                 .status()
-                .with_context(|| format!("failed to execute interactive command for {}", agent_id))?;
+                .with_context(|| {
+                    format!("failed to execute interactive command for {}", agent_id)
+                })?;
             return Ok(status.code().unwrap_or(1));
         }
 
@@ -1045,7 +1047,10 @@ impl CliHandler {
                     .status()
                     .context("exec interactive command in session context")?;
                 session_store::release_attachment(
-                    &self.state.db_path, &sess.id, &client_id, "detach",
+                    &self.state.db_path,
+                    &sess.id,
+                    &client_id,
+                    "detach",
                 )?;
                 return Ok(status.code().unwrap_or(1));
             }
@@ -1367,7 +1372,7 @@ impl CliHandler {
                     api_version: "orchestrator.dev/v2".to_string(),
                     kind: ResourceKind::Agent,
                     metadata,
-                    spec: ResourceSpec::Agent(spec),
+                    spec: ResourceSpec::Agent(Box::new(spec)),
                 };
                 self.apply_or_preview_manifest(manifest, *dry_run, *output)
             }
@@ -2172,7 +2177,10 @@ fn parse_exec_target(target: &str) -> Result<ExecTargetRef<'_>> {
     }
 }
 
-fn resolve_exec_target(state: &crate::state::InnerState, target: &str) -> Result<ResolvedExecTarget> {
+fn resolve_exec_target(
+    state: &crate::state::InnerState,
+    target: &str,
+) -> Result<ResolvedExecTarget> {
     match parse_exec_target(target)? {
         ExecTargetRef::SessionId { session_id } => {
             let sess = session_store::load_session(&state.db_path, session_id)?
@@ -2195,8 +2203,11 @@ fn resolve_exec_target(state: &crate::state::InnerState, target: &str) -> Result
                 .iter()
                 .find(|s| s.id == step_id)
                 .with_context(|| format!("step '{}' not found in task '{}'", step_id, task_id))?;
-            let session =
-                session_store::load_active_session_for_task_step(&state.db_path, &task_id, step_id)?;
+            let session = session_store::load_active_session_for_task_step(
+                &state.db_path,
+                &task_id,
+                step_id,
+            )?;
             Ok(ResolvedExecTarget {
                 task_id,
                 step_id: step_id.to_string(),

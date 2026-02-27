@@ -456,10 +456,7 @@ impl FromStr for WorkflowStepType {
             "doc_governance" => Ok(Self::DocGovernance),
             "align_tests" => Ok(Self::AlignTests),
             "self_test" => Ok(Self::SelfTest),
-            _ => Err(format!(
-                "unknown workflow step type: {}",
-                value
-            )),
+            _ => Err(format!("unknown workflow step type: {}", value)),
         }
     }
 }
@@ -873,12 +870,60 @@ pub fn default_workflow_steps(
     retest: Option<&str>,
 ) -> Vec<WorkflowStepConfig> {
     vec![
-        step_config("init_once", Some(WorkflowStepType::InitOnce), None, Some("init_once"), false, false, false),
-        step_config("plan", Some(WorkflowStepType::Plan), Some("plan"), None, false, false, true),
-        step_config("qa", Some(WorkflowStepType::Qa), Some("qa"), None, qa.is_some(), true, false),
-        step_config("ticket_scan", Some(WorkflowStepType::TicketScan), None, Some("ticket_scan"), ticket_scan, true, false),
-        step_config("fix", Some(WorkflowStepType::Fix), Some("fix"), None, fix.is_some(), true, false),
-        step_config("retest", Some(WorkflowStepType::Retest), Some("retest"), None, retest.is_some(), true, false),
+        step_config(
+            "init_once",
+            Some(WorkflowStepType::InitOnce),
+            None,
+            Some("init_once"),
+            false,
+            false,
+            false,
+        ),
+        step_config(
+            "plan",
+            Some(WorkflowStepType::Plan),
+            Some("plan"),
+            None,
+            false,
+            false,
+            true,
+        ),
+        step_config(
+            "qa",
+            Some(WorkflowStepType::Qa),
+            Some("qa"),
+            None,
+            qa.is_some(),
+            true,
+            false,
+        ),
+        step_config(
+            "ticket_scan",
+            Some(WorkflowStepType::TicketScan),
+            None,
+            Some("ticket_scan"),
+            ticket_scan,
+            true,
+            false,
+        ),
+        step_config(
+            "fix",
+            Some(WorkflowStepType::Fix),
+            Some("fix"),
+            None,
+            fix.is_some(),
+            true,
+            false,
+        ),
+        step_config(
+            "retest",
+            Some(WorkflowStepType::Retest),
+            Some("retest"),
+            None,
+            retest.is_some(),
+            true,
+            false,
+        ),
     ]
 }
 

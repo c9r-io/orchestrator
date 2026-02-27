@@ -73,7 +73,7 @@ pub struct RuntimePolicyResource {
 #[derive(Debug, Clone)]
 pub enum RegisteredResource {
     Workspace(WorkspaceResource),
-    Agent(AgentResource),
+    Agent(Box<AgentResource>),
     Workflow(WorkflowResource),
     Project(ProjectResource),
     Defaults(DefaultsResource),
@@ -301,7 +301,7 @@ impl Resource for AgentResource {
         manifest_yaml(
             ResourceKind::Agent,
             &self.metadata,
-            ResourceSpec::Agent(self.spec.clone()),
+            ResourceSpec::Agent(Box::new(self.spec.clone())),
         )
     }
 
@@ -632,7 +632,7 @@ impl Resource for RegisteredResource {
             return Some(Self::Workspace(workspace));
         }
         if let Some(agent) = AgentResource::get_from(config, name) {
-            return Some(Self::Agent(agent));
+            return Some(Self::Agent(Box::new(agent)));
         }
         if let Some(workflow) = WorkflowResource::get_from(config, name) {
             return Some(Self::Workflow(workflow));
@@ -747,9 +747,10 @@ fn build_agent(resource: OrchestratorResource) -> Result<RegisteredResource> {
         return Err(anyhow!("resource kind/spec mismatch for Agent"));
     }
     match spec {
-        ResourceSpec::Agent(spec) => {
-            Ok(RegisteredResource::Agent(AgentResource { metadata, spec }))
-        }
+        ResourceSpec::Agent(spec) => Ok(RegisteredResource::Agent(Box::new(AgentResource {
+            metadata,
+            spec: *spec,
+        }))),
         _ => Err(anyhow!("resource kind/spec mismatch for Agent")),
     }
 }
@@ -928,10 +929,25 @@ fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
             git_ops: config.templates.get("git_ops").cloned(),
             extra: {
                 let named_keys: std::collections::HashSet<&str> = [
-                    "init_once", "plan", "qa", "ticket_scan", "fix", "retest",
-                    "loop_guard", "build", "test", "lint", "implement", "review", "git_ops",
-                ].into_iter().collect();
-                config.templates.iter()
+                    "init_once",
+                    "plan",
+                    "qa",
+                    "ticket_scan",
+                    "fix",
+                    "retest",
+                    "loop_guard",
+                    "build",
+                    "test",
+                    "lint",
+                    "implement",
+                    "review",
+                    "git_ops",
+                ]
+                .into_iter()
+                .collect();
+                config
+                    .templates
+                    .iter()
                     .filter(|(k, _)| !named_keys.contains(k.as_str()))
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect()
@@ -1300,10 +1316,10 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
             ),
             None => metadata_with_name(name),
         };
-        resources.push(RegisteredResource::Agent(AgentResource {
+        resources.push(RegisteredResource::Agent(Box::new(AgentResource {
             metadata,
             spec: agent_config_to_spec(agent),
-        }));
+        })));
     }
     for (name, workflow) in &config.workflows {
         let metadata = match config.resource_meta.workflows.get(name) {
@@ -1333,12 +1349,15 @@ pub fn export_manifest_documents(config: &OrchestratorConfig) -> Vec<Orchestrato
                 metadata: item.metadata,
                 spec: ResourceSpec::Workspace(item.spec),
             },
-            RegisteredResource::Agent(item) => OrchestratorResource {
-                api_version: API_VERSION.to_string(),
-                kind: ResourceKind::Agent,
-                metadata: item.metadata,
-                spec: ResourceSpec::Agent(item.spec),
-            },
+            RegisteredResource::Agent(item) => {
+                let item = *item;
+                OrchestratorResource {
+                    api_version: API_VERSION.to_string(),
+                    kind: ResourceKind::Agent,
+                    metadata: item.metadata,
+                    spec: ResourceSpec::Agent(Box::new(item.spec)),
+                }
+            }
             RegisteredResource::Workflow(item) => OrchestratorResource {
                 api_version: API_VERSION.to_string(),
                 kind: ResourceKind::Workflow,
@@ -1402,7 +1421,7 @@ mod tests {
                 labels: None,
                 annotations: None,
             },
-            spec: ResourceSpec::Agent(AgentSpec {
+            spec: ResourceSpec::Agent(Box::new(AgentSpec {
                 templates: AgentTemplatesSpec {
                     init_once: None,
                     plan: None,
@@ -1422,7 +1441,7 @@ mod tests {
                 capabilities: None,
                 metadata: None,
                 selection: None,
-            }),
+            })),
         }
     }
 
@@ -1491,7 +1510,7 @@ mod tests {
                 labels: None,
                 annotations: None,
             },
-            spec: ResourceSpec::Agent(AgentSpec {
+            spec: ResourceSpec::Agent(Box::new(AgentSpec {
                 templates: AgentTemplatesSpec {
                     init_once: None,
                     plan: None,
@@ -1511,7 +1530,7 @@ mod tests {
                 capabilities: None,
                 metadata: None,
                 selection: None,
-            }),
+            })),
         };
 
         let error = dispatch_resource(resource).expect_err("dispatch should fail");

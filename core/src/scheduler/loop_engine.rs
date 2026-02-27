@@ -8,7 +8,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use super::item_executor::{execute_guard_step, process_item};
-use super::phase_runner::run_phase_with_rotation;
+use super::phase_runner::{run_phase_with_rotation, RotatingPhaseRunRequest};
 use super::runtime::load_task_runtime_context;
 use super::safety::{
     create_checkpoint, restore_binary_snapshot, rollback_to_checkpoint, snapshot_binary,
@@ -66,20 +66,22 @@ async fn run_task_loop_core(
                 )?;
                 let init_result = run_phase_with_rotation(
                     &state,
-                    task_id,
-                    &anchor_item_id,
-                    &step.id,
-                    "init_once",
-                    step.tty,
-                    step.required_capability.as_deref(),
-                    ".",
-                    &[],
-                    &task_ctx.workspace_root,
-                    &task_ctx.workspace_id,
-                    task_ctx.current_cycle,
-                    &runtime,
-                    None,
-                    task_ctx.safety.step_timeout_secs,
+                    RotatingPhaseRunRequest {
+                        task_id,
+                        item_id: &anchor_item_id,
+                        step_id: &step.id,
+                        phase: "init_once",
+                        tty: step.tty,
+                        capability: step.required_capability.as_deref(),
+                        rel_path: ".",
+                        ticket_paths: &[],
+                        workspace_root: &task_ctx.workspace_root,
+                        workspace_id: &task_ctx.workspace_id,
+                        cycle: task_ctx.current_cycle,
+                        runtime: &runtime,
+                        pipeline_vars: None,
+                        step_timeout_secs: task_ctx.safety.step_timeout_secs,
+                    },
                 )
                 .await?;
                 if !init_result.is_success() {
@@ -101,7 +103,13 @@ async fn run_task_loop_core(
     'cycle: loop {
         if is_task_paused_in_db(&state, task_id)? {
             let unresolved = count_unresolved_items(&state, task_id)?;
-            record_task_execution_metric(&state, task_id, "paused", task_ctx.current_cycle, unresolved)?;
+            record_task_execution_metric(
+                &state,
+                task_id,
+                "paused",
+                task_ctx.current_cycle,
+                unresolved,
+            )?;
             return Ok(());
         }
 
@@ -116,14 +124,31 @@ async fn run_task_loop_core(
             )?;
             state.emit_event(task_id, None, "task_paused", json!({}));
             let unresolved = count_unresolved_items(&state, task_id)?;
-            record_task_execution_metric(&state, task_id, "paused", task_ctx.current_cycle, unresolved)?;
+            record_task_execution_metric(
+                &state,
+                task_id,
+                "paused",
+                task_ctx.current_cycle,
+                unresolved,
+            )?;
             return Ok(());
         }
 
         task_ctx.current_cycle += 1;
         update_task_cycle_state(&state, task_id, task_ctx.current_cycle, task_ctx.init_done)?;
-        insert_event(&state, task_id, None, "cycle_started", json!({"cycle": task_ctx.current_cycle}))?;
-        state.emit_event(task_id, None, "cycle_started", json!({"cycle": task_ctx.current_cycle}));
+        insert_event(
+            &state,
+            task_id,
+            None,
+            "cycle_started",
+            json!({"cycle": task_ctx.current_cycle}),
+        )?;
+        state.emit_event(
+            task_id,
+            None,
+            "cycle_started",
+            json!({"cycle": task_ctx.current_cycle}),
+        );
 
         if matches!(
             task_ctx.safety.checkpoint_strategy,
@@ -170,9 +195,18 @@ async fn run_task_loop_core(
         }
 
         let items = list_task_items_for_cycle(&state, task_id)?;
-        let task_item_paths: Vec<String> = items.iter().map(|item| item.qa_file_path.clone()).collect();
+        let task_item_paths: Vec<String> =
+            items.iter().map(|item| item.qa_file_path.clone()).collect();
         for item in items {
-            process_item(&state, task_id, &item, &task_item_paths, &task_ctx, &runtime).await?;
+            process_item(
+                &state,
+                task_id,
+                &item,
+                &task_item_paths,
+                &task_ctx,
+                &runtime,
+            )
+            .await?;
             if runtime.stop_flag.load(Ordering::SeqCst) || is_task_paused_in_db(&state, task_id)? {
                 continue 'cycle;
             }
@@ -192,7 +226,9 @@ async fn run_task_loop_core(
                 crate::config::CheckpointStrategy::GitTag
             )
         {
-            let rollback_cycle = task_ctx.current_cycle.saturating_sub(task_ctx.consecutive_failures);
+            let rollback_cycle = task_ctx
+                .current_cycle
+                .saturating_sub(task_ctx.consecutive_failures);
             let rollback_tag = format!("checkpoint/{}/{}", task_id, rollback_cycle.max(1));
             let ws_path = Path::new(&task_ctx.workspace_root);
             match rollback_to_checkpoint(ws_path, &rollback_tag).await {
@@ -208,7 +244,12 @@ async fn run_task_loop_core(
                             "consecutive_failures": task_ctx.consecutive_failures,
                         }),
                     )?;
-                    state.emit_event(task_id, None, "auto_rollback", json!({"rollback_to": rollback_tag}));
+                    state.emit_event(
+                        task_id,
+                        None,
+                        "auto_rollback",
+                        json!({"rollback_to": rollback_tag}),
+                    );
 
                     if task_ctx.safety.binary_snapshot && task_ctx.self_referential {
                         match restore_binary_snapshot(&task_ctx.workspace_root).await {
@@ -248,7 +289,8 @@ async fn run_task_loop_core(
                 continue;
             }
 
-            let guard_result = execute_guard_step(&state, task_id, step, &task_ctx, &runtime).await?;
+            let guard_result =
+                execute_guard_step(&state, task_id, step, &task_ctx, &runtime).await?;
             if guard_result.should_stop {
                 insert_event(
                     &state,
@@ -261,23 +303,42 @@ async fn run_task_loop_core(
                         "reason": guard_result.reason
                     }),
                 )?;
-                state.emit_event(task_id, None, "workflow_terminated", json!({"guard_step": step.id}));
+                state.emit_event(
+                    task_id,
+                    None,
+                    "workflow_terminated",
+                    json!({"guard_step": step.id}),
+                );
                 set_task_status(&state, task_id, "completed", true)?;
                 insert_event(&state, task_id, None, "task_completed", json!({}))?;
                 state.emit_event(task_id, None, "task_completed", json!({}));
                 let unresolved = count_unresolved_items(&state, task_id)?;
-                record_task_execution_metric(&state, task_id, "completed", task_ctx.current_cycle, unresolved)?;
+                record_task_execution_metric(
+                    &state,
+                    task_id,
+                    "completed",
+                    task_ctx.current_cycle,
+                    unresolved,
+                )?;
                 return Ok(());
             }
         }
 
         let unresolved = count_unresolved_items(&state, task_id)?;
-        let loop_mode_check =
-            evaluate_loop_guard_rules(&task_ctx.execution_plan.loop_policy, task_ctx.current_cycle, unresolved);
+        let loop_mode_check = evaluate_loop_guard_rules(
+            &task_ctx.execution_plan.loop_policy,
+            task_ctx.current_cycle,
+            unresolved,
+        );
 
         let should_continue = if let Some((continue_loop, _)) = loop_mode_check {
             continue_loop
-        } else if task_ctx.execution_plan.loop_policy.guard.stop_when_no_unresolved {
+        } else if task_ctx
+            .execution_plan
+            .loop_policy
+            .guard
+            .stop_when_no_unresolved
+        {
             unresolved > 0
         } else {
             true
@@ -325,14 +386,37 @@ async fn run_task_loop_core(
 
     if unresolved > 0 {
         set_task_status(&state, task_id, "failed", true)?;
-        insert_event(&state, task_id, None, "task_failed", json!({"unresolved_items": unresolved}))?;
-        state.emit_event(task_id, None, "task_failed", json!({"unresolved_items": unresolved}));
-        record_task_execution_metric(&state, task_id, "failed", task_ctx.current_cycle, unresolved)?;
+        insert_event(
+            &state,
+            task_id,
+            None,
+            "task_failed",
+            json!({"unresolved_items": unresolved}),
+        )?;
+        state.emit_event(
+            task_id,
+            None,
+            "task_failed",
+            json!({"unresolved_items": unresolved}),
+        );
+        record_task_execution_metric(
+            &state,
+            task_id,
+            "failed",
+            task_ctx.current_cycle,
+            unresolved,
+        )?;
     } else {
         set_task_status(&state, task_id, "completed", true)?;
         insert_event(&state, task_id, None, "task_completed", json!({}))?;
         state.emit_event(task_id, None, "task_completed", json!({}));
-        record_task_execution_metric(&state, task_id, "completed", task_ctx.current_cycle, unresolved)?;
+        record_task_execution_metric(
+            &state,
+            task_id,
+            "completed",
+            task_ctx.current_cycle,
+            unresolved,
+        )?;
     }
 
     Ok(())

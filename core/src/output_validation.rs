@@ -279,9 +279,8 @@ mod tests {
  --> src/main.rs:10:5
 warning: unused variable
  --> src/lib.rs:3:9"#;
-        let outcome =
-            validate_phase_output("build", Uuid::new_v4(), "agent", 1, "", stderr)
-                .expect("validation should return outcome");
+        let outcome = validate_phase_output("build", Uuid::new_v4(), "agent", 1, "", stderr)
+            .expect("validation should return outcome");
         assert_eq!(outcome.output.build_errors.len(), 2);
         assert_eq!(outcome.output.build_errors[0].level, BuildErrorLevel::Error);
         assert_eq!(
@@ -294,9 +293,8 @@ warning: unused variable
     #[test]
     fn test_phase_parses_failures() {
         let stdout = "test my_module::test_foo ... FAILED\ntest my_module::test_bar ... ok\n\n---- my_module::test_foo stdout ----\nthread 'my_module::test_foo' panicked at 'assertion failed'\n\nfailures:\n    my_module::test_foo\n";
-        let outcome =
-            validate_phase_output("test", Uuid::new_v4(), "agent", 1, stdout, "")
-                .expect("validation should return outcome");
+        let outcome = validate_phase_output("test", Uuid::new_v4(), "agent", 1, stdout, "")
+            .expect("validation should return outcome");
         // The "test ... FAILED" line is detected, and then the failure block merges with it
         assert!(!outcome.output.test_failures.is_empty());
         assert!(outcome
@@ -308,9 +306,8 @@ warning: unused variable
 
     #[test]
     fn non_build_phase_has_no_build_errors() {
-        let outcome =
-            validate_phase_output("implement", Uuid::new_v4(), "agent", 0, "done", "")
-                .expect("validation should return outcome");
+        let outcome = validate_phase_output("implement", Uuid::new_v4(), "agent", 0, "done", "")
+            .expect("validation should return outcome");
         assert!(outcome.output.build_errors.is_empty());
         assert!(outcome.output.test_failures.is_empty());
     }

@@ -252,7 +252,12 @@ mod tests {
             db_writer: Arc::new(crate::db_write::DbWriteCoordinator::new(&PathBuf::new()).unwrap()),
         });
 
-        state.emit_event("test-task", Some("test-item"), "self_test_phase", serde_json::json!({"phase": "cargo_check"}));
+        state.emit_event(
+            "test-task",
+            Some("test-item"),
+            "self_test_phase",
+            serde_json::json!({"phase": "cargo_check"}),
+        );
 
         let check_output = tokio::process::Command::new("cargo")
             .args(["check", "--message-format=short"])

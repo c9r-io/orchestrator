@@ -61,7 +61,10 @@ pub async fn restore_binary_snapshot(workspace_root: &Path) -> Result<()> {
     let binary_path = workspace_root.join("core/target/release/agent-orchestrator");
 
     if !stable_path.exists() {
-        anyhow::bail!("no .stable binary snapshot found at {}", stable_path.display());
+        anyhow::bail!(
+            "no .stable binary snapshot found at {}",
+            stable_path.display()
+        );
     }
 
     tokio::fs::copy(&stable_path, &binary_path)
@@ -85,7 +88,12 @@ pub async fn execute_self_test_step(
 ) -> Result<i64> {
     let core_dir = workspace_root.join("core");
 
-    state.emit_event(task_id, Some(item_id), "self_test_phase", json!({"phase": "cargo_check"}));
+    state.emit_event(
+        task_id,
+        Some(item_id),
+        "self_test_phase",
+        json!({"phase": "cargo_check"}),
+    );
     let check_output = tokio::process::Command::new("cargo")
         .args(["check", "--message-format=short"])
         .current_dir(&core_dir)
@@ -111,9 +119,20 @@ pub async fn execute_self_test_step(
         json!({"phase": "cargo_check", "passed": true}),
     );
 
-    state.emit_event(task_id, Some(item_id), "self_test_phase", json!({"phase": "cargo_test_lib"}));
+    state.emit_event(
+        task_id,
+        Some(item_id),
+        "self_test_phase",
+        json!({"phase": "cargo_test_lib"}),
+    );
     let test_output = tokio::process::Command::new("cargo")
-        .args(["test", "--lib", "--", "--skip", "self_test_survives_smoke_test"])
+        .args([
+            "test",
+            "--lib",
+            "--",
+            "--skip",
+            "self_test_survives_smoke_test",
+        ])
         .current_dir(&core_dir)
         .output()
         .await
@@ -146,7 +165,12 @@ pub async fn execute_self_test_step(
             json!({"phase": "manifest_validate"}),
         );
         let validate_output = tokio::process::Command::new(&script_path)
-            .args(["manifest", "validate", "-f", "docs/workflow/self-bootstrap.yaml"])
+            .args([
+                "manifest",
+                "validate",
+                "-f",
+                "docs/workflow/self-bootstrap.yaml",
+            ])
             .current_dir(workspace_root)
             .output()
             .await

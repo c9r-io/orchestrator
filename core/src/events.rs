@@ -115,7 +115,10 @@ pub fn query_step_events(db_path: &Path, task_id: &str) -> Result<Vec<StepEvent>
         let v: Value = serde_json::from_str(&payload_json).unwrap_or_default();
         events.push(StepEvent {
             event_type,
-            step: v["step"].as_str().or_else(|| v["phase"].as_str()).map(String::from),
+            step: v["step"]
+                .as_str()
+                .or_else(|| v["phase"].as_str())
+                .map(String::from),
             agent_id: v["agent_id"].as_str().map(String::from),
             success: v["success"].as_bool(),
             duration_ms: v["duration_ms"].as_u64(),

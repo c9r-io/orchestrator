@@ -402,21 +402,17 @@ fn sdlc_step_types_round_trip() {
     ];
 
     for (s, expected_variant) in &sdlc_types {
-        let parsed = WorkflowStepType::from_str(s)
-            .unwrap_or_else(|e| panic!("from_str({s}) failed: {e}"));
-        assert_eq!(
-            parsed, *expected_variant,
-            "variant mismatch for '{s}'"
-        );
+        let parsed =
+            WorkflowStepType::from_str(s).unwrap_or_else(|e| panic!("from_str({s}) failed: {e}"));
+        assert_eq!(parsed, *expected_variant, "variant mismatch for '{s}'");
         assert_eq!(parsed.as_str(), *s, "as_str round-trip failed for '{s}'");
     }
 }
 
 #[test]
 fn parse_self_bootstrap_fixture_resources() {
-    let yaml =
-        std::fs::read_to_string("../fixtures/manifests/bundles/self-bootstrap-test.yaml")
-            .expect("fixture file missing");
+    let yaml = std::fs::read_to_string("../fixtures/manifests/bundles/self-bootstrap-test.yaml")
+        .expect("fixture file missing");
     let resources = parse_resources_from_yaml(&yaml).expect("should parse");
 
     let workspace_count = resources
@@ -433,8 +429,14 @@ fn parse_self_bootstrap_fixture_resources() {
         .count();
 
     assert_eq!(workspace_count, 1, "expected 1 workspace");
-    assert!(agent_count >= 6, "expected at least 6 agents, got {agent_count}");
-    assert!(workflow_count >= 5, "expected at least 5 workflows, got {workflow_count}");
+    assert!(
+        agent_count >= 6,
+        "expected at least 6 agents, got {agent_count}"
+    );
+    assert!(
+        workflow_count >= 5,
+        "expected at least 5 workflows, got {workflow_count}"
+    );
 
     let ws = resources
         .iter()
@@ -486,10 +488,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
         "architect".to_string(),
         make_agent(
             &["plan", "qa_doc_gen"],
-            &[
-                ("plan", "echo plan"),
-                ("qa_doc_gen", "echo qa_doc_gen"),
-            ],
+            &[("plan", "echo plan"), ("qa_doc_gen", "echo qa_doc_gen")],
         ),
     );
     agents.insert(
@@ -702,7 +701,11 @@ fn multi_agent_capability_config_validates() {
     let config = multi_agent_config();
     let workflow = config.workflows.get("bootstrap").unwrap();
     let result = validate_workflow_config(&config, workflow, "bootstrap");
-    assert!(result.is_ok(), "multi-agent config should validate: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "multi-agent config should validate: {:?}",
+        result
+    );
 }
 
 #[test]
@@ -712,8 +715,8 @@ fn build_execution_plan_contains_all_bootstrap_steps() {
 
     let config = multi_agent_config();
     let workflow = config.workflows.get("bootstrap").unwrap();
-    let plan = build_execution_plan(&config, workflow, "bootstrap")
-        .expect("execution plan should build");
+    let plan =
+        build_execution_plan(&config, workflow, "bootstrap").expect("execution plan should build");
 
     let step_ids: Vec<&str> = plan.steps.iter().map(|s| s.id.as_str()).collect();
     assert!(step_ids.contains(&"plan"), "missing plan step");
@@ -721,8 +724,14 @@ fn build_execution_plan_contains_all_bootstrap_steps() {
     assert!(step_ids.contains(&"implement"), "missing implement step");
     assert!(step_ids.contains(&"qa_testing"), "missing qa_testing step");
     assert!(step_ids.contains(&"ticket_fix"), "missing ticket_fix step");
-    assert!(step_ids.contains(&"align_tests"), "missing align_tests step");
-    assert!(step_ids.contains(&"doc_governance"), "missing doc_governance step");
+    assert!(
+        step_ids.contains(&"align_tests"),
+        "missing align_tests step"
+    );
+    assert!(
+        step_ids.contains(&"doc_governance"),
+        "missing doc_governance step"
+    );
     assert!(step_ids.contains(&"loop_guard"), "missing loop_guard step");
 
     // Verify expected step properties
@@ -731,7 +740,10 @@ fn build_execution_plan_contains_all_bootstrap_steps() {
     assert!(!plan_step.repeatable, "plan step should not be repeatable");
 
     let loop_guard_step = plan.steps.iter().find(|s| s.id == "loop_guard").unwrap();
-    assert!(loop_guard_step.is_guard, "loop_guard should be a guard step");
+    assert!(
+        loop_guard_step.is_guard,
+        "loop_guard should be a guard step"
+    );
     assert_eq!(loop_guard_step.builtin.as_deref(), Some("loop_guard"));
 }
 
@@ -819,9 +831,8 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
 fn sdlc_full_pipeline_workflow_parses_from_fixture() {
     use agent_orchestrator::config::WorkflowStepType;
 
-    let yaml =
-        std::fs::read_to_string("../fixtures/manifests/bundles/self-bootstrap-test.yaml")
-            .expect("fixture file missing");
+    let yaml = std::fs::read_to_string("../fixtures/manifests/bundles/self-bootstrap-test.yaml")
+        .expect("fixture file missing");
     let resources = parse_resources_from_yaml(&yaml).expect("should parse");
     let mut config = minimal_config();
     for resource in resources {
