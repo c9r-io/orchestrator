@@ -50,7 +50,8 @@ Expected: help output prints without error.
 ### 2.2 Clean Runtime State
 
 ```bash
-./scripts/orchestrator.sh db reset -f --include-config --include-history
+# Cold-start safe reset
+rm -f data/agent_orchestrator.db config/default.yaml
 ./scripts/orchestrator.sh init -f
 ```
 
@@ -78,7 +79,7 @@ Expected:
 
 ```bash
 QA_PROJECT="qa-survival-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --from-workspace self --force
 ```
 
 ---
@@ -120,7 +121,7 @@ YAML
   -w smoke-unsafe -W smoke-unsafe-wf \
   --no-start -g "smoke: expect hard error"
 
-TASK_ID=$(./scripts/orchestrator.sh task list --json | jq -r '.[0].id')
+TASK_ID=$(./scripts/orchestrator.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
 ./scripts/orchestrator.sh task start "$TASK_ID" 2>&1 | tee /tmp/smoke-unsafe-out.txt
 ```
 
@@ -163,7 +164,7 @@ YAML
   -w smoke-warn -W smoke-warn-wf \
   --no-start -g "smoke: expect warnings"
 
-TASK_ID2=$(./scripts/orchestrator.sh task list --json | jq -r '.[0].id')
+TASK_ID2=$(./scripts/orchestrator.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
 ./scripts/orchestrator.sh task start "$TASK_ID2" 2>/tmp/smoke-warn-stderr.txt &
 TASK_PID=$!
 sleep 3
@@ -188,11 +189,14 @@ rm -f .stable
   --no-start \
   -g "SURVIVAL SMOKE: binary snapshot verification"
 
-TASK_ID=$(./scripts/orchestrator.sh task list --json | jq -r '.[0].id')
+TASK_ID=$(./scripts/orchestrator.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
 
-./scripts/orchestrator.sh task start "$TASK_ID" --detach
+# Start inline so the task actually begins even when no background worker is running
+./scripts/orchestrator.sh task start "$TASK_ID" >/tmp/smoke-snapshot-stdout.txt 2>/tmp/smoke-snapshot-stderr.txt &
+START_PID=$!
 sleep 5
 ./scripts/orchestrator.sh task pause "$TASK_ID"
+kill "$START_PID" 2>/dev/null; wait "$START_PID" 2>/dev/null
 
 # Verify .stable was created
 ls -la .stable
@@ -266,7 +270,7 @@ YAML
   --no-start \
   -g "SURVIVAL SMOKE: self_test should pass on clean codebase"
 
-TASK_ID=$(./scripts/orchestrator.sh task list --json | jq -r '.[0].id')
+TASK_ID=$(./scripts/orchestrator.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
 ./scripts/orchestrator.sh task start "$TASK_ID"
 
 # Query step events
@@ -297,7 +301,7 @@ echo 'fn _smoke_break() { let x: i32 = "bad"; }' >> core/src/lib.rs
   --no-start \
   -g "SURVIVAL SMOKE: self_test should fail on broken code"
 
-TASK_ID=$(./scripts/orchestrator.sh task list --json | jq -r '.[0].id')
+TASK_ID=$(./scripts/orchestrator.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
 ./scripts/orchestrator.sh task start "$TASK_ID"
 
 # Query evidence
@@ -383,7 +387,7 @@ YAML
   -g "SMOKE CHAIN: verify plan -> qa_doc_gen -> implement -> self_test with plan_output propagation" \
   -t docs/qa/orchestrator/26-self-bootstrap-workflow.md
 
-TASK_ID=$(./scripts/orchestrator.sh task list --json | jq -r '.[0].id')
+TASK_ID=$(./scripts/orchestrator.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
 ./scripts/orchestrator.sh task start "$TASK_ID"
 ```
 
@@ -457,12 +461,15 @@ WATCHDOG_POLL_INTERVAL=2 WATCHDOG_MAX_FAILURES=3 WATCHDOG_HEALTH_TIMEOUT=2 \
   scripts/watchdog.sh > /tmp/smoke-watchdog.txt 2>&1 &
 WATCHDOG_PID=$!
 
-# Wait for 3 failures + restore
-sleep 10
+# Wait until restore is logged (avoid racing with an in-flight health probe)
+until rg -q "binary restored successfully" /tmp/smoke-watchdog.txt; do
+  sleep 1
+done
 
-# Verify binary restored
-core/target/release/agent-orchestrator --help >/dev/null 2>&1 \
-  && echo "PASS: binary restored" || echo "FAIL: binary still broken"
+# Verify binary restored and healthy after the restore completes
+core/target/release/agent-orchestrator --help >/dev/null 2>&1
+sleep 2
+core/target/release/agent-orchestrator --help >/dev/null 2>&1
 
 # Check watchdog output
 cat /tmp/smoke-watchdog.txt
@@ -509,7 +516,7 @@ Expected:
 
 ```bash
 # Delete smoke tasks
-./scripts/orchestrator.sh task list --json | jq -r '.[].id' | while read tid; do
+./scripts/orchestrator.sh task list -o json | jq -r '.[].id' | while read tid; do
   ./scripts/orchestrator.sh task delete "$tid" -f 2>/dev/null
 done
 
@@ -519,8 +526,9 @@ rm -f /tmp/smoke-unsafe.yaml /tmp/smoke-warn.yaml /tmp/smoke-selftest.yaml /tmp/
 # Remove .stable snapshot
 rm -f .stable
 
-# Optional full reset
-./scripts/orchestrator.sh db reset -f --include-config --include-history
+# Optional full reset (cold-start safe)
+rm -f data/agent_orchestrator.db config/default.yaml
+./scripts/orchestrator.sh init -f
 ```
 
 ---
