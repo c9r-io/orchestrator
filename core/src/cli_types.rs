@@ -256,7 +256,11 @@ pub struct AgentTemplatesSpec {
     pub git_ops: Option<String>,
 
     /// Extra templates for custom/SDLC step types (qa_doc_gen, qa_testing, ticket_fix, etc.)
-    #[serde(flatten, default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    #[serde(
+        flatten,
+        default,
+        skip_serializing_if = "std::collections::HashMap::is_empty"
+    )]
     pub extra: std::collections::HashMap<String, String>,
 }
 
@@ -494,5 +498,79 @@ spec:
             assert!(msg.contains("wrong.version/v2"));
             assert!(msg.contains("orchestrator.dev/v2"));
         }
+    }
+
+    #[test]
+    fn parse_workflow_yaml_with_self_test_step() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: test-workflow
+spec:
+  steps:
+    - id: implement
+      type: implement
+      required_capability: implement
+      enabled: true
+      repeatable: false
+    - id: self_test
+      type: self_test
+      enabled: true
+      repeatable: false
+    - id: qa_testing
+      type: qa_testing
+      required_capability: qa_testing
+      enabled: true
+      repeatable: true
+  loop:
+    mode: once
+  safety:
+    checkpoint_strategy: git_tag
+"#;
+
+        let resource: OrchestratorResource =
+            serde_yaml::from_str(yaml).expect("Failed to parse workflow YAML");
+
+        resource
+            .validate_version()
+            .expect("Version validation failed");
+        assert_eq!(resource.api_version, "orchestrator.dev/v2");
+        assert_eq!(resource.kind, ResourceKind::Workflow);
+
+        if let ResourceSpec::Workflow(workflow_spec) = &resource.spec {
+            let step_ids: Vec<&str> = workflow_spec.steps.iter().map(|s| s.id.as_str()).collect();
+            assert!(
+                step_ids.contains(&"implement"),
+                "should have implement step"
+            );
+            assert!(
+                step_ids.contains(&"self_test"),
+                "should have self_test step"
+            );
+            assert!(
+                step_ids.contains(&"qa_testing"),
+                "should have qa_testing step"
+            );
+
+            let self_test_step = workflow_spec
+                .steps
+                .iter()
+                .find(|s| s.id == "self_test")
+                .expect("self_test step should exist");
+            assert_eq!(self_test_step.step_type.as_str(), "self_test");
+        } else {
+            panic!("Expected Workflow spec");
+        }
+    }
+
+    #[test]
+    fn self_test_step_type_parses_correctly() {
+        use crate::config::WorkflowStepType;
+        use std::str::FromStr;
+
+        let step_type = WorkflowStepType::from_str("self_test").expect("should parse self_test");
+        assert_eq!(step_type, WorkflowStepType::SelfTest);
+        assert_eq!(step_type.as_str(), "self_test");
     }
 }

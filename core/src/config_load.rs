@@ -8,8 +8,8 @@ use crate::resource::export_manifest_resources;
 use anyhow::{Context, Result};
 use rusqlite::{params, OptionalExtension, Transaction};
 use std::collections::{HashMap, HashSet};
-use std::str::FromStr;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 pub fn now_ts() -> String {
     chrono::Utc::now().to_rfc3339()
@@ -805,4 +805,191 @@ pub fn validate_self_referential_safety(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{
+        LoopMode, WorkflowFinalizeConfig, WorkflowLoopConfig, WorkflowLoopGuardConfig,
+    };
+
+    #[test]
+    fn normalize_workflow_sets_builtin_for_self_test() {
+        let mut workflow = WorkflowConfig {
+            steps: vec![WorkflowStepConfig {
+                id: "self_test".to_string(),
+                description: None,
+                step_type: Some(WorkflowStepType::SelfTest),
+                builtin: None,
+                required_capability: None,
+                enabled: true,
+                repeatable: false,
+                is_guard: false,
+                cost_preference: None,
+                prehook: None,
+                tty: false,
+                outputs: vec![],
+                pipe_to: None,
+                command: None,
+            }],
+            loop_policy: WorkflowLoopConfig {
+                mode: LoopMode::Once,
+                guard: WorkflowLoopGuardConfig::default(),
+            },
+            finalize: WorkflowFinalizeConfig { rules: vec![] },
+            qa: None,
+            fix: None,
+            retest: None,
+            dynamic_steps: vec![],
+            safety: crate::config::SafetyConfig::default(),
+        };
+
+        normalize_workflow_config(&mut workflow);
+
+        let self_test_step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "self_test")
+            .expect("self_test step should exist");
+        assert_eq!(
+            self_test_step.builtin.as_deref(),
+            Some("self_test"),
+            "builtin should be set to 'self_test' for SelfTest step type"
+        );
+    }
+
+    #[test]
+    fn validate_self_referential_safety_warns_missing_self_test() {
+        let workflow = WorkflowConfig {
+            steps: vec![WorkflowStepConfig {
+                id: "implement".to_string(),
+                description: None,
+                step_type: Some(WorkflowStepType::Implement),
+                builtin: None,
+                required_capability: Some("implement".to_string()),
+                enabled: true,
+                repeatable: true,
+                is_guard: false,
+                cost_preference: None,
+                prehook: None,
+                tty: false,
+                outputs: vec![],
+                pipe_to: None,
+                command: None,
+            }],
+            loop_policy: WorkflowLoopConfig {
+                mode: LoopMode::Once,
+                guard: WorkflowLoopGuardConfig::default(),
+            },
+            finalize: WorkflowFinalizeConfig { rules: vec![] },
+            qa: None,
+            fix: None,
+            retest: None,
+            dynamic_steps: vec![],
+            safety: crate::config::SafetyConfig {
+                checkpoint_strategy: crate::config::CheckpointStrategy::GitTag,
+                auto_rollback: true,
+                max_consecutive_failures: 3,
+                step_timeout_secs: None,
+                binary_snapshot: false,
+            },
+        };
+
+        let result = validate_self_referential_safety(&workflow, "test-ws");
+        assert!(
+            result.is_ok(),
+            "validation should pass even without self_test"
+        );
+    }
+
+    #[test]
+    fn validate_self_referential_safety_passes_with_self_test() {
+        let workflow = WorkflowConfig {
+            steps: vec![
+                WorkflowStepConfig {
+                    id: "implement".to_string(),
+                    description: None,
+                    step_type: Some(WorkflowStepType::Implement),
+                    builtin: None,
+                    required_capability: Some("implement".to_string()),
+                    enabled: true,
+                    repeatable: true,
+                    is_guard: false,
+                    cost_preference: None,
+                    prehook: None,
+                    tty: false,
+                    outputs: vec![],
+                    pipe_to: None,
+                    command: None,
+                },
+                WorkflowStepConfig {
+                    id: "self_test".to_string(),
+                    description: None,
+                    step_type: Some(WorkflowStepType::SelfTest),
+                    builtin: None,
+                    required_capability: None,
+                    enabled: true,
+                    repeatable: false,
+                    is_guard: false,
+                    cost_preference: None,
+                    prehook: None,
+                    tty: false,
+                    outputs: vec![],
+                    pipe_to: None,
+                    command: None,
+                },
+            ],
+            loop_policy: WorkflowLoopConfig {
+                mode: LoopMode::Once,
+                guard: WorkflowLoopGuardConfig::default(),
+            },
+            finalize: WorkflowFinalizeConfig { rules: vec![] },
+            qa: None,
+            fix: None,
+            retest: None,
+            dynamic_steps: vec![],
+            safety: crate::config::SafetyConfig {
+                checkpoint_strategy: crate::config::CheckpointStrategy::GitTag,
+                auto_rollback: true,
+                max_consecutive_failures: 3,
+                step_timeout_secs: None,
+                binary_snapshot: false,
+            },
+        };
+
+        let result = validate_self_referential_safety(&workflow, "test-ws");
+        assert!(result.is_ok(), "validation should pass with self_test step");
+    }
+
+    #[test]
+    fn validate_self_referential_safety_errors_without_checkpoint_strategy() {
+        let workflow = WorkflowConfig {
+            steps: vec![],
+            loop_policy: WorkflowLoopConfig {
+                mode: LoopMode::Once,
+                guard: WorkflowLoopGuardConfig::default(),
+            },
+            finalize: WorkflowFinalizeConfig { rules: vec![] },
+            qa: None,
+            fix: None,
+            retest: None,
+            dynamic_steps: vec![],
+            safety: crate::config::SafetyConfig {
+                checkpoint_strategy: crate::config::CheckpointStrategy::None,
+                auto_rollback: true,
+                max_consecutive_failures: 3,
+                step_timeout_secs: None,
+                binary_snapshot: false,
+            },
+        };
+
+        let result = validate_self_referential_safety(&workflow, "test-ws");
+        assert!(result.is_err(), "should error without checkpoint_strategy");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("checkpoint_strategy"),
+            "error should mention checkpoint_strategy"
+        );
+    }
 }

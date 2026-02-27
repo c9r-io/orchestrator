@@ -1456,10 +1456,10 @@ pub async fn execute_self_test_step(
         json!({"phase": "cargo_check", "passed": true}),
     );
 
-    // Phase 2: cargo test --lib
+    // Phase 2: cargo test --lib (skip self_test_survives_smoke_test to avoid recursive test execution)
     state.emit_event(task_id, Some(item_id), "self_test_phase", json!({"phase": "cargo_test_lib"}));
     let test_output = tokio::process::Command::new("cargo")
-        .args(["test", "--lib"])
+        .args(["test", "--lib", "--", "--skip", "self_test_survives_smoke_test"])
         .current_dir(&core_dir)
         .output()
         .await
@@ -2934,6 +2934,8 @@ mod tests {
     use crate::test_utils::TestState;
     use rusqlite::params;
     use std::collections::HashMap;
+    use std::path::PathBuf;
+    use std::sync::{Arc, RwLock};
 
     #[test]
     fn load_task_summary_maps_created_and_updated_at_correctly() {
@@ -3119,6 +3121,61 @@ mod tests {
             qa_stdout.contains("QA_DOC_FROM_PLAN:PLAN_MARKER_SB_SMOKE"),
             "expected qa_doc_gen stdout to reflect propagated plan output, got: {}",
             qa_stdout
+        );
+    }
+
+    #[tokio::test]
+    async fn self_test_survives_smoke_test() {
+        use crate::events::NoopSink;
+        use crate::collab::MessageBus;
+        
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let project_root = manifest_dir.parent().unwrap();
+        
+        let core_dir = project_root.join("core");
+        assert!(
+            core_dir.exists(),
+            "core directory should exist at {} for self_test to work",
+            core_dir.display()
+        );
+
+        let state = Arc::new(crate::state::InnerState {
+            app_root: project_root.to_path_buf(),
+            db_path: PathBuf::new(),
+            logs_dir: PathBuf::new(),
+            active_config: RwLock::new(crate::config::ActiveConfig {
+                config: crate::config::OrchestratorConfig::default(),
+                workspaces: HashMap::new(),
+                projects: HashMap::new(),
+                default_project_id: String::new(),
+                default_workspace_id: String::new(),
+                default_workflow_id: String::new(),
+            }),
+            running: tokio::sync::Mutex::new(HashMap::new()),
+            agent_health: RwLock::new(HashMap::new()),
+            agent_metrics: RwLock::new(HashMap::new()),
+            message_bus: Arc::new(MessageBus::new()),
+            event_sink: RwLock::new(Arc::new(NoopSink)),
+            db_writer: Arc::new(crate::db_write::DbWriteCoordinator::new(&PathBuf::new()).unwrap()),
+        });
+
+        state.emit_event("test-task", Some("test-item"), "self_test_phase", json!({"phase": "cargo_check"}));
+        
+        let check_output = tokio::process::Command::new("cargo")
+            .args(["check", "--message-format=short"])
+            .current_dir(&core_dir)
+            .output()
+            .await
+            .context("failed to run cargo check")
+            .expect("cargo check should execute");
+
+        let exit_code = check_output.status.code().unwrap_or(1) as i64;
+        
+        assert_eq!(
+            exit_code, 0,
+            "self_test should pass (exit code 0) when code compiles. \
+             Non-zero means cargo check failed. \
+             This is the SURVIVAL SMOKE test - it should fail if code is broken."
         );
     }
 }
