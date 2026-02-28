@@ -755,4 +755,658 @@ mod tests {
             .expect("count tasks");
         assert_eq!(remaining, 0);
     }
+
+    // ── find_latest_resumable_task_id ──────────────────────────────────
+
+    #[test]
+    fn find_latest_resumable_task_id_returns_running_task() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET status='running' WHERE id = ?1",
+            params![task_id.clone()],
+        )
+        .expect("set running");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let found = repo
+            .find_latest_resumable_task_id(false)
+            .expect("query should succeed");
+        assert_eq!(found, Some(task_id));
+    }
+
+    #[test]
+    fn find_latest_resumable_task_id_returns_interrupted_task() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET status='interrupted' WHERE id = ?1",
+            params![task_id.clone()],
+        )
+        .expect("set interrupted");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let found = repo
+            .find_latest_resumable_task_id(false)
+            .expect("query should succeed");
+        assert_eq!(found, Some(task_id));
+    }
+
+    #[test]
+    fn find_latest_resumable_task_id_returns_paused_task() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET status='paused' WHERE id = ?1",
+            params![task_id.clone()],
+        )
+        .expect("set paused");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let found = repo
+            .find_latest_resumable_task_id(false)
+            .expect("query should succeed");
+        assert_eq!(found, Some(task_id));
+    }
+
+    #[test]
+    fn find_latest_resumable_task_id_includes_pending_when_flag_set() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        // task is created with status 'pending' by default
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+
+        // Without include_pending, pending task should NOT be found
+        let without = repo
+            .find_latest_resumable_task_id(false)
+            .expect("query should succeed");
+        assert_eq!(without, None);
+
+        // With include_pending, pending task SHOULD be found
+        let with = repo
+            .find_latest_resumable_task_id(true)
+            .expect("query should succeed");
+        assert_eq!(with, Some(task_id));
+    }
+
+    #[test]
+    fn find_latest_resumable_task_id_returns_none_when_all_completed() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET status='completed' WHERE id = ?1",
+            params![task_id],
+        )
+        .expect("set completed");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let found = repo
+            .find_latest_resumable_task_id(false)
+            .expect("query should succeed");
+        assert_eq!(found, None);
+    }
+
+    #[test]
+    fn find_latest_resumable_task_id_returns_none_for_failed_task() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET status='failed' WHERE id = ?1",
+            params![task_id],
+        )
+        .expect("set failed");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let found = repo
+            .find_latest_resumable_task_id(false)
+            .expect("query should succeed");
+        assert_eq!(found, None);
+    }
+
+    // ── load_task_runtime_row ──────────────────────────────────────────
+
+    #[test]
+    fn load_task_runtime_row_returns_expected_fields() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+
+        let row = repo
+            .load_task_runtime_row(&task_id)
+            .expect("runtime row should load");
+        assert!(!row.workspace_id.is_empty());
+        assert!(!row.workflow_id.is_empty());
+        assert!(!row.workspace_root_raw.is_empty());
+        assert_eq!(row.goal, "repo-test-goal");
+        assert_eq!(row.current_cycle, 0);
+        assert_eq!(row.init_done, 0);
+    }
+
+    #[test]
+    fn load_task_runtime_row_errors_for_missing_task() {
+        let mut fixture = TestState::new();
+        let (state, _task_id) = seed_task(&mut fixture);
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+
+        let result = repo.load_task_runtime_row("nonexistent-id");
+        assert!(result.is_err());
+    }
+
+    // ── first_task_item_id ─────────────────────────────────────────────
+
+    #[test]
+    fn first_task_item_id_returns_item() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+
+        let item_id = repo
+            .first_task_item_id(&task_id)
+            .expect("query should succeed");
+        assert!(item_id.is_some(), "seeded task must have at least one item");
+    }
+
+    #[test]
+    fn first_task_item_id_returns_none_for_empty_task() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "DELETE FROM task_items WHERE task_id = ?1",
+            params![task_id.clone()],
+        )
+        .expect("delete items");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let item_id = repo
+            .first_task_item_id(&task_id)
+            .expect("query should succeed");
+        assert_eq!(item_id, None);
+    }
+
+    #[test]
+    fn first_task_item_id_respects_order_no() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+
+        // Insert a second item with a lower order_no so it should be returned first
+        let ts = now_ts();
+        conn.execute(
+            "INSERT INTO task_items (id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, updated_at, created_at) VALUES ('item-low-order', ?1, -1, '/tmp/qa.md', 'pending', '[]', '[]', 0, 0, '', '', '', ?2, ?2)",
+            params![task_id.clone(), ts],
+        )
+        .expect("insert low order item");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let first = repo
+            .first_task_item_id(&task_id)
+            .expect("query should succeed");
+        assert_eq!(first, Some("item-low-order".to_string()));
+    }
+
+    // ── count_unresolved_items ─────────────────────────────────────────
+
+    #[test]
+    fn count_unresolved_items_zero_when_all_pending() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+
+        let count = repo
+            .count_unresolved_items(&task_id)
+            .expect("count should succeed");
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn count_unresolved_items_counts_unresolved_status() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE task_items SET status='unresolved' WHERE task_id = ?1",
+            params![task_id.clone()],
+        )
+        .expect("set unresolved");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let count = repo
+            .count_unresolved_items(&task_id)
+            .expect("count should succeed");
+        assert!(count >= 1);
+    }
+
+    #[test]
+    fn count_unresolved_items_counts_qa_failed_status() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE task_items SET status='qa_failed' WHERE task_id = ?1",
+            params![task_id.clone()],
+        )
+        .expect("set qa_failed");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let count = repo
+            .count_unresolved_items(&task_id)
+            .expect("count should succeed");
+        assert!(count >= 1);
+    }
+
+    #[test]
+    fn count_unresolved_items_mixed_statuses() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+
+        // Add two more items with different statuses
+        let ts = now_ts();
+        conn.execute(
+            "INSERT INTO task_items (id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, updated_at, created_at) VALUES ('item-unresolved', ?1, 10, '/tmp/qa1.md', 'unresolved', '[]', '[]', 0, 0, '', '', '', ?2, ?2)",
+            params![task_id.clone(), ts],
+        )
+        .expect("insert unresolved");
+        conn.execute(
+            "INSERT INTO task_items (id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, updated_at, created_at) VALUES ('item-qa-failed', ?1, 11, '/tmp/qa2.md', 'qa_failed', '[]', '[]', 0, 0, '', '', '', ?2, ?2)",
+            params![task_id.clone(), ts],
+        )
+        .expect("insert qa_failed");
+        conn.execute(
+            "INSERT INTO task_items (id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, updated_at, created_at) VALUES ('item-passed', ?1, 12, '/tmp/qa3.md', 'qa_passed', '[]', '[]', 0, 0, '', '', '', ?2, ?2)",
+            params![task_id.clone(), ts],
+        )
+        .expect("insert qa_passed");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let count = repo
+            .count_unresolved_items(&task_id)
+            .expect("count should succeed");
+        // Only 'unresolved' and 'qa_failed' should be counted (original item is still 'pending')
+        assert_eq!(count, 2);
+    }
+
+    // ── list_task_items_for_cycle ───────────────────────────────────────
+
+    #[test]
+    fn list_task_items_for_cycle_returns_items_in_order() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+
+        // Add a second item with a higher order_no
+        let ts = now_ts();
+        conn.execute(
+            "INSERT INTO task_items (id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, updated_at, created_at) VALUES ('item-second', ?1, 99, '/tmp/qa_second.md', 'pending', '[]', '[]', 0, 0, '', '', '', ?2, ?2)",
+            params![task_id.clone(), ts],
+        )
+        .expect("insert second item");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let items = repo
+            .list_task_items_for_cycle(&task_id)
+            .expect("list should succeed");
+        assert!(items.len() >= 2, "should have at least 2 items");
+        // Last item should be our inserted one
+        let last = items.last().unwrap();
+        assert_eq!(last.id, "item-second");
+        assert_eq!(last.qa_file_path, "/tmp/qa_second.md");
+    }
+
+    #[test]
+    fn list_task_items_for_cycle_returns_empty_for_unknown_task() {
+        let mut fixture = TestState::new();
+        let (state, _task_id) = seed_task(&mut fixture);
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+
+        let items = repo
+            .list_task_items_for_cycle("nonexistent-task-id")
+            .expect("list should succeed even for unknown task");
+        assert!(items.is_empty());
+    }
+
+    // ── set_task_status ────────────────────────────────────────────────
+
+    #[test]
+    fn set_task_status_with_completed_sets_completed_at() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+
+        repo.set_task_status(&task_id, "completed", true)
+            .expect("set status should succeed");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (status, completed_at): (String, Option<String>) = conn
+            .query_row(
+                "SELECT status, completed_at FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("query task");
+        assert_eq!(status, "completed");
+        assert!(
+            completed_at.is_some(),
+            "completed_at should be set when set_completed is true"
+        );
+    }
+
+    #[test]
+    fn set_task_status_running_clears_completed_at() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        // First set completed_at to a value
+        conn.execute(
+            "UPDATE tasks SET status='completed', completed_at='2026-01-01T00:00:00Z' WHERE id = ?1",
+            params![task_id.clone()],
+        )
+        .expect("set completed");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        repo.set_task_status(&task_id, "running", false)
+            .expect("set status should succeed");
+
+        let (status, completed_at): (String, Option<String>) = conn
+            .query_row(
+                "SELECT status, completed_at FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("query task");
+        assert_eq!(status, "running");
+        assert_eq!(
+            completed_at, None,
+            "completed_at should be cleared for running status"
+        );
+    }
+
+    #[test]
+    fn set_task_status_pending_clears_completed_at() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET status='completed', completed_at='2026-01-01T00:00:00Z' WHERE id = ?1",
+            params![task_id.clone()],
+        )
+        .expect("set completed");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        repo.set_task_status(&task_id, "pending", false)
+            .expect("set status should succeed");
+
+        let completed_at: Option<String> = conn
+            .query_row(
+                "SELECT completed_at FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| row.get(0),
+            )
+            .expect("query task");
+        assert_eq!(completed_at, None);
+    }
+
+    #[test]
+    fn set_task_status_paused_clears_completed_at() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET status='completed', completed_at='2026-01-01T00:00:00Z' WHERE id = ?1",
+            params![task_id.clone()],
+        )
+        .expect("set completed");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        repo.set_task_status(&task_id, "paused", false)
+            .expect("set status should succeed");
+
+        let completed_at: Option<String> = conn
+            .query_row(
+                "SELECT completed_at FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| row.get(0),
+            )
+            .expect("query task");
+        assert_eq!(completed_at, None);
+    }
+
+    #[test]
+    fn set_task_status_interrupted_clears_completed_at() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET status='completed', completed_at='2026-01-01T00:00:00Z' WHERE id = ?1",
+            params![task_id.clone()],
+        )
+        .expect("set completed");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        repo.set_task_status(&task_id, "interrupted", false)
+            .expect("set status should succeed");
+
+        let completed_at: Option<String> = conn
+            .query_row(
+                "SELECT completed_at FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| row.get(0),
+            )
+            .expect("query task");
+        assert_eq!(completed_at, None);
+    }
+
+    #[test]
+    fn set_task_status_failed_without_set_completed_preserves_completed_at() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET completed_at='2026-01-01T00:00:00Z' WHERE id = ?1",
+            params![task_id.clone()],
+        )
+        .expect("set completed_at");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        // "failed" is not in the list that clears completed_at, and set_completed is false
+        repo.set_task_status(&task_id, "failed", false)
+            .expect("set status should succeed");
+
+        let (status, completed_at): (String, Option<String>) = conn
+            .query_row(
+                "SELECT status, completed_at FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("query task");
+        assert_eq!(status, "failed");
+        assert_eq!(
+            completed_at,
+            Some("2026-01-01T00:00:00Z".to_string()),
+            "completed_at should be preserved for non-clearing status without set_completed"
+        );
+    }
+
+    // ── update_task_cycle_state ────────────────────────────────────────
+
+    #[test]
+    fn update_task_cycle_state_sets_cycle_and_init_done() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+
+        repo.update_task_cycle_state(&task_id, 3, true)
+            .expect("update should succeed");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (cycle, init_done): (i64, i64) = conn
+            .query_row(
+                "SELECT current_cycle, init_done FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("query task");
+        assert_eq!(cycle, 3);
+        assert_eq!(init_done, 1);
+    }
+
+    #[test]
+    fn update_task_cycle_state_can_clear_init_done() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+
+        // First set init_done to true
+        repo.update_task_cycle_state(&task_id, 1, true)
+            .expect("update should succeed");
+        // Then clear it
+        repo.update_task_cycle_state(&task_id, 2, false)
+            .expect("update should succeed");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (cycle, init_done): (i64, i64) = conn
+            .query_row(
+                "SELECT current_cycle, init_done FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("query task");
+        assert_eq!(cycle, 2);
+        assert_eq!(init_done, 0);
+    }
+
+    // ── update_task_item_status ────────────────────────────────────────
+
+    #[test]
+    fn update_task_item_status_changes_status() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let item_id: String = conn
+            .query_row(
+                "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
+                params![task_id],
+                |row| row.get(0),
+            )
+            .expect("task item exists");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        repo.update_task_item_status(&item_id, "qa_passed")
+            .expect("update should succeed");
+
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM task_items WHERE id = ?1",
+                params![item_id],
+                |row| row.get(0),
+            )
+            .expect("query item");
+        assert_eq!(status, "qa_passed");
+    }
+
+    #[test]
+    fn update_task_item_status_updates_updated_at() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (item_id, old_updated): (String, String) = conn
+            .query_row(
+                "SELECT id, updated_at FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
+                params![task_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("task item exists");
+
+        // Small delay to ensure timestamp difference
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        repo.update_task_item_status(&item_id, "unresolved")
+            .expect("update should succeed");
+
+        let new_updated: String = conn
+            .query_row(
+                "SELECT updated_at FROM task_items WHERE id = ?1",
+                params![item_id],
+                |row| row.get(0),
+            )
+            .expect("query item");
+        assert_ne!(old_updated, new_updated, "updated_at should change");
+    }
+
+    // ── load_task_name ─────────────────────────────────────────────────
+
+    #[test]
+    fn load_task_name_returns_name() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+
+        let name = repo
+            .load_task_name(&task_id)
+            .expect("load_task_name should succeed");
+        assert_eq!(name, Some("repo-test".to_string()));
+    }
+
+    #[test]
+    fn load_task_name_returns_none_for_missing_task() {
+        let mut fixture = TestState::new();
+        let (state, _task_id) = seed_task(&mut fixture);
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+
+        let name = repo
+            .load_task_name("nonexistent-id")
+            .expect("load_task_name should succeed");
+        assert_eq!(name, None);
+    }
+
+    // ── load_task_status ───────────────────────────────────────────────
+
+    #[test]
+    fn load_task_status_returns_current_status() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+
+        let status = repo
+            .load_task_status(&task_id)
+            .expect("load_task_status should succeed");
+        assert_eq!(status, Some("pending".to_string()));
+    }
+
+    #[test]
+    fn load_task_status_reflects_status_change() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET status='running' WHERE id = ?1",
+            params![task_id.clone()],
+        )
+        .expect("set running");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let status = repo
+            .load_task_status(&task_id)
+            .expect("load_task_status should succeed");
+        assert_eq!(status, Some("running".to_string()));
+    }
+
+    #[test]
+    fn load_task_status_returns_none_for_missing_task() {
+        let mut fixture = TestState::new();
+        let (state, _task_id) = seed_task(&mut fixture);
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+
+        let status = repo
+            .load_task_status("nonexistent-id")
+            .expect("load_task_status should succeed");
+        assert_eq!(status, None);
+    }
 }

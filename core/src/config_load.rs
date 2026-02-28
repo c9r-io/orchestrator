@@ -1309,4 +1309,1008 @@ mod tests {
             "error should mention checkpoint_strategy"
         );
     }
+
+    // --- Helper to build a minimal step ---
+    fn make_step(id: &str, step_type: Option<WorkflowStepType>, enabled: bool) -> WorkflowStepConfig {
+        WorkflowStepConfig {
+            id: id.to_string(),
+            description: None,
+            step_type,
+            builtin: None,
+            required_capability: None,
+            enabled,
+            repeatable: true,
+            is_guard: false,
+            cost_preference: None,
+            prehook: None,
+            tty: false,
+            outputs: vec![],
+            pipe_to: None,
+            command: None,
+            chain_steps: vec![],
+            scope: None,
+        }
+    }
+
+    fn make_builtin_step(id: &str, builtin: &str, enabled: bool) -> WorkflowStepConfig {
+        WorkflowStepConfig {
+            builtin: Some(builtin.to_string()),
+            ..make_step(id, None, enabled)
+        }
+    }
+
+    fn make_command_step(id: &str, step_type: Option<WorkflowStepType>, cmd: &str) -> WorkflowStepConfig {
+        WorkflowStepConfig {
+            command: Some(cmd.to_string()),
+            ..make_step(id, step_type, true)
+        }
+    }
+
+    fn make_workflow(steps: Vec<WorkflowStepConfig>) -> WorkflowConfig {
+        WorkflowConfig {
+            steps,
+            loop_policy: WorkflowLoopConfig {
+                mode: LoopMode::Once,
+                guard: WorkflowLoopGuardConfig {
+                    enabled: false,
+                    ..WorkflowLoopGuardConfig::default()
+                },
+            },
+            finalize: WorkflowFinalizeConfig { rules: vec![] },
+            qa: None,
+            fix: None,
+            retest: None,
+            dynamic_steps: vec![],
+            safety: crate::config::SafetyConfig::default(),
+        }
+    }
+
+    fn make_config_with_agent(capability: &str, template: &str) -> OrchestratorConfig {
+        use crate::config::AgentConfig;
+        let mut templates = HashMap::new();
+        templates.insert(capability.to_string(), template.to_string());
+        let mut agents = HashMap::new();
+        agents.insert(
+            "test-agent".to_string(),
+            AgentConfig {
+                templates,
+                ..AgentConfig::default()
+            },
+        );
+        OrchestratorConfig {
+            agents,
+            ..OrchestratorConfig::default()
+        }
+    }
+
+    // ======= now_ts tests =======
+
+    #[test]
+    fn now_ts_returns_rfc3339_string() {
+        let ts = now_ts();
+        assert!(!ts.is_empty());
+        // Should be parseable as RFC3339
+        let parsed = chrono::DateTime::parse_from_rfc3339(&ts);
+        assert!(parsed.is_ok(), "now_ts should return valid RFC3339: {}", ts);
+    }
+
+    #[test]
+    fn now_ts_returns_recent_timestamp() {
+        let before = chrono::Utc::now();
+        let ts = now_ts();
+        let after = chrono::Utc::now();
+        let parsed = chrono::DateTime::parse_from_rfc3339(&ts).unwrap();
+        assert!(parsed >= before, "timestamp should be >= before");
+        assert!(parsed <= after, "timestamp should be <= after");
+    }
+
+    // ======= normalize_workflow_config tests =======
+
+    #[test]
+    fn normalize_empty_steps_generates_defaults() {
+        let mut workflow = make_workflow(vec![]);
+        normalize_workflow_config(&mut workflow);
+        assert!(
+            !workflow.steps.is_empty(),
+            "empty steps should generate default steps"
+        );
+    }
+
+    #[test]
+    fn normalize_sets_required_capability_for_qa_step() {
+        let mut workflow = make_workflow(vec![make_step("qa", Some(WorkflowStepType::Qa), true)]);
+        normalize_workflow_config(&mut workflow);
+        let qa_step = workflow.steps.iter().find(|s| s.id == "qa").unwrap();
+        assert_eq!(qa_step.required_capability.as_deref(), Some("qa"));
+    }
+
+    #[test]
+    fn normalize_sets_required_capability_for_fix_step() {
+        let mut workflow = make_workflow(vec![make_step("fix", Some(WorkflowStepType::Fix), true)]);
+        normalize_workflow_config(&mut workflow);
+        let fix_step = workflow.steps.iter().find(|s| s.id == "fix").unwrap();
+        assert_eq!(fix_step.required_capability.as_deref(), Some("fix"));
+    }
+
+    #[test]
+    fn normalize_sets_required_capability_for_plan_step() {
+        let mut workflow = make_workflow(vec![make_step("plan", Some(WorkflowStepType::Plan), true)]);
+        normalize_workflow_config(&mut workflow);
+        let plan_step = workflow.steps.iter().find(|s| s.id == "plan").unwrap();
+        assert_eq!(plan_step.required_capability.as_deref(), Some("plan"));
+    }
+
+    #[test]
+    fn normalize_sets_required_capability_for_implement_step() {
+        let mut workflow = make_workflow(vec![make_step("implement", Some(WorkflowStepType::Implement), true)]);
+        normalize_workflow_config(&mut workflow);
+        let step = workflow.steps.iter().find(|s| s.id == "implement").unwrap();
+        assert_eq!(step.required_capability.as_deref(), Some("implement"));
+    }
+
+    #[test]
+    fn normalize_sets_required_capability_for_review_step() {
+        let mut workflow = make_workflow(vec![make_step("review", Some(WorkflowStepType::Review), true)]);
+        normalize_workflow_config(&mut workflow);
+        let step = workflow.steps.iter().find(|s| s.id == "review").unwrap();
+        assert_eq!(step.required_capability.as_deref(), Some("review"));
+    }
+
+    #[test]
+    fn normalize_sets_required_capability_for_build_step() {
+        let mut workflow = make_workflow(vec![make_step("build", Some(WorkflowStepType::Build), true)]);
+        normalize_workflow_config(&mut workflow);
+        let step = workflow.steps.iter().find(|s| s.id == "build").unwrap();
+        assert_eq!(step.required_capability.as_deref(), Some("build"));
+    }
+
+    #[test]
+    fn normalize_sets_required_capability_for_test_step() {
+        let mut workflow = make_workflow(vec![make_step("test", Some(WorkflowStepType::Test), true)]);
+        normalize_workflow_config(&mut workflow);
+        let step = workflow.steps.iter().find(|s| s.id == "test").unwrap();
+        assert_eq!(step.required_capability.as_deref(), Some("test"));
+    }
+
+    #[test]
+    fn normalize_sets_required_capability_for_lint_step() {
+        let mut workflow = make_workflow(vec![make_step("lint", Some(WorkflowStepType::Lint), true)]);
+        normalize_workflow_config(&mut workflow);
+        let step = workflow.steps.iter().find(|s| s.id == "lint").unwrap();
+        assert_eq!(step.required_capability.as_deref(), Some("lint"));
+    }
+
+    #[test]
+    fn normalize_sets_required_capability_for_gitops_step() {
+        let mut workflow = make_workflow(vec![make_step("git_ops", Some(WorkflowStepType::GitOps), true)]);
+        normalize_workflow_config(&mut workflow);
+        let step = workflow.steps.iter().find(|s| s.id == "git_ops").unwrap();
+        assert_eq!(step.required_capability.as_deref(), Some("git_ops"));
+    }
+
+    #[test]
+    fn normalize_sets_required_capability_for_qa_doc_gen_step() {
+        let mut workflow = make_workflow(vec![make_step("qa_doc_gen", Some(WorkflowStepType::QaDocGen), true)]);
+        normalize_workflow_config(&mut workflow);
+        let step = workflow.steps.iter().find(|s| s.id == "qa_doc_gen").unwrap();
+        assert_eq!(step.required_capability.as_deref(), Some("qa_doc_gen"));
+    }
+
+    #[test]
+    fn normalize_sets_required_capability_for_qa_testing_step() {
+        let mut workflow = make_workflow(vec![make_step("qa_testing", Some(WorkflowStepType::QaTesting), true)]);
+        normalize_workflow_config(&mut workflow);
+        let step = workflow.steps.iter().find(|s| s.id == "qa_testing").unwrap();
+        assert_eq!(step.required_capability.as_deref(), Some("qa_testing"));
+    }
+
+    #[test]
+    fn normalize_sets_required_capability_for_ticket_fix_step() {
+        let mut workflow = make_workflow(vec![make_step("ticket_fix", Some(WorkflowStepType::TicketFix), true)]);
+        normalize_workflow_config(&mut workflow);
+        let step = workflow.steps.iter().find(|s| s.id == "ticket_fix").unwrap();
+        assert_eq!(step.required_capability.as_deref(), Some("ticket_fix"));
+    }
+
+    #[test]
+    fn normalize_sets_required_capability_for_doc_governance_step() {
+        let mut workflow = make_workflow(vec![make_step("doc_governance", Some(WorkflowStepType::DocGovernance), true)]);
+        normalize_workflow_config(&mut workflow);
+        let step = workflow.steps.iter().find(|s| s.id == "doc_governance").unwrap();
+        assert_eq!(step.required_capability.as_deref(), Some("doc_governance"));
+    }
+
+    #[test]
+    fn normalize_sets_required_capability_for_align_tests_step() {
+        let mut workflow = make_workflow(vec![make_step("align_tests", Some(WorkflowStepType::AlignTests), true)]);
+        normalize_workflow_config(&mut workflow);
+        let step = workflow.steps.iter().find(|s| s.id == "align_tests").unwrap();
+        assert_eq!(step.required_capability.as_deref(), Some("align_tests"));
+    }
+
+    #[test]
+    fn normalize_sets_required_capability_for_retest_step() {
+        let mut workflow = make_workflow(vec![make_step("retest", Some(WorkflowStepType::Retest), true)]);
+        normalize_workflow_config(&mut workflow);
+        let step = workflow.steps.iter().find(|s| s.id == "retest").unwrap();
+        assert_eq!(step.required_capability.as_deref(), Some("retest"));
+    }
+
+    #[test]
+    fn normalize_sets_required_capability_for_smoke_chain_step() {
+        let mut workflow = make_workflow(vec![make_step("smoke_chain", Some(WorkflowStepType::SmokeChain), true)]);
+        normalize_workflow_config(&mut workflow);
+        let step = workflow.steps.iter().find(|s| s.id == "smoke_chain").unwrap();
+        assert_eq!(step.required_capability.as_deref(), Some("smoke_chain"));
+    }
+
+    #[test]
+    fn normalize_sets_loop_guard_builtin_and_is_guard() {
+        let mut workflow = make_workflow(vec![make_step("loop_guard", Some(WorkflowStepType::LoopGuard), true)]);
+        normalize_workflow_config(&mut workflow);
+        let step = workflow.steps.iter().find(|s| s.id == "loop_guard").unwrap();
+        assert_eq!(step.builtin.as_deref(), Some("loop_guard"));
+        assert!(step.is_guard, "LoopGuard step should have is_guard=true");
+    }
+
+    #[test]
+    fn normalize_skips_capability_if_builtin_already_set() {
+        let mut step = make_step("qa", Some(WorkflowStepType::Qa), true);
+        step.builtin = Some("custom_builtin".to_string());
+        let mut workflow = make_workflow(vec![step]);
+        normalize_workflow_config(&mut workflow);
+        let qa_step = workflow.steps.iter().find(|s| s.id == "qa").unwrap();
+        // builtin was set, so required_capability should NOT be overridden
+        assert_eq!(qa_step.builtin.as_deref(), Some("custom_builtin"));
+        assert!(qa_step.required_capability.is_none());
+    }
+
+    #[test]
+    fn normalize_skips_capability_if_command_already_set() {
+        let mut step = make_step("qa", Some(WorkflowStepType::Qa), true);
+        step.command = Some("echo test".to_string());
+        let mut workflow = make_workflow(vec![step]);
+        normalize_workflow_config(&mut workflow);
+        let qa_step = workflow.steps.iter().find(|s| s.id == "qa").unwrap();
+        assert!(qa_step.required_capability.is_none());
+    }
+
+    #[test]
+    fn normalize_adds_missing_standard_steps_as_disabled() {
+        let mut workflow = make_workflow(vec![
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        normalize_workflow_config(&mut workflow);
+        // Should add init_once, plan, qa, ticket_scan, fix, retest as disabled
+        let init_step = workflow.steps.iter().find(|s| s.step_type == Some(WorkflowStepType::InitOnce));
+        assert!(init_step.is_some(), "should add init_once step");
+        assert!(!init_step.unwrap().enabled, "added init_once should be disabled");
+
+        let plan_step = workflow.steps.iter().find(|s| s.step_type == Some(WorkflowStepType::Plan));
+        assert!(plan_step.is_some(), "should add plan step");
+        assert!(!plan_step.unwrap().enabled, "added plan should be disabled");
+    }
+
+    #[test]
+    fn normalize_does_not_duplicate_existing_step_types() {
+        let mut workflow = make_workflow(vec![
+            make_step("plan", Some(WorkflowStepType::Plan), true),
+        ]);
+        normalize_workflow_config(&mut workflow);
+        let plan_count = workflow.steps.iter().filter(|s| s.step_type == Some(WorkflowStepType::Plan)).count();
+        assert_eq!(plan_count, 1, "should not duplicate already-present plan step");
+    }
+
+    #[test]
+    fn normalize_clears_qa_fix_retest_legacy_fields() {
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.qa = Some("qa_template".to_string());
+        workflow.fix = Some("fix_template".to_string());
+        workflow.retest = Some("retest_template".to_string());
+        normalize_workflow_config(&mut workflow);
+        assert!(workflow.qa.is_none(), "qa should be cleared");
+        assert!(workflow.fix.is_none(), "fix should be cleared");
+        assert!(workflow.retest.is_none(), "retest should be cleared");
+    }
+
+    #[test]
+    fn normalize_sets_default_finalize_rules_when_empty() {
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        assert!(workflow.finalize.rules.is_empty());
+        normalize_workflow_config(&mut workflow);
+        assert!(
+            !workflow.finalize.rules.is_empty(),
+            "should set default finalize rules when empty"
+        );
+    }
+
+    #[test]
+    fn normalize_clears_guard_agent_template() {
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.loop_policy.guard.agent_template = Some("old_template".to_string());
+        normalize_workflow_config(&mut workflow);
+        assert!(
+            workflow.loop_policy.guard.agent_template.is_none(),
+            "agent_template should be cleared"
+        );
+    }
+
+    #[test]
+    fn normalize_fills_empty_step_id_from_step_type() {
+        let mut step = make_step("", Some(WorkflowStepType::Plan), true);
+        step.id = "   ".to_string(); // whitespace-only
+        let mut workflow = make_workflow(vec![step]);
+        normalize_workflow_config(&mut workflow);
+        let plan_step = workflow.steps.iter().find(|s| s.step_type == Some(WorkflowStepType::Plan)).unwrap();
+        assert_eq!(plan_step.id, "plan", "empty id should be filled from step_type");
+    }
+
+    #[test]
+    fn normalize_resolves_step_type_from_key_when_none() {
+        // Step with no step_type but id matches a known type
+        let mut step = make_step("plan", None, true);
+        step.required_capability = Some("plan".to_string());
+        let mut workflow = make_workflow(vec![step]);
+        normalize_workflow_config(&mut workflow);
+        let step = workflow.steps.iter().find(|s| s.id == "plan").unwrap();
+        assert_eq!(step.step_type, Some(WorkflowStepType::Plan));
+    }
+
+    #[test]
+    fn normalize_enables_ticket_scan_when_fix_only() {
+        // fix enabled, qa disabled, retest disabled, no prior ticket_scan
+        let mut workflow = make_workflow(vec![
+            make_command_step("fix", Some(WorkflowStepType::Fix), "echo fix"),
+        ]);
+        normalize_workflow_config(&mut workflow);
+        let scan = workflow.steps.iter().find(|s| s.step_type == Some(WorkflowStepType::TicketScan));
+        assert!(scan.is_some(), "ticket_scan should exist");
+        assert!(scan.unwrap().enabled, "ticket_scan should be enabled when fix is enabled but qa is not");
+    }
+
+    #[test]
+    fn normalize_does_not_enable_ticket_scan_when_qa_also_enabled() {
+        let mut workflow = make_workflow(vec![
+            make_command_step("qa", Some(WorkflowStepType::Qa), "echo qa"),
+            make_command_step("fix", Some(WorkflowStepType::Fix), "echo fix"),
+        ]);
+        normalize_workflow_config(&mut workflow);
+        let scan = workflow.steps.iter().find(|s| s.step_type == Some(WorkflowStepType::TicketScan));
+        // ticket_scan should still exist (as disabled placeholder) since it wasn't in steps
+        if let Some(s) = scan {
+            assert!(!s.enabled, "ticket_scan should NOT be auto-enabled when qa is also enabled");
+        }
+    }
+
+    // ======= validate_workflow_config tests =======
+
+    #[test]
+    fn validate_workflow_rejects_empty_steps() {
+        let workflow = make_workflow(vec![]);
+        let config = OrchestratorConfig::default();
+        let result = validate_workflow_config(&config, &workflow, "test-wf");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("at least one step"));
+    }
+
+    #[test]
+    fn validate_workflow_rejects_no_enabled_steps() {
+        let workflow = make_workflow(vec![
+            make_step("qa", Some(WorkflowStepType::Qa), false),
+        ]);
+        let config = OrchestratorConfig::default();
+        let result = validate_workflow_config(&config, &workflow, "test-wf");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("no enabled steps"));
+    }
+
+    #[test]
+    fn validate_workflow_rejects_missing_agent_template() {
+        // Step has no builtin, command, or chain_steps, and no agent provides the template
+        let workflow = make_workflow(vec![
+            make_step("qa", Some(WorkflowStepType::Qa), true),
+        ]);
+        let config = OrchestratorConfig::default();
+        let result = validate_workflow_config(&config, &workflow, "test-wf");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("no agent has template"));
+    }
+
+    #[test]
+    fn validate_workflow_accepts_step_with_agent_template() {
+        let workflow = make_workflow(vec![
+            make_step("qa", Some(WorkflowStepType::Qa), true),
+        ]);
+        let config = make_config_with_agent("qa", "qa_template.md");
+        let result = validate_workflow_config(&config, &workflow, "test-wf");
+        assert!(result.is_ok(), "should accept step when agent has template: {:?}", result.err());
+    }
+
+    #[test]
+    fn validate_workflow_accepts_builtin_step_without_agent() {
+        let workflow = make_workflow(vec![
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        let config = OrchestratorConfig::default();
+        let result = validate_workflow_config(&config, &workflow, "test-wf");
+        assert!(result.is_ok(), "builtin steps should not require agent: {:?}", result.err());
+    }
+
+    #[test]
+    fn validate_workflow_accepts_command_step_without_agent() {
+        let workflow = make_workflow(vec![
+            make_command_step("build", Some(WorkflowStepType::Build), "cargo build"),
+        ]);
+        let config = OrchestratorConfig::default();
+        let result = validate_workflow_config(&config, &workflow, "test-wf");
+        assert!(result.is_ok(), "command steps should not require agent: {:?}", result.err());
+    }
+
+    #[test]
+    fn validate_workflow_accepts_chain_steps_without_agent() {
+        let mut step = make_step("smoke_chain", Some(WorkflowStepType::SmokeChain), true);
+        step.chain_steps = vec![make_command_step("sub", None, "echo sub")];
+        let workflow = make_workflow(vec![step]);
+        let config = OrchestratorConfig::default();
+        let result = validate_workflow_config(&config, &workflow, "test-wf");
+        assert!(result.is_ok(), "chain_steps should count as self-contained: {:?}", result.err());
+    }
+
+    #[test]
+    fn validate_workflow_rejects_zero_max_cycles() {
+        let mut workflow = make_workflow(vec![
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        workflow.loop_policy.guard.max_cycles = Some(0);
+        let config = OrchestratorConfig::default();
+        let result = validate_workflow_config(&config, &workflow, "test-wf");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("max_cycles must be > 0"));
+    }
+
+    #[test]
+    fn validate_workflow_rejects_fixed_without_max_cycles() {
+        let mut workflow = make_workflow(vec![
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        workflow.loop_policy.mode = LoopMode::Fixed;
+        workflow.loop_policy.guard.max_cycles = None;
+        let config = OrchestratorConfig::default();
+        let result = validate_workflow_config(&config, &workflow, "test-wf");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("loop.mode=fixed requires guard.max_cycles"));
+    }
+
+    #[test]
+    fn validate_workflow_accepts_fixed_with_max_cycles() {
+        let mut workflow = make_workflow(vec![
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        workflow.loop_policy.mode = LoopMode::Fixed;
+        workflow.loop_policy.guard.max_cycles = Some(2);
+        let config = OrchestratorConfig::default();
+        let result = validate_workflow_config(&config, &workflow, "test-wf");
+        assert!(result.is_ok(), "fixed mode with max_cycles should pass: {:?}", result.err());
+    }
+
+    #[test]
+    fn validate_workflow_rejects_guard_enabled_without_loop_guard_agent() {
+        let mut workflow = make_workflow(vec![
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        workflow.loop_policy.guard.enabled = true;
+        let config = OrchestratorConfig::default();
+        let result = validate_workflow_config(&config, &workflow, "test-wf");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("no agent has loop_guard template"));
+    }
+
+    #[test]
+    fn validate_workflow_accepts_guard_enabled_with_loop_guard_agent() {
+        let mut workflow = make_workflow(vec![
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        workflow.loop_policy.guard.enabled = true;
+        let config = make_config_with_agent("loop_guard", "loop_guard_template.md");
+        let result = validate_workflow_config(&config, &workflow, "test-wf");
+        assert!(result.is_ok(), "guard with agent should pass: {:?}", result.err());
+    }
+
+    #[test]
+    fn validate_workflow_skips_disabled_steps() {
+        // Disabled step has no agent - should be fine
+        let workflow = make_workflow(vec![
+            make_step("qa", Some(WorkflowStepType::Qa), false),
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        let config = OrchestratorConfig::default();
+        let result = validate_workflow_config(&config, &workflow, "test-wf");
+        assert!(result.is_ok(), "disabled step missing agent should not error: {:?}", result.err());
+    }
+
+    #[test]
+    fn validate_workflow_allows_ticket_scan_without_agent() {
+        let workflow = make_workflow(vec![
+            make_step("ticket_scan", Some(WorkflowStepType::TicketScan), true),
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        let config = OrchestratorConfig::default();
+        let result = validate_workflow_config(&config, &workflow, "test-wf");
+        assert!(result.is_ok(), "ticket_scan should not require agent: {:?}", result.err());
+    }
+
+    // ======= build_execution_plan tests =======
+
+    #[test]
+    fn build_execution_plan_returns_only_enabled_steps() {
+        let workflow = make_workflow(vec![
+            make_builtin_step("self_test", "self_test", true),
+            make_step("qa", Some(WorkflowStepType::Qa), false),
+        ]);
+        let config = OrchestratorConfig::default();
+        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+        assert_eq!(plan.steps.len(), 1, "should only contain enabled steps");
+        assert_eq!(plan.steps[0].id, "self_test");
+    }
+
+    #[test]
+    fn build_execution_plan_copies_step_fields() {
+        let mut step = make_command_step("build", Some(WorkflowStepType::Build), "cargo build");
+        step.repeatable = false;
+        step.tty = true;
+        step.outputs = vec!["result".to_string()];
+        step.pipe_to = Some("next_step".to_string());
+        step.cost_preference = Some(crate::config::CostPreference::Quality);
+        step.scope = Some(crate::config::StepScope::Task);
+        let workflow = make_workflow(vec![step]);
+        let config = OrchestratorConfig::default();
+        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+        let s = &plan.steps[0];
+        assert_eq!(s.id, "build");
+        assert_eq!(s.step_type, Some(WorkflowStepType::Build));
+        assert_eq!(s.command.as_deref(), Some("cargo build"));
+        assert!(!s.repeatable);
+        assert!(s.tty);
+        assert_eq!(s.outputs, vec!["result"]);
+        assert_eq!(s.pipe_to.as_deref(), Some("next_step"));
+        assert_eq!(s.cost_preference, Some(crate::config::CostPreference::Quality));
+        assert_eq!(s.scope, Some(crate::config::StepScope::Task));
+    }
+
+    #[test]
+    fn build_execution_plan_includes_chain_steps() {
+        let mut step = make_step("smoke_chain", Some(WorkflowStepType::SmokeChain), true);
+        step.chain_steps = vec![
+            make_command_step("sub1", Some(WorkflowStepType::Build), "cargo build"),
+            make_command_step("sub2", Some(WorkflowStepType::Test), "cargo test"),
+        ];
+        let workflow = make_workflow(vec![step]);
+        let config = OrchestratorConfig::default();
+        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+        assert_eq!(plan.steps[0].chain_steps.len(), 2);
+        assert_eq!(plan.steps[0].chain_steps[0].id, "sub1");
+        assert_eq!(plan.steps[0].chain_steps[1].id, "sub2");
+    }
+
+    #[test]
+    fn build_execution_plan_copies_loop_policy() {
+        let mut workflow = make_workflow(vec![
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        workflow.loop_policy.mode = LoopMode::Fixed;
+        workflow.loop_policy.guard.max_cycles = Some(3);
+        let config = OrchestratorConfig::default();
+        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+        assert!(matches!(plan.loop_policy.mode, LoopMode::Fixed));
+        assert_eq!(plan.loop_policy.guard.max_cycles, Some(3));
+    }
+
+    #[test]
+    fn build_execution_plan_copies_finalize_config() {
+        let mut workflow = make_workflow(vec![
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        workflow.finalize = crate::config::default_workflow_finalize_config();
+        let config = OrchestratorConfig::default();
+        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+        assert!(
+            !plan.finalize.rules.is_empty(),
+            "finalize rules should be copied"
+        );
+    }
+
+    #[test]
+    fn build_execution_plan_fails_on_invalid_workflow() {
+        let workflow = make_workflow(vec![]); // empty steps
+        let config = OrchestratorConfig::default();
+        let result = build_execution_plan(&config, &workflow, "test-wf");
+        assert!(result.is_err(), "should fail validation");
+    }
+
+    // ======= resolve_workspace_path tests =======
+
+    #[test]
+    fn resolve_workspace_path_joins_rel_path() {
+        let root = std::env::temp_dir();
+        let result = resolve_workspace_path(&root, "subdir/file.md", "test_field");
+        assert!(result.is_ok());
+        let path = result.unwrap();
+        assert!(path.starts_with(&root));
+        assert!(path.ends_with("subdir/file.md"));
+    }
+
+    #[test]
+    fn resolve_workspace_path_rejects_absolute_path() {
+        let root = std::env::temp_dir();
+        let result = resolve_workspace_path(&root, "/etc/passwd", "test_field");
+        assert!(result.is_err(), "should reject absolute path");
+    }
+
+    #[test]
+    fn resolve_workspace_path_rejects_empty_path() {
+        let root = std::env::temp_dir();
+        let result = resolve_workspace_path(&root, "", "test_field");
+        assert!(result.is_err(), "should reject empty path");
+    }
+
+    #[test]
+    fn resolve_workspace_path_rejects_whitespace_path() {
+        let root = std::env::temp_dir();
+        let result = resolve_workspace_path(&root, "   ", "test_field");
+        assert!(result.is_err(), "should reject whitespace-only path");
+    }
+
+    #[test]
+    fn resolve_workspace_path_validates_existing_path_within_root() {
+        // Use the temp dir itself as root, and "." as the path
+        let root = std::env::temp_dir();
+        // Create a subdir to test with
+        let sub = root.join(format!("test-resolve-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&sub).unwrap();
+        let rel = sub.file_name().unwrap().to_str().unwrap();
+        let result = resolve_workspace_path(&root, rel, "test_field");
+        assert!(result.is_ok(), "existing subdir within root should pass: {:?}", result.err());
+        std::fs::remove_dir_all(&sub).ok();
+    }
+
+    // ======= ensure_within_root tests =======
+
+    #[test]
+    fn ensure_within_root_accepts_child_path() {
+        let root = std::env::temp_dir();
+        let child = root.join(format!("test-within-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&child).unwrap();
+        let result = ensure_within_root(&root, &child, "test");
+        assert!(result.is_ok());
+        std::fs::remove_dir_all(&child).ok();
+    }
+
+    #[test]
+    fn ensure_within_root_rejects_nonexistent_path() {
+        let root = std::env::temp_dir();
+        let nonexistent = root.join("nonexistent-path-xyz-abc");
+        let result = ensure_within_root(&root, &nonexistent, "test");
+        assert!(result.is_err(), "should fail for nonexistent path");
+    }
+
+    // ======= validate_self_referential_safety additional tests =======
+
+    #[test]
+    fn validate_self_referential_safety_warns_disabled_auto_rollback() {
+        let workflow = WorkflowConfig {
+            steps: vec![make_step("implement", Some(WorkflowStepType::Implement), true)],
+            safety: crate::config::SafetyConfig {
+                checkpoint_strategy: crate::config::CheckpointStrategy::GitStash,
+                auto_rollback: false, // should trigger warning
+                max_consecutive_failures: 3,
+                step_timeout_secs: None,
+                binary_snapshot: false,
+            },
+            ..make_workflow(vec![])
+        };
+        // Should pass (warning only, not error)
+        let result = validate_self_referential_safety(&workflow, "test-ws");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_self_referential_safety_passes_with_git_stash() {
+        let workflow = WorkflowConfig {
+            steps: vec![
+                make_step("implement", Some(WorkflowStepType::Implement), true),
+                make_step("self_test", Some(WorkflowStepType::SelfTest), true),
+            ],
+            safety: crate::config::SafetyConfig {
+                checkpoint_strategy: crate::config::CheckpointStrategy::GitStash,
+                auto_rollback: true,
+                max_consecutive_failures: 3,
+                step_timeout_secs: None,
+                binary_snapshot: false,
+            },
+            ..make_workflow(vec![])
+        };
+        let result = validate_self_referential_safety(&workflow, "test-ws");
+        assert!(result.is_ok());
+    }
+
+    // ======= normalize_config tests =======
+
+    #[test]
+    fn normalize_config_normalizes_all_workflows() {
+        let mut workflows = HashMap::new();
+        workflows.insert("wf1".to_string(), make_workflow(vec![]));
+        workflows.insert("wf2".to_string(), make_workflow(vec![]));
+        let config = OrchestratorConfig {
+            workflows,
+            ..OrchestratorConfig::default()
+        };
+        let normalized = normalize_config(config);
+        for (_, wf) in &normalized.workflows {
+            assert!(!wf.steps.is_empty(), "all workflows should be normalized");
+        }
+    }
+
+    // ======= resolve_and_validate_workspaces tests =======
+
+    #[test]
+    fn resolve_and_validate_rejects_empty_workspaces() {
+        let config = OrchestratorConfig::default();
+        let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("EMPTY_WORKSPACES"));
+    }
+
+    #[test]
+    fn resolve_and_validate_rejects_empty_agents() {
+        use crate::config::WorkspaceConfig;
+        let mut workspaces = HashMap::new();
+        workspaces.insert(
+            "ws1".to_string(),
+            WorkspaceConfig {
+                root_path: "/tmp".to_string(),
+                qa_targets: vec!["docs".to_string()],
+                ticket_dir: "tickets".to_string(),
+                self_referential: false,
+            },
+        );
+        let config = OrchestratorConfig {
+            workspaces,
+            ..OrchestratorConfig::default()
+        };
+        let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("EMPTY_AGENTS"));
+    }
+
+    #[test]
+    fn resolve_and_validate_rejects_empty_workflows() {
+        use crate::config::{AgentConfig, WorkspaceConfig};
+        let mut workspaces = HashMap::new();
+        workspaces.insert(
+            "ws1".to_string(),
+            WorkspaceConfig {
+                root_path: "/tmp".to_string(),
+                qa_targets: vec!["docs".to_string()],
+                ticket_dir: "tickets".to_string(),
+                self_referential: false,
+            },
+        );
+        let mut agents = HashMap::new();
+        agents.insert("agent1".to_string(), AgentConfig::default());
+        let config = OrchestratorConfig {
+            workspaces,
+            agents,
+            ..OrchestratorConfig::default()
+        };
+        let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("EMPTY_WORKFLOWS"));
+    }
+
+    #[test]
+    fn resolve_and_validate_rejects_empty_workspace_id() {
+        use crate::config::{AgentConfig, WorkspaceConfig};
+        let mut workspaces = HashMap::new();
+        workspaces.insert(
+            "".to_string(), // empty id
+            WorkspaceConfig {
+                root_path: "/tmp".to_string(),
+                qa_targets: vec!["docs".to_string()],
+                ticket_dir: "tickets".to_string(),
+                self_referential: false,
+            },
+        );
+        let mut agents = HashMap::new();
+        agents.insert("agent1".to_string(), AgentConfig::default());
+        let mut workflows = HashMap::new();
+        workflows.insert("wf1".to_string(), make_workflow(vec![make_builtin_step("self_test", "self_test", true)]));
+        let config = OrchestratorConfig {
+            workspaces,
+            agents,
+            workflows,
+            defaults: crate::config::ConfigDefaults {
+                project: "default".to_string(),
+                workspace: "".to_string(),
+                workflow: "wf1".to_string(),
+            },
+            ..OrchestratorConfig::default()
+        };
+        let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("INVALID_WORKSPACE"));
+    }
+
+    #[test]
+    fn resolve_and_validate_rejects_empty_qa_targets() {
+        use crate::config::{AgentConfig, WorkspaceConfig};
+        let mut workspaces = HashMap::new();
+        workspaces.insert(
+            "ws1".to_string(),
+            WorkspaceConfig {
+                root_path: "/tmp".to_string(),
+                qa_targets: vec![], // empty
+                ticket_dir: "tickets".to_string(),
+                self_referential: false,
+            },
+        );
+        let mut agents = HashMap::new();
+        agents.insert("agent1".to_string(), AgentConfig::default());
+        let mut workflows = HashMap::new();
+        workflows.insert("wf1".to_string(), make_workflow(vec![make_builtin_step("self_test", "self_test", true)]));
+        let config = OrchestratorConfig {
+            workspaces,
+            agents,
+            workflows,
+            defaults: crate::config::ConfigDefaults {
+                project: "default".to_string(),
+                workspace: "ws1".to_string(),
+                workflow: "wf1".to_string(),
+            },
+            ..OrchestratorConfig::default()
+        };
+        let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("qa_targets cannot be empty"));
+    }
+
+    #[test]
+    fn resolve_and_validate_rejects_missing_default_workflow() {
+        use crate::config::{AgentConfig, WorkspaceConfig};
+        let ws_root = std::env::temp_dir().join(format!("test-ws-root-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&ws_root).unwrap();
+        let qa_dir = ws_root.join("docs");
+        std::fs::create_dir_all(&qa_dir).unwrap();
+        let ticket_dir = ws_root.join("tickets");
+        std::fs::create_dir_all(&ticket_dir).unwrap();
+
+        let mut workspaces = HashMap::new();
+        workspaces.insert(
+            "ws1".to_string(),
+            WorkspaceConfig {
+                root_path: ws_root.to_string_lossy().to_string(),
+                qa_targets: vec!["docs".to_string()],
+                ticket_dir: "tickets".to_string(),
+                self_referential: false,
+            },
+        );
+        let mut agents = HashMap::new();
+        agents.insert("agent1".to_string(), AgentConfig::default());
+        let mut workflows = HashMap::new();
+        workflows.insert("wf1".to_string(), make_workflow(vec![make_builtin_step("self_test", "self_test", true)]));
+        let config = OrchestratorConfig {
+            workspaces,
+            agents,
+            workflows,
+            defaults: crate::config::ConfigDefaults {
+                project: "default".to_string(),
+                workspace: "ws1".to_string(),
+                workflow: "nonexistent_wf".to_string(), // does not exist
+            },
+            ..OrchestratorConfig::default()
+        };
+        let result = resolve_and_validate_workspaces(Path::new("/"), &config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("defaults.workflow"));
+        std::fs::remove_dir_all(&ws_root).ok();
+    }
+
+    // ======= resolve_and_validate_projects tests =======
+
+    #[test]
+    fn resolve_and_validate_projects_empty_config() {
+        let config = OrchestratorConfig::default();
+        let result = resolve_and_validate_projects(Path::new("/tmp"), &config);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn resolve_and_validate_projects_resolves_workspaces() {
+        use crate::config::{ProjectConfig, WorkspaceConfig};
+        let mut projects = HashMap::new();
+        let mut ws = HashMap::new();
+        ws.insert(
+            "proj-ws".to_string(),
+            WorkspaceConfig {
+                root_path: "some/relative/path".to_string(),
+                qa_targets: vec!["docs".to_string()],
+                ticket_dir: "tickets".to_string(),
+                self_referential: false,
+            },
+        );
+        projects.insert(
+            "proj1".to_string(),
+            ProjectConfig {
+                description: None,
+                workspaces: ws,
+                agents: HashMap::new(),
+                workflows: HashMap::new(),
+            },
+        );
+        let config = OrchestratorConfig {
+            projects,
+            ..OrchestratorConfig::default()
+        };
+        let result = resolve_and_validate_projects(Path::new("/app"), &config).unwrap();
+        assert!(result.contains_key("proj1"));
+        let proj = &result["proj1"];
+        assert!(proj.workspaces.contains_key("proj-ws"));
+        assert!(proj.workspaces["proj-ws"].root_path.starts_with("/app"));
+    }
+
+    // ======= enforce_deletion_guards tests =======
+
+    #[test]
+    fn enforce_deletion_guards_allows_no_removals() {
+        let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
+        crate::db::init_schema(&db_path).unwrap();
+        let conn = crate::db::open_conn(&db_path).unwrap();
+        let config = OrchestratorConfig::default();
+        let result = enforce_deletion_guards(&conn, &config, &config);
+        assert!(result.is_ok());
+        std::fs::remove_file(&db_path).ok();
+    }
+
+    #[test]
+    fn enforce_deletion_guards_allows_removing_unused_workspace() {
+        use crate::config::WorkspaceConfig;
+        let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
+        crate::db::init_schema(&db_path).unwrap();
+        let conn = crate::db::open_conn(&db_path).unwrap();
+        let mut previous_workspaces = HashMap::new();
+        previous_workspaces.insert(
+            "ws-to-remove".to_string(),
+            WorkspaceConfig {
+                root_path: "/tmp".to_string(),
+                qa_targets: vec!["docs".to_string()],
+                ticket_dir: "tickets".to_string(),
+                self_referential: false,
+            },
+        );
+        let previous = OrchestratorConfig {
+            workspaces: previous_workspaces,
+            ..OrchestratorConfig::default()
+        };
+        let candidate = OrchestratorConfig::default(); // ws removed
+        let result = enforce_deletion_guards(&conn, &previous, &candidate);
+        assert!(result.is_ok(), "removing unused workspace should be allowed");
+        std::fs::remove_file(&db_path).ok();
+    }
+
+    #[test]
+    fn enforce_deletion_guards_allows_removing_unused_workflow() {
+        let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
+        crate::db::init_schema(&db_path).unwrap();
+        let conn = crate::db::open_conn(&db_path).unwrap();
+        let mut previous_workflows = HashMap::new();
+        previous_workflows.insert("wf-to-remove".to_string(), make_workflow(vec![]));
+        let previous = OrchestratorConfig {
+            workflows: previous_workflows,
+            ..OrchestratorConfig::default()
+        };
+        let candidate = OrchestratorConfig::default();
+        let result = enforce_deletion_guards(&conn, &previous, &candidate);
+        assert!(result.is_ok(), "removing unused workflow should be allowed");
+        std::fs::remove_file(&db_path).ok();
+    }
 }

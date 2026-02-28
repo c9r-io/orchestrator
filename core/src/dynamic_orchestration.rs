@@ -1064,6 +1064,882 @@ mod tests {
         assert!(none.is_none());
     }
 
+    // ===== New tests for improved coverage =====
+
+    #[test]
+    fn test_prehook_decision_default_is_run() {
+        let decision = PrehookDecision::default();
+        assert!(decision.should_run());
+        assert!(!decision.is_branch());
+        assert!(!decision.is_dynamic_add());
+        assert!(!decision.is_transform());
+    }
+
+    #[test]
+    fn test_prehook_decision_skip_does_not_run() {
+        let decision = PrehookDecision::Skip {
+            reason: "test reason".to_string(),
+        };
+        assert!(!decision.should_run());
+        assert!(!decision.is_branch());
+        assert!(!decision.is_dynamic_add());
+        assert!(!decision.is_transform());
+    }
+
+    #[test]
+    fn test_prehook_decision_serde_run() {
+        let decision = PrehookDecision::Run;
+        let json = serde_json::to_string(&decision).unwrap();
+        let parsed: PrehookDecision = serde_json::from_str(&json).unwrap();
+        assert!(parsed.should_run());
+    }
+
+    #[test]
+    fn test_prehook_decision_serde_skip() {
+        let json = r#"{"action":"Skip","data":{"reason":"no need"}}"#;
+        let decision: PrehookDecision = serde_json::from_str(json).unwrap();
+        assert!(!decision.should_run());
+    }
+
+    #[test]
+    fn test_prehook_decision_serde_branch() {
+        let json = r#"{"action":"Branch","data":{"target":"fix","context":{}}}"#;
+        let decision: PrehookDecision = serde_json::from_str(json).unwrap();
+        assert!(decision.is_branch());
+    }
+
+    #[test]
+    fn test_dynamic_step_pool_empty() {
+        let pool = DynamicStepPool::new();
+        assert!(pool.steps.is_empty());
+        let ctx = StepPrehookContext::default();
+        let matches = pool.find_matching_steps(&ctx);
+        assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn test_dynamic_step_pool_get() {
+        let mut pool = DynamicStepPool::new();
+        pool.add_step(DynamicStepConfig {
+            id: "s1".to_string(),
+            description: Some("desc".to_string()),
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: None,
+            priority: 0,
+            max_runs: Some(3),
+        });
+        assert!(pool.get("s1").is_some());
+        assert_eq!(pool.get("s1").unwrap().max_runs, Some(3));
+        assert!(pool.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_dynamic_step_pool_overwrite() {
+        let mut pool = DynamicStepPool::new();
+        pool.add_step(DynamicStepConfig {
+            id: "s1".to_string(),
+            description: None,
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: None,
+            priority: 1,
+            max_runs: None,
+        });
+        pool.add_step(DynamicStepConfig {
+            id: "s1".to_string(),
+            description: None,
+            step_type: "qa".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: None,
+            priority: 99,
+            max_runs: None,
+        });
+        assert_eq!(pool.steps.len(), 1);
+        assert_eq!(pool.get("s1").unwrap().step_type, "qa");
+        assert_eq!(pool.get("s1").unwrap().priority, 99);
+    }
+
+    #[test]
+    fn test_dynamic_step_no_trigger_does_not_match() {
+        let step = DynamicStepConfig {
+            id: "s1".to_string(),
+            description: None,
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: None,
+            priority: 0,
+            max_runs: None,
+        };
+        let ctx = StepPrehookContext {
+            active_ticket_count: 5,
+            ..Default::default()
+        };
+        assert!(!step.matches(&ctx));
+    }
+
+    #[test]
+    fn test_dynamic_step_matches_qa_exit_code_nonzero() {
+        let step = DynamicStepConfig {
+            id: "s1".to_string(),
+            description: None,
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: Some("qa_exit_code != 0".to_string()),
+            priority: 0,
+            max_runs: None,
+        };
+        let ctx = StepPrehookContext {
+            qa_exit_code: Some(1),
+            ..Default::default()
+        };
+        assert!(step.matches(&ctx));
+    }
+
+    #[test]
+    fn test_dynamic_step_matches_qa_exit_code_zero() {
+        let step = DynamicStepConfig {
+            id: "s1".to_string(),
+            description: None,
+            step_type: "done".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: Some("qa_exit_code == 0".to_string()),
+            priority: 0,
+            max_runs: None,
+        };
+        let ctx = StepPrehookContext {
+            qa_exit_code: Some(0),
+            ..Default::default()
+        };
+        assert!(step.matches(&ctx));
+    }
+
+    #[test]
+    fn test_dynamic_step_matches_qa_confidence_high() {
+        let step = DynamicStepConfig {
+            id: "s1".to_string(),
+            description: None,
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: Some("qa_confidence > 0.8".to_string()),
+            priority: 0,
+            max_runs: None,
+        };
+        let ctx = StepPrehookContext {
+            qa_confidence: Some(0.9),
+            ..Default::default()
+        };
+        assert!(step.matches(&ctx));
+    }
+
+    #[test]
+    fn test_dynamic_step_matches_qa_confidence_low() {
+        let step = DynamicStepConfig {
+            id: "s1".to_string(),
+            description: None,
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: Some("qa_confidence > 0.8".to_string()),
+            priority: 0,
+            max_runs: None,
+        };
+        let ctx = StepPrehookContext {
+            qa_confidence: Some(0.3),
+            ..Default::default()
+        };
+        assert!(!step.matches(&ctx));
+    }
+
+    #[test]
+    fn test_dynamic_step_matches_qa_confidence_medium() {
+        let step = DynamicStepConfig {
+            id: "s1".to_string(),
+            description: None,
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: Some("qa_confidence > 0.5".to_string()),
+            priority: 0,
+            max_runs: None,
+        };
+        let ctx = StepPrehookContext {
+            qa_confidence: Some(0.6),
+            ..Default::default()
+        };
+        assert!(step.matches(&ctx));
+    }
+
+    #[test]
+    fn test_dynamic_step_matches_cycle_gt_2() {
+        let step = DynamicStepConfig {
+            id: "s1".to_string(),
+            description: None,
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: Some("cycle > 2".to_string()),
+            priority: 0,
+            max_runs: None,
+        };
+        let ctx = StepPrehookContext {
+            cycle: 3,
+            ..Default::default()
+        };
+        assert!(step.matches(&ctx));
+    }
+
+    #[test]
+    fn test_dynamic_step_matches_cycle_gt_0() {
+        let step = DynamicStepConfig {
+            id: "s1".to_string(),
+            description: None,
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: Some("cycle > 0".to_string()),
+            priority: 0,
+            max_runs: None,
+        };
+        let ctx = StepPrehookContext {
+            cycle: 1,
+            ..Default::default()
+        };
+        assert!(step.matches(&ctx));
+    }
+
+    #[test]
+    fn test_dynamic_step_does_not_match_cycle_zero() {
+        let step = DynamicStepConfig {
+            id: "s1".to_string(),
+            description: None,
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: Some("cycle > 0".to_string()),
+            priority: 0,
+            max_runs: None,
+        };
+        let ctx = StepPrehookContext {
+            cycle: 0,
+            ..Default::default()
+        };
+        assert!(!step.matches(&ctx));
+    }
+
+    #[test]
+    fn test_dynamic_step_matches_active_tickets_zero() {
+        let step = DynamicStepConfig {
+            id: "s1".to_string(),
+            description: None,
+            step_type: "done".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: Some("active_ticket_count == 0".to_string()),
+            priority: 0,
+            max_runs: None,
+        };
+        let ctx = StepPrehookContext {
+            active_ticket_count: 0,
+            ..Default::default()
+        };
+        assert!(step.matches(&ctx));
+    }
+
+    #[test]
+    fn test_dynamic_step_unknown_condition_returns_false() {
+        let step = DynamicStepConfig {
+            id: "s1".to_string(),
+            description: None,
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: Some("some_unknown_field == true".to_string()),
+            priority: 0,
+            max_runs: None,
+        };
+        let ctx = StepPrehookContext::default();
+        assert!(!step.matches(&ctx));
+    }
+
+    #[test]
+    fn test_dynamic_step_pool_priority_three_steps() {
+        let mut pool = DynamicStepPool::new();
+        pool.add_step(DynamicStepConfig {
+            id: "low".to_string(),
+            description: None,
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: Some("active_ticket_count > 0".to_string()),
+            priority: -5,
+            max_runs: None,
+        });
+        pool.add_step(DynamicStepConfig {
+            id: "mid".to_string(),
+            description: None,
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: Some("active_ticket_count > 0".to_string()),
+            priority: 0,
+            max_runs: None,
+        });
+        pool.add_step(DynamicStepConfig {
+            id: "high".to_string(),
+            description: None,
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: Some("active_ticket_count > 0".to_string()),
+            priority: 50,
+            max_runs: None,
+        });
+        let ctx = StepPrehookContext {
+            active_ticket_count: 1,
+            ..Default::default()
+        };
+        let matches = pool.find_matching_steps(&ctx);
+        assert_eq!(matches.len(), 3);
+        assert_eq!(matches[0].id, "high");
+        assert_eq!(matches[1].id, "mid");
+        assert_eq!(matches[2].id, "low");
+    }
+
+    #[test]
+    fn test_dynamic_step_pool_no_matches() {
+        let mut pool = DynamicStepPool::new();
+        pool.add_step(DynamicStepConfig {
+            id: "s1".to_string(),
+            description: None,
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: Some("active_ticket_count > 0".to_string()),
+            priority: 10,
+            max_runs: None,
+        });
+        let ctx = StepPrehookContext {
+            active_ticket_count: 0,
+            ..Default::default()
+        };
+        let matches = pool.find_matching_steps(&ctx);
+        assert!(matches.is_empty());
+    }
+
+    // ===== DAG: add_node / add_edge errors =====
+
+    #[test]
+    fn test_dag_add_duplicate_node_error() {
+        let mut plan = DynamicExecutionPlan::new();
+        plan.add_node(WorkflowNode {
+            id: "a".to_string(),
+            step_type: "qa".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+
+        let err = plan
+            .add_node(WorkflowNode {
+                id: "a".to_string(),
+                step_type: "fix".to_string(),
+                agent_id: None,
+                template: None,
+                prehook: None,
+                is_guard: false,
+                repeatable: true,
+            })
+            .unwrap_err();
+        assert!(err.to_string().contains("already exists"));
+    }
+
+    #[test]
+    fn test_dag_add_edge_missing_source() {
+        let mut plan = DynamicExecutionPlan::new();
+        plan.add_node(WorkflowNode {
+            id: "b".to_string(),
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+
+        let err = plan
+            .add_edge(WorkflowEdge {
+                from: "a".to_string(),
+                to: "b".to_string(),
+                condition: None,
+            })
+            .unwrap_err();
+        assert!(err.to_string().contains("Source node"));
+    }
+
+    #[test]
+    fn test_dag_add_edge_missing_target() {
+        let mut plan = DynamicExecutionPlan::new();
+        plan.add_node(WorkflowNode {
+            id: "a".to_string(),
+            step_type: "qa".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+
+        let err = plan
+            .add_edge(WorkflowEdge {
+                from: "a".to_string(),
+                to: "b".to_string(),
+                condition: None,
+            })
+            .unwrap_err();
+        assert!(err.to_string().contains("Target node"));
+    }
+
+    // ===== DAG: entry/exit nodes =====
+
+    #[test]
+    fn test_dag_entry_exit_nodes() {
+        let mut plan = DynamicExecutionPlan::new();
+        plan.add_node(WorkflowNode {
+            id: "start".to_string(),
+            step_type: "init".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+        plan.add_node(WorkflowNode {
+            id: "mid".to_string(),
+            step_type: "qa".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+        plan.add_node(WorkflowNode {
+            id: "end".to_string(),
+            step_type: "done".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+        plan.add_edge(WorkflowEdge {
+            from: "start".to_string(),
+            to: "mid".to_string(),
+            condition: None,
+        })
+        .unwrap();
+        plan.add_edge(WorkflowEdge {
+            from: "mid".to_string(),
+            to: "end".to_string(),
+            condition: None,
+        })
+        .unwrap();
+
+        let entries: Vec<&str> = plan.get_entry_nodes().iter().map(|n| n.id.as_str()).collect();
+        assert_eq!(entries.len(), 1);
+        assert!(entries.contains(&"start"));
+
+        let exits: Vec<&str> = plan.get_exit_nodes().iter().map(|n| n.id.as_str()).collect();
+        assert_eq!(exits.len(), 1);
+        assert!(exits.contains(&"end"));
+    }
+
+    #[test]
+    fn test_dag_empty_plan_no_entries_no_exits() {
+        let plan = DynamicExecutionPlan::new();
+        assert!(plan.get_entry_nodes().is_empty());
+        assert!(plan.get_exit_nodes().is_empty());
+        assert!(!plan.has_cycles());
+    }
+
+    #[test]
+    fn test_dag_single_node_is_both_entry_and_exit() {
+        let mut plan = DynamicExecutionPlan::new();
+        plan.add_node(WorkflowNode {
+            id: "only".to_string(),
+            step_type: "qa".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+
+        assert_eq!(plan.get_entry_nodes().len(), 1);
+        assert_eq!(plan.get_exit_nodes().len(), 1);
+        assert!(!plan.has_cycles());
+    }
+
+    // ===== DAG: incoming/outgoing edges =====
+
+    #[test]
+    fn test_dag_incoming_outgoing_edges() {
+        let mut plan = DynamicExecutionPlan::new();
+        plan.add_node(WorkflowNode {
+            id: "a".to_string(),
+            step_type: "qa".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+        plan.add_node(WorkflowNode {
+            id: "b".to_string(),
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+        plan.add_edge(WorkflowEdge {
+            from: "a".to_string(),
+            to: "b".to_string(),
+            condition: None,
+        })
+        .unwrap();
+
+        assert_eq!(plan.get_outgoing_edges("a").len(), 1);
+        assert_eq!(plan.get_incoming_edges("b").len(), 1);
+        assert!(plan.get_outgoing_edges("b").is_empty());
+        assert!(plan.get_incoming_edges("a").is_empty());
+        assert!(plan.get_outgoing_edges("nonexistent").is_empty());
+    }
+
+    // ===== DAG: topological sort with cycle =====
+
+    #[test]
+    fn test_dag_topological_sort_cycle_error() {
+        let mut plan = DynamicExecutionPlan::new();
+        plan.add_node(WorkflowNode {
+            id: "a".to_string(),
+            step_type: "qa".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+        plan.add_node(WorkflowNode {
+            id: "b".to_string(),
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+        plan.add_edge(WorkflowEdge {
+            from: "a".to_string(),
+            to: "b".to_string(),
+            condition: None,
+        })
+        .unwrap();
+        plan.add_edge(WorkflowEdge {
+            from: "b".to_string(),
+            to: "a".to_string(),
+            condition: None,
+        })
+        .unwrap();
+
+        let err = plan.topological_sort().unwrap_err();
+        assert!(err.to_string().contains("cycles"));
+    }
+
+    #[test]
+    fn test_dag_topological_sort_empty() {
+        let plan = DynamicExecutionPlan::new();
+        let sorted = plan.topological_sort().unwrap();
+        assert!(sorted.is_empty());
+    }
+
+    #[test]
+    fn test_dag_topological_sort_diamond() {
+        let mut plan = DynamicExecutionPlan::new();
+        for id in &["a", "b", "c", "d"] {
+            plan.add_node(WorkflowNode {
+                id: id.to_string(),
+                step_type: "step".to_string(),
+                agent_id: None,
+                template: None,
+                prehook: None,
+                is_guard: false,
+                repeatable: false,
+            })
+            .unwrap();
+        }
+        // a -> b, a -> c, b -> d, c -> d
+        plan.add_edge(WorkflowEdge { from: "a".to_string(), to: "b".to_string(), condition: None }).unwrap();
+        plan.add_edge(WorkflowEdge { from: "a".to_string(), to: "c".to_string(), condition: None }).unwrap();
+        plan.add_edge(WorkflowEdge { from: "b".to_string(), to: "d".to_string(), condition: None }).unwrap();
+        plan.add_edge(WorkflowEdge { from: "c".to_string(), to: "d".to_string(), condition: None }).unwrap();
+
+        let sorted = plan.topological_sort().unwrap();
+        assert_eq!(sorted.len(), 4);
+        // a must be before b and c; d must be last
+        let pos = |id: &str| sorted.iter().position(|s| s == id).unwrap();
+        assert!(pos("a") < pos("b"));
+        assert!(pos("a") < pos("c"));
+        assert!(pos("b") < pos("d"));
+        assert!(pos("c") < pos("d"));
+    }
+
+    // ===== DAG: find_next_nodes with conditions =====
+
+    #[test]
+    fn test_dag_find_next_nodes_conditional_not_met() {
+        let mut plan = DynamicExecutionPlan::new();
+        plan.add_node(WorkflowNode {
+            id: "a".to_string(),
+            step_type: "qa".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+        plan.add_node(WorkflowNode {
+            id: "b".to_string(),
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+        plan.add_edge(WorkflowEdge {
+            from: "a".to_string(),
+            to: "b".to_string(),
+            condition: Some("active_ticket_count > 0".to_string()),
+        })
+        .unwrap();
+
+        let ctx = StepPrehookContext {
+            active_ticket_count: 0,
+            ..Default::default()
+        };
+        let next = plan.find_next_nodes("a", &ctx);
+        assert!(next.is_empty());
+    }
+
+    #[test]
+    fn test_dag_find_next_nodes_nonexistent_node() {
+        let plan = DynamicExecutionPlan::new();
+        let ctx = StepPrehookContext::default();
+        let next = plan.find_next_nodes("nope", &ctx);
+        assert!(next.is_empty());
+    }
+
+    // ===== DAG: is_completed =====
+
+    #[test]
+    fn test_dag_is_completed_not_completed_when_only_mid_done() {
+        let mut plan = DynamicExecutionPlan::new();
+        plan.add_node(WorkflowNode {
+            id: "start".to_string(),
+            step_type: "init".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+        plan.add_node(WorkflowNode {
+            id: "end".to_string(),
+            step_type: "done".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .unwrap();
+        plan.add_edge(WorkflowEdge {
+            from: "start".to_string(),
+            to: "end".to_string(),
+            condition: None,
+        })
+        .unwrap();
+
+        let mut state = DagExecutionState::default();
+        state.completed_nodes.insert("start".to_string());
+        // "start" is not an exit node, so not completed
+        assert!(!plan.is_completed(&state));
+    }
+
+    // ===== PrehookConfig default =====
+
+    #[test]
+    fn test_prehook_config_default() {
+        let cfg = PrehookConfig::default();
+        assert_eq!(cfg.engine, "cel");
+        assert_eq!(cfg.when, "true");
+        assert!(cfg.reason.is_none());
+        assert!(!cfg.extended);
+    }
+
+    // ===== AdaptivePlannerConfig default =====
+
+    #[test]
+    fn test_adaptive_planner_config_default() {
+        let cfg = AdaptivePlannerConfig::default();
+        assert!(!cfg.enabled);
+        assert!(cfg.provider.is_none());
+        assert!(cfg.model.is_none());
+        assert_eq!(cfg.max_history, 10);
+        assert!((cfg.temperature - 0.7).abs() < f32::EPSILON);
+    }
+
+    // ===== AdaptivePlanner: history management =====
+
+    #[test]
+    fn test_adaptive_planner_add_history_respects_max() {
+        let config = AdaptivePlannerConfig {
+            max_history: 2,
+            ..Default::default()
+        };
+        let mut planner = AdaptivePlanner::new(config);
+
+        for i in 0..5 {
+            planner.add_history(ExecutionHistoryRecord {
+                task_id: format!("task_{}", i),
+                item_id: "item".to_string(),
+                cycle: i,
+                steps: vec![],
+                final_status: "done".to_string(),
+                timestamp: Utc::now(),
+            });
+        }
+        assert_eq!(planner.history.len(), 2);
+        // oldest records should have been evicted
+        assert_eq!(planner.history[0].task_id, "task_3");
+        assert_eq!(planner.history[1].task_id, "task_4");
+    }
+
+    // ===== AdaptivePlanner: generate_plan when enabled =====
+
+    #[test]
+    fn test_adaptive_planner_generate_plan_enabled() {
+        let config = AdaptivePlannerConfig {
+            enabled: true,
+            ..Default::default()
+        };
+        let planner = AdaptivePlanner::new(config);
+        let ctx = StepPrehookContext::default();
+        let plan = planner.generate_plan(&ctx).unwrap();
+        // The default plan adds qa and fix nodes
+        assert!(plan.nodes.contains_key("qa"));
+        assert!(plan.nodes.contains_key("fix"));
+        assert_eq!(plan.edges.len(), 1);
+    }
+
+    // ===== DagExecutionState default =====
+
+    #[test]
+    fn test_dag_execution_state_default() {
+        let state = DagExecutionState::default();
+        assert!(state.current_node.is_none());
+        assert!(state.completed_nodes.is_empty());
+        assert!(state.skipped_nodes.is_empty());
+        assert!(state.context.is_empty());
+        assert!(state.branch_history.is_empty());
+    }
+
+    // ===== StepPrehookContext default =====
+
+    #[test]
+    fn test_step_prehook_context_default() {
+        let ctx = StepPrehookContext::default();
+        assert_eq!(ctx.cycle, 0);
+        assert_eq!(ctx.active_ticket_count, 0);
+        assert!(!ctx.qa_failed);
+        assert!(!ctx.fix_required);
+        assert!(ctx.qa_exit_code.is_none());
+        assert!(!ctx.self_test_passed);
+        assert!(!ctx.is_last_cycle);
+        assert_eq!(ctx.max_cycles, 0);
+    }
+
+    // ===== DynamicStepPool serde =====
+
+    #[test]
+    fn test_dynamic_step_pool_serde_round_trip() {
+        let mut pool = DynamicStepPool::new();
+        pool.add_step(DynamicStepConfig {
+            id: "s1".to_string(),
+            description: Some("my step".to_string()),
+            step_type: "fix".to_string(),
+            agent_id: Some("agent1".to_string()),
+            template: Some("tpl".to_string()),
+            trigger: Some("active_ticket_count > 0".to_string()),
+            priority: 42,
+            max_runs: Some(3),
+        });
+        let json = serde_json::to_string(&pool).unwrap();
+        let pool2: DynamicStepPool = serde_json::from_str(&json).unwrap();
+        assert_eq!(pool2.steps.len(), 1);
+        let s = pool2.get("s1").unwrap();
+        assert_eq!(s.priority, 42);
+        assert_eq!(s.max_runs, Some(3));
+    }
+
+    // ===== DynamicExecutionPlan serde =====
+
+    #[test]
+    fn test_dynamic_execution_plan_serde_round_trip() {
+        let mut plan = DynamicExecutionPlan::new();
+        plan.add_node(WorkflowNode {
+            id: "n1".to_string(),
+            step_type: "qa".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: true,
+        })
+        .unwrap();
+        plan.entry = Some("n1".to_string());
+
+        let json = serde_json::to_string(&plan).unwrap();
+        let plan2: DynamicExecutionPlan = serde_json::from_str(&json).unwrap();
+        assert_eq!(plan2.entry, Some("n1".to_string()));
+        assert!(plan2.nodes.contains_key("n1"));
+    }
+
     #[test]
     fn test_dag_is_completed() {
         let mut plan = DynamicExecutionPlan::new();

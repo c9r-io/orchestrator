@@ -473,3 +473,298 @@ pub fn reset_project_data(
         events: events.max(0) as u64,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dto::CreateTaskPayload;
+    use crate::task_ops::create_task_impl;
+    use crate::test_utils::TestState;
+
+    fn tmp_db_path() -> (std::path::PathBuf, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("db-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create tmp dir");
+        let db_path = dir.join("test.db");
+        (dir, db_path)
+    }
+
+    // ── open_conn ──
+
+    #[test]
+    fn open_conn_creates_connection() {
+        let (_dir, db_path) = tmp_db_path();
+        init_schema(&db_path).expect("init_schema");
+
+        let conn = open_conn(&db_path).expect("open_conn");
+        // Verify foreign keys are enabled
+        let fk: i64 = conn
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .expect("pragma");
+        assert_eq!(fk, 1);
+    }
+
+    // ── init_schema ──
+
+    #[test]
+    fn init_schema_creates_tables() {
+        let (_dir, db_path) = tmp_db_path();
+        init_schema(&db_path).expect("init_schema");
+
+        let conn = open_conn(&db_path).expect("open_conn");
+        let tables: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+                .expect("prepare");
+            stmt.query_map([], |row| row.get(0))
+                .expect("query")
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .expect("collect")
+        };
+
+        assert!(tables.contains(&"tasks".to_string()));
+        assert!(tables.contains(&"task_items".to_string()));
+        assert!(tables.contains(&"command_runs".to_string()));
+        assert!(tables.contains(&"events".to_string()));
+        assert!(tables.contains(&"orchestrator_config".to_string()));
+        assert!(tables.contains(&"agent_sessions".to_string()));
+        assert!(tables.contains(&"session_attachments".to_string()));
+    }
+
+    #[test]
+    fn init_schema_is_idempotent() {
+        let (_dir, db_path) = tmp_db_path();
+        init_schema(&db_path).expect("first init");
+        init_schema(&db_path).expect("second init should succeed");
+    }
+
+    // ── ensure_column ──
+
+    #[test]
+    fn ensure_column_adds_missing_column() {
+        let (_dir, db_path) = tmp_db_path();
+        init_schema(&db_path).expect("init_schema");
+
+        let conn = open_conn(&db_path).expect("open_conn");
+        // Add a new column that doesn't exist yet
+        ensure_column(
+            &conn,
+            "tasks",
+            "test_col_xyz",
+            "ALTER TABLE tasks ADD COLUMN test_col_xyz TEXT",
+        )
+        .expect("ensure_column add");
+
+        // Verify column exists
+        let mut stmt = conn.prepare("PRAGMA table_info(tasks)").expect("prepare");
+        let cols: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .expect("query")
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .expect("collect");
+        assert!(cols.contains(&"test_col_xyz".to_string()));
+    }
+
+    #[test]
+    fn ensure_column_noop_if_exists() {
+        let (_dir, db_path) = tmp_db_path();
+        init_schema(&db_path).expect("init_schema");
+
+        let conn = open_conn(&db_path).expect("open_conn");
+        // "status" already exists on tasks; should be a no-op
+        ensure_column(
+            &conn,
+            "tasks",
+            "status",
+            "ALTER TABLE tasks ADD COLUMN status TEXT",
+        )
+        .expect("ensure_column noop");
+    }
+
+    // ── count_tasks_by_workspace / count_tasks_by_workflow ──
+
+    #[test]
+    fn count_tasks_by_workspace_returns_zero_initially() {
+        let (_dir, db_path) = tmp_db_path();
+        init_schema(&db_path).expect("init_schema");
+
+        let conn = open_conn(&db_path).expect("open_conn");
+        let count = count_tasks_by_workspace(&conn, "nonexistent").expect("count");
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn count_tasks_by_workspace_counts_correctly() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/count_ws_test.md");
+        std::fs::write(&qa_file, "# count ws test\n").expect("seed qa file");
+
+        create_task_impl(&state, CreateTaskPayload::default()).expect("task 1");
+        create_task_impl(&state, CreateTaskPayload::default()).expect("task 2");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let count = count_tasks_by_workspace(&conn, "default").expect("count");
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn count_tasks_by_workflow_returns_zero_initially() {
+        let (_dir, db_path) = tmp_db_path();
+        init_schema(&db_path).expect("init_schema");
+
+        let conn = open_conn(&db_path).expect("open_conn");
+        let count = count_tasks_by_workflow(&conn, "nonexistent").expect("count");
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn count_tasks_by_workflow_counts_correctly() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/count_wf_test.md");
+        std::fs::write(&qa_file, "# count wf test\n").expect("seed qa file");
+
+        create_task_impl(&state, CreateTaskPayload::default()).expect("task 1");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let count = count_tasks_by_workflow(&conn, "basic").expect("count");
+        assert_eq!(count, 1);
+    }
+
+    // ── insert_task_execution_metric ──
+
+    #[test]
+    fn insert_task_execution_metric_stores_row() {
+        let (_dir, db_path) = tmp_db_path();
+        init_schema(&db_path).expect("init_schema");
+
+        let metric = TaskExecutionMetric {
+            task_id: "task-123".to_string(),
+            status: "running".to_string(),
+            current_cycle: 2,
+            unresolved_items: 3,
+            total_items: 10,
+            failed_items: 1,
+            command_runs: 5,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        insert_task_execution_metric(&db_path, &metric).expect("insert metric");
+
+        let conn = open_conn(&db_path).expect("open sqlite");
+        let (tid, status, cycle, unresolved, total, failed, runs): (
+            String, String, i64, i64, i64, i64, i64,
+        ) = conn
+            .query_row(
+                "SELECT task_id, status, current_cycle, unresolved_items, total_items, failed_items, command_runs FROM task_execution_metrics WHERE task_id = ?1",
+                params!["task-123"],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
+            )
+            .expect("query metric");
+
+        assert_eq!(tid, "task-123");
+        assert_eq!(status, "running");
+        assert_eq!(cycle, 2);
+        assert_eq!(unresolved, 3);
+        assert_eq!(total, 10);
+        assert_eq!(failed, 1);
+        assert_eq!(runs, 5);
+    }
+
+    // ── reset_db ──
+
+    #[test]
+    fn reset_db_clears_data() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/reset_test.md");
+        std::fs::write(&qa_file, "# reset test\n").expect("seed qa file");
+
+        create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
+
+        // Confirm task exists
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let before: i64 = conn
+            .query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get(0))
+            .expect("count before");
+        assert!(before > 0);
+        drop(conn);
+
+        reset_db(&state, false, false).expect("reset_db");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let after: i64 = conn
+            .query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get(0))
+            .expect("count after");
+        assert_eq!(after, 0);
+    }
+
+    #[test]
+    fn reset_db_with_config_clears_config() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        // Confirm config exists
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let config_before: i64 = conn
+            .query_row("SELECT COUNT(*) FROM orchestrator_config", [], |row| {
+                row.get(0)
+            })
+            .expect("count config before");
+        assert!(config_before > 0);
+        drop(conn);
+
+        reset_db(&state, false, true).expect("reset_db with config");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let config_after: i64 = conn
+            .query_row("SELECT COUNT(*) FROM orchestrator_config", [], |row| {
+                row.get(0)
+            })
+            .expect("count config after");
+        assert_eq!(config_after, 0);
+    }
+
+    // ── reset_project_data ──
+
+    #[test]
+    fn reset_project_data_returns_zero_stats_for_unknown_project() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let stats = reset_project_data(&state, "nonexistent-project").expect("reset project data");
+        assert_eq!(
+            stats,
+            ProjectResetStats {
+                tasks: 0,
+                task_items: 0,
+                command_runs: 0,
+                events: 0,
+            }
+        );
+    }
+
+    // ── ProjectResetStats ──
+
+    #[test]
+    fn project_reset_stats_debug_and_eq() {
+        let a = ProjectResetStats {
+            tasks: 1,
+            task_items: 2,
+            command_runs: 3,
+            events: 4,
+        };
+        let b = a;
+        assert_eq!(a, b);
+        // Debug should work
+        let _debug = format!("{:?}", a);
+    }
+}

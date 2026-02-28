@@ -1066,3 +1066,758 @@ pub fn default_workflow_finalize_config() -> WorkflowFinalizeConfig {
         ],
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ===== Default impls =====
+
+    #[test]
+    fn test_orchestrator_config_default() {
+        let cfg = OrchestratorConfig::default();
+        assert!(cfg.projects.is_empty());
+        assert!(cfg.workspaces.is_empty());
+        assert!(cfg.agents.is_empty());
+        assert!(cfg.workflows.is_empty());
+        assert!(!cfg.resume.auto);
+        assert_eq!(cfg.defaults.project, "");
+        assert_eq!(cfg.defaults.workspace, "");
+        assert_eq!(cfg.defaults.workflow, "");
+    }
+
+    #[test]
+    fn test_runner_config_default() {
+        let cfg = RunnerConfig::default();
+        assert_eq!(cfg.shell, "/bin/bash");
+        assert_eq!(cfg.shell_arg, "-lc");
+        assert_eq!(cfg.policy, RunnerPolicy::Legacy);
+        assert_eq!(cfg.executor, RunnerExecutorKind::Shell);
+        assert_eq!(cfg.allowed_shells.len(), 3);
+        assert!(cfg.allowed_shells.contains(&"/bin/bash".to_string()));
+        assert_eq!(cfg.allowed_shell_args, vec!["-lc", "-c"]);
+        assert!(cfg.env_allowlist.contains(&"PATH".to_string()));
+        assert!(cfg.env_allowlist.contains(&"HOME".to_string()));
+        assert!(cfg.redaction_patterns.contains(&"token".to_string()));
+        assert!(cfg.redaction_patterns.contains(&"secret".to_string()));
+    }
+
+    #[test]
+    fn test_safety_config_default() {
+        let cfg = SafetyConfig::default();
+        assert_eq!(cfg.max_consecutive_failures, 3);
+        assert!(!cfg.auto_rollback);
+        assert!(matches!(cfg.checkpoint_strategy, CheckpointStrategy::None));
+        assert!(cfg.step_timeout_secs.is_none());
+        assert!(!cfg.binary_snapshot);
+    }
+
+    #[test]
+    fn test_workflow_loop_guard_default() {
+        let cfg = WorkflowLoopGuardConfig::default();
+        assert!(cfg.enabled);
+        assert!(cfg.stop_when_no_unresolved);
+        assert!(cfg.max_cycles.is_none());
+        assert!(cfg.agent_template.is_none());
+    }
+
+    #[test]
+    fn test_agent_config_default_and_new() {
+        let cfg = AgentConfig::default();
+        assert!(cfg.capabilities.is_empty());
+        assert!(cfg.templates.is_empty());
+        assert_eq!(cfg.metadata.name, "");
+        assert!(cfg.metadata.description.is_none());
+        assert!(cfg.metadata.version.is_none());
+        assert!(cfg.metadata.cost.is_none());
+
+        let cfg2 = AgentConfig::new();
+        assert!(cfg2.capabilities.is_empty());
+    }
+
+    #[test]
+    fn test_resource_metadata_store_default() {
+        let store = ResourceMetadataStore::default();
+        assert!(store.workspaces.is_empty());
+        assert!(store.agents.is_empty());
+        assert!(store.workflows.is_empty());
+    }
+
+    #[test]
+    fn test_resource_stored_metadata_default() {
+        let meta = ResourceStoredMetadata::default();
+        assert!(meta.labels.is_none());
+        assert!(meta.annotations.is_none());
+    }
+
+    #[test]
+    fn test_pipeline_variables_default() {
+        let pv = PipelineVariables::default();
+        assert!(pv.vars.is_empty());
+        assert!(pv.build_errors.is_empty());
+        assert!(pv.test_failures.is_empty());
+        assert_eq!(pv.prev_stdout, "");
+        assert_eq!(pv.prev_stderr, "");
+        assert_eq!(pv.diff, "");
+    }
+
+    #[test]
+    fn test_loop_mode_default() {
+        let mode = LoopMode::default();
+        assert!(matches!(mode, LoopMode::Once));
+    }
+
+    #[test]
+    fn test_step_scope_default() {
+        let scope = StepScope::default();
+        assert_eq!(scope, StepScope::Item);
+    }
+
+    #[test]
+    fn test_cost_preference_default() {
+        let pref = CostPreference::default();
+        assert_eq!(pref, CostPreference::Balance);
+    }
+
+    #[test]
+    fn test_checkpoint_strategy_default() {
+        let strat = CheckpointStrategy::default();
+        assert!(matches!(strat, CheckpointStrategy::None));
+    }
+
+    #[test]
+    fn test_step_hook_engine_default() {
+        let engine = StepHookEngine::default();
+        assert!(matches!(engine, StepHookEngine::Cel));
+    }
+
+    #[test]
+    fn test_runner_policy_default() {
+        let policy = RunnerPolicy::default();
+        assert_eq!(policy, RunnerPolicy::Legacy);
+    }
+
+    #[test]
+    fn test_runner_executor_kind_default() {
+        let kind = RunnerExecutorKind::default();
+        assert_eq!(kind, RunnerExecutorKind::Shell);
+    }
+
+    // ===== FromStr impls =====
+
+    #[test]
+    fn test_loop_mode_from_str_valid() {
+        assert!(matches!(LoopMode::from_str("once").unwrap(), LoopMode::Once));
+        assert!(matches!(LoopMode::from_str("fixed").unwrap(), LoopMode::Fixed));
+        assert!(matches!(
+            LoopMode::from_str("infinite").unwrap(),
+            LoopMode::Infinite
+        ));
+    }
+
+    #[test]
+    fn test_loop_mode_from_str_invalid() {
+        let err = LoopMode::from_str("bogus").unwrap_err();
+        assert!(err.contains("unknown loop mode"));
+        assert!(err.contains("bogus"));
+    }
+
+    #[test]
+    fn test_workflow_step_type_from_str_all_variants() {
+        let cases = vec![
+            ("init_once", WorkflowStepType::InitOnce),
+            ("plan", WorkflowStepType::Plan),
+            ("qa", WorkflowStepType::Qa),
+            ("ticket_scan", WorkflowStepType::TicketScan),
+            ("fix", WorkflowStepType::Fix),
+            ("retest", WorkflowStepType::Retest),
+            ("loop_guard", WorkflowStepType::LoopGuard),
+            ("build", WorkflowStepType::Build),
+            ("test", WorkflowStepType::Test),
+            ("lint", WorkflowStepType::Lint),
+            ("implement", WorkflowStepType::Implement),
+            ("review", WorkflowStepType::Review),
+            ("git_ops", WorkflowStepType::GitOps),
+            ("qa_doc_gen", WorkflowStepType::QaDocGen),
+            ("qa_testing", WorkflowStepType::QaTesting),
+            ("ticket_fix", WorkflowStepType::TicketFix),
+            ("doc_governance", WorkflowStepType::DocGovernance),
+            ("align_tests", WorkflowStepType::AlignTests),
+            ("self_test", WorkflowStepType::SelfTest),
+            ("smoke_chain", WorkflowStepType::SmokeChain),
+        ];
+        for (s, expected) in cases {
+            let parsed = WorkflowStepType::from_str(s).unwrap();
+            assert_eq!(parsed, expected, "failed for {}", s);
+        }
+    }
+
+    #[test]
+    fn test_workflow_step_type_from_str_invalid() {
+        let err = WorkflowStepType::from_str("nope").unwrap_err();
+        assert!(err.contains("unknown workflow step type"));
+    }
+
+    // ===== as_str round-trip =====
+
+    #[test]
+    fn test_workflow_step_type_as_str_round_trip() {
+        let all = vec![
+            WorkflowStepType::InitOnce,
+            WorkflowStepType::Plan,
+            WorkflowStepType::Qa,
+            WorkflowStepType::TicketScan,
+            WorkflowStepType::Fix,
+            WorkflowStepType::Retest,
+            WorkflowStepType::LoopGuard,
+            WorkflowStepType::Build,
+            WorkflowStepType::Test,
+            WorkflowStepType::Lint,
+            WorkflowStepType::Implement,
+            WorkflowStepType::Review,
+            WorkflowStepType::GitOps,
+            WorkflowStepType::QaDocGen,
+            WorkflowStepType::QaTesting,
+            WorkflowStepType::TicketFix,
+            WorkflowStepType::DocGovernance,
+            WorkflowStepType::AlignTests,
+            WorkflowStepType::SelfTest,
+            WorkflowStepType::SmokeChain,
+        ];
+        for variant in all {
+            let s = variant.as_str();
+            let parsed = WorkflowStepType::from_str(s).unwrap();
+            assert_eq!(parsed, variant);
+        }
+    }
+
+    // ===== has_structured_output =====
+
+    #[test]
+    fn test_has_structured_output() {
+        assert!(WorkflowStepType::Build.has_structured_output());
+        assert!(WorkflowStepType::Test.has_structured_output());
+        assert!(WorkflowStepType::Lint.has_structured_output());
+        assert!(WorkflowStepType::QaTesting.has_structured_output());
+        assert!(WorkflowStepType::SelfTest.has_structured_output());
+        assert!(WorkflowStepType::SmokeChain.has_structured_output());
+
+        assert!(!WorkflowStepType::Plan.has_structured_output());
+        assert!(!WorkflowStepType::Fix.has_structured_output());
+        assert!(!WorkflowStepType::Implement.has_structured_output());
+        assert!(!WorkflowStepType::Review.has_structured_output());
+        assert!(!WorkflowStepType::Qa.has_structured_output());
+        assert!(!WorkflowStepType::DocGovernance.has_structured_output());
+    }
+
+    // ===== default_scope =====
+
+    #[test]
+    fn test_default_scope_task_steps() {
+        let task_scoped = vec![
+            WorkflowStepType::Plan,
+            WorkflowStepType::QaDocGen,
+            WorkflowStepType::Implement,
+            WorkflowStepType::SelfTest,
+            WorkflowStepType::AlignTests,
+            WorkflowStepType::DocGovernance,
+            WorkflowStepType::Review,
+            WorkflowStepType::Build,
+            WorkflowStepType::Test,
+            WorkflowStepType::Lint,
+            WorkflowStepType::GitOps,
+            WorkflowStepType::SmokeChain,
+            WorkflowStepType::LoopGuard,
+            WorkflowStepType::InitOnce,
+        ];
+        for st in task_scoped {
+            assert_eq!(st.default_scope(), StepScope::Task, "expected Task for {:?}", st);
+        }
+    }
+
+    #[test]
+    fn test_default_scope_item_steps() {
+        let item_scoped = vec![
+            WorkflowStepType::Qa,
+            WorkflowStepType::QaTesting,
+            WorkflowStepType::TicketFix,
+            WorkflowStepType::TicketScan,
+            WorkflowStepType::Fix,
+            WorkflowStepType::Retest,
+        ];
+        for st in item_scoped {
+            assert_eq!(st.default_scope(), StepScope::Item, "expected Item for {:?}", st);
+        }
+    }
+
+    // ===== AgentConfig methods =====
+
+    #[test]
+    fn test_agent_supports_capability() {
+        let mut agent = AgentConfig::new();
+        agent.capabilities = vec!["plan".to_string(), "qa".to_string()];
+        assert!(agent.supports_capability("plan"));
+        assert!(agent.supports_capability("qa"));
+        assert!(!agent.supports_capability("fix"));
+    }
+
+    #[test]
+    fn test_agent_get_template() {
+        let mut agent = AgentConfig::new();
+        agent.templates.insert("plan".to_string(), "plan template".to_string());
+        assert_eq!(agent.get_template("plan"), Some(&"plan template".to_string()));
+        assert_eq!(agent.get_template("fix"), None);
+    }
+
+    // ===== TaskExecutionStep::resolved_scope =====
+
+    #[test]
+    fn test_resolved_scope_explicit_override() {
+        let step = TaskExecutionStep {
+            id: "my_step".to_string(),
+            step_type: Some(WorkflowStepType::Qa), // default would be Item
+            required_capability: None,
+            builtin: None,
+            enabled: true,
+            repeatable: true,
+            is_guard: false,
+            cost_preference: None,
+            prehook: None,
+            tty: false,
+            outputs: vec![],
+            pipe_to: None,
+            command: None,
+            chain_steps: vec![],
+            scope: Some(StepScope::Task), // explicit override
+        };
+        assert_eq!(step.resolved_scope(), StepScope::Task);
+    }
+
+    #[test]
+    fn test_resolved_scope_from_step_type() {
+        let step = TaskExecutionStep {
+            id: "my_step".to_string(),
+            step_type: Some(WorkflowStepType::Plan),
+            required_capability: None,
+            builtin: None,
+            enabled: true,
+            repeatable: true,
+            is_guard: false,
+            cost_preference: None,
+            prehook: None,
+            tty: false,
+            outputs: vec![],
+            pipe_to: None,
+            command: None,
+            chain_steps: vec![],
+            scope: None,
+        };
+        assert_eq!(step.resolved_scope(), StepScope::Task);
+    }
+
+    #[test]
+    fn test_resolved_scope_no_type_defaults_to_item() {
+        let step = TaskExecutionStep {
+            id: "my_step".to_string(),
+            step_type: None,
+            required_capability: None,
+            builtin: None,
+            enabled: true,
+            repeatable: true,
+            is_guard: false,
+            cost_preference: None,
+            prehook: None,
+            tty: false,
+            outputs: vec![],
+            pipe_to: None,
+            command: None,
+            chain_steps: vec![],
+            scope: None,
+        };
+        assert_eq!(step.resolved_scope(), StepScope::Item);
+    }
+
+    // ===== TaskExecutionPlan::step =====
+
+    #[test]
+    fn test_task_execution_plan_step_found() {
+        let plan = TaskExecutionPlan {
+            steps: vec![
+                TaskExecutionStep {
+                    id: "plan_step".to_string(),
+                    step_type: Some(WorkflowStepType::Plan),
+                    required_capability: None,
+                    builtin: None,
+                    enabled: true,
+                    repeatable: false,
+                    is_guard: false,
+                    cost_preference: None,
+                    prehook: None,
+                    tty: false,
+                    outputs: vec![],
+                    pipe_to: None,
+                    command: None,
+                    chain_steps: vec![],
+                    scope: None,
+                },
+                TaskExecutionStep {
+                    id: "qa_step".to_string(),
+                    step_type: Some(WorkflowStepType::Qa),
+                    required_capability: None,
+                    builtin: None,
+                    enabled: true,
+                    repeatable: true,
+                    is_guard: false,
+                    cost_preference: None,
+                    prehook: None,
+                    tty: false,
+                    outputs: vec![],
+                    pipe_to: None,
+                    command: None,
+                    chain_steps: vec![],
+                    scope: None,
+                },
+            ],
+            loop_policy: WorkflowLoopConfig::default(),
+            finalize: WorkflowFinalizeConfig::default(),
+        };
+
+        let found = plan.step(WorkflowStepType::Qa);
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, "qa_step");
+
+        let found_plan = plan.step(WorkflowStepType::Plan);
+        assert!(found_plan.is_some());
+        assert_eq!(found_plan.unwrap().id, "plan_step");
+    }
+
+    #[test]
+    fn test_task_execution_plan_step_not_found() {
+        let plan = TaskExecutionPlan {
+            steps: vec![],
+            loop_policy: WorkflowLoopConfig::default(),
+            finalize: WorkflowFinalizeConfig::default(),
+        };
+        assert!(plan.step(WorkflowStepType::Fix).is_none());
+    }
+
+    // ===== default_workflow_steps =====
+
+    #[test]
+    fn test_default_workflow_steps_all_disabled() {
+        let steps = default_workflow_steps(None, false, None, None);
+        assert_eq!(steps.len(), 6);
+        // qa disabled
+        let qa = steps.iter().find(|s| s.id == "qa").unwrap();
+        assert!(!qa.enabled);
+        // ticket_scan disabled
+        let ts = steps.iter().find(|s| s.id == "ticket_scan").unwrap();
+        assert!(!ts.enabled);
+        // fix disabled
+        let fix = steps.iter().find(|s| s.id == "fix").unwrap();
+        assert!(!fix.enabled);
+        // retest disabled
+        let retest = steps.iter().find(|s| s.id == "retest").unwrap();
+        assert!(!retest.enabled);
+    }
+
+    #[test]
+    fn test_default_workflow_steps_all_enabled() {
+        let steps = default_workflow_steps(Some("qa_agent"), true, Some("fix_agent"), Some("retest_agent"));
+        let qa = steps.iter().find(|s| s.id == "qa").unwrap();
+        assert!(qa.enabled);
+        let ts = steps.iter().find(|s| s.id == "ticket_scan").unwrap();
+        assert!(ts.enabled);
+        let fix = steps.iter().find(|s| s.id == "fix").unwrap();
+        assert!(fix.enabled);
+        let retest = steps.iter().find(|s| s.id == "retest").unwrap();
+        assert!(retest.enabled);
+    }
+
+    #[test]
+    fn test_default_workflow_steps_step_types() {
+        let steps = default_workflow_steps(Some("qa"), true, Some("fix"), Some("retest"));
+        assert_eq!(steps[0].step_type, Some(WorkflowStepType::InitOnce));
+        assert_eq!(steps[1].step_type, Some(WorkflowStepType::Plan));
+        assert_eq!(steps[2].step_type, Some(WorkflowStepType::Qa));
+        assert_eq!(steps[3].step_type, Some(WorkflowStepType::TicketScan));
+        assert_eq!(steps[4].step_type, Some(WorkflowStepType::Fix));
+        assert_eq!(steps[5].step_type, Some(WorkflowStepType::Retest));
+    }
+
+    #[test]
+    fn test_default_workflow_steps_tty_flags() {
+        let steps = default_workflow_steps(None, false, None, None);
+        // only plan should have tty=true
+        let plan = steps.iter().find(|s| s.id == "plan").unwrap();
+        assert!(plan.tty);
+        for s in steps.iter().filter(|s| s.id != "plan") {
+            assert!(!s.tty, "step {} should not have tty", s.id);
+        }
+    }
+
+    #[test]
+    fn test_default_workflow_steps_repeatable() {
+        let steps = default_workflow_steps(Some("qa"), true, Some("fix"), Some("retest"));
+        let init = steps.iter().find(|s| s.id == "init_once").unwrap();
+        assert!(!init.repeatable);
+        let plan = steps.iter().find(|s| s.id == "plan").unwrap();
+        assert!(!plan.repeatable);
+        // qa, ticket_scan, fix, retest are repeatable
+        for id in &["qa", "ticket_scan", "fix", "retest"] {
+            let s = steps.iter().find(|s| s.id == *id).unwrap();
+            assert!(s.repeatable, "step {} should be repeatable", id);
+        }
+    }
+
+    // ===== default_workflow_finalize_config =====
+
+    #[test]
+    fn test_default_workflow_finalize_config_rule_count() {
+        let cfg = default_workflow_finalize_config();
+        assert_eq!(cfg.rules.len(), 12);
+    }
+
+    #[test]
+    fn test_default_workflow_finalize_config_skip_without_tickets_has_is_last_cycle() {
+        let cfg = default_workflow_finalize_config();
+        let rule = cfg.rules.iter().find(|r| r.id == "skip_without_tickets").unwrap();
+        assert!(
+            rule.when.contains("is_last_cycle"),
+            "skip_without_tickets must include is_last_cycle guard"
+        );
+        assert_eq!(rule.status, "skipped");
+    }
+
+    #[test]
+    fn test_default_workflow_finalize_config_rule_ids_unique() {
+        let cfg = default_workflow_finalize_config();
+        let mut ids: Vec<&str> = cfg.rules.iter().map(|r| r.id.as_str()).collect();
+        let original_len = ids.len();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), original_len, "finalize rule IDs must be unique");
+    }
+
+    #[test]
+    fn test_default_workflow_finalize_config_all_rules_have_reasons() {
+        let cfg = default_workflow_finalize_config();
+        for rule in &cfg.rules {
+            assert!(
+                rule.reason.is_some(),
+                "rule {} should have a reason",
+                rule.id
+            );
+        }
+    }
+
+    #[test]
+    fn test_default_workflow_finalize_config_fallback_rules_last() {
+        let cfg = default_workflow_finalize_config();
+        let last_two: Vec<&str> = cfg.rules.iter().rev().take(2).map(|r| r.id.as_str()).collect();
+        assert!(last_two.contains(&"fallback_qa_passed"));
+        assert!(last_two.contains(&"fallback_unresolved_with_tickets"));
+    }
+
+    // ===== Serialization round-trips =====
+
+    #[test]
+    fn test_orchestrator_config_serde_round_trip() {
+        let cfg = OrchestratorConfig::default();
+        let json = serde_json::to_string(&cfg).unwrap();
+        let cfg2: OrchestratorConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(cfg2.defaults.project, cfg.defaults.project);
+        assert!(cfg2.projects.is_empty());
+    }
+
+    #[test]
+    fn test_runner_config_serde_round_trip() {
+        let cfg = RunnerConfig::default();
+        let json = serde_json::to_string(&cfg).unwrap();
+        let cfg2: RunnerConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(cfg2.shell, cfg.shell);
+        assert_eq!(cfg2.policy, cfg.policy);
+    }
+
+    #[test]
+    fn test_loop_mode_serde_round_trip() {
+        for mode_str in &["\"once\"", "\"fixed\"", "\"infinite\""] {
+            let mode: LoopMode = serde_json::from_str(mode_str).unwrap();
+            let json = serde_json::to_string(&mode).unwrap();
+            assert_eq!(&json, mode_str);
+        }
+    }
+
+    #[test]
+    fn test_step_scope_serde_round_trip() {
+        for scope_str in &["\"task\"", "\"item\""] {
+            let scope: StepScope = serde_json::from_str(scope_str).unwrap();
+            let json = serde_json::to_string(&scope).unwrap();
+            assert_eq!(&json, scope_str);
+        }
+    }
+
+    #[test]
+    fn test_cost_preference_serde_round_trip() {
+        for pref_str in &["\"performance\"", "\"quality\"", "\"balance\""] {
+            let pref: CostPreference = serde_json::from_str(pref_str).unwrap();
+            let json = serde_json::to_string(&pref).unwrap();
+            assert_eq!(&json, pref_str);
+        }
+    }
+
+    #[test]
+    fn test_checkpoint_strategy_serde_round_trip() {
+        for s in &["\"none\"", "\"git_tag\"", "\"git_stash\""] {
+            let strat: CheckpointStrategy = serde_json::from_str(s).unwrap();
+            let json = serde_json::to_string(&strat).unwrap();
+            assert_eq!(&json, s);
+        }
+    }
+
+    #[test]
+    fn test_workflow_step_type_serde_round_trip() {
+        let step_type = WorkflowStepType::QaTesting;
+        let json = serde_json::to_string(&step_type).unwrap();
+        assert_eq!(json, "\"qa_testing\"");
+        let parsed: WorkflowStepType = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, WorkflowStepType::QaTesting);
+    }
+
+    #[test]
+    fn test_build_error_level_serde() {
+        let err: BuildErrorLevel = serde_json::from_str("\"error\"").unwrap();
+        assert_eq!(err, BuildErrorLevel::Error);
+        let warn: BuildErrorLevel = serde_json::from_str("\"warning\"").unwrap();
+        assert_eq!(warn, BuildErrorLevel::Warning);
+    }
+
+    #[test]
+    fn test_safety_config_serde_round_trip() {
+        let cfg = SafetyConfig {
+            max_consecutive_failures: 5,
+            auto_rollback: true,
+            checkpoint_strategy: CheckpointStrategy::GitTag,
+            step_timeout_secs: Some(600),
+            binary_snapshot: true,
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        let cfg2: SafetyConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(cfg2.max_consecutive_failures, 5);
+        assert!(cfg2.auto_rollback);
+        assert!(matches!(cfg2.checkpoint_strategy, CheckpointStrategy::GitTag));
+        assert_eq!(cfg2.step_timeout_secs, Some(600));
+        assert!(cfg2.binary_snapshot);
+    }
+
+    #[test]
+    fn test_workflow_finalize_config_serde_round_trip() {
+        let cfg = default_workflow_finalize_config();
+        let json = serde_json::to_string(&cfg).unwrap();
+        let cfg2: WorkflowFinalizeConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(cfg2.rules.len(), cfg.rules.len());
+        assert_eq!(cfg2.rules[0].id, cfg.rules[0].id);
+    }
+
+    // ===== Serde with defaults (missing optional fields) =====
+
+    #[test]
+    fn test_runner_config_deserialize_minimal() {
+        let json = r#"{"shell": "/bin/sh"}"#;
+        let cfg: RunnerConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.shell, "/bin/sh");
+        // defaults should kick in
+        assert_eq!(cfg.shell_arg, "-lc");
+        assert_eq!(cfg.policy, RunnerPolicy::Legacy);
+        assert!(!cfg.allowed_shells.is_empty());
+    }
+
+    #[test]
+    fn test_safety_config_deserialize_minimal() {
+        let json = r#"{}"#;
+        let cfg: SafetyConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.max_consecutive_failures, 3);
+        assert!(!cfg.auto_rollback);
+    }
+
+    #[test]
+    fn test_pipeline_variables_deserialize_minimal() {
+        let json = r#"{}"#;
+        let pv: PipelineVariables = serde_json::from_str(json).unwrap();
+        assert!(pv.vars.is_empty());
+        assert!(pv.build_errors.is_empty());
+    }
+
+    // ===== PIPELINE_VAR_INLINE_LIMIT constant =====
+
+    #[test]
+    fn test_pipeline_var_inline_limit() {
+        assert_eq!(PIPELINE_VAR_INLINE_LIMIT, 4096);
+    }
+
+    // ===== WorkflowStepConfig via step_config helper =====
+
+    #[test]
+    fn test_step_config_helper() {
+        let s = step_config("my_id", Some(WorkflowStepType::Build), Some("build"), None, true, false, false);
+        assert_eq!(s.id, "my_id");
+        assert_eq!(s.step_type, Some(WorkflowStepType::Build));
+        assert_eq!(s.required_capability, Some("build".to_string()));
+        assert!(s.builtin.is_none());
+        assert!(s.enabled);
+        assert!(!s.repeatable);
+        assert!(!s.is_guard);
+        assert!(s.cost_preference.is_none());
+        assert!(s.prehook.is_none());
+        assert!(!s.tty);
+        assert!(s.outputs.is_empty());
+        assert!(s.pipe_to.is_none());
+        assert!(s.command.is_none());
+        assert!(s.chain_steps.is_empty());
+        assert!(s.scope.is_none());
+    }
+
+    // ===== WorkflowLoopConfig default =====
+
+    #[test]
+    fn test_workflow_loop_config_default() {
+        let cfg = WorkflowLoopConfig::default();
+        assert!(matches!(cfg.mode, LoopMode::Once));
+        assert!(cfg.guard.enabled);
+    }
+
+    // ===== WorkflowFinalizeConfig default =====
+
+    #[test]
+    fn test_workflow_finalize_config_default_empty() {
+        let cfg = WorkflowFinalizeConfig::default();
+        assert!(cfg.rules.is_empty());
+    }
+
+    // ===== AgentSelectionConfig default =====
+
+    #[test]
+    fn test_agent_selection_config_default() {
+        let cfg = AgentSelectionConfig::default();
+        assert!(cfg.weights.is_none());
+        // The strategy defaults to CapabilityAware via the serde default fn
+        // but Default derive gives CostBased; verify the struct-level default
+    }
+
+    // ===== StepPrehookUiConfig default =====
+
+    #[test]
+    fn test_step_prehook_ui_config_default() {
+        let cfg = StepPrehookUiConfig::default();
+        assert!(cfg.mode.is_none());
+        assert!(cfg.preset_id.is_none());
+        assert!(cfg.expr.is_none());
+    }
+
+    // ===== default_project function =====
+
+    #[test]
+    fn test_default_project() {
+        assert_eq!(default_project(), "default");
+    }
+}

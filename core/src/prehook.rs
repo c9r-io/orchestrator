@@ -877,6 +877,86 @@ mod tests {
         assert!(!result.unwrap(), "should not trigger fix when no errors");
     }
 
+    // --- Helper to create a default StepPrehookContext ---
+    fn default_step_prehook_context() -> StepPrehookContext {
+        StepPrehookContext {
+            task_id: "task-1".to_string(),
+            task_item_id: "item-1".to_string(),
+            cycle: 1,
+            step: "qa".to_string(),
+            qa_file_path: "test.md".to_string(),
+            item_status: "pending".to_string(),
+            task_status: "running".to_string(),
+            qa_exit_code: Some(0),
+            fix_exit_code: Some(0),
+            retest_exit_code: Some(0),
+            active_ticket_count: 0,
+            new_ticket_count: 0,
+            qa_failed: false,
+            fix_required: false,
+            qa_confidence: None,
+            qa_quality_score: None,
+            fix_has_changes: None,
+            upstream_artifacts: vec![],
+            build_error_count: 0,
+            test_failure_count: 0,
+            build_exit_code: None,
+            test_exit_code: None,
+            self_test_exit_code: None,
+            self_test_passed: false,
+            max_cycles: 1,
+            is_last_cycle: true,
+        }
+    }
+
+    // --- Helper to create a default ItemFinalizeContext ---
+    fn default_item_finalize_context() -> crate::config::ItemFinalizeContext {
+        crate::config::ItemFinalizeContext {
+            task_id: "task-1".to_string(),
+            task_item_id: "item-1".to_string(),
+            cycle: 1,
+            qa_file_path: "qa.md".to_string(),
+            item_status: "pending".to_string(),
+            task_status: "running".to_string(),
+            qa_exit_code: Some(0),
+            fix_exit_code: Some(0),
+            retest_exit_code: Some(0),
+            active_ticket_count: 0,
+            new_ticket_count: 0,
+            retest_new_ticket_count: 0,
+            qa_failed: false,
+            fix_required: false,
+            qa_enabled: true,
+            qa_ran: true,
+            qa_skipped: false,
+            fix_enabled: true,
+            fix_ran: false,
+            fix_success: false,
+            retest_enabled: true,
+            retest_ran: false,
+            retest_success: false,
+            qa_confidence: None,
+            qa_quality_score: None,
+            fix_confidence: None,
+            fix_quality_score: None,
+            total_artifacts: 0,
+            has_ticket_artifacts: false,
+            has_code_change_artifacts: false,
+            is_last_cycle: true,
+        }
+    }
+
+    // --- Helper to create a default WorkflowFinalizeRule ---
+    fn make_rule(id: &str, when: &str, status: &str, reason: Option<&str>) -> WorkflowFinalizeRule {
+        WorkflowFinalizeRule {
+            id: id.to_string(),
+            engine: StepHookEngine::Cel,
+            when: when.to_string(),
+            status: status.to_string(),
+            reason: reason.map(String::from),
+        }
+    }
+
     #[test]
     fn test_max_cycles_and_is_last_cycle_cel_variables() {
         let context = StepPrehookContext {
@@ -925,5 +1005,863 @@ mod tests {
         let result = evaluate_step_prehook_expression("is_last_cycle", &last_ctx);
         assert!(result.is_ok());
         assert!(result.unwrap());
+    }
+
+    // ========================================================================
+    // validate_step_prehook: additional edge cases
+    // ========================================================================
+
+    #[test]
+    fn test_validate_step_prehook_whitespace_only_expression() {
+        let prehook = StepPrehookConfig {
+            when: "   ".to_string(),
+            reason: None,
+            engine: StepHookEngine::Cel,
+            ui: None,
+            extended: false,
+        };
+        let result = validate_step_prehook(&prehook, "wf", "step");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("prehook.when cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_step_prehook_complex_valid_cel() {
+        let prehook = StepPrehookConfig {
+            when: "is_last_cycle && active_ticket_count > 0 || qa_failed == true".to_string(),
+            reason: Some("complex condition".to_string()),
+            engine: StepHookEngine::Cel,
+            ui: None,
+            extended: false,
+        };
+        let result = validate_step_prehook(&prehook, "wf", "qa_testing");
+        assert!(result.is_ok());
+    }
+
+    // ========================================================================
+    // validate_workflow_finalize_rule: additional edge cases
+    // ========================================================================
+
+    #[test]
+    fn test_validate_workflow_finalize_rule_invalid_cel() {
+        let rule = make_rule("bad-cel", "invalid @#$% expression", "failed", None);
+        let result = validate_workflow_finalize_rule(&rule, "wf");
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("invalid CEL") || err_msg.contains("parser panic"),
+            "expected CEL error, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_validate_workflow_finalize_rule_whitespace_id() {
+        let rule = make_rule("  ", "true", "skipped", None);
+        let result = validate_workflow_finalize_rule(&rule, "wf");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("empty id"));
+    }
+
+    #[test]
+    fn test_validate_workflow_finalize_rule_whitespace_status() {
+        let rule = WorkflowFinalizeRule {
+            id: "rule-1".to_string(),
+            engine: StepHookEngine::Cel,
+            when: "true".to_string(),
+            status: "   ".to_string(),
+            reason: None,
+        };
+        let result = validate_workflow_finalize_rule(&rule, "wf");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("empty status"));
+    }
+
+    #[test]
+    fn test_validate_workflow_finalize_rule_whitespace_when() {
+        let rule = WorkflowFinalizeRule {
+            id: "rule-1".to_string(),
+            engine: StepHookEngine::Cel,
+            when: "   ".to_string(),
+            status: "skipped".to_string(),
+            reason: None,
+        };
+        let result = validate_workflow_finalize_rule(&rule, "wf");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("empty when"));
+    }
+
+    // ========================================================================
+    // evaluate_finalize_rule_expression: full coverage
+    // ========================================================================
+
+    #[test]
+    fn test_evaluate_finalize_rule_expression_true() {
+        let rule = make_rule("r1", "qa_skipped && active_ticket_count == 0", "skipped", None);
+        let context = ItemFinalizeContext {
+            qa_skipped: true,
+            active_ticket_count: 0,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_expression_false() {
+        let rule = make_rule("r1", "qa_skipped && active_ticket_count == 0", "skipped", None);
+        let context = ItemFinalizeContext {
+            qa_skipped: false,
+            active_ticket_count: 0,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_expression_invalid_cel() {
+        let rule = make_rule("r1", "not valid @#$ cel", "failed", None);
+        let context = default_item_finalize_context();
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_expression_non_bool_result() {
+        // An expression that returns an integer instead of a bool
+        let rule = make_rule("r1", "active_ticket_count + 1", "failed", None);
+        let context = default_item_finalize_context();
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("must return bool"));
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_qa_enabled_variables() {
+        let rule = make_rule("r1", "qa_enabled && qa_ran && !qa_skipped", "passed", None);
+        let context = ItemFinalizeContext {
+            qa_enabled: true,
+            qa_ran: true,
+            qa_skipped: false,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_fix_variables() {
+        let rule = make_rule("r1", "fix_enabled && fix_ran && fix_success", "fixed", None);
+        let context = ItemFinalizeContext {
+            fix_enabled: true,
+            fix_ran: true,
+            fix_success: true,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_retest_variables() {
+        let rule = make_rule(
+            "r1",
+            "retest_enabled && retest_ran && retest_success",
+            "verified",
+            None,
+        );
+        let context = ItemFinalizeContext {
+            retest_enabled: true,
+            retest_ran: true,
+            retest_success: true,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_is_last_cycle() {
+        let rule = make_rule(
+            "r1",
+            "qa_skipped && active_ticket_count == 0 && is_last_cycle",
+            "skipped",
+            None,
+        );
+        // Not last cycle -- rule should not match
+        let context = ItemFinalizeContext {
+            qa_skipped: true,
+            active_ticket_count: 0,
+            is_last_cycle: false,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+
+        // Last cycle -- rule should match
+        let context_last = ItemFinalizeContext {
+            is_last_cycle: true,
+            ..context
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context_last);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_retest_new_ticket_count() {
+        let rule = make_rule("r1", "retest_new_ticket_count > 0", "needs_review", None);
+        let context = ItemFinalizeContext {
+            retest_new_ticket_count: 3,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_new_ticket_count() {
+        let rule = make_rule("r1", "new_ticket_count > 0 && qa_failed", "failing", None);
+        let context = ItemFinalizeContext {
+            new_ticket_count: 5,
+            qa_failed: true,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_exit_codes() {
+        let rule = make_rule("r1", "qa_exit_code == 1 && fix_exit_code == 0", "fixed", None);
+        let context = ItemFinalizeContext {
+            qa_exit_code: Some(1),
+            fix_exit_code: Some(0),
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_retest_exit_code() {
+        let rule = make_rule("r1", "retest_exit_code == 0", "verified", None);
+        let context = ItemFinalizeContext {
+            retest_exit_code: Some(0),
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_fix_required() {
+        let rule = make_rule("r1", "fix_required && !fix_ran", "needs_fix", None);
+        let context = ItemFinalizeContext {
+            fix_required: true,
+            fix_ran: false,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_task_and_item_ids() {
+        let rule = make_rule("r1", "task_id == \"my-task\" && task_item_id == \"my-item\"", "matched", None);
+        let context = ItemFinalizeContext {
+            task_id: "my-task".to_string(),
+            task_item_id: "my-item".to_string(),
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_cycle_variable() {
+        let rule = make_rule("r1", "cycle >= 2", "advanced", None);
+        let context = ItemFinalizeContext {
+            cycle: 3,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+
+        let context_early = ItemFinalizeContext {
+            cycle: 1,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context_early);
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_item_status_variable() {
+        let rule = make_rule("r1", "item_status == \"completed\"", "done", None);
+        let context = ItemFinalizeContext {
+            item_status: "completed".to_string(),
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_task_status_variable() {
+        let rule = make_rule("r1", "task_status == \"running\"", "active", None);
+        let context = default_item_finalize_context();
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_qa_file_path_variable() {
+        let rule = make_rule("r1", "qa_file_path == \"qa.md\"", "found", None);
+        let context = default_item_finalize_context();
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    // ========================================================================
+    // resolve_workflow_finalize_outcome: full coverage
+    // ========================================================================
+
+    #[test]
+    fn test_resolve_workflow_finalize_outcome_no_rules() {
+        let finalize = WorkflowFinalizeConfig { rules: vec![] };
+        let context = default_item_finalize_context();
+        let result = resolve_workflow_finalize_outcome(&finalize, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn test_resolve_workflow_finalize_outcome_no_match() {
+        let finalize = WorkflowFinalizeConfig {
+            rules: vec![make_rule("r1", "active_ticket_count > 100", "skipped", None)],
+        };
+        let context = default_item_finalize_context();
+        let result = resolve_workflow_finalize_outcome(&finalize, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn test_resolve_workflow_finalize_outcome_first_match_wins() {
+        let finalize = WorkflowFinalizeConfig {
+            rules: vec![
+                make_rule("r1", "true", "first_status", Some("first reason")),
+                make_rule("r2", "true", "second_status", Some("second reason")),
+            ],
+        };
+        let context = default_item_finalize_context();
+        let result = resolve_workflow_finalize_outcome(&finalize, &context).unwrap();
+        assert!(result.is_some());
+        let outcome = result.unwrap();
+        assert_eq!(outcome.rule_id, "r1");
+        assert_eq!(outcome.status, "first_status");
+        assert_eq!(outcome.reason, "first reason");
+    }
+
+    #[test]
+    fn test_resolve_workflow_finalize_outcome_second_rule_matches() {
+        let finalize = WorkflowFinalizeConfig {
+            rules: vec![
+                make_rule("r1", "false", "skipped", Some("skip reason")),
+                make_rule("r2", "true", "passed", Some("pass reason")),
+            ],
+        };
+        let context = default_item_finalize_context();
+        let result = resolve_workflow_finalize_outcome(&finalize, &context).unwrap();
+        assert!(result.is_some());
+        let outcome = result.unwrap();
+        assert_eq!(outcome.rule_id, "r2");
+        assert_eq!(outcome.status, "passed");
+        assert_eq!(outcome.reason, "pass reason");
+    }
+
+    #[test]
+    fn test_resolve_workflow_finalize_outcome_default_reason() {
+        let finalize = WorkflowFinalizeConfig {
+            rules: vec![make_rule("my-rule", "true", "done", None)],
+        };
+        let context = default_item_finalize_context();
+        let result = resolve_workflow_finalize_outcome(&finalize, &context).unwrap();
+        let outcome = result.unwrap();
+        assert_eq!(outcome.reason, "finalize rule 'my-rule' matched");
+    }
+
+    #[test]
+    fn test_resolve_workflow_finalize_outcome_complex_conditions() {
+        let finalize = WorkflowFinalizeConfig {
+            rules: vec![
+                make_rule(
+                    "skip_without_tickets",
+                    "qa_skipped && active_ticket_count == 0 && is_last_cycle",
+                    "skipped",
+                    Some("QA skipped, no tickets"),
+                ),
+                make_rule(
+                    "qa_passed",
+                    "qa_ran && !qa_failed",
+                    "passed",
+                    Some("QA passed"),
+                ),
+                make_rule(
+                    "qa_failed_fixed",
+                    "qa_failed && fix_ran && fix_success && retest_success",
+                    "fixed",
+                    Some("Fixed and verified"),
+                ),
+            ],
+        };
+
+        // Case 1: QA skipped, last cycle, no tickets => skip_without_tickets
+        let ctx1 = ItemFinalizeContext {
+            qa_skipped: true,
+            qa_ran: false,
+            active_ticket_count: 0,
+            is_last_cycle: true,
+            ..default_item_finalize_context()
+        };
+        let outcome = resolve_workflow_finalize_outcome(&finalize, &ctx1)
+            .unwrap()
+            .unwrap();
+        assert_eq!(outcome.rule_id, "skip_without_tickets");
+
+        // Case 2: QA skipped, NOT last cycle => skip rule doesn't match, qa_ran also false
+        let ctx2 = ItemFinalizeContext {
+            qa_skipped: true,
+            qa_ran: false,
+            active_ticket_count: 0,
+            is_last_cycle: false,
+            ..default_item_finalize_context()
+        };
+        let result = resolve_workflow_finalize_outcome(&finalize, &ctx2).unwrap();
+        assert!(result.is_none());
+
+        // Case 3: QA ran and passed => qa_passed
+        let ctx3 = ItemFinalizeContext {
+            qa_ran: true,
+            qa_failed: false,
+            qa_skipped: false,
+            ..default_item_finalize_context()
+        };
+        let outcome = resolve_workflow_finalize_outcome(&finalize, &ctx3)
+            .unwrap()
+            .unwrap();
+        assert_eq!(outcome.rule_id, "qa_passed");
+
+        // Case 4: QA failed, fix ran and succeeded, retest succeeded
+        let ctx4 = ItemFinalizeContext {
+            qa_ran: true,
+            qa_failed: true,
+            qa_skipped: false,
+            fix_ran: true,
+            fix_success: true,
+            retest_success: true,
+            ..default_item_finalize_context()
+        };
+        // First matching rule: qa_ran && !qa_failed is false, so check qa_failed_fixed
+        let outcome = resolve_workflow_finalize_outcome(&finalize, &ctx4)
+            .unwrap()
+            .unwrap();
+        assert_eq!(outcome.rule_id, "qa_failed_fixed");
+    }
+
+    #[test]
+    fn test_resolve_workflow_finalize_outcome_invalid_cel_returns_error() {
+        let finalize = WorkflowFinalizeConfig {
+            rules: vec![make_rule("bad", "not @#$ valid", "error", None)],
+        };
+        let context = default_item_finalize_context();
+        let result = resolve_workflow_finalize_outcome(&finalize, &context);
+        assert!(result.is_err());
+    }
+
+    // ========================================================================
+    // evaluate_step_prehook_expression: additional edge cases
+    // ========================================================================
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_non_bool_result() {
+        let context = default_step_prehook_context();
+        // Expression returns an integer, not a bool
+        let result = evaluate_step_prehook_expression("active_ticket_count + 1", &context);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("must return bool"));
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_string_comparison() {
+        let context = StepPrehookContext {
+            item_status: "build_failed".to_string(),
+            step: "fix".to_string(),
+            ..default_step_prehook_context()
+        };
+        let result =
+            evaluate_step_prehook_expression("item_status == \"build_failed\"", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_step_variable() {
+        let context = StepPrehookContext {
+            step: "qa_testing".to_string(),
+            ..default_step_prehook_context()
+        };
+        let result = evaluate_step_prehook_expression("step == \"qa_testing\"", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_task_id_variable() {
+        let context = StepPrehookContext {
+            task_id: "special-task".to_string(),
+            ..default_step_prehook_context()
+        };
+        let result =
+            evaluate_step_prehook_expression("task_id == \"special-task\"", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_task_item_id_variable() {
+        let context = StepPrehookContext {
+            task_item_id: "item-42".to_string(),
+            ..default_step_prehook_context()
+        };
+        let result =
+            evaluate_step_prehook_expression("task_item_id == \"item-42\"", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_qa_file_path_variable() {
+        let context = StepPrehookContext {
+            qa_file_path: "/tmp/qa_report.md".to_string(),
+            ..default_step_prehook_context()
+        };
+        let result = evaluate_step_prehook_expression(
+            "qa_file_path == \"/tmp/qa_report.md\"",
+            &context,
+        );
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_task_status_variable() {
+        let context = StepPrehookContext {
+            task_status: "paused".to_string(),
+            ..default_step_prehook_context()
+        };
+        let result = evaluate_step_prehook_expression("task_status == \"paused\"", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_new_ticket_count() {
+        let context = StepPrehookContext {
+            new_ticket_count: 7,
+            ..default_step_prehook_context()
+        };
+        let result = evaluate_step_prehook_expression("new_ticket_count >= 5", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_fix_required() {
+        let context = StepPrehookContext {
+            fix_required: true,
+            ..default_step_prehook_context()
+        };
+        let result = evaluate_step_prehook_expression("fix_required", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_fix_exit_code() {
+        let context = StepPrehookContext {
+            fix_exit_code: Some(1),
+            ..default_step_prehook_context()
+        };
+        let result = evaluate_step_prehook_expression("fix_exit_code == 1", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_retest_exit_code() {
+        let context = StepPrehookContext {
+            retest_exit_code: Some(2),
+            ..default_step_prehook_context()
+        };
+        let result = evaluate_step_prehook_expression("retest_exit_code == 2", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_build_exit_code() {
+        let context = StepPrehookContext {
+            build_exit_code: Some(1),
+            ..default_step_prehook_context()
+        };
+        let result = evaluate_step_prehook_expression("build_exit_code == 1", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_test_exit_code() {
+        let context = StepPrehookContext {
+            test_exit_code: Some(1),
+            ..default_step_prehook_context()
+        };
+        let result = evaluate_step_prehook_expression("test_exit_code == 1", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_test_failures() {
+        let context = StepPrehookContext {
+            test_failure_count: 5,
+            ..default_step_prehook_context()
+        };
+        let result = evaluate_step_prehook_expression("test_failures > 0", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_literal_true() {
+        let context = default_step_prehook_context();
+        let result = evaluate_step_prehook_expression("true", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_literal_false() {
+        let context = default_step_prehook_context();
+        let result = evaluate_step_prehook_expression("false", &context);
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_negation() {
+        let context = StepPrehookContext {
+            qa_failed: false,
+            ..default_step_prehook_context()
+        };
+        let result = evaluate_step_prehook_expression("!qa_failed", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_or_operator() {
+        let context = StepPrehookContext {
+            qa_failed: false,
+            fix_required: true,
+            ..default_step_prehook_context()
+        };
+        let result =
+            evaluate_step_prehook_expression("qa_failed || fix_required", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_cycle_arithmetic() {
+        let context = StepPrehookContext {
+            cycle: 3,
+            max_cycles: 5,
+            ..default_step_prehook_context()
+        };
+        let result =
+            evaluate_step_prehook_expression("cycle > 1 && cycle < max_cycles", &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    // ========================================================================
+    // build_finalize_cel_context: exercising all variables
+    // ========================================================================
+
+    #[test]
+    fn test_evaluate_finalize_rule_all_bool_flags_false() {
+        let rule = make_rule(
+            "r1",
+            "!qa_enabled && !qa_ran && !qa_skipped && !fix_enabled && !fix_ran && !fix_success && !retest_enabled && !retest_ran && !retest_success && !qa_failed && !fix_required",
+            "none",
+            None,
+        );
+        let context = ItemFinalizeContext {
+            qa_enabled: false,
+            qa_ran: false,
+            qa_skipped: false,
+            fix_enabled: false,
+            fix_ran: false,
+            fix_success: false,
+            retest_enabled: false,
+            retest_ran: false,
+            retest_success: false,
+            qa_failed: false,
+            fix_required: false,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_all_bool_flags_true() {
+        let rule = make_rule(
+            "r1",
+            "qa_enabled && qa_ran && qa_skipped && fix_enabled && fix_ran && fix_success && retest_enabled && retest_ran && retest_success && qa_failed && fix_required",
+            "all_true",
+            None,
+        );
+        let context = ItemFinalizeContext {
+            qa_enabled: true,
+            qa_ran: true,
+            qa_skipped: true,
+            fix_enabled: true,
+            fix_ran: true,
+            fix_success: true,
+            retest_enabled: true,
+            retest_ran: true,
+            retest_success: true,
+            qa_failed: true,
+            fix_required: true,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    // ========================================================================
+    // resolve_workflow_finalize_outcome: multiple rules, none match
+    // ========================================================================
+
+    #[test]
+    fn test_resolve_workflow_finalize_outcome_all_false() {
+        let finalize = WorkflowFinalizeConfig {
+            rules: vec![
+                make_rule("r1", "false", "a", None),
+                make_rule("r2", "false", "b", None),
+                make_rule("r3", "false", "c", None),
+            ],
+        };
+        let context = default_item_finalize_context();
+        let result = resolve_workflow_finalize_outcome(&finalize, &context).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_resolve_workflow_finalize_outcome_third_rule_matches() {
+        let finalize = WorkflowFinalizeConfig {
+            rules: vec![
+                make_rule("r1", "false", "first", None),
+                make_rule("r2", "false", "second", None),
+                make_rule("r3", "true", "third", Some("third wins")),
+            ],
+        };
+        let context = default_item_finalize_context();
+        let outcome = resolve_workflow_finalize_outcome(&finalize, &context)
+            .unwrap()
+            .unwrap();
+        assert_eq!(outcome.rule_id, "r3");
+        assert_eq!(outcome.status, "third");
+        assert_eq!(outcome.reason, "third wins");
+    }
+
+    // ========================================================================
+    // validate_step_prehook: with reason set
+    // ========================================================================
+
+    #[test]
+    fn test_validate_step_prehook_with_reason() {
+        let prehook = StepPrehookConfig {
+            when: "is_last_cycle".to_string(),
+            reason: Some("Only run on last cycle".to_string()),
+            engine: StepHookEngine::Cel,
+            ui: None,
+            extended: false,
+        };
+        let result = validate_step_prehook(&prehook, "wf", "qa_testing");
+        assert!(result.is_ok());
+    }
+
+    // ========================================================================
+    // validate_workflow_finalize_rule: with reason set
+    // ========================================================================
+
+    #[test]
+    fn test_validate_workflow_finalize_rule_with_reason() {
+        let rule = WorkflowFinalizeRule {
+            id: "rule-with-reason".to_string(),
+            engine: StepHookEngine::Cel,
+            when: "qa_failed && active_ticket_count > 0".to_string(),
+            status: "needs_fix".to_string(),
+            reason: Some("QA failures found with active tickets".to_string()),
+        };
+        let result = validate_workflow_finalize_rule(&rule, "wf");
+        assert!(result.is_ok());
+    }
+
+    // ========================================================================
+    // evaluate_step_prehook_expression: self_test_passed variable
+    // ========================================================================
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_self_test_passed_not_in_cel() {
+        // self_test_passed is a field on StepPrehookContext but is NOT added
+        // as a CEL variable in build_step_prehook_cel_context.
+        // Attempting to use it should fail at execution time.
+        let context = StepPrehookContext {
+            self_test_passed: true,
+            ..default_step_prehook_context()
+        };
+        // The expression references a variable not in the CEL context
+        let result = evaluate_step_prehook_expression("self_test_passed == true", &context);
+        // This should either error or return false depending on CEL semantics
+        // The important thing is it doesn't panic
+        assert!(result.is_err() || !result.unwrap());
     }
 }

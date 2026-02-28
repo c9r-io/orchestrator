@@ -606,4 +606,467 @@ mod tests {
         assert_eq!(lines[4], "line 0499");
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    // ── Tests using TestState ──────────────────────────────────────────
+
+    use crate::config_load::now_ts;
+    use crate::dto::CreateTaskPayload;
+    use crate::task_ops::create_task_impl;
+    use crate::task_repository::{NewCommandRun, SqliteTaskRepository, TaskRepository};
+    use crate::test_utils::TestState;
+
+    /// Helper: create a TestState, seed a QA file, create a task, return (state, task_id).
+    fn seed_task(fixture: &mut TestState) -> (std::sync::Arc<crate::state::InnerState>, String) {
+        let state = fixture.build();
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/query_test.md");
+        std::fs::write(&qa_file, "# query test\n").expect("seed qa file");
+        let created = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("query-test".to_string()),
+                goal: Some("query-test-goal".to_string()),
+                ..Default::default()
+            },
+        )
+        .expect("task should be created");
+        (state, created.id)
+    }
+
+    /// Helper: get the first task_item id for a given task.
+    fn first_item_id(state: &crate::state::InnerState, task_id: &str) -> String {
+        let conn = crate::db::open_conn(&state.db_path).expect("open db");
+        conn.query_row(
+            "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
+            rusqlite::params![task_id],
+            |row| row.get(0),
+        )
+        .expect("task item should exist")
+    }
+
+    #[test]
+    fn resolve_task_id_exact_match() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let resolved = resolve_task_id(&state, &task_id).expect("resolve exact id");
+        assert_eq!(resolved, task_id);
+    }
+
+    #[test]
+    fn resolve_task_id_prefix_match() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let prefix = &task_id[..8];
+        let resolved = resolve_task_id(&state, prefix).expect("resolve prefix id");
+        assert_eq!(resolved, task_id);
+    }
+
+    #[test]
+    fn resolve_task_id_not_found() {
+        let mut fixture = TestState::new();
+        let (state, _task_id) = seed_task(&mut fixture);
+        let result = resolve_task_id(&state, "nonexistent-id-00000000");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn load_task_summary_returns_counts() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let summary = load_task_summary(&state, &task_id).expect("load task summary");
+        assert_eq!(summary.id, task_id);
+        assert_eq!(summary.name, "query-test");
+        assert_eq!(summary.goal, "query-test-goal");
+        // The task should have at least 1 item (the seeded qa file)
+        assert!(summary.total_items >= 1, "expected at least 1 total_items");
+        // Initially nothing is finished or failed
+        assert_eq!(summary.finished_items, 0);
+        assert_eq!(summary.failed_items, 0);
+    }
+
+    #[test]
+    fn load_task_summary_with_prefix() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let prefix = &task_id[..8];
+        let summary = load_task_summary(&state, prefix).expect("load summary by prefix");
+        assert_eq!(summary.id, task_id);
+    }
+
+    #[test]
+    fn list_tasks_impl_returns_seeded_task() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let tasks = list_tasks_impl(&state).expect("list tasks");
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].id, task_id);
+        assert_eq!(tasks[0].name, "query-test");
+    }
+
+    #[test]
+    fn list_tasks_impl_empty_when_no_tasks() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let tasks = list_tasks_impl(&state).expect("list tasks");
+        assert!(tasks.is_empty());
+    }
+
+    #[test]
+    fn list_tasks_impl_multiple_tasks_ordered_desc() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/multi_test.md");
+        std::fs::write(&qa_file, "# multi test\n").expect("seed qa file");
+
+        let t1 = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("task-1".to_string()),
+                ..Default::default()
+            },
+        )
+        .expect("create task 1");
+
+        let t2 = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("task-2".to_string()),
+                ..Default::default()
+            },
+        )
+        .expect("create task 2");
+
+        let tasks = list_tasks_impl(&state).expect("list tasks");
+        assert_eq!(tasks.len(), 2);
+        // Most recent first
+        assert_eq!(tasks[0].id, t2.id);
+        assert_eq!(tasks[1].id, t1.id);
+    }
+
+    #[test]
+    fn get_task_details_impl_returns_items_and_empty_runs() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let detail = get_task_details_impl(&state, &task_id).expect("get task details");
+        assert_eq!(detail.task.id, task_id);
+        assert!(!detail.items.is_empty(), "should have at least 1 item");
+        // No command runs yet
+        assert!(detail.runs.is_empty());
+    }
+
+    #[test]
+    fn get_task_details_impl_with_command_run() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let item_id = first_item_id(&state, &task_id);
+
+        let dir = test_dir("details-run");
+        let stdout_path = dir.join("stdout.log");
+        let stderr_path = dir.join("stderr.log");
+        std::fs::write(&stdout_path, "output").unwrap();
+        std::fs::write(&stderr_path, "").unwrap();
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        repo.insert_command_run(&NewCommandRun {
+            id: "run-detail-1".to_string(),
+            task_item_id: item_id,
+            phase: "qa".to_string(),
+            command: "echo test".to_string(),
+            cwd: "/tmp".to_string(),
+            workspace_id: "default".to_string(),
+            agent_id: "echo".to_string(),
+            exit_code: 0,
+            stdout_path: stdout_path.to_string_lossy().to_string(),
+            stderr_path: stderr_path.to_string_lossy().to_string(),
+            started_at: now_ts(),
+            ended_at: now_ts(),
+            interrupted: 0,
+            output_json: "{}".to_string(),
+            artifacts_json: "[]".to_string(),
+            confidence: None,
+            quality_score: None,
+            validation_status: "unknown".to_string(),
+            session_id: None,
+            machine_output_source: "stdout".to_string(),
+            output_json_path: None,
+        })
+        .expect("insert command run");
+
+        let detail = get_task_details_impl(&state, &task_id).expect("get task details");
+        assert_eq!(detail.runs.len(), 1);
+        assert_eq!(detail.runs[0].id, "run-detail-1");
+        assert_eq!(detail.runs[0].phase, "qa");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn delete_task_impl_removes_task_and_log_files() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let item_id = first_item_id(&state, &task_id);
+
+        // Create log files on disk
+        let dir = test_dir("delete-logs");
+        let stdout_path = dir.join("delete_stdout.log");
+        let stderr_path = dir.join("delete_stderr.log");
+        std::fs::write(&stdout_path, "stdout data").unwrap();
+        std::fs::write(&stderr_path, "stderr data").unwrap();
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        repo.insert_command_run(&NewCommandRun {
+            id: "run-delete-1".to_string(),
+            task_item_id: item_id,
+            phase: "qa".to_string(),
+            command: "echo delete".to_string(),
+            cwd: "/tmp".to_string(),
+            workspace_id: "default".to_string(),
+            agent_id: "echo".to_string(),
+            exit_code: 0,
+            stdout_path: stdout_path.to_string_lossy().to_string(),
+            stderr_path: stderr_path.to_string_lossy().to_string(),
+            started_at: now_ts(),
+            ended_at: now_ts(),
+            interrupted: 0,
+            output_json: "{}".to_string(),
+            artifacts_json: "[]".to_string(),
+            confidence: None,
+            quality_score: None,
+            validation_status: "unknown".to_string(),
+            session_id: None,
+            machine_output_source: "stdout".to_string(),
+            output_json_path: None,
+        })
+        .expect("insert command run");
+
+        assert!(stdout_path.exists());
+        assert!(stderr_path.exists());
+
+        delete_task_impl(&state, &task_id).expect("delete task");
+
+        // Log files should be cleaned up
+        assert!(!stdout_path.exists(), "stdout log should be deleted");
+        assert!(!stderr_path.exists(), "stderr log should be deleted");
+
+        // Task should no longer be listable
+        let tasks = list_tasks_impl(&state).expect("list after delete");
+        assert!(tasks.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn delete_task_impl_nonexistent_returns_error() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let result = delete_task_impl(&state, "nonexistent-task-id");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn stream_task_logs_impl_returns_log_chunks() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let item_id = first_item_id(&state, &task_id);
+
+        // Create actual log files on disk
+        let dir = test_dir("stream-logs");
+        let stdout_path = dir.join("stream_stdout.log");
+        let stderr_path = dir.join("stream_stderr.log");
+        std::fs::write(&stdout_path, "line 1\nline 2\nline 3\n").unwrap();
+        std::fs::write(&stderr_path, "").unwrap();
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        repo.insert_command_run(&NewCommandRun {
+            id: "run-stream-1".to_string(),
+            task_item_id: item_id,
+            phase: "qa".to_string(),
+            command: "echo stream".to_string(),
+            cwd: "/tmp".to_string(),
+            workspace_id: "default".to_string(),
+            agent_id: "echo".to_string(),
+            exit_code: 0,
+            stdout_path: stdout_path.to_string_lossy().to_string(),
+            stderr_path: stderr_path.to_string_lossy().to_string(),
+            started_at: now_ts(),
+            ended_at: now_ts(),
+            interrupted: 0,
+            output_json: "{}".to_string(),
+            artifacts_json: "[]".to_string(),
+            confidence: None,
+            quality_score: None,
+            validation_status: "unknown".to_string(),
+            session_id: None,
+            machine_output_source: "stdout".to_string(),
+            output_json_path: None,
+        })
+        .expect("insert command run");
+
+        let chunks =
+            stream_task_logs_impl(&state, &task_id, 10, false).expect("stream task logs");
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].run_id, "run-stream-1");
+        assert_eq!(chunks[0].phase, "qa");
+        assert!(chunks[0].content.contains("line 1"));
+        assert!(chunks[0].content.contains("line 3"));
+        // No stderr section since stderr is empty
+        assert!(!chunks[0].content.contains("[stderr]"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stream_task_logs_impl_with_stderr() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let item_id = first_item_id(&state, &task_id);
+
+        let dir = test_dir("stream-stderr");
+        let stdout_path = dir.join("out.log");
+        let stderr_path = dir.join("err.log");
+        std::fs::write(&stdout_path, "stdout content\n").unwrap();
+        std::fs::write(&stderr_path, "warning: something\n").unwrap();
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        repo.insert_command_run(&NewCommandRun {
+            id: "run-stream-err".to_string(),
+            task_item_id: item_id,
+            phase: "implement".to_string(),
+            command: "echo err".to_string(),
+            cwd: "/tmp".to_string(),
+            workspace_id: "default".to_string(),
+            agent_id: "echo".to_string(),
+            exit_code: 1,
+            stdout_path: stdout_path.to_string_lossy().to_string(),
+            stderr_path: stderr_path.to_string_lossy().to_string(),
+            started_at: now_ts(),
+            ended_at: now_ts(),
+            interrupted: 0,
+            output_json: "{}".to_string(),
+            artifacts_json: "[]".to_string(),
+            confidence: None,
+            quality_score: None,
+            validation_status: "unknown".to_string(),
+            session_id: None,
+            machine_output_source: "stdout".to_string(),
+            output_json_path: None,
+        })
+        .expect("insert command run");
+
+        let chunks =
+            stream_task_logs_impl(&state, &task_id, 10, false).expect("stream task logs");
+        assert_eq!(chunks.len(), 1);
+        assert!(chunks[0].content.contains("stdout content"));
+        assert!(chunks[0].content.contains("[stderr]"));
+        assert!(chunks[0].content.contains("warning: something"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stream_task_logs_impl_with_timestamps() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let item_id = first_item_id(&state, &task_id);
+
+        let dir = test_dir("stream-ts");
+        let stdout_path = dir.join("ts_out.log");
+        let stderr_path = dir.join("ts_err.log");
+        std::fs::write(&stdout_path, "data\n").unwrap();
+        std::fs::write(&stderr_path, "").unwrap();
+
+        let ts = now_ts();
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        repo.insert_command_run(&NewCommandRun {
+            id: "run-ts-1".to_string(),
+            task_item_id: item_id,
+            phase: "qa".to_string(),
+            command: "echo ts".to_string(),
+            cwd: "/tmp".to_string(),
+            workspace_id: "default".to_string(),
+            agent_id: "echo".to_string(),
+            exit_code: 0,
+            stdout_path: stdout_path.to_string_lossy().to_string(),
+            stderr_path: stderr_path.to_string_lossy().to_string(),
+            started_at: ts.clone(),
+            ended_at: now_ts(),
+            interrupted: 0,
+            output_json: "{}".to_string(),
+            artifacts_json: "[]".to_string(),
+            confidence: None,
+            quality_score: None,
+            validation_status: "unknown".to_string(),
+            session_id: None,
+            machine_output_source: "stdout".to_string(),
+            output_json_path: None,
+        })
+        .expect("insert command run");
+
+        let chunks =
+            stream_task_logs_impl(&state, &task_id, 10, true).expect("stream with timestamps");
+        assert_eq!(chunks.len(), 1);
+        // When show_timestamps is true, header includes the timestamp
+        assert!(
+            chunks[0].content.contains(&ts),
+            "content should include timestamp"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stream_task_logs_impl_tail_count_limits_output() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let item_id = first_item_id(&state, &task_id);
+
+        let dir = test_dir("stream-tail");
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+
+        // Insert 3 command runs with distinct log files
+        for i in 0..3 {
+            let stdout_path = dir.join(format!("tail_out_{}.log", i));
+            let stderr_path = dir.join(format!("tail_err_{}.log", i));
+            std::fs::write(&stdout_path, format!("run {} output\n", i)).unwrap();
+            std::fs::write(&stderr_path, "").unwrap();
+
+            repo.insert_command_run(&NewCommandRun {
+                id: format!("run-tail-{}", i),
+                task_item_id: item_id.clone(),
+                phase: "qa".to_string(),
+                command: format!("echo {}", i),
+                cwd: "/tmp".to_string(),
+                workspace_id: "default".to_string(),
+                agent_id: "echo".to_string(),
+                exit_code: 0,
+                stdout_path: stdout_path.to_string_lossy().to_string(),
+                stderr_path: stderr_path.to_string_lossy().to_string(),
+                started_at: format!("2026-01-01T00:00:0{}Z", i),
+                ended_at: now_ts(),
+                interrupted: 0,
+                output_json: "{}".to_string(),
+                artifacts_json: "[]".to_string(),
+                confidence: None,
+                quality_score: None,
+                validation_status: "unknown".to_string(),
+                session_id: None,
+                machine_output_source: "stdout".to_string(),
+                output_json_path: None,
+            })
+            .expect("insert command run");
+        }
+
+        // Request only 2 tail entries
+        let chunks =
+            stream_task_logs_impl(&state, &task_id, 2, false).expect("stream with tail limit");
+        assert_eq!(chunks.len(), 2, "should be limited to 2 chunks");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stream_task_logs_impl_no_runs_returns_empty() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let chunks =
+            stream_task_logs_impl(&state, &task_id, 10, false).expect("stream empty logs");
+        assert!(chunks.is_empty());
+    }
 }

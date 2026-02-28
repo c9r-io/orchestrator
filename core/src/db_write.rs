@@ -218,3 +218,480 @@ impl DbWriteCoordinator {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dto::CreateTaskPayload;
+    use crate::task_ops::create_task_impl;
+    use crate::test_utils::TestState;
+
+    /// Helper: build a TestState, seed a QA file, create a task, return (state, task_id, first task_item_id).
+    fn setup_task() -> (std::sync::Arc<crate::state::InnerState>, String, String) {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/db_write_test.md");
+        std::fs::write(&qa_file, "# db_write test\n").expect("seed qa file");
+
+        let created =
+            create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
+        let task_id = created.id.clone();
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let item_id: String = conn
+            .query_row(
+                "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
+                params![task_id],
+                |row| row.get(0),
+            )
+            .expect("fetch first task_item_id");
+
+        // Leak fixture so the temp dir survives for the test
+        std::mem::forget(fixture);
+
+        (state, task_id, item_id)
+    }
+
+    // ── insert_event ──
+
+    #[test]
+    fn insert_event_stores_row() {
+        let (state, task_id, _item_id) = setup_task();
+
+        state
+            .db_writer
+            .insert_event(&task_id, None, "test_event", r#"{"key":"value"}"#)
+            .expect("insert_event");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (evt_type, payload): (String, String) = conn
+            .query_row(
+                "SELECT event_type, payload_json FROM events WHERE task_id = ?1",
+                params![task_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("query event");
+
+        assert_eq!(evt_type, "test_event");
+        assert_eq!(payload, r#"{"key":"value"}"#);
+    }
+
+    #[test]
+    fn insert_event_with_task_item_id() {
+        let (state, task_id, item_id) = setup_task();
+
+        state
+            .db_writer
+            .insert_event(&task_id, Some(&item_id), "item_evt", "{}")
+            .expect("insert_event with item_id");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let stored_item_id: String = conn
+            .query_row(
+                "SELECT task_item_id FROM events WHERE task_id = ?1 AND event_type = 'item_evt'",
+                params![task_id],
+                |row| row.get(0),
+            )
+            .expect("query event item_id");
+
+        assert_eq!(stored_item_id, item_id);
+    }
+
+    // ── set_task_status ──
+
+    #[test]
+    fn set_task_status_completed_sets_completed_at() {
+        let (state, task_id, _) = setup_task();
+
+        state
+            .db_writer
+            .set_task_status(&task_id, "completed", true)
+            .expect("set completed");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (status, completed_at): (String, Option<String>) = conn
+            .query_row(
+                "SELECT status, completed_at FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("query task");
+
+        assert_eq!(status, "completed");
+        assert!(completed_at.is_some(), "completed_at should be set");
+    }
+
+    #[test]
+    fn set_task_status_running_clears_completed_at() {
+        let (state, task_id, _) = setup_task();
+
+        // First mark completed
+        state
+            .db_writer
+            .set_task_status(&task_id, "completed", true)
+            .expect("set completed");
+
+        // Then set back to running -- should clear completed_at
+        state
+            .db_writer
+            .set_task_status(&task_id, "running", false)
+            .expect("set running");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (status, completed_at): (String, Option<String>) = conn
+            .query_row(
+                "SELECT status, completed_at FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("query task");
+
+        assert_eq!(status, "running");
+        assert!(completed_at.is_none(), "completed_at should be cleared for running");
+    }
+
+    #[test]
+    fn set_task_status_pending_clears_completed_at() {
+        let (state, task_id, _) = setup_task();
+
+        state
+            .db_writer
+            .set_task_status(&task_id, "completed", true)
+            .expect("set completed");
+
+        state
+            .db_writer
+            .set_task_status(&task_id, "pending", false)
+            .expect("set pending");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let completed_at: Option<String> = conn
+            .query_row(
+                "SELECT completed_at FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| row.get(0),
+            )
+            .expect("query task");
+
+        assert!(completed_at.is_none(), "completed_at should be cleared for pending");
+    }
+
+    #[test]
+    fn set_task_status_other_preserves_completed_at() {
+        let (state, task_id, _) = setup_task();
+
+        // First mark completed
+        state
+            .db_writer
+            .set_task_status(&task_id, "completed", true)
+            .expect("set completed");
+
+        // Use a non-clearing status with set_completed=false
+        state
+            .db_writer
+            .set_task_status(&task_id, "failed", false)
+            .expect("set failed");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (status, completed_at): (String, Option<String>) = conn
+            .query_row(
+                "SELECT status, completed_at FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("query task");
+
+        assert_eq!(status, "failed");
+        assert!(completed_at.is_some(), "completed_at should be preserved for non-clearing status");
+    }
+
+    // ── update_task_cycle_state ──
+
+    #[test]
+    fn update_task_cycle_state_sets_fields() {
+        let (state, task_id, _) = setup_task();
+
+        state
+            .db_writer
+            .update_task_cycle_state(&task_id, 3, true)
+            .expect("update cycle state");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (cycle, init_done): (i64, i64) = conn
+            .query_row(
+                "SELECT current_cycle, init_done FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("query task");
+
+        assert_eq!(cycle, 3);
+        assert_eq!(init_done, 1);
+    }
+
+    #[test]
+    fn update_task_cycle_state_init_done_false() {
+        let (state, task_id, _) = setup_task();
+
+        state
+            .db_writer
+            .update_task_cycle_state(&task_id, 0, false)
+            .expect("update cycle state");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let init_done: i64 = conn
+            .query_row(
+                "SELECT init_done FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| row.get(0),
+            )
+            .expect("query task");
+
+        assert_eq!(init_done, 0);
+    }
+
+    // ── update_task_item_status ──
+
+    #[test]
+    fn update_task_item_status_changes_status() {
+        let (state, _task_id, item_id) = setup_task();
+
+        state
+            .db_writer
+            .update_task_item_status(&item_id, "running")
+            .expect("update item status");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM task_items WHERE id = ?1",
+                params![item_id],
+                |row| row.get(0),
+            )
+            .expect("query item");
+
+        assert_eq!(status, "running");
+    }
+
+    // ── update_task_item_tickets ──
+
+    #[test]
+    fn update_task_item_tickets_sets_json() {
+        let (state, _task_id, item_id) = setup_task();
+
+        let files_json = r#"["ticket1.md","ticket2.md"]"#;
+        let content_json = r#"[{"title":"bug"}]"#;
+
+        state
+            .db_writer
+            .update_task_item_tickets(&item_id, files_json, content_json)
+            .expect("update tickets");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (stored_files, stored_content): (String, String) = conn
+            .query_row(
+                "SELECT ticket_files_json, ticket_content_json FROM task_items WHERE id = ?1",
+                params![item_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("query item tickets");
+
+        assert_eq!(stored_files, files_json);
+        assert_eq!(stored_content, content_json);
+    }
+
+    // ── persist_phase_result ──
+
+    fn make_command_run(item_id: &str) -> crate::task_repository::NewCommandRun {
+        crate::task_repository::NewCommandRun {
+            id: uuid::Uuid::new_v4().to_string(),
+            task_item_id: item_id.to_string(),
+            phase: "qa".to_string(),
+            command: "echo test".to_string(),
+            cwd: "/tmp".to_string(),
+            workspace_id: "default".to_string(),
+            agent_id: "echo".to_string(),
+            exit_code: 0,
+            stdout_path: "/tmp/stdout.log".to_string(),
+            stderr_path: "/tmp/stderr.log".to_string(),
+            started_at: "2026-01-01T00:00:00Z".to_string(),
+            ended_at: "2026-01-01T00:00:01Z".to_string(),
+            interrupted: 0,
+            output_json: "{}".to_string(),
+            artifacts_json: "[]".to_string(),
+            confidence: Some(0.95),
+            quality_score: None,
+            validation_status: "pass".to_string(),
+            session_id: None,
+            machine_output_source: "stdout".to_string(),
+            output_json_path: None,
+        }
+    }
+
+    #[test]
+    fn persist_phase_result_without_event() {
+        let (state, _task_id, item_id) = setup_task();
+        let run = make_command_run(&item_id);
+        let run_id = run.id.clone();
+
+        state
+            .db_writer
+            .persist_phase_result(&run, None)
+            .expect("persist_phase_result");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let phase: String = conn
+            .query_row(
+                "SELECT phase FROM command_runs WHERE id = ?1",
+                params![run_id],
+                |row| row.get(0),
+            )
+            .expect("query command_run");
+
+        assert_eq!(phase, "qa");
+    }
+
+    #[test]
+    fn persist_phase_result_with_single_event() {
+        let (state, task_id, item_id) = setup_task();
+        let run = make_command_run(&item_id);
+        let run_id = run.id.clone();
+
+        let event = DbEventRecord {
+            task_id: &task_id,
+            task_item_id: Some(&item_id),
+            event_type: "phase_complete",
+            payload_json: r#"{"phase":"qa"}"#,
+        };
+
+        state
+            .db_writer
+            .persist_phase_result(&run, Some(event))
+            .expect("persist_phase_result with event");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+
+        // Verify command run
+        let exit_code: i64 = conn
+            .query_row(
+                "SELECT exit_code FROM command_runs WHERE id = ?1",
+                params![run_id],
+                |row| row.get(0),
+            )
+            .expect("query command_run");
+        assert_eq!(exit_code, 0);
+
+        // Verify event
+        let evt_type: String = conn
+            .query_row(
+                "SELECT event_type FROM events WHERE task_id = ?1 AND event_type = 'phase_complete'",
+                params![task_id],
+                |row| row.get(0),
+            )
+            .expect("query event");
+        assert_eq!(evt_type, "phase_complete");
+    }
+
+    // ── persist_phase_result_with_events ──
+
+    #[test]
+    fn persist_phase_result_with_multiple_events() {
+        let (state, task_id, item_id) = setup_task();
+        let run = make_command_run(&item_id);
+        let run_id = run.id.clone();
+
+        let events = vec![
+            DbEventRecord {
+                task_id: &task_id,
+                task_item_id: Some(&item_id),
+                event_type: "started",
+                payload_json: "{}",
+            },
+            DbEventRecord {
+                task_id: &task_id,
+                task_item_id: None,
+                event_type: "finished",
+                payload_json: r#"{"ok":true}"#,
+            },
+        ];
+
+        state
+            .db_writer
+            .persist_phase_result_with_events(&run, &events)
+            .expect("persist with events");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+
+        // Verify command run exists
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM command_runs WHERE id = ?1",
+                params![run_id],
+                |row| row.get(0),
+            )
+            .expect("count command_runs");
+        assert_eq!(count, 1);
+
+        // Verify both events
+        let event_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM events WHERE task_id = ?1",
+                params![task_id],
+                |row| row.get(0),
+            )
+            .expect("count events");
+        assert_eq!(event_count, 2);
+    }
+
+    #[test]
+    fn persist_phase_result_with_empty_events() {
+        let (state, _task_id, item_id) = setup_task();
+        let run = make_command_run(&item_id);
+        let run_id = run.id.clone();
+
+        state
+            .db_writer
+            .persist_phase_result_with_events(&run, &[])
+            .expect("persist with empty events");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM command_runs WHERE id = ?1",
+                params![run_id],
+                |row| row.get(0),
+            )
+            .expect("count command_runs");
+        assert_eq!(count, 1);
+    }
+
+    // ── insert_command_run ──
+
+    #[test]
+    fn insert_command_run_stores_fields() {
+        let (state, _task_id, item_id) = setup_task();
+        let run = make_command_run(&item_id);
+        let run_id = run.id.clone();
+
+        state
+            .db_writer
+            .insert_command_run(&run)
+            .expect("insert_command_run");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (phase, cmd, confidence): (String, String, Option<f64>) = conn
+            .query_row(
+                "SELECT phase, command, confidence FROM command_runs WHERE id = ?1",
+                params![run_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("query command_run");
+
+        assert_eq!(phase, "qa");
+        assert_eq!(cmd, "echo test");
+        assert!((confidence.unwrap() - 0.95).abs() < 0.01);
+    }
+}

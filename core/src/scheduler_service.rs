@@ -156,4 +156,155 @@ mod tests {
         let winners = [r1, r2].into_iter().filter(|v| v.is_some()).count();
         assert_eq!(winners, 1);
     }
+
+    /// Helper to seed a qa file and create a task, returning the state and task id.
+    fn seed_task(fixture: &mut TestState) -> (std::sync::Arc<crate::state::InnerState>, String) {
+        let state = fixture.build();
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/svc_test.md");
+        std::fs::write(&qa_file, "# svc test\n").expect("seed qa file");
+        let created = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("svc-test".to_string()),
+                ..Default::default()
+            },
+        )
+        .expect("create task");
+        (state, created.id)
+    }
+
+    #[test]
+    fn enqueue_task_sets_pending_and_creates_wake_signal() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+
+        // First claim the task so it becomes "running"
+        let claimed = claim_next_pending_task(&state).expect("claim");
+        assert_eq!(claimed.as_deref(), Some(task_id.as_str()));
+
+        // Now enqueue it again
+        enqueue_task(&state, &task_id).expect("enqueue task");
+
+        // Verify it is pending again
+        let conn = crate::db::open_conn(&state.db_path).expect("open db");
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| row.get(0),
+            )
+            .expect("query status");
+        assert_eq!(status, "pending");
+
+        // Wake signal file should exist
+        let wake_path = worker_wake_signal_path(&state);
+        assert!(wake_path.exists(), "wake signal file should exist");
+    }
+
+    #[test]
+    fn next_pending_task_id_returns_pending() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+
+        let next = next_pending_task_id(&state).expect("next pending");
+        assert_eq!(next.as_deref(), Some(task_id.as_str()));
+    }
+
+    #[test]
+    fn next_pending_task_id_returns_none_when_no_pending() {
+        let mut fixture = TestState::new();
+        let (state, _task_id) = seed_task(&mut fixture);
+
+        // Claim the only task so none are pending
+        let _ = claim_next_pending_task(&state).expect("claim");
+
+        let next = next_pending_task_id(&state).expect("next pending after claim");
+        assert!(next.is_none(), "should be no pending tasks");
+    }
+
+    #[test]
+    fn pending_task_count_returns_correct_count() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        // No tasks yet
+        let count = pending_task_count(&state).expect("count 0");
+        assert_eq!(count, 0);
+
+        // Seed a qa file and create 2 tasks
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/count_test.md");
+        std::fs::write(&qa_file, "# count test\n").expect("seed qa file");
+
+        create_task_impl(&state, CreateTaskPayload::default()).expect("create task 1");
+        create_task_impl(&state, CreateTaskPayload::default()).expect("create task 2");
+
+        let count = pending_task_count(&state).expect("count 2");
+        assert_eq!(count, 2);
+
+        // Claim one
+        let _ = claim_next_pending_task(&state).expect("claim one");
+        let count = pending_task_count(&state).expect("count after claim");
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn signal_worker_stop_creates_stop_file() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let stop_path = worker_stop_signal_path(&state);
+        assert!(!stop_path.exists(), "stop file should not exist yet");
+
+        signal_worker_stop(&state).expect("signal stop");
+        assert!(stop_path.exists(), "stop file should be created");
+
+        let contents = std::fs::read_to_string(&stop_path).expect("read stop file");
+        assert_eq!(contents, "stop");
+
+        // Wake signal should also be touched
+        let wake_path = worker_wake_signal_path(&state);
+        assert!(wake_path.exists(), "wake signal should be touched by stop");
+    }
+
+    #[test]
+    fn clear_worker_stop_signal_removes_stop_file() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        // Create the stop signal first
+        signal_worker_stop(&state).expect("signal stop");
+        let stop_path = worker_stop_signal_path(&state);
+        assert!(stop_path.exists());
+
+        // Clear it
+        clear_worker_stop_signal(&state).expect("clear stop signal");
+        assert!(!stop_path.exists(), "stop file should be removed");
+    }
+
+    #[test]
+    fn clear_worker_stop_signal_noop_when_no_file() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        // Should not error even if file doesn't exist
+        clear_worker_stop_signal(&state).expect("clear nonexistent stop signal");
+    }
+
+    #[test]
+    fn worker_signal_paths_are_under_data_dir() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let stop_path = worker_stop_signal_path(&state);
+        let wake_path = worker_wake_signal_path(&state);
+
+        assert!(stop_path.starts_with(state.app_root.join("data")));
+        assert!(wake_path.starts_with(state.app_root.join("data")));
+        assert!(stop_path.ends_with("worker.stop"));
+        assert!(wake_path.ends_with("worker.wakeup"));
+    }
 }

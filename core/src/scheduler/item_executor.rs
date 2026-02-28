@@ -1240,3 +1240,236 @@ pub async fn process_item_filtered(
         .update_task_item_status(item_id, &item_status)?;
     Ok(pipeline_vars)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::PipelineVariables;
+    use std::collections::HashMap;
+
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "item-exec-test-{}-{}",
+            name,
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn empty_pipeline() -> PipelineVariables {
+        PipelineVariables {
+            prev_stdout: String::new(),
+            prev_stderr: String::new(),
+            diff: String::new(),
+            build_errors: Vec::new(),
+            test_failures: Vec::new(),
+            vars: HashMap::new(),
+        }
+    }
+
+    // ── spill_large_var tests ────────────────────────────────────────
+
+    #[test]
+    fn spill_large_var_small_value_inserts_inline() {
+        let dir = temp_dir("slv-small");
+        let mut pipeline = empty_pipeline();
+        let value = "hello world".to_string();
+
+        spill_large_var(&dir, "task1", "stdout", value.clone(), &mut pipeline);
+
+        assert_eq!(pipeline.vars.get("stdout").unwrap(), "hello world");
+        assert!(pipeline.vars.get("stdout_path").is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn spill_large_var_exactly_at_limit_inserts_inline() {
+        let dir = temp_dir("slv-exact");
+        let mut pipeline = empty_pipeline();
+        let value = "x".repeat(PIPELINE_VAR_INLINE_LIMIT);
+
+        spill_large_var(&dir, "task1", "out", value.clone(), &mut pipeline);
+
+        assert_eq!(pipeline.vars.get("out").unwrap(), &value);
+        assert!(pipeline.vars.get("out_path").is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn spill_large_var_one_byte_over_limit_spills_to_file() {
+        let dir = temp_dir("slv-over");
+        let mut pipeline = empty_pipeline();
+        let value = "x".repeat(PIPELINE_VAR_INLINE_LIMIT + 1);
+
+        spill_large_var(&dir, "task1", "big", value.clone(), &mut pipeline);
+
+        // Inline value should be truncated with the marker
+        let inline = pipeline.vars.get("big").unwrap();
+        assert!(inline.contains("...\n[truncated — full content at "));
+        // The inline prefix (before the marker) should be at most PIPELINE_VAR_INLINE_LIMIT bytes
+        let prefix_end = inline.find("...\n[truncated").unwrap();
+        assert!(prefix_end <= PIPELINE_VAR_INLINE_LIMIT);
+
+        // Companion path variable should exist
+        let path_str = pipeline.vars.get("big_path").unwrap();
+        let spill_path = std::path::Path::new(path_str);
+        assert!(spill_path.exists());
+
+        // File should contain the full original value
+        let on_disk = std::fs::read_to_string(spill_path).unwrap();
+        assert_eq!(on_disk, value);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn spill_large_var_large_value_sets_correct_path_key() {
+        let dir = temp_dir("slv-pathkey");
+        let mut pipeline = empty_pipeline();
+        let value = "y".repeat(PIPELINE_VAR_INLINE_LIMIT + 100);
+
+        spill_large_var(&dir, "t42", "my_key", value, &mut pipeline);
+
+        let path_str = pipeline.vars.get("my_key_path").unwrap();
+        assert!(path_str.contains("t42"));
+        assert!(path_str.ends_with("my_key.txt"));
+    }
+
+    #[test]
+    fn spill_large_var_multibyte_boundary() {
+        let dir = temp_dir("slv-mb");
+        let mut pipeline = empty_pipeline();
+        // Build a string that puts a multi-byte char right at the 4096 boundary.
+        // Chinese chars are 3 bytes each. Fill up to just before the limit, then
+        // add a char whose encoding would straddle the boundary.
+        let prefix_len = PIPELINE_VAR_INLINE_LIMIT - 1; // 4095 ASCII bytes
+        let mut value = "a".repeat(prefix_len);
+        // Append multi-byte chars so total exceeds limit
+        value.push_str("你好世界"); // 12 bytes of UTF-8
+        assert!(value.len() > PIPELINE_VAR_INLINE_LIMIT);
+
+        spill_large_var(&dir, "task1", "mb", value.clone(), &mut pipeline);
+
+        let inline = pipeline.vars.get("mb").unwrap();
+        // The truncated portion must be valid UTF-8 (guaranteed by safe_end logic)
+        assert!(inline.contains("...\n[truncated"));
+
+        // Verify the full file content is intact
+        let path_str = pipeline.vars.get("mb_path").unwrap();
+        let on_disk = std::fs::read_to_string(path_str).unwrap();
+        assert_eq!(on_disk, value);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // ── spill_to_file tests ──────────────────────────────────────────
+
+    #[test]
+    fn spill_to_file_small_value_returns_none() {
+        let dir = temp_dir("stf-small");
+        let value = "short string";
+
+        let result = spill_to_file(&dir, "task1", "key", value);
+        assert!(result.is_none());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn spill_to_file_exactly_at_limit_returns_none() {
+        let dir = temp_dir("stf-exact");
+        let value = "z".repeat(PIPELINE_VAR_INLINE_LIMIT);
+
+        let result = spill_to_file(&dir, "task1", "key", &value);
+        assert!(result.is_none());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn spill_to_file_one_byte_over_returns_some() {
+        let dir = temp_dir("stf-over");
+        let value = "z".repeat(PIPELINE_VAR_INLINE_LIMIT + 1);
+
+        let result = spill_to_file(&dir, "task1", "key", &value);
+        assert!(result.is_some());
+
+        let (truncated, path_str) = result.unwrap();
+        assert!(truncated.starts_with("zzzz"));
+        assert!(truncated.contains("...\n[truncated — full content at "));
+        assert!(path_str.ends_with("key.txt"));
+
+        // Verify file on disk
+        let on_disk = std::fs::read_to_string(&path_str).unwrap();
+        assert_eq!(on_disk, value);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn spill_to_file_large_value_truncated_format() {
+        let dir = temp_dir("stf-fmt");
+        let value = "A".repeat(PIPELINE_VAR_INLINE_LIMIT + 500);
+
+        let (truncated, path_str) = spill_to_file(&dir, "task1", "output", &value).unwrap();
+
+        // The truncated string should contain the marker text
+        assert!(truncated.contains("...\n[truncated — full content at "));
+        // The path in the truncated message should match the returned path
+        assert!(truncated.contains(&path_str));
+        // The truncated prefix should be exactly PIPELINE_VAR_INLINE_LIMIT bytes of 'A'
+        let prefix = &truncated[..PIPELINE_VAR_INLINE_LIMIT];
+        assert!(prefix.chars().all(|c| c == 'A'));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn spill_to_file_multibyte_at_boundary() {
+        let dir = temp_dir("stf-mb");
+        // Create a value where a 3-byte UTF-8 char straddles the 4096 boundary.
+        // 4095 ASCII bytes + "你好" (6 bytes) = 4101 total, exceeding the limit.
+        // The char "你" starts at byte 4095 and ends at 4097, straddling the boundary.
+        let mut value = "b".repeat(PIPELINE_VAR_INLINE_LIMIT - 1);
+        value.push_str("你好世界你好世界"); // 24 more bytes
+
+        let result = spill_to_file(&dir, "task1", "key", &value);
+        assert!(result.is_some());
+
+        let (truncated, _path_str) = result.unwrap();
+        // The truncated text should be valid UTF-8 (it is a String, so guaranteed)
+        // and should NOT split a multi-byte character
+        let prefix_end = truncated.find("...\n[truncated").unwrap();
+        let prefix = &truncated[..prefix_end];
+        // The prefix should end before the multi-byte char since it can't fit
+        // within the limit without splitting
+        assert_eq!(prefix.len(), PIPELINE_VAR_INLINE_LIMIT - 1);
+        assert!(prefix.chars().all(|c| c == 'b'));
+
+        // Full content on disk should be intact
+        let on_disk = std::fs::read_to_string(&_path_str).unwrap();
+        assert_eq!(on_disk, value);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn spill_to_file_multibyte_fully_within_limit() {
+        let dir = temp_dir("stf-mb2");
+        // 4094 ASCII bytes + "你" (3 bytes) = 4097, just over the limit.
+        // But the char boundary at 4094+3=4097 > 4096, so safe_end backs down to 4094.
+        let mut value = "c".repeat(PIPELINE_VAR_INLINE_LIMIT - 2);
+        value.push_str("你好世界"); // 12 bytes, total = 4094 + 12 = 4106
+
+        let (truncated, _) = spill_to_file(&dir, "task1", "k", &value).unwrap();
+        let prefix_end = truncated.find("...\n[truncated").unwrap();
+        let prefix = &truncated[..prefix_end];
+        // safe_end should back up to the start of the multibyte char
+        // 4094 bytes of 'c', then "你" starts at 4094 and needs bytes 4094..4097
+        // which exceeds the 4096 limit, so safe_end = 4094
+        assert_eq!(prefix.len(), PIPELINE_VAR_INLINE_LIMIT - 2);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
