@@ -1,6 +1,7 @@
 use crate::config::{
-    ItemFinalizeContext, PipelineVariables, StepPrehookContext, TaskExecutionStep,
-    TaskRuntimeContext, WorkflowStepType, PIPELINE_VAR_INLINE_LIMIT,
+    CaptureSource, ExecutionMode, ItemFinalizeContext, OnFailureAction, OnSuccessAction,
+    PipelineVariables, PostAction, StepPrehookContext, TaskExecutionStep,
+    TaskRuntimeContext, PIPELINE_VAR_INLINE_LIMIT,
 };
 use crate::events::insert_event;
 use crate::prehook::{emit_item_finalize_event, evaluate_step_prehook};
@@ -13,7 +14,7 @@ use crate::ticket::{
 };
 use anyhow::Result;
 use serde_json::json;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -94,6 +95,214 @@ pub(crate) fn spill_to_file(
     Some((truncated, path.to_string_lossy().to_string()))
 }
 
+// ── StepExecutionAccumulator ─────────────────────────────────────
+
+/// Accumulator that tracks state across steps in the unified execution loop.
+pub struct StepExecutionAccumulator {
+    pub item_status: String,
+    pub pipeline_vars: PipelineVariables,
+    pub active_tickets: Vec<String>,
+    pub created_ticket_files: Vec<String>,
+    pub phase_artifacts: Vec<crate::collab::Artifact>,
+    pub flags: HashMap<String, bool>,
+    pub exit_codes: HashMap<String, i64>,
+    pub step_ran: HashMap<String, bool>,
+    pub step_skipped: HashMap<String, bool>,
+    pub new_ticket_count: i64,
+}
+
+impl StepExecutionAccumulator {
+    pub fn new(pipeline_vars: PipelineVariables) -> Self {
+        Self {
+            item_status: "pending".to_string(),
+            pipeline_vars,
+            active_tickets: Vec::new(),
+            created_ticket_files: Vec::new(),
+            phase_artifacts: Vec::new(),
+            flags: HashMap::new(),
+            exit_codes: HashMap::new(),
+            step_ran: HashMap::new(),
+            step_skipped: HashMap::new(),
+            new_ticket_count: 0,
+        }
+    }
+
+    /// Build a StepPrehookContext from accumulated state.
+    pub fn to_prehook_context(
+        &self,
+        task_id: &str,
+        item: &crate::dto::TaskItemRow,
+        task_ctx: &TaskRuntimeContext,
+        step_id: &str,
+    ) -> StepPrehookContext {
+        let max_cycles = task_ctx
+            .execution_plan
+            .loop_policy
+            .guard
+            .max_cycles
+            .unwrap_or(1);
+        StepPrehookContext {
+            task_id: task_id.to_string(),
+            task_item_id: item.id.clone(),
+            cycle: task_ctx.current_cycle,
+            step: step_id.to_string(),
+            qa_file_path: item.qa_file_path.clone(),
+            item_status: self.item_status.clone(),
+            task_status: "running".to_string(),
+            qa_exit_code: self.exit_codes.get("qa").or(self.exit_codes.get("qa_testing")).copied(),
+            fix_exit_code: self.exit_codes.get("fix").or(self.exit_codes.get("ticket_fix")).copied(),
+            retest_exit_code: self.exit_codes.get("retest").copied(),
+            active_ticket_count: self.active_tickets.len() as i64,
+            new_ticket_count: self.new_ticket_count,
+            qa_failed: self.flags.get("qa_failed").copied().unwrap_or(false),
+            fix_required: self.flags.get("qa_failed").copied().unwrap_or(false)
+                || !self.active_tickets.is_empty(),
+            qa_confidence: None,
+            qa_quality_score: None,
+            fix_has_changes: None,
+            upstream_artifacts: vec![],
+            build_error_count: self.pipeline_vars.build_errors.len() as i64,
+            test_failure_count: self.pipeline_vars.test_failures.len() as i64,
+            build_exit_code: self.exit_codes.get("build").copied(),
+            test_exit_code: self.exit_codes.get("test").copied(),
+            self_test_exit_code: self
+                .pipeline_vars
+                .vars
+                .get("self_test_exit_code")
+                .and_then(|v| v.parse::<i64>().ok()),
+            self_test_passed: self
+                .pipeline_vars
+                .vars
+                .get("self_test_passed")
+                .map(|v| v == "true")
+                .unwrap_or(false),
+            max_cycles,
+            is_last_cycle: task_ctx.current_cycle >= max_cycles,
+        }
+    }
+
+    /// Build an ItemFinalizeContext from accumulated state.
+    pub fn to_finalize_context(
+        &self,
+        task_id: &str,
+        item: &crate::dto::TaskItemRow,
+        task_ctx: &TaskRuntimeContext,
+    ) -> ItemFinalizeContext {
+        let qa_ran = self.step_ran.get("qa").or(self.step_ran.get("qa_testing")).copied().unwrap_or(false);
+        let qa_skipped = self.step_skipped.get("qa").or(self.step_skipped.get("qa_testing")).copied().unwrap_or(false);
+        let qa_enabled = qa_ran || qa_skipped;
+        let fix_ran = self.step_ran.get("fix").or(self.step_ran.get("ticket_fix")).copied().unwrap_or(false);
+        let fix_success = self.flags.get("fix_success").copied().unwrap_or(false);
+        let fix_enabled = fix_ran
+            || self.step_skipped.get("fix").or(self.step_skipped.get("ticket_fix")).copied().unwrap_or(false)
+            || task_ctx.execution_plan.steps.iter().any(|s| {
+                (s.id == "fix" || s.id == "ticket_fix") && s.enabled
+            });
+        let retest_ran = self.step_ran.get("retest").copied().unwrap_or(false);
+        let retest_success = self.flags.get("retest_success").copied().unwrap_or(false);
+        let retest_enabled = retest_ran
+            || self.step_skipped.get("retest").copied().unwrap_or(false)
+            || task_ctx.execution_plan.steps.iter().any(|s| s.id == "retest" && s.enabled);
+
+        ItemFinalizeContext {
+            task_id: task_id.to_string(),
+            task_item_id: item.id.clone(),
+            cycle: task_ctx.current_cycle,
+            qa_file_path: item.qa_file_path.clone(),
+            item_status: self.item_status.clone(),
+            task_status: "running".to_string(),
+            qa_exit_code: self.exit_codes.get("qa").or(self.exit_codes.get("qa_testing")).copied(),
+            fix_exit_code: self.exit_codes.get("fix").or(self.exit_codes.get("ticket_fix")).copied(),
+            retest_exit_code: self.exit_codes.get("retest").copied(),
+            active_ticket_count: self.active_tickets.len() as i64,
+            new_ticket_count: self.new_ticket_count,
+            retest_new_ticket_count: 0,
+            qa_failed: self.flags.get("qa_failed").copied().unwrap_or(false),
+            fix_required: !self.active_tickets.is_empty(),
+            qa_enabled,
+            qa_ran,
+            qa_skipped,
+            fix_enabled,
+            fix_ran,
+            fix_success,
+            retest_enabled,
+            retest_ran,
+            retest_success,
+            qa_confidence: None,
+            qa_quality_score: None,
+            fix_confidence: None,
+            fix_quality_score: None,
+            total_artifacts: self.phase_artifacts.len() as i64,
+            has_ticket_artifacts: self
+                .phase_artifacts
+                .iter()
+                .any(|a| matches!(a.kind, crate::collab::ArtifactKind::Ticket { .. })),
+            has_code_change_artifacts: self
+                .phase_artifacts
+                .iter()
+                .any(|a| matches!(a.kind, crate::collab::ArtifactKind::CodeChange { .. })),
+            is_last_cycle: task_ctx.current_cycle
+                >= task_ctx
+                    .execution_plan
+                    .loop_policy
+                    .guard
+                    .max_cycles
+                    .unwrap_or(1),
+        }
+    }
+
+    /// Apply capture declarations from a step result into the accumulator.
+    pub fn apply_captures(
+        &mut self,
+        captures: &[crate::config::CaptureDecl],
+        step_id: &str,
+        result: &crate::dto::RunResult,
+    ) {
+        for cap in captures {
+            match cap.source {
+                CaptureSource::ExitCode => {
+                    self.exit_codes.insert(step_id.to_string(), result.exit_code);
+                    self.pipeline_vars
+                        .vars
+                        .insert(cap.var.clone(), result.exit_code.to_string());
+                }
+                CaptureSource::FailedFlag => {
+                    let failed = !result.is_success();
+                    self.flags.insert(cap.var.clone(), failed);
+                    self.pipeline_vars
+                        .vars
+                        .insert(cap.var.clone(), failed.to_string());
+                }
+                CaptureSource::SuccessFlag => {
+                    let success = result.is_success();
+                    self.flags.insert(cap.var.clone(), success);
+                    self.pipeline_vars
+                        .vars
+                        .insert(cap.var.clone(), success.to_string());
+                }
+                CaptureSource::Stdout => {
+                    if let Some(ref output) = result.output {
+                        spill_large_var(
+                            Path::new(""),
+                            "",
+                            &cap.var,
+                            output.stdout.clone(),
+                            &mut self.pipeline_vars,
+                        );
+                    }
+                }
+                CaptureSource::Stderr => {
+                    if let Some(ref output) = result.output {
+                        self.pipeline_vars
+                            .vars
+                            .insert(cap.var.clone(), output.stderr.clone());
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub async fn execute_builtin_step(
     state: &Arc<InnerState>,
     task_id: &str,
@@ -103,11 +312,7 @@ pub async fn execute_builtin_step(
     runtime: &RunningTask,
     rel_path: &str,
 ) -> Result<(crate::dto::RunResult, PipelineVariables)> {
-    let phase = step
-        .step_type
-        .as_ref()
-        .map(|t| t.as_str())
-        .unwrap_or(&step.id);
+    let phase = &step.id;
 
     let result = if let Some(ref command) = step.command {
         let ctx = crate::collab::AgentContext::new(
@@ -329,8 +534,12 @@ pub async fn process_item(
 }
 
 /// Process an item, optionally filtering to only run steps whose id is in `step_filter`.
-/// When `step_filter` is `None`, all steps run (legacy behavior).
+/// When `step_filter` is `None`, all steps run.
 /// Returns updated pipeline variables so callers can propagate task-scoped vars.
+///
+/// # Unified execution loop
+/// Every step goes through the same path: prehook → execute → capture → status → post_actions.
+/// Step-specific behaviors (on_failure, captures, post_actions) are declared as data in `StepBehavior`.
 pub async fn process_item_filtered(
     state: &Arc<InnerState>,
     task_id: &str,
@@ -344,681 +553,333 @@ pub async fn process_item_filtered(
     let should_run_step = |step_id: &str| -> bool {
         step_filter.map_or(true, |f| f.contains(step_id))
     };
-    let qa_step = task_ctx.execution_plan.step(WorkflowStepType::Qa);
-    let plan_step = task_ctx.execution_plan.step(WorkflowStepType::Plan);
-    let ticket_scan_step = task_ctx.execution_plan.step(WorkflowStepType::TicketScan);
-    let fix_step = task_ctx.execution_plan.step(WorkflowStepType::Fix);
-    let retest_step = task_ctx.execution_plan.step(WorkflowStepType::Retest);
-    let qa_enabled = qa_step.is_some();
-    let fix_enabled = fix_step.is_some();
-    let retest_enabled = retest_step.is_some();
-    let mut active_tickets: Vec<String> = Vec::new();
-    let retest_new_tickets: Vec<String> = Vec::new();
-    let mut qa_failed = false;
-    let mut qa_ran = false;
-    let mut qa_skipped = false;
-    let mut fix_ran = false;
-    let mut fix_success = false;
-    let mut retest_ran = false;
-    let mut retest_success = false;
-    let mut qa_exit_code: Option<i64> = None;
-    let mut fix_exit_code: Option<i64> = None;
-    let mut retest_exit_code: Option<i64> = None;
-    let mut new_ticket_count = 0_i64;
-    let mut item_status = "pending".to_string();
-    let mut phase_artifacts: Vec<crate::collab::Artifact> = Vec::new();
-    let mut qa_stdout_path: Option<String> = None;
-    let mut qa_stderr_path: Option<String> = None;
-    let mut created_ticket_files: Vec<String> = Vec::new();
-    let mut pipeline_vars = task_ctx.pipeline_vars.clone();
-    let mut build_exit_code: Option<i64> = None;
-    let mut test_exit_code: Option<i64> = None;
-
-    if let Some(plan_step) = plan_step {
-        if plan_step.enabled && should_run_step(&plan_step.id) && (plan_step.repeatable || task_ctx.current_cycle <= 1) {
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                "step_started",
-                json!({"step":"plan"}),
-            )?;
-            let result = run_phase_with_rotation(
-                state,
-                RotatingPhaseRunRequest {
-                    task_id,
-                    item_id,
-                    step_id: &plan_step.id,
-                    phase: "plan",
-                    tty: plan_step.tty,
-                    capability: plan_step.required_capability.as_deref(),
-                    rel_path: &item.qa_file_path,
-                    ticket_paths: &active_tickets,
-                    workspace_root: &task_ctx.workspace_root,
-                    workspace_id: &task_ctx.workspace_id,
-                    cycle: task_ctx.current_cycle,
-                    runtime,
-                    pipeline_vars: Some(&task_ctx.pipeline_vars),
-                    step_timeout_secs: task_ctx.safety.step_timeout_secs,
-                },
-            )
-            .await?;
-            if let Some(ref output) = result.output {
-                pipeline_vars.prev_stdout = output.stdout.clone();
-                pipeline_vars.prev_stderr = output.stderr.clone();
-                if let Some((trunc, path)) = spill_to_file(
-                    &state.logs_dir,
-                    task_id,
-                    "prev_stdout",
-                    &pipeline_vars.prev_stdout,
-                ) {
-                    pipeline_vars.prev_stdout = trunc;
-                    pipeline_vars
-                        .vars
-                        .insert("prev_stdout_path".to_string(), path);
-                }
-                if let Some((trunc, path)) = spill_to_file(
-                    &state.logs_dir,
-                    task_id,
-                    "prev_stderr",
-                    &pipeline_vars.prev_stderr,
-                ) {
-                    pipeline_vars.prev_stderr = trunc;
-                    pipeline_vars
-                        .vars
-                        .insert("prev_stderr_path".to_string(), path);
-                }
-                if !output.stdout.is_empty() {
-                    spill_large_var(
-                        &state.logs_dir,
-                        task_id,
-                        "plan_output",
-                        output.stdout.clone(),
-                        &mut pipeline_vars,
-                    );
-                }
-            }
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                "step_finished",
-                json!({"step":"plan","exit_code":result.exit_code,"success":result.exit_code == 0}),
-            )?;
-            if result.exit_code != 0 {
-                item_status = "unresolved".to_string();
-                state
-                    .db_writer
-                    .update_task_item_status(item_id, &item_status)?;
-                return Ok(pipeline_vars);
-            }
-        }
-    }
-
-    if let Some(qa_step) = qa_step.filter(|s| should_run_step(&s.id)) {
-        let should_run_qa = evaluate_step_prehook(
-            state,
-            qa_step.prehook.as_ref(),
-            &StepPrehookContext {
-                task_id: task_id.to_string(),
-                task_item_id: item_id.to_string(),
-                cycle: task_ctx.current_cycle,
-                step: "qa".to_string(),
-                qa_file_path: item.qa_file_path.clone(),
-                item_status: item_status.clone(),
-                task_status: "running".to_string(),
-                qa_exit_code,
-                fix_exit_code,
-                retest_exit_code,
-                active_ticket_count: active_tickets.len() as i64,
-                new_ticket_count,
-                qa_failed,
-                fix_required: qa_failed || !active_tickets.is_empty(),
-                qa_confidence: None,
-                qa_quality_score: None,
-                fix_has_changes: None,
-                upstream_artifacts: vec![],
-                build_error_count: 0,
-                test_failure_count: 0,
-                build_exit_code: None,
-                test_exit_code: None,
-                self_test_exit_code: None,
-                self_test_passed: false,
-                max_cycles: task_ctx
-                    .execution_plan
-                    .loop_policy
-                    .guard
-                    .max_cycles
-                    .unwrap_or(1),
-                is_last_cycle: task_ctx.current_cycle
-                    >= task_ctx
-                        .execution_plan
-                        .loop_policy
-                        .guard
-                        .max_cycles
-                        .unwrap_or(1),
-            },
-        )?;
-
-        if should_run_qa {
-            qa_ran = true;
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                "step_started",
-                json!({"step":"qa"}),
-            )?;
-            let result = run_phase_with_rotation(
-                state,
-                RotatingPhaseRunRequest {
-                    task_id,
-                    item_id,
-                    step_id: &qa_step.id,
-                    phase: "qa",
-                    tty: qa_step.tty,
-                    capability: qa_step.required_capability.as_deref(),
-                    rel_path: &item.qa_file_path,
-                    ticket_paths: &active_tickets,
-                    workspace_root: &task_ctx.workspace_root,
-                    workspace_id: &task_ctx.workspace_id,
-                    cycle: task_ctx.current_cycle,
-                    runtime,
-                    pipeline_vars: None,
-                    step_timeout_secs: task_ctx.safety.step_timeout_secs,
-                },
-            )
-            .await?;
-            qa_exit_code = Some(result.exit_code);
-            qa_failed = result.exit_code != 0;
-            qa_stdout_path = Some(result.stdout_path.clone());
-            qa_stderr_path = Some(result.stderr_path.clone());
-
-            let qa_artifacts = result
-                .output
-                .as_ref()
-                .map(|o| o.artifacts.clone())
-                .unwrap_or_default();
-            if !qa_artifacts.is_empty() {
-                insert_event(
-                    state,
-                    task_id,
-                    Some(item_id),
-                    "artifacts_parsed",
-                    json!({"step":"qa","count":qa_artifacts.len()}),
-                )?;
-                phase_artifacts.extend(qa_artifacts);
-            }
-
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                "step_finished",
-                json!({"step":"qa","exit_code":result.exit_code,"success":result.is_success()}),
-            )?;
-        } else {
-            qa_skipped = true;
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                "step_skipped",
-                json!({"step":"qa"}),
-            )?;
-        }
-    }
-
-    if qa_failed || (!active_tickets.is_empty() && qa_enabled) {
-        item_status = "qa_failed".to_string();
-    }
-
-    if qa_failed {
-        if let Some(qa_exit) = qa_exit_code {
-            let stdout_path = qa_stdout_path.clone().unwrap_or_default();
-            let stderr_path = qa_stderr_path.clone().unwrap_or_default();
-            let task_name = SqliteTaskRepository::new(state.db_path.clone())
-                .load_task_name(task_id)?
-                .unwrap_or_else(|| task_id.to_string());
-            match create_ticket_for_qa_failure(
-                &task_ctx.workspace_root,
-                &task_ctx.ticket_dir,
-                &task_name,
-                &item.qa_file_path,
-                qa_exit,
-                &stdout_path,
-                &stderr_path,
-            ) {
-                Ok(Some(ticket_path)) => {
-                    created_ticket_files.push(ticket_path.clone());
-                    insert_event(
-                        state,
-                        task_id,
-                        Some(item_id),
-                        "ticket_created",
-                        json!({"path": ticket_path, "qa_file": item.qa_file_path}),
-                    )?;
-                }
-                Ok(None) => {}
-                Err(e) => eprintln!("[warn] failed to auto-create ticket: {e}"),
-            }
-        }
-    }
-
-    if let Some(scan_step) = ticket_scan_step.filter(|s| should_run_step(&s.id)) {
-        if scan_step.enabled {
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                "step_started",
-                json!({"step":"ticket_scan"}),
-            )?;
-            let tickets = scan_active_tickets_for_task_items(task_ctx, task_item_paths)?;
-            active_tickets = tickets.get(&item.qa_file_path).cloned().unwrap_or_default();
-            new_ticket_count = active_tickets.len() as i64;
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                "step_finished",
-                json!({"step":"ticket_scan","tickets":active_tickets.len()}),
-            )?;
-        }
-    } else {
-        active_tickets = list_existing_tickets_for_item(task_ctx, &item.qa_file_path)?;
-        new_ticket_count = active_tickets.len() as i64;
-    }
-
-    if active_tickets.is_empty() {
-        let ticket_artifacts = phase_artifacts
-            .iter()
-            .filter(|a| matches!(a.kind, crate::collab::ArtifactKind::Ticket { .. }))
-            .count();
-        if ticket_artifacts > 0 {
-            active_tickets = (0..ticket_artifacts)
-                .map(|idx| format!("artifact://ticket/{}", idx))
-                .collect();
-            new_ticket_count = active_tickets.len() as i64;
-        }
-    }
-
-    if let Some(fix_step) = fix_step.filter(|s| should_run_step(&s.id)) {
-        if fix_step.enabled && !active_tickets.is_empty() {
-            let should_run_fix = evaluate_step_prehook(
-                state,
-                fix_step.prehook.as_ref(),
-                &StepPrehookContext {
-                    task_id: task_id.to_string(),
-                    task_item_id: item_id.to_string(),
-                    cycle: task_ctx.current_cycle,
-                    step: "fix".to_string(),
-                    qa_file_path: item.qa_file_path.clone(),
-                    item_status: item_status.clone(),
-                    task_status: "running".to_string(),
-                    qa_exit_code,
-                    fix_exit_code,
-                    retest_exit_code,
-                    active_ticket_count: active_tickets.len() as i64,
-                    new_ticket_count,
-                    qa_failed,
-                    fix_required: qa_failed || !active_tickets.is_empty(),
-                    qa_confidence: None,
-                    qa_quality_score: None,
-                    fix_has_changes: None,
-                    upstream_artifacts: vec![],
-                    build_error_count: 0,
-                    test_failure_count: 0,
-                    build_exit_code: None,
-                    test_exit_code: None,
-                    self_test_exit_code: None,
-                    self_test_passed: false,
-                    max_cycles: task_ctx
-                        .execution_plan
-                        .loop_policy
-                        .guard
-                        .max_cycles
-                        .unwrap_or(1),
-                    is_last_cycle: task_ctx.current_cycle
-                        >= task_ctx
-                            .execution_plan
-                            .loop_policy
-                            .guard
-                            .max_cycles
-                            .unwrap_or(1),
-                },
-            )?;
-
-            if should_run_fix {
-                fix_ran = true;
-                insert_event(
-                    state,
-                    task_id,
-                    Some(item_id),
-                    "step_started",
-                    json!({"step":"fix"}),
-                )?;
-                let result = run_phase_with_rotation(
-                    state,
-                    RotatingPhaseRunRequest {
-                        task_id,
-                        item_id,
-                        step_id: &fix_step.id,
-                        phase: "fix",
-                        tty: fix_step.tty,
-                        capability: fix_step.required_capability.as_deref(),
-                        rel_path: &item.qa_file_path,
-                        ticket_paths: &active_tickets,
-                        workspace_root: &task_ctx.workspace_root,
-                        workspace_id: &task_ctx.workspace_id,
-                        cycle: task_ctx.current_cycle,
-                        runtime,
-                        pipeline_vars: None,
-                        step_timeout_secs: task_ctx.safety.step_timeout_secs,
-                    },
-                )
-                .await?;
-                fix_exit_code = Some(result.exit_code);
-                fix_success = result.is_success();
-                if fix_success {
-                    item_status = "fixed".to_string();
-                }
-
-                let fix_artifacts = result
-                    .output
-                    .as_ref()
-                    .map(|o| o.artifacts.clone())
-                    .unwrap_or_default();
-                if !fix_artifacts.is_empty() {
-                    insert_event(
-                        state,
-                        task_id,
-                        Some(item_id),
-                        "artifacts_parsed",
-                        json!({"step":"fix","count":fix_artifacts.len()}),
-                    )?;
-                    phase_artifacts.extend(fix_artifacts);
-                }
-
-                insert_event(
-                    state,
-                    task_id,
-                    Some(item_id),
-                    "step_finished",
-                    json!({"step":"fix","exit_code":result.exit_code,"success":fix_success}),
-                )?;
-            }
-        }
-    }
-
-    if let Some(retest_step) = retest_step.filter(|s| should_run_step(&s.id)) {
-        if retest_step.enabled && fix_success {
-            retest_ran = true;
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                "step_started",
-                json!({"step":"retest"}),
-            )?;
-            let result = run_phase_with_rotation(
-                state,
-                RotatingPhaseRunRequest {
-                    task_id,
-                    item_id,
-                    step_id: &retest_step.id,
-                    phase: "retest",
-                    tty: retest_step.tty,
-                    capability: retest_step.required_capability.as_deref(),
-                    rel_path: &item.qa_file_path,
-                    ticket_paths: &retest_new_tickets,
-                    workspace_root: &task_ctx.workspace_root,
-                    workspace_id: &task_ctx.workspace_id,
-                    cycle: task_ctx.current_cycle,
-                    runtime,
-                    pipeline_vars: None,
-                    step_timeout_secs: task_ctx.safety.step_timeout_secs,
-                },
-            )
-            .await?;
-            retest_exit_code = Some(result.exit_code);
-            retest_success = result.is_success();
-            if retest_success {
-                item_status = "verified".to_string();
-            }
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                "step_finished",
-                json!({"step":"retest","exit_code":result.exit_code,"success":retest_success}),
-            )?;
-        }
-    }
+    let mut acc = StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone());
+    // ── Unified step loop ────────────────────────────────────────────
 
     for step in &task_ctx.execution_plan.steps {
-        if step.is_guard {
-            continue;
-        }
-        if !should_run_step(&step.id) {
-            continue;
-        }
-        let step_type = step.step_type.as_ref().map(|t| t.as_str()).unwrap_or("");
-        let is_standard_step = matches!(
-            step_type,
-            "" | "init_once" | "plan" | "qa" | "ticket_scan" | "retest" | "loop_guard"
-        );
-        let is_fix_in_pipeline = step_type == "fix" && !fix_ran;
-        if is_standard_step && !is_fix_in_pipeline {
-            continue;
-        }
-        if !step.enabled {
+        // Skip guards (handled separately in loop_engine), disabled, and filtered-out steps
+        if step.is_guard || !step.enabled || !should_run_step(&step.id) {
             continue;
         }
         if !step.repeatable && task_ctx.current_cycle > 1 {
             continue;
         }
 
-        let should_run = evaluate_step_prehook(
-            state,
-            step.prehook.as_ref(),
-            &StepPrehookContext {
-                task_id: task_id.to_string(),
-                task_item_id: item_id.to_string(),
-                cycle: task_ctx.current_cycle,
-                step: step_type.to_string(),
-                qa_file_path: item.qa_file_path.clone(),
-                item_status: item_status.clone(),
-                task_status: "running".to_string(),
-                qa_exit_code,
-                fix_exit_code,
-                retest_exit_code,
-                active_ticket_count: active_tickets.len() as i64,
-                new_ticket_count,
-                qa_failed,
-                fix_required: qa_failed || !active_tickets.is_empty(),
-                qa_confidence: None,
-                qa_quality_score: None,
-                fix_has_changes: None,
-                upstream_artifacts: vec![],
-                build_error_count: pipeline_vars.build_errors.len() as i64,
-                test_failure_count: pipeline_vars.test_failures.len() as i64,
-                build_exit_code,
-                test_exit_code,
-                self_test_exit_code: pipeline_vars
-                    .vars
-                    .get("self_test_exit_code")
-                    .and_then(|v| v.parse::<i64>().ok()),
-                self_test_passed: pipeline_vars
-                    .vars
-                    .get("self_test_passed")
-                    .map(|v| v == "true")
-                    .unwrap_or(false),
-                max_cycles: task_ctx
-                    .execution_plan
-                    .loop_policy
-                    .guard
-                    .max_cycles
-                    .unwrap_or(1),
-                is_last_cycle: task_ctx.current_cycle
-                    >= task_ctx
-                        .execution_plan
-                        .loop_policy
-                        .guard
-                        .max_cycles
-                        .unwrap_or(1),
-            },
-        )?;
+        let phase = &step.id;
 
+        // 1. Evaluate prehook
+        let prehook_ctx = acc.to_prehook_context(task_id, item, task_ctx, &step.id);
+        let should_run = evaluate_step_prehook(state, step.prehook.as_ref(), &prehook_ctx)?;
         if !should_run {
+            acc.step_skipped.insert(step.id.clone(), true);
             insert_event(
                 state,
                 task_id,
                 Some(item_id),
                 "step_skipped",
-                json!({"step": step_type, "reason": "prehook_false"}),
+                json!({"step": phase, "step_id": &step.id, "reason": "prehook_false"}),
             )?;
             continue;
         }
 
+        // 2. Execute
         insert_event(
             state,
             task_id,
             Some(item_id),
             "step_started",
-            json!({"step": step_type, "step_id": step.id}),
+            json!({"step": phase, "step_id": &step.id}),
         )?;
 
-        if step.builtin.as_deref() == Some("self_test") {
-            let exit_code =
-                execute_self_test_step(&task_ctx.workspace_root, state, task_id, item_id)
-                    .await
-                    .unwrap_or(1);
+        let result = match &step.behavior.execution {
+            ExecutionMode::Builtin { name } if name == "self_test" => {
+                // Self-test uses a specialized builtin
+                let exit_code =
+                    execute_self_test_step(&task_ctx.workspace_root, state, task_id, item_id)
+                        .await
+                        .unwrap_or(1);
+                let passed = exit_code == 0;
+                acc.pipeline_vars
+                    .vars
+                    .insert("self_test_exit_code".to_string(), exit_code.to_string());
+                acc.pipeline_vars
+                    .vars
+                    .insert("self_test_passed".to_string(), passed.to_string());
 
-            let passed = exit_code == 0;
-            pipeline_vars
-                .vars
-                .insert("self_test_exit_code".to_string(), exit_code.to_string());
-            pipeline_vars
-                .vars
-                .insert("self_test_passed".to_string(), passed.to_string());
-
-            if !passed {
-                item_status = "self_test_failed".to_string();
-            }
-
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                "step_finished",
-                json!({"step": "self_test", "exit_code": exit_code, "success": passed}),
-            )?;
-            continue;
-        }
-
-        if step.step_type == Some(WorkflowStepType::SmokeChain) && !step.chain_steps.is_empty() {
-            let mut smoke_chain_passed = true;
-            for chain_step in &step.chain_steps {
                 insert_event(
                     state,
                     task_id,
                     Some(item_id),
-                    "chain_step_started",
-                    json!({"step": step_type, "chain_step": chain_step.id}),
+                    "step_finished",
+                    json!({"step": phase, "exit_code": exit_code, "success": passed}),
                 )?;
 
+                // Apply behavior-driven status transitions for self_test
+                if !passed {
+                    match &step.behavior.on_failure {
+                        OnFailureAction::Continue => {}
+                        OnFailureAction::SetStatus { status } => {
+                            acc.item_status = status.clone();
+                        }
+                        OnFailureAction::EarlyReturn { status } => {
+                            acc.item_status = status.clone();
+                            state
+                                .db_writer
+                                .update_task_item_status(item_id, &acc.item_status)?;
+                            return Ok(acc.pipeline_vars);
+                        }
+                    }
+                }
+                acc.step_ran.insert(step.id.clone(), true);
+                acc.exit_codes.insert(step.id.clone(), exit_code as i64);
+                // Apply captures
+                let synth_result = crate::dto::RunResult {
+                    success: passed,
+                    exit_code: exit_code as i64,
+                    stdout_path: String::new(),
+                    stderr_path: String::new(),
+                    timed_out: false,
+                    duration_ms: None,
+                    output: None,
+                    validation_status: "passed".to_string(),
+                    agent_id: "builtin".to_string(),
+                    run_id: String::new(),
+                };
+                acc.apply_captures(&step.behavior.captures, &step.id, &synth_result);
+                continue;
+            }
+
+            ExecutionMode::Builtin { name } if name == "ticket_scan" => {
+                // Ticket scan builtin
+                insert_event(
+                    state,
+                    task_id,
+                    Some(item_id),
+                    "step_started",
+                    json!({"step": "ticket_scan"}),
+                )?;
+                let tickets = scan_active_tickets_for_task_items(task_ctx, task_item_paths)?;
+                acc.active_tickets = tickets
+                    .get(&item.qa_file_path)
+                    .cloned()
+                    .unwrap_or_default();
+                acc.new_ticket_count = acc.active_tickets.len() as i64;
+                acc.step_ran.insert(step.id.clone(), true);
+                insert_event(
+                    state,
+                    task_id,
+                    Some(item_id),
+                    "step_finished",
+                    json!({"step": "ticket_scan", "tickets": acc.active_tickets.len()}),
+                )?;
+                continue;
+            }
+
+            ExecutionMode::Chain => {
+                // Chain execution: run sub-steps in sequence
+                let mut chain_passed = true;
+                for chain_step in &step.chain_steps {
+                    insert_event(
+                        state,
+                        task_id,
+                        Some(item_id),
+                        "chain_step_started",
+                        json!({"step": phase, "chain_step": chain_step.id}),
+                    )?;
+
+                    let mut step_ctx = task_ctx.clone();
+                    step_ctx.pipeline_vars = acc.pipeline_vars.clone();
+
+                    let (chain_result, new_pipeline) = execute_builtin_step(
+                        state,
+                        task_id,
+                        item_id,
+                        chain_step,
+                        &step_ctx,
+                        runtime,
+                        &item.qa_file_path,
+                    )
+                    .await?;
+                    acc.pipeline_vars = new_pipeline;
+
+                    if let Some(ref output) = chain_result.output {
+                        if !output.stdout.is_empty() {
+                            spill_large_var(
+                                &state.logs_dir,
+                                task_id,
+                                "plan_output",
+                                output.stdout.clone(),
+                                &mut acc.pipeline_vars,
+                            );
+                        }
+                    }
+
+                    insert_event(
+                        state,
+                        task_id,
+                        Some(item_id),
+                        "chain_step_finished",
+                        json!({
+                            "step": phase,
+                            "chain_step": chain_step.id,
+                            "exit_code": chain_result.exit_code,
+                            "success": chain_result.is_success()
+                        }),
+                    )?;
+
+                    if !chain_result.is_success() {
+                        chain_passed = false;
+                        acc.item_status = format!("{}_failed", chain_step.id);
+                        break;
+                    }
+                }
+                acc.step_ran.insert(step.id.clone(), true);
+                insert_event(
+                    state,
+                    task_id,
+                    Some(item_id),
+                    "step_finished",
+                    json!({"step": phase, "success": chain_passed}),
+                )?;
+                continue;
+            }
+
+            // ExecutionMode::Agent or ExecutionMode::Builtin for generic builtins
+            _ => {
                 let mut step_ctx = task_ctx.clone();
-                step_ctx.pipeline_vars = pipeline_vars.clone();
+                step_ctx.pipeline_vars = acc.pipeline_vars.clone();
 
                 let (result, new_pipeline) = execute_builtin_step(
                     state,
                     task_id,
                     item_id,
-                    chain_step,
+                    step,
                     &step_ctx,
                     runtime,
                     &item.qa_file_path,
                 )
                 .await?;
-                pipeline_vars = new_pipeline;
+                acc.pipeline_vars = new_pipeline;
 
                 if let Some(ref output) = result.output {
                     if !output.stdout.is_empty() {
+                        let output_key = format!("{}_output", phase);
                         spill_large_var(
                             &state.logs_dir,
                             task_id,
-                            "plan_output",
+                            &output_key,
                             output.stdout.clone(),
-                            &mut pipeline_vars,
+                            &mut acc.pipeline_vars,
                         );
                     }
                 }
 
+                result
+            }
+        };
+
+        // 3. Capture outputs
+        acc.exit_codes.insert(step.id.clone(), result.exit_code);
+        acc.apply_captures(&step.behavior.captures, &step.id, &result);
+        acc.step_ran.insert(step.id.clone(), true);
+
+        // 4. Status transitions
+        if result.is_success() {
+            if let OnSuccessAction::SetStatus { status } = &step.behavior.on_success {
+                acc.item_status = status.clone();
+            }
+        } else {
+            match &step.behavior.on_failure {
+                OnFailureAction::Continue => {}
+                OnFailureAction::SetStatus { status } => {
+                    acc.item_status = status.clone();
+                }
+                OnFailureAction::EarlyReturn { status } => {
+                    acc.item_status = status.clone();
+                    state
+                        .db_writer
+                        .update_task_item_status(item_id, &acc.item_status)?;
+                    return Ok(acc.pipeline_vars);
+                }
+            }
+        }
+
+        // 5. Post-actions
+        for action in &step.behavior.post_actions {
+            match action {
+                PostAction::CreateTicket if !result.is_success() => {
+                    if let Some(exit_code) = acc.exit_codes.get(&step.id) {
+                        let task_name = SqliteTaskRepository::new(state.db_path.clone())
+                            .load_task_name(task_id)?
+                            .unwrap_or_else(|| task_id.to_string());
+                        match create_ticket_for_qa_failure(
+                            &task_ctx.workspace_root,
+                            &task_ctx.ticket_dir,
+                            &task_name,
+                            &item.qa_file_path,
+                            *exit_code,
+                            &result.stdout_path,
+                            &result.stderr_path,
+                        ) {
+                            Ok(Some(ticket_path)) => {
+                                acc.created_ticket_files.push(ticket_path.clone());
+                                insert_event(
+                                    state,
+                                    task_id,
+                                    Some(item_id),
+                                    "ticket_created",
+                                    json!({"path": ticket_path, "qa_file": item.qa_file_path}),
+                                )?;
+                            }
+                            Ok(None) => {}
+                            Err(e) => eprintln!("[warn] failed to auto-create ticket: {e}"),
+                        }
+                    }
+                }
+                PostAction::ScanTickets => {
+                    let tickets = scan_active_tickets_for_task_items(task_ctx, task_item_paths)?;
+                    acc.active_tickets = tickets
+                        .get(&item.qa_file_path)
+                        .cloned()
+                        .unwrap_or_default();
+                    acc.new_ticket_count = acc.active_tickets.len() as i64;
+                }
+                _ => {}
+            }
+        }
+
+        // 6. Collect artifacts
+        if step.behavior.collect_artifacts {
+            let step_artifacts = result
+                .output
+                .as_ref()
+                .map(|o| o.artifacts.clone())
+                .unwrap_or_default();
+            if !step_artifacts.is_empty() {
                 insert_event(
                     state,
                     task_id,
                     Some(item_id),
-                    "chain_step_finished",
-                    json!({
-                        "step": step_type,
-                        "chain_step": chain_step.id,
-                        "exit_code": result.exit_code,
-                        "success": result.is_success()
-                    }),
+                    "artifacts_parsed",
+                    json!({"step": phase, "count": step_artifacts.len()}),
                 )?;
-
-                if !result.is_success() {
-                    smoke_chain_passed = false;
-                    item_status = format!("{}_failed", chain_step.id);
-                    break;
-                }
+                acc.phase_artifacts.extend(step_artifacts);
             }
-
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                "step_finished",
-                json!({"step": "smoke_chain", "success": smoke_chain_passed}),
-            )?;
-            continue;
         }
 
-        let mut step_ctx = task_ctx.clone();
-        step_ctx.pipeline_vars = pipeline_vars.clone();
-
-        let (result, new_pipeline) = execute_builtin_step(
-            state,
-            task_id,
-            item_id,
-            step,
-            &step_ctx,
-            runtime,
-            &item.qa_file_path,
-        )
-        .await?;
-        pipeline_vars = new_pipeline;
-
-        match step_type {
-            "build" => {
-                build_exit_code = Some(result.exit_code);
-                if !result.is_success() {
-                    item_status = "build_failed".to_string();
-                }
+        // Also check for ticket artifacts that may seed active_tickets
+        if acc.active_tickets.is_empty() {
+            let ticket_artifact_count = acc
+                .phase_artifacts
+                .iter()
+                .filter(|a| matches!(a.kind, crate::collab::ArtifactKind::Ticket { .. }))
+                .count();
+            if ticket_artifact_count > 0 {
+                acc.active_tickets = (0..ticket_artifact_count)
+                    .map(|idx| format!("artifact://ticket/{}", idx))
+                    .collect();
+                acc.new_ticket_count = acc.active_tickets.len() as i64;
             }
-            "test" => {
-                test_exit_code = Some(result.exit_code);
-                if !result.is_success() {
-                    item_status = "test_failed".to_string();
-                }
-            }
-            "implement" => {
-                if !result.is_success() {
-                    item_status = "implement_failed".to_string();
-                }
-            }
-            _ => {}
         }
 
         let confidence = result.output.as_ref().map(|o| o.confidence).unwrap_or(0.0);
@@ -1033,7 +894,7 @@ pub async fn process_item_filtered(
             Some(item_id),
             "step_finished",
             json!({
-                "step": step_type,
+                "step": phase,
                 "step_id": step.id,
                 "agent_id": result.agent_id,
                 "run_id": result.run_id,
@@ -1041,8 +902,8 @@ pub async fn process_item_filtered(
                 "success": result.is_success(),
                 "timed_out": result.timed_out,
                 "duration_ms": result.duration_ms,
-                "build_errors": pipeline_vars.build_errors.len(),
-                "test_failures": pipeline_vars.test_failures.len(),
+                "build_errors": acc.pipeline_vars.build_errors.len(),
+                "test_failures": acc.pipeline_vars.test_failures.len(),
                 "confidence": confidence,
                 "quality_score": quality,
                 "validation_status": result.validation_status,
@@ -1050,8 +911,7 @@ pub async fn process_item_filtered(
         )?;
     }
 
-    // Dynamic steps only run when no step filter is set (legacy/full mode)
-    // or when we're in an item-scoped segment (filter is Some but dynamic steps are item-scoped)
+    // Dynamic steps (only in full/legacy mode, not in segment-filtered mode)
     if !task_ctx.dynamic_steps.is_empty() && step_filter.is_none() {
         let pool = {
             let mut p = crate::dynamic_orchestration::DynamicStepPool::new();
@@ -1060,44 +920,34 @@ pub async fn process_item_filtered(
             }
             p
         };
+        let prehook_ctx = acc.to_prehook_context(task_id, item, task_ctx, "dynamic");
         let dyn_ctx = crate::dynamic_orchestration::StepPrehookContext {
-            task_id: task_id.to_string(),
-            task_item_id: item_id.to_string(),
-            cycle: task_ctx.current_cycle,
+            task_id: prehook_ctx.task_id,
+            task_item_id: prehook_ctx.task_item_id,
+            cycle: prehook_ctx.cycle,
             step: "dynamic".to_string(),
-            qa_file_path: item.qa_file_path.clone(),
-            item_status: item_status.clone(),
-            task_status: "running".to_string(),
-            qa_exit_code,
-            fix_exit_code,
-            retest_exit_code,
-            active_ticket_count: active_tickets.len() as i64,
-            new_ticket_count,
-            qa_failed,
-            fix_required: !active_tickets.is_empty(),
-            qa_confidence: None,
-            qa_quality_score: None,
-            fix_has_changes: None,
+            qa_file_path: prehook_ctx.qa_file_path,
+            item_status: prehook_ctx.item_status,
+            task_status: prehook_ctx.task_status,
+            qa_exit_code: prehook_ctx.qa_exit_code,
+            fix_exit_code: prehook_ctx.fix_exit_code,
+            retest_exit_code: prehook_ctx.retest_exit_code,
+            active_ticket_count: prehook_ctx.active_ticket_count,
+            new_ticket_count: prehook_ctx.new_ticket_count,
+            qa_failed: prehook_ctx.qa_failed,
+            fix_required: prehook_ctx.fix_required,
+            qa_confidence: prehook_ctx.qa_confidence,
+            qa_quality_score: prehook_ctx.qa_quality_score,
+            fix_has_changes: prehook_ctx.fix_has_changes,
             upstream_artifacts: vec![],
-            build_error_count: 0,
-            test_failure_count: 0,
-            build_exit_code: None,
-            test_exit_code: None,
-            self_test_exit_code: None,
-            self_test_passed: false,
-            max_cycles: task_ctx
-                .execution_plan
-                .loop_policy
-                .guard
-                .max_cycles
-                .unwrap_or(1),
-            is_last_cycle: task_ctx.current_cycle
-                >= task_ctx
-                    .execution_plan
-                    .loop_policy
-                    .guard
-                    .max_cycles
-                    .unwrap_or(1),
+            build_error_count: prehook_ctx.build_error_count,
+            test_failure_count: prehook_ctx.test_failure_count,
+            build_exit_code: prehook_ctx.build_exit_code,
+            test_exit_code: prehook_ctx.test_exit_code,
+            self_test_exit_code: prehook_ctx.self_test_exit_code,
+            self_test_passed: prehook_ctx.self_test_passed,
+            max_cycles: prehook_ctx.max_cycles,
+            is_last_cycle: prehook_ctx.is_last_cycle,
         };
         let matched = pool.find_matching_steps(&dyn_ctx);
         for ds in matched {
@@ -1119,7 +969,7 @@ pub async fn process_item_filtered(
                     tty: false,
                     capability: cap,
                     rel_path: &item.qa_file_path,
-                    ticket_paths: &active_tickets,
+                    ticket_paths: &acc.active_tickets,
                     workspace_root: &task_ctx.workspace_root,
                     workspace_id: &task_ctx.workspace_id,
                     cycle: task_ctx.current_cycle,
@@ -1139,95 +989,40 @@ pub async fn process_item_filtered(
         }
     }
 
-    if item_status == "pending" {
-        if qa_failed {
-            item_status = "qa_failed".to_string();
-        } else if !active_tickets.is_empty() && !fix_ran {
-            item_status = "unresolved".to_string();
-        } else if fix_success && !retest_ran {
-            item_status = "fixed".to_string();
-        } else if fix_success && retest_success {
-            item_status = "verified".to_string();
-        } else if !active_tickets.is_empty() {
-            item_status = "unresolved".to_string();
-        } else if qa_skipped || !qa_enabled {
-            let is_last = task_ctx.current_cycle
-                >= task_ctx
-                    .execution_plan
-                    .loop_policy
-                    .guard
-                    .max_cycles
-                    .unwrap_or(1);
-            item_status = if is_last { "skipped" } else { "pending" }.to_string();
-        } else {
-            item_status = "qa_passed".to_string();
-        }
+    // Seed active tickets from existing ticket files if no scan step ran
+    if acc.active_tickets.is_empty()
+        && !acc.step_ran.contains_key("ticket_scan")
+    {
+        acc.active_tickets = list_existing_tickets_for_item(task_ctx, &item.qa_file_path)?;
+        acc.new_ticket_count = acc.active_tickets.len() as i64;
     }
 
-    let finalize_context = ItemFinalizeContext {
-        task_id: task_id.to_string(),
-        task_item_id: item_id.to_string(),
-        cycle: task_ctx.current_cycle,
-        qa_file_path: item.qa_file_path.clone(),
-        item_status: item_status.clone(),
-        task_status: "running".to_string(),
-        qa_exit_code,
-        fix_exit_code,
-        retest_exit_code,
-        active_ticket_count: active_tickets.len() as i64,
-        new_ticket_count,
-        retest_new_ticket_count: retest_new_tickets.len() as i64,
-        qa_failed,
-        fix_required: !active_tickets.is_empty(),
-        qa_enabled,
-        qa_ran,
-        qa_skipped,
-        fix_enabled,
-        fix_ran,
-        fix_success,
-        retest_enabled,
-        retest_ran,
-        retest_success,
-        qa_confidence: None,
-        qa_quality_score: None,
-        fix_confidence: None,
-        fix_quality_score: None,
-        total_artifacts: phase_artifacts.len() as i64,
-        has_ticket_artifacts: phase_artifacts
-            .iter()
-            .any(|a| matches!(a.kind, crate::collab::ArtifactKind::Ticket { .. })),
-        has_code_change_artifacts: phase_artifacts
-            .iter()
-            .any(|a| matches!(a.kind, crate::collab::ArtifactKind::CodeChange { .. })),
-        is_last_cycle: task_ctx.current_cycle
-            >= task_ctx
-                .execution_plan
-                .loop_policy
-                .guard
-                .max_cycles
-                .unwrap_or(1),
-    };
+    // ── Finalize via CEL rules ──────────────────────────────────────
+    let finalize_context = acc.to_finalize_context(task_id, item, task_ctx);
 
     if let Some(outcome) = crate::prehook::resolve_workflow_finalize_outcome(
         &task_ctx.execution_plan.finalize,
         &finalize_context,
     )? {
-        item_status = outcome.status.clone();
+        acc.item_status = outcome.status.clone();
         emit_item_finalize_event(state, &finalize_context, &outcome)?;
     }
 
-    let has_ticket_artifacts_for_persist = !created_ticket_files.is_empty()
-        || phase_artifacts
+    // Persist ticket artifacts
+    let has_ticket_artifacts = !acc.created_ticket_files.is_empty()
+        || acc
+            .phase_artifacts
             .iter()
             .any(|a| matches!(a.kind, crate::collab::ArtifactKind::Ticket { .. }));
-    if has_ticket_artifacts_for_persist {
-        let ticket_content: Vec<&serde_json::Value> = phase_artifacts
+    if has_ticket_artifacts {
+        let ticket_content: Vec<&serde_json::Value> = acc
+            .phase_artifacts
             .iter()
             .filter(|a| matches!(a.kind, crate::collab::ArtifactKind::Ticket { .. }))
             .filter_map(|a| a.content.as_ref())
             .collect();
         let files_json =
-            serde_json::to_string(&created_ticket_files).unwrap_or_else(|_| "[]".to_string());
+            serde_json::to_string(&acc.created_ticket_files).unwrap_or_else(|_| "[]".to_string());
         let content_json =
             serde_json::to_string(&ticket_content).unwrap_or_else(|_| "[]".to_string());
         state
@@ -1237,8 +1032,8 @@ pub async fn process_item_filtered(
 
     state
         .db_writer
-        .update_task_item_status(item_id, &item_status)?;
-    Ok(pipeline_vars)
+        .update_task_item_status(item_id, &acc.item_status)?;
+    Ok(acc.pipeline_vars)
 }
 
 #[cfg(test)]

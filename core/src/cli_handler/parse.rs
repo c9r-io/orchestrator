@@ -234,14 +234,7 @@ pub(super) fn normalize_loop_mode(loop_mode: &str) -> Result<String> {
 }
 
 pub(super) fn validate_workflow_step_type(value: &str) -> Result<String> {
-    use crate::config::WorkflowStepType;
-    let parsed = value.parse::<WorkflowStepType>().map_err(|_| {
-        anyhow::anyhow!(
-            "invalid --step '{}': expected init_once|plan|qa|ticket_scan|fix|retest|loop_guard",
-            value
-        )
-    })?;
-    Ok(parsed.as_str().to_string())
+    crate::config::validate_step_type(value).map_err(|e| anyhow::anyhow!(e))
 }
 
 #[cfg(test)]

@@ -60,12 +60,7 @@ impl CliHandler {
                 found
                     .with_context(|| format!("no agent template found for capability '{}'", cap))?
             } else {
-                let cap = step
-                    .step_type
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or("qa")
-                    .to_string();
+                let cap = step.id.clone();
                 let found =
                     active.config.agents.iter().find_map(|(id, cfg)| {
                         cfg.get_template(&cap).map(|t| (id.clone(), t.clone()))

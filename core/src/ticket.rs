@@ -243,10 +243,10 @@ pub fn should_seed_targets_from_active_tickets(
 ) -> bool {
     target_files.is_none()
         && execution_plan
-            .step(crate::config::WorkflowStepType::Qa)
+            .step_by_id("qa")
             .is_none()
         && execution_plan
-            .step(crate::config::WorkflowStepType::TicketScan)
+            .step_by_id("ticket_scan")
             .is_some()
 }
 
@@ -511,12 +511,11 @@ mod tests {
 
     #[test]
     fn test_should_seed_targets_from_active_tickets() {
-        use crate::config::{TaskExecutionPlan, TaskExecutionStep, WorkflowStepType};
+        use crate::config::{StepBehavior, TaskExecutionPlan, TaskExecutionStep};
 
         let plan_with_ticket_scan = TaskExecutionPlan {
             steps: vec![TaskExecutionStep {
-                id: "scan".to_string(),
-                step_type: Some(WorkflowStepType::TicketScan),
+                id: "ticket_scan".to_string(),
                 enabled: true,
                 repeatable: false,
                 is_guard: false,
@@ -530,6 +529,7 @@ mod tests {
                 command: None,
                 chain_steps: vec![],
                 scope: None,
+                behavior: StepBehavior::default(),
             }],
             loop_policy: crate::config::WorkflowLoopConfig::default(),
             finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
@@ -552,7 +552,6 @@ mod tests {
         let plan_with_qa = TaskExecutionPlan {
             steps: vec![TaskExecutionStep {
                 id: "qa".to_string(),
-                step_type: Some(WorkflowStepType::Qa),
                 enabled: true,
                 repeatable: false,
                 is_guard: false,
@@ -566,6 +565,7 @@ mod tests {
                 command: None,
                 chain_steps: vec![],
                 scope: None,
+                behavior: StepBehavior::default(),
             }],
             loop_policy: crate::config::WorkflowLoopConfig::default(),
             finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },

@@ -10,7 +10,7 @@ use crate::config::{
     OrchestratorConfig, ProjectConfig, ResumeConfig, RunnerConfig, RunnerExecutorKind,
     RunnerPolicy, StepHookEngine, StepPrehookConfig, StepPrehookUiConfig, WorkflowConfig,
     WorkflowFinalizeConfig, WorkflowFinalizeRule, WorkflowLoopConfig, WorkflowLoopGuardConfig,
-    StepScope, WorkflowStepConfig, WorkflowStepType, WorkspaceConfig,
+    StepBehavior, StepScope, WorkflowStepConfig, WorkspaceConfig,
 };
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
@@ -355,7 +355,7 @@ impl Resource for WorkflowResource {
             return Err(anyhow!("workflow.spec.steps[].type cannot be empty"));
         }
         for step in &self.spec.steps {
-            parse_workflow_step_type(&step.step_type)?;
+            crate::config::validate_step_type(&step.step_type).map_err(|e| anyhow!(e))?;
         }
         let loop_mode = parse_loop_mode(&self.spec.loop_policy.mode)?;
         if matches!(loop_mode, LoopMode::Fixed) {
@@ -986,12 +986,9 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
         .steps
         .iter()
         .map(|step| {
-            let step_type = parse_workflow_step_type(&step.step_type)?;
-            let is_guard = step_type == WorkflowStepType::LoopGuard;
-            let builtin = if matches!(
-                step_type,
-                WorkflowStepType::InitOnce | WorkflowStepType::LoopGuard
-            ) {
+            crate::config::validate_step_type(&step.step_type).map_err(|e| anyhow!(e))?;
+            let is_guard = step.step_type == "loop_guard";
+            let builtin = if matches!(step.step_type.as_str(), "init_once" | "loop_guard") {
                 Some(step.step_type.clone())
             } else {
                 None
@@ -1019,7 +1016,6 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
             Ok(WorkflowStepConfig {
                 id: step.id.clone(),
                 description: None,
-                step_type: Some(step_type),
                 required_capability: step.required_capability.clone(),
                 builtin: step.builtin.clone().or(builtin),
                 enabled: step.enabled,
@@ -1033,6 +1029,7 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
                 command: step.command.clone(),
                 chain_steps: vec![],
                 scope,
+                behavior: StepBehavior::default(),
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -1105,11 +1102,7 @@ fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
         .iter()
         .map(|step| WorkflowStepSpec {
             id: step.id.clone(),
-            step_type: step
-                .step_type
-                .as_ref()
-                .map(|t| t.as_str().to_string())
-                .unwrap_or_default(),
+            step_type: step.id.clone(),
             required_capability: step.required_capability.clone(),
             builtin: step.builtin.clone(),
             enabled: step.enabled,
@@ -1134,7 +1127,7 @@ fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
             command: step.command.clone(),
             scope: step.scope.and_then(|s| {
                 // Only serialize when it differs from default
-                let default = step.step_type.as_ref().map(|t| t.default_scope()).unwrap_or(StepScope::Item);
+                let default = crate::config::default_scope_for_step_id(&step.id);
                 if s != default {
                     Some(match s {
                         StepScope::Task => "task".to_string(),
@@ -1250,10 +1243,6 @@ fn runner_config_to_spec(config: &RunnerConfig) -> RunnerSpec {
         env_allowlist: config.env_allowlist.clone(),
         redaction_patterns: config.redaction_patterns.clone(),
     }
-}
-
-fn parse_workflow_step_type(value: &str) -> Result<WorkflowStepType> {
-    value.parse::<WorkflowStepType>().map_err(|e| anyhow!(e))
 }
 
 fn parse_loop_mode(value: &str) -> Result<LoopMode> {
@@ -3127,7 +3116,7 @@ spec:
                 WorkflowStepConfig {
                     id: "perf".to_string(),
                     description: None,
-                    step_type: Some(WorkflowStepType::Qa),
+
                     required_capability: None,
                     builtin: None,
                     enabled: true,
@@ -3141,11 +3130,12 @@ spec:
                     command: None,
                     chain_steps: vec![],
                     scope: None,
+                    behavior: StepBehavior::default(),
                 },
                 WorkflowStepConfig {
                     id: "qual".to_string(),
                     description: None,
-                    step_type: Some(WorkflowStepType::Fix),
+
                     required_capability: None,
                     builtin: None,
                     enabled: true,
@@ -3159,11 +3149,12 @@ spec:
                     command: None,
                     chain_steps: vec![],
                     scope: None,
+                    behavior: StepBehavior::default(),
                 },
                 WorkflowStepConfig {
                     id: "bal".to_string(),
                     description: None,
-                    step_type: Some(WorkflowStepType::Plan),
+
                     required_capability: None,
                     builtin: None,
                     enabled: true,
@@ -3177,6 +3168,7 @@ spec:
                     command: None,
                     chain_steps: vec![],
                     scope: None,
+                    behavior: StepBehavior::default(),
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -3207,7 +3199,7 @@ spec:
             steps: vec![WorkflowStepConfig {
                 id: "qa".to_string(),
                 description: None,
-                step_type: Some(WorkflowStepType::Qa),
+
                 required_capability: None,
                 builtin: None,
                 enabled: true,
@@ -3221,6 +3213,7 @@ spec:
                 command: None,
                 chain_steps: vec![],
                 scope: None,
+                behavior: StepBehavior::default(),
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Infinite,
@@ -3500,7 +3493,7 @@ spec:
             steps: vec![WorkflowStepConfig {
                 id: "qa_testing".to_string(),
                 description: None,
-                step_type: Some(WorkflowStepType::Qa),
+
                 required_capability: None,
                 builtin: None,
                 enabled: true,
@@ -3520,6 +3513,7 @@ spec:
                 command: None,
                 chain_steps: vec![],
                 scope: None,
+                behavior: StepBehavior::default(),
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -3553,7 +3547,7 @@ spec:
             steps: vec![WorkflowStepConfig {
                 id: "qa".to_string(),
                 description: None,
-                step_type: Some(WorkflowStepType::Qa),
+
                 required_capability: None,
                 builtin: None,
                 enabled: true,
@@ -3567,6 +3561,7 @@ spec:
                 command: None,
                 chain_steps: vec![],
                 scope: None,
+                behavior: StepBehavior::default(),
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -3729,44 +3724,6 @@ spec:
         let stored = config.resource_meta.workflows.get("store-meta-wf").unwrap();
         assert_eq!(stored.labels.as_ref().unwrap().get("version").unwrap(), "v2");
     }
-}
-
-#[test]
-fn parse_workflow_step_type_valid() {
-    assert_eq!(
-        parse_workflow_step_type("init_once").unwrap(),
-        WorkflowStepType::InitOnce
-    );
-    assert_eq!(
-        parse_workflow_step_type("qa").unwrap(),
-        WorkflowStepType::Qa
-    );
-    assert_eq!(
-        parse_workflow_step_type("plan").unwrap(),
-        WorkflowStepType::Plan
-    );
-    assert_eq!(
-        parse_workflow_step_type("ticket_scan").unwrap(),
-        WorkflowStepType::TicketScan
-    );
-    assert_eq!(
-        parse_workflow_step_type("fix").unwrap(),
-        WorkflowStepType::Fix
-    );
-    assert_eq!(
-        parse_workflow_step_type("retest").unwrap(),
-        WorkflowStepType::Retest
-    );
-}
-
-#[test]
-fn parse_workflow_step_type_invalid() {
-    let result = parse_workflow_step_type("unknown");
-    assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("unknown workflow step type"));
 }
 
 #[test]

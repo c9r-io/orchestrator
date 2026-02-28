@@ -22,9 +22,9 @@ The execution plan is grouped into **contiguous segments** of same scope. Each s
 
 | File | Role |
 |------|------|
-| `core/src/config.rs` | `StepScope` enum, `default_scope()`, `resolved_scope()` |
+| `core/src/config.rs` | `StepScope` enum, `default_scope_for_step_id()`, `resolved_scope()` |
 | `core/src/scheduler/loop_engine.rs` | `build_scope_segments()`, segment dispatch |
-| `core/src/scheduler/item_executor.rs` | `process_item_filtered()` with step filter |
+| `core/src/scheduler/item_executor.rs` | `process_item_filtered()` unified loop with `StepExecutionAccumulator` |
 
 ---
 
@@ -209,7 +209,7 @@ Verify that pipeline variables set during task-scoped segments (e.g., `plan_outp
 
 ### Goal
 
-Verify that `default_scope()` correctly classifies all self-bootstrap steps without needing YAML `scope` fields.
+Verify that `default_scope_for_step_id()` correctly classifies all self-bootstrap steps without needing YAML `scope` fields.
 
 ### Steps
 
@@ -266,7 +266,7 @@ Verify that `build_scope_segments()` produces correct contiguous groupings and t
 
 - `build_segments_groups_contiguous_scopes`: 5 steps → 3 segments (Task[plan,implement] → Item[qa_testing,ticket_fix] → Task[doc_governance])
 - `build_segments_skips_guards`: loop_guard excluded, only plan segment remains
-- `resolved_scope_uses_explicit_override`: `scope: Some(Task)` on a QaTesting step overrides its default Item scope
+- `resolved_scope_uses_explicit_override`: `scope: Some(Task)` on a qa_testing step (item-scoped by default) overrides to Task scope
 
 ### Expected Data State
 

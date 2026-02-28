@@ -1,5 +1,5 @@
 use crate::cli::{OutputFormat, TaskSessionCommands};
-use crate::config::{TaskExecutionPlan, TaskExecutionStep, WorkflowStepType};
+use crate::config::{TaskExecutionPlan, TaskExecutionStep};
 use crate::config_load::now_ts;
 use crate::db::open_conn;
 use crate::scheduler::resolve_task_id;
@@ -101,10 +101,10 @@ impl CliHandler {
         repeatable: bool,
     ) -> Result<i32> {
         let resolved_id = resolve_task_id(&self.state, task_id)?;
-        let parsed_step_type = step.parse::<WorkflowStepType>().map_err(|_| {
+        crate::config::validate_step_type(step).map_err(|e| {
             anyhow::anyhow!(
-                "invalid --step '{}': expected init_once|plan|qa|ticket_scan|fix|retest|loop_guard",
-                step
+                "invalid --step '{}': {}",
+                step, e
             )
         })?;
 
@@ -124,40 +124,31 @@ impl CliHandler {
                 )
             })?;
 
-        let mut new_id = format!("{}-{}", parsed_step_type.as_str(), plan.steps.len() + 1);
+        let mut new_id = format!("{}-{}", step, plan.steps.len() + 1);
         if !plan.steps.iter().any(|s| s.id == new_id) {
             // keep generated id
         } else {
-            new_id = format!("{}-{}", parsed_step_type.as_str(), uuid::Uuid::new_v4());
+            new_id = format!("{}-{}", step, uuid::Uuid::new_v4());
         }
 
-        let builtin = match parsed_step_type {
-            WorkflowStepType::InitOnce => Some("init_once".to_string()),
-            WorkflowStepType::TicketScan => Some("ticket_scan".to_string()),
-            WorkflowStepType::LoopGuard => Some("loop_guard".to_string()),
+        let builtin = match step {
+            "init_once" | "ticket_scan" | "loop_guard" => Some(step.to_string()),
             _ => None,
         };
         let required_capability = capability.map(|v| v.to_string()).or_else(|| {
-            if matches!(
-                parsed_step_type,
-                WorkflowStepType::Plan
-                    | WorkflowStepType::Qa
-                    | WorkflowStepType::Fix
-                    | WorkflowStepType::Retest
-            ) {
-                Some(parsed_step_type.as_str().to_string())
-            } else {
-                None
+            match step {
+                "plan" | "qa" | "fix" | "retest" => Some(step.to_string()),
+                _ => None,
             }
         });
+        let is_guard = step == "loop_guard";
         let inserted_step = TaskExecutionStep {
             id: new_id.clone(),
-            step_type: Some(parsed_step_type.clone()),
             required_capability,
             builtin,
             enabled: true,
             repeatable,
-            is_guard: parsed_step_type == WorkflowStepType::LoopGuard,
+            is_guard,
             cost_preference: None,
             prehook: None,
             tty,
@@ -166,6 +157,7 @@ impl CliHandler {
             command: None,
             chain_steps: vec![],
             scope: None,
+            behavior: Default::default(),
         };
         plan.steps.insert(insert_idx, inserted_step);
 

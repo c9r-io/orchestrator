@@ -49,9 +49,9 @@ A builtin step (`self_test`) inserted between `implement` and `qa_testing` in th
 
 If any phase fails, the step returns a non-zero exit code. Pipeline variables `self_test_exit_code` and `self_test_passed` are set for downstream prehook evaluation.
 
-- Enum variant: `SelfTest` in `WorkflowStepType`
+- Step id: `"self_test"` (identified by string, `WorkflowStepType` enum deleted)
 - Function: `execute_self_test_step()` in `core/src/scheduler.rs`
-- Normalization: `SelfTest` type auto-sets `builtin: "self_test"` in `config_load.rs`
+- Normalization: `self_test` id auto-sets `builtin: "self_test"` in `config_load.rs`
 
 ### Layer 3: Self-Referential Enforcement
 

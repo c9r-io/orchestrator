@@ -1,4 +1,4 @@
-use crate::config::{LoopMode, StepScope, WorkflowStepType};
+use crate::config::{LoopMode, StepScope};
 use crate::events::insert_event;
 use crate::state::InnerState;
 use anyhow::Result;
@@ -56,7 +56,7 @@ async fn run_task_loop_core(
     let mut task_ctx = load_task_runtime_context(&state, task_id)?;
 
     if !task_ctx.init_done {
-        if let Some(step) = task_ctx.execution_plan.step(WorkflowStepType::InitOnce) {
+        if let Some(step) = task_ctx.execution_plan.step_by_id("init_once") {
             if let Some(anchor_item_id) = first_task_item_id(&state, task_id)? {
                 insert_event(
                     &state,
@@ -578,28 +578,6 @@ mod tests {
     }
 
     #[test]
-    fn default_scope_task_for_plan_implement() {
-        assert_eq!(WorkflowStepType::Plan.default_scope(), StepScope::Task);
-        assert_eq!(WorkflowStepType::Implement.default_scope(), StepScope::Task);
-        assert_eq!(WorkflowStepType::SelfTest.default_scope(), StepScope::Task);
-        assert_eq!(WorkflowStepType::QaDocGen.default_scope(), StepScope::Task);
-        assert_eq!(WorkflowStepType::AlignTests.default_scope(), StepScope::Task);
-        assert_eq!(WorkflowStepType::DocGovernance.default_scope(), StepScope::Task);
-        assert_eq!(WorkflowStepType::Build.default_scope(), StepScope::Task);
-        assert_eq!(WorkflowStepType::Test.default_scope(), StepScope::Task);
-    }
-
-    #[test]
-    fn default_scope_item_for_qa_steps() {
-        assert_eq!(WorkflowStepType::Qa.default_scope(), StepScope::Item);
-        assert_eq!(WorkflowStepType::QaTesting.default_scope(), StepScope::Item);
-        assert_eq!(WorkflowStepType::TicketFix.default_scope(), StepScope::Item);
-        assert_eq!(WorkflowStepType::TicketScan.default_scope(), StepScope::Item);
-        assert_eq!(WorkflowStepType::Fix.default_scope(), StepScope::Item);
-        assert_eq!(WorkflowStepType::Retest.default_scope(), StepScope::Item);
-    }
-
-    #[test]
     fn build_segments_groups_contiguous_scopes() {
         use crate::config::*;
         let task_ctx = TaskRuntimeContext {
@@ -610,7 +588,7 @@ mod tests {
                 steps: vec![
                     TaskExecutionStep {
                         id: "plan".into(),
-                        step_type: Some(WorkflowStepType::Plan),
+
                         required_capability: None,
                         builtin: None,
                         enabled: true,
@@ -624,10 +602,11 @@ mod tests {
                         command: None,
                         chain_steps: vec![],
                         scope: None,
+                        behavior: StepBehavior::default(),
                     },
                     TaskExecutionStep {
                         id: "implement".into(),
-                        step_type: Some(WorkflowStepType::Implement),
+
                         required_capability: None,
                         builtin: None,
                         enabled: true,
@@ -641,10 +620,11 @@ mod tests {
                         command: None,
                         chain_steps: vec![],
                         scope: None,
+                        behavior: StepBehavior::default(),
                     },
                     TaskExecutionStep {
                         id: "qa_testing".into(),
-                        step_type: Some(WorkflowStepType::QaTesting),
+
                         required_capability: None,
                         builtin: None,
                         enabled: true,
@@ -658,10 +638,11 @@ mod tests {
                         command: None,
                         chain_steps: vec![],
                         scope: None,
+                        behavior: StepBehavior::default(),
                     },
                     TaskExecutionStep {
                         id: "ticket_fix".into(),
-                        step_type: Some(WorkflowStepType::TicketFix),
+
                         required_capability: None,
                         builtin: None,
                         enabled: true,
@@ -675,10 +656,11 @@ mod tests {
                         command: None,
                         chain_steps: vec![],
                         scope: None,
+                        behavior: StepBehavior::default(),
                     },
                     TaskExecutionStep {
                         id: "doc_governance".into(),
-                        step_type: Some(WorkflowStepType::DocGovernance),
+
                         required_capability: None,
                         builtin: None,
                         enabled: true,
@@ -692,6 +674,7 @@ mod tests {
                         command: None,
                         chain_steps: vec![],
                         scope: None,
+                        behavior: StepBehavior::default(),
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
@@ -737,7 +720,7 @@ mod tests {
                 steps: vec![
                     TaskExecutionStep {
                         id: "plan".into(),
-                        step_type: Some(WorkflowStepType::Plan),
+
                         required_capability: None,
                         builtin: None,
                         enabled: true,
@@ -751,10 +734,11 @@ mod tests {
                         command: None,
                         chain_steps: vec![],
                         scope: None,
+                        behavior: StepBehavior::default(),
                     },
                     TaskExecutionStep {
                         id: "loop_guard".into(),
-                        step_type: Some(WorkflowStepType::LoopGuard),
+
                         required_capability: None,
                         builtin: Some("loop_guard".into()),
                         enabled: true,
@@ -768,6 +752,7 @@ mod tests {
                         command: None,
                         chain_steps: vec![],
                         scope: None,
+                        behavior: StepBehavior::default(),
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
@@ -795,7 +780,7 @@ mod tests {
         use crate::config::*;
         let step = TaskExecutionStep {
             id: "qa_testing".into(),
-            step_type: Some(WorkflowStepType::QaTesting),
+
             required_capability: None,
             builtin: None,
             enabled: true,
@@ -809,6 +794,7 @@ mod tests {
             command: None,
             chain_steps: vec![],
             scope: Some(StepScope::Task), // Override default Item scope
+            behavior: StepBehavior::default(),
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }

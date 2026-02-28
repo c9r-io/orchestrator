@@ -197,12 +197,14 @@ Issue observed before fix:
 - result: downstream step could hang or run with poor context
 
 Fix applied:
-- propagate `plan` step stdout into pipeline vars at `process_item` level
-- file: `core/src/scheduler.rs`
+- propagate `plan` step stdout into pipeline vars via unified execution loop
+- file: `core/src/scheduler/item_executor.rs` (unified `process_item_filtered()` loop with `StepExecutionAccumulator`)
 - includes:
   - `pipeline_vars.prev_stdout = output.stdout.clone()`
   - `pipeline_vars.prev_stderr = output.stderr.clone()`
-  - `pipeline_vars.vars.insert("plan_output", output.stdout.clone())`
+  - `pipeline_vars.vars.insert("plan_output", ...)` with large-output spill-to-file support
+
+> **Note**: The original fix was in `core/src/scheduler.rs` `process_item()`. After the Unified Step Execution Model refactoring (design doc 13), all step execution logic moved to `item_executor.rs` with `StepExecutionAccumulator`. The `WorkflowStepType` enum was deleted; steps are now identified by string `id`.
 
 Regression test added:
 - `plan_output_is_propagated_to_qa_doc_gen_template`

@@ -48,7 +48,7 @@ impl CliHandler {
                             let step_types: Vec<String> = wf
                                 .steps
                                 .iter()
-                                .map(|s| format!("{:?}", s.step_type))
+                                .map(|s| s.id.clone())
                                 .collect();
                             println!("{:<20} {:<40}", name, step_types.join(", "));
                         }
@@ -244,7 +244,7 @@ impl CliHandler {
                         let steps: Vec<String> = workflow
                             .steps
                             .iter()
-                            .filter_map(|s| s.step_type.as_ref().map(|t| t.as_str().to_string()))
+                            .map(|s| s.id.clone())
                             .collect();
                         Some(json!({
                             "name": name,
@@ -314,7 +314,7 @@ impl CliHandler {
                             let step_types: Vec<String> = wf
                                 .steps
                                 .iter()
-                                .map(|s| format!("{:?}", s.step_type))
+                                .map(|s| s.id.clone())
                                 .collect();
                             println!("{:<20} {:<40}", name, step_types.join(", "));
                         }

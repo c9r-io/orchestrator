@@ -36,7 +36,7 @@ The correct SDLC model: **task-scoped** steps (plan, implement, self_test) run *
 ## Scope
 
 - In scope:
-  - `StepScope` enum and `default_scope()` on `WorkflowStepType`
+  - `StepScope` enum and `default_scope_for_step_id()` free function (formerly `default_scope()` on deleted `WorkflowStepType` enum)
   - Segment-based cycle execution in `loop_engine.rs`
   - Scope-aware step dispatch in `item_executor.rs`
   - YAML spec and config plumbing for `scope` field
@@ -58,9 +58,11 @@ pub enum StepScope {
 }
 ```
 
-Each `WorkflowStepType` has a `default_scope()`:
-- **Task**: Plan, QaDocGen, Implement, SelfTest, AlignTests, DocGovernance, Review, Build, Test, Lint, GitOps, SmokeChain, LoopGuard, InitOnce
-- **Item**: Qa, QaTesting, TicketFix, TicketScan, Fix, Retest
+Each step `id` has a default scope via `default_scope_for_step_id()`:
+- **Task**: plan, qa_doc_gen, implement, self_test, align_tests, doc_governance, review, build, test, lint, git_ops, smoke_chain, loop_guard, init_once (and any unknown id)
+- **Item**: qa, qa_testing, ticket_fix, ticket_scan, fix, retest
+
+> **Note**: The `WorkflowStepType` enum was deleted in the Unified Step Execution Model refactoring. Steps are now identified by string `id`. See `docs/design_doc/orchestrator/13-unified-step-execution-model.md`.
 
 ### 2. Segment-Based Execution
 
@@ -84,22 +86,24 @@ For each segment:
 Rather than refactoring `process_item()` into separate functions (high risk, large diff), the approach adds a `step_filter: Option<&HashSet<String>>` parameter. When set, only steps whose `id` is in the filter run. This keeps the existing step execution logic intact while enabling segment-based dispatch.
 
 Key touchpoints:
-- Hardcoded steps (plan, qa, ticket_scan, fix, retest): each checks `should_run_step(&step.id)`
-- Workflow-defined steps loop: `should_run_step` check added at top of loop
+- Unified loop: all steps filtered by `should_run_step(&step.id)` via `StepExecutionAccumulator`
 - Dynamic steps: only run when `step_filter` is `None` (legacy full mode)
+
+> **Note**: The original step filter approach has been superseded by the unified execution loop with `StepExecutionAccumulator`. See `docs/design_doc/orchestrator/13-unified-step-execution-model.md`.
 
 ## Alternatives And Tradeoffs
 
 - **Option A: Fully split process_item into process_task_steps + process_item_steps** — Cleaner separation but extremely large diff touching 700+ lines of battle-tested execution logic. High regression risk.
-- **Option B: Step filter on existing process_item** (chosen) — Minimal diff, preserves existing logic verbatim, segment runner controls scope via filter. Lower risk.
-- Why we chose B: The existing `process_item()` contains complex hardcoded step logic for plan/qa/ticket_scan/fix/retest with intricate state tracking. Splitting it risks breaking subtle invariants. The filter approach achieves the same effect with a much smaller blast radius.
+- **Option B: Step filter on existing process_item** (originally chosen) — Minimal diff, preserves existing logic verbatim, segment runner controls scope via filter. Lower risk.
+- **Option C: Unified loop with StepExecutionAccumulator** (superseded Option B) — Deleted all hardcoded step logic. One generic loop where behaviors are declared as data. See `docs/design_doc/orchestrator/13-unified-step-execution-model.md`.
+- Why Option B was originally chosen: The existing `process_item()` contained complex hardcoded step logic. The filter approach achieved scope-based execution with minimal blast radius. Option C later deleted all that hardcoded logic entirely.
 
 ## Risks And Mitigations
 
 - Risk: Task-scoped steps use first item as anchor — item_id in events won't reflect "no item"
   - Mitigation: Acceptable for now; task-scoped events are logged with the anchor item_id. Future: introduce a synthetic "task" item.
 - Risk: Scope override via YAML could create invalid segment orderings
-  - Mitigation: `default_scope()` handles 100% of standard workflows. Override is opt-in for edge cases.
+  - Mitigation: `default_scope_for_step_id()` handles 100% of standard workflows. Override is opt-in for edge cases.
 
 ---
 
@@ -113,15 +117,15 @@ Key touchpoints:
 
 - Config: No new env vars. `scope` field in YAML is optional with defaults.
 - Migration: Zero migration. Existing YAML/DB states work unchanged.
-- Backward compatibility: `process_item()` wrapper calls `process_item_filtered(..., None)` preserving exact legacy behavior.
+- Backward compatibility: `process_item_filtered()` unified loop handles all step types. The old `process_item()` wrapper has been removed.
 
 ---
 
 ## Test Plan
 
 - Unit tests (5 new):
-  - `default_scope_task_for_plan_implement` — verifies all task-scoped types
-  - `default_scope_item_for_qa_steps` — verifies all item-scoped types
+  - `test_default_scope_task_steps` — verifies all task-scoped step IDs
+  - `test_default_scope_item_steps` — verifies all item-scoped step IDs
   - `build_segments_groups_contiguous_scopes` — 5 steps → 3 segments (Task/Item/Task)
   - `build_segments_skips_guards` — guard steps excluded from segments
   - `resolved_scope_uses_explicit_override` — explicit `scope: Task` overrides default
@@ -147,9 +151,9 @@ Key touchpoints:
 
 | File | Change |
 |------|--------|
-| `core/src/config.rs` | `StepScope` enum, `default_scope()`, `scope` field on step structs, `resolved_scope()` |
+| `core/src/config.rs` | `StepScope` enum, `default_scope_for_step_id()`, `scope` field on step structs, `resolved_scope()` |
 | `core/src/cli_types.rs` | `scope: Option<String>` on `WorkflowStepSpec` |
 | `core/src/resource.rs` | Parse/serialize `scope` in spec↔config conversion |
 | `core/src/config_load.rs` | Pass `scope` in `build_execution_plan()` |
 | `core/src/scheduler/loop_engine.rs` | `ScopeSegment`, `build_scope_segments()`, segment dispatch loop |
-| `core/src/scheduler/item_executor.rs` | `process_item_filtered()` with step filter |
+| `core/src/scheduler/item_executor.rs` | `process_item_filtered()` unified loop with `StepExecutionAccumulator` |

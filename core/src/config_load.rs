@@ -1,6 +1,6 @@
 use crate::config::{
-    ActiveConfig, OrchestratorConfig, ResolvedProject, ResolvedWorkspace, TaskExecutionPlan,
-    WorkflowConfig, WorkflowStepConfig, WorkflowStepType,
+    ActiveConfig, OrchestratorConfig, ResolvedProject, ResolvedWorkspace, StepBehavior,
+    TaskExecutionPlan, WorkflowConfig, WorkflowStepConfig,
 };
 use crate::db::{count_tasks_by_workflow, count_tasks_by_workspace, open_conn};
 use crate::dto::ConfigOverview;
@@ -9,7 +9,6 @@ use anyhow::{Context, Result};
 use rusqlite::{params, OptionalExtension, Transaction};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 pub fn now_ts() -> String {
     chrono::Utc::now().to_rfc3339()
@@ -38,7 +37,7 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
     let had_ticket_scan_step = workflow
         .steps
         .iter()
-        .any(|step| step.step_type.as_ref() == Some(&WorkflowStepType::TicketScan));
+        .any(|step| step.id == "ticket_scan");
     if workflow.steps.is_empty() {
         workflow.steps = crate::config::default_workflow_steps(
             workflow.qa.as_deref(),
@@ -51,59 +50,38 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
 
     // Preserve original YAML order: apply defaults to each step in place,
     // then add missing standard steps as disabled placeholders.
-    let mut seen_types: HashSet<String> = HashSet::new();
+    let mut seen_ids: HashSet<String> = HashSet::new();
     for mut step in workflow.steps.drain(..) {
         let key = step
-            .step_type
-            .as_ref()
-            .map(|t| t.as_str().to_string())
-            .or_else(|| step.builtin.clone())
+            .builtin
+            .clone()
             .or_else(|| step.required_capability.clone())
             .unwrap_or(step.id.clone());
 
-        seen_types.insert(key.clone());
+        seen_ids.insert(key.clone());
 
-        // Resolve step_type from key if not set
-        if step.step_type.is_none() {
-            step.step_type = WorkflowStepType::from_str(&key).ok();
-        }
-
-        // Apply defaults based on step type
-        if let Some(ref st) = step.step_type {
-            if step.required_capability.is_none()
-                && step.builtin.is_none()
-                && step.command.is_none()
-            {
-                match st {
-                    WorkflowStepType::Qa
-                    | WorkflowStepType::Fix
-                    | WorkflowStepType::Retest
-                    | WorkflowStepType::Plan
-                    | WorkflowStepType::Build
-                    | WorkflowStepType::Test
-                    | WorkflowStepType::Lint
-                    | WorkflowStepType::Implement
-                    | WorkflowStepType::Review
-                    | WorkflowStepType::GitOps
-                    | WorkflowStepType::QaDocGen
-                    | WorkflowStepType::QaTesting
-                    | WorkflowStepType::TicketFix
-                    | WorkflowStepType::DocGovernance
-                    | WorkflowStepType::AlignTests => {
-                        step.required_capability = Some(st.as_str().to_string());
-                    }
-                    WorkflowStepType::LoopGuard => {
-                        step.builtin = Some("loop_guard".to_string());
-                        step.is_guard = true;
-                    }
-                    WorkflowStepType::SelfTest => {
-                        step.builtin = Some("self_test".to_string());
-                    }
-                    WorkflowStepType::SmokeChain => {
-                        step.required_capability = Some(st.as_str().to_string());
-                    }
-                    _ => {}
+        // Apply defaults based on step id
+        if step.required_capability.is_none()
+            && step.builtin.is_none()
+            && step.command.is_none()
+        {
+            match key.as_str() {
+                "qa" | "fix" | "retest" | "plan" | "build" | "test" | "lint"
+                | "implement" | "review" | "git_ops" | "qa_doc_gen" | "qa_testing"
+                | "ticket_fix" | "doc_governance" | "align_tests" | "smoke_chain" => {
+                    step.required_capability = Some(key.clone());
                 }
+                "loop_guard" => {
+                    step.builtin = Some("loop_guard".to_string());
+                    step.is_guard = true;
+                }
+                "self_test" => {
+                    step.builtin = Some("self_test".to_string());
+                }
+                "init_once" | "ticket_scan" => {
+                    step.builtin = Some(key.clone());
+                }
+                _ => {}
             }
         }
 
@@ -111,21 +89,14 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
     }
 
     // Add missing standard steps as disabled placeholders (except LoopGuard)
-    let standard_step_types = [
-        WorkflowStepType::InitOnce,
-        WorkflowStepType::Plan,
-        WorkflowStepType::Qa,
-        WorkflowStepType::TicketScan,
-        WorkflowStepType::Fix,
-        WorkflowStepType::Retest,
+    let standard_step_ids = [
+        "init_once", "plan", "qa", "ticket_scan", "fix", "retest",
     ];
-    for step_type in &standard_step_types {
-        let key = step_type.as_str().to_string();
-        if !seen_types.contains(&key) {
+    for step_id in &standard_step_ids {
+        if !seen_ids.contains(*step_id) {
             normalized.push(WorkflowStepConfig {
-                id: key,
+                id: step_id.to_string(),
                 description: None,
-                step_type: Some(step_type.clone()),
                 required_capability: None,
                 builtin: None,
                 enabled: false,
@@ -139,37 +110,28 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                 command: None,
                 chain_steps: vec![],
                 scope: None,
+                behavior: StepBehavior::default(),
             });
         }
     }
     workflow.steps = normalized;
-    for step in &mut workflow.steps {
-        if step.id.trim().is_empty() {
-            step.id = step
-                .step_type
-                .as_ref()
-                .map(|t| t.as_str())
-                .unwrap_or(&step.id)
-                .to_string();
-        }
-    }
     let qa_enabled = workflow
         .steps
         .iter()
-        .any(|step| step.step_type.as_ref() == Some(&WorkflowStepType::Qa) && step.enabled);
+        .any(|step| step.id == "qa" && step.enabled);
     let fix_enabled = workflow
         .steps
         .iter()
-        .any(|step| step.step_type.as_ref() == Some(&WorkflowStepType::Fix) && step.enabled);
+        .any(|step| step.id == "fix" && step.enabled);
     let retest_enabled = workflow
         .steps
         .iter()
-        .any(|step| step.step_type.as_ref() == Some(&WorkflowStepType::Retest) && step.enabled);
+        .any(|step| step.id == "retest" && step.enabled);
     if !had_ticket_scan_step && !qa_enabled && fix_enabled && !retest_enabled {
         if let Some(scan_step) = workflow
             .steps
             .iter_mut()
-            .find(|step| step.step_type.as_ref() == Some(&WorkflowStepType::TicketScan))
+            .find(|step| step.id == "ticket_scan")
         {
             scan_step.enabled = true;
         }
@@ -210,17 +172,15 @@ pub fn validate_workflow_config(
             );
         }
         let key = step
-            .step_type
-            .as_ref()
-            .map(|t| t.as_str())
-            .or(step.builtin.as_deref())
+            .builtin
+            .as_deref()
             .or(step.required_capability.as_deref())
             .unwrap_or(&step.id);
         if !step.enabled {
             continue;
         }
         enabled_count += 1;
-        if step.step_type.as_ref() == Some(&WorkflowStepType::TicketScan) {
+        if step.id == "ticket_scan" {
             if let Some(prehook) = step.prehook.as_ref() {
                 crate::prehook::validate_step_prehook(prehook, workflow_id, key)?;
             }
@@ -303,17 +263,15 @@ fn validate_workflow_config_with_agents(
             );
         }
         let key = step
-            .step_type
-            .as_ref()
-            .map(|t| t.as_str())
-            .or(step.builtin.as_deref())
+            .builtin
+            .as_deref()
             .or(step.required_capability.as_deref())
             .unwrap_or(&step.id);
         if !step.enabled {
             continue;
         }
         enabled_count += 1;
-        if step.step_type.as_ref() == Some(&WorkflowStepType::TicketScan) {
+        if step.id == "ticket_scan" {
             if let Some(prehook) = step.prehook.as_ref() {
                 crate::prehook::validate_step_prehook(prehook, workflow_id, key)?;
             }
@@ -759,7 +717,6 @@ pub fn build_execution_plan(
         }
         steps.push(crate::config::TaskExecutionStep {
             id: step.id.clone(),
-            step_type: step.step_type.clone(),
             required_capability: step.required_capability.clone(),
             builtin: step.builtin.clone(),
             enabled: step.enabled,
@@ -776,7 +733,6 @@ pub fn build_execution_plan(
                 .iter()
                 .map(|cs| crate::config::TaskExecutionStep {
                     id: cs.id.clone(),
-                    step_type: cs.step_type.clone(),
                     required_capability: cs.required_capability.clone(),
                     builtin: cs.builtin.clone(),
                     enabled: cs.enabled,
@@ -790,9 +746,11 @@ pub fn build_execution_plan(
                     command: cs.command.clone(),
                     chain_steps: vec![],
                     scope: cs.scope,
+                    behavior: StepBehavior::default(),
                 })
                 .collect(),
             scope: step.scope,
+            behavior: StepBehavior::default(),
         });
     }
     let loop_policy = workflow.loop_policy.clone();
@@ -831,12 +789,7 @@ pub fn validate_self_referential_safety(
     }
 
     // Warning: no self_test step in workflow
-    let has_self_test = workflow.steps.iter().any(|s| {
-        s.step_type
-            .as_ref()
-            .map(|t| matches!(t, WorkflowStepType::SelfTest))
-            .unwrap_or(false)
-    });
+    let has_self_test = workflow.steps.iter().any(|s| s.id == "self_test");
     if !has_self_test {
         eprintln!(
             "[warn] workspace '{}' is self_referential but has no 'self_test' step in its workflow. \
@@ -854,6 +807,8 @@ mod tests {
     use crate::config::{
         LoopMode, WorkflowFinalizeConfig, WorkflowLoopConfig, WorkflowLoopGuardConfig,
     };
+    #[allow(unused_imports)]
+    use std::collections::HashMap;
 
     #[test]
     fn normalize_workflow_sets_builtin_for_self_test() {
@@ -861,7 +816,6 @@ mod tests {
             steps: vec![WorkflowStepConfig {
                 id: "self_test".to_string(),
                 description: None,
-                step_type: Some(WorkflowStepType::SelfTest),
                 builtin: None,
                 required_capability: None,
                 enabled: true,
@@ -875,6 +829,7 @@ mod tests {
                 command: None,
                 chain_steps: vec![],
                 scope: None,
+                behavior: StepBehavior::default(),
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -912,8 +867,7 @@ mod tests {
                 WorkflowStepConfig {
                     id: "self_test_fail".to_string(),
                     description: None,
-                    step_type: Some(WorkflowStepType::SelfTest),
-                    builtin: None,
+                    builtin: Some("self_test".to_string()),
                     required_capability: None,
                     enabled: true,
                     repeatable: false,
@@ -926,12 +880,12 @@ mod tests {
                     command: None,
                     chain_steps: vec![],
                     scope: None,
+                    behavior: StepBehavior::default(),
                 },
                 WorkflowStepConfig {
                     id: "self_test_recover".to_string(),
                     description: None,
-                    step_type: Some(WorkflowStepType::SelfTest),
-                    builtin: None,
+                    builtin: Some("self_test".to_string()),
                     required_capability: None,
                     enabled: true,
                     repeatable: false,
@@ -944,6 +898,7 @@ mod tests {
                     command: None,
                     chain_steps: vec![],
                     scope: None,
+                    behavior: StepBehavior::default(),
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -966,7 +921,7 @@ mod tests {
         let self_test_ids: Vec<&str> = workflow
             .steps
             .iter()
-            .filter(|s| s.step_type.as_ref() == Some(&WorkflowStepType::SelfTest))
+            .filter(|s| s.builtin.as_deref() == Some("self_test"))
             .map(|s| s.id.as_str())
             .collect();
         assert_eq!(self_test_ids, vec!["self_test_fail", "self_test_recover"]);
@@ -979,7 +934,6 @@ mod tests {
                 WorkflowStepConfig {
                     id: "self_test_fail".to_string(),
                     description: None,
-                    step_type: Some(WorkflowStepType::SelfTest),
                     builtin: Some("self_test".to_string()),
                     required_capability: None,
                     enabled: true,
@@ -993,11 +947,11 @@ mod tests {
                     command: None,
                     chain_steps: vec![],
                     scope: None,
+                    behavior: StepBehavior::default(),
                 },
                 WorkflowStepConfig {
                     id: "self_test_recover".to_string(),
                     description: None,
-                    step_type: Some(WorkflowStepType::SelfTest),
                     builtin: Some("self_test".to_string()),
                     required_capability: None,
                     enabled: true,
@@ -1011,6 +965,7 @@ mod tests {
                     command: None,
                     chain_steps: vec![],
                     scope: None,
+                    behavior: StepBehavior::default(),
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -1043,7 +998,6 @@ mod tests {
                 WorkflowStepConfig {
                     id: "implement_phase_one".to_string(),
                     description: None,
-                    step_type: Some(WorkflowStepType::Implement),
                     builtin: None,
                     required_capability: None,
                     enabled: true,
@@ -1057,11 +1011,11 @@ mod tests {
                     command: Some("echo phase-one".to_string()),
                     chain_steps: vec![],
                     scope: None,
+                    behavior: StepBehavior::default(),
                 },
                 WorkflowStepConfig {
                     id: "implement_phase_two".to_string(),
                     description: None,
-                    step_type: Some(WorkflowStepType::Implement),
                     builtin: None,
                     required_capability: None,
                     enabled: true,
@@ -1075,6 +1029,7 @@ mod tests {
                     command: Some("echo phase-two".to_string()),
                     chain_steps: vec![],
                     scope: None,
+                    behavior: StepBehavior::default(),
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -1107,7 +1062,6 @@ mod tests {
                 WorkflowStepConfig {
                     id: "duplicate_step".to_string(),
                     description: None,
-                    step_type: Some(WorkflowStepType::SelfTest),
                     builtin: Some("self_test".to_string()),
                     required_capability: None,
                     enabled: true,
@@ -1121,11 +1075,11 @@ mod tests {
                     command: None,
                     chain_steps: vec![],
                     scope: None,
+                    behavior: StepBehavior::default(),
                 },
                 WorkflowStepConfig {
                     id: "duplicate_step".to_string(),
                     description: None,
-                    step_type: Some(WorkflowStepType::Implement),
                     builtin: None,
                     required_capability: None,
                     enabled: true,
@@ -1139,6 +1093,7 @@ mod tests {
                     command: Some("echo duplicate".to_string()),
                     chain_steps: vec![],
                     scope: None,
+                    behavior: StepBehavior::default(),
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -1176,7 +1131,6 @@ mod tests {
             steps: vec![WorkflowStepConfig {
                 id: "implement".to_string(),
                 description: None,
-                step_type: Some(WorkflowStepType::Implement),
                 builtin: None,
                 required_capability: Some("implement".to_string()),
                 enabled: true,
@@ -1190,6 +1144,7 @@ mod tests {
                 command: None,
                 chain_steps: vec![],
                 scope: None,
+                behavior: StepBehavior::default(),
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -1223,7 +1178,6 @@ mod tests {
                 WorkflowStepConfig {
                     id: "implement".to_string(),
                     description: None,
-                    step_type: Some(WorkflowStepType::Implement),
                     builtin: None,
                     required_capability: Some("implement".to_string()),
                     enabled: true,
@@ -1237,11 +1191,11 @@ mod tests {
                     command: None,
                     chain_steps: vec![],
                     scope: None,
+                    behavior: StepBehavior::default(),
                 },
                 WorkflowStepConfig {
                     id: "self_test".to_string(),
                     description: None,
-                    step_type: Some(WorkflowStepType::SelfTest),
                     builtin: None,
                     required_capability: None,
                     enabled: true,
@@ -1255,6 +1209,7 @@ mod tests {
                     command: None,
                     chain_steps: vec![],
                     scope: None,
+                    behavior: StepBehavior::default(),
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -1311,11 +1266,10 @@ mod tests {
     }
 
     // --- Helper to build a minimal step ---
-    fn make_step(id: &str, step_type: Option<WorkflowStepType>, enabled: bool) -> WorkflowStepConfig {
+    fn make_step(id: &str, enabled: bool) -> WorkflowStepConfig {
         WorkflowStepConfig {
             id: id.to_string(),
             description: None,
-            step_type,
             builtin: None,
             required_capability: None,
             enabled,
@@ -1329,20 +1283,21 @@ mod tests {
             command: None,
             chain_steps: vec![],
             scope: None,
+            behavior: StepBehavior::default(),
         }
     }
 
     fn make_builtin_step(id: &str, builtin: &str, enabled: bool) -> WorkflowStepConfig {
         WorkflowStepConfig {
             builtin: Some(builtin.to_string()),
-            ..make_step(id, None, enabled)
+            ..make_step(id, enabled)
         }
     }
 
-    fn make_command_step(id: &str, step_type: Option<WorkflowStepType>, cmd: &str) -> WorkflowStepConfig {
+    fn make_command_step(id: &str, cmd: &str) -> WorkflowStepConfig {
         WorkflowStepConfig {
             command: Some(cmd.to_string()),
-            ..make_step(id, step_type, true)
+            ..make_step(id, true)
         }
     }
 
@@ -1418,7 +1373,7 @@ mod tests {
 
     #[test]
     fn normalize_sets_required_capability_for_qa_step() {
-        let mut workflow = make_workflow(vec![make_step("qa", Some(WorkflowStepType::Qa), true)]);
+        let mut workflow = make_workflow(vec![make_step("qa", true)]);
         normalize_workflow_config(&mut workflow);
         let qa_step = workflow.steps.iter().find(|s| s.id == "qa").unwrap();
         assert_eq!(qa_step.required_capability.as_deref(), Some("qa"));
@@ -1426,7 +1381,7 @@ mod tests {
 
     #[test]
     fn normalize_sets_required_capability_for_fix_step() {
-        let mut workflow = make_workflow(vec![make_step("fix", Some(WorkflowStepType::Fix), true)]);
+        let mut workflow = make_workflow(vec![make_step("fix", true)]);
         normalize_workflow_config(&mut workflow);
         let fix_step = workflow.steps.iter().find(|s| s.id == "fix").unwrap();
         assert_eq!(fix_step.required_capability.as_deref(), Some("fix"));
@@ -1434,7 +1389,7 @@ mod tests {
 
     #[test]
     fn normalize_sets_required_capability_for_plan_step() {
-        let mut workflow = make_workflow(vec![make_step("plan", Some(WorkflowStepType::Plan), true)]);
+        let mut workflow = make_workflow(vec![make_step("plan", true)]);
         normalize_workflow_config(&mut workflow);
         let plan_step = workflow.steps.iter().find(|s| s.id == "plan").unwrap();
         assert_eq!(plan_step.required_capability.as_deref(), Some("plan"));
@@ -1442,7 +1397,7 @@ mod tests {
 
     #[test]
     fn normalize_sets_required_capability_for_implement_step() {
-        let mut workflow = make_workflow(vec![make_step("implement", Some(WorkflowStepType::Implement), true)]);
+        let mut workflow = make_workflow(vec![make_step("implement", true)]);
         normalize_workflow_config(&mut workflow);
         let step = workflow.steps.iter().find(|s| s.id == "implement").unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("implement"));
@@ -1450,7 +1405,7 @@ mod tests {
 
     #[test]
     fn normalize_sets_required_capability_for_review_step() {
-        let mut workflow = make_workflow(vec![make_step("review", Some(WorkflowStepType::Review), true)]);
+        let mut workflow = make_workflow(vec![make_step("review", true)]);
         normalize_workflow_config(&mut workflow);
         let step = workflow.steps.iter().find(|s| s.id == "review").unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("review"));
@@ -1458,7 +1413,7 @@ mod tests {
 
     #[test]
     fn normalize_sets_required_capability_for_build_step() {
-        let mut workflow = make_workflow(vec![make_step("build", Some(WorkflowStepType::Build), true)]);
+        let mut workflow = make_workflow(vec![make_step("build", true)]);
         normalize_workflow_config(&mut workflow);
         let step = workflow.steps.iter().find(|s| s.id == "build").unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("build"));
@@ -1466,7 +1421,7 @@ mod tests {
 
     #[test]
     fn normalize_sets_required_capability_for_test_step() {
-        let mut workflow = make_workflow(vec![make_step("test", Some(WorkflowStepType::Test), true)]);
+        let mut workflow = make_workflow(vec![make_step("test", true)]);
         normalize_workflow_config(&mut workflow);
         let step = workflow.steps.iter().find(|s| s.id == "test").unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("test"));
@@ -1474,7 +1429,7 @@ mod tests {
 
     #[test]
     fn normalize_sets_required_capability_for_lint_step() {
-        let mut workflow = make_workflow(vec![make_step("lint", Some(WorkflowStepType::Lint), true)]);
+        let mut workflow = make_workflow(vec![make_step("lint", true)]);
         normalize_workflow_config(&mut workflow);
         let step = workflow.steps.iter().find(|s| s.id == "lint").unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("lint"));
@@ -1482,7 +1437,7 @@ mod tests {
 
     #[test]
     fn normalize_sets_required_capability_for_gitops_step() {
-        let mut workflow = make_workflow(vec![make_step("git_ops", Some(WorkflowStepType::GitOps), true)]);
+        let mut workflow = make_workflow(vec![make_step("git_ops", true)]);
         normalize_workflow_config(&mut workflow);
         let step = workflow.steps.iter().find(|s| s.id == "git_ops").unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("git_ops"));
@@ -1490,7 +1445,7 @@ mod tests {
 
     #[test]
     fn normalize_sets_required_capability_for_qa_doc_gen_step() {
-        let mut workflow = make_workflow(vec![make_step("qa_doc_gen", Some(WorkflowStepType::QaDocGen), true)]);
+        let mut workflow = make_workflow(vec![make_step("qa_doc_gen", true)]);
         normalize_workflow_config(&mut workflow);
         let step = workflow.steps.iter().find(|s| s.id == "qa_doc_gen").unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("qa_doc_gen"));
@@ -1498,7 +1453,7 @@ mod tests {
 
     #[test]
     fn normalize_sets_required_capability_for_qa_testing_step() {
-        let mut workflow = make_workflow(vec![make_step("qa_testing", Some(WorkflowStepType::QaTesting), true)]);
+        let mut workflow = make_workflow(vec![make_step("qa_testing", true)]);
         normalize_workflow_config(&mut workflow);
         let step = workflow.steps.iter().find(|s| s.id == "qa_testing").unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("qa_testing"));
@@ -1506,7 +1461,7 @@ mod tests {
 
     #[test]
     fn normalize_sets_required_capability_for_ticket_fix_step() {
-        let mut workflow = make_workflow(vec![make_step("ticket_fix", Some(WorkflowStepType::TicketFix), true)]);
+        let mut workflow = make_workflow(vec![make_step("ticket_fix", true)]);
         normalize_workflow_config(&mut workflow);
         let step = workflow.steps.iter().find(|s| s.id == "ticket_fix").unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("ticket_fix"));
@@ -1514,7 +1469,7 @@ mod tests {
 
     #[test]
     fn normalize_sets_required_capability_for_doc_governance_step() {
-        let mut workflow = make_workflow(vec![make_step("doc_governance", Some(WorkflowStepType::DocGovernance), true)]);
+        let mut workflow = make_workflow(vec![make_step("doc_governance", true)]);
         normalize_workflow_config(&mut workflow);
         let step = workflow.steps.iter().find(|s| s.id == "doc_governance").unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("doc_governance"));
@@ -1522,7 +1477,7 @@ mod tests {
 
     #[test]
     fn normalize_sets_required_capability_for_align_tests_step() {
-        let mut workflow = make_workflow(vec![make_step("align_tests", Some(WorkflowStepType::AlignTests), true)]);
+        let mut workflow = make_workflow(vec![make_step("align_tests", true)]);
         normalize_workflow_config(&mut workflow);
         let step = workflow.steps.iter().find(|s| s.id == "align_tests").unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("align_tests"));
@@ -1530,7 +1485,7 @@ mod tests {
 
     #[test]
     fn normalize_sets_required_capability_for_retest_step() {
-        let mut workflow = make_workflow(vec![make_step("retest", Some(WorkflowStepType::Retest), true)]);
+        let mut workflow = make_workflow(vec![make_step("retest", true)]);
         normalize_workflow_config(&mut workflow);
         let step = workflow.steps.iter().find(|s| s.id == "retest").unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("retest"));
@@ -1538,7 +1493,7 @@ mod tests {
 
     #[test]
     fn normalize_sets_required_capability_for_smoke_chain_step() {
-        let mut workflow = make_workflow(vec![make_step("smoke_chain", Some(WorkflowStepType::SmokeChain), true)]);
+        let mut workflow = make_workflow(vec![make_step("smoke_chain", true)]);
         normalize_workflow_config(&mut workflow);
         let step = workflow.steps.iter().find(|s| s.id == "smoke_chain").unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("smoke_chain"));
@@ -1546,7 +1501,7 @@ mod tests {
 
     #[test]
     fn normalize_sets_loop_guard_builtin_and_is_guard() {
-        let mut workflow = make_workflow(vec![make_step("loop_guard", Some(WorkflowStepType::LoopGuard), true)]);
+        let mut workflow = make_workflow(vec![make_step("loop_guard", true)]);
         normalize_workflow_config(&mut workflow);
         let step = workflow.steps.iter().find(|s| s.id == "loop_guard").unwrap();
         assert_eq!(step.builtin.as_deref(), Some("loop_guard"));
@@ -1555,7 +1510,7 @@ mod tests {
 
     #[test]
     fn normalize_skips_capability_if_builtin_already_set() {
-        let mut step = make_step("qa", Some(WorkflowStepType::Qa), true);
+        let mut step = make_step("qa", true);
         step.builtin = Some("custom_builtin".to_string());
         let mut workflow = make_workflow(vec![step]);
         normalize_workflow_config(&mut workflow);
@@ -1567,7 +1522,7 @@ mod tests {
 
     #[test]
     fn normalize_skips_capability_if_command_already_set() {
-        let mut step = make_step("qa", Some(WorkflowStepType::Qa), true);
+        let mut step = make_step("qa", true);
         step.command = Some("echo test".to_string());
         let mut workflow = make_workflow(vec![step]);
         normalize_workflow_config(&mut workflow);
@@ -1582,11 +1537,11 @@ mod tests {
         ]);
         normalize_workflow_config(&mut workflow);
         // Should add init_once, plan, qa, ticket_scan, fix, retest as disabled
-        let init_step = workflow.steps.iter().find(|s| s.step_type == Some(WorkflowStepType::InitOnce));
+        let init_step = workflow.steps.iter().find(|s| s.id == "init_once");
         assert!(init_step.is_some(), "should add init_once step");
         assert!(!init_step.unwrap().enabled, "added init_once should be disabled");
 
-        let plan_step = workflow.steps.iter().find(|s| s.step_type == Some(WorkflowStepType::Plan));
+        let plan_step = workflow.steps.iter().find(|s| s.id == "plan");
         assert!(plan_step.is_some(), "should add plan step");
         assert!(!plan_step.unwrap().enabled, "added plan should be disabled");
     }
@@ -1594,10 +1549,10 @@ mod tests {
     #[test]
     fn normalize_does_not_duplicate_existing_step_types() {
         let mut workflow = make_workflow(vec![
-            make_step("plan", Some(WorkflowStepType::Plan), true),
+            make_step("plan", true),
         ]);
         normalize_workflow_config(&mut workflow);
-        let plan_count = workflow.steps.iter().filter(|s| s.step_type == Some(WorkflowStepType::Plan)).count();
+        let plan_count = workflow.steps.iter().filter(|s| s.id == "plan").count();
         assert_eq!(plan_count, 1, "should not duplicate already-present plan step");
     }
 
@@ -1636,34 +1591,32 @@ mod tests {
     }
 
     #[test]
-    fn normalize_fills_empty_step_id_from_step_type() {
-        let mut step = make_step("", Some(WorkflowStepType::Plan), true);
-        step.id = "   ".to_string(); // whitespace-only
+    fn normalize_preserves_step_id() {
+        let step = make_step("plan", true);
         let mut workflow = make_workflow(vec![step]);
         normalize_workflow_config(&mut workflow);
-        let plan_step = workflow.steps.iter().find(|s| s.step_type == Some(WorkflowStepType::Plan)).unwrap();
-        assert_eq!(plan_step.id, "plan", "empty id should be filled from step_type");
+        let plan_step = workflow.steps.iter().find(|s| s.id == "plan").unwrap();
+        assert_eq!(plan_step.id, "plan", "step id should be preserved");
     }
 
     #[test]
-    fn normalize_resolves_step_type_from_key_when_none() {
-        // Step with no step_type but id matches a known type
-        let mut step = make_step("plan", None, true);
-        step.required_capability = Some("plan".to_string());
+    fn normalize_sets_required_capability_from_id() {
+        // Step with id matching a known type gets required_capability set
+        let step = make_step("plan", true);
         let mut workflow = make_workflow(vec![step]);
         normalize_workflow_config(&mut workflow);
         let step = workflow.steps.iter().find(|s| s.id == "plan").unwrap();
-        assert_eq!(step.step_type, Some(WorkflowStepType::Plan));
+        assert_eq!(step.required_capability.as_deref(), Some("plan"));
     }
 
     #[test]
     fn normalize_enables_ticket_scan_when_fix_only() {
         // fix enabled, qa disabled, retest disabled, no prior ticket_scan
         let mut workflow = make_workflow(vec![
-            make_command_step("fix", Some(WorkflowStepType::Fix), "echo fix"),
+            make_command_step("fix", "echo fix"),
         ]);
         normalize_workflow_config(&mut workflow);
-        let scan = workflow.steps.iter().find(|s| s.step_type == Some(WorkflowStepType::TicketScan));
+        let scan = workflow.steps.iter().find(|s| s.id == "ticket_scan");
         assert!(scan.is_some(), "ticket_scan should exist");
         assert!(scan.unwrap().enabled, "ticket_scan should be enabled when fix is enabled but qa is not");
     }
@@ -1671,11 +1624,11 @@ mod tests {
     #[test]
     fn normalize_does_not_enable_ticket_scan_when_qa_also_enabled() {
         let mut workflow = make_workflow(vec![
-            make_command_step("qa", Some(WorkflowStepType::Qa), "echo qa"),
-            make_command_step("fix", Some(WorkflowStepType::Fix), "echo fix"),
+            make_command_step("qa", "echo qa"),
+            make_command_step("fix", "echo fix"),
         ]);
         normalize_workflow_config(&mut workflow);
-        let scan = workflow.steps.iter().find(|s| s.step_type == Some(WorkflowStepType::TicketScan));
+        let scan = workflow.steps.iter().find(|s| s.id == "ticket_scan");
         // ticket_scan should still exist (as disabled placeholder) since it wasn't in steps
         if let Some(s) = scan {
             assert!(!s.enabled, "ticket_scan should NOT be auto-enabled when qa is also enabled");
@@ -1696,7 +1649,7 @@ mod tests {
     #[test]
     fn validate_workflow_rejects_no_enabled_steps() {
         let workflow = make_workflow(vec![
-            make_step("qa", Some(WorkflowStepType::Qa), false),
+            make_step("qa", false),
         ]);
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
@@ -1708,7 +1661,7 @@ mod tests {
     fn validate_workflow_rejects_missing_agent_template() {
         // Step has no builtin, command, or chain_steps, and no agent provides the template
         let workflow = make_workflow(vec![
-            make_step("qa", Some(WorkflowStepType::Qa), true),
+            make_step("qa", true),
         ]);
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
@@ -1719,7 +1672,7 @@ mod tests {
     #[test]
     fn validate_workflow_accepts_step_with_agent_template() {
         let workflow = make_workflow(vec![
-            make_step("qa", Some(WorkflowStepType::Qa), true),
+            make_step("qa", true),
         ]);
         let config = make_config_with_agent("qa", "qa_template.md");
         let result = validate_workflow_config(&config, &workflow, "test-wf");
@@ -1739,7 +1692,7 @@ mod tests {
     #[test]
     fn validate_workflow_accepts_command_step_without_agent() {
         let workflow = make_workflow(vec![
-            make_command_step("build", Some(WorkflowStepType::Build), "cargo build"),
+            make_command_step("build", "cargo build"),
         ]);
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
@@ -1748,8 +1701,8 @@ mod tests {
 
     #[test]
     fn validate_workflow_accepts_chain_steps_without_agent() {
-        let mut step = make_step("smoke_chain", Some(WorkflowStepType::SmokeChain), true);
-        step.chain_steps = vec![make_command_step("sub", None, "echo sub")];
+        let mut step = make_step("smoke_chain", true);
+        step.chain_steps = vec![make_command_step("sub", "echo sub")];
         let workflow = make_workflow(vec![step]);
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
@@ -1820,7 +1773,7 @@ mod tests {
     fn validate_workflow_skips_disabled_steps() {
         // Disabled step has no agent - should be fine
         let workflow = make_workflow(vec![
-            make_step("qa", Some(WorkflowStepType::Qa), false),
+            make_step("qa", false),
             make_builtin_step("self_test", "self_test", true),
         ]);
         let config = OrchestratorConfig::default();
@@ -1831,7 +1784,7 @@ mod tests {
     #[test]
     fn validate_workflow_allows_ticket_scan_without_agent() {
         let workflow = make_workflow(vec![
-            make_step("ticket_scan", Some(WorkflowStepType::TicketScan), true),
+            make_step("ticket_scan", true),
             make_builtin_step("self_test", "self_test", true),
         ]);
         let config = OrchestratorConfig::default();
@@ -1845,7 +1798,7 @@ mod tests {
     fn build_execution_plan_returns_only_enabled_steps() {
         let workflow = make_workflow(vec![
             make_builtin_step("self_test", "self_test", true),
-            make_step("qa", Some(WorkflowStepType::Qa), false),
+            make_step("qa", false),
         ]);
         let config = OrchestratorConfig::default();
         let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
@@ -1855,7 +1808,7 @@ mod tests {
 
     #[test]
     fn build_execution_plan_copies_step_fields() {
-        let mut step = make_command_step("build", Some(WorkflowStepType::Build), "cargo build");
+        let mut step = make_command_step("build", "cargo build");
         step.repeatable = false;
         step.tty = true;
         step.outputs = vec!["result".to_string()];
@@ -1867,7 +1820,6 @@ mod tests {
         let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
         let s = &plan.steps[0];
         assert_eq!(s.id, "build");
-        assert_eq!(s.step_type, Some(WorkflowStepType::Build));
         assert_eq!(s.command.as_deref(), Some("cargo build"));
         assert!(!s.repeatable);
         assert!(s.tty);
@@ -1879,10 +1831,10 @@ mod tests {
 
     #[test]
     fn build_execution_plan_includes_chain_steps() {
-        let mut step = make_step("smoke_chain", Some(WorkflowStepType::SmokeChain), true);
+        let mut step = make_step("smoke_chain", true);
         step.chain_steps = vec![
-            make_command_step("sub1", Some(WorkflowStepType::Build), "cargo build"),
-            make_command_step("sub2", Some(WorkflowStepType::Test), "cargo test"),
+            make_command_step("sub1", "cargo build"),
+            make_command_step("sub2", "cargo test"),
         ];
         let workflow = make_workflow(vec![step]);
         let config = OrchestratorConfig::default();
@@ -1998,7 +1950,7 @@ mod tests {
     #[test]
     fn validate_self_referential_safety_warns_disabled_auto_rollback() {
         let workflow = WorkflowConfig {
-            steps: vec![make_step("implement", Some(WorkflowStepType::Implement), true)],
+            steps: vec![make_step("implement", true)],
             safety: crate::config::SafetyConfig {
                 checkpoint_strategy: crate::config::CheckpointStrategy::GitStash,
                 auto_rollback: false, // should trigger warning
@@ -2017,8 +1969,8 @@ mod tests {
     fn validate_self_referential_safety_passes_with_git_stash() {
         let workflow = WorkflowConfig {
             steps: vec![
-                make_step("implement", Some(WorkflowStepType::Implement), true),
-                make_step("self_test", Some(WorkflowStepType::SelfTest), true),
+                make_step("implement", true),
+                make_step("self_test", true),
             ],
             safety: crate::config::SafetyConfig {
                 checkpoint_strategy: crate::config::CheckpointStrategy::GitStash,

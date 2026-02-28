@@ -57,9 +57,8 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                 "basic".to_string(),
                 WorkflowConfig {
                     steps: vec![WorkflowStepConfig {
-                        id: "run_qa".to_string(),
+                        id: "qa".to_string(),
                         description: None,
-                        step_type: Some(WorkflowStepType::Qa),
                         builtin: None,
                         required_capability: None,
                         enabled: true,
@@ -73,6 +72,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                         command: None,
                         chain_steps: vec![],
                         scope: None,
+                        behavior: StepBehavior::default(),
                     }],
                     loop_policy: WorkflowLoopConfig {
                         mode: LoopMode::Once,
@@ -390,24 +390,22 @@ spec:
 
 #[test]
 fn sdlc_step_types_round_trip() {
-    use agent_orchestrator::config::WorkflowStepType;
-    use std::str::FromStr;
+    use agent_orchestrator::config::validate_step_type;
 
     let sdlc_types = [
-        ("qa_doc_gen", WorkflowStepType::QaDocGen),
-        ("qa_testing", WorkflowStepType::QaTesting),
-        ("ticket_fix", WorkflowStepType::TicketFix),
-        ("doc_governance", WorkflowStepType::DocGovernance),
-        ("align_tests", WorkflowStepType::AlignTests),
-        ("plan", WorkflowStepType::Plan),
-        ("implement", WorkflowStepType::Implement),
+        "qa_doc_gen",
+        "qa_testing",
+        "ticket_fix",
+        "doc_governance",
+        "align_tests",
+        "plan",
+        "implement",
     ];
 
-    for (s, expected_variant) in &sdlc_types {
-        let parsed =
-            WorkflowStepType::from_str(s).unwrap_or_else(|e| panic!("from_str({s}) failed: {e}"));
-        assert_eq!(parsed, *expected_variant, "variant mismatch for '{s}'");
-        assert_eq!(parsed.as_str(), *s, "as_str round-trip failed for '{s}'");
+    for s in &sdlc_types {
+        let result = validate_step_type(s);
+        assert!(result.is_ok(), "validate_step_type({s}) should succeed");
+        assert_eq!(result.unwrap(), *s, "round-trip failed for '{s}'");
     }
 }
 
@@ -552,7 +550,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                         WorkflowStepConfig {
                             id: "plan".to_string(),
                             description: None,
-                            step_type: Some(WorkflowStepType::Plan),
+
                             builtin: None,
                             required_capability: Some("plan".to_string()),
                             enabled: true,
@@ -566,11 +564,12 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             command: None,
                             chain_steps: vec![],
                             scope: None,
+                            behavior: StepBehavior::default(),
                         },
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
                             description: None,
-                            step_type: Some(WorkflowStepType::QaDocGen),
+
                             builtin: None,
                             required_capability: Some("qa_doc_gen".to_string()),
                             enabled: true,
@@ -584,11 +583,12 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             command: None,
                             chain_steps: vec![],
                             scope: None,
+                            behavior: StepBehavior::default(),
                         },
                         WorkflowStepConfig {
                             id: "implement".to_string(),
                             description: None,
-                            step_type: Some(WorkflowStepType::Implement),
+
                             builtin: None,
                             required_capability: Some("implement".to_string()),
                             enabled: true,
@@ -602,11 +602,12 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             command: None,
                             chain_steps: vec![],
                             scope: None,
+                            behavior: StepBehavior::default(),
                         },
                         WorkflowStepConfig {
                             id: "qa_testing".to_string(),
                             description: None,
-                            step_type: Some(WorkflowStepType::QaTesting),
+
                             builtin: None,
                             required_capability: Some("qa_testing".to_string()),
                             enabled: true,
@@ -620,11 +621,12 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             command: None,
                             chain_steps: vec![],
                             scope: None,
+                            behavior: StepBehavior::default(),
                         },
                         WorkflowStepConfig {
                             id: "ticket_fix".to_string(),
                             description: None,
-                            step_type: Some(WorkflowStepType::TicketFix),
+
                             builtin: None,
                             required_capability: Some("ticket_fix".to_string()),
                             enabled: true,
@@ -638,11 +640,12 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             command: None,
                             chain_steps: vec![],
                             scope: None,
+                            behavior: StepBehavior::default(),
                         },
                         WorkflowStepConfig {
                             id: "align_tests".to_string(),
                             description: None,
-                            step_type: Some(WorkflowStepType::AlignTests),
+
                             builtin: None,
                             required_capability: Some("align_tests".to_string()),
                             enabled: true,
@@ -656,11 +659,12 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             command: None,
                             chain_steps: vec![],
                             scope: None,
+                            behavior: StepBehavior::default(),
                         },
                         WorkflowStepConfig {
                             id: "doc_governance".to_string(),
                             description: None,
-                            step_type: Some(WorkflowStepType::DocGovernance),
+
                             builtin: None,
                             required_capability: Some("doc_governance".to_string()),
                             enabled: true,
@@ -674,11 +678,12 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             command: None,
                             chain_steps: vec![],
                             scope: None,
+                            behavior: StepBehavior::default(),
                         },
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
                             description: None,
-                            step_type: Some(WorkflowStepType::LoopGuard),
+
                             builtin: Some("loop_guard".to_string()),
                             required_capability: None,
                             enabled: true,
@@ -692,6 +697,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             command: None,
                             chain_steps: vec![],
                             scope: None,
+                            behavior: StepBehavior::default(),
                         },
                     ],
                     loop_policy: WorkflowLoopConfig {
@@ -728,7 +734,6 @@ fn multi_agent_capability_config_validates() {
 
 #[test]
 fn build_execution_plan_contains_all_bootstrap_steps() {
-    use agent_orchestrator::config::WorkflowStepType;
     use agent_orchestrator::config_load::build_execution_plan;
 
     let config = multi_agent_config();
@@ -754,7 +759,7 @@ fn build_execution_plan_contains_all_bootstrap_steps() {
 
     // Verify expected step properties
     let plan_step = plan.steps.iter().find(|s| s.id == "plan").unwrap();
-    assert_eq!(plan_step.step_type, Some(WorkflowStepType::Plan));
+    assert_eq!(plan_step.id, "plan");
     assert!(!plan_step.repeatable, "plan step should not be repeatable");
 
     let loop_guard_step = plan.steps.iter().find(|s| s.id == "loop_guard").unwrap();
@@ -768,8 +773,8 @@ fn build_execution_plan_contains_all_bootstrap_steps() {
 #[test]
 fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
     use agent_orchestrator::config::{
-        LoopMode, WorkflowConfig, WorkflowFinalizeConfig, WorkflowLoopConfig,
-        WorkflowLoopGuardConfig, WorkflowStepConfig, WorkflowStepType,
+        LoopMode, StepBehavior, WorkflowConfig, WorkflowFinalizeConfig, WorkflowLoopConfig,
+        WorkflowLoopGuardConfig, WorkflowStepConfig,
     };
     use agent_orchestrator::config_load::normalize_workflow_config;
 
@@ -778,7 +783,6 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
             WorkflowStepConfig {
                 id: "qa_doc_gen".to_string(),
                 description: None,
-                step_type: Some(WorkflowStepType::QaDocGen),
                 builtin: None,
                 required_capability: None, // not set — normalize should fill it in
                 enabled: true,
@@ -792,11 +796,11 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
                 command: None,
                 chain_steps: vec![],
                 scope: None,
+                behavior: StepBehavior::default(),
             },
             WorkflowStepConfig {
                 id: "align_tests".to_string(),
                 description: None,
-                step_type: Some(WorkflowStepType::AlignTests),
                 builtin: None,
                 required_capability: None,
                 enabled: true,
@@ -810,6 +814,7 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
                 command: None,
                 chain_steps: vec![],
                 scope: None,
+                behavior: StepBehavior::default(),
             },
         ],
         loop_policy: WorkflowLoopConfig {
@@ -851,8 +856,6 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
 
 #[test]
 fn sdlc_full_pipeline_workflow_parses_from_fixture() {
-    use agent_orchestrator::config::WorkflowStepType;
-
     let yaml = std::fs::read_to_string("../fixtures/manifests/bundles/self-bootstrap-test.yaml")
         .expect("fixture file missing");
     let resources = parse_resources_from_yaml(&yaml).expect("should parse");
@@ -867,31 +870,30 @@ fn sdlc_full_pipeline_workflow_parses_from_fixture() {
         .get("sdlc_full_pipeline")
         .expect("sdlc_full_pipeline workflow missing");
 
-    let step_types: Vec<Option<WorkflowStepType>> =
-        workflow.steps.iter().map(|s| s.step_type.clone()).collect();
+    let step_ids: Vec<&str> = workflow.steps.iter().map(|s| s.id.as_str()).collect();
 
     assert!(
-        step_types.contains(&Some(WorkflowStepType::Plan)),
+        step_ids.contains(&"plan"),
         "sdlc_full_pipeline should have plan step"
     );
     assert!(
-        step_types.contains(&Some(WorkflowStepType::QaDocGen)),
+        step_ids.contains(&"qa_doc_gen"),
         "sdlc_full_pipeline should have qa_doc_gen step"
     );
     assert!(
-        step_types.contains(&Some(WorkflowStepType::QaTesting)),
+        step_ids.contains(&"qa_testing"),
         "sdlc_full_pipeline should have qa_testing step"
     );
     assert!(
-        step_types.contains(&Some(WorkflowStepType::TicketFix)),
+        step_ids.contains(&"ticket_fix"),
         "sdlc_full_pipeline should have ticket_fix step"
     );
     assert!(
-        step_types.contains(&Some(WorkflowStepType::AlignTests)),
+        step_ids.contains(&"align_tests"),
         "sdlc_full_pipeline should have align_tests step"
     );
     assert!(
-        step_types.contains(&Some(WorkflowStepType::DocGovernance)),
+        step_ids.contains(&"doc_governance"),
         "sdlc_full_pipeline should have doc_governance step"
     );
 }

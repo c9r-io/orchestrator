@@ -85,7 +85,7 @@ SELECT COUNT(*) FROM tasks;
 
 - Command returns success message for inserted step.
 - `execution_plan_json.steps` contains a `plan-*` step before `qa`.
-- Inserted step has `type=plan` and `tty=true`.
+- Inserted step has `id` starting with `plan-` and `tty=true`.
 
 ### Expected Data State
 ```sql
@@ -94,7 +94,7 @@ SELECT
     SELECT 1
     FROM tasks
     WHERE id = '{task_id}'
-      AND execution_plan_json LIKE '%"step_type":"plan"%'
+      AND execution_plan_json LIKE '%"id":"plan-%'
       AND execution_plan_json LIKE '%"tty":true%'
   );
 -- Expected: 1

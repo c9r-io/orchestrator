@@ -39,19 +39,19 @@ The self_test step is a builtin step type that validates code compiles and tests
 
 ### Goal
 
-Verify self_test step type parses correctly from YAML
+Verify self_test step type validates correctly
 
 ### Steps
 
 1. Run unit test:
    ```bash
-   cd core && cargo test --lib self_test_step_type_parses_correctly
+   cd core && cargo test --lib self_test_step_type_validates_correctly
    ```
 
 ### Expected
 
 - Test passes
-- WorkflowStepType::from_str("self_test") returns SelfTest variant
+- `validate_step_type("self_test")` returns Ok("self_test")
 
 ---
 
@@ -75,7 +75,7 @@ Verify YAML with self_test step parses correctly
 ### Expected
 
 - Test passes
-- Workflow contains self_test step with step_type = "self_test"
+- Workflow contains self_test step with id = "self_test"
 
 ---
 
@@ -87,7 +87,7 @@ Verify YAML with self_test step parses correctly
 
 ### Goal
 
-Verify normalization sets builtin = "self_test" for SelfTest step type
+Verify normalization sets builtin = "self_test" for self_test step id
 
 ### Steps
 

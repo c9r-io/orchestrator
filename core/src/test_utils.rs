@@ -1,9 +1,9 @@
 use crate::collab::MessageBus;
 use crate::config::{
     AgentConfig, AgentMetadata, AgentSelectionConfig, ConfigDefaults, LoopMode, OrchestratorConfig,
-    ResourceMetadataStore, ResumeConfig, RunnerConfig, SafetyConfig, WorkflowConfig,
+    ResourceMetadataStore, ResumeConfig, RunnerConfig, SafetyConfig, StepBehavior, WorkflowConfig,
     WorkflowFinalizeConfig, WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
-    WorkflowStepType, WorkspaceConfig,
+    WorkspaceConfig,
 };
 use crate::config_load::{
     build_active_config, load_raw_config_from_db, persist_raw_config, read_active_config,
@@ -84,9 +84,8 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                 "basic".to_string(),
                 WorkflowConfig {
                     steps: vec![WorkflowStepConfig {
-                        id: "run_qa".to_string(),
+                        id: "qa".to_string(),
                         description: None,
-                        step_type: Some(WorkflowStepType::Qa),
                         builtin: None,
                         required_capability: None,
                         enabled: true,
@@ -100,6 +99,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                         command: None,
                         chain_steps: vec![],
                         scope: None,
+                        behavior: StepBehavior::default(),
                     }],
                     loop_policy: WorkflowLoopConfig {
                         mode: LoopMode::Once,

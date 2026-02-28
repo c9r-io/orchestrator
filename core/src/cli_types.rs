@@ -569,12 +569,9 @@ spec:
     }
 
     #[test]
-    fn self_test_step_type_parses_correctly() {
-        use crate::config::WorkflowStepType;
-        use std::str::FromStr;
-
-        let step_type = WorkflowStepType::from_str("self_test").expect("should parse self_test");
-        assert_eq!(step_type, WorkflowStepType::SelfTest);
-        assert_eq!(step_type.as_str(), "self_test");
+    fn self_test_step_type_validates_correctly() {
+        let result = crate::config::validate_step_type("self_test");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "self_test");
     }
 }

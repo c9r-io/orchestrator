@@ -366,114 +366,110 @@ pub enum StepScope {
     Item,
 }
 
-/// Workflow step type enumeration
+// ── Step Behavior declarations ─────────────────────────────────────
+
+/// Declarative behavior attached to each workflow step.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct StepBehavior {
+    #[serde(default)]
+    pub on_failure: OnFailureAction,
+    #[serde(default)]
+    pub on_success: OnSuccessAction,
+    #[serde(default)]
+    pub captures: Vec<CaptureDecl>,
+    #[serde(default)]
+    pub post_actions: Vec<PostAction>,
+    #[serde(default)]
+    pub execution: ExecutionMode,
+    #[serde(default)]
+    pub collect_artifacts: bool,
+}
+
+/// What to do when a step fails.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum OnFailureAction {
+    #[default]
+    Continue,
+    SetStatus { status: String },
+    EarlyReturn { status: String },
+}
+
+/// What to do when a step succeeds.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum OnSuccessAction {
+    #[default]
+    Continue,
+    SetStatus { status: String },
+}
+
+/// A single capture declaration: what to extract from a step result.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CaptureDecl {
+    pub var: String,
+    pub source: CaptureSource,
+}
+
+/// Source of a captured value.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum WorkflowStepType {
-    InitOnce,
-    Plan,
-    Qa,
-    TicketScan,
-    Fix,
-    Retest,
-    LoopGuard,
-    Build,
-    Test,
-    Lint,
-    Implement,
-    Review,
-    GitOps,
-    // AI SDLC closed-loop step types
-    QaDocGen,
-    QaTesting,
-    TicketFix,
-    DocGovernance,
-    AlignTests,
-    SelfTest,
-    SmokeChain,
+pub enum CaptureSource {
+    Stdout,
+    Stderr,
+    ExitCode,
+    FailedFlag,
+    SuccessFlag,
 }
 
-impl WorkflowStepType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::InitOnce => "init_once",
-            Self::Plan => "plan",
-            Self::Qa => "qa",
-            Self::TicketScan => "ticket_scan",
-            Self::Fix => "fix",
-            Self::Retest => "retest",
-            Self::LoopGuard => "loop_guard",
-            Self::Build => "build",
-            Self::Test => "test",
-            Self::Lint => "lint",
-            Self::Implement => "implement",
-            Self::Review => "review",
-            Self::GitOps => "git_ops",
-            Self::QaDocGen => "qa_doc_gen",
-            Self::QaTesting => "qa_testing",
-            Self::TicketFix => "ticket_fix",
-            Self::DocGovernance => "doc_governance",
-            Self::AlignTests => "align_tests",
-            Self::SelfTest => "self_test",
-            Self::SmokeChain => "smoke_chain",
-        }
-    }
+/// Post-step action to run after a step completes.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", tag = "type")]
+pub enum PostAction {
+    CreateTicket,
+    ScanTickets,
+}
 
-    /// Returns true if this step type produces structured output for pipeline variables
-    pub fn has_structured_output(&self) -> bool {
-        matches!(
-            self,
-            Self::Build
-                | Self::Test
-                | Self::Lint
-                | Self::QaTesting
-                | Self::SelfTest
-                | Self::SmokeChain
-        )
-    }
+/// How a step is executed.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", tag = "type")]
+pub enum ExecutionMode {
+    #[default]
+    Agent,
+    Builtin { name: String },
+    Chain,
+}
 
-    /// Returns the default execution scope for this step type.
-    pub fn default_scope(&self) -> StepScope {
-        match self {
-            // Task-scoped: run once per cycle
-            Self::Plan | Self::QaDocGen | Self::Implement | Self::SelfTest
-            | Self::AlignTests | Self::DocGovernance | Self::Review
-            | Self::Build | Self::Test | Self::Lint | Self::GitOps
-            | Self::SmokeChain | Self::LoopGuard | Self::InitOnce => StepScope::Task,
-            // Item-scoped: fan-out per QA file
-            Self::Qa | Self::QaTesting | Self::TicketFix
-            | Self::TicketScan | Self::Fix | Self::Retest => StepScope::Item,
-        }
+/// Known workflow step IDs
+const KNOWN_STEP_IDS: &[&str] = &[
+    "init_once", "plan", "qa", "ticket_scan", "fix", "retest", "loop_guard",
+    "build", "test", "lint", "implement", "review", "git_ops",
+    "qa_doc_gen", "qa_testing", "ticket_fix", "doc_governance",
+    "align_tests", "self_test", "smoke_chain",
+];
+
+/// Validate that a step type string is a known step ID.
+pub fn validate_step_type(value: &str) -> Result<String, String> {
+    if KNOWN_STEP_IDS.contains(&value) {
+        Ok(value.to_string())
+    } else {
+        Err(format!("unknown workflow step type: {}", value))
     }
 }
 
-impl FromStr for WorkflowStepType {
-    type Err = String;
+/// Returns true if a step ID produces structured output for pipeline variables
+pub fn has_structured_output(step_id: &str) -> bool {
+    matches!(step_id, "build" | "test" | "lint" | "qa_testing" | "self_test" | "smoke_chain")
+}
 
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
-            "init_once" => Ok(Self::InitOnce),
-            "plan" => Ok(Self::Plan),
-            "qa" => Ok(Self::Qa),
-            "ticket_scan" => Ok(Self::TicketScan),
-            "fix" => Ok(Self::Fix),
-            "retest" => Ok(Self::Retest),
-            "loop_guard" => Ok(Self::LoopGuard),
-            "build" => Ok(Self::Build),
-            "test" => Ok(Self::Test),
-            "lint" => Ok(Self::Lint),
-            "implement" => Ok(Self::Implement),
-            "review" => Ok(Self::Review),
-            "git_ops" => Ok(Self::GitOps),
-            "qa_doc_gen" => Ok(Self::QaDocGen),
-            "qa_testing" => Ok(Self::QaTesting),
-            "ticket_fix" => Ok(Self::TicketFix),
-            "doc_governance" => Ok(Self::DocGovernance),
-            "align_tests" => Ok(Self::AlignTests),
-            "self_test" => Ok(Self::SelfTest),
-            "smoke_chain" => Ok(Self::SmokeChain),
-            _ => Err(format!("unknown workflow step type: {}", value)),
-        }
+/// Returns the default execution scope for a step ID.
+/// Task-scoped steps run once per cycle; item-scoped steps fan-out per QA file.
+pub fn default_scope_for_step_id(step_id: &str) -> StepScope {
+    match step_id {
+        // Item-scoped: fan-out per QA file
+        "qa" | "qa_testing" | "ticket_fix" | "ticket_scan" | "fix" | "retest" => StepScope::Item,
+        // Everything else defaults to task-scoped
+        _ => StepScope::Task,
     }
 }
 
@@ -608,8 +604,6 @@ pub struct WorkflowStepConfig {
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
-    pub step_type: Option<WorkflowStepType>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required_capability: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -637,9 +631,12 @@ pub struct WorkflowStepConfig {
     /// Sub-steps to execute in sequence for smoke_chain step
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chain_steps: Vec<WorkflowStepConfig>,
-    /// Execution scope override (defaults based on step type)
+    /// Execution scope (defaults based on step id)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<StepScope>,
+    /// Declarative step behavior (on_failure, captures, post_actions, etc.)
+    #[serde(default)]
+    pub behavior: StepBehavior,
 }
 
 fn default_true() -> bool {
@@ -650,8 +647,6 @@ fn default_true() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskExecutionStep {
     pub id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub step_type: Option<WorkflowStepType>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required_capability: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -683,17 +678,15 @@ pub struct TaskExecutionStep {
     /// Execution scope override (defaults based on step type)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<StepScope>,
+    /// Declarative step behavior (on_failure, captures, post_actions, etc.)
+    #[serde(default)]
+    pub behavior: StepBehavior,
 }
 
 impl TaskExecutionStep {
-    /// Returns the resolved scope: explicit override or default based on step type.
+    /// Returns the resolved scope: explicit override or default based on step id.
     pub fn resolved_scope(&self) -> StepScope {
-        self.scope.unwrap_or_else(|| {
-            self.step_type
-                .as_ref()
-                .map(|t| t.default_scope())
-                .unwrap_or(StepScope::Item)
-        })
+        self.scope.unwrap_or_else(|| default_scope_for_step_id(&self.id))
     }
 }
 
@@ -708,10 +701,9 @@ pub struct TaskExecutionPlan {
 }
 
 impl TaskExecutionPlan {
-    pub fn step(&self, step_type: WorkflowStepType) -> Option<&TaskExecutionStep> {
-        self.steps
-            .iter()
-            .find(|step| step.step_type.as_ref() == Some(&step_type))
+    /// Find step by string id
+    pub fn step_by_id(&self, id: &str) -> Option<&TaskExecutionStep> {
+        self.steps.iter().find(|step| step.id == id)
     }
 }
 
@@ -878,7 +870,6 @@ pub struct WorkflowFinalizeOutcome {
 /// Helper to create a WorkflowStepConfig with new fields defaulted
 fn step_config(
     id: &str,
-    step_type: Option<WorkflowStepType>,
     required_capability: Option<&str>,
     builtin: Option<&str>,
     enabled: bool,
@@ -888,7 +879,6 @@ fn step_config(
     WorkflowStepConfig {
         id: id.to_string(),
         description: None,
-        step_type,
         required_capability: required_capability.map(String::from),
         builtin: builtin.map(String::from),
         enabled,
@@ -902,6 +892,7 @@ fn step_config(
         command: None,
         chain_steps: vec![],
         scope: None,
+        behavior: StepBehavior::default(),
     }
 }
 
@@ -913,60 +904,12 @@ pub fn default_workflow_steps(
     retest: Option<&str>,
 ) -> Vec<WorkflowStepConfig> {
     vec![
-        step_config(
-            "init_once",
-            Some(WorkflowStepType::InitOnce),
-            None,
-            Some("init_once"),
-            false,
-            false,
-            false,
-        ),
-        step_config(
-            "plan",
-            Some(WorkflowStepType::Plan),
-            Some("plan"),
-            None,
-            false,
-            false,
-            true,
-        ),
-        step_config(
-            "qa",
-            Some(WorkflowStepType::Qa),
-            Some("qa"),
-            None,
-            qa.is_some(),
-            true,
-            false,
-        ),
-        step_config(
-            "ticket_scan",
-            Some(WorkflowStepType::TicketScan),
-            None,
-            Some("ticket_scan"),
-            ticket_scan,
-            true,
-            false,
-        ),
-        step_config(
-            "fix",
-            Some(WorkflowStepType::Fix),
-            Some("fix"),
-            None,
-            fix.is_some(),
-            true,
-            false,
-        ),
-        step_config(
-            "retest",
-            Some(WorkflowStepType::Retest),
-            Some("retest"),
-            None,
-            retest.is_some(),
-            true,
-            false,
-        ),
+        step_config("init_once", None, Some("init_once"), false, false, false),
+        step_config("plan", Some("plan"), None, false, false, true),
+        step_config("qa", Some("qa"), None, qa.is_some(), true, false),
+        step_config("ticket_scan", None, Some("ticket_scan"), ticket_scan, true, false),
+        step_config("fix", Some("fix"), None, fix.is_some(), true, false),
+        step_config("retest", Some("retest"), None, retest.is_some(), true, false),
     ]
 }
 
@@ -1223,130 +1166,64 @@ mod tests {
     }
 
     #[test]
-    fn test_workflow_step_type_from_str_all_variants() {
-        let cases = vec![
-            ("init_once", WorkflowStepType::InitOnce),
-            ("plan", WorkflowStepType::Plan),
-            ("qa", WorkflowStepType::Qa),
-            ("ticket_scan", WorkflowStepType::TicketScan),
-            ("fix", WorkflowStepType::Fix),
-            ("retest", WorkflowStepType::Retest),
-            ("loop_guard", WorkflowStepType::LoopGuard),
-            ("build", WorkflowStepType::Build),
-            ("test", WorkflowStepType::Test),
-            ("lint", WorkflowStepType::Lint),
-            ("implement", WorkflowStepType::Implement),
-            ("review", WorkflowStepType::Review),
-            ("git_ops", WorkflowStepType::GitOps),
-            ("qa_doc_gen", WorkflowStepType::QaDocGen),
-            ("qa_testing", WorkflowStepType::QaTesting),
-            ("ticket_fix", WorkflowStepType::TicketFix),
-            ("doc_governance", WorkflowStepType::DocGovernance),
-            ("align_tests", WorkflowStepType::AlignTests),
-            ("self_test", WorkflowStepType::SelfTest),
-            ("smoke_chain", WorkflowStepType::SmokeChain),
-        ];
-        for (s, expected) in cases {
-            let parsed = WorkflowStepType::from_str(s).unwrap();
-            assert_eq!(parsed, expected, "failed for {}", s);
+    fn test_validate_step_type_known_ids() {
+        for id in &[
+            "init_once", "plan", "qa", "ticket_scan", "fix", "retest",
+            "loop_guard", "build", "test", "lint", "implement", "review",
+            "git_ops", "qa_doc_gen", "qa_testing", "ticket_fix",
+            "doc_governance", "align_tests", "self_test", "smoke_chain",
+        ] {
+            assert!(validate_step_type(id).is_ok(), "expected valid for {}", id);
         }
     }
 
     #[test]
-    fn test_workflow_step_type_from_str_invalid() {
-        let err = WorkflowStepType::from_str("nope").unwrap_err();
-        assert!(err.contains("unknown workflow step type"));
-    }
-
-    // ===== as_str round-trip =====
-
-    #[test]
-    fn test_workflow_step_type_as_str_round_trip() {
-        let all = vec![
-            WorkflowStepType::InitOnce,
-            WorkflowStepType::Plan,
-            WorkflowStepType::Qa,
-            WorkflowStepType::TicketScan,
-            WorkflowStepType::Fix,
-            WorkflowStepType::Retest,
-            WorkflowStepType::LoopGuard,
-            WorkflowStepType::Build,
-            WorkflowStepType::Test,
-            WorkflowStepType::Lint,
-            WorkflowStepType::Implement,
-            WorkflowStepType::Review,
-            WorkflowStepType::GitOps,
-            WorkflowStepType::QaDocGen,
-            WorkflowStepType::QaTesting,
-            WorkflowStepType::TicketFix,
-            WorkflowStepType::DocGovernance,
-            WorkflowStepType::AlignTests,
-            WorkflowStepType::SelfTest,
-            WorkflowStepType::SmokeChain,
-        ];
-        for variant in all {
-            let s = variant.as_str();
-            let parsed = WorkflowStepType::from_str(s).unwrap();
-            assert_eq!(parsed, variant);
-        }
+    fn test_validate_step_type_unknown_id() {
+        let result = validate_step_type("my_custom_step");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unknown workflow step type"));
     }
 
     // ===== has_structured_output =====
 
     #[test]
     fn test_has_structured_output() {
-        assert!(WorkflowStepType::Build.has_structured_output());
-        assert!(WorkflowStepType::Test.has_structured_output());
-        assert!(WorkflowStepType::Lint.has_structured_output());
-        assert!(WorkflowStepType::QaTesting.has_structured_output());
-        assert!(WorkflowStepType::SelfTest.has_structured_output());
-        assert!(WorkflowStepType::SmokeChain.has_structured_output());
+        assert!(has_structured_output("build"));
+        assert!(has_structured_output("test"));
+        assert!(has_structured_output("lint"));
+        assert!(has_structured_output("qa_testing"));
+        assert!(has_structured_output("self_test"));
+        assert!(has_structured_output("smoke_chain"));
 
-        assert!(!WorkflowStepType::Plan.has_structured_output());
-        assert!(!WorkflowStepType::Fix.has_structured_output());
-        assert!(!WorkflowStepType::Implement.has_structured_output());
-        assert!(!WorkflowStepType::Review.has_structured_output());
-        assert!(!WorkflowStepType::Qa.has_structured_output());
-        assert!(!WorkflowStepType::DocGovernance.has_structured_output());
+        assert!(!has_structured_output("plan"));
+        assert!(!has_structured_output("fix"));
+        assert!(!has_structured_output("implement"));
+        assert!(!has_structured_output("review"));
+        assert!(!has_structured_output("qa"));
+        assert!(!has_structured_output("doc_governance"));
     }
 
-    // ===== default_scope =====
+    // ===== default_scope_for_step_id =====
 
     #[test]
     fn test_default_scope_task_steps() {
         let task_scoped = vec![
-            WorkflowStepType::Plan,
-            WorkflowStepType::QaDocGen,
-            WorkflowStepType::Implement,
-            WorkflowStepType::SelfTest,
-            WorkflowStepType::AlignTests,
-            WorkflowStepType::DocGovernance,
-            WorkflowStepType::Review,
-            WorkflowStepType::Build,
-            WorkflowStepType::Test,
-            WorkflowStepType::Lint,
-            WorkflowStepType::GitOps,
-            WorkflowStepType::SmokeChain,
-            WorkflowStepType::LoopGuard,
-            WorkflowStepType::InitOnce,
+            "plan", "qa_doc_gen", "implement", "self_test", "align_tests",
+            "doc_governance", "review", "build", "test", "lint", "git_ops",
+            "smoke_chain", "loop_guard", "init_once",
         ];
-        for st in task_scoped {
-            assert_eq!(st.default_scope(), StepScope::Task, "expected Task for {:?}", st);
+        for id in task_scoped {
+            assert_eq!(default_scope_for_step_id(id), StepScope::Task, "expected Task for {}", id);
         }
     }
 
     #[test]
     fn test_default_scope_item_steps() {
         let item_scoped = vec![
-            WorkflowStepType::Qa,
-            WorkflowStepType::QaTesting,
-            WorkflowStepType::TicketFix,
-            WorkflowStepType::TicketScan,
-            WorkflowStepType::Fix,
-            WorkflowStepType::Retest,
+            "qa", "qa_testing", "ticket_fix", "ticket_scan", "fix", "retest",
         ];
-        for st in item_scoped {
-            assert_eq!(st.default_scope(), StepScope::Item, "expected Item for {:?}", st);
+        for id in item_scoped {
+            assert_eq!(default_scope_for_step_id(id), StepScope::Item, "expected Item for {}", id);
         }
     }
 
@@ -1374,8 +1251,7 @@ mod tests {
     #[test]
     fn test_resolved_scope_explicit_override() {
         let step = TaskExecutionStep {
-            id: "my_step".to_string(),
-            step_type: Some(WorkflowStepType::Qa), // default would be Item
+            id: "qa".to_string(), // default would be Item
             required_capability: None,
             builtin: None,
             enabled: true,
@@ -1389,15 +1265,15 @@ mod tests {
             command: None,
             chain_steps: vec![],
             scope: Some(StepScope::Task), // explicit override
+            behavior: StepBehavior::default(),
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
 
     #[test]
-    fn test_resolved_scope_from_step_type() {
+    fn test_resolved_scope_from_step_id() {
         let step = TaskExecutionStep {
-            id: "my_step".to_string(),
-            step_type: Some(WorkflowStepType::Plan),
+            id: "plan".to_string(),
             required_capability: None,
             builtin: None,
             enabled: true,
@@ -1411,15 +1287,15 @@ mod tests {
             command: None,
             chain_steps: vec![],
             scope: None,
+            behavior: StepBehavior::default(),
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
 
     #[test]
-    fn test_resolved_scope_no_type_defaults_to_item() {
+    fn test_resolved_scope_unknown_id_defaults_to_task() {
         let step = TaskExecutionStep {
-            id: "my_step".to_string(),
-            step_type: None,
+            id: "my_custom_step".to_string(),
             required_capability: None,
             builtin: None,
             enabled: true,
@@ -1433,19 +1309,19 @@ mod tests {
             command: None,
             chain_steps: vec![],
             scope: None,
+            behavior: StepBehavior::default(),
         };
-        assert_eq!(step.resolved_scope(), StepScope::Item);
+        assert_eq!(step.resolved_scope(), StepScope::Task);
     }
 
-    // ===== TaskExecutionPlan::step =====
+    // ===== TaskExecutionPlan::step_by_id =====
 
     #[test]
-    fn test_task_execution_plan_step_found() {
+    fn test_task_execution_plan_step_by_id_found() {
         let plan = TaskExecutionPlan {
             steps: vec![
                 TaskExecutionStep {
-                    id: "plan_step".to_string(),
-                    step_type: Some(WorkflowStepType::Plan),
+                    id: "plan".to_string(),
                     required_capability: None,
                     builtin: None,
                     enabled: true,
@@ -1459,10 +1335,10 @@ mod tests {
                     command: None,
                     chain_steps: vec![],
                     scope: None,
+                    behavior: StepBehavior::default(),
                 },
                 TaskExecutionStep {
-                    id: "qa_step".to_string(),
-                    step_type: Some(WorkflowStepType::Qa),
+                    id: "qa".to_string(),
                     required_capability: None,
                     builtin: None,
                     enabled: true,
@@ -1476,29 +1352,30 @@ mod tests {
                     command: None,
                     chain_steps: vec![],
                     scope: None,
+                    behavior: StepBehavior::default(),
                 },
             ],
             loop_policy: WorkflowLoopConfig::default(),
             finalize: WorkflowFinalizeConfig::default(),
         };
 
-        let found = plan.step(WorkflowStepType::Qa);
+        let found = plan.step_by_id("qa");
         assert!(found.is_some());
-        assert_eq!(found.unwrap().id, "qa_step");
+        assert_eq!(found.unwrap().id, "qa");
 
-        let found_plan = plan.step(WorkflowStepType::Plan);
+        let found_plan = plan.step_by_id("plan");
         assert!(found_plan.is_some());
-        assert_eq!(found_plan.unwrap().id, "plan_step");
+        assert_eq!(found_plan.unwrap().id, "plan");
     }
 
     #[test]
-    fn test_task_execution_plan_step_not_found() {
+    fn test_task_execution_plan_step_by_id_not_found() {
         let plan = TaskExecutionPlan {
             steps: vec![],
             loop_policy: WorkflowLoopConfig::default(),
             finalize: WorkflowFinalizeConfig::default(),
         };
-        assert!(plan.step(WorkflowStepType::Fix).is_none());
+        assert!(plan.step_by_id("fix").is_none());
     }
 
     // ===== default_workflow_steps =====
@@ -1532,17 +1409,6 @@ mod tests {
         assert!(fix.enabled);
         let retest = steps.iter().find(|s| s.id == "retest").unwrap();
         assert!(retest.enabled);
-    }
-
-    #[test]
-    fn test_default_workflow_steps_step_types() {
-        let steps = default_workflow_steps(Some("qa"), true, Some("fix"), Some("retest"));
-        assert_eq!(steps[0].step_type, Some(WorkflowStepType::InitOnce));
-        assert_eq!(steps[1].step_type, Some(WorkflowStepType::Plan));
-        assert_eq!(steps[2].step_type, Some(WorkflowStepType::Qa));
-        assert_eq!(steps[3].step_type, Some(WorkflowStepType::TicketScan));
-        assert_eq!(steps[4].step_type, Some(WorkflowStepType::Fix));
-        assert_eq!(steps[5].step_type, Some(WorkflowStepType::Retest));
     }
 
     #[test]
@@ -1676,15 +1542,6 @@ mod tests {
     }
 
     #[test]
-    fn test_workflow_step_type_serde_round_trip() {
-        let step_type = WorkflowStepType::QaTesting;
-        let json = serde_json::to_string(&step_type).unwrap();
-        assert_eq!(json, "\"qa_testing\"");
-        let parsed: WorkflowStepType = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed, WorkflowStepType::QaTesting);
-    }
-
-    #[test]
     fn test_build_error_level_serde() {
         let err: BuildErrorLevel = serde_json::from_str("\"error\"").unwrap();
         assert_eq!(err, BuildErrorLevel::Error);
@@ -1759,9 +1616,8 @@ mod tests {
 
     #[test]
     fn test_step_config_helper() {
-        let s = step_config("my_id", Some(WorkflowStepType::Build), Some("build"), None, true, false, false);
+        let s = step_config("my_id", Some("build"), None, true, false, false);
         assert_eq!(s.id, "my_id");
-        assert_eq!(s.step_type, Some(WorkflowStepType::Build));
         assert_eq!(s.required_capability, Some("build".to_string()));
         assert!(s.builtin.is_none());
         assert!(s.enabled);

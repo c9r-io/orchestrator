@@ -32,9 +32,9 @@ mod tests {
     use super::*;
     use crate::collab::MessageBus;
     use crate::config::{
-        AgentConfig, AgentMetadata, AgentSelectionConfig, LoopMode, WorkflowConfig,
+        AgentConfig, AgentMetadata, AgentSelectionConfig, LoopMode, StepBehavior, WorkflowConfig,
         WorkflowFinalizeConfig, WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
-        WorkflowStepType, PIPELINE_VAR_INLINE_LIMIT,
+        PIPELINE_VAR_INLINE_LIMIT,
     };
     use crate::db::open_conn;
     use crate::dto::CreateTaskPayload;
@@ -116,7 +116,7 @@ mod tests {
                         WorkflowStepConfig {
                             id: "plan".to_string(),
                             description: None,
-                            step_type: Some(WorkflowStepType::Plan),
+
                             builtin: None,
                             required_capability: Some("plan".to_string()),
                             enabled: true,
@@ -130,11 +130,12 @@ mod tests {
                             command: None,
                             chain_steps: vec![],
                             scope: None,
+                            behavior: StepBehavior::default(),
                         },
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
                             description: None,
-                            step_type: Some(WorkflowStepType::QaDocGen),
+
                             builtin: None,
                             required_capability: Some("qa_doc_gen".to_string()),
                             enabled: true,
@@ -148,11 +149,12 @@ mod tests {
                             command: None,
                             chain_steps: vec![],
                             scope: None,
+                            behavior: StepBehavior::default(),
                         },
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
                             description: None,
-                            step_type: Some(WorkflowStepType::LoopGuard),
+
                             builtin: Some("loop_guard".to_string()),
                             required_capability: None,
                             enabled: true,
@@ -166,6 +168,7 @@ mod tests {
                             command: None,
                             chain_steps: vec![],
                             scope: None,
+                            behavior: StepBehavior::default(),
                         },
                     ],
                     loop_policy: WorkflowLoopConfig {
@@ -229,20 +232,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn smoke_chain_step_type_is_parsed_correctly() {
-        let step_type: WorkflowStepType = "smoke_chain".parse().expect("should parse");
-        assert_eq!(step_type, WorkflowStepType::SmokeChain);
-        assert_eq!(step_type.as_str(), "smoke_chain");
-        assert!(step_type.has_structured_output());
-    }
-
-    #[tokio::test]
     async fn smoke_chain_normalize_sets_required_capability() {
         let mut workflow = WorkflowConfig {
             steps: vec![WorkflowStepConfig {
                 id: "smoke_chain".to_string(),
                 description: None,
-                step_type: Some(WorkflowStepType::SmokeChain),
+
                 builtin: None,
                 required_capability: None,
                 enabled: true,
@@ -257,7 +252,7 @@ mod tests {
                 chain_steps: vec![WorkflowStepConfig {
                     id: "verify".to_string(),
                     description: None,
-                    step_type: Some(WorkflowStepType::Qa),
+
                     builtin: None,
                     required_capability: Some("qa".to_string()),
                     enabled: true,
@@ -271,8 +266,10 @@ mod tests {
                     command: None,
                     chain_steps: vec![],
                     scope: None,
+                    behavior: StepBehavior::default(),
                 }],
                 scope: None,
+                behavior: StepBehavior::default(),
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -349,7 +346,7 @@ mod tests {
                         WorkflowStepConfig {
                             id: "plan".to_string(),
                             description: None,
-                            step_type: Some(WorkflowStepType::Plan),
+
                             builtin: None,
                             required_capability: Some("plan".to_string()),
                             enabled: true,
@@ -363,11 +360,12 @@ mod tests {
                             command: None,
                             chain_steps: vec![],
                             scope: None,
+                            behavior: StepBehavior::default(),
                         },
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
                             description: None,
-                            step_type: Some(WorkflowStepType::QaDocGen),
+
                             builtin: None,
                             required_capability: Some("qa_doc_gen".to_string()),
                             enabled: true,
@@ -381,11 +379,12 @@ mod tests {
                             command: None,
                             chain_steps: vec![],
                             scope: None,
+                            behavior: StepBehavior::default(),
                         },
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
                             description: None,
-                            step_type: Some(WorkflowStepType::LoopGuard),
+
                             builtin: Some("loop_guard".to_string()),
                             required_capability: None,
                             enabled: true,
@@ -399,6 +398,7 @@ mod tests {
                             command: None,
                             chain_steps: vec![],
                             scope: None,
+                            behavior: StepBehavior::default(),
                         },
                     ],
                     loop_policy: WorkflowLoopConfig {
