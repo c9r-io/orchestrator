@@ -512,7 +512,9 @@ mod tests {
         item_executor::spill_large_var(&dir, "task1", "plan_output", small_value.clone(), &mut pipeline);
 
         assert_eq!(pipeline.vars.get("plan_output").unwrap(), &small_value);
-        assert!(!pipeline.vars.contains_key("plan_output_path"));
+        // _path is always set now (even for small values)
+        let p = pipeline.vars.get("plan_output_path").expect("plan_output_path must be set");
+        assert_eq!(std::fs::read_to_string(p).unwrap(), small_value);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

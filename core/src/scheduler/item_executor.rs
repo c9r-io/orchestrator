@@ -25,9 +25,10 @@ use super::safety::execute_self_test_step;
 use super::task_state::count_unresolved_items;
 use super::RunningTask;
 
-/// Insert a pipeline variable, spilling to a file when the value exceeds
-/// [`PIPELINE_VAR_INLINE_LIMIT`].  When spilled the inline value is truncated
-/// and a companion `{key}_path` variable is set pointing to the full-content file.
+/// Insert a pipeline variable, always writing the full content to a file and
+/// setting a companion `{key}_path` variable.  When the value exceeds
+/// [`PIPELINE_VAR_INLINE_LIMIT`] the inline value is truncated; otherwise the
+/// full value is kept inline as well.
 pub(crate) fn spill_large_var(
     logs_dir: &Path,
     task_id: &str,
@@ -35,14 +36,18 @@ pub(crate) fn spill_large_var(
     value: String,
     pipeline: &mut PipelineVariables,
 ) {
+    // Always write to file so downstream steps can reference {key}_path
+    let dir = logs_dir.join(task_id);
+    std::fs::create_dir_all(&dir).ok();
+    let path = dir.join(format!("{}.txt", key));
+    std::fs::write(&path, &value).ok();
+    pipeline
+        .vars
+        .insert(format!("{}_path", key), path.to_string_lossy().to_string());
+
     if value.len() <= PIPELINE_VAR_INLINE_LIMIT {
         pipeline.vars.insert(key.to_string(), value);
     } else {
-        let dir = logs_dir.join(task_id);
-        std::fs::create_dir_all(&dir).ok();
-        let path = dir.join(format!("{}.txt", key));
-        std::fs::write(&path, &value).ok();
-
         let safe_end = {
             let limit = PIPELINE_VAR_INLINE_LIMIT.min(value.len());
             let mut end = limit;
@@ -57,9 +62,6 @@ pub(crate) fn spill_large_var(
             path.display()
         );
         pipeline.vars.insert(key.to_string(), truncated);
-        pipeline
-            .vars
-            .insert(format!("{}_path", key), path.to_string_lossy().to_string());
     }
 }
 
@@ -1083,7 +1085,9 @@ mod tests {
         spill_large_var(&dir, "task1", "stdout", value.clone(), &mut pipeline);
 
         assert_eq!(pipeline.vars.get("stdout").unwrap(), "hello world");
-        assert!(pipeline.vars.get("stdout_path").is_none());
+        // _path is always set now (even for small values)
+        let p = pipeline.vars.get("stdout_path").expect("stdout_path must be set");
+        assert_eq!(std::fs::read_to_string(p).unwrap(), "hello world");
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1096,7 +1100,9 @@ mod tests {
         spill_large_var(&dir, "task1", "out", value.clone(), &mut pipeline);
 
         assert_eq!(pipeline.vars.get("out").unwrap(), &value);
-        assert!(pipeline.vars.get("out_path").is_none());
+        // _path is always set now (even for small values)
+        let p = pipeline.vars.get("out_path").expect("out_path must be set");
+        assert_eq!(std::fs::read_to_string(p).unwrap(), value);
         std::fs::remove_dir_all(&dir).ok();
     }
 
