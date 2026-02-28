@@ -129,6 +129,9 @@ pub enum Commands {
 
     #[command(subcommand)]
     Verify(VerifyCommands),
+
+    #[command(alias = "ck", subcommand)]
+    Check(CheckCommands),
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -253,6 +256,20 @@ pub enum TaskCommands {
         /// Refresh interval in seconds
         #[arg(short, long, default_value = "2")]
         interval: u64,
+    },
+
+    /// Show execution trace with anomaly detection
+    Trace {
+        /// Task ID
+        task_id: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Show all events (verbose)
+        #[arg(long, short)]
+        verbose: bool,
     },
 
     /// Delete a task
@@ -592,6 +609,49 @@ pub enum VerifyCommands {
         /// Workspace root path (default: current directory)
         #[arg(short, long)]
         root: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum CheckCommands {
+    /// Validate workspace paths and accessibility
+    #[command(alias = "ws")]
+    Workspace {
+        /// Workspace ID to check (optional, checks all if not provided)
+        #[arg(value_name = "WORKSPACE_ID")]
+        workspace_id: Option<String>,
+
+        /// Output format
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+
+    /// Validate agent configurations and health status
+    #[command(alias = "ag")]
+    Agent {
+        /// Agent ID to check (optional, checks all if not provided)
+        #[arg(value_name = "AGENT_ID")]
+        agent_id: Option<String>,
+
+        /// Output format
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+
+    /// Validate configuration integrity
+    #[command(alias = "cfg")]
+    Config {
+        /// Output format
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+
+    /// Run all check validations
+    #[command(alias = "a")]
+    All {
+        /// Output format
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
     },
 }
 
@@ -1534,6 +1594,151 @@ mod tests {
                 assert_eq!(root, Some("/another/path".to_string()));
             }
             _ => panic!("expected verify binary-snapshot command"),
+        }
+    }
+
+    #[test]
+    fn parse_check_workspace_command() {
+        let cli = Cli::parse_from(["orchestrator", "check", "workspace"]);
+
+        match cli.command {
+            Commands::Check(CheckCommands::Workspace {
+                workspace_id,
+                output,
+            }) => {
+                assert_eq!(workspace_id, None);
+                assert_eq!(output, OutputFormat::Table);
+            }
+            _ => panic!("expected check workspace command"),
+        }
+    }
+
+    #[test]
+    fn parse_check_workspace_with_id() {
+        let cli = Cli::parse_from(["orchestrator", "check", "workspace", "my-ws"]);
+
+        match cli.command {
+            Commands::Check(CheckCommands::Workspace {
+                workspace_id,
+                output,
+            }) => {
+                assert_eq!(workspace_id, Some("my-ws".to_string()));
+                assert_eq!(output, OutputFormat::Table);
+            }
+            _ => panic!("expected check workspace command"),
+        }
+    }
+
+    #[test]
+    fn parse_check_workspace_with_output_format() {
+        let cli = Cli::parse_from(["orchestrator", "check", "workspace", "-o", "json"]);
+
+        match cli.command {
+            Commands::Check(CheckCommands::Workspace {
+                workspace_id,
+                output,
+            }) => {
+                assert_eq!(workspace_id, None);
+                assert_eq!(output, OutputFormat::Json);
+            }
+            _ => panic!("expected check workspace command"),
+        }
+    }
+
+    #[test]
+    fn parse_check_agent_command() {
+        let cli = Cli::parse_from(["orchestrator", "check", "agent"]);
+
+        match cli.command {
+            Commands::Check(CheckCommands::Agent { agent_id, output }) => {
+                assert_eq!(agent_id, None);
+                assert_eq!(output, OutputFormat::Table);
+            }
+            _ => panic!("expected check agent command"),
+        }
+    }
+
+    #[test]
+    fn parse_check_agent_with_id() {
+        let cli = Cli::parse_from(["orchestrator", "check", "agent", "opencode"]);
+
+        match cli.command {
+            Commands::Check(CheckCommands::Agent { agent_id, output }) => {
+                assert_eq!(agent_id, Some("opencode".to_string()));
+                assert_eq!(output, OutputFormat::Table);
+            }
+            _ => panic!("expected check agent command"),
+        }
+    }
+
+    #[test]
+    fn parse_check_agent_with_output_format() {
+        let cli = Cli::parse_from(["orchestrator", "check", "agent", "-o", "yaml"]);
+
+        match cli.command {
+            Commands::Check(CheckCommands::Agent { agent_id, output }) => {
+                assert_eq!(agent_id, None);
+                assert_eq!(output, OutputFormat::Yaml);
+            }
+            _ => panic!("expected check agent command"),
+        }
+    }
+
+    #[test]
+    fn parse_check_config_command() {
+        let cli = Cli::parse_from(["orchestrator", "check", "config"]);
+
+        match cli.command {
+            Commands::Check(CheckCommands::Config { output }) => {
+                assert_eq!(output, OutputFormat::Table);
+            }
+            _ => panic!("expected check config command"),
+        }
+    }
+
+    #[test]
+    fn parse_check_config_with_output_format() {
+        let cli = Cli::parse_from(["orchestrator", "check", "config", "-o", "json"]);
+
+        match cli.command {
+            Commands::Check(CheckCommands::Config { output }) => {
+                assert_eq!(output, OutputFormat::Json);
+            }
+            _ => panic!("expected check config command"),
+        }
+    }
+
+    #[test]
+    fn parse_check_all_command() {
+        let cli = Cli::parse_from(["orchestrator", "check", "all"]);
+
+        match cli.command {
+            Commands::Check(CheckCommands::All { output }) => {
+                assert_eq!(output, OutputFormat::Table);
+            }
+            _ => panic!("expected check all command"),
+        }
+    }
+
+    #[test]
+    fn parse_check_all_with_output_format() {
+        let cli = Cli::parse_from(["orchestrator", "check", "all", "-o", "yaml"]);
+
+        match cli.command {
+            Commands::Check(CheckCommands::All { output }) => {
+                assert_eq!(output, OutputFormat::Yaml);
+            }
+            _ => panic!("expected check all command"),
+        }
+    }
+
+    #[test]
+    fn parse_check_alias_ck() {
+        let cli = Cli::parse_from(["orchestrator", "ck", "all"]);
+
+        match cli.command {
+            Commands::Check(CheckCommands::All { .. }) => {}
+            _ => panic!("expected check command via alias"),
         }
     }
 }

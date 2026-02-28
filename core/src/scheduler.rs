@@ -5,6 +5,7 @@ mod query;
 mod runtime;
 pub mod safety;
 mod task_state;
+pub mod trace;
 
 pub use crate::state::RunningTask;
 pub use item_executor::{execute_builtin_step, execute_guard_step, process_item, GuardResult};

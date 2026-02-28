@@ -178,6 +178,30 @@ impl CliHandler {
                 }
                 Ok(0)
             }
+            TaskCommands::Trace {
+                task_id,
+                json,
+                verbose,
+            } => {
+                let resolved_id = resolve_task_id(&self.state, task_id)?;
+                let detail = get_task_details_impl(&self.state, &resolved_id)?;
+                let trace = crate::scheduler::trace::build_trace(
+                    &detail.task.id,
+                    &detail.task.status,
+                    &detail.events,
+                    &detail.runs,
+                );
+                if *json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&trace)
+                            .context("failed to serialize trace")?
+                    );
+                } else {
+                    crate::scheduler::trace::render_trace_terminal(&trace, *verbose);
+                }
+                Ok(0)
+            }
             TaskCommands::Worker(cmd) => self.handle_task_worker(cmd),
             TaskCommands::Session(cmd) => self.handle_task_session(cmd),
             TaskCommands::Edit {

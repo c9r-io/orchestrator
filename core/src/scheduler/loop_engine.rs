@@ -137,18 +137,19 @@ async fn run_task_loop_core(
 
         task_ctx.current_cycle += 1;
         update_task_cycle_state(&state, task_id, task_ctx.current_cycle, task_ctx.init_done)?;
+        let max_cycles = task_ctx.execution_plan.loop_policy.guard.max_cycles;
         insert_event(
             &state,
             task_id,
             None,
             "cycle_started",
-            json!({"cycle": task_ctx.current_cycle}),
+            json!({"cycle": task_ctx.current_cycle, "max_cycles": max_cycles}),
         )?;
         state.emit_event(
             task_id,
             None,
             "cycle_started",
-            json!({"cycle": task_ctx.current_cycle}),
+            json!({"cycle": task_ctx.current_cycle, "max_cycles": max_cycles}),
         );
 
         if matches!(

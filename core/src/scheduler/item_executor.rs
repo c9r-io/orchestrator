@@ -594,12 +594,13 @@ pub async fn process_item_filtered(
         }
 
         // 2. Execute
+        let pipeline_var_keys: Vec<&String> = acc.pipeline_vars.vars.keys().collect();
         insert_event(
             state,
             task_id,
             Some(item_id),
             "step_started",
-            json!({"step": phase, "step_id": &step.id}),
+            json!({"step": phase, "step_id": &step.id, "cycle": task_ctx.current_cycle, "pipeline_var_keys": pipeline_var_keys}),
         )?;
 
         let result = match &step.behavior.execution {
