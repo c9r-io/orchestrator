@@ -123,6 +123,11 @@ impl RunnerExecutor for ShellRunnerExecutor {
             .stderr(Stdio::from(stderr))
             .kill_on_drop(true);
 
+        #[cfg(unix)]
+        {
+            cmd.process_group(0); // child becomes its own process group leader
+        }
+
         if runner.policy == RunnerPolicy::Allowlist {
             cmd.env_clear();
             for key in &runner.env_allowlist {
@@ -195,6 +200,32 @@ pub fn enforce_runner_policy(runner: &RunnerConfig, command: &str) -> Result<()>
         }
     }
     Ok(())
+}
+
+/// Kill the entire process group rooted at the child process.
+///
+/// Because we spawn children with `process_group(0)`, the child PID equals
+/// its PGID.  Sending `SIGKILL` to the negated PID kills every process in
+/// that group (child + all descendants).  On non-Unix platforms we fall back
+/// to the regular per-process kill.
+pub async fn kill_child_process_group(child: &mut tokio::process::Child) {
+    if let Some(pid) = child.id() {
+        #[cfg(unix)]
+        {
+            // SAFETY: kill(-pid, SIGKILL) is a POSIX syscall that sends a
+            // signal to a process group.  The pid was obtained from a child we
+            // spawned, so the group exists and belongs to us.
+            unsafe {
+                libc::kill(-(pid as i32), libc::SIGKILL);
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = child.kill().await;
+        }
+    } else {
+        let _ = child.kill().await;
+    }
 }
 
 pub fn redact_text(raw: &str, patterns: &[String]) -> String {

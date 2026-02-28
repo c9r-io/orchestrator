@@ -11,12 +11,14 @@ use std::sync::Arc;
 
 use super::task_state::set_task_status;
 use super::{run_task_loop, RunningTask};
+use crate::runner::kill_child_process_group;
 
 pub async fn kill_current_child(runtime: &RunningTask) {
     let mut child_lock = runtime.child.lock().await;
-    if let Some(mut child) = child_lock.take() {
-        let _ = child.kill().await;
+    if let Some(ref mut child) = *child_lock {
+        kill_child_process_group(child).await;
     }
+    *child_lock = None;
 }
 
 pub async fn spawn_task_runner(state: Arc<InnerState>, task_id: String) -> Result<()> {

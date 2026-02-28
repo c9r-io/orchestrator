@@ -7,7 +7,7 @@ use crate::health::{
 };
 use crate::metrics::MetricsCollector;
 use crate::output_validation::validate_phase_output;
-use crate::runner::{redact_text, spawn_with_runner};
+use crate::runner::{kill_child_process_group, redact_text, spawn_with_runner};
 use crate::selection::{select_agent_advanced, select_agent_by_preference};
 use crate::session_store;
 use crate::state::InnerState;
@@ -309,7 +309,7 @@ async fn run_phase_with_timeout(
         if remaining.is_zero() {
             let mut child_lock = runtime.child.lock().await;
             if let Some(ref mut child) = *child_lock {
-                let _ = child.kill().await;
+                kill_child_process_group(child).await;
             }
             timed_out = true;
             insert_event(
@@ -383,6 +383,16 @@ async fn run_phase_with_timeout(
                         "pid_alive": pid_alive,
                     }),
                 )?;
+
+                // Cross-process pause: check if another process (e.g. `task pause`)
+                // has marked this task as paused in the DB.
+                if super::task_state::is_task_paused_in_db(state, task_id)? {
+                    let mut child_lock = runtime.child.lock().await;
+                    if let Some(ref mut child) = *child_lock {
+                        kill_child_process_group(child).await;
+                    }
+                    break -5; // externally paused
+                }
             }
         }
     };

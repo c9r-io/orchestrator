@@ -13,6 +13,7 @@ dependencies = [
  "clap_complete",
  "glob",
  "lazy_static",
+ "libc",
  "md-5",
  "pathdiff",
  "rand",
