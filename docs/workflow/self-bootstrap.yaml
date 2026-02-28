@@ -314,7 +314,7 @@ spec:
     mode: fixed
     max_cycles: 2
     enabled: true
-    stop_when_no_unresolved: true
+    stop_when_no_unresolved: false
 
   safety:
     max_consecutive_failures: 3

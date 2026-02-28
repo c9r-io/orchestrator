@@ -435,7 +435,16 @@ pub async fn execute_guard_step(
     if let Some(builtin) = &step.builtin {
         if builtin.as_str() == "loop_guard" {
             let unresolved = count_unresolved_items(state, task_id)?;
-            let should_stop = unresolved == 0;
+            // Respect stop_when_no_unresolved config: only stop on zero unresolved
+            // when the guard is configured to do so. In Fixed mode with max_cycles,
+            // the loop_engine's evaluate_loop_guard_rules handles cycle counting
+            // separately, so the builtin guard should not short-circuit it.
+            let should_stop = task_ctx
+                .execution_plan
+                .loop_policy
+                .guard
+                .stop_when_no_unresolved
+                && unresolved == 0;
             return Ok(GuardResult {
                 should_stop,
                 reason: if should_stop {
