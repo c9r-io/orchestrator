@@ -42,9 +42,17 @@ fn spill_large_var(
         let path = dir.join(format!("{}.txt", key));
         std::fs::write(&path, &value).ok();
 
+        let safe_end = {
+            let limit = PIPELINE_VAR_INLINE_LIMIT.min(value.len());
+            let mut end = limit;
+            while end > 0 && !value.is_char_boundary(end) {
+                end -= 1;
+            }
+            end
+        };
         let truncated = format!(
             "{}...\n[truncated — full content at {}]",
-            &value[..PIPELINE_VAR_INLINE_LIMIT.min(value.len())],
+            &value[..safe_end],
             path.display()
         );
         pipeline.vars.insert(key.to_string(), truncated);
@@ -70,9 +78,17 @@ fn spill_to_file(
     let path = dir.join(format!("{}.txt", key));
     std::fs::write(&path, value.as_bytes()).ok();
 
+    let safe_end = {
+        let limit = PIPELINE_VAR_INLINE_LIMIT.min(value.len());
+        let mut end = limit;
+        while end > 0 && !value.is_char_boundary(end) {
+            end -= 1;
+        }
+        end
+    };
     let truncated = format!(
         "{}...\n[truncated — full content at {}]",
-        &value[..PIPELINE_VAR_INLINE_LIMIT.min(value.len())],
+        &value[..safe_end],
         path.display()
     );
     Some((truncated, path.to_string_lossy().to_string()))
@@ -149,15 +165,21 @@ pub async fn execute_builtin_step(
     if let Some(ref output) = result.output {
         pipeline.prev_stdout = output.stdout.clone();
         pipeline.prev_stderr = output.stderr.clone();
-        if let Some((trunc, path)) =
-            spill_to_file(&state.logs_dir, task_id, "prev_stdout", &pipeline.prev_stdout)
-        {
+        if let Some((trunc, path)) = spill_to_file(
+            &state.logs_dir,
+            task_id,
+            "prev_stdout",
+            &pipeline.prev_stdout,
+        ) {
             pipeline.prev_stdout = trunc;
             pipeline.vars.insert("prev_stdout_path".to_string(), path);
         }
-        if let Some((trunc, path)) =
-            spill_to_file(&state.logs_dir, task_id, "prev_stderr", &pipeline.prev_stderr)
-        {
+        if let Some((trunc, path)) = spill_to_file(
+            &state.logs_dir,
+            task_id,
+            "prev_stderr",
+            &pipeline.prev_stderr,
+        ) {
             pipeline.prev_stderr = trunc;
             pipeline.vars.insert("prev_stderr_path".to_string(), path);
         }
@@ -183,8 +205,7 @@ pub async fn execute_builtin_step(
         .await
     {
         pipeline.diff = String::from_utf8_lossy(&diff_output.stdout).to_string();
-        if let Some((trunc, path)) =
-            spill_to_file(&state.logs_dir, task_id, "diff", &pipeline.diff)
+        if let Some((trunc, path)) = spill_to_file(&state.logs_dir, task_id, "diff", &pipeline.diff)
         {
             pipeline.diff = trunc;
             pipeline.vars.insert("diff_path".to_string(), path);
@@ -444,8 +465,19 @@ pub async fn process_item(
                 test_exit_code: None,
                 self_test_exit_code: None,
                 self_test_passed: false,
-                max_cycles: task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
-                is_last_cycle: task_ctx.current_cycle >= task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
+                max_cycles: task_ctx
+                    .execution_plan
+                    .loop_policy
+                    .guard
+                    .max_cycles
+                    .unwrap_or(1),
+                is_last_cycle: task_ctx.current_cycle
+                    >= task_ctx
+                        .execution_plan
+                        .loop_policy
+                        .guard
+                        .max_cycles
+                        .unwrap_or(1),
             },
         )?;
 
@@ -622,8 +654,19 @@ pub async fn process_item(
                     test_exit_code: None,
                     self_test_exit_code: None,
                     self_test_passed: false,
-                    max_cycles: task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
-                    is_last_cycle: task_ctx.current_cycle >= task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
+                    max_cycles: task_ctx
+                        .execution_plan
+                        .loop_policy
+                        .guard
+                        .max_cycles
+                        .unwrap_or(1),
+                    is_last_cycle: task_ctx.current_cycle
+                        >= task_ctx
+                            .execution_plan
+                            .loop_policy
+                            .guard
+                            .max_cycles
+                            .unwrap_or(1),
                 },
             )?;
 
@@ -789,8 +832,19 @@ pub async fn process_item(
                     .get("self_test_passed")
                     .map(|v| v == "true")
                     .unwrap_or(false),
-                max_cycles: task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
-                is_last_cycle: task_ctx.current_cycle >= task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
+                max_cycles: task_ctx
+                    .execution_plan
+                    .loop_policy
+                    .guard
+                    .max_cycles
+                    .unwrap_or(1),
+                is_last_cycle: task_ctx.current_cycle
+                    >= task_ctx
+                        .execution_plan
+                        .loop_policy
+                        .guard
+                        .max_cycles
+                        .unwrap_or(1),
             },
         )?;
 
@@ -855,9 +909,16 @@ pub async fn process_item(
                 let mut step_ctx = task_ctx.clone();
                 step_ctx.pipeline_vars = pipeline_vars.clone();
 
-                let (result, new_pipeline) =
-                    execute_builtin_step(state, task_id, item_id, chain_step, &step_ctx, runtime, &item.qa_file_path)
-                        .await?;
+                let (result, new_pipeline) = execute_builtin_step(
+                    state,
+                    task_id,
+                    item_id,
+                    chain_step,
+                    &step_ctx,
+                    runtime,
+                    &item.qa_file_path,
+                )
+                .await?;
                 pipeline_vars = new_pipeline;
 
                 if let Some(ref output) = result.output {
@@ -905,8 +966,16 @@ pub async fn process_item(
         let mut step_ctx = task_ctx.clone();
         step_ctx.pipeline_vars = pipeline_vars.clone();
 
-        let (result, new_pipeline) =
-            execute_builtin_step(state, task_id, item_id, step, &step_ctx, runtime, &item.qa_file_path).await?;
+        let (result, new_pipeline) = execute_builtin_step(
+            state,
+            task_id,
+            item_id,
+            step,
+            &step_ctx,
+            runtime,
+            &item.qa_file_path,
+        )
+        .await?;
         pipeline_vars = new_pipeline;
 
         match step_type {
@@ -992,8 +1061,19 @@ pub async fn process_item(
             test_exit_code: None,
             self_test_exit_code: None,
             self_test_passed: false,
-            max_cycles: task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
-            is_last_cycle: task_ctx.current_cycle >= task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
+            max_cycles: task_ctx
+                .execution_plan
+                .loop_policy
+                .guard
+                .max_cycles
+                .unwrap_or(1),
+            is_last_cycle: task_ctx.current_cycle
+                >= task_ctx
+                    .execution_plan
+                    .loop_policy
+                    .guard
+                    .max_cycles
+                    .unwrap_or(1),
         };
         let matched = pool.find_matching_steps(&dyn_ctx);
         for ds in matched {
@@ -1047,7 +1127,13 @@ pub async fn process_item(
         } else if !active_tickets.is_empty() {
             item_status = "unresolved".to_string();
         } else if qa_skipped || !qa_enabled {
-            let is_last = task_ctx.current_cycle >= task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1);
+            let is_last = task_ctx.current_cycle
+                >= task_ctx
+                    .execution_plan
+                    .loop_policy
+                    .guard
+                    .max_cycles
+                    .unwrap_or(1);
             item_status = if is_last { "skipped" } else { "pending" }.to_string();
         } else {
             item_status = "qa_passed".to_string();
@@ -1089,7 +1175,13 @@ pub async fn process_item(
         has_code_change_artifacts: phase_artifacts
             .iter()
             .any(|a| matches!(a.kind, crate::collab::ArtifactKind::CodeChange { .. })),
-        is_last_cycle: task_ctx.current_cycle >= task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
+        is_last_cycle: task_ctx.current_cycle
+            >= task_ctx
+                .execution_plan
+                .loop_policy
+                .guard
+                .max_cycles
+                .unwrap_or(1),
     };
 
     if let Some(outcome) = crate::prehook::resolve_workflow_finalize_outcome(
