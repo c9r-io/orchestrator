@@ -383,6 +383,9 @@ fn build_finalize_cel_context(context: &ItemFinalizeContext) -> Result<CelContex
     cel_context
         .add_variable("retest_success", context.retest_success)
         .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("is_last_cycle", context.is_last_cycle)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
     Ok(cel_context)
 }
 

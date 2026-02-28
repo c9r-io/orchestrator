@@ -821,6 +821,7 @@ pub struct ItemFinalizeContext {
     pub total_artifacts: i64,
     pub has_ticket_artifacts: bool,
     pub has_code_change_artifacts: bool,
+    pub is_last_cycle: bool,
 }
 
 /// Workflow finalize outcome
@@ -932,7 +933,7 @@ pub fn default_workflow_finalize_config() -> WorkflowFinalizeConfig {
             WorkflowFinalizeRule {
                 id: "skip_without_tickets".to_string(),
                 engine: StepHookEngine::Cel,
-                when: "(qa_skipped == true || qa_enabled == false) && active_ticket_count == 0"
+                when: "(qa_skipped == true || qa_enabled == false) && active_ticket_count == 0 && is_last_cycle"
                     .to_string(),
                 status: "skipped".to_string(),
                 reason: Some("qa skipped and no tickets".to_string()),

@@ -1046,7 +1046,8 @@ pub async fn process_item(
         } else if !active_tickets.is_empty() {
             item_status = "unresolved".to_string();
         } else if qa_skipped || !qa_enabled {
-            item_status = "skipped".to_string();
+            let is_last = task_ctx.current_cycle >= task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1);
+            item_status = if is_last { "skipped" } else { "pending" }.to_string();
         } else {
             item_status = "qa_passed".to_string();
         }
@@ -1087,6 +1088,7 @@ pub async fn process_item(
         has_code_change_artifacts: phase_artifacts
             .iter()
             .any(|a| matches!(a.kind, crate::collab::ArtifactKind::CodeChange { .. })),
+        is_last_cycle: task_ctx.current_cycle >= task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(1),
     };
 
     if let Some(outcome) = crate::prehook::resolve_workflow_finalize_outcome(
