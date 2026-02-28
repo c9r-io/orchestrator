@@ -388,6 +388,14 @@ impl TaskRepository for SqliteTaskRepository {
             anyhow::bail!("task not found: {}", task_id);
         }
 
+        if matches!(status.as_deref(), Some("running")) {
+            anyhow::bail!(
+                "task {} is already running — cannot start a second instance. \
+                 Use 'task pause' first, or wait for it to finish.",
+                task_id
+            );
+        }
+
         if matches!(status.as_deref(), Some("failed")) {
             tx.execute(
                 "UPDATE task_items SET status='pending', ticket_files_json='[]', ticket_content_json='[]', fix_required=0, fixed=0, last_error='', completed_at=NULL, updated_at=?2 WHERE task_id=?1 AND status='unresolved'",
@@ -649,6 +657,28 @@ mod tests {
             )
             .expect("task_items query");
         assert!(reset_count >= 1);
+    }
+
+    #[test]
+    fn prepare_task_for_start_batch_rejects_already_running() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET status='running' WHERE id = ?1",
+            params![task_id.clone()],
+        )
+        .expect("mark task running");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let err = repo
+            .prepare_task_for_start_batch(&task_id)
+            .expect_err("should reject already-running task");
+        assert!(
+            err.to_string().contains("already running"),
+            "error should mention 'already running', got: {}",
+            err
+        );
     }
 
     #[test]
