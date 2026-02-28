@@ -72,6 +72,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                         pipe_to: None,
                         command: None,
                         chain_steps: vec![],
+                        scope: None,
                     }],
                     loop_policy: WorkflowLoopConfig {
                         mode: LoopMode::Once,
@@ -564,6 +565,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             pipe_to: None,
                             command: None,
                             chain_steps: vec![],
+                            scope: None,
                         },
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
@@ -581,6 +583,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             pipe_to: None,
                             command: None,
                             chain_steps: vec![],
+                            scope: None,
                         },
                         WorkflowStepConfig {
                             id: "implement".to_string(),
@@ -598,6 +601,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             pipe_to: None,
                             command: None,
                             chain_steps: vec![],
+                            scope: None,
                         },
                         WorkflowStepConfig {
                             id: "qa_testing".to_string(),
@@ -615,6 +619,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             pipe_to: None,
                             command: None,
                             chain_steps: vec![],
+                            scope: None,
                         },
                         WorkflowStepConfig {
                             id: "ticket_fix".to_string(),
@@ -632,6 +637,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             pipe_to: None,
                             command: None,
                             chain_steps: vec![],
+                            scope: None,
                         },
                         WorkflowStepConfig {
                             id: "align_tests".to_string(),
@@ -649,6 +655,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             pipe_to: None,
                             command: None,
                             chain_steps: vec![],
+                            scope: None,
                         },
                         WorkflowStepConfig {
                             id: "doc_governance".to_string(),
@@ -666,6 +673,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             pipe_to: None,
                             command: None,
                             chain_steps: vec![],
+                            scope: None,
                         },
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
@@ -683,6 +691,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             pipe_to: None,
                             command: None,
                             chain_steps: vec![],
+                            scope: None,
                         },
                     ],
                     loop_policy: WorkflowLoopConfig {
@@ -782,6 +791,7 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
                 pipe_to: None,
                 command: None,
                 chain_steps: vec![],
+                scope: None,
             },
             WorkflowStepConfig {
                 id: "align_tests".to_string(),
@@ -799,6 +809,7 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
                 pipe_to: None,
                 command: None,
                 chain_steps: vec![],
+                scope: None,
             },
         ],
         loop_policy: WorkflowLoopConfig {

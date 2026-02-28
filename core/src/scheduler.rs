@@ -129,6 +129,7 @@ mod tests {
                             pipe_to: None,
                             command: None,
                             chain_steps: vec![],
+                            scope: None,
                         },
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
@@ -146,6 +147,7 @@ mod tests {
                             pipe_to: None,
                             command: None,
                             chain_steps: vec![],
+                            scope: None,
                         },
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
@@ -163,6 +165,7 @@ mod tests {
                             pipe_to: None,
                             command: None,
                             chain_steps: vec![],
+                            scope: None,
                         },
                     ],
                     loop_policy: WorkflowLoopConfig {
@@ -267,7 +270,9 @@ mod tests {
                     pipe_to: None,
                     command: None,
                     chain_steps: vec![],
+                    scope: None,
                 }],
+                scope: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -357,6 +362,7 @@ mod tests {
                             pipe_to: None,
                             command: None,
                             chain_steps: vec![],
+                            scope: None,
                         },
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
@@ -374,6 +380,7 @@ mod tests {
                             pipe_to: None,
                             command: None,
                             chain_steps: vec![],
+                            scope: None,
                         },
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
@@ -391,6 +398,7 @@ mod tests {
                             pipe_to: None,
                             command: None,
                             chain_steps: vec![],
+                            scope: None,
                         },
                     ],
                     loop_policy: WorkflowLoopConfig {

@@ -1,13 +1,14 @@
-use crate::config::{LoopMode, WorkflowStepType};
+use crate::config::{LoopMode, StepScope, WorkflowStepType};
 use crate::events::insert_event;
 use crate::state::InnerState;
 use anyhow::Result;
 use serde_json::json;
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use super::item_executor::{execute_guard_step, process_item};
+use super::item_executor::{execute_guard_step, process_item, process_item_filtered};
 use super::phase_runner::{run_phase_with_rotation, RotatingPhaseRunRequest};
 use super::runtime::load_task_runtime_context;
 use super::safety::{
@@ -197,18 +198,59 @@ async fn run_task_loop_core(
         let items = list_task_items_for_cycle(&state, task_id)?;
         let task_item_paths: Vec<String> =
             items.iter().map(|item| item.qa_file_path.clone()).collect();
-        for item in items {
-            process_item(
-                &state,
-                task_id,
-                &item,
-                &task_item_paths,
-                &task_ctx,
-                &runtime,
-            )
-            .await?;
-            if runtime.stop_flag.load(Ordering::SeqCst) || is_task_paused_in_db(&state, task_id)? {
-                continue 'cycle;
+
+        // Segment-based execution: group steps by scope and dispatch accordingly.
+        // Task-scoped steps run once (using first item as context anchor).
+        // Item-scoped steps fan out across all items.
+        let segments = build_scope_segments(&task_ctx);
+        if segments.is_empty() {
+            // Fallback: no steps in execution plan, run legacy path
+            for item in &items {
+                process_item(&state, task_id, item, &task_item_paths, &task_ctx, &runtime).await?;
+                if runtime.stop_flag.load(Ordering::SeqCst) || is_task_paused_in_db(&state, task_id)? {
+                    continue 'cycle;
+                }
+            }
+        } else {
+            for segment in &segments {
+                match segment.scope {
+                    StepScope::Task => {
+                        // Run task-scoped steps once using first item as anchor
+                        if let Some(anchor_item) = items.first() {
+                            let updated_vars = process_item_filtered(
+                                &state,
+                                task_id,
+                                anchor_item,
+                                &task_item_paths,
+                                &task_ctx,
+                                &runtime,
+                                Some(&segment.step_ids),
+                            )
+                            .await?;
+                            // Propagate task-scoped pipeline vars to subsequent segments
+                            task_ctx.pipeline_vars = updated_vars;
+                        }
+                    }
+                    StepScope::Item => {
+                        // Fan out item-scoped steps across all items
+                        for item in &items {
+                            let _item_vars = process_item_filtered(
+                                &state,
+                                task_id,
+                                item,
+                                &task_item_paths,
+                                &task_ctx,
+                                &runtime,
+                                Some(&segment.step_ids),
+                            )
+                            .await?;
+                            // Item-scoped vars do NOT propagate back to task scope
+                        }
+                    }
+                }
+                if runtime.stop_flag.load(Ordering::SeqCst) || is_task_paused_in_db(&state, task_id)? {
+                    continue 'cycle;
+                }
             }
         }
 
@@ -451,6 +493,37 @@ pub fn evaluate_loop_guard_rules(
     }
 }
 
+/// A contiguous group of steps with the same execution scope.
+struct ScopeSegment {
+    scope: StepScope,
+    step_ids: HashSet<String>,
+}
+
+/// Group execution plan steps into contiguous segments of the same scope.
+/// Guard steps are excluded; they run separately after items.
+fn build_scope_segments(task_ctx: &crate::config::TaskRuntimeContext) -> Vec<ScopeSegment> {
+    let mut segments: Vec<ScopeSegment> = Vec::new();
+    for step in &task_ctx.execution_plan.steps {
+        if step.is_guard || !step.enabled {
+            continue;
+        }
+        let scope = step.resolved_scope();
+        if let Some(last) = segments.last_mut() {
+            if last.scope == scope {
+                last.step_ids.insert(step.id.clone());
+                continue;
+            }
+        }
+        let mut ids = HashSet::new();
+        ids.insert(step.id.clone());
+        segments.push(ScopeSegment {
+            scope,
+            step_ids: ids,
+        });
+    }
+    segments
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -502,5 +575,241 @@ mod tests {
         assert_eq!(result, None); // guard enabled, no decision yet
         let result = evaluate_loop_guard_rules(&policy, 3, 0);
         assert_eq!(result, Some((false, "max_cycles_reached".to_string())));
+    }
+
+    #[test]
+    fn default_scope_task_for_plan_implement() {
+        assert_eq!(WorkflowStepType::Plan.default_scope(), StepScope::Task);
+        assert_eq!(WorkflowStepType::Implement.default_scope(), StepScope::Task);
+        assert_eq!(WorkflowStepType::SelfTest.default_scope(), StepScope::Task);
+        assert_eq!(WorkflowStepType::QaDocGen.default_scope(), StepScope::Task);
+        assert_eq!(WorkflowStepType::AlignTests.default_scope(), StepScope::Task);
+        assert_eq!(WorkflowStepType::DocGovernance.default_scope(), StepScope::Task);
+        assert_eq!(WorkflowStepType::Build.default_scope(), StepScope::Task);
+        assert_eq!(WorkflowStepType::Test.default_scope(), StepScope::Task);
+    }
+
+    #[test]
+    fn default_scope_item_for_qa_steps() {
+        assert_eq!(WorkflowStepType::Qa.default_scope(), StepScope::Item);
+        assert_eq!(WorkflowStepType::QaTesting.default_scope(), StepScope::Item);
+        assert_eq!(WorkflowStepType::TicketFix.default_scope(), StepScope::Item);
+        assert_eq!(WorkflowStepType::TicketScan.default_scope(), StepScope::Item);
+        assert_eq!(WorkflowStepType::Fix.default_scope(), StepScope::Item);
+        assert_eq!(WorkflowStepType::Retest.default_scope(), StepScope::Item);
+    }
+
+    #[test]
+    fn build_segments_groups_contiguous_scopes() {
+        use crate::config::*;
+        let task_ctx = TaskRuntimeContext {
+            workspace_id: "ws".into(),
+            workspace_root: "/tmp".into(),
+            ticket_dir: "tickets".into(),
+            execution_plan: TaskExecutionPlan {
+                steps: vec![
+                    TaskExecutionStep {
+                        id: "plan".into(),
+                        step_type: Some(WorkflowStepType::Plan),
+                        required_capability: None,
+                        builtin: None,
+                        enabled: true,
+                        repeatable: true,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        outputs: vec![],
+                        pipe_to: None,
+                        command: None,
+                        chain_steps: vec![],
+                        scope: None,
+                    },
+                    TaskExecutionStep {
+                        id: "implement".into(),
+                        step_type: Some(WorkflowStepType::Implement),
+                        required_capability: None,
+                        builtin: None,
+                        enabled: true,
+                        repeatable: true,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        outputs: vec![],
+                        pipe_to: None,
+                        command: None,
+                        chain_steps: vec![],
+                        scope: None,
+                    },
+                    TaskExecutionStep {
+                        id: "qa_testing".into(),
+                        step_type: Some(WorkflowStepType::QaTesting),
+                        required_capability: None,
+                        builtin: None,
+                        enabled: true,
+                        repeatable: true,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        outputs: vec![],
+                        pipe_to: None,
+                        command: None,
+                        chain_steps: vec![],
+                        scope: None,
+                    },
+                    TaskExecutionStep {
+                        id: "ticket_fix".into(),
+                        step_type: Some(WorkflowStepType::TicketFix),
+                        required_capability: None,
+                        builtin: None,
+                        enabled: true,
+                        repeatable: true,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        outputs: vec![],
+                        pipe_to: None,
+                        command: None,
+                        chain_steps: vec![],
+                        scope: None,
+                    },
+                    TaskExecutionStep {
+                        id: "doc_governance".into(),
+                        step_type: Some(WorkflowStepType::DocGovernance),
+                        required_capability: None,
+                        builtin: None,
+                        enabled: true,
+                        repeatable: true,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        outputs: vec![],
+                        pipe_to: None,
+                        command: None,
+                        chain_steps: vec![],
+                        scope: None,
+                    },
+                ],
+                loop_policy: WorkflowLoopConfig::default(),
+                finalize: WorkflowFinalizeConfig::default(),
+            },
+            current_cycle: 1,
+            init_done: true,
+            dynamic_steps: vec![],
+            pipeline_vars: PipelineVariables::default(),
+            safety: SafetyConfig::default(),
+            self_referential: false,
+            consecutive_failures: 0,
+        };
+
+        let segments = build_scope_segments(&task_ctx);
+
+        // Should produce 3 segments:
+        // [plan, implement] → Task
+        // [qa_testing, ticket_fix] → Item
+        // [doc_governance] → Task
+        assert_eq!(segments.len(), 3);
+
+        assert_eq!(segments[0].scope, StepScope::Task);
+        assert!(segments[0].step_ids.contains("plan"));
+        assert!(segments[0].step_ids.contains("implement"));
+
+        assert_eq!(segments[1].scope, StepScope::Item);
+        assert!(segments[1].step_ids.contains("qa_testing"));
+        assert!(segments[1].step_ids.contains("ticket_fix"));
+
+        assert_eq!(segments[2].scope, StepScope::Task);
+        assert!(segments[2].step_ids.contains("doc_governance"));
+    }
+
+    #[test]
+    fn build_segments_skips_guards() {
+        use crate::config::*;
+        let task_ctx = TaskRuntimeContext {
+            workspace_id: "ws".into(),
+            workspace_root: "/tmp".into(),
+            ticket_dir: "tickets".into(),
+            execution_plan: TaskExecutionPlan {
+                steps: vec![
+                    TaskExecutionStep {
+                        id: "plan".into(),
+                        step_type: Some(WorkflowStepType::Plan),
+                        required_capability: None,
+                        builtin: None,
+                        enabled: true,
+                        repeatable: true,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        outputs: vec![],
+                        pipe_to: None,
+                        command: None,
+                        chain_steps: vec![],
+                        scope: None,
+                    },
+                    TaskExecutionStep {
+                        id: "loop_guard".into(),
+                        step_type: Some(WorkflowStepType::LoopGuard),
+                        required_capability: None,
+                        builtin: Some("loop_guard".into()),
+                        enabled: true,
+                        repeatable: true,
+                        is_guard: true,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        outputs: vec![],
+                        pipe_to: None,
+                        command: None,
+                        chain_steps: vec![],
+                        scope: None,
+                    },
+                ],
+                loop_policy: WorkflowLoopConfig::default(),
+                finalize: WorkflowFinalizeConfig::default(),
+            },
+            current_cycle: 1,
+            init_done: true,
+            dynamic_steps: vec![],
+            pipeline_vars: PipelineVariables::default(),
+            safety: SafetyConfig::default(),
+            self_referential: false,
+            consecutive_failures: 0,
+        };
+
+        let segments = build_scope_segments(&task_ctx);
+        // Guard is excluded, only plan remains
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].scope, StepScope::Task);
+        assert!(segments[0].step_ids.contains("plan"));
+        assert!(!segments[0].step_ids.contains("loop_guard"));
+    }
+
+    #[test]
+    fn resolved_scope_uses_explicit_override() {
+        use crate::config::*;
+        let step = TaskExecutionStep {
+            id: "qa_testing".into(),
+            step_type: Some(WorkflowStepType::QaTesting),
+            required_capability: None,
+            builtin: None,
+            enabled: true,
+            repeatable: true,
+            is_guard: false,
+            cost_preference: None,
+            prehook: None,
+            tty: false,
+            outputs: vec![],
+            pipe_to: None,
+            command: None,
+            chain_steps: vec![],
+            scope: Some(StepScope::Task), // Override default Item scope
+        };
+        assert_eq!(step.resolved_scope(), StepScope::Task);
     }
 }

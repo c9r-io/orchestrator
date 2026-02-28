@@ -324,7 +324,26 @@ pub async fn process_item(
     task_ctx: &TaskRuntimeContext,
     runtime: &RunningTask,
 ) -> Result<()> {
+    process_item_filtered(state, task_id, item, task_item_paths, task_ctx, runtime, None).await?;
+    Ok(())
+}
+
+/// Process an item, optionally filtering to only run steps whose id is in `step_filter`.
+/// When `step_filter` is `None`, all steps run (legacy behavior).
+/// Returns updated pipeline variables so callers can propagate task-scoped vars.
+pub async fn process_item_filtered(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    item: &crate::dto::TaskItemRow,
+    task_item_paths: &[String],
+    task_ctx: &TaskRuntimeContext,
+    runtime: &RunningTask,
+    step_filter: Option<&HashSet<String>>,
+) -> Result<PipelineVariables> {
     let item_id = item.id.as_str();
+    let should_run_step = |step_id: &str| -> bool {
+        step_filter.map_or(true, |f| f.contains(step_id))
+    };
     let qa_step = task_ctx.execution_plan.step(WorkflowStepType::Qa);
     let plan_step = task_ctx.execution_plan.step(WorkflowStepType::Plan);
     let ticket_scan_step = task_ctx.execution_plan.step(WorkflowStepType::TicketScan);
@@ -356,7 +375,7 @@ pub async fn process_item(
     let mut test_exit_code: Option<i64> = None;
 
     if let Some(plan_step) = plan_step {
-        if plan_step.enabled && (plan_step.repeatable || task_ctx.current_cycle <= 1) {
+        if plan_step.enabled && should_run_step(&plan_step.id) && (plan_step.repeatable || task_ctx.current_cycle <= 1) {
             insert_event(
                 state,
                 task_id,
@@ -431,12 +450,12 @@ pub async fn process_item(
                 state
                     .db_writer
                     .update_task_item_status(item_id, &item_status)?;
-                return Ok(());
+                return Ok(pipeline_vars);
             }
         }
     }
 
-    if let Some(qa_step) = qa_step {
+    if let Some(qa_step) = qa_step.filter(|s| should_run_step(&s.id)) {
         let should_run_qa = evaluate_step_prehook(
             state,
             qa_step.prehook.as_ref(),
@@ -586,7 +605,7 @@ pub async fn process_item(
         }
     }
 
-    if let Some(scan_step) = ticket_scan_step {
+    if let Some(scan_step) = ticket_scan_step.filter(|s| should_run_step(&s.id)) {
         if scan_step.enabled {
             insert_event(
                 state,
@@ -624,7 +643,7 @@ pub async fn process_item(
         }
     }
 
-    if let Some(fix_step) = fix_step {
+    if let Some(fix_step) = fix_step.filter(|s| should_run_step(&s.id)) {
         if fix_step.enabled && !active_tickets.is_empty() {
             let should_run_fix = evaluate_step_prehook(
                 state,
@@ -732,7 +751,7 @@ pub async fn process_item(
         }
     }
 
-    if let Some(retest_step) = retest_step {
+    if let Some(retest_step) = retest_step.filter(|s| should_run_step(&s.id)) {
         if retest_step.enabled && fix_success {
             retest_ran = true;
             insert_event(
@@ -779,6 +798,9 @@ pub async fn process_item(
 
     for step in &task_ctx.execution_plan.steps {
         if step.is_guard {
+            continue;
+        }
+        if !should_run_step(&step.id) {
             continue;
         }
         let step_type = step.step_type.as_ref().map(|t| t.as_str()).unwrap_or("");
@@ -1028,7 +1050,9 @@ pub async fn process_item(
         )?;
     }
 
-    if !task_ctx.dynamic_steps.is_empty() {
+    // Dynamic steps only run when no step filter is set (legacy/full mode)
+    // or when we're in an item-scoped segment (filter is Some but dynamic steps are item-scoped)
+    if !task_ctx.dynamic_steps.is_empty() && step_filter.is_none() {
         let pool = {
             let mut p = crate::dynamic_orchestration::DynamicStepPool::new();
             for ds in &task_ctx.dynamic_steps {
@@ -1214,5 +1238,5 @@ pub async fn process_item(
     state
         .db_writer
         .update_task_item_status(item_id, &item_status)?;
-    Ok(())
+    Ok(pipeline_vars)
 }

@@ -355,6 +355,17 @@ fn default_selection_strategy() -> SelectionStrategy {
     SelectionStrategy::CapabilityAware
 }
 
+/// Execution scope for a workflow step
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum StepScope {
+    /// Runs once per cycle (plan, implement, self_test, align_tests, doc_governance)
+    Task,
+    /// Runs per item/QA file (qa_testing, ticket_fix)
+    #[default]
+    Item,
+}
+
 /// Workflow step type enumeration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -419,6 +430,20 @@ impl WorkflowStepType {
                 | Self::SelfTest
                 | Self::SmokeChain
         )
+    }
+
+    /// Returns the default execution scope for this step type.
+    pub fn default_scope(&self) -> StepScope {
+        match self {
+            // Task-scoped: run once per cycle
+            Self::Plan | Self::QaDocGen | Self::Implement | Self::SelfTest
+            | Self::AlignTests | Self::DocGovernance | Self::Review
+            | Self::Build | Self::Test | Self::Lint | Self::GitOps
+            | Self::SmokeChain | Self::LoopGuard | Self::InitOnce => StepScope::Task,
+            // Item-scoped: fan-out per QA file
+            Self::Qa | Self::QaTesting | Self::TicketFix
+            | Self::TicketScan | Self::Fix | Self::Retest => StepScope::Item,
+        }
     }
 }
 
@@ -612,6 +637,9 @@ pub struct WorkflowStepConfig {
     /// Sub-steps to execute in sequence for smoke_chain step
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chain_steps: Vec<WorkflowStepConfig>,
+    /// Execution scope override (defaults based on step type)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<StepScope>,
 }
 
 fn default_true() -> bool {
@@ -652,6 +680,21 @@ pub struct TaskExecutionStep {
     /// Sub-steps to execute in sequence for smoke_chain step
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chain_steps: Vec<TaskExecutionStep>,
+    /// Execution scope override (defaults based on step type)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<StepScope>,
+}
+
+impl TaskExecutionStep {
+    /// Returns the resolved scope: explicit override or default based on step type.
+    pub fn resolved_scope(&self) -> StepScope {
+        self.scope.unwrap_or_else(|| {
+            self.step_type
+                .as_ref()
+                .map(|t| t.default_scope())
+                .unwrap_or(StepScope::Item)
+        })
+    }
 }
 
 /// Task execution plan
@@ -858,6 +901,7 @@ fn step_config(
         pipe_to: None,
         command: None,
         chain_steps: vec![],
+        scope: None,
     }
 }
 

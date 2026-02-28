@@ -165,6 +165,7 @@ impl CliHandler {
             pipe_to: None,
             command: None,
             chain_steps: vec![],
+            scope: None,
         };
         plan.steps.insert(insert_idx, inserted_step);
 

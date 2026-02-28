@@ -10,7 +10,7 @@ use crate::config::{
     OrchestratorConfig, ProjectConfig, ResumeConfig, RunnerConfig, RunnerExecutorKind,
     RunnerPolicy, StepHookEngine, StepPrehookConfig, StepPrehookUiConfig, WorkflowConfig,
     WorkflowFinalizeConfig, WorkflowFinalizeRule, WorkflowLoopConfig, WorkflowLoopGuardConfig,
-    WorkflowStepConfig, WorkflowStepType, WorkspaceConfig,
+    StepScope, WorkflowStepConfig, WorkflowStepType, WorkspaceConfig,
 };
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
@@ -1011,6 +1011,11 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
                 }),
                 None => None,
             };
+            let scope = match step.scope.as_deref() {
+                Some("task") => Some(StepScope::Task),
+                Some("item") => Some(StepScope::Item),
+                _ => None,
+            };
             Ok(WorkflowStepConfig {
                 id: step.id.clone(),
                 description: None,
@@ -1027,6 +1032,7 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
                 pipe_to: None,
                 command: step.command.clone(),
                 chain_steps: vec![],
+                scope,
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -1126,6 +1132,18 @@ fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
             }),
             tty: step.tty,
             command: step.command.clone(),
+            scope: step.scope.and_then(|s| {
+                // Only serialize when it differs from default
+                let default = step.step_type.as_ref().map(|t| t.default_scope()).unwrap_or(StepScope::Item);
+                if s != default {
+                    Some(match s {
+                        StepScope::Task => "task".to_string(),
+                        StepScope::Item => "item".to_string(),
+                    })
+                } else {
+                    None
+                }
+            }),
         })
         .collect();
 
@@ -1478,6 +1496,7 @@ mod tests {
                     prehook: None,
                     tty: false,
                     command: None,
+                    scope: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "once".to_string(),

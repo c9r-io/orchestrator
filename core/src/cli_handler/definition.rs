@@ -153,6 +153,7 @@ impl CliHandler {
                         prehook: None,
                         tty: false,
                         command: None,
+                        scope: None,
                     })
                     .collect();
 

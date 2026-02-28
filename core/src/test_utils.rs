@@ -99,6 +99,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                         pipe_to: None,
                         command: None,
                         chain_steps: vec![],
+                        scope: None,
                     }],
                     loop_policy: WorkflowLoopConfig {
                         mode: LoopMode::Once,

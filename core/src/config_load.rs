@@ -138,6 +138,7 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                 pipe_to: None,
                 command: None,
                 chain_steps: vec![],
+                scope: None,
             });
         }
     }
@@ -788,8 +789,10 @@ pub fn build_execution_plan(
                     pipe_to: cs.pipe_to.clone(),
                     command: cs.command.clone(),
                     chain_steps: vec![],
+                    scope: cs.scope,
                 })
                 .collect(),
+            scope: step.scope,
         });
     }
     let loop_policy = workflow.loop_policy.clone();
@@ -871,6 +874,7 @@ mod tests {
                 pipe_to: None,
                 command: None,
                 chain_steps: vec![],
+                scope: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -921,6 +925,7 @@ mod tests {
                     pipe_to: None,
                     command: None,
                     chain_steps: vec![],
+                    scope: None,
                 },
                 WorkflowStepConfig {
                     id: "self_test_recover".to_string(),
@@ -938,6 +943,7 @@ mod tests {
                     pipe_to: None,
                     command: None,
                     chain_steps: vec![],
+                    scope: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -986,6 +992,7 @@ mod tests {
                     pipe_to: None,
                     command: None,
                     chain_steps: vec![],
+                    scope: None,
                 },
                 WorkflowStepConfig {
                     id: "self_test_recover".to_string(),
@@ -1003,6 +1010,7 @@ mod tests {
                     pipe_to: None,
                     command: None,
                     chain_steps: vec![],
+                    scope: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -1048,6 +1056,7 @@ mod tests {
                     pipe_to: None,
                     command: Some("echo phase-one".to_string()),
                     chain_steps: vec![],
+                    scope: None,
                 },
                 WorkflowStepConfig {
                     id: "implement_phase_two".to_string(),
@@ -1065,6 +1074,7 @@ mod tests {
                     pipe_to: None,
                     command: Some("echo phase-two".to_string()),
                     chain_steps: vec![],
+                    scope: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -1110,6 +1120,7 @@ mod tests {
                     pipe_to: None,
                     command: None,
                     chain_steps: vec![],
+                    scope: None,
                 },
                 WorkflowStepConfig {
                     id: "duplicate_step".to_string(),
@@ -1127,6 +1138,7 @@ mod tests {
                     pipe_to: None,
                     command: Some("echo duplicate".to_string()),
                     chain_steps: vec![],
+                    scope: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -1177,6 +1189,7 @@ mod tests {
                 pipe_to: None,
                 command: None,
                 chain_steps: vec![],
+                scope: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -1223,6 +1236,7 @@ mod tests {
                     pipe_to: None,
                     command: None,
                     chain_steps: vec![],
+                    scope: None,
                 },
                 WorkflowStepConfig {
                     id: "self_test".to_string(),
@@ -1240,6 +1254,7 @@ mod tests {
                     pipe_to: None,
                     command: None,
                     chain_steps: vec![],
+                    scope: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig {

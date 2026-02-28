@@ -345,6 +345,10 @@ pub struct WorkflowStepSpec {
     /// Build command for builtin build/test/lint steps
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
+
+    /// Execution scope: "task" (once per cycle) or "item" (per QA file)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
 }
 
 fn default_true() -> bool {
