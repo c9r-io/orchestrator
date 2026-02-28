@@ -466,4 +466,279 @@ mod tests {
         let result = parse_ticket_preview_content("no content here");
         assert!(result.status.is_empty());
     }
+
+    #[test]
+    fn test_parse_ticket_preview_content_extracts_status_and_qa_doc() {
+        let content = "**Status**: OPEN\n**QA Document**: `docs/qa/auth.md`\n";
+        let result = parse_ticket_preview_content(content);
+        assert_eq!(result.status, "OPEN");
+        assert_eq!(result.qa_document, "docs/qa/auth.md");
+    }
+
+    #[test]
+    fn test_parse_ticket_preview_content_only_status() {
+        let content = "# Title\n**Status**: FAILED\nSome details";
+        let result = parse_ticket_preview_content(content);
+        assert_eq!(result.status, "FAILED");
+        assert!(result.qa_document.is_empty());
+    }
+
+    #[test]
+    fn test_normalize_rel_path_for_match_backtick_wrapping() {
+        let result = normalize_rel_path_for_match("`docs/qa/test.md`");
+        assert_eq!(result, "docs/qa/test.md");
+    }
+
+    #[test]
+    fn test_normalize_rel_path_for_match_empty() {
+        let result = normalize_rel_path_for_match("");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_normalize_rel_path_for_match_whitespace_only() {
+        let result = normalize_rel_path_for_match("   ");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_is_active_ticket_status_various_closed() {
+        assert!(!is_active_ticket_status("CLOSED"));
+        assert!(!is_active_ticket_status("RESOLVED"));
+        assert!(!is_active_ticket_status("SKIPPED"));
+        assert!(!is_active_ticket_status("PASSED"));
+    }
+
+    #[test]
+    fn test_should_seed_targets_from_active_tickets() {
+        use crate::config::{TaskExecutionPlan, TaskExecutionStep, WorkflowStepType};
+
+        let plan_with_ticket_scan = TaskExecutionPlan {
+            steps: vec![TaskExecutionStep {
+                id: "scan".to_string(),
+                step_type: Some(WorkflowStepType::TicketScan),
+                enabled: true,
+                repeatable: false,
+                is_guard: false,
+                builtin: None,
+                cost_preference: None,
+                required_capability: None,
+                prehook: None,
+                tty: false,
+                outputs: vec![],
+                pipe_to: None,
+                command: None,
+                chain_steps: vec![],
+                scope: None,
+            }],
+            loop_policy: crate::config::WorkflowLoopConfig::default(),
+            finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
+        };
+
+        // No target_files, no qa step, has ticket_scan -> should seed
+        assert!(should_seed_targets_from_active_tickets(
+            None,
+            &plan_with_ticket_scan
+        ));
+
+        // Has target_files -> should NOT seed
+        let targets = vec!["docs/qa/test.md".to_string()];
+        assert!(!should_seed_targets_from_active_tickets(
+            Some(&targets),
+            &plan_with_ticket_scan
+        ));
+
+        // Has QA step -> should NOT seed
+        let plan_with_qa = TaskExecutionPlan {
+            steps: vec![TaskExecutionStep {
+                id: "qa".to_string(),
+                step_type: Some(WorkflowStepType::Qa),
+                enabled: true,
+                repeatable: false,
+                is_guard: false,
+                builtin: None,
+                cost_preference: None,
+                required_capability: None,
+                prehook: None,
+                tty: false,
+                outputs: vec![],
+                pipe_to: None,
+                command: None,
+                chain_steps: vec![],
+                scope: None,
+            }],
+            loop_policy: crate::config::WorkflowLoopConfig::default(),
+            finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
+        };
+        assert!(!should_seed_targets_from_active_tickets(None, &plan_with_qa));
+    }
+
+    #[test]
+    fn test_list_ticket_files_in_workspace() {
+        let dir = std::env::temp_dir().join(format!("ticket-test-{}", uuid::Uuid::new_v4()));
+        let ticket_dir = dir.join("docs/ticket");
+        std::fs::create_dir_all(&ticket_dir).unwrap();
+
+        // Create ticket files
+        std::fs::write(ticket_dir.join("auto_test_001.md"), "# Ticket").unwrap();
+        std::fs::write(ticket_dir.join("auto_test_002.md"), "# Ticket 2").unwrap();
+        // README should be excluded
+        std::fs::write(ticket_dir.join("README.md"), "# Readme").unwrap();
+        // Non-md files should be excluded
+        std::fs::write(ticket_dir.join("notes.txt"), "notes").unwrap();
+
+        let result = list_ticket_files_in_workspace(&dir, "docs/ticket").unwrap();
+        assert_eq!(result.len(), 2);
+        assert!(result.iter().all(|p| p.ends_with(".md")));
+        assert!(!result.iter().any(|p| p.contains("README")));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_list_ticket_files_in_workspace_missing_dir() {
+        let dir = std::env::temp_dir().join(format!("ticket-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let result = list_ticket_files_in_workspace(&dir, "docs/ticket").unwrap();
+        assert!(result.is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_create_ticket_for_qa_failure() {
+        let dir = std::env::temp_dir().join(format!("ticket-create-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let stdout_path = dir.join("stdout.log");
+        let stderr_path = dir.join("stderr.log");
+        std::fs::write(&stdout_path, "test output line 1\ntest output line 2").unwrap();
+        std::fs::write(&stderr_path, "error detail").unwrap();
+
+        let result = create_ticket_for_qa_failure(
+            &dir,
+            "docs/ticket",
+            "test-task",
+            "docs/qa/auth.md",
+            1,
+            stdout_path.to_str().unwrap(),
+            stderr_path.to_str().unwrap(),
+        )
+        .unwrap();
+
+        assert!(result.is_some());
+        let ticket_path = result.unwrap();
+        assert!(ticket_path.starts_with("docs/ticket/auto_auth_"));
+        assert!(ticket_path.ends_with(".md"));
+
+        // Verify content
+        let abs_path = dir.join(&ticket_path);
+        let content = std::fs::read_to_string(&abs_path).unwrap();
+        assert!(content.contains("**Status**: FAILED"));
+        assert!(content.contains("**QA Document**: `docs/qa/auth.md`"));
+        assert!(content.contains("exited with code 1"));
+        assert!(content.contains("test output line"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_collect_target_files_with_explicit_list() {
+        let dir = std::env::temp_dir().join(format!("target-files-{}", uuid::Uuid::new_v4()));
+        let qa_dir = dir.join("docs/qa");
+        std::fs::create_dir_all(&qa_dir).unwrap();
+
+        std::fs::write(qa_dir.join("test1.md"), "# Test 1").unwrap();
+        std::fs::write(qa_dir.join("test2.md"), "# Test 2").unwrap();
+
+        let input = vec![
+            "docs/qa/test1.md".to_string(),
+            "docs/qa/test2.md".to_string(),
+            "docs/qa/nonexistent.md".to_string(), // should be filtered
+            "".to_string(),                         // should be filtered
+        ];
+
+        let result = collect_target_files(&dir, &[], Some(input)).unwrap();
+        assert_eq!(result.len(), 2);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_collect_target_files_from_directory_scan() {
+        let dir = std::env::temp_dir().join(format!("target-scan-{}", uuid::Uuid::new_v4()));
+        let qa_dir = dir.join("docs/qa");
+        std::fs::create_dir_all(&qa_dir).unwrap();
+
+        std::fs::write(qa_dir.join("auth.md"), "# Auth QA").unwrap();
+        std::fs::write(qa_dir.join("README.md"), "# README").unwrap();
+        std::fs::write(qa_dir.join("data.json"), "{}").unwrap();
+
+        let result =
+            collect_target_files(&dir, &["docs/qa".to_string()], None).unwrap();
+        assert_eq!(result.len(), 1);
+        assert!(result[0].contains("auth.md"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_read_ticket_preview_from_workspace() {
+        let dir = std::env::temp_dir().join(format!("preview-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("ticket.md"),
+            "**Status**: FAILED\n**QA Document**: `docs/qa/test.md`\n",
+        )
+        .unwrap();
+
+        let preview = read_ticket_preview_from_workspace(&dir, "ticket.md");
+        assert_eq!(preview.status, "FAILED");
+        assert_eq!(preview.qa_document, "docs/qa/test.md");
+
+        // Non-existent file returns empty preview
+        let preview = read_ticket_preview_from_workspace(&dir, "nonexistent.md");
+        assert!(preview.status.is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_read_ticket_preview() {
+        use crate::config::TaskRuntimeContext;
+
+        let dir = std::env::temp_dir().join(format!("read-preview-{}", uuid::Uuid::new_v4()));
+        let ticket_dir = dir.join("docs/ticket");
+        std::fs::create_dir_all(&ticket_dir).unwrap();
+        std::fs::write(
+            ticket_dir.join("t1.md"),
+            "**Status**: OPEN\n**QA Document**: `docs/qa/a.md`\n",
+        )
+        .unwrap();
+
+        let task_ctx = TaskRuntimeContext {
+            workspace_id: "ws".to_string(),
+            workspace_root: dir.clone(),
+            ticket_dir: "docs/ticket".to_string(),
+            execution_plan: crate::config::TaskExecutionPlan {
+                steps: vec![],
+                loop_policy: crate::config::WorkflowLoopConfig::default(),
+                finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
+            },
+            current_cycle: 0,
+            init_done: false,
+            dynamic_steps: vec![],
+            pipeline_vars: crate::config::PipelineVariables::default(),
+            safety: crate::config::SafetyConfig::default(),
+            self_referential: false,
+            consecutive_failures: 0,
+        };
+
+        let result = read_ticket_preview(&task_ctx, "docs/ticket/t1.md");
+        assert_eq!(result["status"], "OPEN");
+        assert_eq!(result["qa_document"], "docs/qa/a.md");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

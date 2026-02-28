@@ -394,7 +394,7 @@ fn format_bytes(bytes: u64) -> String {
     }
 }
 
-fn tail_lines(path: &Path, limit: usize) -> Result<String> {
+pub(crate) fn tail_lines(path: &Path, limit: usize) -> Result<String> {
     if limit == 0 {
         return Ok(String::new());
     }
@@ -442,4 +442,168 @@ fn tail_lines(path: &Path, limit: usize) -> Result<String> {
     }
 
     Ok(String::from_utf8_lossy(&data).trim_end().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn test_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "query-test-{}-{}",
+            name,
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn format_duration_milliseconds() {
+        assert_eq!(format_duration(0), "0ms");
+        assert_eq!(format_duration(500), "500ms");
+        assert_eq!(format_duration(999), "999ms");
+    }
+
+    #[test]
+    fn format_duration_seconds() {
+        assert_eq!(format_duration(1000), "1.0s");
+        assert_eq!(format_duration(1500), "1.5s");
+        assert_eq!(format_duration(59_999), "60.0s");
+    }
+
+    #[test]
+    fn format_duration_minutes() {
+        assert_eq!(format_duration(60_000), "1m 0s");
+        assert_eq!(format_duration(90_000), "1m 30s");
+        assert_eq!(format_duration(3_661_000), "61m 1s");
+    }
+
+    #[test]
+    fn format_bytes_bytes() {
+        assert_eq!(format_bytes(0), "0B");
+        assert_eq!(format_bytes(512), "512B");
+        assert_eq!(format_bytes(1023), "1023B");
+    }
+
+    #[test]
+    fn format_bytes_kilobytes() {
+        assert_eq!(format_bytes(1024), "1.0KB");
+        assert_eq!(format_bytes(1536), "1.5KB");
+    }
+
+    #[test]
+    fn format_bytes_megabytes() {
+        assert_eq!(format_bytes(1024 * 1024), "1.0MB");
+        assert_eq!(format_bytes(1024 * 1024 * 5), "5.0MB");
+    }
+
+    #[test]
+    fn colorize_status_completed() {
+        let result = colorize_status("completed");
+        assert!(result.contains("completed"));
+        assert!(result.contains("\x1b[32m")); // green
+    }
+
+    #[test]
+    fn colorize_status_failed() {
+        let result = colorize_status("failed");
+        assert!(result.contains("failed"));
+        assert!(result.contains("\x1b[31m")); // red
+    }
+
+    #[test]
+    fn colorize_status_running() {
+        let result = colorize_status("running");
+        assert!(result.contains("\x1b[33m")); // yellow
+    }
+
+    #[test]
+    fn colorize_status_paused() {
+        let result = colorize_status("paused");
+        assert!(result.contains("\x1b[90m")); // gray
+    }
+
+    #[test]
+    fn colorize_status_unknown_passes_through() {
+        assert_eq!(colorize_status("pending"), "pending");
+        assert_eq!(colorize_status("other"), "other");
+    }
+
+    #[test]
+    fn tail_lines_zero_limit_returns_empty() {
+        let dir = test_dir("zero");
+        let path = dir.join("log.txt");
+        std::fs::write(&path, "line1\nline2\n").unwrap();
+        let result = tail_lines(&path, 0).unwrap();
+        assert_eq!(result, "");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn tail_lines_empty_file_returns_empty() {
+        let dir = test_dir("empty");
+        let path = dir.join("log.txt");
+        std::fs::write(&path, "").unwrap();
+        let result = tail_lines(&path, 10).unwrap();
+        assert_eq!(result, "");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn tail_lines_returns_last_n_lines() {
+        let dir = test_dir("lastn");
+        let path = dir.join("log.txt");
+        // Use trailing newline so each "line" is terminated
+        let content = (1..=20)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n";
+        std::fs::write(&path, &content).unwrap();
+
+        let result = tail_lines(&path, 3).unwrap();
+        let lines: Vec<&str> = result.lines().collect();
+        assert_eq!(lines.len(), 3);
+        assert_eq!(lines[0], "line 18");
+        assert_eq!(lines[2], "line 20");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn tail_lines_returns_all_when_limit_exceeds_file() {
+        let dir = test_dir("exceed");
+        let path = dir.join("log.txt");
+        std::fs::write(&path, "line1\nline2\nline3").unwrap();
+
+        let result = tail_lines(&path, 100).unwrap();
+        let lines: Vec<&str> = result.lines().collect();
+        assert_eq!(lines.len(), 3);
+        assert_eq!(lines[0], "line1");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn tail_lines_missing_file_returns_error() {
+        let result = tail_lines(Path::new("/nonexistent/path"), 10);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn tail_lines_large_file() {
+        let dir = test_dir("large");
+        let path = dir.join("big.txt");
+        let mut f = std::fs::File::create(&path).unwrap();
+        for i in 0..500 {
+            writeln!(f, "line {:04}", i).unwrap();
+        }
+        drop(f);
+
+        let result = tail_lines(&path, 5).unwrap();
+        let lines: Vec<&str> = result.lines().collect();
+        assert_eq!(lines.len(), 5);
+        assert_eq!(lines[4], "line 0499");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

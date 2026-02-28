@@ -132,3 +132,151 @@ pub fn query_step_events(db_path: &Path, task_id: &str) -> Result<Vec<StepEvent>
     }
     Ok(events)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn noop_sink_does_not_panic() {
+        let sink = NoopSink;
+        sink.emit("task1", Some("item1"), "step_started", serde_json::json!({}));
+        sink.emit("task1", None, "task_completed", serde_json::json!({"status": "ok"}));
+    }
+
+    #[test]
+    fn insert_event_and_query_roundtrip() {
+        let mut fixture = crate::test_utils::TestState::new();
+        let state = fixture.build();
+
+        // Insert events
+        insert_event(
+            &state,
+            "task1",
+            Some("item1"),
+            "step_started",
+            serde_json::json!({"step": "qa", "agent_id": "qa_agent"}),
+        )
+        .unwrap();
+
+        insert_event(
+            &state,
+            "task1",
+            Some("item1"),
+            "step_finished",
+            serde_json::json!({"step": "qa", "success": true, "duration_ms": 1500}),
+        )
+        .unwrap();
+
+        insert_event(
+            &state,
+            "task1",
+            None,
+            "cycle_started",
+            serde_json::json!({"cycle": 1}),
+        )
+        .unwrap();
+
+        // Query events back
+        let events = query_step_events(&state.db_path, "task1").unwrap();
+        assert_eq!(events.len(), 3);
+
+        assert_eq!(events[0].event_type, "step_started");
+        assert_eq!(events[0].step.as_deref(), Some("qa"));
+        assert_eq!(events[0].agent_id.as_deref(), Some("qa_agent"));
+
+        assert_eq!(events[1].event_type, "step_finished");
+        assert_eq!(events[1].success, Some(true));
+        assert_eq!(events[1].duration_ms, Some(1500));
+
+        assert_eq!(events[2].event_type, "cycle_started");
+    }
+
+    #[test]
+    fn query_step_events_empty_for_unknown_task() {
+        let mut fixture = crate::test_utils::TestState::new();
+        let state = fixture.build();
+
+        let events = query_step_events(&state.db_path, "nonexistent_task").unwrap();
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn query_latest_step_log_paths_returns_none_when_empty() {
+        let mut fixture = crate::test_utils::TestState::new();
+        let state = fixture.build();
+
+        let result = query_latest_step_log_paths(&state.db_path, "task1").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn query_latest_step_log_paths_returns_paths() {
+        let mut fixture = crate::test_utils::TestState::new();
+        let state = fixture.build();
+
+        insert_event(
+            &state,
+            "task1",
+            Some("item1"),
+            "step_spawned",
+            serde_json::json!({
+                "phase": "qa",
+                "stdout_path": "/tmp/stdout.log",
+                "stderr_path": "/tmp/stderr.log"
+            }),
+        )
+        .unwrap();
+
+        let result = query_latest_step_log_paths(&state.db_path, "task1").unwrap();
+        assert!(result.is_some());
+        let (phase, stdout, stderr) = result.unwrap();
+        assert_eq!(phase, "qa");
+        assert_eq!(stdout, "/tmp/stdout.log");
+        assert_eq!(stderr, "/tmp/stderr.log");
+    }
+
+    #[test]
+    fn query_latest_step_log_paths_empty_phase_returns_none() {
+        let mut fixture = crate::test_utils::TestState::new();
+        let state = fixture.build();
+
+        insert_event(
+            &state,
+            "task1",
+            Some("item1"),
+            "step_started",
+            serde_json::json!({"stdout_path": "/tmp/out.log"}),
+        )
+        .unwrap();
+
+        let result = query_latest_step_log_paths(&state.db_path, "task1").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn step_event_parses_all_optional_fields() {
+        let mut fixture = crate::test_utils::TestState::new();
+        let state = fixture.build();
+
+        insert_event(
+            &state,
+            "task1",
+            None,
+            "step_heartbeat",
+            serde_json::json!({
+                "step": "implement",
+                "stdout_bytes": 4096,
+                "pid": 12345,
+                "pid_alive": true
+            }),
+        )
+        .unwrap();
+
+        let events = query_step_events(&state.db_path, "task1").unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].stdout_bytes, Some(4096));
+        assert_eq!(events[0].pid, Some(12345));
+        assert_eq!(events[0].pid_alive, Some(true));
+    }
+}

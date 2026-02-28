@@ -27,7 +27,7 @@ use super::RunningTask;
 /// Insert a pipeline variable, spilling to a file when the value exceeds
 /// [`PIPELINE_VAR_INLINE_LIMIT`].  When spilled the inline value is truncated
 /// and a companion `{key}_path` variable is set pointing to the full-content file.
-fn spill_large_var(
+pub(crate) fn spill_large_var(
     logs_dir: &Path,
     task_id: &str,
     key: &str,
@@ -64,7 +64,7 @@ fn spill_large_var(
 
 /// Write a large value to a spill file and return `(truncated_value, path_string)`.
 /// Returns `None` if the value fits within the inline limit.
-fn spill_to_file(
+pub(crate) fn spill_to_file(
     logs_dir: &Path,
     task_id: &str,
     key: &str,

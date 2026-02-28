@@ -502,6 +502,93 @@ mod tests {
         );
     }
 
+    #[test]
+    fn spill_large_var_inline_when_small() {
+        let dir = std::env::temp_dir().join(format!("spill-small-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut pipeline = crate::config::PipelineVariables::default();
+        let small_value = "short value".to_string();
+        item_executor::spill_large_var(&dir, "task1", "plan_output", small_value.clone(), &mut pipeline);
+
+        assert_eq!(pipeline.vars.get("plan_output").unwrap(), &small_value);
+        assert!(!pipeline.vars.contains_key("plan_output_path"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn spill_large_var_spills_when_over_limit() {
+        let dir = std::env::temp_dir().join(format!("spill-large-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut pipeline = crate::config::PipelineVariables::default();
+        let large_value = "X".repeat(PIPELINE_VAR_INLINE_LIMIT + 500);
+        item_executor::spill_large_var(&dir, "task1", "plan_output", large_value.clone(), &mut pipeline);
+
+        let inline = pipeline.vars.get("plan_output").unwrap();
+        assert!(inline.contains("truncated"));
+        assert!(inline.len() < large_value.len());
+
+        let path = pipeline.vars.get("plan_output_path").unwrap();
+        assert!(path.contains("plan_output.txt"));
+
+        // Verify spill file has full content
+        let spill_content = std::fs::read_to_string(path).unwrap();
+        assert_eq!(spill_content.len(), large_value.len());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn spill_to_file_returns_none_when_small() {
+        let dir = std::env::temp_dir().join(format!("spill-fn-small-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let result = item_executor::spill_to_file(&dir, "task1", "key", "small value");
+        assert!(result.is_none());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn spill_to_file_returns_truncated_and_path_when_large() {
+        let dir = std::env::temp_dir().join(format!("spill-fn-large-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let large = "Y".repeat(PIPELINE_VAR_INLINE_LIMIT + 1000);
+        let result = item_executor::spill_to_file(&dir, "task1", "output", &large);
+        assert!(result.is_some());
+
+        let (truncated, path) = result.unwrap();
+        assert!(truncated.contains("truncated"));
+        assert!(path.contains("output.txt"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn spill_large_var_handles_multibyte_utf8_at_boundary() {
+        let dir = std::env::temp_dir().join(format!("spill-utf8-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut pipeline = crate::config::PipelineVariables::default();
+        // Create a string with multibyte chars near the boundary
+        let mut value = "A".repeat(PIPELINE_VAR_INLINE_LIMIT - 2);
+        value.push('中'); // 3-byte UTF-8 char that crosses the boundary
+        value.push_str(&"B".repeat(500));
+
+        item_executor::spill_large_var(&dir, "task1", "key", value, &mut pipeline);
+
+        let inline = pipeline.vars.get("key").unwrap();
+        // Should not panic on UTF-8 boundary
+        assert!(inline.contains("truncated"));
+        // Truncated inline should be valid UTF-8
+        assert!(inline.is_char_boundary(0));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[tokio::test]
     async fn self_test_survives_smoke_test() {
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));

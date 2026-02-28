@@ -621,3 +621,37 @@ pub async fn run_phase_with_rotation(
     )
     .await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shell_escape_simple_string() {
+        assert_eq!(shell_escape("hello"), "'hello'");
+    }
+
+    #[test]
+    fn shell_escape_string_with_single_quotes() {
+        assert_eq!(shell_escape("it's"), "'it'\\''s'");
+    }
+
+    #[test]
+    fn shell_escape_empty_string() {
+        assert_eq!(shell_escape(""), "''");
+    }
+
+    #[test]
+    fn shell_escape_special_chars_preserved() {
+        assert_eq!(shell_escape("$HOME"), "'$HOME'");
+        assert_eq!(shell_escape("a b c"), "'a b c'");
+        assert_eq!(shell_escape("a`b"), "'a`b'");
+    }
+
+    #[test]
+    fn resolved_step_timeout_defaults() {
+        assert_eq!(resolved_step_timeout_secs(None), DEFAULT_STEP_TIMEOUT_SECS);
+        assert_eq!(resolved_step_timeout_secs(Some(60)), 60);
+        assert_eq!(resolved_step_timeout_secs(Some(0)), 0);
+    }
+}

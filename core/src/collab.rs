@@ -1270,6 +1270,510 @@ mod tests {
     }
 
     #[test]
+    fn test_agent_output_failure() {
+        let output = AgentOutput::new(
+            Uuid::new_v4(),
+            "impl_agent".to_string(),
+            "implement".to_string(),
+            1,
+            "".to_string(),
+            "error".to_string(),
+        );
+        assert!(!output.is_success());
+    }
+
+    #[test]
+    fn test_agent_output_builder_methods() {
+        let output = AgentOutput::new(
+            Uuid::new_v4(),
+            "agent".to_string(),
+            "qa".to_string(),
+            0,
+            "ok".to_string(),
+            "".to_string(),
+        )
+        .with_confidence(0.85)
+        .with_quality_score(0.9)
+        .with_metrics(ExecutionMetrics {
+            duration_ms: 1000,
+            tokens_consumed: Some(500),
+            api_calls: Some(3),
+            retry_count: 1,
+        })
+        .with_artifacts(vec![Artifact::new(ArtifactKind::Custom {
+            name: "test".to_string(),
+        })]);
+
+        assert_eq!(output.confidence, 0.85);
+        assert_eq!(output.quality_score, 0.9);
+        assert_eq!(output.metrics.duration_ms, 1000);
+        assert_eq!(output.artifacts.len(), 1);
+    }
+
+    #[test]
+    fn test_agent_output_confidence_clamped() {
+        let output = AgentOutput::new(
+            Uuid::new_v4(),
+            "a".to_string(),
+            "p".to_string(),
+            0,
+            "".to_string(),
+            "".to_string(),
+        )
+        .with_confidence(1.5)
+        .with_quality_score(-0.5);
+
+        assert_eq!(output.confidence, 1.0);
+        assert_eq!(output.quality_score, 0.0);
+    }
+
+    #[test]
+    fn test_artifact_builder() {
+        let artifact = Artifact::new(ArtifactKind::CodeChange {
+            files: vec!["main.rs".to_string()],
+        })
+        .with_path("/tmp/diff.patch".to_string())
+        .with_content(serde_json::json!({"lines_added": 10}))
+        .with_checksum("abc123".to_string());
+
+        assert_eq!(artifact.path.unwrap(), "/tmp/diff.patch");
+        assert!(artifact.content.is_some());
+        assert_eq!(artifact.checksum, "abc123");
+    }
+
+    #[test]
+    fn test_agent_endpoint_constructors() {
+        let ep1 = AgentEndpoint::agent("qa_agent");
+        assert_eq!(ep1.agent_id, "qa_agent");
+        assert!(ep1.phase.is_none());
+
+        let ep2 = AgentEndpoint::for_phase("impl_agent", "implement");
+        assert_eq!(ep2.agent_id, "impl_agent");
+        assert_eq!(ep2.phase.as_deref(), Some("implement"));
+
+        let ep3 = AgentEndpoint::for_task_item("agent1", "task1", "item1");
+        assert_eq!(ep3.task_id.as_deref(), Some("task1"));
+        assert_eq!(ep3.item_id.as_deref(), Some("item1"));
+    }
+
+    #[test]
+    fn test_agent_message_new() {
+        let sender = AgentEndpoint::agent("sender");
+        let receiver = AgentEndpoint::agent("receiver");
+        let msg = AgentMessage::new(
+            sender.clone(),
+            vec![receiver.clone()],
+            MessagePayload::Custom(serde_json::json!("hello")),
+        );
+        assert_eq!(msg.msg_type, MessageType::Request);
+        assert_eq!(msg.sender.agent_id, "sender");
+        assert_eq!(msg.receivers.len(), 1);
+    }
+
+    #[test]
+    fn test_agent_message_response_to() {
+        let original = AgentMessage::new(
+            AgentEndpoint::agent("alice"),
+            vec![AgentEndpoint::agent("bob")],
+            MessagePayload::Custom(serde_json::json!("req")),
+        );
+        let response = AgentMessage::response_to(
+            &original,
+            MessagePayload::Custom(serde_json::json!("resp")),
+        );
+        assert_eq!(response.msg_type, MessageType::Response);
+        assert_eq!(response.correlation_id, Some(original.id));
+        assert_eq!(response.sender.agent_id, "bob");
+        assert_eq!(response.receivers[0].agent_id, "alice");
+    }
+
+    #[test]
+    fn test_agent_message_publish() {
+        let msg = AgentMessage::publish(
+            AgentEndpoint::agent("broadcaster"),
+            MessagePayload::Custom(serde_json::json!("broadcast")),
+        );
+        assert_eq!(msg.msg_type, MessageType::Publish);
+        assert!(msg.receivers.is_empty());
+    }
+
+    #[test]
+    fn test_message_pattern_by_type() {
+        let msg = AgentMessage::new(
+            AgentEndpoint::agent("a"),
+            vec![AgentEndpoint::agent("b")],
+            MessagePayload::Custom(serde_json::json!("test")),
+        );
+        assert!(MessagePattern::ByType(MessageType::Request).matches(&msg));
+        assert!(!MessagePattern::ByType(MessageType::Response).matches(&msg));
+    }
+
+    #[test]
+    fn test_message_pattern_by_agent() {
+        let msg = AgentMessage::new(
+            AgentEndpoint::agent("qa_agent"),
+            vec![],
+            MessagePayload::Custom(serde_json::json!("x")),
+        );
+        assert!(MessagePattern::ByAgent("qa_agent".to_string()).matches(&msg));
+        assert!(!MessagePattern::ByAgent("other".to_string()).matches(&msg));
+    }
+
+    #[test]
+    fn test_message_pattern_by_task_item() {
+        let msg = AgentMessage::new(
+            AgentEndpoint::for_task_item("agent", "t1", "i1"),
+            vec![],
+            MessagePayload::Custom(serde_json::json!("x")),
+        );
+        assert!(MessagePattern::ByTaskItem("t1".to_string(), "i1".to_string()).matches(&msg));
+        assert!(!MessagePattern::ByTaskItem("t1".to_string(), "i2".to_string()).matches(&msg));
+    }
+
+    #[test]
+    fn test_message_pattern_clone() {
+        let pattern = MessagePattern::ByPhase("qa".to_string());
+        let cloned = pattern.clone();
+        if let MessagePattern::ByPhase(p) = cloned {
+            assert_eq!(p, "qa");
+        } else {
+            panic!("unexpected pattern variant");
+        }
+    }
+
+    #[test]
+    fn test_message_pattern_debug() {
+        let pattern = MessagePattern::ByType(MessageType::Request);
+        let debug = format!("{:?}", pattern);
+        assert!(debug.contains("ByType"));
+    }
+
+    #[test]
+    fn test_artifact_registry_get_by_phase() {
+        let mut registry = ArtifactRegistry::default();
+        registry.register(
+            "qa".to_string(),
+            Artifact::new(ArtifactKind::Custom {
+                name: "a".to_string(),
+            }),
+        );
+        registry.register(
+            "implement".to_string(),
+            Artifact::new(ArtifactKind::Custom {
+                name: "b".to_string(),
+            }),
+        );
+
+        assert_eq!(registry.get_by_phase("qa").len(), 1);
+        assert_eq!(registry.get_by_phase("implement").len(), 1);
+        assert_eq!(registry.get_by_phase("nonexistent").len(), 0);
+    }
+
+    #[test]
+    fn test_artifact_registry_get_by_kind() {
+        let mut registry = ArtifactRegistry::default();
+        let kind = ArtifactKind::TestResult {
+            passed: 10,
+            failed: 2,
+        };
+        registry.register("qa".to_string(), Artifact::new(kind.clone()));
+        registry.register(
+            "qa".to_string(),
+            Artifact::new(ArtifactKind::Custom {
+                name: "x".to_string(),
+            }),
+        );
+
+        let results = registry.get_by_kind(&kind);
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_artifact_registry_get_latest() {
+        let mut registry = ArtifactRegistry::default();
+        assert!(registry.get_latest("qa").is_none());
+
+        registry.register(
+            "qa".to_string(),
+            Artifact::new(ArtifactKind::Custom {
+                name: "first".to_string(),
+            }),
+        );
+        registry.register(
+            "qa".to_string(),
+            Artifact::new(ArtifactKind::Custom {
+                name: "second".to_string(),
+            }),
+        );
+
+        let latest = registry.get_latest("qa").unwrap();
+        if let ArtifactKind::Custom { name } = &latest.kind {
+            assert_eq!(name, "second");
+        }
+    }
+
+    #[test]
+    fn test_artifact_registry_all() {
+        let mut registry = ArtifactRegistry::default();
+        registry.register(
+            "qa".to_string(),
+            Artifact::new(ArtifactKind::Custom {
+                name: "a".to_string(),
+            }),
+        );
+        registry.register(
+            "plan".to_string(),
+            Artifact::new(ArtifactKind::Custom {
+                name: "b".to_string(),
+            }),
+        );
+
+        let all = registry.all();
+        assert_eq!(all.len(), 2);
+    }
+
+    #[test]
+    fn test_shared_state_operations() {
+        let mut state = SharedState::default();
+        assert!(state.get("key").is_none());
+
+        state.set("key", serde_json::json!("value"));
+        assert_eq!(state.get("key").unwrap(), &serde_json::json!("value"));
+
+        let removed = state.remove("key");
+        assert!(removed.is_some());
+        assert!(state.get("key").is_none());
+    }
+
+    #[test]
+    fn test_shared_state_render_non_string_json() {
+        let mut state = SharedState::default();
+        state.set("data", serde_json::json!({"nested": true}));
+
+        let result = state.render_template("result: {data}");
+        assert!(result.contains("nested"));
+    }
+
+    #[test]
+    fn test_agent_context_to_ref() {
+        let ctx = AgentContext::new(
+            "t1".to_string(),
+            "i1".to_string(),
+            2,
+            "qa".to_string(),
+            PathBuf::from("/ws"),
+            "ws1".to_string(),
+        );
+        let r = ctx.to_ref();
+        assert_eq!(r.task_id, "t1");
+        assert_eq!(r.item_id, "i1");
+        assert_eq!(r.cycle, 2);
+        assert_eq!(r.phase, Some("qa".to_string()));
+    }
+
+    #[test]
+    fn test_agent_context_add_upstream_output() {
+        let mut ctx = AgentContext::new(
+            "t1".to_string(),
+            "i1".to_string(),
+            1,
+            "qa".to_string(),
+            PathBuf::from("/ws"),
+            "ws1".to_string(),
+        );
+
+        let output = AgentOutput::new(
+            Uuid::new_v4(),
+            "plan_agent".to_string(),
+            "plan".to_string(),
+            0,
+            "plan output".to_string(),
+            "".to_string(),
+        )
+        .with_artifacts(vec![Artifact::new(ArtifactKind::Custom {
+            name: "plan_doc".to_string(),
+        })]);
+
+        ctx.add_upstream_output(output);
+        assert_eq!(ctx.upstream_outputs.len(), 1);
+        assert_eq!(ctx.artifacts.count(), 1);
+    }
+
+    #[test]
+    fn test_agent_context_render_source_tree_alias() {
+        let ctx = AgentContext::new(
+            "t1".to_string(),
+            "i1".to_string(),
+            1,
+            "qa".to_string(),
+            PathBuf::from("/workspace"),
+            "ws1".to_string(),
+        );
+        let result = ctx.render_template("root={source_tree}");
+        assert_eq!(result, "root=/workspace");
+    }
+
+    #[test]
+    fn test_parse_artifacts_from_output_json_object() {
+        let input = r#"{"kind":"ticket","severity":"high","category":"bug"}"#;
+        let artifacts = parse_artifacts_from_output(input);
+        assert_eq!(artifacts.len(), 1);
+        if let ArtifactKind::Ticket { severity, category } = &artifacts[0].kind {
+            assert_eq!(*severity, Severity::High);
+            assert_eq!(category, "bug");
+        } else {
+            panic!("expected Ticket");
+        }
+    }
+
+    #[test]
+    fn test_parse_artifacts_from_output_json_array() {
+        let input = r#"[{"kind":"test_result","passed":5,"failed":1},{"kind":"code_change","files":["a.rs"]}]"#;
+        let artifacts = parse_artifacts_from_output(input);
+        assert_eq!(artifacts.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_artifacts_from_output_ticket_marker() {
+        let input = "some output\n[TICKET: severity=high, category=bug]\nmore output";
+        let artifacts = parse_artifacts_from_output(input);
+        assert_eq!(artifacts.len(), 1);
+        if let ArtifactKind::Ticket { severity, category } = &artifacts[0].kind {
+            assert_eq!(*severity, Severity::High);
+            assert_eq!(category, "bug");
+        }
+    }
+
+    #[test]
+    fn test_parse_artifacts_from_output_ticket_severity_levels() {
+        let levels = [
+            ("severity=critical", Severity::Critical),
+            ("severity=medium", Severity::Medium),
+            ("severity=low", Severity::Low),
+            ("severity=unknown", Severity::Info),
+        ];
+        for (marker, expected) in levels {
+            let input = format!("[TICKET: {}, category=bug]", marker);
+            let artifacts = parse_artifacts_from_output(&input);
+            assert_eq!(artifacts.len(), 1);
+            if let ArtifactKind::Ticket { severity, .. } = &artifacts[0].kind {
+                assert_eq!(*severity, expected, "failed for marker: {}", marker);
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_artifacts_from_output_ticket_categories() {
+        let categories = [
+            ("category=security", "security"),
+            ("category=performance", "performance"),
+            ("category=other", "general"),
+        ];
+        for (marker, expected) in categories {
+            let input = format!("[TICKET: severity=high, {}]", marker);
+            let artifacts = parse_artifacts_from_output(&input);
+            if let ArtifactKind::Ticket { category, .. } = &artifacts[0].kind {
+                assert_eq!(category, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_artifacts_from_output_no_artifacts() {
+        let artifacts = parse_artifacts_from_output("plain text with no markers");
+        assert!(artifacts.is_empty());
+    }
+
+    #[test]
+    fn test_extract_artifact_kind_decision() {
+        let value = serde_json::json!({
+            "kind": "decision",
+            "choice": "option_a",
+            "rationale": "better performance"
+        });
+        let kind = extract_artifact_kind(&value).unwrap();
+        if let ArtifactKind::Decision { choice, rationale } = kind {
+            assert_eq!(choice, "option_a");
+            assert_eq!(rationale, "better performance");
+        } else {
+            panic!("expected Decision");
+        }
+    }
+
+    #[test]
+    fn test_extract_artifact_kind_analysis() {
+        let value = serde_json::json!({
+            "kind": "analysis",
+            "findings": [
+                {"title": "Issue 1", "severity": "high", "description": "desc"}
+            ]
+        });
+        let kind = extract_artifact_kind(&value).unwrap();
+        if let ArtifactKind::Analysis { findings } = kind {
+            assert_eq!(findings.len(), 1);
+            assert_eq!(findings[0].title, "Issue 1");
+            assert_eq!(findings[0].severity, Severity::High);
+        }
+    }
+
+    #[test]
+    fn test_extract_artifact_kind_unknown_returns_none() {
+        let value = serde_json::json!({"kind": "unknown_type"});
+        assert!(extract_artifact_kind(&value).is_none());
+    }
+
+    #[test]
+    fn test_extract_artifact_kind_missing_kind_returns_none() {
+        let value = serde_json::json!({"data": "value"});
+        assert!(extract_artifact_kind(&value).is_none());
+    }
+
+    #[test]
+    fn test_workflow_dag_get_ready_nodes() {
+        let mut dag = WorkflowDag::new("test".to_string(), "Test".to_string());
+
+        dag.add_node(WorkflowNode {
+            id: "a".to_string(),
+            step_type: StepType::InitOnce,
+            agent_requirement: AgentRequirement {
+                capability: None,
+                preferred_agents: vec![],
+                min_success_rate: None,
+            },
+            prehook: None,
+            config: NodeConfig::default(),
+        });
+        dag.add_node(WorkflowNode {
+            id: "b".to_string(),
+            step_type: StepType::Qa,
+            agent_requirement: AgentRequirement {
+                capability: None,
+                preferred_agents: vec![],
+                min_success_rate: None,
+            },
+            prehook: None,
+            config: NodeConfig::default(),
+        });
+        dag.add_edge(WorkflowEdge {
+            from: "a".to_string(),
+            to: "b".to_string(),
+            condition: None,
+            transform: None,
+        });
+
+        let completed = std::collections::HashSet::new();
+        let ready = dag.get_ready_nodes(&completed);
+        assert_eq!(ready.len(), 1);
+        assert!(ready.contains(&"a".to_string()));
+
+        let mut completed = std::collections::HashSet::new();
+        completed.insert("a".to_string());
+        let ready = dag.get_ready_nodes(&completed);
+        assert_eq!(ready.len(), 1);
+        assert!(ready.contains(&"b".to_string()));
+    }
+
+    #[test]
     fn test_pipeline_vars_escaped_in_template() {
         let ctx = AgentContext::new(
             "task1".to_string(),
