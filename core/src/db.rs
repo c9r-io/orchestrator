@@ -339,6 +339,12 @@ pub fn init_schema(db_path: &Path) -> Result<()> {
         "output_json_path",
         "ALTER TABLE command_runs ADD COLUMN output_json_path TEXT",
     )?;
+    ensure_column(
+        &conn,
+        "command_runs",
+        "pid",
+        "ALTER TABLE command_runs ADD COLUMN pid INTEGER",
+    )?;
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_command_runs_validation_status ON command_runs(validation_status)",
         [],

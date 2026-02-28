@@ -568,6 +568,14 @@ pub async fn process_item_filtered(
     // ── Unified step loop ────────────────────────────────────────────
 
     for step in &task_ctx.execution_plan.steps {
+        // Check for pause/stop between steps
+        if runtime.stop_flag.load(std::sync::atomic::Ordering::SeqCst) {
+            return Ok(acc.pipeline_vars);
+        }
+        if super::task_state::is_task_paused_in_db(state, task_id)? {
+            return Ok(acc.pipeline_vars);
+        }
+
         // Skip guards (handled separately in loop_engine), disabled, and filtered-out steps
         if step.is_guard || !step.enabled || !should_run_step(&step.id) {
             continue;

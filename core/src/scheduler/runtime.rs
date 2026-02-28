@@ -78,8 +78,12 @@ pub async fn stop_task_runtime(state: Arc<InnerState>, task_id: &str, status: &s
     };
 
     if let Some(runtime) = runtime {
+        // In-process path: we have a handle to the running task
         runtime.stop_flag.store(true, Ordering::SeqCst);
         kill_current_child(&runtime).await;
+    } else {
+        // Cross-process path: find and kill active children from DB
+        kill_active_children_from_db(&state, task_id);
     }
 
     set_task_status(&state, task_id, status, false)?;
@@ -137,6 +141,25 @@ pub async fn shutdown_running_tasks(state: Arc<InnerState>) {
     let mut running = state.running.lock().await;
     for (task_id, _) in runtimes {
         running.remove(&task_id);
+    }
+}
+
+/// Kill active child processes found via DB when we don't have an in-process handle.
+/// Used by cross-process `task pause` where `state.running` is empty.
+fn kill_active_children_from_db(state: &InnerState, task_id: &str) {
+    let pids = match state.db_writer.find_active_child_pids(task_id) {
+        Ok(pids) => pids,
+        Err(_) => return,
+    };
+    for pid in pids {
+        #[cfg(unix)]
+        {
+            // SAFETY: kill(-pid, SIGKILL) sends SIGKILL to the process group.
+            // The pid was recorded from a child we spawned, so the group belongs to us.
+            unsafe {
+                libc::kill(-(pid as i32), libc::SIGKILL);
+            }
+        }
     }
 }
 

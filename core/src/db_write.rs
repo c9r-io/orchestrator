@@ -237,6 +237,34 @@ impl DbWriteCoordinator {
         Ok(())
     }
 
+    pub fn update_command_run_pid(&self, run_id: &str, pid: i64) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        conn.execute(
+            "UPDATE command_runs SET pid = ?2 WHERE id = ?1",
+            params![run_id, pid],
+        )?;
+        Ok(())
+    }
+
+    pub fn find_active_child_pids(&self, task_id: &str) -> Result<Vec<i64>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        let mut stmt = conn.prepare(
+            "SELECT cr.pid FROM command_runs cr
+             JOIN task_items ti ON cr.task_item_id = ti.id
+             WHERE ti.task_id = ?1 AND cr.exit_code = -1 AND cr.pid IS NOT NULL",
+        )?;
+        let pids = stmt
+            .query_map(params![task_id], |row| row.get::<_, i64>(0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(pids)
+    }
+
     pub fn update_task_cycle_state(
         &self,
         task_id: &str,

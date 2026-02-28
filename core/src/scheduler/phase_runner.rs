@@ -277,6 +277,10 @@ async fn run_phase_with_timeout(
     }
 
     let child_pid = child.id();
+    // Write PID to command_runs so cross-process pause can find and kill it
+    if let Some(pid) = child_pid {
+        let _ = state.db_writer.update_command_run_pid(&run_id, pid as i64);
+    }
     let preview: String = command.chars().take(120).collect();
     insert_event(
         state,
