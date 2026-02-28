@@ -85,6 +85,7 @@ pub async fn execute_builtin_step(
     step: &TaskExecutionStep,
     task_ctx: &TaskRuntimeContext,
     runtime: &RunningTask,
+    rel_path: &str,
 ) -> Result<(crate::dto::RunResult, PipelineVariables)> {
     let phase = step
         .step_type
@@ -131,7 +132,7 @@ pub async fn execute_builtin_step(
                 phase,
                 tty: step.tty,
                 capability: step.required_capability.as_deref(),
-                rel_path: ".",
+                rel_path,
                 ticket_paths: &[],
                 workspace_root: &task_ctx.workspace_root,
                 workspace_id: &task_ctx.workspace_id,
@@ -855,7 +856,7 @@ pub async fn process_item(
                 step_ctx.pipeline_vars = pipeline_vars.clone();
 
                 let (result, new_pipeline) =
-                    execute_builtin_step(state, task_id, item_id, chain_step, &step_ctx, runtime)
+                    execute_builtin_step(state, task_id, item_id, chain_step, &step_ctx, runtime, &item.qa_file_path)
                         .await?;
                 pipeline_vars = new_pipeline;
 
@@ -905,7 +906,7 @@ pub async fn process_item(
         step_ctx.pipeline_vars = pipeline_vars.clone();
 
         let (result, new_pipeline) =
-            execute_builtin_step(state, task_id, item_id, step, &step_ctx, runtime).await?;
+            execute_builtin_step(state, task_id, item_id, step, &step_ctx, runtime, &item.qa_file_path).await?;
         pipeline_vars = new_pipeline;
 
         match step_type {
