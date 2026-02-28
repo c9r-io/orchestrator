@@ -3,6 +3,7 @@ mod loop_engine;
 mod phase_runner;
 mod query;
 mod runtime;
+pub mod check;
 pub mod safety;
 mod task_state;
 pub mod trace;

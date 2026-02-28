@@ -611,7 +611,7 @@ fn detect_unexpanded_template_var(command_runs: &[CommandRunDto], anomalies: &mu
 }
 
 /// Find `{var_name}` patterns (lowercase + underscore) in a string.
-fn find_template_vars(s: &str) -> Vec<String> {
+pub fn find_template_vars(s: &str) -> Vec<String> {
     let mut results = Vec::new();
     let bytes = s.as_bytes();
     let mut i = 0;
