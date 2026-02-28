@@ -58,7 +58,7 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
             .or_else(|| step.required_capability.clone())
             .unwrap_or(step.id.clone());
 
-        seen_ids.insert(key.clone());
+        seen_ids.insert(step.id.clone());
 
         // Apply defaults based on step id
         if step.required_capability.is_none()
