@@ -30,11 +30,32 @@ spec:
       Use /arch-guidance — read docs/architecture.md first.
       Use /rust-conventions for coding patterns.
 
-      Create a detailed implementation plan:
-      1. Identify which files need changes
-      2. Design the approach with minimal blast radius
-      3. Consider test strategy (unit tests required for all new logic)
-      4. Output the plan as structured text
+      Create a detailed implementation plan with these sections:
+
+      ## Files to Change
+      Identify exactly which files need changes and what changes each file needs.
+
+      ## Approach
+      Design the approach with minimal blast radius. Do NOT introduce new
+      abstractions (traits, generics, wrapper types) unless they are immediately
+      used by at least two call sites. Prefer simple, direct code.
+
+      ## Scope Boundary
+      Explicitly list what is IN scope and OUT of scope. Any change not listed
+      here must not be made during implementation.
+
+      ## Test Strategy
+      Unit tests are required for all new logic.
+
+      ## QA Strategy
+      Classify this task and define the appropriate QA approach:
+      - For REFACTORING tasks: QA should focus on behavioral equivalence —
+        verify that given identical inputs, outputs remain unchanged. This is
+        best validated through unit tests, not scenario-based QA documents.
+        State explicitly if new QA docs are NOT needed.
+      - For NEW FEATURE tasks: QA should cover happy path, error cases, and
+        boundary conditions via scenario-based QA documents under docs/qa/.
+      - For BUG FIX tasks: QA should verify the fix and add a regression test.
 
       Current diff in this cycle: {diff}"
       --model minimax-coding-plan/MiniMax-M2.5-highspeed
@@ -45,12 +66,20 @@ spec:
       "/qa-doc-gen
 
       Project: {source_tree}
-      Plan (summary):
-      {plan_output}
-      Full plan file: {plan_output_path}
 
-      Generate executable QA test documents for the planned changes.
-      Place them under docs/qa/ following existing conventions."
+      IMPORTANT: First read the full plan file at {plan_output_path} to understand
+      the complete implementation plan, including its QA Strategy section.
+
+      Follow the QA Strategy defined in the plan:
+      - If the plan says QA docs are NOT needed (e.g. refactoring tasks where
+        behavioral equivalence is validated by unit tests), output a brief
+        summary explaining why and skip QA doc generation.
+      - If the plan calls for scenario-based QA docs, generate them under
+        docs/qa/ following existing conventions.
+
+      Do NOT generate QA documents that duplicate what unit tests already cover.
+      Focus on integration-level and end-to-end behaviors that unit tests cannot
+      verify (CLI commands, cross-module interactions, YAML round-trips)."
       --model minimax-coding-plan/MiniMax-M2.5-highspeed
 ---
 # Coder agent (MiniMax-M2.5-highspeed) — code generation, fixing, and test alignment
@@ -74,11 +103,12 @@ spec:
       Use /rust-conventions for all Rust code.
       Use /test-authoring — add unit tests for new logic.
 
-      Plan (summary):
-      {plan_output}
-      Full plan file: {plan_output_path}
+      IMPORTANT: First read the full plan file at {plan_output_path}.
+      Follow the plan exactly — implement only what is listed in the plan's
+      'Files to Change' and 'Scope Boundary' sections. Do NOT add abstractions,
+      traits, or types that are not specified in the plan.
 
-      Implement the changes. After writing code, run 'cd {source_tree}/core && cargo check'
+      After writing code, run 'cd {source_tree}/core && cargo check'
       to verify compilation before finishing."
       --model minimax-coding-plan/MiniMax-M2.5-highspeed
 
