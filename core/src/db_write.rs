@@ -101,6 +101,76 @@ impl DbWriteCoordinator {
         Ok(())
     }
 
+    pub fn update_command_run(&self, run: &NewCommandRun) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        conn.execute(
+            "UPDATE command_runs SET exit_code = ?2, ended_at = ?3, interrupted = ?4, output_json = ?5, artifacts_json = ?6, confidence = ?7, quality_score = ?8, validation_status = ?9, session_id = ?10, machine_output_source = ?11, output_json_path = ?12 WHERE id = ?1",
+            params![
+                run.id,
+                run.exit_code,
+                run.ended_at,
+                run.interrupted,
+                run.output_json,
+                run.artifacts_json,
+                run.confidence,
+                run.quality_score,
+                run.validation_status,
+                run.session_id,
+                run.machine_output_source,
+                run.output_json_path
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_command_run_with_events(
+        &self,
+        run: &NewCommandRun,
+        events: &[DbEventRecord<'_>],
+    ) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
+            "UPDATE command_runs SET exit_code = ?2, ended_at = ?3, interrupted = ?4, output_json = ?5, artifacts_json = ?6, confidence = ?7, quality_score = ?8, validation_status = ?9, session_id = ?10, machine_output_source = ?11, output_json_path = ?12 WHERE id = ?1",
+            params![
+                run.id,
+                run.exit_code,
+                run.ended_at,
+                run.interrupted,
+                run.output_json,
+                run.artifacts_json,
+                run.confidence,
+                run.quality_score,
+                run.validation_status,
+                run.session_id,
+                run.machine_output_source,
+                run.output_json_path
+            ],
+        )?;
+
+        for event in events {
+            tx.execute(
+                "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    event.task_id,
+                    event.task_item_id,
+                    event.event_type,
+                    event.payload_json,
+                    now_ts()
+                ],
+            )?;
+        }
+
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn persist_phase_result(
         &self,
         run: &NewCommandRun,

@@ -159,6 +159,38 @@ async fn run_phase_with_timeout(
     .await
     .context("log file setup worker failed")??;
 
+    // Insert a "running" command_run record immediately so `task logs` shows it during execution
+    {
+        let initial_run = NewCommandRun {
+            id: run_id.clone(),
+            task_item_id: item_id.to_string(),
+            phase: phase.to_string(),
+            command: command.clone(),
+            cwd: workspace_root.to_string_lossy().to_string(),
+            workspace_id: workspace_id.to_string(),
+            agent_id: agent_id.to_string(),
+            exit_code: -1,
+            stdout_path: stdout_path.to_string_lossy().to_string(),
+            stderr_path: stderr_path.to_string_lossy().to_string(),
+            started_at: now.clone(),
+            ended_at: String::new(),
+            interrupted: 0,
+            output_json: "{}".to_string(),
+            artifacts_json: "[]".to_string(),
+            confidence: None,
+            quality_score: None,
+            validation_status: "running".to_string(),
+            session_id: None,
+            machine_output_source: if tty {
+                "output_json_path".to_string()
+            } else {
+                "stdout".to_string()
+            },
+            output_json_path: None,
+        };
+        state.db_writer.insert_command_run(&initial_run)?;
+    }
+
     let mut session_id: Option<String> = None;
     let command_to_run = if tty {
         let sid = Uuid::new_v4().to_string();
@@ -475,7 +507,7 @@ async fn run_phase_with_timeout(
             event_type: publish_event_type,
             payload_json: publish_event_payload_json.as_str(),
         });
-        writer.persist_phase_result_with_events(&insert_payload, &events)
+        writer.update_command_run_with_events(&insert_payload, &events)
     })
     .await
     .context("command run insert worker failed")??;

@@ -25,7 +25,8 @@ spec:
     plan: >-
       opencode run
       "You are working on the Agent Orchestrator project at {source_tree}.
-      Your goal: {goal}.
+      Your task: create a detailed implementation plan for: {goal}.
+      Output ONLY a plan document — do NOT write any code or make file changes.
 
       Use /arch-guidance — read docs/architecture.md first.
       Use /rust-conventions for coding patterns.
@@ -98,12 +99,11 @@ spec:
     implement: >-
       opencode run
       "You are working on the Agent Orchestrator project at {source_tree}.
-      Your goal: {goal}.
 
       Use /rust-conventions for all Rust code.
       Use /test-authoring — add unit tests for new logic.
 
-      IMPORTANT: First read the full plan file at {plan_output_path}.
+      IMPORTANT: Read the plan at {plan_output_path} and implement it exactly.
       Follow the plan exactly — implement only what is listed in the plan's
       'Files to Change' and 'Scope Boundary' sections. Do NOT add abstractions,
       traits, or types that are not specified in the plan.
