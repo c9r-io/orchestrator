@@ -16,10 +16,12 @@ Execute scenario-based QA testing driven by `docs/qa/**/*.md` documents.
    cd core && cargo build --release
    ```
 
-2. **Initialize orchestrator if needed**:
+2. **Initialize orchestrator if needed** — only when the database does not exist yet:
    ```bash
-   rm -f data/agent_orchestrator.db config/default.yaml
-   ./scripts/orchestrator.sh init
+   # DANGER: NEVER run `rm -f data/agent_orchestrator.db` or `db reset` during
+   # an active workflow run. Doing so destroys all in-flight task state.
+   # Only initialize when no database exists at all.
+   test -f data/agent_orchestrator.db || ./scripts/orchestrator.sh init
    ```
 
 3. QA docs exist under `docs/qa/`.
