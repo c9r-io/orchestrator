@@ -205,42 +205,53 @@ kind: Workflow
 metadata:
   name: self-bootstrap
 spec:
+  # Step execution uses the Unified Step Execution Model (design doc 13):
+  # - Steps identified by string `id`, no WorkflowStepType enum
+  # - `scope: task` steps run once per cycle; `scope: item` steps fan out per QA file
+  # - Segment-based execution groups contiguous same-scope steps (design doc 12)
+  #
+  # Segments for this workflow:
+  #   ┌─── Task ───────────────────────────────────────────┐  ┌── Item ──────────┐  ┌── Task ──────────────────────┐
+  #   plan + qa_doc_gen + implement + self_test               qa_testing + ticket_fix  align_tests + doc_governance
   steps:
-    # Phase 1: Planning — create implementation plan (architect/opus)
+    # ── Task segment: plan → qa_doc_gen → implement → self_test ──
     - id: plan
       type: plan
+      scope: task
       required_capability: plan
       enabled: true
       repeatable: false
       tty: false
 
-    # Phase 2: QA Doc Generation — produce executable test docs from plan (architect/opus)
     - id: qa_doc_gen
       type: qa_doc_gen
+      scope: task
       required_capability: qa_doc_gen
       enabled: true
       repeatable: false
       tty: false
 
-    # Phase 3: Implementation — write code + unit tests (coder/minimax)
     - id: implement
       type: implement
+      scope: task
       required_capability: implement
       enabled: true
       repeatable: true
       tty: false
 
-    # Phase 3.5: Self-Test — cargo check + cargo test --lib + manifest validate
+    # Self-Test — cargo check + cargo test --lib + manifest validate (builtin)
     - id: self_test
       type: self_test
+      scope: task
       enabled: true
       repeatable: true
       tty: false
 
-    # Phase 4: QA Testing — rebuild CLI + execute QA scenarios + create tickets (tester/minimax)
+    # ── Item segment: qa_testing + ticket_fix (fan out per QA file) ──
     # Deferred to Cycle 2 (last cycle) so Cycle 1 stays focused on production code
     - id: qa_testing
       type: qa_testing
+      scope: item
       required_capability: qa_testing
       enabled: true
       repeatable: true
@@ -250,9 +261,9 @@ spec:
         when: "is_last_cycle"
         reason: "QA testing deferred to final cycle"
 
-    # Phase 5: Ticket Fix — fix QA failures (coder/minimax, prehook: last cycle + tickets exist)
     - id: ticket_fix
       type: ticket_fix
+      scope: item
       required_capability: ticket_fix
       enabled: true
       repeatable: true
@@ -262,10 +273,11 @@ spec:
         when: "is_last_cycle && active_ticket_count > 0"
         reason: "Only fix tickets on last cycle when there are active tickets"
 
-    # Phase 6: Align Tests — cargo test + clippy + build, iterate until stable (coder/minimax)
-    # Deferred to Cycle 2 so Cycle 1 only runs self_test for fast feedback
+    # ── Task segment: align_tests + doc_governance ──
+    # Deferred to Cycle 2 for full validation pass
     - id: align_tests
       type: align_tests
+      scope: task
       required_capability: align_tests
       enabled: true
       repeatable: true
@@ -275,10 +287,9 @@ spec:
         when: "is_last_cycle"
         reason: "Test alignment deferred to final cycle"
 
-    # Phase 7: Doc Governance — audit and remediate doc quality (reviewer/minimax)
-    # Deferred to Cycle 2 for full validation pass
     - id: doc_governance
       type: doc_governance
+      scope: task
       required_capability: doc_governance
       enabled: true
       repeatable: true
@@ -288,7 +299,7 @@ spec:
         when: "is_last_cycle"
         reason: "Doc governance deferred to final cycle"
 
-    # Phase 8: Loop guard (reviewer/minimax)
+    # Loop guard (builtin, always last)
     - id: loop_guard
       type: loop_guard
       enabled: true
