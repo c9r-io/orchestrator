@@ -221,7 +221,7 @@ async fn run_task_loop_core(
         } else {
             let mut item_state: HashMap<String, StepExecutionAccumulator> = HashMap::new();
             let mut halt_after_task_segment = false;
-            for segment in &segments {
+            for (segment_idx, segment) in segments.iter().enumerate() {
                 match segment.scope {
                     StepScope::Task => {
                         // Run task-scoped steps once using first item as anchor
@@ -244,12 +244,24 @@ async fn run_task_loop_core(
                             // Propagate task-scoped pipeline vars to subsequent segments
                             task_ctx.pipeline_vars = task_acc.pipeline_vars.clone();
                             if task_acc.terminal {
+                                let skipped_item_steps = collect_remaining_item_step_steps(
+                                    &task_ctx,
+                                    &segments,
+                                    segment_idx + 1,
+                                );
                                 propagate_task_segment_terminal_state(
                                     &items,
                                     &mut item_state,
                                     &task_acc,
                                     &task_ctx.pipeline_vars,
+                                    &skipped_item_steps,
                                 );
+                                emit_skipped_item_step_events(
+                                    &state,
+                                    task_id,
+                                    &items,
+                                    &skipped_item_steps,
+                                )?;
                                 halt_after_task_segment = true;
                             }
                         }
@@ -569,6 +581,7 @@ fn propagate_task_segment_terminal_state(
     item_state: &mut HashMap<String, StepExecutionAccumulator>,
     task_acc: &StepExecutionAccumulator,
     task_pipeline_vars: &crate::config::PipelineVariables,
+    skipped_item_steps: &[String],
 ) {
     for item in items {
         let acc = item_state
@@ -580,8 +593,65 @@ fn propagate_task_segment_terminal_state(
             acc.flags
                 .insert("execution_failed".to_string(), execution_failed);
         }
+        for step_id in skipped_item_steps {
+            acc.step_skipped.insert(step_id.clone(), true);
+        }
         acc.terminal = true;
     }
+}
+
+fn collect_remaining_item_step_steps(
+    task_ctx: &crate::config::TaskRuntimeContext,
+    segments: &[ScopeSegment],
+    start_idx: usize,
+) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut step_ids = Vec::new();
+
+    for segment in segments.iter().skip(start_idx) {
+        if segment.scope != StepScope::Item {
+            continue;
+        }
+        for step in &task_ctx.execution_plan.steps {
+            if !segment.step_ids.contains(&step.id) || !step.enabled {
+                continue;
+            }
+            if !step.repeatable && task_ctx.current_cycle > 1 {
+                continue;
+            }
+            if seen.insert(step.id.clone()) {
+                step_ids.push(step.id.clone());
+            }
+        }
+    }
+
+    step_ids
+}
+
+fn emit_skipped_item_step_events(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    items: &[crate::dto::TaskItemRow],
+    skipped_item_steps: &[String],
+) -> Result<()> {
+    for item in items {
+        for step_id in skipped_item_steps {
+            insert_event(
+                state,
+                task_id,
+                Some(&item.id),
+                "step_skipped",
+                json!({
+                    "step": step_id,
+                    "step_id": step_id,
+                    "step_scope": StepScope::Item,
+                    "reason": "upstream_task_segment_terminated"
+                }),
+            )?;
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -886,6 +956,7 @@ mod tests {
             &mut item_state,
             &task_acc,
             &PipelineVariables::default(),
+            &["qa_testing".to_string(), "ticket_fix".to_string()],
         );
 
         assert_eq!(item_state.len(), 2);
@@ -894,6 +965,8 @@ mod tests {
             assert!(acc.terminal);
             assert_eq!(acc.item_status, "unresolved");
             assert_eq!(acc.flags.get("execution_failed").copied(), Some(true));
+            assert_eq!(acc.step_skipped.get("qa_testing").copied(), Some(true));
+            assert_eq!(acc.step_skipped.get("ticket_fix").copied(), Some(true));
             assert_eq!(
                 acc.pipeline_vars
                     .vars
@@ -902,5 +975,108 @@ mod tests {
                 Some("provider rate limit exceeded")
             );
         }
+    }
+
+    #[test]
+    fn collect_remaining_item_step_steps_returns_only_item_steps_after_segment() {
+        use crate::config::{
+            PipelineVariables, SafetyConfig, StepBehavior, TaskExecutionPlan, TaskExecutionStep,
+            TaskRuntimeContext, WorkflowFinalizeConfig, WorkflowLoopConfig,
+        };
+
+        let task_ctx = TaskRuntimeContext {
+            workspace_id: "ws".into(),
+            workspace_root: "/tmp".into(),
+            ticket_dir: "tickets".into(),
+            current_cycle: 2,
+            execution_plan: TaskExecutionPlan {
+                steps: vec![
+                    TaskExecutionStep {
+                        id: "implement".into(),
+                        required_capability: None,
+                        builtin: None,
+                        enabled: true,
+                        repeatable: true,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        outputs: vec![],
+                        pipe_to: None,
+                        command: None,
+                        chain_steps: vec![],
+                        scope: Some(StepScope::Task),
+                        behavior: StepBehavior::default(),
+                    },
+                    TaskExecutionStep {
+                        id: "qa_testing".into(),
+                        required_capability: None,
+                        builtin: None,
+                        enabled: true,
+                        repeatable: true,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        outputs: vec![],
+                        pipe_to: None,
+                        command: None,
+                        chain_steps: vec![],
+                        scope: Some(StepScope::Item),
+                        behavior: StepBehavior::default(),
+                    },
+                    TaskExecutionStep {
+                        id: "ticket_fix".into(),
+                        required_capability: None,
+                        builtin: None,
+                        enabled: true,
+                        repeatable: true,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        outputs: vec![],
+                        pipe_to: None,
+                        command: None,
+                        chain_steps: vec![],
+                        scope: Some(StepScope::Item),
+                        behavior: StepBehavior::default(),
+                    },
+                    TaskExecutionStep {
+                        id: "align_tests".into(),
+                        required_capability: None,
+                        builtin: None,
+                        enabled: true,
+                        repeatable: true,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        outputs: vec![],
+                        pipe_to: None,
+                        command: None,
+                        chain_steps: vec![],
+                        scope: Some(StepScope::Task),
+                        behavior: StepBehavior::default(),
+                    },
+                ],
+                loop_policy: WorkflowLoopConfig::default(),
+                finalize: WorkflowFinalizeConfig::default(),
+            },
+            init_done: true,
+            dynamic_steps: vec![],
+            pipeline_vars: PipelineVariables::default(),
+            safety: SafetyConfig::default(),
+            self_referential: false,
+            consecutive_failures: 0,
+        };
+        let segments = build_scope_segments(&task_ctx);
+
+        let skipped = collect_remaining_item_step_steps(&task_ctx, &segments, 1);
+
+        assert_eq!(
+            skipped,
+            vec!["qa_testing".to_string(), "ticket_fix".to_string()]
+        );
     }
 }

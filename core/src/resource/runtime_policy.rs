@@ -256,10 +256,9 @@ mod tests {
         }
         let resource = dispatch_resource(manifest).expect("dispatch should succeed");
         let err = resource.validate().unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("runner.allowed_shells cannot be empty")
-        );
+        assert!(err
+            .to_string()
+            .contains("runner.allowed_shells cannot be empty"));
     }
 
     #[test]
@@ -272,10 +271,9 @@ mod tests {
         }
         let resource = dispatch_resource(manifest).expect("dispatch should succeed");
         let err = resource.validate().unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("runner.allowed_shell_args cannot be empty")
-        );
+        assert!(err
+            .to_string()
+            .contains("runner.allowed_shell_args cannot be empty"));
     }
 
     #[test]

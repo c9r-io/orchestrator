@@ -88,7 +88,9 @@ cd core && cargo build --release && cd ..
   -w self -W self-bootstrap \
   --no-start \
   -g "课题名称：运行策略改为安全优先；背景：当前 RunnerConfig 默认仍为 Legacy，默认执行面过宽，与安全优先定位不一致；本轮任务目标：把默认运行策略改为 Allowlist，并让 Legacy 仅在显式声明时生效，同时补齐配置、校验、文档与测试；约束：必须保留显式 Legacy 兼容路径，不能破坏任务执行、日志、事件和已有 allowlist 字段语义；最终目标：默认行为为 Allowlist，Legacy 成为显式降级模式，相关测试与文档更新并通过。" \
-  -t core/src
+  -t core/src/config.rs \
+  -t core/src/config_load.rs \
+  -t core/src/runner.rs
 ```
 
 记录返回的 `<task_id>`，然后启动：
@@ -122,8 +124,8 @@ cd core && cargo build --release && cd ..
 ### 4.2 日志监控
 
 ```bash
-./scripts/orchestrator.sh task logs <task_id> --tail 100
-./scripts/orchestrator.sh task logs <task_id> --tail 100 --step implement
+./scripts/orchestrator.sh task logs --tail 100 <task_id>
+./scripts/orchestrator.sh task logs --tail 200 <task_id>
 ```
 
 重点观察：
@@ -132,7 +134,7 @@ cd core && cargo build --release && cd ..
 2. `implement` 是否覆盖默认值、配置转换、校验、测试与文档，而不是只改一个常量
 3. `self_test` 是否仍能发挥自举安全闸门作用
 4. `qa_testing` / `ticket_fix` 是否发现并回收兼容性回归
-5. 分步骤日志是否能定位卡住或偏题发生在哪一段
+5. 日志中各步骤的输出是否能定位卡住或偏题发生在哪一段
 
 ### 4.3 进程监控
 
@@ -152,8 +154,8 @@ git diff --stat
 当需要更细粒度观察时，人工可以补充使用：
 
 ```bash
-./scripts/orchestrator.sh task trace <task_id> -o json
-./scripts/orchestrator.sh debug task <task_id>
+./scripts/orchestrator.sh task trace <task_id> --json
+./scripts/orchestrator.sh task watch <task_id>
 sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id = '<task_id>' ORDER BY id DESC LIMIT 20;"
 ```
 
@@ -233,7 +235,7 @@ Cycle 2 中重点观察：
 
 ```bash
 ./scripts/orchestrator.sh task info <task_id> -o json
-./scripts/orchestrator.sh task logs <task_id> --tail 200
+./scripts/orchestrator.sh task logs --tail 200 <task_id>
 git diff --stat
 ```
 

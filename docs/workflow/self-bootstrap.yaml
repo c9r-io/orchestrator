@@ -59,7 +59,7 @@ spec:
       - For BUG FIX tasks: QA should verify the fix and add a regression test.
 
       Current diff in this cycle: {diff}"
-      --model minimax-coding-plan/MiniMax-M2.5-highspeed
+      --model google/gemini-3.1-pro-preview
 
     # QA doc generation: produce executable QA test documents from the plan
     qa_doc_gen: >-
@@ -110,7 +110,7 @@ spec:
 
       After writing code, run 'cd {source_tree}/core && cargo check'
       to verify compilation before finishing."
-      --model google/antigravity-claude-opus-4-5-thinking
+      --model google/antigravity-gemini-3-pro
 
     # Ticket fix: read tickets, verify, fix, re-run QA, delete ticket on success
     ticket_fix: >-
@@ -119,7 +119,7 @@ spec:
 
       Fix the QA tickets. Read tickets from {ticket_paths}, verify the issue, apply fixes,
       re-run the failing scenario, and delete the ticket once verified."
-      --model google/antigravity-claude-opus-4-5-thinking
+      --model google/antigravity-gemini-3-pro
 
     # Align tests: run cargo test + clippy + build, iterate until all pass
     align_tests: >-

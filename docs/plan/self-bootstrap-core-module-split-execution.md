@@ -88,7 +88,10 @@ cd core && cargo build --release && cd ..
   -w self -W self-bootstrap \
   --no-start \
   -g "课题名称：拆分超大核心模块；背景：config_load.rs、config.rs、dynamic_orchestration.rs、collab.rs 等文件体量过大且职责混杂，已形成维护和演进成本；本轮任务目标：在不改变外部行为的前提下按职责拆分这些超大模块，优先切开配置规范化/自愈、动态编排、消息总线与 artifact 相关逻辑，并保持测试通过；约束：必须保留 CLI 契约、配置格式、步骤语义、trace、事件和 message bus 对外行为；最终目标：超大文件完成高价值拆分，模块边界更清晰，测试与文档同步更新。" \
-  -t core/src
+  -t core/src/config_load.rs \
+  -t core/src/config.rs \
+  -t core/src/dynamic_orchestration.rs \
+  -t core/src/collab.rs
 ```
 
 记录返回的 `<task_id>`，然后启动：
@@ -122,8 +125,8 @@ cd core && cargo build --release && cd ..
 ### 4.2 日志监控
 
 ```bash
-./scripts/orchestrator.sh task logs <task_id> --tail 100
-./scripts/orchestrator.sh task logs <task_id> --tail 100 --step implement
+./scripts/orchestrator.sh task logs --tail 100 <task_id>
+./scripts/orchestrator.sh task logs --tail 200 <task_id>
 ```
 
 重点观察：
@@ -132,7 +135,7 @@ cd core && cargo build --release && cd ..
 2. `implement` 是否优先拆高耦合逻辑并保持内部接口清晰，而不是只新增转发层
 3. `self_test` 是否仍能发挥自举安全闸门作用
 4. `qa_testing` / `ticket_fix` 是否能发现拆分后引入的行为回归
-5. 分步骤日志是否能定位卡住或偏题发生在哪一段
+5. 日志中各步骤的输出是否能定位卡住或偏题发生在哪一段
 
 ### 4.3 进程监控
 
@@ -152,8 +155,8 @@ git diff --stat
 当需要更细粒度观察时，人工可以补充使用：
 
 ```bash
-./scripts/orchestrator.sh task trace <task_id> -o json
-./scripts/orchestrator.sh debug task <task_id>
+./scripts/orchestrator.sh task trace <task_id> --json
+./scripts/orchestrator.sh task watch <task_id>
 sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id = '<task_id>' ORDER BY id DESC LIMIT 20;"
 ```
 
@@ -233,7 +236,7 @@ Cycle 2 中重点观察：
 
 ```bash
 ./scripts/orchestrator.sh task info <task_id> -o json
-./scripts/orchestrator.sh task logs <task_id> --tail 200
+./scripts/orchestrator.sh task logs --tail 200 <task_id>
 git diff --stat
 ```
 

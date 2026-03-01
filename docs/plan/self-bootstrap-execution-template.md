@@ -93,7 +93,8 @@ cd core && cargo build --release && cd ..
   -w self -W self-bootstrap \
   --no-start \
   -g "<将上方任务目标压缩成单行，直接作为 goal 传入>" \
-  -t <主目标文件或主目标路径>
+  -t <主目标文件1> \
+  -t <主目标文件2>
 ```
 
 记录返回的 `<task_id>`，然后启动：
@@ -127,8 +128,8 @@ cd core && cargo build --release && cd ..
 ### 4.2 日志监控
 
 ```bash
-./scripts/orchestrator.sh task logs <task_id> --tail 100
-./scripts/orchestrator.sh task logs <task_id> --tail 100 --step implement
+./scripts/orchestrator.sh task logs --tail 100 <task_id>
+./scripts/orchestrator.sh task logs --tail 200 <task_id>
 ```
 
 重点观察：
@@ -137,7 +138,7 @@ cd core && cargo build --release && cd ..
 2. `implement` 是否在解决根因，而不是做表面绕过
 3. `self_test` 是否仍能发挥自举安全闸门作用
 4. `qa_testing` / `ticket_fix` 是否发现并回收回归问题
-5. 分步骤日志是否能定位卡住或偏题发生在哪一段
+5. 日志中各步骤的输出是否能定位卡住或偏题发生在哪一段
 
 ### 4.3 进程监控
 
@@ -157,8 +158,8 @@ git diff --stat
 当需要更细粒度观察时，人工可以补充使用：
 
 ```bash
-./scripts/orchestrator.sh task trace <task_id> -o json
-./scripts/orchestrator.sh debug task <task_id>
+./scripts/orchestrator.sh task trace <task_id> --json
+./scripts/orchestrator.sh task watch <task_id>
 sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id = '<task_id>' ORDER BY id DESC LIMIT 20;"
 ```
 
@@ -238,7 +239,7 @@ Cycle 2 中重点观察：
 
 ```bash
 ./scripts/orchestrator.sh task info <task_id> -o json
-./scripts/orchestrator.sh task logs <task_id> --tail 200
+./scripts/orchestrator.sh task logs --tail 200 <task_id>
 git diff --stat
 ```
 
