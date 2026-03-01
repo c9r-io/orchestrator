@@ -60,6 +60,26 @@ Expected:
 - Explicit `--target-file` overrides the default source.
 - Multiple explicit targets are rejected only for task-scoped-only workflows.
 
+### Runtime Control Supplemental Checks
+
+Before Scenario 4, verify the runtime control commands against a real in-flight task:
+
+1. Create a detached task that will run long enough to observe live state:
+   ```bash
+   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "runtime-control" --goal "runtime control validation" --detach | grep -oE '[0-9a-f-]{36}' | head -1)
+   ```
+2. Start a worker in another terminal and wait for the task to enter `running`.
+3. While the task is still running:
+   - run `./scripts/orchestrator.sh task info "${TASK_ID}" -o json` multiple times
+   - run `./scripts/orchestrator.sh task logs "${TASK_ID}" --tail 20`
+   - run `./scripts/orchestrator.sh task watch "${TASK_ID}" --interval 1`
+4. Stop the worker after the task reaches a terminal state.
+
+Expected:
+- Repeated `task info` calls keep returning valid JSON and do not fail on transient reads.
+- `task logs` succeeds even if some run logs are not yet readable, using per-run placeholders when needed.
+- `task watch` renders a frame immediately and should not clear to a blank screen before data is available.
+
 ---
 
 ## Scenario 1: Foreground Task Start

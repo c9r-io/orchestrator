@@ -89,7 +89,10 @@ pub fn build_trace(
     command_runs: &[CommandRunDto],
 ) -> TaskTrace {
     let first_event_at = events.first().map(|e| e.created_at.as_str()).unwrap_or("");
-    let last_event_at = events.last().map(|e| e.created_at.as_str()).unwrap_or(first_event_at);
+    let last_event_at = events
+        .last()
+        .map(|e| e.created_at.as_str())
+        .unwrap_or(first_event_at);
     build_trace_with_meta(
         TraceTaskMeta {
             task_id,
@@ -398,7 +401,10 @@ fn close_cycle_at(cycle: &mut CycleBuilder, ended_at: Option<String>) {
 fn is_cycle_activity_event(event_type: &str) -> bool {
     matches!(
         event_type,
-        "loop_guard_decision" | "item_finalize_evaluated" | "task_completed" | "task_failed"
+        "loop_guard_decision"
+            | "item_finalize_evaluated"
+            | "task_completed"
+            | "task_failed"
             | "task_paused"
     )
 }
@@ -529,7 +535,9 @@ fn detect_overlapping_cycles(cycles: &[CycleTrace], anomalies: &mut Vec<Anomaly>
     for pair in cycles.windows(2) {
         let prev = &pair[0];
         let next = &pair[1];
-        let (Some(prev_end), Some(next_start)) = (prev.ended_at.as_deref(), next.started_at.as_deref()) else {
+        let (Some(prev_end), Some(next_start)) =
+            (prev.ended_at.as_deref(), next.started_at.as_deref())
+        else {
             continue;
         };
         let (Some(prev_end_dt), Some(next_start_dt)) = (
@@ -1593,7 +1601,12 @@ mod tests {
                 "2026-03-01T04:00:20.000000+00:00",
                 "item-1",
             ),
-            make_event(8, "task_completed", json!({}), "2026-03-01T04:00:21.000000+00:00"),
+            make_event(
+                8,
+                "task_completed",
+                json!({}),
+                "2026-03-01T04:00:21.000000+00:00",
+            ),
         ];
 
         let trace = build_trace_with_meta(
@@ -1648,7 +1661,11 @@ mod tests {
             .summary
             .wall_time_secs
             .expect("completed task should have wall time");
-        assert!((wall - 154.842).abs() < 0.01, "unexpected wall time: {}", wall);
+        assert!(
+            (wall - 154.842).abs() < 0.01,
+            "unexpected wall time: {}",
+            wall
+        );
     }
 
     #[test]
