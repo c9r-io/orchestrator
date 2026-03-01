@@ -87,6 +87,23 @@ qa_resolve_project() {
   export QA_PROJECT QA_WORKSPACE
 }
 
+qa_project_root() {
+  local root
+  root="$(qa_repo_root)"
+  echo "$root/workspace/$QA_PROJECT"
+}
+
+qa_apply_fixture_additive() {
+  local manifest="$1"
+  local bin
+  bin="$(qa_binary_path)"
+  "$bin" init --force >/dev/null 2>&1 || true
+  "$bin" apply -f "$manifest" >/dev/null 2>&1 || {
+    qa_error "Failed to apply config manifest: $manifest"
+    exit 2
+  }
+}
+
 qa_prepare_project() {
   local workflow="$1"
   local bin
@@ -114,12 +131,25 @@ EOF
 
 qa_reset_project_data() {
   local bin
-  local root
   local project_root
   bin="$(qa_binary_path)"
-  root="$(qa_repo_root)"
-  project_root="$root/workspace/$QA_PROJECT"
+  project_root="$(qa_project_root)"
   "$bin" qa project reset "$QA_PROJECT" --keep-config --force >/dev/null
   rm -rf "$project_root/docs/ticket" "$project_root/docs/qa"
   mkdir -p "$project_root/docs/qa" "$project_root/docs/ticket"
+}
+
+qa_recreate_project() {
+  local workflow="$1"
+  local bin
+  local project_root
+  bin="$(qa_binary_path)"
+  project_root="$(qa_project_root)"
+
+  # The CLI does not yet expose project deletion. Recreate the isolated
+  # project by resetting project-local rows, clearing its root path, then
+  # forcing the scaffold to be created again.
+  "$bin" qa project reset "$QA_PROJECT" --keep-config --force >/dev/null 2>&1 || true
+  rm -rf "$project_root"
+  qa_prepare_project "$workflow"
 }

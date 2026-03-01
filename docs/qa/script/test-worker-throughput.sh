@@ -45,17 +45,9 @@ qa_require_binary
 cd "$REPO_ROOT"
 
 qa_info "Applying fixture for throughput baseline..."
-"$BINARY" init --force >/dev/null 2>&1 || true
-"$BINARY" db reset --force --include-config >/dev/null 2>&1 || true
-"$BINARY" apply -f fixtures/manifests/bundles/output-formats.yaml >/dev/null
-DEFAULT_WORKFLOW="$("$BINARY" manifest export -o json 2>/dev/null | jq -r 'first(.[] | select(.kind=="Defaults") | .spec.workflow) // "qa_only"' 2>/dev/null || echo "qa_only")"
-if [[ -z "$DEFAULT_WORKFLOW" || "$DEFAULT_WORKFLOW" == "null" ]]; then
-  DEFAULT_WORKFLOW="qa_only"
-fi
+qa_apply_fixture_additive "fixtures/manifests/bundles/output-formats.yaml"
 qa_resolve_project "qa-throughput"
-qa_prepare_project "$DEFAULT_WORKFLOW"
-qa_reset_project_data
-qa_prepare_project "$DEFAULT_WORKFLOW"
+qa_recreate_project "qa_only"
 
 qa_info "Enqueuing detached tasks: $TASKS"
 for i in $(seq 1 "$TASKS"); do

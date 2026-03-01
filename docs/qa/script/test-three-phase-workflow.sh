@@ -16,13 +16,9 @@ qa_require_binary
 cd "$REPO_ROOT"
 
 qa_info "Ensuring config is applied from manifest..."
-"$BINARY" init --force 2>/dev/null || true
-"$BINARY" db reset --force --include-config >/dev/null 2>&1 || true
-"$BINARY" apply -f fixtures/manifests/bundles/three-phase-forced.yaml 2>/dev/null || { qa_error "Failed to apply config manifest"; exit 2; }
+qa_apply_fixture_additive "fixtures/manifests/bundles/three-phase-forced.yaml"
 qa_resolve_project "qa-three-phase"
-qa_prepare_project "qa_fix_retest_forced"
-qa_reset_project_data
-qa_prepare_project "qa_fix_retest_forced"
+qa_recreate_project "qa_fix_retest_forced"
 
 qa_info "========================================"
 qa_info "TEST: Three-Phase Workflow (QA + Fix + Retest)"

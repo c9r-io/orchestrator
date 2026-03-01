@@ -210,10 +210,12 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 ### Steps
 
-1. **Reset DB** (critical — residual agents in DB with matching templates will cause a false pass):
+1. **Recreate an isolated QA scaffold** (critical — residual agents already in active config can cause a false pass):
    ```bash
-   ./scripts/orchestrator.sh db reset --force --include-config
-   ./scripts/orchestrator.sh init
+   ./scripts/orchestrator.sh init --force
+   QA_PROJECT="qa-validate-${USER}-$(date +%Y%m%d%H%M%S)"
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
    ```
 
 2. 创建无效配置 (workflow 需要 qa 但没有 agent 提供 qa 模板):
@@ -266,7 +268,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
-| Validation passes ("Manifest is valid") when it should fail | `manifest validate` merges the manifest with existing DB config; a residual agent in the DB has a matching `qa` template | Reset DB and reinitialize: `./scripts/orchestrator.sh db reset --force --include-config && ./scripts/orchestrator.sh init` |
+| Validation passes ("Manifest is valid") when it should fail | `manifest validate` merges the manifest with existing active config; a residual agent already applied to the runtime has a matching `qa` template | Re-apply only the intended validation fixture set and run the check from a fresh isolated project/workspace root; do not clear global config |
 
 ---
 

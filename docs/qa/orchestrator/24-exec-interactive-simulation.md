@@ -29,11 +29,10 @@ Entry point: `./scripts/orchestrator.sh`
 
 ### Steps
 
-1. Build and reset:
+1. Build and initialize:
    ```bash
    (cd core && cargo build --release)
    ./scripts/orchestrator.sh init --force
-   ./scripts/orchestrator.sh db reset --force --include-config
    ```
 2. Execute reusable script setup:
    ```bash

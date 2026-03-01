@@ -35,8 +35,10 @@ cd ..
 test -f data/agent_orchestrator.db || ./scripts/orchestrator.sh init
 
 QA_PROJECT="qa-cycle2-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
 ./scripts/orchestrator.sh apply -f docs/workflow/self-bootstrap.yaml
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+rm -rf "workspace/${QA_PROJECT}"
+./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
 ```
 
 ---

@@ -82,8 +82,10 @@ cd ..
 ### Preconditions
 
 ```bash
-./scripts/orchestrator.sh db reset --force --include-config
-./scripts/orchestrator.sh init
+./scripts/orchestrator.sh init --force
+QA_PROJECT="qa-config-enhanced-${USER}-$(date +%Y%m%d%H%M%S)"
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+rm -rf "workspace/${QA_PROJECT}"
 ```
 
 ### Steps

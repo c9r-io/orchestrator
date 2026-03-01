@@ -23,6 +23,8 @@ Watchdog script: `scripts/watchdog.sh`.
 rm -f fixtures/ticket/auto_*.md
 
 QA_PROJECT="qa-survival-${USER}-$(date +%Y%m%d%H%M%S)"
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+rm -rf "workspace/${QA_PROJECT}"
 ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
 ```
 

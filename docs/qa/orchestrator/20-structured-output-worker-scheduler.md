@@ -53,9 +53,10 @@ Verify strict-mode validation fails phase output when `qa` stdout is not JSON.
 1. Prepare an isolated project and apply config:
    ```bash
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
    ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    ```
 2. Create and run a task that uses non-JSON `qa` output:
    ```bash

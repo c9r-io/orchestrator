@@ -15,6 +15,13 @@ kubectl-style fixtures for `orchestrator apply -f`.
 
 These fixtures replace legacy flat-config bootstrap flows.
 
+## Isolation Rules
+
+- Manifest fixtures are additive setup artifacts. They are not a substitute for deleting or resetting the whole orchestrator control-plane state.
+- Do not pair fixture application with `db reset --include-config` or `db reset --force --include-config` during routine QA runs.
+- Prefer isolated QA projects: recreate the project-local scaffold (`qa project reset`, remove `workspace/<project>`, then `qa project create`) and then apply the fixture needed by that scenario.
+- Bundle fixtures must not be used to hijack unrelated default workspace/workflow expectations for other active runs.
+
 ## CLI Probe Fixtures
 
 For Phase 2 CLI regression work, use the dedicated probe bundle:

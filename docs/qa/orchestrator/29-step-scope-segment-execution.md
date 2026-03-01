@@ -69,8 +69,10 @@ Verify that plan and implement steps execute exactly once per cycle, regardless 
    ```bash
    rm -f fixtures/ticket/auto_*.md
    QA_PROJECT="qa-scope-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    ```
 
 2. Create a task targeting multiple QA files:

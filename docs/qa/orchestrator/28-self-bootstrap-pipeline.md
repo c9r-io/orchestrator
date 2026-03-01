@@ -28,19 +28,20 @@ Fixture: `fixtures/manifests/bundles/self-bootstrap-test.yaml`
 ### Common Preconditions
 
 ```bash
-./scripts/orchestrator.sh db reset --force --include-config
-./scripts/orchestrator.sh init
+./scripts/orchestrator.sh init --force
 
 rm -f fixtures/ticket/auto_*.md
 
 QA_PROJECT="qa-bootstrap-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
 ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+rm -rf "workspace/${QA_PROJECT}"
+./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
 ```
 
-> Note: DB reset is required to clear any residual workflows from prior test runs
-> (e.g., `exec_interactive_flow`) that may cause config validation errors like
-> "loop.guard enabled but no agent has loop_guard template".
+> Note: Fixture application is additive. Re-apply the expected fixture and
+> recreate the isolated project scaffold instead of clearing global config when
+> prior runs leave unrelated workflows behind.
 
 ---
 

@@ -16,15 +16,13 @@ qa_require_binary
 cd "$REPO_ROOT"
 
 qa_info "Preparing isolated config for exec interactive simulation..."
-"$BINARY" init --force >/dev/null 2>&1 || true
-"$BINARY" db reset --force --include-config >/dev/null 2>&1 || true
 
 mkdir -p "$REPO_ROOT/workspace/default/docs/qa" "$REPO_ROOT/workspace/default/docs/ticket"
 cat > "$REPO_ROOT/workspace/default/docs/qa/exec-smoke.md" <<'MD'
 # Exec Interactive Smoke
 MD
 
-MANIFEST="/tmp/exec-interactive-flow.yaml"
+MANIFEST="$REPO_ROOT/workspace/exec-interactive-flow.yaml"
 cat > "$MANIFEST" <<'YAML'
 apiVersion: orchestrator.dev/v2
 kind: Workspace
@@ -66,12 +64,10 @@ spec:
     rules: []
 YAML
 
-"$BINARY" apply -f "$MANIFEST" >/dev/null
+qa_apply_fixture_additive "$MANIFEST"
 
 qa_resolve_project "qa-exec-interactive"
-qa_prepare_project "exec_interactive_flow"
-qa_reset_project_data
-qa_prepare_project "exec_interactive_flow"
+qa_recreate_project "exec_interactive_flow"
 
 TASK_OUTPUT="$("$BINARY" task create --project "$QA_PROJECT" --workspace "$QA_WORKSPACE" --workflow exec_interactive_flow --name "exec-interactive-$(date +%s)" --goal "simulate interactive exec" --no-start 2>&1)"
 TASK_ID="$(qa_extract_task_id "$TASK_OUTPUT")"

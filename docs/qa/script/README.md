@@ -21,7 +21,8 @@ Shell scripts for executable QA scenarios.
   - binary existence check
   - common args parsing (`--workspace`, `--project`, `--json`)
   - auto project isolation (`qa_resolve_project`)
-  - per-project cleanup (`qa_reset_project_data`)
+  - additive fixture setup (`qa_apply_fixture_additive`)
+  - project-local scaffold recreation (`qa_recreate_project`)
 
 ## Prerequisites
 
@@ -53,17 +54,19 @@ Shell scripts for executable QA scenarios.
 ## Determinism Notes
 
 - Each script uses an isolated QA project by default (auto-generated when `--project` is not provided).
-- Each script resets only that project's task/runtime rows with:
+- Each script recreates only that project's local scaffold with:
   - `orchestrator qa project reset <project> --keep-config --force`
+  - `rm -rf workspace/<project>`
+  - `orchestrator qa project create <project> --force`
 - The SQLite DB file is preserved across runs.
 - Each script uses a dedicated fixture to avoid cross-scenario config drift:
   - `test-task-pause-resume.sh` -> `fixtures/manifests/bundles/pause-resume-workflow.yaml`
   - `test-task-retry.sh` -> `fixtures/manifests/bundles/retry-workflow.yaml`
   - `test-three-phase-workflow.sh` -> `fixtures/manifests/bundles/three-phase-forced.yaml`
 - Fixtures now use structured JSON outputs for strict phase validation (`qa`/`fix`/`retest`/`guard`).
-- Scripts perform config-level isolation with `db reset --include-config` before applying their fixture.
-- Run scripts serially. They update shared active config via `apply`, so parallel runs can overwrite each other's fixture setup.
-- `test-exec-interactive.sh` applies an inline temporary manifest (`/tmp/exec-interactive-flow.yaml`) for deterministic `plan` + `qa` capability coverage.
+- Scripts apply fixtures additively and must not clear orchestrator config as part of normal setup.
+- Run scripts serially. They still update shared active config via `apply`, so parallel runs can overwrite each other's fixture setup.
+- `test-exec-interactive.sh` applies an inline temporary manifest (`workspace/exec-interactive-flow.yaml`) for deterministic `plan` + `qa` capability coverage.
 
 ## Troubleshooting
 

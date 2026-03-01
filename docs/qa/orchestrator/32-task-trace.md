@@ -26,8 +26,9 @@ Every scenario starts from a clean project with at least one completed task:
 ```bash
 QA_PROJECT="qa-trace-$(date +%s)"
 ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+rm -rf "workspace/${QA_PROJECT}"
 ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --from-workspace cli_probe_ws --workflow probe_task_scoped --force
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
 ```
 
 ---
@@ -196,6 +197,9 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 
 These checks use the official self-referential probe fixtures directly, not
 `qa project create`.
+
+Do not use `db reset --include-config` here; these probe checks rely on direct
+runtime fixtures, not control-plane reinitialization.
 
 1. Apply the self-referential probe fixtures:
    ```bash

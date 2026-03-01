@@ -16,18 +16,17 @@ Entry point: `./scripts/orchestrator.sh task <command>`
 Project setup (run once):
 
 ```bash
-./scripts/orchestrator.sh db reset --force --include-config
-./scripts/orchestrator.sh init
+./scripts/orchestrator.sh init --force
 
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
 ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+rm -rf "workspace/${QA_PROJECT}"
+./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
 ```
 
-> Note: DB reset is required to clear any residual workflows from prior test runs
-> that may cause config validation errors (e.g., stale workflows requiring
-> missing agent templates).
+> Note: Fixture application is additive. Re-apply the expected fixture and
+> recreate the isolated project scaffold instead of clearing global config.
 
 ---
 
@@ -38,7 +37,7 @@ QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 - DB reset and project setup completed (see Background).
 - Workspace and workflow are available.
 - Multiple target files exist in repository.
-- Project is prepared: `./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force`
+- Project scaffold is freshly recreated: `qa project reset` + `rm -rf "workspace/${QA_PROJECT}"` + `qa project create --force`
 
 ### Steps
 
@@ -73,7 +72,7 @@ QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
-| `Error: active config is not runnable ... loop.guard enabled but no agent has loop_guard template` | Residual workflow from a prior test run exists in the DB | Reset DB: `./scripts/orchestrator.sh db reset --force --include-config && ./scripts/orchestrator.sh init` |
+| `Error: active config is not runnable ... loop.guard enabled but no agent has loop_guard template` | Residual workflow from a prior test run is still present because fixture application is additive | Re-apply `fixtures/manifests/bundles/echo-workflow.yaml`, then recreate the isolated QA project scaffold (`qa project reset` + `rm -rf workspace/<project>` + `qa project create --force`) |
 | `Error: load task details failed ... task not found` | Task failed during execution and info lookup uses wrong project scope | Ensure `--project "${QA_PROJECT}"` is passed to `task info` |
 
 ---

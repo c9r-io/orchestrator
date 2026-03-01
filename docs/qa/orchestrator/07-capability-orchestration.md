@@ -42,12 +42,13 @@ to the fix-capable agent when capabilities are disjoint.
 
 ### Steps
 
-1. Reset and apply:
+1. Initialize and apply:
    ```bash
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
    ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/capability-test.yaml
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    ```
 
 2. Create and run task:
@@ -99,12 +100,13 @@ distributes work across them and each agent uses its own correct template.
 
 ### Steps
 
-1. Reset and apply:
+1. Initialize and apply:
    ```bash
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
    ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/multi-echo.yaml
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    ```
 
 2. Create and run task:
@@ -149,12 +151,13 @@ Validate that repeatable steps execute in every loop cycle.
 
 ### Steps
 
-1. Reset and apply:
+1. Initialize and apply:
    ```bash
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
    ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/repeatable-test.yaml
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    ```
 
 2. Create and run task:
@@ -202,12 +205,13 @@ Validate that a guard step can terminate the workflow loop.
 
 ### Steps
 
-1. Reset and apply:
+1. Initialize and apply:
    ```bash
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
    ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/guard-test.yaml
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    ```
 
 2. Create and run task:
@@ -254,12 +258,13 @@ both agents are used for execution.
 
 ### Steps
 
-1. Reset and apply:
+1. Initialize and apply:
    ```bash
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
    ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    ```
 
 2. Create and run task:

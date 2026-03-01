@@ -51,9 +51,10 @@ agents:
 - Runtime initialized and mock config applied into SQLite:
    ```bash
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
    ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/output-formats.yaml
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    ```
 
 ### Goal
@@ -94,7 +95,7 @@ Validate task creation and execution with mock bash agent completes successfully
 
 ### Preconditions
 
-- Project data is clean: `./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force` before running this scenario
+- Project scaffold is freshly recreated before running this scenario: `qa project reset` + `rm -rf "workspace/${QA_PROJECT}"` + `qa project create --force`
 - At least one task exists in the system
 
 ### Goal

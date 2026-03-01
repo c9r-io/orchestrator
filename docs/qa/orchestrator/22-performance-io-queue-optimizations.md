@@ -32,9 +32,10 @@ Entry point: `./scripts/orchestrator.sh`
 1. Create and run a task:
    ```bash
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
    ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/output-formats.yaml
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "single-persist" --goal "command run payload completeness" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ./scripts/orchestrator.sh task start "${TASK_ID}" || true
    ```

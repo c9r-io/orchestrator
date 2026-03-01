@@ -16,13 +16,9 @@ qa_require_binary
 cd "$REPO_ROOT"
 
 qa_info "Ensuring config is applied from manifest..."
-"$BINARY" init --force 2>/dev/null || true
-"$BINARY" db reset --force --include-config >/dev/null 2>&1 || true
-"$BINARY" apply -f fixtures/manifests/bundles/retry-workflow.yaml 2>/dev/null || { qa_error "Failed to apply config manifest"; exit 2; }
+qa_apply_fixture_additive "fixtures/manifests/bundles/retry-workflow.yaml"
 qa_resolve_project "qa-retry"
-qa_prepare_project "qa_only_fail"
-qa_reset_project_data
-qa_prepare_project "qa_only_fail"
+qa_recreate_project "qa_only_fail"
 
 qa_info "========================================"
 qa_info "TEST: Task Retry"

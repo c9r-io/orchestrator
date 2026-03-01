@@ -42,14 +42,14 @@ lower-cost agent is selected more frequently by the scoring algorithm.
 
 ### Steps
 
-1. Reset and apply:
+1. Initialize and apply:
    ```bash
-   ./scripts/orchestrator.sh db reset --force --include-config
-   ./scripts/orchestrator.sh init
+   ./scripts/orchestrator.sh init --force
    ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
    ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
    ```
 
 2. Create and run task:
@@ -101,14 +101,14 @@ both used successfully.
 
 ### Steps
 
-1. Reset and apply:
+1. Initialize and apply:
    ```bash
-   ./scripts/orchestrator.sh db reset --force --include-config
-   ./scripts/orchestrator.sh init
+   ./scripts/orchestrator.sh init --force
    ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-quality-test.yaml
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
    ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
    ```
 
 2. Create and run task:
@@ -166,14 +166,14 @@ and the healthy agent handles an increasing share of work across cycles.
 
 ### Steps
 
-1. Reset and apply:
+1. Initialize and apply:
    ```bash
-   ./scripts/orchestrator.sh db reset --force --include-config
-   ./scripts/orchestrator.sh init
+   ./scripts/orchestrator.sh init --force
    ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/mixed-health.yaml
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
    ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
    ```
 
 2. Create and run task:
@@ -279,14 +279,14 @@ Validate that agent load tracking influences selection during execution.
 
 ### Steps
 
-1. Reset and apply:
+1. Initialize and apply:
    ```bash
-   ./scripts/orchestrator.sh db reset --force --include-config
-   ./scripts/orchestrator.sh init
+   ./scripts/orchestrator.sh init --force
    ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
    ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
    ```
 
 2. Create and run task:
@@ -320,9 +320,10 @@ Validate that agent load tracking influences selection during execution.
 - There is no dedicated CLI command to inspect raw agent metrics; verify
   indirectly via log distribution across agents
 - Health state is tracked per-capability via `AgentHealthState.capability_health`
-- **DB isolation is critical**: `apply` is additive and `qa project reset` does
-  not clear agent config. Always `./scripts/orchestrator.sh db reset --force --include-config` before each
-  scenario to prevent residual agents from interfering with selection
+- **Project isolation is critical**: `apply` is additive and `qa project reset`
+  only clears project-local rows. Re-apply the expected fixture and recreate
+  the isolated QA project scaffold (`qa project reset` + `rm -rf workspace/<project>`
+  + `qa project create --force`) before each scenario to keep selection inputs deterministic
 
 ---
 

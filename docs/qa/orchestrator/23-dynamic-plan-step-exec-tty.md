@@ -71,8 +71,9 @@ SELECT COUNT(*) FROM tasks;
    ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/output-formats.yaml
    ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
    ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
    TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "plan-insert" --goal "insert plan before qa" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 

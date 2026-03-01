@@ -62,10 +62,11 @@ Ensure summary timestamps are sourced from `tasks.created_at` and `tasks.updated
 1. Initialize and apply fixture:
    ```bash
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
    ./scripts/orchestrator.sh init
    ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    ```
 2. Create task without auto-start:
    ```bash

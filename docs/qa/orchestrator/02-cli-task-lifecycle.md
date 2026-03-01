@@ -39,8 +39,9 @@ Run once before scenarios:
 ```bash
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+rm -rf "workspace/${QA_PROJECT}"
 ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --from-workspace cli_probe_ws --workflow probe_task_scoped --force
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
 ```
 
 ### Target Resolution Supplemental Checks
@@ -90,6 +91,9 @@ Expected:
 
 These checks intentionally do not use `qa project create`, because that path
 always creates non-self-referential workspaces.
+
+Do not pair these probe checks with `db reset --include-config`; they must keep
+the active runtime config intact and only apply the dedicated probe fixtures.
 
 1. Apply the self-referential probe fixtures:
    ```bash
