@@ -24,7 +24,8 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 ### Preconditions
 
-- Fresh sqlite state
+- Fresh sqlite state (`apply` is additive; residual agents from other fixtures
+  participate in selection and skew results — always delete the DB first)
 
 ### Goal
 
@@ -43,10 +44,12 @@ lower-cost agent is selected more frequently by the scoring algorithm.
 
 1. Reset and apply:
    ```bash
+   ./scripts/orchestrator.sh db reset --force --include-config
+   ./scripts/orchestrator.sh init
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
    ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml
    ```
 
 2. Create and run task:
@@ -80,9 +83,8 @@ lower-cost agent is selected more frequently by the scoring algorithm.
 
 ### Preconditions
 
-- Fresh sqlite state (use a new database or ensure no other agents with `qa`
-  capability exist; `apply` merges additively and pre-existing agents will
-  participate in selection)
+- Fresh sqlite state (`apply` merges additively; pre-existing agents will
+  participate in selection — always delete the DB first)
 
 ### Goal
 
@@ -101,10 +103,12 @@ both used successfully.
 
 1. Reset and apply:
    ```bash
+   ./scripts/orchestrator.sh db reset --force --include-config
+   ./scripts/orchestrator.sh init
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-quality-test.yaml
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
    ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-quality-test.yaml
    ```
 
 2. Create and run task:
@@ -144,8 +148,8 @@ both used successfully.
 
 ### Preconditions
 
-- Fresh sqlite state (important: other `qa`-capable agents in the global
-  config will participate in selection; use a clean database for isolation)
+- Fresh sqlite state (other `qa`-capable agents in the global config will
+  participate in selection — always delete the DB first for isolation)
 
 ### Goal
 
@@ -164,10 +168,12 @@ and the healthy agent handles an increasing share of work across cycles.
 
 1. Reset and apply:
    ```bash
+   ./scripts/orchestrator.sh db reset --force --include-config
+   ./scripts/orchestrator.sh init
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/mixed-health.yaml
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
    ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/mixed-health.yaml
    ```
 
 2. Create and run task:
@@ -261,7 +267,7 @@ Validate that `task retry` resets a failed item to pending and re-queues it.
 
 ### Preconditions
 
-- Fresh sqlite state
+- Fresh sqlite state (always delete the DB first)
 
 ### Goal
 
@@ -275,10 +281,12 @@ Validate that agent load tracking influences selection during execution.
 
 1. Reset and apply:
    ```bash
+   ./scripts/orchestrator.sh db reset --force --include-config
+   ./scripts/orchestrator.sh init
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
    ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml
    ```
 
 2. Create and run task:
@@ -312,6 +320,9 @@ Validate that agent load tracking influences selection during execution.
 - There is no dedicated CLI command to inspect raw agent metrics; verify
   indirectly via log distribution across agents
 - Health state is tracked per-capability via `AgentHealthState.capability_health`
+- **DB isolation is critical**: `apply` is additive and `qa project reset` does
+  not clear agent config. Always `./scripts/orchestrator.sh db reset --force --include-config` before each
+  scenario to prevent residual agents from interfering with selection
 
 ---
 

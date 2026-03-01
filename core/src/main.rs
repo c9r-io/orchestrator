@@ -24,13 +24,13 @@ use agent_orchestrator::task_repository;
 #[cfg(test)]
 mod test_utils;
 
-use crate::cli::{Cli, Commands, ManifestCommands};
+use crate::cli::{Cli, Commands, DbCommands, ManifestCommands};
 use crate::collab::MessageBus;
 use crate::config_load::read_active_config;
 use crate::config_load::{
     detect_app_root, load_or_seed_config, load_raw_config_from_db, persist_raw_config,
 };
-use crate::db::init_schema;
+use crate::db::{init_schema, reset_db_by_path};
 use crate::resource::{
     dispatch_resource, kind_as_str, parse_resources_from_yaml, ApplyResult, Resource,
 };
@@ -328,6 +328,26 @@ fn try_handle_preflight_command(cli: &Cli) -> Result<Option<i32>> {
         Commands::Manifest(ManifestCommands::Validate { file }) => {
             let app_root = detect_app_root();
             Ok(Some(run_manifest_validate_preflight(&app_root, file)?))
+        }
+        Commands::Db(DbCommands::Reset {
+            force,
+            include_history,
+            include_config,
+        }) => {
+            if !force {
+                eprintln!("Use --force to confirm database reset");
+                return Ok(Some(1));
+            }
+            let app_root = detect_app_root();
+            let (db_path, _logs_dir) = initialize_runtime(&app_root)?;
+            reset_db_by_path(&db_path, *include_history, *include_config)?;
+            println!("Database reset completed");
+            if *include_config {
+                println!("All config versions deleted (next apply starts from blank)");
+            } else if *include_history {
+                println!("Config version history cleared (active version preserved)");
+            }
+            Ok(Some(0))
         }
         _ => Ok(None),
     }

@@ -200,7 +200,12 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 ### Preconditions
 
-- 无
+- Fresh sqlite state (`manifest validate` merges the manifest with existing DB config; residual agents with matching templates will cause validation to pass)
+
+```bash
+./scripts/orchestrator.sh db reset --force --include-config
+./scripts/orchestrator.sh init
+```
 
 ### Goal
 
@@ -255,6 +260,12 @@ Entry point: `./scripts/orchestrator.sh <command>`
 ### Expected
 
 - 错误信息包含: `No agent has template for step 'qa'` 或类似
+
+### Troubleshooting
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| Validation passes ("Manifest is valid") when it should fail | `manifest validate` merges the manifest with existing DB config; a residual agent in the DB has a matching `qa` template | Reset DB and reinitialize: `./scripts/orchestrator.sh db reset --force --include-config && ./scripts/orchestrator.sh init` |
 
 ---
 

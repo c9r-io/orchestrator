@@ -16,19 +16,28 @@ selection can change the outcome.
 
 ### Common Preconditions
 
-Every scenario starts from a clean slate. Because the echo-workflow fixture
-uses `ticket_dir: fixtures/ticket`, stale auto-generated tickets from previous
-runs can cause items to be marked "unresolved" even when QA passes. Always
-remove them before starting:
+Every scenario starts from a clean slate. Two cleanup steps are required:
+
+1. **DB isolation**: `apply` is additive — agents from previous test fixtures
+   remain in the config and participate in agent selection, causing unexpected
+   failures. Delete the DB to guarantee only the intended agents exist.
+2. **Stale tickets**: The echo-workflow fixture uses `ticket_dir: fixtures/ticket`.
+   Stale auto-generated tickets from previous runs can cause items to be marked
+   "unresolved" even when QA passes.
 
 ```bash
-# Clean stale auto-generated tickets (preserves README.md and manually created tickets)
+# 1. Fresh DB (removes residual agents from other test fixtures)
+./scripts/orchestrator.sh db reset --force --include-config
+./scripts/orchestrator.sh init
+
+# 2. Clean stale auto-generated tickets
 rm -f fixtures/ticket/auto_*.md
 
+# 3. Apply fixture and create project
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
 ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
 ```
 
 Scenario 4 uses a different fixture (`fail-workflow.yaml`) — see its own
@@ -39,6 +48,7 @@ preconditions section.
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
 | qa_only/loop_test tasks fail with "unresolved" items despite QA exit 0 | Stale ticket files in `fixtures/ticket/` match item QA docs; finalize rules mark items with active tickets as "unresolved" when no fix step is present | Run `rm -f fixtures/ticket/auto_*.md` before testing |
+| Task fails with unexpected agent selection (e.g., wrong agent handles qa) | Residual agents from previous test fixtures remain in DB; `apply` is additive and `qa project reset` does not clear agent config | Reset DB and reinitialize: `./scripts/orchestrator.sh db reset --force --include-config && ./scripts/orchestrator.sh init` |
 
 ---
 

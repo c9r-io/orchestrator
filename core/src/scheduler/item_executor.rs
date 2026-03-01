@@ -718,7 +718,7 @@ pub async fn process_item_filtered(
                     let mut step_ctx = task_ctx.clone();
                     step_ctx.pipeline_vars = acc.pipeline_vars.clone();
 
-                    let (chain_result, new_pipeline) = execute_builtin_step(
+                    let chain_exec = execute_builtin_step(
                         state,
                         task_id,
                         item_id,
@@ -727,7 +727,28 @@ pub async fn process_item_filtered(
                         runtime,
                         &item.qa_file_path,
                     )
-                    .await?;
+                    .await;
+
+                    let (chain_result, new_pipeline) = match chain_exec {
+                        Ok(val) => val,
+                        Err(e) => {
+                            let _ = insert_event(
+                                state,
+                                task_id,
+                                Some(item_id),
+                                "chain_step_finished",
+                                json!({"step": phase, "chain_step": chain_step.id, "error": e.to_string(), "success": false}),
+                            );
+                            let _ = insert_event(
+                                state,
+                                task_id,
+                                Some(item_id),
+                                "step_finished",
+                                json!({"step": phase, "error": e.to_string(), "success": false}),
+                            );
+                            return Err(e);
+                        }
+                    };
                     acc.pipeline_vars = new_pipeline;
 
                     if let Some(ref output) = chain_result.output {
@@ -777,7 +798,7 @@ pub async fn process_item_filtered(
                 let mut step_ctx = task_ctx.clone();
                 step_ctx.pipeline_vars = acc.pipeline_vars.clone();
 
-                let (result, new_pipeline) = execute_builtin_step(
+                let exec_result = execute_builtin_step(
                     state,
                     task_id,
                     item_id,
@@ -786,7 +807,21 @@ pub async fn process_item_filtered(
                     runtime,
                     &item.qa_file_path,
                 )
-                .await?;
+                .await;
+
+                let (result, new_pipeline) = match exec_result {
+                    Ok(val) => val,
+                    Err(e) => {
+                        let _ = insert_event(
+                            state,
+                            task_id,
+                            Some(item_id),
+                            "step_finished",
+                            json!({"step": phase, "step_id": step.id, "error": e.to_string(), "success": false}),
+                        );
+                        return Err(e);
+                    }
+                };
                 acc.pipeline_vars = new_pipeline;
 
                 if let Some(ref output) = result.output {
@@ -824,6 +859,13 @@ pub async fn process_item_filtered(
                 }
                 OnFailureAction::EarlyReturn { status } => {
                     acc.item_status = status.clone();
+                    insert_event(
+                        state,
+                        task_id,
+                        Some(item_id),
+                        "step_finished",
+                        json!({"step": phase, "step_id": step.id, "early_return": true, "exit_code": result.exit_code, "success": false}),
+                    )?;
                     state
                         .db_writer
                         .update_task_item_status(item_id, &acc.item_status)?;

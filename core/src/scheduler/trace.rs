@@ -69,6 +69,21 @@ pub fn build_trace(
     events: &[EventDto],
     command_runs: &[CommandRunDto],
 ) -> TaskTrace {
+    let mut sorted_events: Vec<&EventDto> = events.iter().collect();
+    sorted_events.sort_by_key(|e| e.id);
+    let sorted_refs: Vec<EventDto> = sorted_events
+        .into_iter()
+        .map(|e| EventDto {
+            id: e.id,
+            task_id: e.task_id.clone(),
+            task_item_id: e.task_item_id.clone(),
+            event_type: e.event_type.clone(),
+            payload: e.payload.clone(),
+            created_at: e.created_at.clone(),
+        })
+        .collect();
+    let events = &sorted_refs;
+
     let cycles = build_cycles(events, command_runs);
     let mut anomalies = Vec::new();
 
@@ -444,7 +459,8 @@ fn detect_missing_step_end(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
                     open.insert(key, event.created_at.clone());
                 }
             }
-            "step_finished" | "step_skipped" => {
+            "step_finished" | "step_skipped" | "chain_step_finished"
+            | "dynamic_step_finished" => {
                 if let Some(step) = step_id {
                     let key = (step.to_string(), event.task_item_id.clone());
                     open.remove(&key);
