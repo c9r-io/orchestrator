@@ -10,7 +10,7 @@
 
 > 当前项目存在一项技术负债：在 workflow 调度定义中，builtin 步骤 `self_test` 仍存在被误路由为 capability lookup 的瑕疵，导致使用者需要在 `docs/workflow/self-bootstrap.yaml` 中为 `coder` agent 硬编码一套 `self_test` Shell 指令作为临时 workaround。
 >
-> 本轮任务目标是：围绕 `docs/workflow/self-bootstrap.yaml` 完成这项技术负债的自举修复与回归验证，让 `self_test` 回归真正的 builtin 执行路径，不再依赖 agent capability/template 兜底。
+> 本轮任务目标是：围绕 `docs/workflow/self-bootstrap.yaml` 完成这项技术负债的自举修复与回归验证，让 `self_test` 回归真正的 builtin 执行路径，不再依赖 agent capability/template 兜底；并把本次修复收口到可维护状态：将 builtin effective execution 的判定收敛到共享入口，避免在 `config.rs` 与 `item_executor.rs` 维持双份规则，同时补上真正穿过 `load_task_runtime_context()` 与实际 step dispatch 的回归测试，而不是只用 helper 复制逻辑自证。
 >
 > 约束：
 > 1. 必须以 `self-bootstrap` workflow 为主执行路径。
@@ -18,6 +18,8 @@
 > 3. 优先修复 builtin 路由问题，而不是仅删除 YAML 中的 workaround。
 > 4. 保留 `self_test` 现有语义：`cargo check`、`cargo test --lib`、`manifest validate`，以及相关事件、状态、pipeline variables。
 > 5. 最终目标是让 `docs/workflow/self-bootstrap.yaml` 不再需要 `coder` agent 上的 `self_test` capability/template workaround。
+> 6. 将 effective execution 判定收敛到共享入口，不保留 `config.rs` 与 `item_executor.rs` 的双份判定逻辑。
+> 7. 回归测试必须覆盖真实运行路径：至少穿过 `load_task_runtime_context()`，并验证实际 step dispatch，而不是仅验证复制出来的 helper。
 
 ### 1.1 预期产出
 
@@ -28,6 +30,8 @@
 3. 修复 builtin `self_test` 路由问题的代码改动。
 4. 删除 `docs/workflow/self-bootstrap.yaml` 中仅用于兜底的 `self_test` workaround（如果底层修复已经完成）。
 5. 回归验证结果，包括 `self_test` 在无 workaround 前提下可运行的证据。
+6. 一轮“质量收尾”改动：收敛 builtin effective execution 判定入口，减少重复逻辑。
+7. 至少一组真正覆盖 runtime load + step dispatch 的回归测试证据。
 
 ### 1.2 非目标
 
@@ -47,6 +51,11 @@ plan -> qa_doc_gen -> implement -> self_test -> qa_testing -> ticket_fix -> alig
 
 1. 启动和提供课题目标。
 2. 监控执行状态、判断是否卡住、记录结果。
+
+补充围挡：
+
+1. 某些低价模型已知会出现长静默窗口，`low_output_step` 单独出现时不直接视为故障；若 heartbeat 仍增长、`pid_alive=true`，应继续观察。
+2. Cycle 2 预期验证链必须实际进入 `qa_testing -> ticket_fix`（如有 ticket）-> `align_tests` -> `doc_governance`。若因 item 被提前 finalize / skipped 而短路，必须视为流程缺陷并记录 ticket。
 
 ---
 
@@ -121,7 +130,9 @@ cd core && cargo build --release && cd ..
 
 ```bash
 ./scripts/orchestrator.sh task logs <task_id> --tail 100
-./scripts/orchestrator.sh task logs <task_id> --tail 100 --step implement
+ls data/logs/<task_id>/
+tail -n 100 data/logs/<task_id>/implement_<run_id>.stdout
+tail -n 100 data/logs/<task_id>/implement_<run_id>.stderr
 ```
 
 重点观察：
@@ -130,7 +141,8 @@ cd core && cargo build --release && cd ..
 2. `implement` 是否真的修改 builtin 路由，而不是只做 YAML 删除
 3. `self_test` 是否在修复后走 builtin 语义
 4. `qa_testing` / `ticket_fix` 是否发现并回收回归问题
-5. 分步骤日志是否能定位卡住或偏题发生在哪个阶段
+5. `qa_testing` / `ticket_fix` 在 Cycle 2 是否真的进入执行，而不是因 item 提前 finalize 被短路
+6. 分步骤日志是否能定位卡住或偏题发生在哪个阶段
 
 ### 4.3 进程监控
 
@@ -151,15 +163,16 @@ git diff --stat
 
 ```bash
 ./scripts/orchestrator.sh task trace <task_id> -o json
-./scripts/orchestrator.sh debug task <task_id>
+./scripts/orchestrator.sh debug --component scheduler -v
 sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id = '<task_id>' ORDER BY id DESC LIMIT 20;"
 ```
 
 重点用途：
 
 1. 确认 `self_test` 是否被执行、被跳过，还是被错误路由
-2. 判断卡住发生在调度层、agent 执行层还是事件落库层
-3. 快速查看最近事件，确认 `step_started`、`step_finished`、guard 决策是否符合预期
+2. 确认 Cycle 2 是否真实进入 `qa_testing` / `ticket_fix`，还是被 finalize / skip 提前短路
+3. 判断卡住发生在调度层、agent 执行层还是事件落库层
+4. 快速查看最近事件，确认 `step_started`、`step_finished`、guard 决策是否符合预期
 
 ---
 
@@ -184,6 +197,7 @@ sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events 
 1. builtin 判定路径
 2. task plan / dynamic insert 时的 `self_test` builtin 识别
 3. scheduler 执行时 builtin 优先路径
+4. 将 effective execution 判定收敛到共享入口，避免在 `config.rs` 与 `item_executor.rs` 维持重复规则
 
 如果改动只发生在 [`docs/workflow/self-bootstrap.yaml`](/Volumes/Yotta/ai_native_sdlc/docs/workflow/self-bootstrap.yaml) 而核心代码无变化，应判定为不满足目标。
 
@@ -194,6 +208,7 @@ sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events 
 1. `self_test` 仍然执行
 2. 行为包含 `cargo check`、`cargo test --lib`
 3. 若实现包含 manifest 校验，则该阶段未被破坏
+4. 回归测试不是只验证 helper，而是至少有一条真实运行路径覆盖 `load_task_runtime_context()` 或实际 step dispatch
 
 如果 `self_test` 因删掉 workaround 后直接失效，说明本轮未修成。
 
@@ -201,10 +216,11 @@ sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events 
 
 Cycle 2 中重点观察：
 
-1. `qa_testing` 是否产出回归 ticket
-2. `ticket_fix` 是否回收新问题
-3. `align_tests` 是否补齐单测
-4. `doc_governance` 是否未引入文档漂移
+1. `qa_testing` 是否实际进入执行（必须有 `step_started` / `step_finished` 或对应 item 级事件）
+2. `ticket_fix` 是否在存在 ticket 时实际进入执行
+3. 若 `qa_testing` / `ticket_fix` 被提前 finalize / skipped 短路，直接判定为流程缺陷
+4. `align_tests` 是否补齐单测
+5. `doc_governance` 是否未引入文档漂移
 
 ---
 
@@ -216,7 +232,10 @@ Cycle 2 中重点观察：
 2. 核心修复不是仅删 workaround，而是修复了 builtin `self_test` 的底层路由问题。
 3. [`docs/workflow/self-bootstrap.yaml`](/Volumes/Yotta/ai_native_sdlc/docs/workflow/self-bootstrap.yaml) 中不再需要 `coder` agent 的 `self_test` capability/template。
 4. `self_test` 仍能作为 builtin 正常执行，并保留原有验证语义。
-5. 本轮没有留下新的未解决 ticket；若有 ticket，必须由同一轮 `ticket_fix` 回收，或明确记录未收口原因。
+5. builtin effective execution 判定已收敛到共享入口，不再在 `config.rs` 与 `item_executor.rs` 维护双份规则。
+6. 回归测试覆盖真实运行路径，而不是仅靠复制逻辑的 helper 自证。
+7. Cycle 2 实际跑到 `qa_testing`，且在有 ticket 时实际跑到 `ticket_fix`，不能被 item 提前 finalize / skipped 短路。
+8. 本轮没有留下新的未解决 ticket；若有 ticket，必须由同一轮 `ticket_fix` 回收，或明确记录未收口原因。
 
 ---
 
@@ -227,7 +246,10 @@ Cycle 2 中重点观察：
 1. `plan` 明显偏题，未聚焦 builtin 路由技术债。
 2. `implement` 长时间无输出、无代码变更。
 3. `self_test` 因移除 workaround 后失效，且 workflow 无法自行修复。
-4. `qa_testing` 持续产生同类 ticket，进入无效循环。
+4. 代码层面仍同时保留 `config.rs` 与 `item_executor.rs` 的双份 effective execution 判定逻辑。
+5. 测试仍只验证 helper / 局部逻辑，没有覆盖真实 runtime load 或实际 dispatch。
+6. Cycle 2 未实际进入 `qa_testing` / `ticket_fix`，而是被 finalize / skipped 提前短路。
+7. `qa_testing` 持续产生同类 ticket，进入无效循环。
 
 建议记录方式：
 

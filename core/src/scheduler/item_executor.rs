@@ -487,8 +487,8 @@ pub async fn execute_guard_step(
     task_ctx: &TaskRuntimeContext,
     runtime: &RunningTask,
 ) -> Result<GuardResult> {
-    if let Some(builtin) = &step.builtin {
-        if builtin.as_str() == "loop_guard" {
+    if let ExecutionMode::Builtin { name } = step.effective_execution_mode().as_ref() {
+        if name == "loop_guard" {
             let unresolved = count_unresolved_items(state, task_id)?;
             // Respect stop_when_no_unresolved config: only stop on zero unresolved
             // when the guard is configured to do so. In Fixed mode with max_cycles,
@@ -673,7 +673,12 @@ pub async fn process_item_filtered(
             json!({"step": phase, "step_id": &step.id, "step_scope": step.resolved_scope(), "cycle": task_ctx.current_cycle, "pipeline_var_keys": pipeline_var_keys}),
         )?;
 
-        let result = match &step.behavior.execution {
+        // Layer 2 defense: delegate to the consolidated method on TaskExecutionStep.
+        // If `step.builtin` names a known builtin, the method returns Builtin regardless
+        // of what `behavior.execution` says, making dispatch robust against stale JSON.
+        let effective_execution = step.effective_execution_mode();
+
+        let result = match effective_execution.as_ref() {
             ExecutionMode::Builtin { name } if name == "self_test" => {
                 // Self-test uses a specialized builtin
                 let exit_code =
@@ -1172,7 +1177,7 @@ pub async fn process_item_filtered(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::PipelineVariables;
+    use crate::config::{ExecutionMode, PipelineVariables, StepBehavior};
     use std::collections::HashMap;
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
@@ -1403,5 +1408,72 @@ mod tests {
         assert_eq!(prefix.len(), PIPELINE_VAR_INLINE_LIMIT - 2);
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // ── Layer-2 dispatch guard tests ─────────────────────────────────
+
+    fn make_step(
+        id: &str,
+        builtin: Option<&str>,
+        execution: ExecutionMode,
+    ) -> crate::config::TaskExecutionStep {
+        crate::config::TaskExecutionStep {
+            id: id.to_string(),
+            builtin: builtin.map(|s| s.to_string()),
+            required_capability: None,
+            enabled: true,
+            repeatable: true,
+            is_guard: false,
+            cost_preference: None,
+            prehook: None,
+            tty: false,
+            outputs: vec![],
+            pipe_to: None,
+            command: None,
+            chain_steps: vec![],
+            scope: None,
+            behavior: StepBehavior {
+                execution,
+                ..StepBehavior::default()
+            },
+        }
+    }
+
+    #[test]
+    fn builtin_guard_routes_self_test_regardless_of_execution_mode() {
+        // Step has stale Agent execution mode but builtin field is authoritative.
+        let step = make_step("self_test", Some("self_test"), ExecutionMode::Agent);
+        assert_eq!(
+            step.effective_execution_mode().as_ref(),
+            &ExecutionMode::Builtin {
+                name: "self_test".to_string()
+            },
+            "dispatch guard must resolve self_test builtin even when behavior.execution is Agent"
+        );
+    }
+
+    #[test]
+    fn builtin_guard_noop_for_agent_step() {
+        // Pure agent step (no builtin field) stays as Agent.
+        let step = make_step("plan", None, ExecutionMode::Agent);
+        assert_eq!(step.effective_execution_mode().as_ref(), &ExecutionMode::Agent);
+    }
+
+    #[test]
+    fn builtin_guard_noop_when_already_correct() {
+        // Step already has correct Builtin execution mode — guard is a no-op.
+        let step = make_step(
+            "self_test",
+            Some("self_test"),
+            ExecutionMode::Builtin {
+                name: "self_test".to_string(),
+            },
+        );
+        assert_eq!(
+            step.effective_execution_mode().as_ref(),
+            &ExecutionMode::Builtin {
+                name: "self_test".to_string()
+            }
+        );
     }
 }

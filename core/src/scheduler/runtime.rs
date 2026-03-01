@@ -194,6 +194,11 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
                 },
             )
         });
+    // Layer 1 defense: re-normalize builtin steps whose `behavior.execution`
+    // may have been stored as the serde default `Agent` in SQLite.
+    for step in &mut execution_plan.steps {
+        step.renormalize_execution_mode();
+    }
     if execution_plan.finalize.rules.is_empty() {
         execution_plan.finalize = crate::config::default_workflow_finalize_config();
     }
@@ -445,5 +450,62 @@ mod tests {
         shutdown_running_tasks(state.clone()).await;
         let running = state.running.lock().await;
         assert!(running.is_empty());
+    }
+
+    #[test]
+    fn load_task_runtime_context_renormalizes_stale_self_test_steps() {
+        use crate::config::ExecutionMode;
+
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let active = read_active_config(&state).expect("read active config");
+        let workflow = active
+            .config
+            .workflows
+            .get(&active.default_workflow_id)
+            .expect("default workflow");
+        let mut plan = build_execution_plan(&active.config, workflow, &active.default_workflow_id)
+            .expect("build execution plan");
+
+        let stale_step = plan.steps.first_mut().expect("plan has step");
+        stale_step.id = "self_test".to_string();
+        stale_step.builtin = Some("self_test".to_string());
+        stale_step.required_capability = Some("self_test".to_string());
+        stale_step.behavior.execution = ExecutionMode::Agent;
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET execution_plan_json = ?2 WHERE id = ?1",
+            params![
+                task_id.clone(),
+                serde_json::to_string(&plan).expect("serialize plan")
+            ],
+        )
+        .expect("update task");
+
+        let ctx = load_task_runtime_context(&state, &task_id).expect("load runtime context");
+        let loaded_step = ctx
+            .execution_plan
+            .step_by_id("self_test")
+            .expect("self_test step present");
+
+        assert_eq!(
+            loaded_step.behavior.execution,
+            ExecutionMode::Builtin {
+                name: "self_test".to_string()
+            },
+            "load_task_runtime_context must heal stale stored execution mode"
+        );
+        assert!(
+            loaded_step.required_capability.is_none(),
+            "load_task_runtime_context must clear stale required_capability for builtin steps"
+        );
+        assert_eq!(
+            loaded_step.effective_execution_mode().as_ref(),
+            &ExecutionMode::Builtin {
+                name: "self_test".to_string()
+            },
+            "the loaded step must dispatch as builtin through the real runtime path"
+        );
     }
 }

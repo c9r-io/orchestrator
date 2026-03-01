@@ -1,4 +1,5 @@
 .sisyphus
+.stable
 data/logs/*.log
 config/default.yaml
 docs/ticket/*.md

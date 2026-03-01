@@ -851,6 +851,45 @@ impl TaskExecutionStep {
         self.scope
             .unwrap_or_else(|| default_scope_for_step_id(&self.id))
     }
+
+    /// Returns the authoritative execution mode for this step.
+    ///
+    /// If `self.builtin` names a known builtin, this always returns
+    /// `Builtin { name }` regardless of what `behavior.execution` says.
+    /// This is the single consolidated entry point for dispatch decisions.
+    ///
+    /// Unlike [`renormalize_execution_mode`] which mutates stored state,
+    /// this method is read-only and is always authoritative at dispatch time,
+    /// even if renormalization hasn't run yet.
+    pub fn effective_execution_mode(&self) -> std::borrow::Cow<'_, ExecutionMode> {
+        if let Some(ref bname) = self.builtin {
+            if is_known_builtin_step_name(bname) {
+                return std::borrow::Cow::Owned(ExecutionMode::Builtin {
+                    name: bname.clone(),
+                });
+            }
+        }
+        std::borrow::Cow::Borrowed(&self.behavior.execution)
+    }
+
+    /// Corrects `behavior.execution` when `builtin` disagrees with it.
+    ///
+    /// After deserializing from SQLite the `behavior.execution` field may carry
+    /// the serde `#[default]` value (`ExecutionMode::Agent`) even though
+    /// `self.builtin` names a known builtin step.  This method is the single
+    /// source of truth for healing that mismatch:
+    ///
+    /// - If `self.builtin` names a known builtin, force `behavior.execution`
+    ///   to `Builtin { name }` and clear `required_capability`.
+    /// - Otherwise leave the step unchanged.
+    pub fn renormalize_execution_mode(&mut self) {
+        if let Some(ref name) = self.builtin.clone() {
+            if is_known_builtin_step_name(name) {
+                self.behavior.execution = ExecutionMode::Builtin { name: name.clone() };
+                self.required_capability = None;
+            }
+        }
+    }
 }
 
 /// Task execution plan
@@ -1926,5 +1965,99 @@ mod tests {
     #[test]
     fn test_default_project() {
         assert_eq!(default_project(), "default");
+    }
+
+    // ===== TaskExecutionStep::renormalize_execution_mode =====
+
+    fn make_agent_step(
+        id: &str,
+        builtin: Option<&str>,
+        capability: Option<&str>,
+    ) -> TaskExecutionStep {
+        TaskExecutionStep {
+            id: id.to_string(),
+            required_capability: capability.map(|s| s.to_string()),
+            builtin: builtin.map(|s| s.to_string()),
+            enabled: true,
+            repeatable: true,
+            is_guard: false,
+            cost_preference: None,
+            prehook: None,
+            tty: false,
+            outputs: vec![],
+            pipe_to: None,
+            command: None,
+            chain_steps: vec![],
+            scope: None,
+            behavior: StepBehavior::default(),
+        }
+    }
+
+    #[test]
+    fn renormalize_corrects_stale_agent_to_builtin() {
+        let mut step = make_agent_step("self_test", Some("self_test"), None);
+        // Precondition: execution defaults to Agent (serde default)
+        assert_eq!(step.behavior.execution, ExecutionMode::Agent);
+        step.renormalize_execution_mode();
+        assert_eq!(
+            step.behavior.execution,
+            ExecutionMode::Builtin {
+                name: "self_test".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn renormalize_clears_stale_required_capability() {
+        let mut step = make_agent_step("self_test", Some("self_test"), Some("self_test"));
+        step.renormalize_execution_mode();
+        assert!(step.required_capability.is_none());
+    }
+
+    #[test]
+    fn renormalize_noop_for_correct_builtin() {
+        let mut step = make_agent_step("self_test", Some("self_test"), None);
+        step.behavior.execution = ExecutionMode::Builtin {
+            name: "self_test".to_string(),
+        };
+        step.renormalize_execution_mode();
+        assert_eq!(
+            step.behavior.execution,
+            ExecutionMode::Builtin {
+                name: "self_test".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn renormalize_noop_for_agent_step() {
+        let mut step = make_agent_step("plan", None, Some("plan"));
+        step.renormalize_execution_mode();
+        // stays Agent, capability unchanged
+        assert_eq!(step.behavior.execution, ExecutionMode::Agent);
+        assert_eq!(step.required_capability, Some("plan".to_string()));
+    }
+
+    #[test]
+    fn renormalize_handles_all_known_builtins() {
+        for name in &["init_once", "loop_guard", "ticket_scan", "self_test"] {
+            let mut step = make_agent_step(name, Some(name), None);
+            // Starts as Agent (default)
+            assert_eq!(
+                step.behavior.execution,
+                ExecutionMode::Agent,
+                "name={}",
+                name
+            );
+            step.renormalize_execution_mode();
+            assert_eq!(
+                step.behavior.execution,
+                ExecutionMode::Builtin {
+                    name: name.to_string()
+                },
+                "name={}",
+                name
+            );
+        }
     }
 }
