@@ -7,6 +7,7 @@ use std::process::Stdio;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     fn make_runner_config() -> RunnerConfig {
         RunnerConfig {
@@ -64,6 +65,28 @@ mod tests {
     }
 
     #[test]
+    fn test_enforce_runner_policy_rejects_disallowed_shell() {
+        let mut runner = make_runner_config();
+        runner.policy = RunnerPolicy::Allowlist;
+        runner.shell = "/bin/sh".to_string();
+
+        let result = enforce_runner_policy(&runner, "echo hello");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("runner.shell"));
+    }
+
+    #[test]
+    fn test_enforce_runner_policy_rejects_disallowed_shell_arg() {
+        let mut runner = make_runner_config();
+        runner.policy = RunnerPolicy::Allowlist;
+        runner.shell_arg = "-c".to_string();
+
+        let result = enforce_runner_policy(&runner, "echo hello");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("runner.shell_arg"));
+    }
+
+    #[test]
     fn test_redact_text_removes_matching_patterns() {
         let patterns = vec!["password".to_string(), "token".to_string()];
         let input = "my password is [REDACTED] and token is [REDACTED]";
@@ -87,6 +110,62 @@ mod tests {
         let input = "hello world";
         let result = redact_text(input, &patterns);
         assert_eq!(result, "hello world");
+    }
+
+    #[tokio::test]
+    async fn test_spawn_with_runner_allowlist_filters_environment() {
+        let temp = tempdir().expect("create tempdir");
+        let stdout_path = temp.path().join("stdout.log");
+        let stderr_path = temp.path().join("stderr.log");
+        let stdout = File::create(&stdout_path).expect("create stdout file");
+        let stderr = File::create(&stderr_path).expect("create stderr file");
+
+        let mut runner = make_runner_config();
+        runner.policy = RunnerPolicy::Allowlist;
+        runner.env_allowlist = vec!["RUNNER_ALLOWED_TEST".to_string()];
+
+        std::env::set_var("RUNNER_ALLOWED_TEST", "visible");
+        std::env::set_var("RUNNER_BLOCKED_TEST", "hidden");
+        std::env::set_var("CLAUDECODE", "nested-session");
+
+        let mut child = spawn_with_runner(
+            &runner,
+            "printf '%s|%s|%s' \"${RUNNER_ALLOWED_TEST:-missing}\" \"${RUNNER_BLOCKED_TEST:-missing}\" \"${CLAUDECODE:-missing}\"",
+            temp.path(),
+            stdout,
+            stderr,
+        )
+        .expect("spawn with allowlist");
+
+        let status = child.wait().await.expect("wait for child");
+        std::env::remove_var("RUNNER_ALLOWED_TEST");
+        std::env::remove_var("RUNNER_BLOCKED_TEST");
+        std::env::remove_var("CLAUDECODE");
+
+        assert!(status.success());
+        assert_eq!(
+            std::fs::read_to_string(&stdout_path).expect("read stdout"),
+            "visible|missing|missing"
+        );
+        let stderr_output = std::fs::read_to_string(&stderr_path).expect("read stderr");
+        assert!(!stderr_output.contains("RUNNER_ALLOWED_TEST"));
+        assert!(!stderr_output.contains("RUNNER_BLOCKED_TEST"));
+    }
+
+    #[test]
+    fn test_spawn_with_runner_wraps_spawn_errors() {
+        let temp = tempdir().expect("create tempdir");
+        let stdout_path = temp.path().join("stdout.log");
+        let stderr_path = temp.path().join("stderr.log");
+        let stdout = File::create(&stdout_path).expect("create stdout file");
+        let stderr = File::create(&stderr_path).expect("create stderr file");
+
+        let mut runner = make_runner_config();
+        runner.shell = "/definitely/missing-shell".to_string();
+
+        let err = spawn_with_runner(&runner, "echo hello", temp.path(), stdout, stderr)
+            .expect_err("missing shell should fail");
+        assert!(err.to_string().contains("failed to spawn runner"));
     }
 }
 

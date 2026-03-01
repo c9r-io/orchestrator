@@ -257,3 +257,193 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
         consecutive_failures: 0,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::WorkflowSafetyProfile;
+    use crate::config_load::{build_execution_plan, read_active_config};
+    use crate::db::open_conn;
+    use crate::dto::CreateTaskPayload;
+    use crate::task_ops::create_task_impl;
+    use crate::task_repository::{SqliteTaskRepository, TaskRepository};
+    use crate::test_utils::TestState;
+    use rusqlite::params;
+
+    fn seed_task(fixture: &mut TestState) -> (Arc<InnerState>, String) {
+        let state = fixture.build();
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/runtime_test.md");
+        std::fs::write(&qa_file, "# runtime test\n").expect("seed qa file");
+        let created = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("runtime-test".to_string()),
+                goal: Some("runtime-test-goal".to_string()),
+                ..Default::default()
+            },
+        )
+        .expect("create task");
+        (state, created.id)
+    }
+
+    #[test]
+    fn load_task_runtime_context_normalizes_fields() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let active = read_active_config(&state).expect("read active config");
+        let workflow = active
+            .config
+            .workflows
+            .get(&active.default_workflow_id)
+            .expect("default workflow");
+        let mut plan = build_execution_plan(&active.config, workflow, &active.default_workflow_id)
+            .expect("build execution plan");
+        plan.finalize.rules.clear();
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET execution_plan_json = ?2, current_cycle = -4, init_done = 1 WHERE id = ?1",
+            params![
+                task_id.clone(),
+                serde_json::to_string(&plan).expect("serialize plan")
+            ],
+        )
+        .expect("update task");
+
+        let ctx = load_task_runtime_context(&state, &task_id).expect("load runtime context");
+        assert_eq!(ctx.current_cycle, 0);
+        assert!(ctx.init_done);
+        assert!(!ctx.execution_plan.finalize.rules.is_empty());
+        assert_eq!(
+            ctx.pipeline_vars.vars.get("goal").map(String::as_str),
+            Some("runtime-test-goal")
+        );
+        assert!(!ctx.execution_plan.steps.is_empty());
+    }
+
+    #[test]
+    fn load_task_runtime_context_errors_when_workspace_root_is_missing() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        std::fs::remove_dir_all(state.app_root.join("workspace/default"))
+            .expect("remove workspace root");
+
+        let err = load_task_runtime_context(&state, &task_id).expect_err("missing root must fail");
+        assert!(err.to_string().contains("workspace root does not exist"));
+    }
+
+    #[test]
+    fn load_task_runtime_context_validates_probe_profile() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+
+        {
+            let mut active = state.active_config.write().expect("lock active config");
+            let workflow_id = active.default_workflow_id.clone();
+            active
+                .config
+                .workflows
+                .get_mut(&workflow_id)
+                .expect("default workflow")
+                .safety
+                .profile = WorkflowSafetyProfile::SelfReferentialProbe;
+        }
+
+        let err = load_task_runtime_context(&state, &task_id)
+            .expect_err("probe profile should fail for non-self-referential workspace");
+        assert!(err.to_string().contains("not self_referential"));
+    }
+
+    #[tokio::test]
+    async fn spawn_task_runner_returns_early_for_duplicate_task() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+
+        {
+            let mut running = state.running.lock().await;
+            running.insert(task_id.clone(), RunningTask::new());
+        }
+
+        spawn_task_runner(state.clone(), task_id.clone())
+            .await
+            .expect("duplicate spawn should return ok");
+
+        let running = state.running.lock().await;
+        assert_eq!(running.len(), 1);
+        assert!(running.contains_key(&task_id));
+    }
+
+    #[tokio::test]
+    async fn stop_task_runtime_marks_task_and_stop_flag() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let runtime = RunningTask::new();
+
+        {
+            let mut running = state.running.lock().await;
+            running.insert(task_id.clone(), runtime.clone());
+        }
+
+        stop_task_runtime(state.clone(), &task_id, "paused")
+            .await
+            .expect("stop runtime");
+
+        assert!(runtime.stop_flag.load(Ordering::SeqCst));
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        assert_eq!(
+            repo.load_task_status(&task_id).expect("load task status"),
+            Some("paused".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn stop_task_runtime_for_delete_removes_running_handle() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+
+        {
+            let mut running = state.running.lock().await;
+            running.insert(task_id.clone(), RunningTask::new());
+        }
+
+        stop_task_runtime_for_delete(state.clone(), &task_id)
+            .await
+            .expect("stop for delete");
+
+        let running = state.running.lock().await;
+        assert!(!running.contains_key(&task_id));
+    }
+
+    #[tokio::test]
+    async fn shutdown_running_tasks_pauses_and_clears_runtime_map() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+
+        {
+            let mut running = state.running.lock().await;
+            running.insert(task_id.clone(), RunningTask::new());
+        }
+
+        shutdown_running_tasks(state.clone()).await;
+
+        let running = state.running.lock().await;
+        assert!(running.is_empty());
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        assert_eq!(
+            repo.load_task_status(&task_id).expect("load task status"),
+            Some("paused".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn shutdown_running_tasks_is_noop_when_empty() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        shutdown_running_tasks(state.clone()).await;
+        let running = state.running.lock().await;
+        assert!(running.is_empty());
+    }
+}

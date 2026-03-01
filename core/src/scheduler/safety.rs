@@ -134,6 +134,7 @@ pub async fn execute_self_test_step(
     item_id: &str,
 ) -> Result<i64> {
     let core_dir = workspace_root.join("core");
+    let cargo_bin = std::env::var("ORCH_SELF_TEST_CARGO").unwrap_or_else(|_| "cargo".to_string());
 
     state.emit_event(
         task_id,
@@ -141,7 +142,7 @@ pub async fn execute_self_test_step(
         "self_test_phase",
         json!({"phase": "cargo_check"}),
     );
-    let check_output = tokio::process::Command::new("cargo")
+    let check_output = tokio::process::Command::new(&cargo_bin)
         .args(["check", "--message-format=short"])
         .current_dir(&core_dir)
         .output()
@@ -172,7 +173,7 @@ pub async fn execute_self_test_step(
         "self_test_phase",
         json!({"phase": "cargo_test_lib"}),
     );
-    let test_output = tokio::process::Command::new("cargo")
+    let test_output = tokio::process::Command::new(&cargo_bin)
         .args([
             "test",
             "--lib",
@@ -248,7 +249,14 @@ pub async fn execute_self_test_step(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::TestState;
     use std::io::Write;
+    use tempfile::TempDir;
+
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn create_mock_binary(path: &Path, content: &[u8]) -> std::io::Result<()> {
         let parent = path.parent().unwrap();
@@ -256,6 +264,36 @@ mod tests {
         let mut file = std::fs::File::create(path)?;
         file.write_all(content)?;
         Ok(())
+    }
+
+    fn make_temp_dir(label: &str) -> TempDir {
+        tempfile::Builder::new()
+            .prefix(label)
+            .tempdir()
+            .expect("create temp dir")
+    }
+
+    fn write_executable(path: &Path, content: &str) {
+        let parent = path.parent().expect("script parent");
+        std::fs::create_dir_all(parent).expect("create script dir");
+        std::fs::write(path, content).expect("write script");
+        #[cfg(unix)]
+        {
+            let mut perms = std::fs::metadata(path)
+                .expect("script metadata")
+                .permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(path, perms).expect("set executable permissions");
+        }
+    }
+
+    fn run_git(args: &[&str], cwd: &Path) {
+        let status = std::process::Command::new("git")
+            .args(args)
+            .current_dir(cwd)
+            .status()
+            .expect("run git");
+        assert!(status.success(), "git {:?} should succeed", args);
     }
 
     #[tokio::test]
@@ -482,5 +520,141 @@ mod tests {
         assert!(err_msg.contains("release binary not found"));
 
         std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[tokio::test]
+    async fn test_create_checkpoint_and_rollback_success() {
+        let temp = make_temp_dir("safety-test-git");
+        let repo = temp.path();
+
+        run_git(&["init"], repo);
+        run_git(&["config", "user.email", "test@example.com"], repo);
+        run_git(&["config", "user.name", "Coverage Test"], repo);
+
+        let tracked = repo.join("tracked.txt");
+        std::fs::write(&tracked, "base\n").expect("write base file");
+        run_git(&["add", "tracked.txt"], repo);
+        run_git(&["commit", "-m", "base"], repo);
+
+        std::fs::write(&tracked, "checkpoint\n").expect("write checkpoint content");
+        run_git(&["commit", "-am", "checkpoint"], repo);
+
+        let tag = create_checkpoint(repo, "task-1", 2)
+            .await
+            .expect("create checkpoint");
+        assert_eq!(tag, "checkpoint/task-1/2");
+
+        std::fs::write(&tracked, "after\n").expect("write after content");
+        run_git(&["commit", "-am", "after"], repo);
+
+        rollback_to_checkpoint(repo, &tag)
+            .await
+            .expect("rollback to checkpoint");
+
+        assert_eq!(
+            std::fs::read_to_string(&tracked).expect("read tracked file"),
+            "checkpoint\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_checkpoint_fails_outside_git_repo() {
+        let temp = make_temp_dir("safety-test-no-git");
+        let err = create_checkpoint(temp.path(), "task-1", 1)
+            .await
+            .expect_err("checkpoint should fail without git repo");
+        assert!(err.to_string().contains("git tag failed"));
+    }
+
+    #[tokio::test]
+    async fn test_rollback_to_checkpoint_fails_for_missing_tag() {
+        let temp = make_temp_dir("safety-test-missing-tag");
+        let repo = temp.path();
+
+        run_git(&["init"], repo);
+        run_git(&["config", "user.email", "test@example.com"], repo);
+        run_git(&["config", "user.name", "Coverage Test"], repo);
+        let tracked = repo.join("tracked.txt");
+        std::fs::write(&tracked, "base\n").expect("write base file");
+        run_git(&["add", "tracked.txt"], repo);
+        run_git(&["commit", "-m", "base"], repo);
+
+        let err = rollback_to_checkpoint(repo, "checkpoint/missing/1")
+            .await
+            .expect_err("rollback should fail for missing tag");
+        assert!(err.to_string().contains("git reset failed"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_self_test_step_returns_nonzero_when_cargo_check_fails() {
+        let _env_guard = ENV_LOCK.lock().expect("lock env");
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let workspace_root = state.app_root.clone();
+
+        let fake_bin = workspace_root.join("fake-bin");
+        let cargo_log = workspace_root.join("fake-cargo.log");
+        write_executable(
+            &fake_bin.join("cargo"),
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FAKE_CARGO_LOG\"\nexit 9\n",
+        );
+        std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
+
+        let fake_cargo = fake_bin.join("cargo");
+        std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
+        std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
+
+        let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1")
+            .await
+            .expect("self test should return exit code");
+
+        std::env::remove_var("FAKE_CARGO_LOG");
+        std::env::remove_var("ORCH_SELF_TEST_CARGO");
+
+        assert_eq!(result, 9);
+        let log = std::fs::read_to_string(&cargo_log).expect("read cargo log");
+        assert!(log.contains("check --message-format=short"));
+        assert!(!log.contains("test --lib"));
+    }
+
+    #[tokio::test]
+    async fn test_execute_self_test_step_success_with_manifest_validate() {
+        let _env_guard = ENV_LOCK.lock().expect("lock env");
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let workspace_root = state.app_root.clone();
+
+        let fake_bin = workspace_root.join("fake-bin");
+        let cargo_log = workspace_root.join("fake-cargo.log");
+        let manifest_log = workspace_root.join("manifest.log");
+        write_executable(
+            &fake_bin.join("cargo"),
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FAKE_CARGO_LOG\"\nexit 0\n",
+        );
+        write_executable(
+            &workspace_root.join("scripts/orchestrator.sh"),
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FAKE_MANIFEST_LOG\"\nexit 0\n",
+        );
+        std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
+
+        let fake_cargo = fake_bin.join("cargo");
+        std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
+        std::env::set_var("FAKE_MANIFEST_LOG", &manifest_log);
+        std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
+
+        let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1")
+            .await
+            .expect("self test should succeed");
+
+        std::env::remove_var("FAKE_CARGO_LOG");
+        std::env::remove_var("FAKE_MANIFEST_LOG");
+        std::env::remove_var("ORCH_SELF_TEST_CARGO");
+
+        assert_eq!(result, 0);
+        let cargo_calls = std::fs::read_to_string(&cargo_log).expect("read cargo log");
+        let manifest_calls = std::fs::read_to_string(&manifest_log).expect("read manifest log");
+        assert!(cargo_calls.contains("check --message-format=short"));
+        assert!(cargo_calls.contains("test --lib -- --skip self_test_survives_smoke_test"));
+        assert!(manifest_calls.contains("manifest validate -f docs/workflow/self-bootstrap.yaml"));
     }
 }

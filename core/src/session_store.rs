@@ -271,3 +271,172 @@ pub fn release_attachment(
     )?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::{init_schema, open_conn};
+    use tempfile::TempDir;
+
+    fn make_db() -> (TempDir, std::path::PathBuf) {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let db_path = dir.path().join("sessions.db");
+        init_schema(&db_path).expect("init schema");
+        (dir, db_path)
+    }
+
+    fn make_session<'a>(
+        id: &'a str,
+        task_id: &'a str,
+        step_id: &'a str,
+        state: &'a str,
+    ) -> NewSession<'a> {
+        NewSession {
+            id,
+            task_id,
+            task_item_id: Some("item-1"),
+            step_id,
+            phase: "qa",
+            agent_id: "agent-a",
+            state,
+            pid: 100,
+            pty_backend: "pty",
+            cwd: "/tmp",
+            command: "echo hi",
+            input_fifo_path: "/tmp/in.fifo",
+            stdout_path: "/tmp/stdout.log",
+            stderr_path: "/tmp/stderr.log",
+            transcript_path: "/tmp/transcript.log",
+            output_json_path: Some("/tmp/output.json"),
+        }
+    }
+
+    #[test]
+    fn insert_load_and_update_session_lifecycle() {
+        let (_dir, db_path) = make_db();
+        let session = make_session("sess-1", "task-1", "qa", "active");
+        insert_session(&db_path, &session).expect("insert session");
+
+        let inserted = load_session(&db_path, "sess-1")
+            .expect("load session")
+            .expect("session should exist");
+        assert_eq!(inserted.task_item_id.as_deref(), Some("item-1"));
+        assert_eq!(
+            inserted.output_json_path.as_deref(),
+            Some("/tmp/output.json")
+        );
+        assert_eq!(inserted.state, "active");
+        assert_eq!(inserted.pid, 100);
+        assert_eq!(inserted.ended_at, None);
+        assert_eq!(inserted.exit_code, None);
+
+        update_session_pid(&db_path, "sess-1", 4242).expect("update pid");
+        update_session_state(&db_path, "sess-1", "detached", Some(7), false)
+            .expect("detach session");
+
+        let detached = load_session(&db_path, "sess-1")
+            .expect("reload session")
+            .expect("session should still exist");
+        assert_eq!(detached.pid, 4242);
+        assert_eq!(detached.state, "detached");
+        assert_eq!(detached.exit_code, Some(7));
+        assert_eq!(detached.ended_at, None);
+
+        update_session_state(&db_path, "sess-1", "exited", None, true).expect("exit session");
+        let exited = load_session(&db_path, "sess-1")
+            .expect("reload exited session")
+            .expect("session should still exist");
+        assert_eq!(exited.state, "exited");
+        assert_eq!(exited.exit_code, Some(7));
+        assert!(exited.ended_at.is_some());
+
+        assert!(load_session(&db_path, "missing")
+            .expect("load missing session")
+            .is_none());
+    }
+
+    #[test]
+    fn active_session_lookup_and_listing_filter_by_task() {
+        let (_dir, db_path) = make_db();
+        insert_session(
+            &db_path,
+            &make_session("sess-old", "task-1", "qa", "exited"),
+        )
+        .expect("insert exited session");
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        insert_session(
+            &db_path,
+            &make_session("sess-active", "task-1", "qa", "active"),
+        )
+        .expect("insert active session");
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        insert_session(
+            &db_path,
+            &make_session("sess-detached", "task-1", "qa", "detached"),
+        )
+        .expect("insert detached session");
+        insert_session(
+            &db_path,
+            &make_session("sess-other", "task-2", "qa", "active"),
+        )
+        .expect("insert other task session");
+
+        let active = load_active_session_for_task_step(&db_path, "task-1", "qa")
+            .expect("query active session")
+            .expect("task should have an active session");
+        assert_eq!(active.id, "sess-detached");
+        assert_eq!(active.state, "detached");
+
+        let task_1_sessions = list_task_sessions(&db_path, "task-1").expect("list sessions");
+        let task_1_ids: Vec<&str> = task_1_sessions.iter().map(|row| row.id.as_str()).collect();
+        assert_eq!(task_1_ids.len(), 3);
+        assert!(task_1_ids.contains(&"sess-old"));
+        assert!(task_1_ids.contains(&"sess-active"));
+        assert!(task_1_ids.contains(&"sess-detached"));
+
+        assert!(
+            load_active_session_for_task_step(&db_path, "task-1", "missing-step")
+                .expect("query missing step")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn writer_and_reader_attachments_round_trip() {
+        let (_dir, db_path) = make_db();
+        insert_session(&db_path, &make_session("sess-1", "task-1", "qa", "active"))
+            .expect("insert session");
+
+        assert!(acquire_writer(&db_path, "sess-1", "writer-1").expect("acquire initial writer"));
+        assert!(acquire_writer(&db_path, "sess-1", "writer-1").expect("re-acquire same writer"));
+        assert!(!acquire_writer(&db_path, "sess-1", "writer-2").expect("reject second writer"));
+
+        attach_reader(&db_path, "sess-1", "reader-1").expect("attach reader");
+        release_attachment(&db_path, "sess-1", "reader-1", "done").expect("detach reader");
+        release_attachment(&db_path, "sess-1", "writer-1", "handoff").expect("detach writer");
+
+        let session = load_session(&db_path, "sess-1")
+            .expect("reload session")
+            .expect("session should exist");
+        assert_eq!(session.writer_client_id, None);
+
+        let conn = open_conn(&db_path).expect("open sqlite");
+        let writer_attachments: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM session_attachments WHERE session_id = ?1 AND mode = 'writer'",
+                params!["sess-1"],
+                |row| row.get(0),
+            )
+            .expect("count writer attachments");
+        let detached_attachments: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM session_attachments WHERE session_id = ?1 AND detached_at IS NOT NULL",
+                params!["sess-1"],
+                |row| row.get(0),
+            )
+            .expect("count detached attachments");
+
+        assert_eq!(writer_attachments, 2);
+        assert_eq!(detached_attachments, 3);
+    }
+}
