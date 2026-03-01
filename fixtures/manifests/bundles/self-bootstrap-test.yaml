@@ -101,13 +101,11 @@ spec:
       type: build
       enabled: true
       repeatable: true
-      builtin: build
       command: "echo 'Compiling agent-orchestrator v0.1.0' && echo 'Finished dev [unoptimized] target(s)'"
     - id: test
       type: test
       enabled: true
       repeatable: true
-      builtin: test
       command: "echo 'running 5 tests' && echo 'test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'"
     - id: loop_guard
       type: loop_guard
@@ -140,7 +138,6 @@ spec:
       type: build
       enabled: true
       repeatable: true
-      builtin: build
       command: "echo 'error[E0308]: mismatched types' >&2 && echo '  --> src/main.rs:10:5' >&2 && exit 1"
     - id: fix
       type: fix
@@ -177,13 +174,11 @@ spec:
       type: build
       enabled: true
       repeatable: true
-      builtin: build
       command: "echo 'Compiling ok' && echo 'Finished dev [unoptimized] target(s)'"
     - id: test
       type: test
       enabled: true
       repeatable: true
-      builtin: test
       command: "echo 'running 3 tests' && echo 'test result: ok. 3 passed; 0 failed'"
     - id: fix
       type: fix
@@ -220,7 +215,6 @@ spec:
       type: build
       enabled: true
       repeatable: true
-      builtin: build
       command: "echo 'Compiling ok' && echo 'Finished dev [unoptimized] target(s)'"
     - id: loop_guard
       type: loop_guard
