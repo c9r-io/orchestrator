@@ -185,9 +185,15 @@ impl CliHandler {
             } => {
                 let resolved_id = resolve_task_id(&self.state, task_id)?;
                 let detail = get_task_details_impl(&self.state, &resolved_id)?;
-                let trace = crate::scheduler::trace::build_trace(
-                    &detail.task.id,
-                    &detail.task.status,
+                let trace = crate::scheduler::trace::build_trace_with_meta(
+                    crate::scheduler::trace::TraceTaskMeta {
+                        task_id: &detail.task.id,
+                        status: &detail.task.status,
+                        created_at: &detail.task.created_at,
+                        started_at: detail.task.started_at.as_deref(),
+                        completed_at: detail.task.completed_at.as_deref(),
+                        updated_at: &detail.task.updated_at,
+                    },
                     &detail.events,
                     &detail.runs,
                 );

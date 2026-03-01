@@ -1,4 +1,5 @@
 use crate::dto::{CommandRunDto, EventDto};
+use chrono::TimeZone;
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -61,11 +62,50 @@ pub struct TraceSummary {
     pub wall_time_secs: Option<f64>,
 }
 
+pub struct TraceTaskMeta<'a> {
+    pub task_id: &'a str,
+    pub status: &'a str,
+    pub created_at: &'a str,
+    pub started_at: Option<&'a str>,
+    pub completed_at: Option<&'a str>,
+    pub updated_at: &'a str,
+}
+
+#[derive(Debug)]
+struct CycleBuilder {
+    cycle: u32,
+    started_at: Option<String>,
+    ended_at: Option<String>,
+    last_seen_at: Option<String>,
+    steps: Vec<StepTrace>,
+}
+
 // ── Pure trace builder ───────────────────────────────────────────────
 
 pub fn build_trace(
     task_id: &str,
     status: &str,
+    events: &[EventDto],
+    command_runs: &[CommandRunDto],
+) -> TaskTrace {
+    let first_event_at = events.first().map(|e| e.created_at.as_str()).unwrap_or("");
+    let last_event_at = events.last().map(|e| e.created_at.as_str()).unwrap_or(first_event_at);
+    build_trace_with_meta(
+        TraceTaskMeta {
+            task_id,
+            status,
+            created_at: first_event_at,
+            started_at: None,
+            completed_at: None,
+            updated_at: last_event_at,
+        },
+        events,
+        command_runs,
+    )
+}
+
+pub fn build_trace_with_meta(
+    task_meta: TraceTaskMeta<'_>,
     events: &[EventDto],
     command_runs: &[CommandRunDto],
 ) -> TaskTrace {
@@ -84,11 +124,11 @@ pub fn build_trace(
         .collect();
     let events = &sorted_refs;
 
-    let cycles = build_cycles(events, command_runs);
+    let cycles = build_cycles(&task_meta, events, command_runs);
     let mut anomalies = Vec::new();
 
     detect_duplicate_runner(events, &mut anomalies);
-    detect_overlapping_cycles(events, &mut anomalies);
+    detect_overlapping_cycles(&cycles, &mut anomalies);
     detect_overlapping_steps(events, &mut anomalies);
     detect_missing_step_end(events, &mut anomalies);
     detect_empty_cycles(events, &mut anomalies);
@@ -114,7 +154,7 @@ pub fn build_trace(
         *anomaly_counts.entry(key.to_string()).or_insert(0) += 1;
     }
 
-    let wall_time_secs = compute_wall_time(events);
+    let wall_time_secs = compute_wall_time(&task_meta, events);
 
     let summary = TraceSummary {
         total_cycles: cycles.len() as u32,
@@ -126,8 +166,8 @@ pub fn build_trace(
     };
 
     TaskTrace {
-        task_id: task_id.to_string(),
-        status: status.to_string(),
+        task_id: task_meta.task_id.to_string(),
+        status: task_meta.status.to_string(),
         cycles,
         anomalies,
         summary,
@@ -136,9 +176,13 @@ pub fn build_trace(
 
 // ── Timeline reconstruction ──────────────────────────────────────────
 
-fn build_cycles(events: &[EventDto], command_runs: &[CommandRunDto]) -> Vec<CycleTrace> {
-    let mut cycles: Vec<CycleTrace> = Vec::new();
-    let mut current_cycle: Option<u32> = None;
+fn build_cycles(
+    task_meta: &TraceTaskMeta<'_>,
+    events: &[EventDto],
+    command_runs: &[CommandRunDto],
+) -> Vec<CycleTrace> {
+    let mut cycles: Vec<CycleBuilder> = Vec::new();
+    let mut current_cycle_idx: Option<usize> = None;
 
     // Index command_runs by (item_id, phase) for lookup
     let mut runs_by_item_phase: HashMap<(String, String), Vec<&CommandRunDto>> = HashMap::new();
@@ -152,20 +196,31 @@ fn build_cycles(events: &[EventDto], command_runs: &[CommandRunDto]) -> Vec<Cycl
     for event in events {
         match event.event_type.as_str() {
             "cycle_started" => {
+                if let Some(idx) = current_cycle_idx {
+                    let ended_at = cycles[idx]
+                        .last_seen_at
+                        .clone()
+                        .or_else(|| cycles[idx].started_at.clone())
+                        .or_else(|| Some(event.created_at.clone()));
+                    close_cycle_at(&mut cycles[idx], ended_at);
+                }
+
                 let cycle_num = event
                     .payload
                     .get("cycle")
                     .and_then(|v| v.as_u64())
                     .unwrap_or(0) as u32;
-                current_cycle = Some(cycle_num);
-                cycles.push(CycleTrace {
+                cycles.push(CycleBuilder {
                     cycle: cycle_num,
                     started_at: Some(event.created_at.clone()),
                     ended_at: None,
+                    last_seen_at: Some(event.created_at.clone()),
                     steps: Vec::new(),
                 });
+                current_cycle_idx = Some(cycles.len() - 1);
             }
             "step_started" | "chain_step_started" | "dynamic_step_started" => {
+                let cycle_idx = ensure_cycle_for_event(&mut cycles, &mut current_cycle_idx, event);
                 let step_id = event
                     .payload
                     .get("step")
@@ -193,26 +248,15 @@ fn build_cycles(events: &[EventDto], command_runs: &[CommandRunDto]) -> Vec<Cycl
                     skip_reason: None,
                 };
 
-                if let Some(cycle) = cycles.last_mut() {
-                    cycle.steps.push(step);
-                } else {
-                    // Step before any cycle — create an implicit cycle 0
-                    if current_cycle.is_none() {
-                        current_cycle = Some(0);
-                        cycles.push(CycleTrace {
-                            cycle: 0,
-                            started_at: Some(event.created_at.clone()),
-                            ended_at: None,
-                            steps: Vec::new(),
-                        });
-                    }
-                    cycles.last_mut().unwrap().steps.push(step);
-                }
+                let cycle = &mut cycles[cycle_idx];
+                cycle.last_seen_at = Some(event.created_at.clone());
+                cycle.steps.push(step);
             }
-            "step_finished" => {
+            "step_finished" | "chain_step_finished" | "dynamic_step_finished" => {
                 let step_id = event
                     .payload
                     .get("step")
+                    .or_else(|| event.payload.get("step_id"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("unknown");
                 let success = event.payload.get("success").and_then(|v| v.as_bool());
@@ -224,7 +268,8 @@ fn build_cycles(events: &[EventDto], command_runs: &[CommandRunDto]) -> Vec<Cycl
                     .map(|s| s.to_string());
 
                 // Find matching step in current cycle (search backwards for latest match)
-                if let Some(cycle) = cycles.last_mut() {
+                if let Some(cycle) = current_cycle_idx.and_then(|idx| cycles.get_mut(idx)) {
+                    cycle.last_seen_at = Some(event.created_at.clone());
                     if let Some(step) = cycle
                         .steps
                         .iter_mut()
@@ -260,6 +305,7 @@ fn build_cycles(events: &[EventDto], command_runs: &[CommandRunDto]) -> Vec<Cycl
                 }
             }
             "step_skipped" => {
+                let cycle_idx = ensure_cycle_for_event(&mut cycles, &mut current_cycle_idx, event);
                 let step_id = event
                     .payload
                     .get("step")
@@ -290,45 +336,156 @@ fn build_cycles(events: &[EventDto], command_runs: &[CommandRunDto]) -> Vec<Cycl
                     skip_reason: reason,
                 };
 
-                if let Some(cycle) = cycles.last_mut() {
-                    cycle.steps.push(step);
+                let cycle = &mut cycles[cycle_idx];
+                cycle.last_seen_at = Some(event.created_at.clone());
+                cycle.steps.push(step);
+            }
+            "task_completed" | "task_failed" | "task_paused" => {
+                if let Some(cycle) = current_cycle_idx.and_then(|idx| cycles.get_mut(idx)) {
+                    cycle.last_seen_at = Some(event.created_at.clone());
+                    close_cycle_at(cycle, Some(event.created_at.clone()));
                 }
             }
-            "task_completed" | "task_failed" => {
-                // Close the last cycle
-                if let Some(cycle) = cycles.last_mut() {
-                    if cycle.ended_at.is_none() {
-                        cycle.ended_at = Some(event.created_at.clone());
-                    }
+            _ if is_cycle_activity_event(&event.event_type) => {
+                if let Some(cycle) = current_cycle_idx.and_then(|idx| cycles.get_mut(idx)) {
+                    cycle.last_seen_at = Some(event.created_at.clone());
                 }
             }
             _ => {}
         }
     }
 
+    finalize_cycle_boundaries(&mut cycles, task_meta, events);
+
     cycles
+        .into_iter()
+        .map(|cycle| CycleTrace {
+            cycle: cycle.cycle,
+            started_at: cycle.started_at,
+            ended_at: cycle.ended_at,
+            steps: cycle.steps,
+        })
+        .collect()
 }
 
-fn compute_wall_time(events: &[EventDto]) -> Option<f64> {
-    let first = events.first()?;
-    let last = events.last()?;
-    let start = parse_timestamp(&first.created_at)?;
-    let end = parse_timestamp(&last.created_at)?;
+fn ensure_cycle_for_event(
+    cycles: &mut Vec<CycleBuilder>,
+    current_cycle_idx: &mut Option<usize>,
+    event: &EventDto,
+) -> usize {
+    if let Some(idx) = *current_cycle_idx {
+        return idx;
+    }
+
+    cycles.push(CycleBuilder {
+        cycle: 0,
+        started_at: Some(event.created_at.clone()),
+        ended_at: None,
+        last_seen_at: Some(event.created_at.clone()),
+        steps: Vec::new(),
+    });
+    let idx = cycles.len() - 1;
+    *current_cycle_idx = Some(idx);
+    idx
+}
+
+fn close_cycle_at(cycle: &mut CycleBuilder, ended_at: Option<String>) {
+    if cycle.ended_at.is_none() {
+        cycle.ended_at = ended_at;
+    }
+}
+
+fn is_cycle_activity_event(event_type: &str) -> bool {
+    matches!(
+        event_type,
+        "loop_guard_decision" | "item_finalize_evaluated" | "task_completed" | "task_failed"
+            | "task_paused"
+    )
+}
+
+fn finalize_cycle_boundaries(
+    cycles: &mut [CycleBuilder],
+    task_meta: &TraceTaskMeta<'_>,
+    events: &[EventDto],
+) {
+    let task_terminal_at = task_meta
+        .completed_at
+        .map(str::to_string)
+        .or_else(|| events.last().map(|e| e.created_at.clone()))
+        .or_else(|| {
+            if task_meta.updated_at.is_empty() {
+                None
+            } else {
+                Some(task_meta.updated_at.to_string())
+            }
+        });
+    let task_finished = matches!(task_meta.status, "completed" | "failed");
+
+    for idx in 0..cycles.len() {
+        if cycles[idx].ended_at.is_some() {
+            continue;
+        }
+
+        if idx + 1 < cycles.len() {
+            cycles[idx].ended_at = cycles[idx]
+                .last_seen_at
+                .clone()
+                .or_else(|| cycles[idx + 1].started_at.clone());
+            continue;
+        }
+
+        if task_finished {
+            cycles[idx].ended_at = task_terminal_at
+                .clone()
+                .or_else(|| cycles[idx].last_seen_at.clone())
+                .or_else(|| cycles[idx].started_at.clone());
+        }
+    }
+}
+
+fn compute_wall_time(task_meta: &TraceTaskMeta<'_>, events: &[EventDto]) -> Option<f64> {
+    let start_ts = task_meta
+        .started_at
+        .or_else(|| (!task_meta.created_at.is_empty()).then_some(task_meta.created_at))
+        .or_else(|| events.first().map(|e| e.created_at.as_str()))?;
+
+    let end_ts = if matches!(task_meta.status, "completed" | "failed") {
+        task_meta
+            .completed_at
+            .or_else(|| (!task_meta.updated_at.is_empty()).then_some(task_meta.updated_at))
+            .or_else(|| events.last().map(|e| e.created_at.as_str()))?
+    } else {
+        events
+            .last()
+            .map(|e| e.created_at.as_str())
+            .or_else(|| (!task_meta.updated_at.is_empty()).then_some(task_meta.updated_at))?
+    };
+
+    let start = parse_trace_timestamp(start_ts)?;
+    let end = parse_trace_timestamp(end_ts)?;
     let duration = end.signed_duration_since(start);
     Some(duration.num_milliseconds() as f64 / 1000.0)
 }
 
-fn parse_timestamp(ts: &str) -> Option<chrono::NaiveDateTime> {
-    // Try common formats
-    chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%d %H:%M:%S")
-        .or_else(|_| chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%dT%H:%M:%S"))
-        .or_else(|_| chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%dT%H:%M:%S%.f"))
-        .or_else(|_| {
-            // Handle timezone-aware strings by trimming tz
-            let trimmed = ts.trim_end_matches('Z');
-            chrono::NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%dT%H:%M:%S%.f")
-        })
-        .ok()
+fn parse_trace_timestamp(ts: &str) -> Option<chrono::DateTime<chrono::FixedOffset>> {
+    if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(ts) {
+        return Some(parsed);
+    }
+
+    let zero_offset = chrono::FixedOffset::east_opt(0)?;
+    for fmt in [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S%.f",
+    ] {
+        if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(ts, fmt) {
+            if let Some(parsed) = zero_offset.from_local_datetime(&naive).single() {
+                return Some(parsed);
+            }
+        }
+    }
+
+    None
 }
 
 // ── Anomaly detection rules ──────────────────────────────────────────
@@ -368,33 +525,30 @@ fn detect_duplicate_runner(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
     }
 }
 
-fn detect_overlapping_cycles(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
-    let mut open_cycle: Option<(u32, String)> = None; // (cycle_num, started_at)
+fn detect_overlapping_cycles(cycles: &[CycleTrace], anomalies: &mut Vec<Anomaly>) {
+    for pair in cycles.windows(2) {
+        let prev = &pair[0];
+        let next = &pair[1];
+        let (Some(prev_end), Some(next_start)) = (prev.ended_at.as_deref(), next.started_at.as_deref()) else {
+            continue;
+        };
+        let (Some(prev_end_dt), Some(next_start_dt)) = (
+            parse_trace_timestamp(prev_end),
+            parse_trace_timestamp(next_start),
+        ) else {
+            continue;
+        };
 
-    for event in events {
-        if event.event_type == "cycle_started" {
-            let cycle = event
-                .payload
-                .get("cycle")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u32;
-            if let Some((prev_cycle, ref prev_at)) = open_cycle {
-                anomalies.push(Anomaly {
-                    rule: "overlapping_cycles".to_string(),
-                    severity: Severity::Error,
-                    message: format!(
-                        "Cycle {} started at {} while Cycle {} (started {}) still running",
-                        cycle, event.created_at, prev_cycle, prev_at,
-                    ),
-                    at: Some(event.created_at.clone()),
-                });
-            }
-            open_cycle = Some((cycle, event.created_at.clone()));
-        } else if event.event_type == "task_completed"
-            || event.event_type == "task_failed"
-            || event.event_type == "task_paused"
-        {
-            open_cycle = None;
+        if prev_end_dt > next_start_dt {
+            anomalies.push(Anomaly {
+                rule: "overlapping_cycles".to_string(),
+                severity: Severity::Error,
+                message: format!(
+                    "Cycle {} ended at {} after Cycle {} started at {}",
+                    prev.cycle, prev_end, next.cycle, next_start,
+                ),
+                at: Some(next_start.to_string()),
+            });
         }
     }
 }
@@ -834,6 +988,21 @@ mod tests {
     use super::*;
     use serde_json::{json, Value};
 
+    fn make_task_meta<'a>(
+        status: &'a str,
+        started_at: Option<&'a str>,
+        completed_at: Option<&'a str>,
+    ) -> TraceTaskMeta<'a> {
+        TraceTaskMeta {
+            task_id: "test-task",
+            status,
+            created_at: "2025-01-01T10:00:00+00:00",
+            started_at,
+            completed_at,
+            updated_at: completed_at.unwrap_or("2025-01-01T10:00:00+00:00"),
+        }
+    }
+
     fn make_event(id: i64, event_type: &str, payload: Value, created_at: &str) -> EventDto {
         EventDto {
             id,
@@ -1083,26 +1252,24 @@ mod tests {
 
     #[test]
     fn detect_overlapping_cycles_anomaly() {
-        let events = vec![
-            make_event(
-                1,
-                "cycle_started",
-                json!({"cycle": 1}),
-                "2025-01-01 10:00:00",
-            ),
-            make_event(
-                2,
-                "cycle_started",
-                json!({"cycle": 2}),
-                "2025-01-01 10:00:05",
-            ),
+        let cycles = vec![
+            CycleTrace {
+                cycle: 1,
+                started_at: Some("2025-01-01T10:00:00+00:00".to_string()),
+                ended_at: Some("2025-01-01T10:00:10+00:00".to_string()),
+                steps: vec![],
+            },
+            CycleTrace {
+                cycle: 2,
+                started_at: Some("2025-01-01T10:00:05+00:00".to_string()),
+                ended_at: Some("2025-01-01T10:00:20+00:00".to_string()),
+                steps: vec![],
+            },
         ];
 
-        let trace = build_trace("test-task", "running", &events, &[]);
-        let overlap = trace
-            .anomalies
-            .iter()
-            .find(|a| a.rule == "overlapping_cycles");
+        let mut anomalies = Vec::new();
+        detect_overlapping_cycles(&cycles, &mut anomalies);
+        let overlap = anomalies.iter().find(|a| a.rule == "overlapping_cycles");
         assert!(overlap.is_some(), "should detect overlapping cycles");
         assert_eq!(overlap.unwrap().severity, Severity::Error);
     }
@@ -1373,6 +1540,145 @@ mod tests {
             (wall - 272.0).abs() < 1.0,
             "wall time should be ~272s, got {}",
             wall
+        );
+    }
+
+    #[test]
+    fn two_cycle_completed_task_closes_first_cycle_without_overlap() {
+        let events = vec![
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2026-03-01T04:00:00.000000+00:00",
+            ),
+            make_item_event(
+                2,
+                "step_started",
+                json!({"step": "implement"}),
+                "2026-03-01T04:00:01.000000+00:00",
+                "item-1",
+            ),
+            make_item_event(
+                3,
+                "step_finished",
+                json!({"step": "implement", "success": true}),
+                "2026-03-01T04:00:10.000000+00:00",
+                "item-1",
+            ),
+            make_item_event(
+                4,
+                "step_skipped",
+                json!({"step": "align_tests", "reason": "prehook_false"}),
+                "2026-03-01T04:00:12.000000+00:00",
+                "item-1",
+            ),
+            make_event(
+                5,
+                "cycle_started",
+                json!({"cycle": 2}),
+                "2026-03-01T04:00:13.000000+00:00",
+            ),
+            make_item_event(
+                6,
+                "step_started",
+                json!({"step": "implement"}),
+                "2026-03-01T04:00:14.000000+00:00",
+                "item-1",
+            ),
+            make_item_event(
+                7,
+                "step_finished",
+                json!({"step": "implement", "success": true}),
+                "2026-03-01T04:00:20.000000+00:00",
+                "item-1",
+            ),
+            make_event(8, "task_completed", json!({}), "2026-03-01T04:00:21.000000+00:00"),
+        ];
+
+        let trace = build_trace_with_meta(
+            make_task_meta(
+                "completed",
+                Some("2026-03-01T04:00:00.000000+00:00"),
+                Some("2026-03-01T04:00:21.000000+00:00"),
+            ),
+            &events,
+            &[],
+        );
+
+        assert_eq!(trace.cycles.len(), 2);
+        assert_eq!(
+            trace.cycles[0].ended_at.as_deref(),
+            Some("2026-03-01T04:00:12.000000+00:00")
+        );
+        assert_eq!(
+            trace.cycles[1].ended_at.as_deref(),
+            Some("2026-03-01T04:00:21.000000+00:00")
+        );
+        assert!(
+            trace
+                .anomalies
+                .iter()
+                .all(|a| a.rule != "overlapping_cycles"),
+            "unexpected overlap anomaly: {:?}",
+            trace.anomalies
+        );
+    }
+
+    #[test]
+    fn completed_task_wall_time_uses_task_meta_when_events_are_sparse() {
+        let events = vec![make_event(
+            1,
+            "cycle_started",
+            json!({"cycle": 1}),
+            "2026-03-01T04:07:03.635397+00:00",
+        )];
+
+        let trace = build_trace_with_meta(
+            make_task_meta(
+                "completed",
+                Some("2026-03-01T04:07:03.635397+00:00"),
+                Some("2026-03-01T04:09:38.477325+00:00"),
+            ),
+            &events,
+            &[],
+        );
+
+        let wall = trace
+            .summary
+            .wall_time_secs
+            .expect("completed task should have wall time");
+        assert!((wall - 154.842).abs() < 0.01, "unexpected wall time: {}", wall);
+    }
+
+    #[test]
+    fn parse_trace_timestamp_accepts_rfc3339_offset() {
+        let parsed = parse_trace_timestamp("2026-03-01T04:09:38.477325+00:00");
+        assert!(parsed.is_some(), "should parse RFC3339 with offset");
+    }
+
+    #[test]
+    fn completed_task_backfills_last_cycle_end_from_completed_at() {
+        let events = vec![make_event(
+            1,
+            "cycle_started",
+            json!({"cycle": 1}),
+            "2026-03-01T04:00:00.000000+00:00",
+        )];
+
+        let trace = build_trace_with_meta(
+            make_task_meta(
+                "completed",
+                Some("2026-03-01T04:00:00.000000+00:00"),
+                Some("2026-03-01T04:00:30.000000+00:00"),
+            ),
+            &events,
+            &[],
+        );
+
+        assert_eq!(
+            trace.cycles[0].ended_at.as_deref(),
+            Some("2026-03-01T04:00:30.000000+00:00")
         );
     }
 }
