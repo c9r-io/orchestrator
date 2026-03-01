@@ -6,7 +6,7 @@ use crate::config::{
     normalize_step_execution_mode, CheckpointStrategy, CostPreference, LoopMode, SafetyConfig,
     StepBehavior, StepHookEngine, StepPrehookConfig, StepPrehookUiConfig, StepScope,
     WorkflowConfig, WorkflowFinalizeConfig, WorkflowFinalizeRule, WorkflowLoopConfig,
-    WorkflowLoopGuardConfig, WorkflowStepConfig,
+    WorkflowLoopGuardConfig, WorkflowSafetyProfile, WorkflowStepConfig,
 };
 use anyhow::{anyhow, Result};
 
@@ -142,6 +142,7 @@ pub(in crate::resource) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Resul
             },
             step_timeout_secs: spec.safety.step_timeout_secs,
             binary_snapshot: spec.safety.binary_snapshot,
+            profile: parse_safety_profile(spec.safety.profile.as_deref()),
         },
     })
 }
@@ -246,6 +247,7 @@ pub(super) fn safety_config_to_spec(config: &SafetyConfig) -> SafetySpec {
         checkpoint_strategy: checkpoint_strategy_as_str(&config.checkpoint_strategy).to_string(),
         step_timeout_secs: config.step_timeout_secs,
         binary_snapshot: config.binary_snapshot,
+        profile: safety_profile_as_str(&config.profile).map(str::to_string),
     }
 }
 
@@ -254,6 +256,20 @@ pub(super) fn checkpoint_strategy_as_str(strategy: &CheckpointStrategy) -> &'sta
         CheckpointStrategy::GitTag => "git_tag",
         CheckpointStrategy::GitStash => "git_stash",
         CheckpointStrategy::None => "none",
+    }
+}
+
+fn parse_safety_profile(value: Option<&str>) -> WorkflowSafetyProfile {
+    match value {
+        Some("self_referential_probe") => WorkflowSafetyProfile::SelfReferentialProbe,
+        _ => WorkflowSafetyProfile::Standard,
+    }
+}
+
+fn safety_profile_as_str(profile: &WorkflowSafetyProfile) -> Option<&'static str> {
+    match profile {
+        WorkflowSafetyProfile::Standard => None,
+        WorkflowSafetyProfile::SelfReferentialProbe => Some("self_referential_probe"),
     }
 }
 
@@ -640,6 +656,7 @@ mod tests {
                 checkpoint_strategy: "git_tag".to_string(),
                 step_timeout_secs: Some(600),
                 binary_snapshot: true,
+                profile: Some("self_referential_probe".to_string()),
             },
         };
         let config = workflow_spec_to_config(&spec).unwrap();
@@ -651,6 +668,10 @@ mod tests {
         ));
         assert_eq!(config.safety.step_timeout_secs, Some(600));
         assert!(config.safety.binary_snapshot);
+        assert_eq!(
+            config.safety.profile,
+            WorkflowSafetyProfile::SelfReferentialProbe
+        );
     }
 
     #[test]
@@ -685,6 +706,7 @@ mod tests {
                 checkpoint_strategy: "git_stash".to_string(),
                 step_timeout_secs: None,
                 binary_snapshot: false,
+                profile: None,
             },
         };
         let config = workflow_spec_to_config(&spec).unwrap();
@@ -726,6 +748,7 @@ mod tests {
                 checkpoint_strategy: "unknown_strat".to_string(),
                 step_timeout_secs: None,
                 binary_snapshot: false,
+                profile: None,
             },
         };
         let config = workflow_spec_to_config(&spec).unwrap();
@@ -999,6 +1022,7 @@ mod tests {
             checkpoint_strategy: CheckpointStrategy::GitTag,
             step_timeout_secs: Some(900),
             binary_snapshot: true,
+            profile: WorkflowSafetyProfile::SelfReferentialProbe,
         };
         let spec = safety_config_to_spec(&config);
         assert_eq!(spec.max_consecutive_failures, 7);
@@ -1006,6 +1030,7 @@ mod tests {
         assert_eq!(spec.checkpoint_strategy, "git_tag");
         assert_eq!(spec.step_timeout_secs, Some(900));
         assert!(spec.binary_snapshot);
+        assert_eq!(spec.profile.as_deref(), Some("self_referential_probe"));
     }
 
     #[test]
@@ -1067,6 +1092,7 @@ mod tests {
                 checkpoint_strategy: "git_tag".to_string(),
                 step_timeout_secs: Some(900),
                 binary_snapshot: true,
+                profile: Some("self_referential_probe".to_string()),
             },
         };
         let config = workflow_spec_to_config(&spec).expect("spec->config should succeed");
@@ -1076,6 +1102,10 @@ mod tests {
         assert_eq!(roundtripped.safety.checkpoint_strategy, "git_tag");
         assert_eq!(roundtripped.safety.step_timeout_secs, Some(900));
         assert!(roundtripped.safety.binary_snapshot);
+        assert_eq!(
+            roundtripped.safety.profile.as_deref(),
+            Some("self_referential_probe")
+        );
     }
 
     #[test]
@@ -1119,6 +1149,7 @@ mod tests {
                 checkpoint_strategy: CheckpointStrategy::GitTag,
                 step_timeout_secs: Some(600),
                 binary_snapshot: true,
+                profile: WorkflowSafetyProfile::SelfReferentialProbe,
             },
         };
         let spec = workflow_config_to_spec(&config);
@@ -1127,5 +1158,6 @@ mod tests {
         assert_eq!(spec.safety.checkpoint_strategy, "git_tag");
         assert_eq!(spec.safety.step_timeout_secs, Some(600));
         assert!(spec.safety.binary_snapshot);
+        assert_eq!(spec.safety.profile.as_deref(), Some("self_referential_probe"));
     }
 }

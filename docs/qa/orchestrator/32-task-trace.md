@@ -17,6 +17,7 @@ The latest regression fix also requires:
 - `summary.wall_time_secs` must be populated for completed tasks, including RFC3339 timestamps with timezone offsets
 - `task trace` must remain available even when the current active config is invalid for execution
 - low-output heartbeats must be distinguishable from ordinary long-running steps in anomaly output
+- self-referential probe traces must support official probe workflows without requiring `self_test`
 
 ### Common Preconditions
 
@@ -190,6 +191,28 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 - `task trace` still returns trace output instead of failing during startup
 - JSON output remains valid and includes `summary.total_cycles`
 - Exit code 0
+
+### Self-Referential Probe Trace Checks
+
+These checks use the official self-referential probe fixtures directly, not
+`qa project create`.
+
+1. Apply the self-referential probe fixtures:
+   ```bash
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-referential-probe-fixtures.yaml
+   ```
+2. Run a low-output self-referential probe task to completion.
+3. Run an active-output self-referential probe task to completion.
+4. Inspect both traces:
+   ```bash
+   ./scripts/orchestrator.sh task trace {low_output_task_id} --json | jq '.anomalies'
+   ./scripts/orchestrator.sh task trace {active_output_task_id} --json | jq '.anomalies'
+   ```
+
+Expected:
+- `self_ref_probe_low_output` emits `low_output_step`
+- `self_ref_probe_active_output` does not emit `low_output_step`
+- Neither workflow requires `self_test` to remain valid
 
 ---
 

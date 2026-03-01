@@ -304,6 +304,8 @@ pub struct SafetySpec {
     /// Snapshot the release binary at cycle start for rollback
     #[serde(default)]
     pub binary_snapshot: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
 }
 
 fn default_max_consecutive_failures() -> u32 {

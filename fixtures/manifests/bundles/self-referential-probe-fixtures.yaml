@@ -1,0 +1,79 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: self_ref_probe_ws
+spec:
+  root_path: "."
+  qa_targets:
+    - fixtures/qa-probe-targets
+  ticket_dir: fixtures/ticket
+  self_referential: true
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: self_ref_probe_fallback
+spec:
+  capabilities:
+    - plan
+    - implement
+    - qa
+    - align_tests
+    - doc_governance
+  templates:
+    plan: "echo 'plan fallback'"
+    implement: "echo 'implement fallback'"
+    qa: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"probe-qa\",\"description\":\"probe qa fallback\",\"severity\":\"info\"}]}]}'"
+    align_tests: "echo 'align fallback'"
+    doc_governance: "echo 'doc fallback'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: self_ref_probe_runtime_control
+spec:
+  steps:
+    - id: implement
+      type: implement
+      enabled: true
+      command: "bash -lc 'for i in 1 2 3 4; do echo runtime-tick-$i; sleep 15; done'"
+  loop:
+    mode: once
+  safety:
+    auto_rollback: true
+    checkpoint_strategy: git_tag
+    profile: self_referential_probe
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: self_ref_probe_low_output
+spec:
+  steps:
+    - id: implement
+      type: implement
+      enabled: true
+      command: "bash -lc 'sleep 125'"
+  loop:
+    mode: once
+  safety:
+    auto_rollback: true
+    checkpoint_strategy: git_tag
+    profile: self_referential_probe
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: self_ref_probe_active_output
+spec:
+  steps:
+    - id: implement
+      type: implement
+      enabled: true
+      command: "bash -lc 'for i in 1 2 3 4; do printf \"active-output-%02d-abcdefghijklmnopqrstuvwxyz0123456789\\n\" \"$i\"; sleep 30; done'"
+  loop:
+    mode: once
+  safety:
+    auto_rollback: true
+    checkpoint_strategy: git_tag
+    profile: self_referential_probe

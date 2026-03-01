@@ -216,6 +216,9 @@ pub struct SafetyConfig {
     /// Snapshot the release binary at cycle start for rollback
     #[serde(default)]
     pub binary_snapshot: bool,
+    /// Safety policy profile for self-referential workflows
+    #[serde(default)]
+    pub profile: WorkflowSafetyProfile,
 }
 
 fn default_max_consecutive_failures() -> u32 {
@@ -230,6 +233,7 @@ impl Default for SafetyConfig {
             checkpoint_strategy: CheckpointStrategy::default(),
             step_timeout_secs: None,
             binary_snapshot: false,
+            profile: WorkflowSafetyProfile::default(),
         }
     }
 }
@@ -242,6 +246,15 @@ pub enum CheckpointStrategy {
     None,
     GitTag,
     GitStash,
+}
+
+/// Safety profile for self-referential workflows.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowSafetyProfile {
+    #[default]
+    Standard,
+    SelfReferentialProbe,
 }
 
 /// Build error with source location
@@ -1789,6 +1802,7 @@ mod tests {
             checkpoint_strategy: CheckpointStrategy::GitTag,
             step_timeout_secs: Some(600),
             binary_snapshot: true,
+            profile: WorkflowSafetyProfile::SelfReferentialProbe,
         };
         let json = serde_json::to_string(&cfg).unwrap();
         let cfg2: SafetyConfig = serde_json::from_str(&json).unwrap();
@@ -1800,6 +1814,7 @@ mod tests {
         ));
         assert_eq!(cfg2.step_timeout_secs, Some(600));
         assert!(cfg2.binary_snapshot);
+        assert_eq!(cfg2.profile, WorkflowSafetyProfile::SelfReferentialProbe);
     }
 
     #[test]
@@ -1830,6 +1845,7 @@ mod tests {
         let cfg: SafetyConfig = serde_json::from_str(json).unwrap();
         assert_eq!(cfg.max_consecutive_failures, 3);
         assert!(!cfg.auto_rollback);
+        assert_eq!(cfg.profile, WorkflowSafetyProfile::Standard);
     }
 
     #[test]

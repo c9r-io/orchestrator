@@ -86,6 +86,25 @@ Expected:
 - For `probe_low_output`, `task watch` surfaces a `LOW OUTPUT` indicator instead of only showing a live PID.
 - For `probe_active_output`, `task watch` continues to show progress details without entering `LOW OUTPUT`.
 
+### Self-Referential Probe Safety Checks
+
+These checks intentionally do not use `qa project create`, because that path
+always creates non-self-referential workspaces.
+
+1. Apply the self-referential probe fixtures:
+   ```bash
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-referential-probe-fixtures.yaml
+   ```
+2. Submit a detached task directly against the global workspace `self_ref_probe_ws` using `self_ref_probe_runtime_control`.
+3. Submit a detached task directly against the global workspace `self_ref_probe_ws` using `self_ref_probe_low_output`.
+4. Submit a detached task directly against the global workspace `self_ref_probe_ws` using `self_ref_probe_active_output`.
+
+Expected:
+- The self-referential probe workflows create and run without requiring `self_test`.
+- They do not need to borrow `build` or any strict-output phase.
+- `self_ref_probe_low_output` surfaces `LOW OUTPUT` during execution.
+- `self_ref_probe_active_output` does not surface `LOW OUTPUT`.
+
 ---
 
 ## Scenario 1: Foreground Task Start
