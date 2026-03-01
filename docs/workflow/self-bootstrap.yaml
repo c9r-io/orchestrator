@@ -254,7 +254,7 @@ spec:
       type: qa_testing
       scope: item
       required_capability: qa_testing
-      enabled: false
+      enabled: true
       repeatable: true
       tty: false
       prehook:
@@ -266,7 +266,7 @@ spec:
       type: ticket_fix
       scope: item
       required_capability: ticket_fix
-      enabled: false
+      enabled: true
       repeatable: true
       tty: false
       prehook:

@@ -50,10 +50,15 @@ impl DbWriteCoordinator {
         let now = now_ts();
         if set_completed {
             conn.execute(
-                "UPDATE tasks SET status = ?2, completed_at = ?3, updated_at = ?4 WHERE id = ?1",
+                "UPDATE tasks SET status = ?2, started_at = COALESCE(started_at, ?3), completed_at = ?4, updated_at = ?5 WHERE id = ?1",
+                params![task_id, status, now.clone(), now.clone(), now],
+            )?;
+        } else if status == "running" {
+            conn.execute(
+                "UPDATE tasks SET status = ?2, started_at = COALESCE(started_at, ?3), completed_at = NULL, updated_at = ?4 WHERE id = ?1",
                 params![task_id, status, now.clone(), now],
             )?;
-        } else if matches!(status, "pending" | "running" | "paused" | "interrupted") {
+        } else if matches!(status, "pending" | "paused" | "interrupted") {
             conn.execute(
                 "UPDATE tasks SET status = ?2, completed_at = NULL, updated_at = ?3 WHERE id = ?1",
                 params![task_id, status, now],
@@ -295,6 +300,32 @@ impl DbWriteCoordinator {
         conn.execute(
             "UPDATE task_items SET status = ?2, updated_at = ?3 WHERE id = ?1",
             params![task_item_id, status, now_ts()],
+        )?;
+        Ok(())
+    }
+
+    pub fn mark_task_item_running(&self, task_item_id: &str) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        let now = now_ts();
+        conn.execute(
+            "UPDATE task_items SET status = 'running', started_at = COALESCE(started_at, ?2), completed_at = NULL, updated_at = ?3 WHERE id = ?1",
+            params![task_item_id, now.clone(), now],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_task_item_terminal_status(&self, task_item_id: &str, status: &str) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        let now = now_ts();
+        conn.execute(
+            "UPDATE task_items SET status = ?2, started_at = COALESCE(started_at, ?3), completed_at = ?4, updated_at = ?5 WHERE id = ?1",
+            params![task_item_id, status, now.clone(), now.clone(), now],
         )?;
         Ok(())
     }
@@ -580,6 +611,52 @@ mod tests {
             .expect("query item");
 
         assert_eq!(status, "running");
+    }
+
+    #[test]
+    fn mark_task_item_running_sets_started_at() {
+        let (state, _task_id, item_id) = setup_task();
+
+        state
+            .db_writer
+            .mark_task_item_running(&item_id)
+            .expect("mark task item running");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (status, started_at, completed_at): (String, Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT status, started_at, completed_at FROM task_items WHERE id = ?1",
+                params![item_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("query item");
+
+        assert_eq!(status, "running");
+        assert!(started_at.is_some(), "started_at should be set");
+        assert!(completed_at.is_none(), "completed_at should be cleared");
+    }
+
+    #[test]
+    fn set_task_item_terminal_status_sets_completed_at() {
+        let (state, _task_id, item_id) = setup_task();
+
+        state
+            .db_writer
+            .set_task_item_terminal_status(&item_id, "qa_passed")
+            .expect("set task item terminal status");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (status, started_at, completed_at): (String, Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT status, started_at, completed_at FROM task_items WHERE id = ?1",
+                params![item_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("query item");
+
+        assert_eq!(status, "qa_passed");
+        assert!(started_at.is_some(), "started_at should be backfilled");
+        assert!(completed_at.is_some(), "completed_at should be set");
     }
 
     // ── update_task_item_tickets ──

@@ -1042,9 +1042,12 @@ pub struct ItemFinalizeContext {
     pub retest_new_ticket_count: i64,
     pub qa_failed: bool,
     pub fix_required: bool,
+    pub qa_configured: bool,
+    pub qa_observed: bool,
     pub qa_enabled: bool,
     pub qa_ran: bool,
     pub qa_skipped: bool,
+    pub fix_configured: bool,
     pub fix_enabled: bool,
     pub fix_ran: bool,
     pub fix_success: bool,
@@ -1136,7 +1139,7 @@ pub fn default_workflow_finalize_config() -> WorkflowFinalizeConfig {
             WorkflowFinalizeRule {
                 id: "skip_without_tickets".to_string(),
                 engine: StepHookEngine::Cel,
-                when: "(qa_skipped == true || qa_enabled == false) && active_ticket_count == 0 && is_last_cycle"
+                when: "qa_skipped == true && active_ticket_count == 0 && is_last_cycle"
                     .to_string(),
                 status: "skipped".to_string(),
                 reason: Some("qa skipped and no tickets".to_string()),

@@ -30,6 +30,8 @@ pub trait TaskRepository {
         current_cycle: u32,
         init_done: bool,
     ) -> Result<()>;
+    fn mark_task_item_running(&self, task_item_id: &str) -> Result<()>;
+    fn set_task_item_terminal_status(&self, task_item_id: &str, status: &str) -> Result<()>;
     fn update_task_item_status(&self, task_item_id: &str, status: &str) -> Result<()>;
     fn load_task_name(&self, task_id: &str) -> Result<Option<String>>;
     fn list_task_log_runs(&self, task_id: &str, limit: usize) -> Result<Vec<TaskLogRunRow>>;
@@ -345,10 +347,15 @@ impl TaskRepository for SqliteTaskRepository {
         let now = now_ts();
         if set_completed {
             conn.execute(
-                "UPDATE tasks SET status = ?2, completed_at = ?3, updated_at = ?4 WHERE id = ?1",
+                "UPDATE tasks SET status = ?2, started_at = COALESCE(started_at, ?3), completed_at = ?4, updated_at = ?5 WHERE id = ?1",
+                params![task_id, status, now.clone(), now.clone(), now],
+            )?;
+        } else if status == "running" {
+            conn.execute(
+                "UPDATE tasks SET status = ?2, started_at = COALESCE(started_at, ?3), completed_at = NULL, updated_at = ?4 WHERE id = ?1",
                 params![task_id, status, now.clone(), now],
             )?;
-        } else if matches!(status, "pending" | "running" | "paused" | "interrupted") {
+        } else if matches!(status, "pending" | "paused" | "interrupted") {
             conn.execute(
                 "UPDATE tasks SET status = ?2, completed_at = NULL, updated_at = ?3 WHERE id = ?1",
                 params![task_id, status, now],
@@ -404,8 +411,8 @@ impl TaskRepository for SqliteTaskRepository {
         }
 
         tx.execute(
-            "UPDATE tasks SET status = 'running', completed_at = NULL, updated_at = ?2 WHERE id = ?1",
-            params![task_id, now_ts()],
+            "UPDATE tasks SET status = 'running', started_at = COALESCE(started_at, ?2), completed_at = NULL, updated_at = ?3 WHERE id = ?1",
+            params![task_id, now_ts(), now_ts()],
         )?;
         tx.commit()?;
         Ok(())
@@ -435,6 +442,26 @@ impl TaskRepository for SqliteTaskRepository {
         conn.execute(
             "UPDATE task_items SET status = ?2, updated_at = ?3 WHERE id = ?1",
             params![task_item_id, status, now_ts()],
+        )?;
+        Ok(())
+    }
+
+    fn mark_task_item_running(&self, task_item_id: &str) -> Result<()> {
+        let conn = open_conn(&self.db_path)?;
+        let now = now_ts();
+        conn.execute(
+            "UPDATE task_items SET status = 'running', started_at = COALESCE(started_at, ?2), completed_at = NULL, updated_at = ?3 WHERE id = ?1",
+            params![task_item_id, now.clone(), now],
+        )?;
+        Ok(())
+    }
+
+    fn set_task_item_terminal_status(&self, task_item_id: &str, status: &str) -> Result<()> {
+        let conn = open_conn(&self.db_path)?;
+        let now = now_ts();
+        conn.execute(
+            "UPDATE task_items SET status = ?2, started_at = COALESCE(started_at, ?3), completed_at = ?4, updated_at = ?5 WHERE id = ?1",
+            params![task_item_id, status, now.clone(), now.clone(), now],
         )?;
         Ok(())
     }
@@ -1368,6 +1395,64 @@ mod tests {
             )
             .expect("query item");
         assert_ne!(old_updated, new_updated, "updated_at should change");
+    }
+
+    #[test]
+    fn mark_task_item_running_sets_started_at() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let item_id: String = conn
+            .query_row(
+                "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
+                params![task_id],
+                |row| row.get(0),
+            )
+            .expect("task item exists");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        repo.mark_task_item_running(&item_id)
+            .expect("mark should succeed");
+
+        let (status, started_at, completed_at): (String, Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT status, started_at, completed_at FROM task_items WHERE id = ?1",
+                params![item_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("query item");
+        assert_eq!(status, "running");
+        assert!(started_at.is_some());
+        assert!(completed_at.is_none());
+    }
+
+    #[test]
+    fn set_task_item_terminal_status_sets_completed_at() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let item_id: String = conn
+            .query_row(
+                "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
+                params![task_id],
+                |row| row.get(0),
+            )
+            .expect("task item exists");
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        repo.set_task_item_terminal_status(&item_id, "qa_passed")
+            .expect("terminal update should succeed");
+
+        let (status, started_at, completed_at): (String, Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT status, started_at, completed_at FROM task_items WHERE id = ?1",
+                params![item_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("query item");
+        assert_eq!(status, "qa_passed");
+        assert!(started_at.is_some());
+        assert!(completed_at.is_some());
     }
 
     // ── load_task_name ─────────────────────────────────────────────────

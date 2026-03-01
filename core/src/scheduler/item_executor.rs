@@ -115,6 +115,7 @@ pub struct StepExecutionAccumulator {
     pub qa_quality_score: Option<f32>,
     pub fix_confidence: Option<f32>,
     pub fix_quality_score: Option<f32>,
+    pub terminal: bool,
 }
 
 impl StepExecutionAccumulator {
@@ -134,6 +135,22 @@ impl StepExecutionAccumulator {
             qa_quality_score: None,
             fix_confidence: None,
             fix_quality_score: None,
+            terminal: false,
+        }
+    }
+
+    pub fn merge_task_pipeline_vars(&mut self, task_pipeline_vars: &PipelineVariables) {
+        for (key, value) in &task_pipeline_vars.vars {
+            self.pipeline_vars
+                .vars
+                .entry(key.clone())
+                .or_insert_with(|| value.clone());
+        }
+        if self.pipeline_vars.build_errors.is_empty() {
+            self.pipeline_vars.build_errors = task_pipeline_vars.build_errors.clone();
+        }
+        if self.pipeline_vars.test_failures.is_empty() {
+            self.pipeline_vars.test_failures = task_pipeline_vars.test_failures.clone();
         }
     }
 
@@ -218,7 +235,13 @@ impl StepExecutionAccumulator {
             .or(self.step_skipped.get("qa_testing"))
             .copied()
             .unwrap_or(false);
-        let qa_enabled = qa_ran || qa_skipped;
+        let qa_configured = task_ctx.execution_plan.steps.iter().any(|s| {
+            (s.id == "qa" || s.id == "qa_testing")
+                && s.enabled
+                && (s.repeatable || task_ctx.current_cycle <= 1)
+        });
+        let qa_observed = qa_ran || qa_skipped;
+        let qa_enabled = qa_configured;
         let fix_ran = self
             .step_ran
             .get("fix")
@@ -226,6 +249,11 @@ impl StepExecutionAccumulator {
             .copied()
             .unwrap_or(false);
         let fix_success = self.flags.get("fix_success").copied().unwrap_or(false);
+        let fix_configured = task_ctx.execution_plan.steps.iter().any(|s| {
+            (s.id == "fix" || s.id == "ticket_fix")
+                && s.enabled
+                && (s.repeatable || task_ctx.current_cycle <= 1)
+        });
         let fix_enabled = fix_ran
             || self
                 .step_skipped
@@ -233,11 +261,7 @@ impl StepExecutionAccumulator {
                 .or(self.step_skipped.get("ticket_fix"))
                 .copied()
                 .unwrap_or(false)
-            || task_ctx
-                .execution_plan
-                .steps
-                .iter()
-                .any(|s| (s.id == "fix" || s.id == "ticket_fix") && s.enabled);
+            || fix_configured;
         let retest_ran = self.step_ran.get("retest").copied().unwrap_or(false);
         let retest_success = self.flags.get("retest_success").copied().unwrap_or(false);
         let retest_enabled = retest_ran
@@ -271,9 +295,12 @@ impl StepExecutionAccumulator {
             retest_new_ticket_count: 0,
             qa_failed: self.flags.get("qa_failed").copied().unwrap_or(false),
             fix_required: !self.active_tickets.is_empty(),
+            qa_configured,
+            qa_observed,
             qa_enabled,
             qa_ran,
             qa_skipped,
+            fix_configured,
             fix_enabled,
             fix_ran,
             fix_success,
@@ -594,6 +621,7 @@ pub async fn process_item(
     task_ctx: &TaskRuntimeContext,
     runtime: &RunningTask,
 ) -> Result<()> {
+    let mut acc = StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone());
     process_item_filtered(
         state,
         task_id,
@@ -602,8 +630,10 @@ pub async fn process_item(
         task_ctx,
         runtime,
         None,
+        &mut acc,
     )
     .await?;
+    finalize_item_execution(state, task_id, item, task_ctx, &mut acc)?;
     Ok(())
 }
 
@@ -622,20 +652,24 @@ pub async fn process_item_filtered(
     task_ctx: &TaskRuntimeContext,
     runtime: &RunningTask,
     step_filter: Option<&HashSet<String>>,
-) -> Result<PipelineVariables> {
+    acc: &mut StepExecutionAccumulator,
+) -> Result<()> {
     let item_id = item.id.as_str();
     let should_run_step =
         |step_id: &str| -> bool { step_filter.map_or(true, |f| f.contains(step_id)) };
-    let mut acc = StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone());
+    acc.merge_task_pipeline_vars(&task_ctx.pipeline_vars);
     // ── Unified step loop ────────────────────────────────────────────
 
     for step in &task_ctx.execution_plan.steps {
         // Check for pause/stop between steps
         if runtime.stop_flag.load(std::sync::atomic::Ordering::SeqCst) {
-            return Ok(acc.pipeline_vars);
+            return Ok(());
         }
         if super::task_state::is_task_paused_in_db(state, task_id)? {
-            return Ok(acc.pipeline_vars);
+            return Ok(());
+        }
+        if acc.terminal {
+            return Ok(());
         }
 
         // Skip guards (handled separately in loop_engine), disabled, and filtered-out steps
@@ -664,6 +698,9 @@ pub async fn process_item_filtered(
         }
 
         // 2. Execute
+        if acc.step_ran.is_empty() {
+            state.db_writer.mark_task_item_running(item_id)?;
+        }
         let pipeline_var_keys: Vec<&String> = acc.pipeline_vars.vars.keys().collect();
         insert_event(
             state,
@@ -710,10 +747,8 @@ pub async fn process_item_filtered(
                         }
                         OnFailureAction::EarlyReturn { status } => {
                             acc.item_status = status.clone();
-                            state
-                                .db_writer
-                                .update_task_item_status(item_id, &acc.item_status)?;
-                            return Ok(acc.pipeline_vars);
+                            acc.terminal = true;
+                            return Ok(());
                         }
                     }
                 }
@@ -916,6 +951,7 @@ pub async fn process_item_filtered(
                 }
                 OnFailureAction::EarlyReturn { status } => {
                     acc.item_status = status.clone();
+                    acc.terminal = true;
                     insert_event(
                         state,
                         task_id,
@@ -923,10 +959,7 @@ pub async fn process_item_filtered(
                         "step_finished",
                         json!({"step": phase, "step_id": step.id, "step_scope": step.resolved_scope(), "early_return": true, "exit_code": result.exit_code, "success": false}),
                     )?;
-                    state
-                        .db_writer
-                        .update_task_item_status(item_id, &acc.item_status)?;
-                    return Ok(acc.pipeline_vars);
+                    return Ok(());
                 }
             }
         }
@@ -1129,16 +1162,41 @@ pub async fn process_item_filtered(
         }
     }
 
+    Ok(())
+}
+
+pub fn finalize_item_execution(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    item: &crate::dto::TaskItemRow,
+    task_ctx: &TaskRuntimeContext,
+    acc: &mut StepExecutionAccumulator,
+) -> Result<()> {
+    let item_id = item.id.as_str();
+
     // Seed active tickets from existing ticket files if no scan step ran
     if acc.active_tickets.is_empty() && !acc.step_ran.contains_key("ticket_scan") {
         acc.active_tickets = list_existing_tickets_for_item(task_ctx, &item.qa_file_path)?;
         acc.new_ticket_count = acc.active_tickets.len() as i64;
     }
 
-    // ── Finalize via CEL rules ──────────────────────────────────────
     let finalize_context = acc.to_finalize_context(task_id, item, task_ctx);
-
-    if let Some(outcome) = crate::prehook::resolve_workflow_finalize_outcome(
+    if finalize_context.is_last_cycle
+        && finalize_context.qa_configured
+        && !finalize_context.qa_observed
+    {
+        acc.item_status = "unresolved".to_string();
+        insert_event(
+            state,
+            task_id,
+            Some(item_id),
+            "item_validation_missing",
+            json!({
+                "step": "qa_testing",
+                "reason": "configured qa step was neither run nor skipped in final cycle"
+            }),
+        )?;
+    } else if let Some(outcome) = crate::prehook::resolve_workflow_finalize_outcome(
         &task_ctx.execution_plan.finalize,
         &finalize_context,
     )? {
@@ -1146,7 +1204,6 @@ pub async fn process_item_filtered(
         emit_item_finalize_event(state, &finalize_context, &outcome)?;
     }
 
-    // Persist ticket artifacts
     let has_ticket_artifacts = !acc.created_ticket_files.is_empty()
         || acc
             .phase_artifacts
@@ -1170,8 +1227,8 @@ pub async fn process_item_filtered(
 
     state
         .db_writer
-        .update_task_item_status(item_id, &acc.item_status)?;
-    Ok(acc.pipeline_vars)
+        .set_task_item_terminal_status(item_id, &acc.item_status)?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1456,7 +1513,10 @@ mod tests {
     fn builtin_guard_noop_for_agent_step() {
         // Pure agent step (no builtin field) stays as Agent.
         let step = make_step("plan", None, ExecutionMode::Agent);
-        assert_eq!(step.effective_execution_mode().as_ref(), &ExecutionMode::Agent);
+        assert_eq!(
+            step.effective_execution_mode().as_ref(),
+            &ExecutionMode::Agent
+        );
     }
 
     #[test]

@@ -3,12 +3,15 @@ use crate::events::insert_event;
 use crate::state::InnerState;
 use anyhow::Result;
 use serde_json::json;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use super::item_executor::{execute_guard_step, process_item, process_item_filtered};
+use super::item_executor::{
+    execute_guard_step, finalize_item_execution, process_item, process_item_filtered,
+    StepExecutionAccumulator,
+};
 use super::phase_runner::{run_phase_with_rotation, RotatingPhaseRunRequest};
 use super::runtime::load_task_runtime_context;
 use super::safety::{
@@ -216,12 +219,15 @@ async fn run_task_loop_core(
                 }
             }
         } else {
+            let mut item_state: HashMap<String, StepExecutionAccumulator> = HashMap::new();
             for segment in &segments {
                 match segment.scope {
                     StepScope::Task => {
                         // Run task-scoped steps once using first item as anchor
                         if let Some(anchor_item) = items.first() {
-                            let updated_vars = process_item_filtered(
+                            let mut task_acc =
+                                StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone());
+                            process_item_filtered(
                                 &state,
                                 task_id,
                                 anchor_item,
@@ -229,16 +235,20 @@ async fn run_task_loop_core(
                                 &task_ctx,
                                 &runtime,
                                 Some(&segment.step_ids),
+                                &mut task_acc,
                             )
                             .await?;
                             // Propagate task-scoped pipeline vars to subsequent segments
-                            task_ctx.pipeline_vars = updated_vars;
+                            task_ctx.pipeline_vars = task_acc.pipeline_vars;
                         }
                     }
                     StepScope::Item => {
                         // Fan out item-scoped steps across all items
                         for item in &items {
-                            let _item_vars = process_item_filtered(
+                            let acc = item_state.entry(item.id.clone()).or_insert_with(|| {
+                                StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone())
+                            });
+                            process_item_filtered(
                                 &state,
                                 task_id,
                                 item,
@@ -246,9 +256,9 @@ async fn run_task_loop_core(
                                 &task_ctx,
                                 &runtime,
                                 Some(&segment.step_ids),
+                                acc,
                             )
                             .await?;
-                            // Item-scoped vars do NOT propagate back to task scope
                         }
                     }
                 }
@@ -257,6 +267,13 @@ async fn run_task_loop_core(
                 {
                     continue 'cycle;
                 }
+            }
+
+            for item in &items {
+                let acc = item_state.entry(item.id.clone()).or_insert_with(|| {
+                    StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone())
+                });
+                finalize_item_execution(&state, task_id, item, &task_ctx, acc)?;
             }
         }
 

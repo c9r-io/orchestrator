@@ -48,8 +48,8 @@ pub fn claim_next_pending_task(state: &InnerState) -> Result<Option<String>> {
     };
 
     let updated = tx.execute(
-        "UPDATE tasks SET status = 'running', completed_at = NULL, updated_at = ?2 WHERE id = ?1 AND status = 'pending'",
-        rusqlite::params![task_id, now_ts()],
+        "UPDATE tasks SET status = 'running', started_at = COALESCE(started_at, ?2), completed_at = NULL, updated_at = ?3 WHERE id = ?1 AND status = 'pending'",
+        rusqlite::params![task_id, now_ts(), now_ts()],
     )?;
     tx.commit()?;
     if updated == 1 {

@@ -357,6 +357,12 @@ fn build_finalize_cel_context(context: &ItemFinalizeContext) -> Result<CelContex
         .add_variable("fix_required", context.fix_required)
         .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
     cel_context
+        .add_variable("qa_configured", context.qa_configured)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("qa_observed", context.qa_observed)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
         .add_variable("qa_enabled", context.qa_enabled)
         .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
     cel_context
@@ -364,6 +370,9 @@ fn build_finalize_cel_context(context: &ItemFinalizeContext) -> Result<CelContex
         .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
     cel_context
         .add_variable("qa_skipped", context.qa_skipped)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("fix_configured", context.fix_configured)
         .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
     cel_context
         .add_variable("fix_enabled", context.fix_enabled)
@@ -926,9 +935,12 @@ mod tests {
             retest_new_ticket_count: 0,
             qa_failed: false,
             fix_required: false,
+            qa_configured: true,
+            qa_observed: true,
             qa_enabled: true,
             qa_ran: true,
             qa_skipped: false,
+            fix_configured: true,
             fix_enabled: true,
             fix_ran: false,
             fix_success: false,
