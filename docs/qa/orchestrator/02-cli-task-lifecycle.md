@@ -23,6 +23,12 @@ Task creation target resolution now follows workflow scope:
 - any explicit `--target-file` values override the default source
 - multiple explicit targets are only valid for workflows that include item-scoped steps
 
+Runtime control commands also need to remain stable while a task is actively running:
+
+- `task info` should return valid output repeatedly during execution instead of failing on transient reads
+- `task logs` should return partial output when some log files are temporarily unavailable
+- `task watch` should keep the last visible frame until a fresh snapshot is ready
+
 Entry point: `./scripts/orchestrator.sh task <command>`
 
 ### Project Isolation Setup
@@ -193,7 +199,7 @@ LIMIT 5;
 
 ### Expected
 - Logs show run output chunks grouped by phase/run id.
-- Missing/corrupted log paths produce explicit read errors.
+- Missing/corrupted log paths produce per-run placeholders instead of aborting the whole command.
 - Tail and timestamp flags behave as documented.
 
 ### Expected Data State

@@ -4,23 +4,69 @@ use crate::runner::redact_text;
 use crate::state::InnerState;
 use crate::task_repository::{SqliteTaskRepository, TaskRepository};
 use anyhow::{Context, Result};
+use std::fmt::Write as _;
 use std::io::{Read, Seek};
 use std::path::Path;
+use std::time::{Duration, Instant};
+
+const QUERY_RETRY_ATTEMPTS: usize = 3;
+const QUERY_RETRY_DELAY_MS: u64 = 75;
+const FOLLOW_POLL_MS: u64 = 500;
+const FOLLOW_WARNING_THROTTLE_SECS: u64 = 5;
+const LOG_UNAVAILABLE_MARKER: &str = "[log unavailable]";
+
+fn is_transient_query_error(err: &anyhow::Error) -> bool {
+    let message = err.to_string();
+    [
+        "database is locked",
+        "failed to open sqlite db",
+        "failed to read log file",
+        "failed to seek log file",
+        "read stdout tail",
+        "read stderr tail",
+    ]
+    .iter()
+    .any(|needle| message.contains(needle))
+}
+
+fn retry_query<T, F>(label: &str, f: F) -> Result<T>
+where
+    F: Fn() -> Result<T>,
+{
+    let mut last_err = None;
+    for attempt in 0..QUERY_RETRY_ATTEMPTS {
+        match f() {
+            Ok(value) => return Ok(value),
+            Err(err) if is_transient_query_error(&err) && attempt + 1 < QUERY_RETRY_ATTEMPTS => {
+                last_err = Some(err);
+                std::thread::sleep(Duration::from_millis(QUERY_RETRY_DELAY_MS));
+            }
+            Err(err) => {
+                return Err(err).with_context(|| format!("{label} failed"));
+            }
+        }
+    }
+
+    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("{label} failed")))
+        .with_context(|| format!("{label} failed"))
+}
 
 pub fn resolve_task_id(state: &InnerState, task_id: &str) -> Result<String> {
     SqliteTaskRepository::new(state.db_path.clone()).resolve_task_id(task_id)
 }
 
 pub fn load_task_summary(state: &InnerState, task_id: &str) -> Result<TaskSummary> {
-    let resolved_id = resolve_task_id(state, task_id)?;
-    let repo = SqliteTaskRepository::new(state.db_path.clone());
-    let mut summary = repo.load_task_summary(&resolved_id)?;
-    let (total, finished, failed) = repo.load_task_item_counts(&resolved_id)?;
+    retry_query("load task summary", || {
+        let resolved_id = resolve_task_id(state, task_id)?;
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let mut summary = repo.load_task_summary(&resolved_id)?;
+        let (total, finished, failed) = repo.load_task_item_counts(&resolved_id)?;
 
-    summary.total_items = total;
-    summary.finished_items = finished;
-    summary.failed_items = failed;
-    Ok(summary)
+        summary.total_items = total;
+        summary.finished_items = finished;
+        summary.failed_items = failed;
+        Ok(summary)
+    })
 }
 
 pub fn list_tasks_impl(state: &InnerState) -> Result<Vec<TaskSummary>> {
@@ -35,16 +81,7 @@ pub fn list_tasks_impl(state: &InnerState) -> Result<Vec<TaskSummary>> {
 }
 
 pub fn get_task_details_impl(state: &InnerState, task_id: &str) -> Result<TaskDetail> {
-    let task = load_task_summary(state, task_id)?;
-    let repo = SqliteTaskRepository::new(state.db_path.clone());
-    let (items, runs, events) = repo.load_task_detail_rows(&task.id)?;
-
-    Ok(TaskDetail {
-        task,
-        items,
-        runs,
-        events,
-    })
+    load_task_detail_snapshot(state, task_id)
 }
 
 pub fn delete_task_impl(state: &InnerState, task_id: &str) -> Result<()> {
@@ -69,7 +106,9 @@ pub fn stream_task_logs_impl(
 
     let resolved_id = resolve_task_id(state, task_id)?;
     let repo = SqliteTaskRepository::new(state.db_path.clone());
-    let runs = repo.list_task_log_runs(&resolved_id, 14)?;
+    let runs = retry_query("list task log runs", || {
+        repo.list_task_log_runs(&resolved_id, 14)
+    })?;
     let redaction_patterns = {
         let active = read_loaded_config(state)?;
         active.config.runner.redaction_patterns.clone()
@@ -83,9 +122,13 @@ pub fn stream_task_logs_impl(
         let stderr_path = row.stderr_path;
         let started_at = row.started_at;
         let stdout_tail = tail_lines(Path::new(&stdout_path), PER_FILE_LINE_LIMIT)
-            .with_context(|| format!("read stdout tail for run_id={run_id} path={stdout_path}"))?;
+            .with_context(|| format!("read stdout tail for run_id={run_id} path={stdout_path}"))
+            .ok()
+            .unwrap_or_default();
         let stderr_tail = tail_lines(Path::new(&stderr_path), PER_FILE_LINE_LIMIT)
-            .with_context(|| format!("read stderr tail for run_id={run_id} path={stderr_path}"))?;
+            .with_context(|| format!("read stderr tail for run_id={run_id} path={stderr_path}"))
+            .ok()
+            .unwrap_or_default();
 
         let header = if show_timestamps {
             let ts = started_at.as_deref().unwrap_or("unknown");
@@ -94,10 +137,15 @@ pub fn stream_task_logs_impl(
             format!("[{}][{}]", run_id, phase)
         };
 
+        let log_body = if stdout_tail.is_empty() && stderr_tail.is_empty() {
+            LOG_UNAVAILABLE_MARKER.to_string()
+        } else {
+            redact_text(&stdout_tail, &redaction_patterns)
+        };
         let content = format!(
             "{}\n{}{}",
             header,
-            redact_text(&stdout_tail, &redaction_patterns),
+            log_body,
             if stderr_tail.is_empty() {
                 String::new()
             } else {
@@ -126,17 +174,21 @@ pub fn stream_task_logs_impl(
 }
 
 pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
-    use tokio::io::AsyncSeekExt;
-
     let mut stdout_pos: u64 = 0;
     let mut stderr_pos: u64 = 0;
     let mut current_phase = String::new();
+    let mut waiting_notice_printed = false;
+    let mut last_warning_at: Option<Instant> = None;
 
     loop {
         let latest = crate::events::query_latest_step_log_paths(&state.db_path, task_id);
         let (phase, stdout_path, stderr_path) = match latest {
             Ok(Some(info)) => info,
             Ok(None) => {
+                if !waiting_notice_printed {
+                    eprintln!("[waiting for first log stream]");
+                    waiting_notice_printed = true;
+                }
                 let repo = SqliteTaskRepository::new(state.db_path.clone());
                 if let Ok(Some(status)) = repo.load_task_status(task_id) {
                     if status == "completed" || status == "failed" {
@@ -144,11 +196,15 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
                         return Ok(());
                     }
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                tokio::time::sleep(Duration::from_millis(FOLLOW_POLL_MS)).await;
                 continue;
             }
-            Err(_) => {
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            Err(err) => {
+                maybe_emit_follow_warning(
+                    &format!("[transient log read error: {err}]"),
+                    &mut last_warning_at,
+                );
+                tokio::time::sleep(Duration::from_millis(FOLLOW_POLL_MS)).await;
                 continue;
             }
         };
@@ -161,191 +217,74 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
             stdout_pos = 0;
             stderr_pos = 0;
         }
+        waiting_notice_printed = false;
 
-        if let Ok(mut f) = tokio::fs::File::open(&stdout_path).await {
-            if let Ok(meta) = f.metadata().await {
-                if meta.len() > stdout_pos {
-                    let _ = f.seek(tokio::io::SeekFrom::Start(stdout_pos)).await;
-                    let mut buf = vec![0u8; (meta.len() - stdout_pos) as usize];
-                    if let Ok(n) = tokio::io::AsyncReadExt::read(&mut f, &mut buf).await {
-                        if n > 0 {
-                            print!("{}", String::from_utf8_lossy(&buf[..n]));
-                            stdout_pos += n as u64;
-                        }
-                    }
-                }
-            }
+        if let Err(err) = follow_one_stream(&stdout_path, &mut stdout_pos, false).await {
+            maybe_emit_follow_warning(
+                &format!("[transient log read error: {err}]"),
+                &mut last_warning_at,
+            );
         }
 
-        if let Ok(mut f) = tokio::fs::File::open(&stderr_path).await {
-            if let Ok(meta) = f.metadata().await {
-                if meta.len() > stderr_pos {
-                    let _ = f.seek(tokio::io::SeekFrom::Start(stderr_pos)).await;
-                    let mut buf = vec![0u8; (meta.len() - stderr_pos) as usize];
-                    if let Ok(n) = tokio::io::AsyncReadExt::read(&mut f, &mut buf).await {
-                        if n > 0 {
-                            eprint!("{}", String::from_utf8_lossy(&buf[..n]));
-                            stderr_pos += n as u64;
-                        }
-                    }
-                }
-            }
+        if let Err(err) = follow_one_stream(&stderr_path, &mut stderr_pos, true).await {
+            maybe_emit_follow_warning(
+                &format!("[transient log read error: {err}]"),
+                &mut last_warning_at,
+            );
         }
 
         let repo = SqliteTaskRepository::new(state.db_path.clone());
         if let Ok(Some(status)) = repo.load_task_status(task_id) {
             if status == "completed" || status == "failed" {
-                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                tokio::time::sleep(Duration::from_millis(200)).await;
                 eprintln!("\n--- task {} ---", status);
                 return Ok(());
             }
         }
 
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        tokio::time::sleep(Duration::from_millis(FOLLOW_POLL_MS)).await;
     }
 }
 
 pub async fn watch_task(state: &InnerState, task_id: &str, interval_secs: u64) -> Result<()> {
-    let interval = std::time::Duration::from_secs(interval_secs);
+    let interval = Duration::from_secs(interval_secs);
+    let mut last_warning: Option<String> = None;
 
     loop {
-        print!("\x1b[2J\x1b[H");
-
-        let repo = SqliteTaskRepository::new(state.db_path.clone());
-        let task = repo.load_task_summary(task_id)?;
-
-        println!(
-            "Task: {}  Status: {}  Workflow: {}",
-            &task_id[..8.min(task_id.len())],
-            colorize_status(&task.status),
-            &task.workflow_id,
-        );
-
-        let events = crate::events::query_step_events(&state.db_path, task_id)?;
-        let active_tickets: i64 = 0;
-        let cycle_count = events
-            .iter()
-            .filter(|e| e.event_type == "cycle_started")
-            .count();
-
-        println!("Cycle: {}  Tickets: {}", cycle_count, active_tickets);
-        println!("{}", "━".repeat(72));
-        println!(
-            " {:<15} {:<12} {:<10} {:<9} Details",
-            "Step", "Agent", "Status", "Duration"
-        );
-        println!(
-            " {:<15} {:<12} {:<10} {:<9} ──────────────────",
-            "───────────────", "────────────", "──────────", "─────────"
-        );
-
-        let mut step_states: Vec<StepWatchInfo> = Vec::new();
-        for ev in &events {
-            match ev.event_type.as_str() {
-                "step_started" => {
-                    let step = ev.step.clone().unwrap_or_default();
-                    let agent = ev.agent_id.clone().unwrap_or_default();
-                    if let Some(existing) = step_states.iter_mut().find(|s| s.step == step) {
-                        existing.status = "running".to_string();
-                        existing.agent_id = agent;
-                        existing.started_at = Some(ev.created_at.clone());
-                    } else {
-                        step_states.push(StepWatchInfo {
-                            step,
-                            agent_id: agent,
-                            status: "running".to_string(),
-                            duration_ms: None,
-                            details: String::new(),
-                            started_at: Some(ev.created_at.clone()),
-                        });
-                    }
+        let task = match load_task_summary(state, task_id) {
+            Ok(task) => task,
+            Err(err) if is_transient_query_error(&err) => {
+                let warning = format!("[transient task watch read error: {err}]");
+                if last_warning.as_deref() != Some(&warning) {
+                    eprintln!("{warning}");
+                    last_warning = Some(warning);
                 }
-                "step_finished" => {
-                    let step = ev.step.clone().unwrap_or_default();
-                    if let Some(existing) = step_states.iter_mut().find(|s| s.step == step) {
-                        let success = ev.success.unwrap_or(false);
-                        existing.status = if success {
-                            "done".to_string()
-                        } else {
-                            "failed".to_string()
-                        };
-                        existing.duration_ms = ev.duration_ms;
-                        existing.agent_id =
-                            ev.agent_id.clone().unwrap_or(existing.agent_id.clone());
-                        if let Some(conf) = ev.confidence {
-                            existing.details = format!("conf={:.2}", conf);
-                        }
-                    }
-                }
-                "step_skipped" => {
-                    let step = ev.step.clone().unwrap_or_default();
-                    step_states.push(StepWatchInfo {
-                        step,
-                        agent_id: String::new(),
-                        status: "skipped".to_string(),
-                        duration_ms: None,
-                        details: ev.reason.clone().unwrap_or_default(),
-                        started_at: None,
-                    });
-                }
-                "step_heartbeat" => {
-                    let step = ev.step.clone().unwrap_or_default();
-                    if let Some(existing) = step_states
-                        .iter_mut()
-                        .find(|s| s.step == step && s.status == "running")
-                    {
-                        let stdout_b = ev.stdout_bytes.unwrap_or(0);
-                        let pid = ev.pid.unwrap_or(0);
-                        let alive = ev.pid_alive.unwrap_or(false);
-                        existing.details = format!(
-                            "pid={} {} stdout={}",
-                            pid,
-                            if alive { "alive" } else { "DEAD" },
-                            format_bytes(stdout_b)
-                        );
-                    }
-                }
-                _ => {}
+                tokio::time::sleep(interval).await;
+                continue;
             }
-        }
-
-        for s in &step_states {
-            let duration_str = match s.duration_ms {
-                Some(ms) => format_duration(ms),
-                None if s.status == "running" => {
-                    if let Some(ref ts) = s.started_at {
-                        format!("{}...", ts.chars().skip(11).take(8).collect::<String>())
-                    } else {
-                        "-".to_string()
-                    }
+            Err(err) => return Err(err),
+        };
+        let events = match retry_query("query step events", || {
+            crate::events::query_step_events(&state.db_path, task_id)
+        }) {
+            Ok(events) => events,
+            Err(err) if is_transient_query_error(&err) => {
+                let warning = format!("[transient task watch read error: {err}]");
+                if last_warning.as_deref() != Some(&warning) {
+                    eprintln!("{warning}");
+                    last_warning = Some(warning);
                 }
-                _ => "-".to_string(),
-            };
-            let status_icon = match s.status.as_str() {
-                "done" => "\x1b[32m✓ done\x1b[0m",
-                "failed" => "\x1b[31m✗ fail\x1b[0m",
-                "running" => "\x1b[33m● run\x1b[0m",
-                "skipped" => "\x1b[90m○ skip\x1b[0m",
-                _ => &s.status,
-            };
-            println!(
-                " {:<15} {:<12} {:<18} {:<9} {}",
-                s.step,
-                if s.agent_id.is_empty() {
-                    "-"
-                } else {
-                    &s.agent_id
-                },
-                status_icon,
-                duration_str,
-                s.details
-            );
-        }
+                tokio::time::sleep(interval).await;
+                continue;
+            }
+            Err(err) => return Err(err),
+        };
 
-        println!();
+        let frame = render_watch_frame(&task, &events, task_id);
+        print!("\x1b[2J\x1b[H{frame}");
+        last_warning = None;
 
         if task.status == "completed" || task.status == "failed" {
-            println!("Task finished: {}", colorize_status(&task.status));
             return Ok(());
         }
 
@@ -360,6 +299,207 @@ struct StepWatchInfo {
     duration_ms: Option<u64>,
     details: String,
     started_at: Option<String>,
+}
+
+fn load_task_detail_snapshot(state: &InnerState, task_id: &str) -> Result<TaskDetail> {
+    retry_query("load task details", || {
+        let task = load_task_summary(state, task_id)?;
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let (items, runs, events) = repo.load_task_detail_rows(&task.id)?;
+
+        Ok(TaskDetail {
+            task,
+            items,
+            runs,
+            events,
+        })
+    })
+}
+
+async fn follow_one_stream(path: &str, pos: &mut u64, stderr: bool) -> Result<()> {
+    use tokio::io::AsyncReadExt;
+    use tokio::io::AsyncSeekExt;
+
+    let mut file = tokio::fs::File::open(path)
+        .await
+        .with_context(|| format!("open stream {path}"))?;
+    let meta = file
+        .metadata()
+        .await
+        .with_context(|| format!("stat stream {path}"))?;
+    if meta.len() <= *pos {
+        return Ok(());
+    }
+
+    file.seek(tokio::io::SeekFrom::Start(*pos))
+        .await
+        .with_context(|| format!("seek stream {path}"))?;
+    let mut buf = vec![0u8; (meta.len() - *pos) as usize];
+    let read = file
+        .read(&mut buf)
+        .await
+        .with_context(|| format!("read stream {path}"))?;
+    if read == 0 {
+        return Ok(());
+    }
+
+    if stderr {
+        eprint!("{}", String::from_utf8_lossy(&buf[..read]));
+    } else {
+        print!("{}", String::from_utf8_lossy(&buf[..read]));
+    }
+    *pos += read as u64;
+    Ok(())
+}
+
+fn maybe_emit_follow_warning(message: &str, last_warning_at: &mut Option<Instant>) {
+    let should_print = last_warning_at
+        .map(|at| at.elapsed() >= Duration::from_secs(FOLLOW_WARNING_THROTTLE_SECS))
+        .unwrap_or(true);
+    if should_print {
+        eprintln!("{message}");
+        *last_warning_at = Some(Instant::now());
+    }
+}
+
+fn render_watch_frame(
+    task: &TaskSummary,
+    events: &[crate::events::StepEvent],
+    task_id: &str,
+) -> String {
+    let mut frame = String::new();
+    let _ = writeln!(
+        frame,
+        "Task: {}  Status: {}  Workflow: {}",
+        &task_id[..8.min(task_id.len())],
+        colorize_status(&task.status),
+        &task.workflow_id,
+    );
+
+    let cycle_count = events
+        .iter()
+        .filter(|e| e.event_type == "cycle_started")
+        .count();
+    let _ = writeln!(frame, "Cycle: {}  Tickets: {}", cycle_count, 0);
+    let _ = writeln!(frame, "{}", "━".repeat(72));
+    let _ = writeln!(
+        frame,
+        " {:<15} {:<12} {:<10} {:<9} Details",
+        "Step", "Agent", "Status", "Duration"
+    );
+    let _ = writeln!(
+        frame,
+        " {:<15} {:<12} {:<10} {:<9} ──────────────────",
+        "───────────────", "────────────", "──────────", "─────────"
+    );
+
+    let mut step_states: Vec<StepWatchInfo> = Vec::new();
+    for ev in events {
+        match ev.event_type.as_str() {
+            "step_started" => {
+                let step = ev.step.clone().unwrap_or_default();
+                let agent = ev.agent_id.clone().unwrap_or_default();
+                if let Some(existing) = step_states.iter_mut().find(|s| s.step == step) {
+                    existing.status = "running".to_string();
+                    existing.agent_id = agent;
+                    existing.started_at = Some(ev.created_at.clone());
+                } else {
+                    step_states.push(StepWatchInfo {
+                        step,
+                        agent_id: agent,
+                        status: "running".to_string(),
+                        duration_ms: None,
+                        details: String::new(),
+                        started_at: Some(ev.created_at.clone()),
+                    });
+                }
+            }
+            "step_finished" => {
+                let step = ev.step.clone().unwrap_or_default();
+                if let Some(existing) = step_states.iter_mut().find(|s| s.step == step) {
+                    let success = ev.success.unwrap_or(false);
+                    existing.status = if success {
+                        "done".to_string()
+                    } else {
+                        "failed".to_string()
+                    };
+                    existing.duration_ms = ev.duration_ms;
+                    existing.agent_id = ev.agent_id.clone().unwrap_or(existing.agent_id.clone());
+                    if let Some(conf) = ev.confidence {
+                        existing.details = format!("conf={:.2}", conf);
+                    }
+                }
+            }
+            "step_skipped" => {
+                step_states.push(StepWatchInfo {
+                    step: ev.step.clone().unwrap_or_default(),
+                    agent_id: String::new(),
+                    status: "skipped".to_string(),
+                    duration_ms: None,
+                    details: ev.reason.clone().unwrap_or_default(),
+                    started_at: None,
+                });
+            }
+            "step_heartbeat" => {
+                let step = ev.step.clone().unwrap_or_default();
+                if let Some(existing) = step_states
+                    .iter_mut()
+                    .find(|s| s.step == step && s.status == "running")
+                {
+                    let stdout_b = ev.stdout_bytes.unwrap_or(0);
+                    let pid = ev.pid.unwrap_or(0);
+                    let alive = ev.pid_alive.unwrap_or(false);
+                    existing.details = format!(
+                        "pid={} {} stdout={}",
+                        pid,
+                        if alive { "alive" } else { "DEAD" },
+                        format_bytes(stdout_b)
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
+    for s in &step_states {
+        let duration_str = match s.duration_ms {
+            Some(ms) => format_duration(ms),
+            None if s.status == "running" => {
+                if let Some(ref ts) = s.started_at {
+                    format!("{}...", ts.chars().skip(11).take(8).collect::<String>())
+                } else {
+                    "-".to_string()
+                }
+            }
+            _ => "-".to_string(),
+        };
+        let status_icon = match s.status.as_str() {
+            "done" => "\x1b[32m✓ done\x1b[0m",
+            "failed" => "\x1b[31m✗ fail\x1b[0m",
+            "running" => "\x1b[33m● run\x1b[0m",
+            "skipped" => "\x1b[90m○ skip\x1b[0m",
+            _ => &s.status,
+        };
+        let _ = writeln!(
+            frame,
+            " {:<15} {:<12} {:<18} {:<9} {}",
+            s.step,
+            if s.agent_id.is_empty() {
+                "-"
+            } else {
+                &s.agent_id
+            },
+            status_icon,
+            duration_str,
+            s.details
+        );
+    }
+
+    let _ = writeln!(frame);
+    if task.status == "completed" || task.status == "failed" {
+        let _ = writeln!(frame, "Task finished: {}", colorize_status(&task.status));
+    }
+    frame
 }
 
 fn colorize_status(status: &str) -> String {
@@ -1110,5 +1250,203 @@ mod tests {
         let (state, task_id) = seed_task(&mut fixture);
         let chunks = stream_task_logs_impl(&state, &task_id, 10, false).expect("stream empty logs");
         assert!(chunks.is_empty());
+    }
+
+    #[test]
+    fn stream_task_logs_impl_returns_placeholder_when_logs_missing() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let item_id = first_item_id(&state, &task_id);
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        repo.insert_command_run(&NewCommandRun {
+            id: "run-missing-logs".to_string(),
+            task_item_id: item_id,
+            phase: "qa".to_string(),
+            command: "echo missing".to_string(),
+            cwd: "/tmp".to_string(),
+            workspace_id: "default".to_string(),
+            agent_id: "echo".to_string(),
+            exit_code: 0,
+            stdout_path: "/nonexistent/stdout.log".to_string(),
+            stderr_path: "/nonexistent/stderr.log".to_string(),
+            started_at: now_ts(),
+            ended_at: now_ts(),
+            interrupted: 0,
+            output_json: "{}".to_string(),
+            artifacts_json: "[]".to_string(),
+            confidence: None,
+            quality_score: None,
+            validation_status: "unknown".to_string(),
+            session_id: None,
+            machine_output_source: "stdout".to_string(),
+            output_json_path: None,
+        })
+        .expect("insert command run");
+
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).expect("stream task logs");
+        assert_eq!(chunks.len(), 1);
+        assert!(chunks[0].content.contains(LOG_UNAVAILABLE_MARKER));
+    }
+
+    #[test]
+    fn stream_task_logs_impl_returns_partial_results_when_one_run_is_unavailable() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let item_id = first_item_id(&state, &task_id);
+        let dir = test_dir("partial-logs");
+
+        let stdout_path = dir.join("stdout.log");
+        let stderr_path = dir.join("stderr.log");
+        std::fs::write(&stdout_path, "available output\n").unwrap();
+        std::fs::write(&stderr_path, "").unwrap();
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        repo.insert_command_run(&NewCommandRun {
+            id: "run-partial-good".to_string(),
+            task_item_id: item_id.clone(),
+            phase: "qa".to_string(),
+            command: "echo ok".to_string(),
+            cwd: "/tmp".to_string(),
+            workspace_id: "default".to_string(),
+            agent_id: "echo".to_string(),
+            exit_code: 0,
+            stdout_path: stdout_path.to_string_lossy().to_string(),
+            stderr_path: stderr_path.to_string_lossy().to_string(),
+            started_at: "2026-01-01T00:00:00Z".to_string(),
+            ended_at: now_ts(),
+            interrupted: 0,
+            output_json: "{}".to_string(),
+            artifacts_json: "[]".to_string(),
+            confidence: None,
+            quality_score: None,
+            validation_status: "unknown".to_string(),
+            session_id: None,
+            machine_output_source: "stdout".to_string(),
+            output_json_path: None,
+        })
+        .expect("insert good run");
+        repo.insert_command_run(&NewCommandRun {
+            id: "run-partial-missing".to_string(),
+            task_item_id: item_id,
+            phase: "implement".to_string(),
+            command: "echo missing".to_string(),
+            cwd: "/tmp".to_string(),
+            workspace_id: "default".to_string(),
+            agent_id: "echo".to_string(),
+            exit_code: 0,
+            stdout_path: "/nonexistent/stdout.log".to_string(),
+            stderr_path: "/nonexistent/stderr.log".to_string(),
+            started_at: "2026-01-01T00:00:01Z".to_string(),
+            ended_at: now_ts(),
+            interrupted: 0,
+            output_json: "{}".to_string(),
+            artifacts_json: "[]".to_string(),
+            confidence: None,
+            quality_score: None,
+            validation_status: "unknown".to_string(),
+            session_id: None,
+            machine_output_source: "stdout".to_string(),
+            output_json_path: None,
+        })
+        .expect("insert missing run");
+
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).expect("stream task logs");
+        assert_eq!(chunks.len(), 2);
+        assert!(chunks
+            .iter()
+            .any(|chunk| chunk.content.contains("available output")));
+        assert!(chunks
+            .iter()
+            .any(|chunk| chunk.content.contains(LOG_UNAVAILABLE_MARKER)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn retry_query_retries_transient_error_then_succeeds() {
+        let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let attempts_for_closure = attempts.clone();
+
+        let value = retry_query("transient test", move || {
+            let attempt = attempts_for_closure.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if attempt < 2 {
+                Err(anyhow::anyhow!("database is locked"))
+            } else {
+                Ok(42)
+            }
+        })
+        .expect("retry query should succeed");
+
+        assert_eq!(value, 42);
+        assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn retry_query_does_not_retry_permanent_error() {
+        let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let attempts_for_closure = attempts.clone();
+
+        let result: Result<i32> = retry_query("permanent test", move || {
+            attempts_for_closure.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Err(anyhow::anyhow!("task not found: deadbeef"))
+        });
+
+        assert!(result.is_err());
+        assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn render_watch_frame_includes_running_step_and_cycle() {
+        let task = TaskSummary {
+            id: "12345678-1234-1234-1234-123456789abc".to_string(),
+            name: "watch".to_string(),
+            status: "running".to_string(),
+            started_at: Some("2026-03-01T00:00:00Z".to_string()),
+            completed_at: None,
+            goal: "observe".to_string(),
+            project_id: "default".to_string(),
+            workspace_id: "default".to_string(),
+            workflow_id: "basic".to_string(),
+            target_files: vec![],
+            total_items: 1,
+            finished_items: 0,
+            failed_items: 0,
+            created_at: "2026-03-01T00:00:00Z".to_string(),
+            updated_at: "2026-03-01T00:00:01Z".to_string(),
+        };
+        let events = vec![
+            crate::events::StepEvent {
+                event_type: "cycle_started".to_string(),
+                step: None,
+                agent_id: None,
+                success: None,
+                duration_ms: None,
+                confidence: None,
+                reason: None,
+                stdout_bytes: None,
+                pid: None,
+                pid_alive: None,
+                created_at: "2026-03-01T00:00:00Z".to_string(),
+            },
+            crate::events::StepEvent {
+                event_type: "step_started".to_string(),
+                step: Some("plan".to_string()),
+                agent_id: Some("echo".to_string()),
+                success: None,
+                duration_ms: None,
+                confidence: None,
+                reason: None,
+                stdout_bytes: None,
+                pid: None,
+                pid_alive: None,
+                created_at: "2026-03-01T00:00:01Z".to_string(),
+            },
+        ];
+
+        let frame = render_watch_frame(&task, &events, &task.id);
+        assert!(frame.contains("Task: 12345678"));
+        assert!(frame.contains("Cycle: 1"));
+        assert!(frame.contains("plan"));
+        assert!(frame.contains("echo"));
     }
 }
