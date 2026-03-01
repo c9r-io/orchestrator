@@ -393,6 +393,7 @@ pub async fn execute_builtin_step(
                 agent_id: "builtin",
                 runtime,
                 step_timeout_secs: None,
+                step_scope: step.resolved_scope(),
             },
         )
         .await?
@@ -414,6 +415,7 @@ pub async fn execute_builtin_step(
                 runtime,
                 pipeline_vars: Some(&task_ctx.pipeline_vars),
                 step_timeout_secs: task_ctx.safety.step_timeout_secs,
+                step_scope: step.resolved_scope(),
             },
         )
         .await?
@@ -555,6 +557,7 @@ pub async fn execute_guard_step(
             agent_id: &agent_id,
             runtime,
             step_timeout_secs: None,
+            step_scope: crate::config::StepScope::Task,
         },
     )
     .await?;
@@ -655,7 +658,7 @@ pub async fn process_item_filtered(
                 task_id,
                 Some(item_id),
                 "step_skipped",
-                json!({"step": phase, "step_id": &step.id, "reason": "prehook_false"}),
+                json!({"step": phase, "step_id": &step.id, "step_scope": step.resolved_scope(), "reason": "prehook_false"}),
             )?;
             continue;
         }
@@ -667,7 +670,7 @@ pub async fn process_item_filtered(
             task_id,
             Some(item_id),
             "step_started",
-            json!({"step": phase, "step_id": &step.id, "cycle": task_ctx.current_cycle, "pipeline_var_keys": pipeline_var_keys}),
+            json!({"step": phase, "step_id": &step.id, "step_scope": step.resolved_scope(), "cycle": task_ctx.current_cycle, "pipeline_var_keys": pipeline_var_keys}),
         )?;
 
         let result = match &step.behavior.execution {
@@ -690,7 +693,7 @@ pub async fn process_item_filtered(
                     task_id,
                     Some(item_id),
                     "step_finished",
-                    json!({"step": phase, "exit_code": exit_code, "success": passed}),
+                    json!({"step": phase, "step_scope": step.resolved_scope(), "exit_code": exit_code, "success": passed}),
                 )?;
 
                 // Apply behavior-driven status transitions for self_test
@@ -735,7 +738,7 @@ pub async fn process_item_filtered(
                     task_id,
                     Some(item_id),
                     "step_started",
-                    json!({"step": "ticket_scan"}),
+                    json!({"step": "ticket_scan", "step_scope": step.resolved_scope()}),
                 )?;
                 let tickets = scan_active_tickets_for_task_items(task_ctx, task_item_paths)?;
                 acc.active_tickets = tickets.get(&item.qa_file_path).cloned().unwrap_or_default();
@@ -746,7 +749,7 @@ pub async fn process_item_filtered(
                     task_id,
                     Some(item_id),
                     "step_finished",
-                    json!({"step": "ticket_scan", "tickets": acc.active_tickets.len()}),
+                    json!({"step": "ticket_scan", "step_scope": step.resolved_scope(), "tickets": acc.active_tickets.len()}),
                 )?;
                 continue;
             }
@@ -760,7 +763,7 @@ pub async fn process_item_filtered(
                         task_id,
                         Some(item_id),
                         "chain_step_started",
-                        json!({"step": phase, "chain_step": chain_step.id}),
+                        json!({"step": phase, "step_scope": step.resolved_scope(), "chain_step": chain_step.id}),
                     )?;
 
                     let mut step_ctx = task_ctx.clone();
@@ -785,14 +788,14 @@ pub async fn process_item_filtered(
                                 task_id,
                                 Some(item_id),
                                 "chain_step_finished",
-                                json!({"step": phase, "chain_step": chain_step.id, "error": e.to_string(), "success": false}),
+                                json!({"step": phase, "step_scope": step.resolved_scope(), "chain_step": chain_step.id, "error": e.to_string(), "success": false}),
                             );
                             let _ = insert_event(
                                 state,
                                 task_id,
                                 Some(item_id),
                                 "step_finished",
-                                json!({"step": phase, "error": e.to_string(), "success": false}),
+                                json!({"step": phase, "step_scope": step.resolved_scope(), "error": e.to_string(), "success": false}),
                             );
                             return Err(e);
                         }
@@ -818,6 +821,7 @@ pub async fn process_item_filtered(
                         "chain_step_finished",
                         json!({
                             "step": phase,
+                            "step_scope": step.resolved_scope(),
                             "chain_step": chain_step.id,
                             "exit_code": chain_result.exit_code,
                             "success": chain_result.is_success()
@@ -836,7 +840,7 @@ pub async fn process_item_filtered(
                     task_id,
                     Some(item_id),
                     "step_finished",
-                    json!({"step": phase, "success": chain_passed}),
+                    json!({"step": phase, "step_scope": step.resolved_scope(), "success": chain_passed}),
                 )?;
                 continue;
             }
@@ -865,7 +869,7 @@ pub async fn process_item_filtered(
                             task_id,
                             Some(item_id),
                             "step_finished",
-                            json!({"step": phase, "step_id": step.id, "error": e.to_string(), "success": false}),
+                            json!({"step": phase, "step_id": step.id, "step_scope": step.resolved_scope(), "error": e.to_string(), "success": false}),
                         );
                         return Err(e);
                     }
@@ -912,7 +916,7 @@ pub async fn process_item_filtered(
                         task_id,
                         Some(item_id),
                         "step_finished",
-                        json!({"step": phase, "step_id": step.id, "early_return": true, "exit_code": result.exit_code, "success": false}),
+                        json!({"step": phase, "step_id": step.id, "step_scope": step.resolved_scope(), "early_return": true, "exit_code": result.exit_code, "success": false}),
                     )?;
                     state
                         .db_writer
@@ -1023,11 +1027,12 @@ pub async fn process_item_filtered(
             Some(item_id),
             "step_finished",
             json!({
-                "step": phase,
-                "step_id": step.id,
-                "agent_id": result.agent_id,
-                "run_id": result.run_id,
-                "exit_code": result.exit_code,
+                    "step": phase,
+                    "step_id": step.id,
+                    "step_scope": step.resolved_scope(),
+                    "agent_id": result.agent_id,
+                    "run_id": result.run_id,
+                    "exit_code": result.exit_code,
                 "success": result.is_success(),
                 "timed_out": result.timed_out,
                 "duration_ms": result.duration_ms,
@@ -1085,7 +1090,7 @@ pub async fn process_item_filtered(
                 task_id,
                 Some(item_id),
                 "dynamic_step_started",
-                json!({"step_id": ds.id, "step_type": ds.step_type, "priority": ds.priority}),
+                json!({"step_id": ds.id, "step_type": ds.step_type, "step_scope": "item", "priority": ds.priority}),
             )?;
             let cap = Some(ds.step_type.as_str());
             let result = run_phase_with_rotation(
@@ -1105,6 +1110,7 @@ pub async fn process_item_filtered(
                     runtime,
                     pipeline_vars: None,
                     step_timeout_secs: task_ctx.safety.step_timeout_secs,
+                    step_scope: crate::config::StepScope::Item,
                 },
             )
             .await?;
@@ -1113,7 +1119,7 @@ pub async fn process_item_filtered(
                 task_id,
                 Some(item_id),
                 "dynamic_step_finished",
-                json!({"step_id": ds.id, "exit_code": result.exit_code, "success": result.is_success()}),
+                json!({"step_id": ds.id, "step_scope": "item", "exit_code": result.exit_code, "success": result.is_success()}),
             )?;
         }
     }

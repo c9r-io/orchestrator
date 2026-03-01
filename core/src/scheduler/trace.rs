@@ -1,4 +1,7 @@
 use crate::dto::{CommandRunDto, EventDto};
+use crate::events::{
+    observed_step_scope_from_payload, observed_step_scope_label, ObservedStepScope,
+};
 use chrono::TimeZone;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -27,6 +30,7 @@ pub struct StepTrace {
     pub step_id: String,
     pub scope: String,
     pub item_id: Option<String>,
+    pub anchor_item_id: Option<String>,
     pub started_at: Option<String>,
     pub ended_at: Option<String>,
     pub exit_code: Option<i64>,
@@ -78,6 +82,25 @@ struct CycleBuilder {
     ended_at: Option<String>,
     last_seen_at: Option<String>,
     steps: Vec<StepTrace>,
+}
+
+fn split_observed_item_binding(
+    scope: Option<ObservedStepScope>,
+    task_item_id: &Option<String>,
+) -> (String, Option<String>, Option<String>) {
+    match scope {
+        Some(ObservedStepScope::Item) => (
+            observed_step_scope_label(scope).to_string(),
+            task_item_id.clone(),
+            None,
+        ),
+        Some(ObservedStepScope::Task) => (
+            observed_step_scope_label(scope).to_string(),
+            None,
+            task_item_id.clone(),
+        ),
+        None => ("unknown".to_string(), None, task_item_id.clone()),
+    }
 }
 
 // ── Pure trace builder ───────────────────────────────────────────────
@@ -233,16 +256,16 @@ fn build_cycles(
                     .unwrap_or("unknown")
                     .to_string();
 
-                let scope = if event.task_item_id.is_some() {
-                    "item"
-                } else {
-                    "task"
-                };
+                let (scope, item_id, anchor_item_id) = split_observed_item_binding(
+                    observed_step_scope_from_payload(&event.payload),
+                    &event.task_item_id,
+                );
 
                 let step = StepTrace {
                     step_id,
-                    scope: scope.to_string(),
-                    item_id: event.task_item_id.clone(),
+                    scope,
+                    item_id,
+                    anchor_item_id,
                     started_at: Some(event.created_at.clone()),
                     ended_at: None,
                     exit_code: None,
@@ -291,7 +314,9 @@ fn build_cycles(
                             step.agent_id = agent_id;
                         }
                         // Try to get actual exit_code from command_runs
-                        if let Some(item_id) = &step.item_id {
+                        if let Some(item_id) =
+                            step.item_id.as_ref().or(step.anchor_item_id.as_ref())
+                        {
                             if let Some(runs) =
                                 runs_by_item_phase.get(&(item_id.clone(), step_id.to_string()))
                             {
@@ -321,16 +346,16 @@ fn build_cycles(
                     .get("reason")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
+                let (scope, item_id, anchor_item_id) = split_observed_item_binding(
+                    observed_step_scope_from_payload(&event.payload),
+                    &event.task_item_id,
+                );
 
                 let step = StepTrace {
                     step_id,
-                    scope: if event.task_item_id.is_some() {
-                        "item"
-                    } else {
-                        "task"
-                    }
-                    .to_string(),
-                    item_id: event.task_item_id.clone(),
+                    scope,
+                    item_id,
+                    anchor_item_id,
                     started_at: Some(event.created_at.clone()),
                     ended_at: Some(event.created_at.clone()),
                     exit_code: None,
@@ -977,9 +1002,14 @@ pub fn render_trace_terminal(trace: &TaskTrace, verbose: bool) {
             );
 
             if verbose {
+                let mut parts = vec![format!("scope={}", step.scope)];
                 if let Some(item_id) = &step.item_id {
-                    println!("             item={}", item_id);
+                    parts.push(format!("item={item_id}"));
                 }
+                if let Some(anchor_item_id) = &step.anchor_item_id {
+                    parts.push(format!("anchor_item={anchor_item_id}"));
+                }
+                println!("             {}", parts.join(" "));
             }
         }
     }
@@ -1048,6 +1078,21 @@ mod tests {
     }
 
     fn make_event(id: i64, event_type: &str, payload: Value, created_at: &str) -> EventDto {
+        let mut payload = payload;
+        if matches!(
+            event_type,
+            "step_started"
+                | "step_finished"
+                | "step_skipped"
+                | "chain_step_started"
+                | "chain_step_finished"
+                | "dynamic_step_started"
+                | "dynamic_step_finished"
+                | "step_heartbeat"
+        ) && payload.get("step_scope").is_none()
+        {
+            payload["step_scope"] = json!("task");
+        }
         EventDto {
             id,
             task_id: "test-task".to_string(),
@@ -1065,6 +1110,21 @@ mod tests {
         created_at: &str,
         item_id: &str,
     ) -> EventDto {
+        let mut payload = payload;
+        if matches!(
+            event_type,
+            "step_started"
+                | "step_finished"
+                | "step_skipped"
+                | "chain_step_started"
+                | "chain_step_finished"
+                | "dynamic_step_started"
+                | "dynamic_step_finished"
+                | "step_heartbeat"
+        ) && payload.get("step_scope").is_none()
+        {
+            payload["step_scope"] = json!("item");
+        }
         EventDto {
             id,
             task_id: "test-task".to_string(),
@@ -1826,5 +1886,83 @@ mod tests {
             trace.cycles[0].ended_at.as_deref(),
             Some("2026-03-01T04:00:30.000000+00:00")
         );
+    }
+
+    #[test]
+    fn build_trace_marks_task_scoped_step_with_anchor_item() {
+        let events = vec![
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2026-03-01T04:00:00.000000+00:00",
+            ),
+            make_item_event(
+                2,
+                "step_started",
+                json!({"step": "plan", "step_scope": "task"}),
+                "2026-03-01T04:00:01.000000+00:00",
+                "item-1",
+            ),
+            make_item_event(
+                3,
+                "step_finished",
+                json!({"step": "plan", "step_scope": "task", "success": true}),
+                "2026-03-01T04:00:02.000000+00:00",
+                "item-1",
+            ),
+            make_event(
+                4,
+                "task_completed",
+                json!({}),
+                "2026-03-01T04:00:03.000000+00:00",
+            ),
+        ];
+
+        let trace = build_trace("test-task", "completed", &events, &[]);
+        let step = &trace.cycles[0].steps[0];
+        assert_eq!(step.scope, "task");
+        assert_eq!(step.item_id, None);
+        assert_eq!(step.anchor_item_id.as_deref(), Some("item-1"));
+    }
+
+    #[test]
+    fn build_trace_marks_legacy_step_scope_as_unknown() {
+        let events = vec![
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2026-03-01T04:00:00.000000+00:00",
+            ),
+            EventDto {
+                id: 2,
+                task_id: "test-task".to_string(),
+                task_item_id: Some("item-1".to_string()),
+                event_type: "step_started".to_string(),
+                payload: json!({"step": "plan"}),
+                created_at: "2026-03-01T04:00:01.000000+00:00".to_string(),
+            },
+            EventDto {
+                id: 3,
+                task_id: "test-task".to_string(),
+                task_item_id: Some("item-1".to_string()),
+                event_type: "step_finished".to_string(),
+                payload: json!({"step": "plan", "success": true}),
+                created_at: "2026-03-01T04:00:02.000000+00:00".to_string(),
+            },
+            make_event(
+                4,
+                "task_completed",
+                json!({}),
+                "2026-03-01T04:00:03.000000+00:00",
+            ),
+        ];
+
+        let trace = build_trace("test-task", "completed", &events, &[]);
+        let step = &trace.cycles[0].steps[0];
+        assert_eq!(step.scope, "unknown");
+        assert_eq!(step.item_id, None);
+        assert_eq!(step.anchor_item_id.as_deref(), Some("item-1"));
     }
 }

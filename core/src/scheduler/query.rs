@@ -294,6 +294,8 @@ pub async fn watch_task(state: &InnerState, task_id: &str, interval_secs: u64) -
 
 struct StepWatchInfo {
     step: String,
+    scope: Option<crate::events::ObservedStepScope>,
+    binding_item_id: Option<String>,
     agent_id: String,
     status: String,
     duration_ms: Option<u64>,
@@ -384,13 +386,13 @@ fn render_watch_frame(
     let _ = writeln!(frame, "{}", "━".repeat(72));
     let _ = writeln!(
         frame,
-        " {:<15} {:<12} {:<10} {:<9} Details",
-        "Step", "Agent", "Status", "Duration"
+        " {:<15} {:<7} {:<12} {:<10} {:<9} Details",
+        "Step", "Scope", "Agent", "Status", "Duration"
     );
     let _ = writeln!(
         frame,
-        " {:<15} {:<12} {:<10} {:<9} ──────────────────",
-        "───────────────", "────────────", "──────────", "─────────"
+        " {:<15} {:<7} {:<12} {:<10} {:<9} ─────────────",
+        "───────────────", "───────", "────────────", "──────────", "─────────"
     );
 
     let mut step_states: Vec<StepWatchInfo> = Vec::new();
@@ -400,12 +402,16 @@ fn render_watch_frame(
                 let step = ev.step.clone().unwrap_or_default();
                 let agent = ev.agent_id.clone().unwrap_or_default();
                 if let Some(existing) = step_states.iter_mut().find(|s| s.step == step) {
+                    existing.scope = ev.step_scope;
+                    existing.binding_item_id = ev.task_item_id.clone();
                     existing.status = "running".to_string();
                     existing.agent_id = agent;
                     existing.started_at = Some(ev.created_at.clone());
                 } else {
                     step_states.push(StepWatchInfo {
                         step,
+                        scope: ev.step_scope,
+                        binding_item_id: ev.task_item_id.clone(),
                         agent_id: agent,
                         status: "running".to_string(),
                         duration_ms: None,
@@ -417,6 +423,12 @@ fn render_watch_frame(
             "step_finished" => {
                 let step = ev.step.clone().unwrap_or_default();
                 if let Some(existing) = step_states.iter_mut().find(|s| s.step == step) {
+                    if ev.step_scope.is_some() {
+                        existing.scope = ev.step_scope;
+                    }
+                    if ev.task_item_id.is_some() {
+                        existing.binding_item_id = ev.task_item_id.clone();
+                    }
                     let success = ev.success.unwrap_or(false);
                     existing.status = if success {
                         "done".to_string()
@@ -433,6 +445,8 @@ fn render_watch_frame(
             "step_skipped" => {
                 step_states.push(StepWatchInfo {
                     step: ev.step.clone().unwrap_or_default(),
+                    scope: ev.step_scope,
+                    binding_item_id: ev.task_item_id.clone(),
                     agent_id: String::new(),
                     status: "skipped".to_string(),
                     duration_ms: None,
@@ -446,6 +460,12 @@ fn render_watch_frame(
                     .iter_mut()
                     .find(|s| s.step == step && s.status == "running")
                 {
+                    if ev.step_scope.is_some() {
+                        existing.scope = ev.step_scope;
+                    }
+                    if ev.task_item_id.is_some() {
+                        existing.binding_item_id = ev.task_item_id.clone();
+                    }
                     let stdout_b = ev.stdout_bytes.unwrap_or(0);
                     let stderr_b = ev.stderr_bytes.unwrap_or(0);
                     let stdout_delta_b = ev.stdout_delta_bytes.unwrap_or(0);
@@ -479,6 +499,13 @@ fn render_watch_frame(
                             format_bytes(stdout_b)
                         ),
                     };
+                    if existing.scope == Some(crate::events::ObservedStepScope::Task) {
+                        if let Some(anchor_item_id) = &existing.binding_item_id {
+                            existing
+                                .details
+                                .push_str(&format!(" anchor={anchor_item_id}"));
+                        }
+                    }
                 }
             }
             _ => {}
@@ -506,8 +533,12 @@ fn render_watch_frame(
         };
         let _ = writeln!(
             frame,
-            " {:<15} {:<12} {:<18} {:<9} {}",
+            " {:<15} {:<7} {:<12} {:<18} {:<9} {}",
             s.step,
+            match s.scope {
+                Some(scope) => crate::events::observed_step_scope_label(Some(scope)),
+                None => "?",
+            },
             if s.agent_id.is_empty() {
                 "-"
             } else {
@@ -1442,6 +1473,8 @@ mod tests {
             crate::events::StepEvent {
                 event_type: "cycle_started".to_string(),
                 step: None,
+                step_scope: None,
+                task_item_id: None,
                 agent_id: None,
                 success: None,
                 duration_ms: None,
@@ -1461,6 +1494,8 @@ mod tests {
             crate::events::StepEvent {
                 event_type: "step_started".to_string(),
                 step: Some("plan".to_string()),
+                step_scope: Some(crate::events::ObservedStepScope::Task),
+                task_item_id: Some("item-1".to_string()),
                 agent_id: Some("echo".to_string()),
                 success: None,
                 duration_ms: None,
@@ -1482,7 +1517,9 @@ mod tests {
         let frame = render_watch_frame(&task, &events, &task.id);
         assert!(frame.contains("Task: 12345678"));
         assert!(frame.contains("Cycle: 1"));
+        assert!(frame.contains("Scope"));
         assert!(frame.contains("plan"));
+        assert!(frame.contains(" task "));
         assert!(frame.contains("echo"));
     }
 
@@ -1509,6 +1546,8 @@ mod tests {
             crate::events::StepEvent {
                 event_type: "step_started".to_string(),
                 step: Some("plan".to_string()),
+                step_scope: Some(crate::events::ObservedStepScope::Task),
+                task_item_id: Some("item-1".to_string()),
                 agent_id: Some("echo".to_string()),
                 success: None,
                 duration_ms: None,
@@ -1528,6 +1567,8 @@ mod tests {
             crate::events::StepEvent {
                 event_type: "step_heartbeat".to_string(),
                 step: Some("plan".to_string()),
+                step_scope: Some(crate::events::ObservedStepScope::Task),
+                task_item_id: Some("item-1".to_string()),
                 agent_id: None,
                 success: None,
                 duration_ms: None,
@@ -1550,6 +1591,7 @@ mod tests {
         assert!(frame.contains("LOW OUTPUT"));
         assert!(frame.contains("Δ=0B"));
         assert!(frame.contains("quiet=3"));
+        assert!(frame.contains("anchor=item-1"));
     }
 
     #[test]
@@ -1575,6 +1617,8 @@ mod tests {
             crate::events::StepEvent {
                 event_type: "step_started".to_string(),
                 step: Some("plan".to_string()),
+                step_scope: Some(crate::events::ObservedStepScope::Item),
+                task_item_id: Some("item-1".to_string()),
                 agent_id: Some("echo".to_string()),
                 success: None,
                 duration_ms: None,
@@ -1594,6 +1638,8 @@ mod tests {
             crate::events::StepEvent {
                 event_type: "step_heartbeat".to_string(),
                 step: Some("plan".to_string()),
+                step_scope: Some(crate::events::ObservedStepScope::Item),
+                task_item_id: Some("item-1".to_string()),
                 agent_id: None,
                 success: None,
                 duration_ms: None,
@@ -1613,7 +1659,53 @@ mod tests {
         ];
 
         let frame = render_watch_frame(&task, &events, &task.id);
+        assert!(frame.contains(" item "));
         assert!(frame.contains("state=active"));
         assert!(!frame.contains("LOW OUTPUT"));
+    }
+
+    #[test]
+    fn render_watch_frame_shows_unknown_scope_for_legacy_event() {
+        let task = TaskSummary {
+            id: "12345678-1234-1234-1234-123456789abc".to_string(),
+            name: "watch".to_string(),
+            status: "running".to_string(),
+            started_at: Some("2026-03-01T00:00:00Z".to_string()),
+            completed_at: None,
+            goal: "observe".to_string(),
+            project_id: "default".to_string(),
+            workspace_id: "default".to_string(),
+            workflow_id: "basic".to_string(),
+            target_files: vec![],
+            total_items: 1,
+            finished_items: 0,
+            failed_items: 0,
+            created_at: "2026-03-01T00:00:00Z".to_string(),
+            updated_at: "2026-03-01T00:00:01Z".to_string(),
+        };
+        let events = vec![crate::events::StepEvent {
+            event_type: "step_started".to_string(),
+            step: Some("plan".to_string()),
+            step_scope: None,
+            task_item_id: Some("item-1".to_string()),
+            agent_id: Some("echo".to_string()),
+            success: None,
+            duration_ms: None,
+            confidence: None,
+            reason: None,
+            elapsed_secs: None,
+            stdout_bytes: None,
+            stderr_bytes: None,
+            stdout_delta_bytes: None,
+            stderr_delta_bytes: None,
+            stagnant_heartbeats: None,
+            pid: None,
+            pid_alive: None,
+            output_state: None,
+            created_at: "2026-03-01T00:00:01Z".to_string(),
+        }];
+
+        let frame = render_watch_frame(&task, &events, &task.id);
+        assert!(frame.contains(" ? "));
     }
 }

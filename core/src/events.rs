@@ -5,6 +5,28 @@ use rusqlite::params;
 use serde_json::Value;
 use std::path::Path;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObservedStepScope {
+    Task,
+    Item,
+}
+
+pub fn observed_step_scope_from_payload(payload: &Value) -> Option<ObservedStepScope> {
+    match payload["step_scope"].as_str() {
+        Some("task") => Some(ObservedStepScope::Task),
+        Some("item") => Some(ObservedStepScope::Item),
+        _ => None,
+    }
+}
+
+pub fn observed_step_scope_label(scope: Option<ObservedStepScope>) -> &'static str {
+    match scope {
+        Some(ObservedStepScope::Task) => "task",
+        Some(ObservedStepScope::Item) => "item",
+        None => "unknown",
+    }
+}
+
 /// Trait for emitting real-time events to listeners (UI, logging, etc.)
 /// Separate from `insert_event` which persists to DB.
 pub trait EventSink: Send + Sync {
@@ -45,6 +67,8 @@ pub fn insert_event(
 pub struct StepEvent {
     pub event_type: String,
     pub step: Option<String>,
+    pub step_scope: Option<ObservedStepScope>,
+    pub task_item_id: Option<String>,
     pub agent_id: Option<String>,
     pub success: Option<bool>,
     pub duration_ms: Option<u64>,
@@ -103,7 +127,7 @@ pub fn query_latest_step_log_paths(
 pub fn query_step_events(db_path: &Path, task_id: &str) -> Result<Vec<StepEvent>> {
     let conn = open_conn(db_path)?;
     let mut stmt = conn.prepare(
-        "SELECT event_type, payload_json, created_at FROM events
+        "SELECT event_type, payload_json, created_at, task_item_id FROM events
          WHERE task_id = ?1
            AND event_type IN ('step_started', 'step_finished', 'step_skipped', 'step_heartbeat', 'step_spawned', 'step_timeout', 'cycle_started')
          ORDER BY id ASC",
@@ -112,12 +136,13 @@ pub fn query_step_events(db_path: &Path, task_id: &str) -> Result<Vec<StepEvent>
         let event_type: String = row.get(0)?;
         let payload_json: String = row.get(1)?;
         let created_at: String = row.get(2)?;
-        Ok((event_type, payload_json, created_at))
+        let task_item_id: Option<String> = row.get(3)?;
+        Ok((event_type, payload_json, created_at, task_item_id))
     })?;
 
     let mut events = Vec::new();
     for row in rows {
-        let (event_type, payload_json, created_at) = row?;
+        let (event_type, payload_json, created_at, task_item_id) = row?;
         let v: Value = serde_json::from_str(&payload_json).unwrap_or_default();
         events.push(StepEvent {
             event_type,
@@ -125,6 +150,8 @@ pub fn query_step_events(db_path: &Path, task_id: &str) -> Result<Vec<StepEvent>
                 .as_str()
                 .or_else(|| v["phase"].as_str())
                 .map(String::from),
+            step_scope: observed_step_scope_from_payload(&v),
+            task_item_id,
             agent_id: v["agent_id"].as_str().map(String::from),
             success: v["success"].as_bool(),
             duration_ms: v["duration_ms"].as_u64(),
@@ -205,6 +232,7 @@ mod tests {
 
         assert_eq!(events[0].event_type, "step_started");
         assert_eq!(events[0].step.as_deref(), Some("qa"));
+        assert_eq!(events[0].task_item_id.as_deref(), Some("item1"));
         assert_eq!(events[0].agent_id.as_deref(), Some("qa_agent"));
 
         assert_eq!(events[1].event_type, "step_finished");
@@ -221,6 +249,22 @@ mod tests {
 
         let events = query_step_events(&state.db_path, "nonexistent_task").unwrap();
         assert!(events.is_empty());
+    }
+
+    #[test]
+    fn observed_step_scope_parses_known_values() {
+        assert_eq!(
+            observed_step_scope_from_payload(&serde_json::json!({"step_scope": "task"})),
+            Some(ObservedStepScope::Task)
+        );
+        assert_eq!(
+            observed_step_scope_from_payload(&serde_json::json!({"step_scope": "item"})),
+            Some(ObservedStepScope::Item)
+        );
+        assert_eq!(
+            observed_step_scope_from_payload(&serde_json::json!({})),
+            None
+        );
     }
 
     #[test]
@@ -277,6 +321,26 @@ mod tests {
     }
 
     #[test]
+    fn query_step_events_parses_step_scope_and_task_item_id() {
+        let mut fixture = crate::test_utils::TestState::new();
+        let state = fixture.build();
+
+        insert_event(
+            &state,
+            "task1",
+            Some("item1"),
+            "step_started",
+            serde_json::json!({"step": "qa", "step_scope": "item"}),
+        )
+        .unwrap();
+
+        let events = query_step_events(&state.db_path, "task1").unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].step_scope, Some(ObservedStepScope::Item));
+        assert_eq!(events[0].task_item_id.as_deref(), Some("item1"));
+    }
+
+    #[test]
     fn step_event_parses_all_optional_fields() {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
@@ -288,6 +352,7 @@ mod tests {
             "step_heartbeat",
             serde_json::json!({
                 "step": "implement",
+                "step_scope": "task",
                 "elapsed_secs": 120,
                 "stdout_bytes": 4096,
                 "stderr_bytes": 256,
@@ -303,6 +368,7 @@ mod tests {
 
         let events = query_step_events(&state.db_path, "task1").unwrap();
         assert_eq!(events.len(), 1);
+        assert_eq!(events[0].step_scope, Some(ObservedStepScope::Task));
         assert_eq!(events[0].elapsed_secs, Some(120));
         assert_eq!(events[0].stdout_bytes, Some(4096));
         assert_eq!(events[0].stderr_bytes, Some(256));

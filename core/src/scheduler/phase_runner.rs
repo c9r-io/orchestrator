@@ -1,4 +1,4 @@
-use crate::config::PipelineVariables;
+use crate::config::{PipelineVariables, StepScope};
 use crate::config_load::now_ts;
 use crate::events::insert_event;
 use crate::health::{
@@ -62,6 +62,7 @@ pub struct PhaseRunRequest<'a> {
     pub agent_id: &'a str,
     pub runtime: &'a RunningTask,
     pub step_timeout_secs: Option<u64>,
+    pub step_scope: StepScope,
 }
 
 pub struct RotatingPhaseRunRequest<'a> {
@@ -79,6 +80,14 @@ pub struct RotatingPhaseRunRequest<'a> {
     pub runtime: &'a RunningTask,
     pub pipeline_vars: Option<&'a PipelineVariables>,
     pub step_timeout_secs: Option<u64>,
+    pub step_scope: StepScope,
+}
+
+fn step_scope_label(scope: StepScope) -> &'static str {
+    match scope {
+        StepScope::Task => "task",
+        StepScope::Item => "item",
+    }
 }
 
 pub(crate) fn shell_escape(s: &str) -> String {
@@ -174,6 +183,7 @@ async fn run_phase_with_timeout(
         agent_id,
         runtime,
         step_timeout_secs,
+        step_scope,
     } = request;
     let now = now_ts();
     let run_uuid = Uuid::new_v4();
@@ -352,6 +362,7 @@ async fn run_phase_with_timeout(
         json!({
             "step": phase,
             "step_id": step_id,
+            "step_scope": step_scope_label(step_scope),
             "agent_id": agent_id,
             "run_id": run_id,
             "pid": child_pid,
@@ -387,6 +398,7 @@ async fn run_phase_with_timeout(
                 json!({
                     "step": phase,
                     "step_id": step_id,
+                    "step_scope": step_scope_label(step_scope),
                     "timeout_secs": step_timeout_secs,
                     "pid": child_pid,
                 }),
@@ -450,6 +462,7 @@ async fn run_phase_with_timeout(
                     json!({
                         "step": phase,
                         "step_id": step_id,
+                        "step_scope": step_scope_label(step_scope),
                         "elapsed_secs": elapsed.as_secs(),
                         "stdout_bytes": heartbeat.stdout_bytes,
                         "stderr_bytes": heartbeat.stderr_bytes,
@@ -674,6 +687,7 @@ pub async fn run_phase_with_rotation(
         runtime,
         pipeline_vars,
         step_timeout_secs,
+        step_scope,
     } = request;
     let effective_capability = capability.or(match phase {
         "qa" | "fix" | "retest" => Some(phase),
@@ -737,6 +751,7 @@ pub async fn run_phase_with_rotation(
             agent_id: &agent_id,
             runtime,
             step_timeout_secs,
+            step_scope,
         },
     )
     .await

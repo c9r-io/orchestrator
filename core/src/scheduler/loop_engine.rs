@@ -63,7 +63,7 @@ async fn run_task_loop_core(
                     task_id,
                     Some(&anchor_item_id),
                     "step_started",
-                    json!({"step":"init_once"}),
+                    json!({"step":"init_once", "step_scope": "task"}),
                 )?;
                 let init_result = run_phase_with_rotation(
                     &state,
@@ -82,6 +82,7 @@ async fn run_task_loop_core(
                         runtime: &runtime,
                         pipeline_vars: None,
                         step_timeout_secs: task_ctx.safety.step_timeout_secs,
+                        step_scope: StepScope::Task,
                     },
                 )
                 .await?;
@@ -93,7 +94,7 @@ async fn run_task_loop_core(
                     task_id,
                     Some(&anchor_item_id),
                     "step_finished",
-                    json!({"step":"init_once","exit_code":init_result.exit_code}),
+                    json!({"step":"init_once","step_scope":"task","exit_code":init_result.exit_code}),
                 )?;
             }
         }

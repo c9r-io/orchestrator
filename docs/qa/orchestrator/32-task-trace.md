@@ -110,8 +110,10 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 
 ### Expected
 
-- Steps with an attached `task_item_id` show `item={item_id}` on an indented line
-- Current trace output may still show an anchor `item=` for task-scoped steps; this scenario only verifies that verbose mode exposes item linkage when present, not exact scope reconstruction
+- Every verbose step prints an indented scope line
+- Item-scoped steps show `scope=item item={item_id}`
+- Task-scoped steps show `scope=task`, and if an execution anchor exists it is rendered as `anchor_item={item_id}`
+- Legacy tasks without explicit scope metadata may show `scope=unknown`; they must not silently relabel the anchor as a true `item=...`
 
 ---
 

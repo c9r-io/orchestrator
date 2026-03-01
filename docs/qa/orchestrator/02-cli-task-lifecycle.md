@@ -28,6 +28,7 @@ Runtime control commands also need to remain stable while a task is actively run
 - `task info` should return valid output repeatedly during execution instead of failing on transient reads
 - `task logs` should return partial output when some log files are temporarily unavailable
 - `task watch` should keep the last visible frame until a fresh snapshot is ready
+- `task watch` should display the real step scope instead of inferring it from an anchor item binding
 
 Entry point: `./scripts/orchestrator.sh task <command>`
 
@@ -79,6 +80,7 @@ Expected:
 - Repeated `task info` calls keep returning valid JSON and do not fail on transient reads.
 - `task logs` succeeds even if some run logs are not yet readable, using per-run placeholders when needed.
 - `task watch` renders a frame immediately and should not clear to a blank screen before data is available.
+- `task watch` includes a `Scope` column and reports `task` vs `item` from explicit step metadata, not from whether an anchor item exists.
 - For a long-running command step with no meaningful new output for multiple heartbeats, `task watch` surfaces a `LOW OUTPUT` indicator instead of only showing a live PID.
 - For a long-running step that keeps producing output, `task watch` continues to show progress details without entering `LOW OUTPUT`.
 
