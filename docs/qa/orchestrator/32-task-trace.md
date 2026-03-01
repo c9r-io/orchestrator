@@ -15,6 +15,7 @@ The latest regression fix also requires:
 - completed multi-cycle tasks must populate `ended_at` for every cycle
 - normal two-cycle tasks must not emit false `overlapping_cycles`
 - `summary.wall_time_secs` must be populated for completed tasks, including RFC3339 timestamps with timezone offsets
+- `task trace` must remain available even when the current active config is invalid for execution
 
 ### Common Preconditions
 
@@ -156,23 +157,31 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 
 ---
 
-## Scenario 5: Trace on Nonexistent Task
+## Scenario 5: Trace Works When Active Config Is Not Runnable
 
 ### Preconditions
 
 - Orchestrator binary built and available
+- At least one historical task exists in the local database
+- Current active config is intentionally invalid (for example, a workflow step defines both `builtin` and `required_capability`)
 
 ### Steps
 
-1. Run trace with an invalid task ID:
+1. Confirm the current config is invalid with a command that requires a runnable config:
    ```bash
-   ./scripts/orchestrator.sh task trace nonexistent-task-id-000
+   ./scripts/orchestrator.sh check
+   ```
+2. Run trace for a historical task:
+   ```bash
+   ./scripts/orchestrator.sh task trace {task_id} --json | jq '.summary'
    ```
 
 ### Expected
 
-- Error message indicating task not found
-- Exit code is non-zero
+- `check` reports the active config is not runnable
+- `task trace` still returns trace output instead of failing during startup
+- JSON output remains valid and includes `summary.total_cycles`
+- Exit code 0
 
 ---
 
@@ -184,4 +193,4 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 | 2 | JSON Output | ☐ | | | |
 | 3 | Verbose Mode Shows Item IDs | ☐ | | | |
 | 4 | Anomaly Detection - Real Failure vs False Overlap | ☐ | | | |
-| 5 | Trace on Nonexistent Task | ☐ | | | |
+| 5 | Trace Works When Active Config Is Not Runnable | ☐ | | | |

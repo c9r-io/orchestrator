@@ -1,4 +1,4 @@
-use crate::config_load::read_active_config;
+use crate::config_load::read_loaded_config;
 use crate::dto::{LogChunk, TaskDetail, TaskSummary};
 use crate::runner::redact_text;
 use crate::state::InnerState;
@@ -71,7 +71,7 @@ pub fn stream_task_logs_impl(
     let repo = SqliteTaskRepository::new(state.db_path.clone());
     let runs = repo.list_task_log_runs(&resolved_id, 14)?;
     let redaction_patterns = {
-        let active = read_active_config(state)?;
+        let active = read_loaded_config(state)?;
         active.config.runner.redaction_patterns.clone()
     };
 
@@ -908,6 +908,54 @@ mod tests {
         assert!(chunks[0].content.contains("line 3"));
         // No stderr section since stderr is empty
         assert!(!chunks[0].content.contains("[stderr]"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stream_task_logs_impl_works_when_active_config_is_not_runnable() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let item_id = first_item_id(&state, &task_id);
+
+        let dir = test_dir("stream-invalid-active");
+        let stdout_path = dir.join("stdout.log");
+        let stderr_path = dir.join("stderr.log");
+        std::fs::write(&stdout_path, "token=redacted\nvisible line\n").unwrap();
+        std::fs::write(&stderr_path, "").unwrap();
+
+        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        repo.insert_command_run(&NewCommandRun {
+            id: "run-invalid-active-1".to_string(),
+            task_item_id: item_id,
+            phase: "qa".to_string(),
+            command: "echo stream".to_string(),
+            cwd: "/tmp".to_string(),
+            workspace_id: "default".to_string(),
+            agent_id: "echo".to_string(),
+            exit_code: 0,
+            stdout_path: stdout_path.to_string_lossy().to_string(),
+            stderr_path: stderr_path.to_string_lossy().to_string(),
+            started_at: now_ts(),
+            ended_at: now_ts(),
+            interrupted: 0,
+            output_json: "{}".to_string(),
+            artifacts_json: "[]".to_string(),
+            confidence: None,
+            quality_score: None,
+            validation_status: "unknown".to_string(),
+            session_id: None,
+            machine_output_source: "stdout".to_string(),
+            output_json_path: None,
+        })
+        .expect("insert command run");
+
+        *state.active_config_error.write().unwrap() =
+            Some("active config is not runnable".to_string());
+
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).expect("stream task logs");
+        assert_eq!(chunks.len(), 1);
+        assert!(chunks[0].content.contains("[REDACTED]"));
+        assert!(chunks[0].content.contains("visible line"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

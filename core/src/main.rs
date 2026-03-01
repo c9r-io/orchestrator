@@ -26,7 +26,6 @@ mod test_utils;
 
 use crate::cli::{Cli, Commands, DbCommands, ManifestCommands};
 use crate::collab::MessageBus;
-use crate::config_load::read_active_config;
 use crate::config_load::{
     detect_app_root, load_or_seed_config, load_raw_config_from_db, persist_raw_config,
 };
@@ -48,19 +47,27 @@ fn init_state() -> Result<ManagedState> {
     let (db_path, logs_dir) = initialize_runtime(&app_root)?;
 
     let (config, _yaml, _version, _updated_at) = load_or_seed_config(&db_path)?;
-    let active = config_load::build_active_config(&app_root, config).with_context(|| {
-        "active config is not runnable; continue applying resources until configuration is complete"
-    })?;
-    let default_workspace = active
-        .workspaces
-        .get(&active.default_workspace_id)
-        .context("default workspace is missing after config validation")?;
-    backfill_legacy_data(
-        &db_path,
-        &active.default_workspace_id,
-        &active.default_workflow_id,
-        default_workspace,
-    )?;
+    let (active, active_config_error) = match config_load::build_active_config(&app_root, config.clone()) {
+        Ok(active) => {
+            let default_workspace = active
+                .workspaces
+                .get(&active.default_workspace_id)
+                .context("default workspace is missing after config validation")?;
+            backfill_legacy_data(
+                &db_path,
+                &active.default_workspace_id,
+                &active.default_workflow_id,
+                default_workspace,
+            )?;
+            (active, None)
+        }
+        Err(error) => (
+            placeholder_active_config(config),
+            Some(format!(
+                "active config is not runnable; continue applying resources until configuration is complete: {error}"
+            )),
+        ),
+    };
 
     let db_writer = Arc::new(crate::db_write::DbWriteCoordinator::new(&db_path)?);
     Ok(ManagedState {
@@ -69,6 +76,7 @@ fn init_state() -> Result<ManagedState> {
             db_path,
             logs_dir,
             active_config: RwLock::new(active),
+            active_config_error: RwLock::new(active_config_error),
             running: Mutex::new(std::collections::HashMap::new()),
             agent_health: std::sync::RwLock::new(std::collections::HashMap::new()),
             agent_metrics: std::sync::RwLock::new(std::collections::HashMap::new()),
@@ -77,6 +85,19 @@ fn init_state() -> Result<ManagedState> {
             db_writer,
         }),
     })
+}
+
+fn placeholder_active_config(
+    config: crate::config::OrchestratorConfig,
+) -> crate::config::ActiveConfig {
+    crate::config::ActiveConfig {
+        config,
+        workspaces: std::collections::HashMap::new(),
+        projects: std::collections::HashMap::new(),
+        default_project_id: String::new(),
+        default_workspace_id: String::new(),
+        default_workflow_id: String::new(),
+    }
 }
 
 fn backfill_legacy_data(
@@ -359,9 +380,6 @@ fn main() -> Result<()> {
         std::process::exit(exit_code);
     }
     let state = init_state()?;
-
-    // Ensure config can be loaded before command dispatch.
-    drop(read_active_config(&state.inner)?);
 
     cli::run_cli_mode(state.inner.clone(), cli)
 }

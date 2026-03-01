@@ -240,6 +240,7 @@ impl TestState {
             db_path,
             logs_dir,
             active_config: RwLock::new(active),
+            active_config_error: RwLock::new(None),
             running: Mutex::new(HashMap::new()),
             agent_health: std::sync::RwLock::new(HashMap::new()),
             agent_metrics: std::sync::RwLock::new(HashMap::new()),

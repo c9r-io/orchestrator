@@ -25,6 +25,7 @@ pub struct InnerState {
     pub db_path: PathBuf,
     pub logs_dir: PathBuf,
     pub active_config: RwLock<ActiveConfig>,
+    pub active_config_error: RwLock<Option<String>>,
     pub running: Mutex<HashMap<String, RunningTask>>,
     pub agent_health: std::sync::RwLock<HashMap<String, crate::metrics::AgentHealthState>>,
     pub agent_metrics: std::sync::RwLock<HashMap<String, crate::metrics::AgentMetrics>>,
