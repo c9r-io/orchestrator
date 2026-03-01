@@ -237,15 +237,6 @@ pub fn collect_target_files(
     Ok(files)
 }
 
-pub fn should_seed_targets_from_active_tickets(
-    target_files: Option<&Vec<String>>,
-    execution_plan: &crate::config::TaskExecutionPlan,
-) -> bool {
-    target_files.is_none()
-        && execution_plan.step_by_id("qa").is_none()
-        && execution_plan.step_by_id("ticket_scan").is_some()
-}
-
 pub fn create_ticket_for_qa_failure(
     workspace_root: &Path,
     ticket_dir: &str,
@@ -503,73 +494,6 @@ mod tests {
         assert!(!is_active_ticket_status("RESOLVED"));
         assert!(!is_active_ticket_status("SKIPPED"));
         assert!(!is_active_ticket_status("PASSED"));
-    }
-
-    #[test]
-    fn test_should_seed_targets_from_active_tickets() {
-        use crate::config::{StepBehavior, TaskExecutionPlan, TaskExecutionStep};
-
-        let plan_with_ticket_scan = TaskExecutionPlan {
-            steps: vec![TaskExecutionStep {
-                id: "ticket_scan".to_string(),
-                enabled: true,
-                repeatable: false,
-                is_guard: false,
-                builtin: None,
-                cost_preference: None,
-                required_capability: None,
-                prehook: None,
-                tty: false,
-                outputs: vec![],
-                pipe_to: None,
-                command: None,
-                chain_steps: vec![],
-                scope: None,
-                behavior: StepBehavior::default(),
-            }],
-            loop_policy: crate::config::WorkflowLoopConfig::default(),
-            finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
-        };
-
-        // No target_files, no qa step, has ticket_scan -> should seed
-        assert!(should_seed_targets_from_active_tickets(
-            None,
-            &plan_with_ticket_scan
-        ));
-
-        // Has target_files -> should NOT seed
-        let targets = vec!["docs/qa/test.md".to_string()];
-        assert!(!should_seed_targets_from_active_tickets(
-            Some(&targets),
-            &plan_with_ticket_scan
-        ));
-
-        // Has QA step -> should NOT seed
-        let plan_with_qa = TaskExecutionPlan {
-            steps: vec![TaskExecutionStep {
-                id: "qa".to_string(),
-                enabled: true,
-                repeatable: false,
-                is_guard: false,
-                builtin: None,
-                cost_preference: None,
-                required_capability: None,
-                prehook: None,
-                tty: false,
-                outputs: vec![],
-                pipe_to: None,
-                command: None,
-                chain_steps: vec![],
-                scope: None,
-                behavior: StepBehavior::default(),
-            }],
-            loop_policy: crate::config::WorkflowLoopConfig::default(),
-            finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
-        };
-        assert!(!should_seed_targets_from_active_tickets(
-            None,
-            &plan_with_qa
-        ));
     }
 
     #[test]

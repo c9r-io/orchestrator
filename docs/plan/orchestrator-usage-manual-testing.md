@@ -107,7 +107,10 @@ YAML
 
 ## 5. Create and Run a Task
 
-Important: `task create` requires at least one QA/Security markdown target.
+Important:
+- item-scoped workflows default to scanning QA/Security markdown under workspace `qa_targets`
+- task-scoped-only workflows can be created without QA markdown; the orchestrator uses a synthetic `__UNASSIGNED__` anchor item
+- explicit `--target-file` values override the default source
 
 Create task without auto start:
 
@@ -241,4 +244,3 @@ Reset DB/config:
 ```bash
 ./scripts/orchestrator.sh db reset -f --include-config --include-history
 ```
-

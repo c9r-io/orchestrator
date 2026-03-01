@@ -2,16 +2,110 @@ use crate::config::LoopMode;
 use crate::config_load::build_execution_plan;
 use crate::config_load::{now_ts, read_active_config};
 use crate::db::open_conn;
-use crate::dto::{CreateTaskPayload, TaskSummary};
+use crate::dto::{CreateTaskPayload, TaskSummary, UNASSIGNED_QA_FILE_PATH};
 use crate::scheduler::load_task_summary;
-use crate::ticket::{
-    collect_target_files, collect_target_files_from_active_tickets,
-    should_seed_targets_from_active_tickets,
-};
+use crate::ticket::{collect_target_files, collect_target_files_from_active_tickets};
 use anyhow::{Context, Result};
 use chrono::Utc;
 use rusqlite::params;
 use uuid::Uuid;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TargetSeedStrategy {
+    Explicit,
+    ActiveTickets,
+    QaDirectoryScan,
+    SyntheticAnchor,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ResolvedTaskTargets {
+    persisted_target_files: Vec<String>,
+    task_item_paths: Vec<String>,
+}
+
+fn execution_plan_requires_item_targets(plan: &crate::config::TaskExecutionPlan) -> bool {
+    plan.steps
+        .iter()
+        .any(|step| step.enabled && step.resolved_scope() == crate::config::StepScope::Item)
+}
+
+fn select_target_seed_strategy(
+    explicit_targets: Option<&Vec<String>>,
+    plan: &crate::config::TaskExecutionPlan,
+) -> TargetSeedStrategy {
+    if explicit_targets.is_some() {
+        TargetSeedStrategy::Explicit
+    } else if !execution_plan_requires_item_targets(plan) {
+        TargetSeedStrategy::SyntheticAnchor
+    } else if plan.step_by_id("qa").is_none() && plan.step_by_id("ticket_scan").is_some() {
+        TargetSeedStrategy::ActiveTickets
+    } else {
+        TargetSeedStrategy::QaDirectoryScan
+    }
+}
+
+fn resolve_task_targets(
+    workspace: &crate::config::ResolvedWorkspace,
+    plan: &crate::config::TaskExecutionPlan,
+    explicit_targets: Option<Vec<String>>,
+) -> Result<ResolvedTaskTargets> {
+    let requires_item_targets = execution_plan_requires_item_targets(plan);
+    match select_target_seed_strategy(explicit_targets.as_ref(), plan) {
+        TargetSeedStrategy::Explicit => {
+            let validated = collect_target_files(
+                &workspace.root_path,
+                &workspace.qa_targets,
+                explicit_targets,
+            )?;
+            if requires_item_targets {
+                if validated.is_empty() {
+                    anyhow::bail!("no valid --target-file entries found");
+                }
+                Ok(ResolvedTaskTargets {
+                    persisted_target_files: validated.clone(),
+                    task_item_paths: validated,
+                })
+            } else {
+                match validated.len() {
+                    0 => anyhow::bail!("no valid --target-file entries found"),
+                    1 => Ok(ResolvedTaskTargets {
+                        persisted_target_files: validated.clone(),
+                        task_item_paths: validated,
+                    }),
+                    _ => anyhow::bail!("task-scoped workflow accepts at most one --target-file"),
+                }
+            }
+        }
+        TargetSeedStrategy::ActiveTickets => {
+            let mut targets = collect_target_files_from_active_tickets(
+                &workspace.root_path,
+                &workspace.ticket_dir,
+            )?;
+            if targets.is_empty() {
+                targets.push(UNASSIGNED_QA_FILE_PATH.to_string());
+            }
+            Ok(ResolvedTaskTargets {
+                persisted_target_files: targets.clone(),
+                task_item_paths: targets,
+            })
+        }
+        TargetSeedStrategy::QaDirectoryScan => {
+            let targets = collect_target_files(&workspace.root_path, &workspace.qa_targets, None)?;
+            if targets.is_empty() {
+                anyhow::bail!("No QA/Security markdown files found for item-scoped workflow");
+            }
+            Ok(ResolvedTaskTargets {
+                persisted_target_files: targets.clone(),
+                task_item_paths: targets,
+            })
+        }
+        TargetSeedStrategy::SyntheticAnchor => Ok(ResolvedTaskTargets {
+            persisted_target_files: Vec::new(),
+            task_item_paths: vec![UNASSIGNED_QA_FILE_PATH.to_string()],
+        }),
+    }
+}
 
 pub fn create_task_impl(
     state: &crate::state::InnerState,
@@ -67,25 +161,7 @@ pub fn create_task_impl(
         LoopMode::Infinite => "infinite",
     };
 
-    let target_files_input = payload.target_files.clone();
-    let seed_from_tickets =
-        should_seed_targets_from_active_tickets(target_files_input.as_ref(), &execution_plan);
-    let mut target_files = if seed_from_tickets {
-        collect_target_files_from_active_tickets(&workspace.root_path, &workspace.ticket_dir)?
-    } else {
-        collect_target_files(
-            &workspace.root_path,
-            &workspace.qa_targets,
-            target_files_input,
-        )?
-    };
-    if target_files.is_empty() {
-        if seed_from_tickets {
-            target_files.push(crate::dto::UNASSIGNED_QA_FILE_PATH.to_string());
-        } else {
-            anyhow::bail!("No QA/Security markdown files found");
-        }
-    }
+    let resolved_targets = resolve_task_targets(&workspace, &execution_plan, payload.target_files)?;
 
     let task_id = Uuid::new_v4().to_string();
     let created_at = now_ts();
@@ -104,7 +180,7 @@ pub fn create_task_impl(
             task_id,
             task_name,
             goal,
-            serde_json::to_string(&target_files)?,
+            serde_json::to_string(&resolved_targets.persisted_target_files)?,
             project_id,
             workspace_id,
             workflow_id,
@@ -117,7 +193,7 @@ pub fn create_task_impl(
         ],
     )?;
 
-    for (idx, path) in target_files.iter().enumerate() {
+    for (idx, path) in resolved_targets.task_item_paths.iter().enumerate() {
         let item_id = Uuid::new_v4().to_string();
         tx.execute(
             "INSERT INTO task_items (id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, 'pending', '[]', '[]', 0, 0, '', NULL, NULL, ?5, ?5)",
@@ -149,8 +225,90 @@ pub fn reset_task_item_for_retry(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{
+        LoopMode, SafetyConfig, StepBehavior, WorkflowConfig, WorkflowFinalizeConfig,
+        WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
+    };
     use crate::dto::CreateTaskPayload;
     use crate::test_utils::TestState;
+
+    fn make_workflow(steps: Vec<WorkflowStepConfig>) -> WorkflowConfig {
+        WorkflowConfig {
+            steps,
+            loop_policy: WorkflowLoopConfig {
+                mode: LoopMode::Once,
+                guard: WorkflowLoopGuardConfig {
+                    enabled: false,
+                    stop_when_no_unresolved: false,
+                    max_cycles: None,
+                    agent_template: None,
+                },
+            },
+            finalize: WorkflowFinalizeConfig { rules: vec![] },
+            qa: None,
+            fix: None,
+            retest: None,
+            dynamic_steps: vec![],
+            safety: SafetyConfig::default(),
+        }
+    }
+
+    fn make_step(
+        id: &str,
+        builtin: Option<&str>,
+        required_capability: Option<&str>,
+    ) -> WorkflowStepConfig {
+        WorkflowStepConfig {
+            id: id.to_string(),
+            description: None,
+            builtin: builtin.map(str::to_string),
+            required_capability: required_capability.map(str::to_string),
+            enabled: true,
+            repeatable: false,
+            is_guard: false,
+            cost_preference: None,
+            prehook: None,
+            tty: false,
+            outputs: Vec::new(),
+            pipe_to: None,
+            command: None,
+            chain_steps: vec![],
+            scope: None,
+            behavior: StepBehavior::default(),
+        }
+    }
+
+    fn task_only_workflow() -> WorkflowConfig {
+        make_workflow(vec![make_step("self_test", Some("self_test"), None)])
+    }
+
+    fn ticket_seed_workflow() -> WorkflowConfig {
+        make_workflow(vec![make_step("ticket_scan", Some("ticket_scan"), None)])
+    }
+
+    fn load_task_storage(
+        state: &crate::state::InnerState,
+        task_id: &str,
+    ) -> (Vec<String>, Vec<String>) {
+        let conn = open_conn(&state.db_path).unwrap();
+        let target_files_json: String = conn
+            .query_row(
+                "SELECT target_files_json FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let target_files = serde_json::from_str::<Vec<String>>(&target_files_json).unwrap();
+        let mut stmt = conn
+            .prepare("SELECT qa_file_path FROM task_items WHERE task_id = ?1 ORDER BY order_no")
+            .unwrap();
+        let item_paths = stmt
+            .query_map(params![task_id], |row| row.get::<_, String>(0))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        (target_files, item_paths)
+    }
 
     #[test]
     fn create_task_with_defaults() {
@@ -263,7 +421,7 @@ mod tests {
     }
 
     #[test]
-    fn create_task_with_no_qa_files_fails() {
+    fn create_task_item_scoped_workflow_with_no_qa_files_fails() {
         let mut ts = TestState::new();
         let state = ts.build();
 
@@ -280,7 +438,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(
-            err.contains("No QA/Security markdown files found"),
+            err.contains("No QA/Security markdown files found for item-scoped workflow"),
             "unexpected error: {}",
             err
         );
@@ -315,6 +473,165 @@ mod tests {
         };
         let result = create_task_impl(&state, payload).unwrap();
         assert_eq!(result.total_items, 2, "should have 2 task items");
+        let (target_files, item_paths) = load_task_storage(&state, &result.id);
+        assert_eq!(target_files.len(), 2);
+        assert_eq!(item_paths.len(), 2);
+    }
+
+    #[test]
+    fn create_task_item_scoped_workflow_with_explicit_non_markdown_target_succeeds() {
+        let mut ts = TestState::new();
+        let state = ts.build();
+
+        let active = crate::config_load::read_active_config(&state).unwrap();
+        let ws = active.workspaces.get("default").unwrap();
+        let src_path = ws.root_path.join("src");
+        std::fs::create_dir_all(&src_path).ok();
+        std::fs::write(src_path.join("lib.rs"), "fn main() {}\n").unwrap();
+        drop(active);
+
+        let payload = CreateTaskPayload {
+            name: Some("Targeted Source".to_string()),
+            goal: None,
+            project_id: None,
+            workspace_id: None,
+            workflow_id: None,
+            target_files: Some(vec!["src/lib.rs".to_string()]),
+        };
+        let result = create_task_impl(&state, payload).unwrap();
+        assert_eq!(result.total_items, 1);
+        let (target_files, item_paths) = load_task_storage(&state, &result.id);
+        assert_eq!(target_files, vec!["src/lib.rs".to_string()]);
+        assert_eq!(item_paths, vec!["src/lib.rs".to_string()]);
+    }
+
+    #[test]
+    fn create_task_task_scoped_workflow_without_qa_files_uses_synthetic_anchor() {
+        let mut ts = TestState::new().with_workflow("task_only", task_only_workflow());
+        let state = ts.build();
+
+        let payload = CreateTaskPayload {
+            name: Some("Task Only".to_string()),
+            goal: None,
+            project_id: None,
+            workspace_id: None,
+            workflow_id: Some("task_only".to_string()),
+            target_files: None,
+        };
+        let result = create_task_impl(&state, payload).unwrap();
+        assert_eq!(result.total_items, 1);
+        let (target_files, item_paths) = load_task_storage(&state, &result.id);
+        assert!(target_files.is_empty());
+        assert_eq!(item_paths, vec![UNASSIGNED_QA_FILE_PATH.to_string()]);
+    }
+
+    #[test]
+    fn create_task_task_scoped_workflow_with_single_explicit_target_succeeds() {
+        let mut ts = TestState::new().with_workflow("task_only", task_only_workflow());
+        let state = ts.build();
+
+        let active = crate::config_load::read_active_config(&state).unwrap();
+        let ws = active.workspaces.get("default").unwrap();
+        let src_path = ws.root_path.join("src");
+        std::fs::create_dir_all(&src_path).ok();
+        std::fs::write(src_path.join("lib.rs"), "fn main() {}\n").unwrap();
+        drop(active);
+
+        let payload = CreateTaskPayload {
+            name: Some("Task Only Target".to_string()),
+            goal: None,
+            project_id: None,
+            workspace_id: None,
+            workflow_id: Some("task_only".to_string()),
+            target_files: Some(vec!["src/lib.rs".to_string()]),
+        };
+        let result = create_task_impl(&state, payload).unwrap();
+        assert_eq!(result.total_items, 1);
+        let (target_files, item_paths) = load_task_storage(&state, &result.id);
+        assert_eq!(target_files, vec!["src/lib.rs".to_string()]);
+        assert_eq!(item_paths, vec!["src/lib.rs".to_string()]);
+    }
+
+    #[test]
+    fn create_task_task_scoped_workflow_with_multiple_explicit_targets_fails() {
+        let mut ts = TestState::new().with_workflow("task_only", task_only_workflow());
+        let state = ts.build();
+
+        let active = crate::config_load::read_active_config(&state).unwrap();
+        let ws = active.workspaces.get("default").unwrap();
+        let src_path = ws.root_path.join("src");
+        std::fs::create_dir_all(&src_path).ok();
+        std::fs::write(src_path.join("a.rs"), "fn a() {}\n").unwrap();
+        std::fs::write(src_path.join("b.rs"), "fn b() {}\n").unwrap();
+        drop(active);
+
+        let payload = CreateTaskPayload {
+            name: Some("Task Only Multi".to_string()),
+            goal: None,
+            project_id: None,
+            workspace_id: None,
+            workflow_id: Some("task_only".to_string()),
+            target_files: Some(vec!["src/a.rs".to_string(), "src/b.rs".to_string()]),
+        };
+        let result = create_task_impl(&state, payload);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("task-scoped workflow accepts at most one --target-file"));
+    }
+
+    #[test]
+    fn create_task_ticket_seed_workflow_without_active_tickets_uses_unassigned() {
+        let mut ts = TestState::new().with_workflow("ticket_only", ticket_seed_workflow());
+        let state = ts.build();
+
+        let payload = CreateTaskPayload {
+            name: Some("Ticket Seed Empty".to_string()),
+            goal: None,
+            project_id: None,
+            workspace_id: None,
+            workflow_id: Some("ticket_only".to_string()),
+            target_files: None,
+        };
+        let result = create_task_impl(&state, payload).unwrap();
+        assert_eq!(result.total_items, 1);
+        let (target_files, item_paths) = load_task_storage(&state, &result.id);
+        assert_eq!(target_files, vec![UNASSIGNED_QA_FILE_PATH.to_string()]);
+        assert_eq!(item_paths, vec![UNASSIGNED_QA_FILE_PATH.to_string()]);
+    }
+
+    #[test]
+    fn create_task_ticket_seed_workflow_with_active_tickets_uses_ticket_targets() {
+        let mut ts = TestState::new().with_workflow("ticket_only", ticket_seed_workflow());
+        let state = ts.build();
+
+        let active = crate::config_load::read_active_config(&state).unwrap();
+        let ws = active.workspaces.get("default").unwrap();
+        let qa_dir = ws.root_path.join("docs/qa");
+        std::fs::create_dir_all(&qa_dir).ok();
+        std::fs::write(qa_dir.join("from_ticket.md"), "# From Ticket\n").unwrap();
+        let ticket_dir = ws.root_path.join(&ws.ticket_dir);
+        std::fs::write(
+            ticket_dir.join("active_ticket.md"),
+            "**Status**: OPEN\n**QA Document**: `docs/qa/from_ticket.md`\n",
+        )
+        .unwrap();
+        drop(active);
+
+        let payload = CreateTaskPayload {
+            name: Some("Ticket Seed".to_string()),
+            goal: None,
+            project_id: None,
+            workspace_id: None,
+            workflow_id: Some("ticket_only".to_string()),
+            target_files: None,
+        };
+        let result = create_task_impl(&state, payload).unwrap();
+        assert_eq!(result.total_items, 1);
+        let (target_files, item_paths) = load_task_storage(&state, &result.id);
+        assert_eq!(target_files, vec!["docs/qa/from_ticket.md".to_string()]);
+        assert_eq!(item_paths, vec!["docs/qa/from_ticket.md".to_string()]);
     }
 
     #[test]

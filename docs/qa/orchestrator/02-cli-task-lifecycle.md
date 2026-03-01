@@ -16,6 +16,13 @@ This document validates task lifecycle behavior after scheduler refactor:
 - worker commands (`task worker start|stop|status`)
 - task logs and retry behavior
 
+Task creation target resolution now follows workflow scope:
+
+- item-scoped workflows still default to scanning workspace `qa_targets` when `--target-file` is omitted
+- task-scoped-only workflows use a synthetic `__UNASSIGNED__` anchor when `--target-file` is omitted
+- any explicit `--target-file` values override the default source
+- multiple explicit targets are only valid for workflows that include item-scoped steps
+
 Entry point: `./scripts/orchestrator.sh task <command>`
 
 ### Project Isolation Setup
@@ -28,6 +35,24 @@ QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
 ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/output-formats.yaml
 ```
+
+### Target Resolution Supplemental Checks
+
+Before Scenario 1, also verify `task create --project <project> ...` target resolution in an isolated app root with a minimal config:
+
+1. Prepare isolated runtime and apply a task-scoped-only workflow plus an item-scoped workflow.
+2. For the task-scoped-only workflow:
+   - omit `--target-file`, confirm `task create --project <project> --no-start` succeeds
+   - pass one `--target-file`, confirm success
+   - pass two `--target-file`, confirm the command fails
+3. For the item-scoped workflow:
+   - omit `--target-file`, confirm the command fails when `qa_targets` is empty
+   - pass one or more `--target-file`, confirm the command succeeds
+
+Expected:
+- Task-scoped-only workflows use a synthetic anchor when `--target-file` is omitted.
+- Explicit `--target-file` overrides the default source.
+- Multiple explicit targets are rejected only for task-scoped-only workflows.
 
 ---
 
