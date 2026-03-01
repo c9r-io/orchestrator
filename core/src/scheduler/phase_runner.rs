@@ -28,6 +28,7 @@ const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 const LOW_OUTPUT_DELTA_THRESHOLD_BYTES: u64 = 32;
 const LOW_OUTPUT_MIN_ELAPSED_SECS: u64 = 90;
 const LOW_OUTPUT_CONSECUTIVE_HEARTBEATS: u32 = 3;
+const VALIDATION_FAILED_EXIT_CODE: i64 = -6;
 
 struct LimitedOutput {
     text: String,
@@ -96,6 +97,14 @@ pub(crate) fn shell_escape(s: &str) -> String {
 
 fn resolved_step_timeout_secs(step_timeout_secs: Option<u64>) -> u64 {
     step_timeout_secs.unwrap_or(DEFAULT_STEP_TIMEOUT_SECS)
+}
+
+fn effective_exit_code(exit_code: i64, validation_status: &str) -> i64 {
+    if exit_code == 0 && validation_status == "failed" {
+        VALIDATION_FAILED_EXIT_CODE
+    } else {
+        exit_code
+    }
 }
 
 fn sample_heartbeat_progress(
@@ -512,7 +521,8 @@ async fn run_phase_with_timeout(
         &stdout_content,
         &stderr_content,
     )?;
-    let mut success = exit_code == 0;
+    let final_exit_code = effective_exit_code(exit_code as i64, validation.status);
+    let mut success = final_exit_code == 0;
     let mut validation_event_payload_json: Option<String> = None;
     if validation.status == "failed" {
         success = false;
@@ -540,7 +550,7 @@ async fn run_phase_with_timeout(
         cwd: workspace_root.to_string_lossy().to_string(),
         workspace_id: workspace_id.to_string(),
         agent_id: agent_id.to_string(),
-        exit_code: exit_code as i64,
+        exit_code: final_exit_code,
         stdout_path: stdout_path.to_string_lossy().to_string(),
         stderr_path: stderr_path.to_string_lossy().to_string(),
         started_at: now,
@@ -642,14 +652,14 @@ async fn run_phase_with_timeout(
             &state.db_path,
             sid,
             "closed",
-            Some(exit_code as i64),
+            Some(final_exit_code),
             true,
         );
     }
 
     Ok(crate::dto::RunResult {
         success,
-        exit_code: exit_code as i64,
+        exit_code: final_exit_code,
         stdout_path: stdout_path.to_string_lossy().to_string(),
         stderr_path: stderr_path.to_string_lossy().to_string(),
         timed_out,
@@ -788,6 +798,21 @@ mod tests {
         assert_eq!(resolved_step_timeout_secs(None), DEFAULT_STEP_TIMEOUT_SECS);
         assert_eq!(resolved_step_timeout_secs(Some(60)), 60);
         assert_eq!(resolved_step_timeout_secs(Some(0)), 0);
+    }
+
+    #[test]
+    fn effective_exit_code_preserves_nonzero_codes() {
+        assert_eq!(effective_exit_code(7, "passed"), 7);
+        assert_eq!(effective_exit_code(7, "failed"), 7);
+    }
+
+    #[test]
+    fn effective_exit_code_maps_validation_failure_to_nonzero() {
+        assert_eq!(
+            effective_exit_code(0, "failed"),
+            VALIDATION_FAILED_EXIT_CODE
+        );
+        assert_eq!(effective_exit_code(0, "passed"), 0);
     }
 
     #[test]

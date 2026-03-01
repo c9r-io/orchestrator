@@ -383,6 +383,10 @@ impl StepExecutionAccumulator {
     }
 }
 
+fn is_execution_hard_failure(result: &crate::dto::RunResult) -> bool {
+    result.validation_status == "failed"
+}
+
 pub async fn execute_builtin_step(
     state: &Arc<InnerState>,
     task_id: &str,
@@ -1081,6 +1085,13 @@ pub async fn process_item_filtered(
                 "validation_status": result.validation_status,
             }),
         )?;
+
+        if is_execution_hard_failure(&result) {
+            acc.item_status = "unresolved".to_string();
+            acc.flags.insert("execution_failed".to_string(), true);
+            acc.terminal = true;
+            return Ok(());
+        }
     }
 
     // Dynamic steps (only in full/legacy mode, not in segment-filtered mode)
@@ -1196,6 +1207,8 @@ pub fn finalize_item_execution(
                 "reason": "configured qa step was neither run nor skipped in final cycle"
             }),
         )?;
+    } else if acc.flags.get("execution_failed").copied().unwrap_or(false) {
+        acc.item_status = "unresolved".to_string();
     } else if let Some(outcome) = crate::prehook::resolve_workflow_finalize_outcome(
         &task_ctx.execution_plan.finalize,
         &finalize_context,
@@ -1253,6 +1266,42 @@ mod tests {
             test_failures: Vec::new(),
             vars: HashMap::new(),
         }
+    }
+
+    #[test]
+    fn execution_hard_failure_detects_failed_validation_status() {
+        let result = crate::dto::RunResult {
+            success: false,
+            exit_code: -6,
+            stdout_path: String::new(),
+            stderr_path: String::new(),
+            timed_out: false,
+            duration_ms: None,
+            output: None,
+            validation_status: "failed".to_string(),
+            agent_id: "agent".to_string(),
+            run_id: "run".to_string(),
+        };
+
+        assert!(is_execution_hard_failure(&result));
+    }
+
+    #[test]
+    fn execution_hard_failure_ignores_non_validation_failures() {
+        let result = crate::dto::RunResult {
+            success: false,
+            exit_code: 1,
+            stdout_path: String::new(),
+            stderr_path: String::new(),
+            timed_out: false,
+            duration_ms: None,
+            output: None,
+            validation_status: "passed".to_string(),
+            agent_id: "agent".to_string(),
+            run_id: "run".to_string(),
+        };
+
+        assert!(!is_execution_hard_failure(&result));
     }
 
     // ── spill_large_var tests ────────────────────────────────────────

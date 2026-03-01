@@ -220,6 +220,7 @@ async fn run_task_loop_core(
             }
         } else {
             let mut item_state: HashMap<String, StepExecutionAccumulator> = HashMap::new();
+            let mut halt_after_task_segment = false;
             for segment in &segments {
                 match segment.scope {
                     StepScope::Task => {
@@ -239,7 +240,16 @@ async fn run_task_loop_core(
                             )
                             .await?;
                             // Propagate task-scoped pipeline vars to subsequent segments
-                            task_ctx.pipeline_vars = task_acc.pipeline_vars;
+                            task_ctx.pipeline_vars = task_acc.pipeline_vars.clone();
+                            if task_acc.terminal {
+                                propagate_task_segment_terminal_state(
+                                    &items,
+                                    &mut item_state,
+                                    &task_acc,
+                                    &task_ctx.pipeline_vars,
+                                );
+                                halt_after_task_segment = true;
+                            }
                         }
                     }
                     StepScope::Item => {
@@ -261,6 +271,9 @@ async fn run_task_loop_core(
                             .await?;
                         }
                     }
+                }
+                if halt_after_task_segment {
+                    break;
                 }
                 if runtime.stop_flag.load(Ordering::SeqCst)
                     || is_task_paused_in_db(&state, task_id)?
@@ -547,10 +560,30 @@ fn build_scope_segments(task_ctx: &crate::config::TaskRuntimeContext) -> Vec<Sco
     segments
 }
 
+fn propagate_task_segment_terminal_state(
+    items: &[crate::dto::TaskItemRow],
+    item_state: &mut HashMap<String, StepExecutionAccumulator>,
+    task_acc: &StepExecutionAccumulator,
+    task_pipeline_vars: &crate::config::PipelineVariables,
+) {
+    for item in items {
+        let acc = item_state
+            .entry(item.id.clone())
+            .or_insert_with(|| StepExecutionAccumulator::new(task_pipeline_vars.clone()));
+        acc.merge_task_pipeline_vars(&task_acc.pipeline_vars);
+        acc.item_status = task_acc.item_status.clone();
+        if let Some(execution_failed) = task_acc.flags.get("execution_failed").copied() {
+            acc.flags
+                .insert("execution_failed".to_string(), execution_failed);
+        }
+        acc.terminal = true;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{WorkflowLoopConfig, WorkflowLoopGuardConfig};
+    use crate::config::{PipelineVariables, WorkflowLoopConfig, WorkflowLoopGuardConfig};
 
     fn make_loop_policy(mode: LoopMode, max_cycles: Option<u32>) -> WorkflowLoopConfig {
         WorkflowLoopConfig {
@@ -820,5 +853,50 @@ mod tests {
             behavior: StepBehavior::default(),
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
+    }
+
+    #[test]
+    fn propagate_task_segment_terminal_state_marks_all_items_terminal() {
+        let items = vec![
+            crate::dto::TaskItemRow {
+                id: "item-1".to_string(),
+                qa_file_path: "a.md".to_string(),
+            },
+            crate::dto::TaskItemRow {
+                id: "item-2".to_string(),
+                qa_file_path: "b.md".to_string(),
+            },
+        ];
+        let mut item_state = HashMap::new();
+        let mut task_acc = StepExecutionAccumulator::new(PipelineVariables::default());
+        task_acc.item_status = "unresolved".to_string();
+        task_acc.terminal = true;
+        task_acc.flags.insert("execution_failed".to_string(), true);
+        task_acc.pipeline_vars.vars.insert(
+            "fatal_reason".to_string(),
+            "provider rate limit exceeded".to_string(),
+        );
+
+        propagate_task_segment_terminal_state(
+            &items,
+            &mut item_state,
+            &task_acc,
+            &PipelineVariables::default(),
+        );
+
+        assert_eq!(item_state.len(), 2);
+        for item_id in ["item-1", "item-2"] {
+            let acc = item_state.get(item_id).expect("item state missing");
+            assert!(acc.terminal);
+            assert_eq!(acc.item_status, "unresolved");
+            assert_eq!(acc.flags.get("execution_failed").copied(), Some(true));
+            assert_eq!(
+                acc.pipeline_vars
+                    .vars
+                    .get("fatal_reason")
+                    .map(String::as_str),
+                Some("provider rate limit exceeded")
+            );
+        }
     }
 }

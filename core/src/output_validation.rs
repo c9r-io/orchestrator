@@ -10,6 +10,23 @@ pub struct ValidationOutcome {
     pub error: Option<String>,
 }
 
+fn detect_fatal_agent_error(stdout: &str, stderr: &str) -> Option<&'static str> {
+    let combined = format!("{}\n{}", stdout, stderr).to_ascii_lowercase();
+    let patterns = [
+        ("rate-limited", "provider rate limit exceeded"),
+        ("rate limited", "provider rate limit exceeded"),
+        ("quota exceeded", "provider quota exceeded"),
+        ("quota exhausted", "provider quota exhausted"),
+        ("quota resets in", "provider quota exhausted"),
+        ("authentication failed", "provider authentication failed"),
+        ("invalid api key", "provider authentication failed"),
+    ];
+
+    patterns
+        .iter()
+        .find_map(|(needle, reason)| combined.contains(needle).then_some(*reason))
+}
+
 fn is_strict_phase(phase: &str) -> bool {
     matches!(phase, "qa" | "fix" | "retest" | "guard")
 }
@@ -31,6 +48,22 @@ pub fn validate_phase_output(
     stdout: &str,
     stderr: &str,
 ) -> Result<ValidationOutcome> {
+    if let Some(reason) = detect_fatal_agent_error(stdout, stderr) {
+        let output = AgentOutput::new(
+            run_id,
+            agent_id.to_string(),
+            phase.to_string(),
+            exit_code,
+            stdout.to_string(),
+            stderr.to_string(),
+        );
+        return Ok(ValidationOutcome {
+            output,
+            status: "failed",
+            error: Some(reason.to_string()),
+        });
+    }
+
     let strict = is_strict_phase(phase);
     let parsed_json = serde_json::from_str::<Value>(stdout);
 
@@ -310,5 +343,29 @@ warning: unused variable
             .expect("validation should return outcome");
         assert!(outcome.output.build_errors.is_empty());
         assert!(outcome.output.test_failures.is_empty());
+    }
+
+    #[test]
+    fn fatal_provider_error_marks_run_failed_even_with_zero_exit_code() {
+        let stderr = "Error: All 1 account(s) rate-limited for claude. Quota resets in 116h 44m.";
+        let outcome = validate_phase_output("implement", Uuid::new_v4(), "agent", 0, "", stderr)
+            .expect("validation should return outcome");
+        assert_eq!(outcome.status, "failed");
+        assert_eq!(
+            outcome.error.as_deref(),
+            Some("provider rate limit exceeded")
+        );
+    }
+
+    #[test]
+    fn fatal_provider_auth_error_marks_run_failed() {
+        let stderr = "authentication failed: invalid API key";
+        let outcome = validate_phase_output("align_tests", Uuid::new_v4(), "agent", 0, "", stderr)
+            .expect("validation should return outcome");
+        assert_eq!(outcome.status, "failed");
+        assert_eq!(
+            outcome.error.as_deref(),
+            Some("provider authentication failed")
+        );
     }
 }
