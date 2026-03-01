@@ -869,6 +869,25 @@ pub fn parse_artifacts_from_output(output: &str) -> Vec<Artifact> {
             }
             artifacts.push(artifact);
         }
+
+        // Handle structured output with nested "artifacts" array
+        // e.g. {"confidence":0.4,"artifacts":[{"kind":"ticket",...}]}
+        if artifacts.is_empty() {
+            if let Some(arr) = parsed.get("artifacts").and_then(|v| v.as_array()) {
+                for value in arr {
+                    if let Some(kind) = extract_artifact_kind(value) {
+                        let mut artifact = Artifact::new(kind);
+                        if let Some(path) = value.get("path").and_then(|v| v.as_str()) {
+                            artifact = artifact.with_path(path.to_string());
+                        }
+                        if let Some(content) = value.get("content") {
+                            artifact = artifact.with_content(content.clone());
+                        }
+                        artifacts.push(artifact);
+                    }
+                }
+            }
+        }
     }
 
     // Try to extract ticket markers from plain text
@@ -1623,6 +1642,19 @@ mod tests {
             assert_eq!(category, "bug");
         } else {
             panic!("expected Ticket");
+        }
+    }
+
+    #[test]
+    fn test_parse_artifacts_from_output_nested_artifacts_array() {
+        let input = r#"{"confidence":0.4,"quality_score":0.25,"artifacts":[{"kind":"ticket","severity":"high","category":"capability","content":{"title":"qa-from-agent"}}]}"#;
+        let artifacts = parse_artifacts_from_output(input);
+        assert_eq!(artifacts.len(), 1);
+        if let ArtifactKind::Ticket { severity, category } = &artifacts[0].kind {
+            assert_eq!(*severity, Severity::High);
+            assert_eq!(category, "capability");
+        } else {
+            panic!("expected Ticket from nested artifacts array");
         }
     }
 

@@ -385,10 +385,10 @@ pub struct WorkflowLoopSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_cycles: Option<u32>,
 
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub enabled: bool,
 
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub stop_when_no_unresolved: bool,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]

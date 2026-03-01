@@ -9,8 +9,9 @@
 
 ## Background
 
-Orchestrator 运行时配置存储于 SQLite。`init` 只初始化目录和数据库，不会自动写入配置。
-配置必须通过 kubectl 风格命令 `apply -f <manifest.yaml>` 导入。
+Orchestrator 运行时配置存储于 SQLite。`init` 初始化目录、数据库并写入默认配置
+（包含 default workspace 和预定义 workflow）。
+用户可通过 `apply -f <manifest.yaml>` 导入自定义配置来覆盖或扩展默认配置。
 
 Entry point: `./scripts/orchestrator.sh <command>`
 
@@ -49,7 +50,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 ---
 
-## Scenario 2: init 后必须 apply manifest
+## Scenario 2: init 创建默认配置，apply 可叠加自定义资源
 
 ### Preconditions
 
@@ -57,11 +58,11 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 ### Goal
 
-验证 `init` 不会隐式创建工作区/工作流，必须显式 `apply -f`。
+验证 `init` 创建默认配置后基本命令可用，`apply -f` 可叠加自定义资源。
 
 ### Steps
 
-1. 初始化并验证失败：
+1. 初始化并验证默认配置可用：
    ```bash
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
    ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
@@ -70,7 +71,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
    ./scripts/orchestrator.sh workspace list
    ```
 
-2. 导入最小可运行 manifest：
+2. 导入自定义 manifest 叠加资源：
    ```bash
    ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/output-formats.yaml
    ```
@@ -83,7 +84,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 ### Expected
 
-- Step 1 因配置缺失失败
+- Step 1 因 init 创建默认配置而成功，workspace list 返回 default workspace
 - Step 2 成功并输出资源 apply 结果与配置版本
 - Step 3 正常返回
 

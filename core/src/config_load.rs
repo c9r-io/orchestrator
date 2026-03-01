@@ -1,6 +1,6 @@
 use crate::config::{
-    ActiveConfig, OrchestratorConfig, ResolvedProject, ResolvedWorkspace, StepBehavior,
-    TaskExecutionPlan, WorkflowConfig, WorkflowStepConfig,
+    ActiveConfig, CaptureDecl, CaptureSource, OrchestratorConfig, PostAction, ResolvedProject,
+    ResolvedWorkspace, StepBehavior, TaskExecutionPlan, WorkflowConfig, WorkflowStepConfig,
 };
 use crate::db::{count_tasks_by_workflow, count_tasks_by_workspace, open_conn};
 use crate::dto::ConfigOverview;
@@ -85,6 +85,7 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
             }
         }
 
+        apply_default_step_behavior(&mut step);
         normalized.push(step);
     }
 
@@ -94,7 +95,7 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
     ];
     for step_id in &standard_step_ids {
         if !seen_ids.contains(*step_id) {
-            normalized.push(WorkflowStepConfig {
+            let mut placeholder = WorkflowStepConfig {
                 id: step_id.to_string(),
                 description: None,
                 required_capability: None,
@@ -111,7 +112,9 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                 chain_steps: vec![],
                 scope: None,
                 behavior: StepBehavior::default(),
-            });
+            };
+            apply_default_step_behavior(&mut placeholder);
+            normalized.push(placeholder);
         }
     }
     workflow.steps = normalized;
@@ -143,6 +146,53 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
         workflow.finalize = crate::config::default_workflow_finalize_config();
     }
     workflow.loop_policy.guard.agent_template = None;
+}
+
+/// Apply sensible default behavior to well-known step types when the user
+/// hasn't configured explicit captures or collect_artifacts.
+fn apply_default_step_behavior(step: &mut WorkflowStepConfig) {
+    let key = step
+        .builtin
+        .as_deref()
+        .or(step.required_capability.as_deref())
+        .unwrap_or(&step.id);
+
+    let has_capture = |var: &str| step.behavior.captures.iter().any(|c| c.var == var);
+
+    let has_post_action = |pa: &PostAction| step.behavior.post_actions.iter().any(|a| a == pa);
+
+    match key {
+        "qa" | "qa_testing" => {
+            step.behavior.collect_artifacts = true;
+            if !has_capture("qa_failed") {
+                step.behavior.captures.push(CaptureDecl {
+                    var: "qa_failed".to_string(),
+                    source: CaptureSource::FailedFlag,
+                });
+            }
+            if !has_post_action(&PostAction::CreateTicket) {
+                step.behavior.post_actions.push(PostAction::CreateTicket);
+            }
+        }
+        "fix" | "ticket_fix" => {
+            if !has_capture("fix_success") {
+                step.behavior.captures.push(CaptureDecl {
+                    var: "fix_success".to_string(),
+                    source: CaptureSource::SuccessFlag,
+                });
+            }
+        }
+        "retest" => {
+            step.behavior.collect_artifacts = true;
+            if !has_capture("retest_success") {
+                step.behavior.captures.push(CaptureDecl {
+                    var: "retest_success".to_string(),
+                    source: CaptureSource::SuccessFlag,
+                });
+            }
+        }
+        _ => {}
+    }
 }
 
 fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorConfig {
@@ -746,11 +796,11 @@ pub fn build_execution_plan(
                     command: cs.command.clone(),
                     chain_steps: vec![],
                     scope: cs.scope,
-                    behavior: StepBehavior::default(),
+                    behavior: cs.behavior.clone(),
                 })
                 .collect(),
             scope: step.scope,
-            behavior: StepBehavior::default(),
+            behavior: step.behavior.clone(),
         });
     }
     let loop_policy = workflow.loop_policy.clone();
@@ -1509,6 +1559,66 @@ mod tests {
     }
 
     #[test]
+    fn normalize_sets_default_behavior_for_qa_step() {
+        let mut workflow = make_workflow(vec![make_step("qa", true)]);
+        normalize_workflow_config(&mut workflow);
+        let qa = workflow.steps.iter().find(|s| s.id == "qa").unwrap();
+        assert!(
+            qa.behavior.collect_artifacts,
+            "qa step should have collect_artifacts=true"
+        );
+        assert!(
+            qa.behavior.captures.iter().any(|c| c.var == "qa_failed"
+                && c.source == CaptureSource::FailedFlag),
+            "qa step should capture qa_failed from FailedFlag"
+        );
+    }
+
+    #[test]
+    fn normalize_sets_default_behavior_for_fix_step() {
+        let mut workflow = make_workflow(vec![make_step("fix", true)]);
+        normalize_workflow_config(&mut workflow);
+        let fix = workflow.steps.iter().find(|s| s.id == "fix").unwrap();
+        assert!(
+            fix.behavior.captures.iter().any(|c| c.var == "fix_success"
+                && c.source == CaptureSource::SuccessFlag),
+            "fix step should capture fix_success from SuccessFlag"
+        );
+    }
+
+    #[test]
+    fn normalize_sets_default_behavior_for_retest_step() {
+        let mut workflow = make_workflow(vec![make_step("retest", true)]);
+        normalize_workflow_config(&mut workflow);
+        let retest = workflow.steps.iter().find(|s| s.id == "retest").unwrap();
+        assert!(
+            retest.behavior.collect_artifacts,
+            "retest step should have collect_artifacts=true"
+        );
+        assert!(
+            retest.behavior.captures.iter().any(|c| c.var == "retest_success"
+                && c.source == CaptureSource::SuccessFlag),
+            "retest step should capture retest_success from SuccessFlag"
+        );
+    }
+
+    #[test]
+    fn normalize_does_not_duplicate_existing_captures() {
+        let mut step = make_step("qa", true);
+        step.behavior.captures.push(CaptureDecl {
+            var: "qa_failed".to_string(),
+            source: CaptureSource::FailedFlag,
+        });
+        let mut workflow = make_workflow(vec![step]);
+        normalize_workflow_config(&mut workflow);
+        let qa = workflow.steps.iter().find(|s| s.id == "qa").unwrap();
+        let qa_failed_count = qa.behavior.captures.iter()
+            .filter(|c| c.var == "qa_failed")
+            .count();
+        assert_eq!(qa_failed_count, 1, "should not duplicate existing qa_failed capture");
+    }
+
+    #[test]
     fn normalize_skips_capability_if_builtin_already_set() {
         let mut step = make_step("qa", true);
         step.builtin = Some("custom_builtin".to_string());
@@ -2000,6 +2110,44 @@ mod tests {
         for (_, wf) in &normalized.workflows {
             assert!(!wf.steps.is_empty(), "all workflows should be normalized");
         }
+    }
+
+    #[test]
+    fn normalize_preserves_required_capability_on_custom_step_ids() {
+        let steps = vec![WorkflowStepConfig {
+            id: "run_qa".to_string(),
+            description: None,
+            required_capability: Some("qa".to_string()),
+            builtin: None,
+            enabled: true,
+            repeatable: true,
+            is_guard: false,
+            cost_preference: None,
+            prehook: None,
+            tty: false,
+            outputs: vec![],
+            pipe_to: None,
+            command: None,
+            chain_steps: vec![],
+            scope: None,
+            behavior: StepBehavior::default(),
+        }];
+        let mut wf = make_workflow(steps);
+        normalize_workflow_config(&mut wf);
+
+        let run_qa = wf.steps.iter().find(|s| s.id == "run_qa").unwrap();
+        assert_eq!(
+            run_qa.required_capability,
+            Some("qa".to_string()),
+            "required_capability must survive normalization"
+        );
+
+        let json = serde_json::to_string_pretty(run_qa).unwrap();
+        assert!(
+            json.contains("required_capability"),
+            "required_capability must appear in JSON: {}",
+            json
+        );
     }
 
     // ======= resolve_and_validate_workspaces tests =======

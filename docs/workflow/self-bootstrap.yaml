@@ -15,7 +15,7 @@ apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: architect
-  description: "MiniMax-M2.5-highspeed-powered architect agent — planning and QA doc generation"
+  description: "architect agent — planning and QA doc generation"
 spec:
   capabilities:
     - plan
@@ -59,7 +59,7 @@ spec:
       - For BUG FIX tasks: QA should verify the fix and add a regression test.
 
       Current diff in this cycle: {diff}"
-      --model minimax-coding-plan/MiniMax-M2.5-highspeed
+      --model github-copilot/claude-opus-4.6
 
     # QA doc generation: produce executable QA test documents from the plan
     qa_doc_gen: >-
@@ -88,7 +88,7 @@ apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: coder
-  description: "MiniMax-M2.5-highspeed-powered coder agent — implementation, ticket fixing, and test alignment"
+  description: "coder agent — implementation, ticket fixing, and test alignment"
 spec:
   capabilities:
     - implement
@@ -110,7 +110,7 @@ spec:
 
       After writing code, run 'cd {source_tree}/core && cargo check'
       to verify compilation before finishing."
-      --model minimax-coding-plan/MiniMax-M2.5-highspeed
+      --model google/antigravity-claude-sonnet-4-5
 
     # Ticket fix: read tickets, verify, fix, re-run QA, delete ticket on success
     ticket_fix: >-
@@ -120,7 +120,7 @@ spec:
       Project: {source_tree}
       Fix the QA tickets. Read each ticket, verify the issue, apply fixes,
       re-run the failing scenario, and delete the ticket once verified."
-      --model minimax-coding-plan/MiniMax-M2.5-highspeed
+      --model google/antigravity-claude-sonnet-4-5
 
     # Align tests: run cargo test + clippy + build, iterate until all pass
     align_tests: >-
@@ -133,7 +133,7 @@ spec:
       Run unit tests, analyze failures caused by the recent changes,
       update tests and/or implementation to align, iterate until stable.
       Also fix all clippy warnings and compilation warnings."
-      --model minimax-coding-plan/MiniMax-M2.5-highspeed
+      --model google/antigravity-claude-sonnet-4-5
 ---
 # Tester agent (MiniMax-M2.5-highspeed) — QA scenario execution
 apiVersion: orchestrator.dev/v2

@@ -70,7 +70,9 @@ lower-cost agent is selected more frequently by the scoring algorithm.
 - Task status: `completed`, failed: 0
 - Both agents appear in logs (both `fast-qa` and `quality-qa`)
 - Selection uses capability-aware strategy (default)
-- Lower-cost agent (`fast_agent`) tends to appear more frequently
+- The scoring algorithm gives the lower-cost agent (`fast_agent`) a higher
+  score, but since both agents are within the top-3 candidate pool, actual
+  selection is randomized — distribution may be roughly equal
 
 ---
 

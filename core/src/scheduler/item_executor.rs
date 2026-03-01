@@ -111,6 +111,10 @@ pub struct StepExecutionAccumulator {
     pub step_ran: HashMap<String, bool>,
     pub step_skipped: HashMap<String, bool>,
     pub new_ticket_count: i64,
+    pub qa_confidence: Option<f32>,
+    pub qa_quality_score: Option<f32>,
+    pub fix_confidence: Option<f32>,
+    pub fix_quality_score: Option<f32>,
 }
 
 impl StepExecutionAccumulator {
@@ -126,6 +130,10 @@ impl StepExecutionAccumulator {
             step_ran: HashMap::new(),
             step_skipped: HashMap::new(),
             new_ticket_count: 0,
+            qa_confidence: None,
+            qa_quality_score: None,
+            fix_confidence: None,
+            fix_quality_score: None,
         }
     }
 
@@ -159,8 +167,8 @@ impl StepExecutionAccumulator {
             qa_failed: self.flags.get("qa_failed").copied().unwrap_or(false),
             fix_required: self.flags.get("qa_failed").copied().unwrap_or(false)
                 || !self.active_tickets.is_empty(),
-            qa_confidence: None,
-            qa_quality_score: None,
+            qa_confidence: self.qa_confidence,
+            qa_quality_score: self.qa_quality_score,
             fix_has_changes: None,
             upstream_artifacts: vec![],
             build_error_count: self.pipeline_vars.build_errors.len() as i64,
@@ -230,10 +238,10 @@ impl StepExecutionAccumulator {
             retest_enabled,
             retest_ran,
             retest_success,
-            qa_confidence: None,
-            qa_quality_score: None,
-            fix_confidence: None,
-            fix_quality_score: None,
+            qa_confidence: self.qa_confidence,
+            qa_quality_score: self.qa_quality_score,
+            fix_confidence: self.fix_confidence,
+            fix_quality_score: self.fix_quality_score,
             total_artifacts: self.phase_artifacts.len() as i64,
             has_ticket_artifacts: self
                 .phase_artifacts
@@ -908,6 +916,19 @@ pub async fn process_item_filtered(
             .as_ref()
             .map(|o| o.quality_score)
             .unwrap_or(0.0);
+
+        match phase.as_str() {
+            "qa" | "qa_testing" => {
+                acc.qa_confidence = Some(confidence);
+                acc.qa_quality_score = Some(quality);
+            }
+            "fix" | "ticket_fix" => {
+                acc.fix_confidence = Some(confidence);
+                acc.fix_quality_score = Some(quality);
+            }
+            _ => {}
+        }
+
         insert_event(
             state,
             task_id,

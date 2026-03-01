@@ -30,42 +30,37 @@ Entry point: `./scripts/orchestrator.sh <command>`
 1. 创建有效配置:
    ```bash
    cat > /tmp/valid-config.yaml << 'EOF'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   resume:
-     auto: false
-   defaults:
-     workspace: default
-     workflow: test
-   workspaces:
-     default:
-       root_path: "."
-       qa_targets:
-         - docs/qa
-       ticket_dir: fixtures/ticket
-   agents:
-     test-agent:
-       metadata:
-         name: test-agent
-         description: Test agent
-       capabilities:
-         - qa
-       templates:
-         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
-   workflows:
-     test:
-       steps:
-         - id: run_qa
-           required_capability: qa
-           enabled: true
-       loop:
-         mode: once
-         guard:
-           enabled: false
-           stop_when_no_unresolved: true
-       finalize:
-         rules: []
+   apiVersion: orchestrator.dev/v2
+   kind: Workspace
+   metadata:
+     name: default
+   spec:
+     root_path: "."
+     qa_targets:
+       - docs/qa
+     ticket_dir: fixtures/ticket
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Agent
+   metadata:
+     name: test-agent
+   spec:
+     capabilities:
+       - qa
+     templates:
+       qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Workflow
+   metadata:
+     name: test
+   spec:
+     steps:
+       - id: qa
+         type: qa
+         enabled: true
+     loop:
+       mode: once
    EOF
    ```
 
@@ -97,38 +92,36 @@ Entry point: `./scripts/orchestrator.sh <command>`
 1. 创建无效配置 (仅 qa_targets 为空，其它字段均有效):
    ```bash
    cat > /tmp/invalid-ws.yaml << 'EOF'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   resume:
-     auto: false
-   defaults:
-     workspace: default
-     workflow: test
-   workspaces:
-     default:
-       root_path: /tmp
-       qa_targets: []
-       ticket_dir: fixtures/ticket
-   agents:
-     test-agent:
-       metadata:
-         name: test-agent
-         description: Test agent
-       capabilities:
-         - qa
-       templates:
-         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
-   workflows:
-     test:
-       steps:
-         - id: run_qa
-           required_capability: qa
-           enabled: true
-       loop:
-         mode: once
-       finalize:
-         rules: []
+   apiVersion: orchestrator.dev/v2
+   kind: Workspace
+   metadata:
+     name: default
+   spec:
+     root_path: /tmp
+     qa_targets: []
+     ticket_dir: fixtures/ticket
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Agent
+   metadata:
+     name: test-agent
+   spec:
+     capabilities:
+       - qa
+     templates:
+       qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Workflow
+   metadata:
+     name: test
+   spec:
+     steps:
+       - id: qa
+         type: qa
+         enabled: true
+     loop:
+       mode: once
    EOF
    ```
 
@@ -161,36 +154,34 @@ Entry point: `./scripts/orchestrator.sh <command>`
 1. 创建无效配置 (仅 workflow steps 为空，其它字段均有效):
    ```bash
    cat > /tmp/invalid-workflow.yaml << 'EOF'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   resume:
-     auto: false
-   defaults:
-     workspace: default
-     workflow: test
-   workspaces:
-     default:
-       root_path: /tmp
-       qa_targets:
-         - docs/qa
-       ticket_dir: fixtures/ticket
-   agents:
-     test-agent:
-       metadata:
-         name: test-agent
-         description: Test agent
-       capabilities:
-         - qa
-       templates:
-         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
-   workflows:
-     test:
-       steps: []
-       loop:
-         mode: once
-       finalize:
-         rules: []
+   apiVersion: orchestrator.dev/v2
+   kind: Workspace
+   metadata:
+     name: default
+   spec:
+     root_path: /tmp
+     qa_targets:
+       - docs/qa
+     ticket_dir: fixtures/ticket
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Agent
+   metadata:
+     name: test-agent
+   spec:
+     capabilities:
+       - qa
+     templates:
+       qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Workflow
+   metadata:
+     name: test
+   spec:
+     steps: []
+     loop:
+       mode: once
    EOF
    ```
 
@@ -222,39 +213,37 @@ Entry point: `./scripts/orchestrator.sh <command>`
 1. 创建无效配置 (workflow 需要 qa 但没有 agent 提供 qa 模板):
    ```bash
    cat > /tmp/invalid-template.yaml << 'EOF'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   resume:
-     auto: false
-   defaults:
-     workspace: default
-     workflow: test
-   workspaces:
-     default:
-       root_path: /tmp
-       qa_targets:
-         - docs/qa
-       ticket_dir: fixtures/ticket
-   agents:
-     fix-only:
-       metadata:
-         name: fix-only
-         description: Fix only
-       capabilities:
-         - fix
-       templates:
-         fix: "echo '{\"confidence\":0.82,\"quality_score\":0.78,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fix-sample.patch\"]}]}'"
-   workflows:
-     test:
-       steps:
-         - id: run_qa
-           required_capability: qa
-           enabled: true
-       loop:
-         mode: once
-       finalize:
-         rules: []
+   apiVersion: orchestrator.dev/v2
+   kind: Workspace
+   metadata:
+     name: default
+   spec:
+     root_path: /tmp
+     qa_targets:
+       - docs/qa
+     ticket_dir: fixtures/ticket
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Agent
+   metadata:
+     name: fix-only
+   spec:
+     capabilities:
+       - fix
+     templates:
+       fix: "echo '{\"confidence\":0.82,\"quality_score\":0.78,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fix-sample.patch\"]}]}'"
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Workflow
+   metadata:
+     name: test
+   spec:
+     steps:
+       - id: qa
+         type: qa
+         enabled: true
+     loop:
+       mode: once
    EOF
    ```
 

@@ -905,7 +905,15 @@ fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
     }
 
     AgentConfig {
-        metadata: AgentMetadata::default(),
+        metadata: AgentMetadata {
+            name: String::new(),
+            description: spec
+                .metadata
+                .as_ref()
+                .and_then(|m| m.description.clone()),
+            version: None,
+            cost: spec.metadata.as_ref().and_then(|m| m.cost),
+        },
         capabilities,
         templates,
         selection: spec
@@ -1013,10 +1021,26 @@ fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
                 Some("item") => Some(StepScope::Item),
                 _ => None,
             };
+            let is_builtin_type = matches!(
+                step.step_type.as_str(),
+                "init_once" | "loop_guard" | "ticket_scan"
+            );
+            let required_capability = step.required_capability.clone().or_else(|| {
+                if is_builtin_type {
+                    None
+                } else {
+                    Some(step.step_type.clone())
+                }
+            });
+            let builtin = if is_builtin_type {
+                Some(step.step_type.clone())
+            } else {
+                builtin
+            };
             Ok(WorkflowStepConfig {
                 id: step.id.clone(),
                 description: None,
-                required_capability: step.required_capability.clone(),
+                required_capability,
                 builtin: step.builtin.clone().or(builtin),
                 enabled: step.enabled,
                 repeatable: step.repeatable,
@@ -1102,7 +1126,11 @@ fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
         .iter()
         .map(|step| WorkflowStepSpec {
             id: step.id.clone(),
-            step_type: step.id.clone(),
+            step_type: step
+                .builtin
+                .clone()
+                .or_else(|| step.required_capability.clone())
+                .unwrap_or_else(|| step.id.clone()),
             required_capability: step.required_capability.clone(),
             builtin: step.builtin.clone(),
             enabled: step.enabled,
@@ -2704,9 +2732,10 @@ spec:
         assert!(roundtripped.templates.extra.contains_key("qa_doc_gen"));
         assert!(roundtripped.templates.extra.contains_key("qa_testing"));
         assert!(roundtripped.capabilities.is_some());
-        // Note: agent_spec_to_config uses AgentMetadata::default(), so metadata
-        // from the spec is not preserved through the roundtrip.
-        assert!(roundtripped.metadata.is_none());
+        // Metadata (cost, description) is now preserved through the roundtrip.
+        let rt_meta = roundtripped.metadata.expect("metadata should be preserved");
+        assert_eq!(rt_meta.cost, Some(2));
+        assert_eq!(rt_meta.description, Some("A test agent".to_string()));
     }
 
     #[test]

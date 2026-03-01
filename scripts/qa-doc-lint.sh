@@ -39,7 +39,7 @@ done < <(
 
 echo "[qa-doc-lint] Checking scenario count (<=5) for orchestrator docs..."
 while IFS= read -r file; do
-  count=$(rg -n '^## Scenario' "$file" | wc -l | tr -d ' ')
+  count=$( (rg -n '^## Scenario' "$file" || true) | wc -l | tr -d ' ')
   if [[ "$count" -gt 5 ]]; then
     echo "[qa-doc-lint] Too many scenarios ($count): $file"
     fail=1
@@ -56,9 +56,9 @@ done < <(rg --files docs/qa/orchestrator -g '*.md' 2>/dev/null | sort || true)
 
 # Governance checks (project-wide).
 all_docs=$(find docs/qa -name '*.md' | sort)
-qa_docs=$(printf "%s\n" "$all_docs" | grep -v 'docs/qa/README.md' | grep -v 'docs/qa/_' || true)
+qa_docs=$(printf "%s\n" "$all_docs" | grep -v 'docs/qa/README.md' | grep -v 'docs/qa/_' | grep -v 'docs/qa/script/README.md' || true)
 all_without_readme=$(printf "%s\n" "$qa_docs" | sed 's#^docs/qa/##' | sort)
-indexed=$(rg -o "\(\./[^)]+\.md\)" docs/qa/README.md | sed -E 's#^\(\./##; s#\)$##' | grep -v '^_' | sort -u || true)
+indexed=$(rg -o '`docs/qa/[^`]+\.md`' docs/qa/README.md | sed -E 's#^`docs/qa/##; s#`$##' | grep -v '^_' | sort -u || true)
 
 echo "[qa-doc-lint] Checking README index drift..."
 not_indexed=$(comm -23 <(printf "%s\n" "$all_without_readme") <(printf "%s\n" "$indexed") || true)
