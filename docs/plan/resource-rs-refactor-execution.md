@@ -6,7 +6,61 @@
 
 ## 1. 任务目标
 
-> resource.rs 作为 1,895 行最大单文件，6 种资源类型的逻辑杂糅，需要完整，优雅，解耦的重构
+> resource.rs 已完成第一阶段拆分，但当前结果仅达到“可用的结构化拆分”，尚未完全满足“完整，优雅，解耦”。
+> 下一阶段目标不再是继续机械拆文件，而是完成资源模块的质量收口：补齐语义完整性、消除隐式耦合、收敛重复样板，使 `core/src/resource/` 成为稳定的长期边界。
+
+### 1.1 新目标（质量收口版）
+
+#### A. 完整性（必须达成）
+
+- 修复 `WorkflowConfig -> WorkflowSpec` 的有损转换，确保 `safety` 字段完整往返：
+  - `max_consecutive_failures`
+  - `auto_rollback`
+  - `checkpoint_strategy`
+  - `step_timeout_secs`
+  - `binary_snapshot`
+- 为 workflow 资源补齐真正的 round-trip 验证：`spec -> config -> spec` 后关键字段不能丢失。
+- 新增覆盖导出链路的测试，确保 `export_manifest_resources` / `export_manifest_documents` 导出的 workflow manifest 保留完整 `safety` 配置。
+
+#### B. 解耦（必须达成）
+
+- 消除 `export.rs -> workflow.rs -> workflow_convert.rs` 的隐式穿透依赖。
+- 将 workflow 的转换职责提炼为明确的共享边界，避免通过 `pub(super) use` 暴露“仅为兄弟模块访问”的内部函数。
+- 目标是让调用关系更直观：
+  - `workflow.rs` 负责资源生命周期（validate/apply/get/delete）
+  - 独立的 converter 负责 `spec <-> config`
+  - `export.rs` 只依赖稳定的公共转换接口，不依赖 workflow 模块内部细节
+
+#### C. 优雅性（应达成）
+
+- 减少各 Resource 模块中重复的样板逻辑，重点关注以下重复模式：
+  - `metadata` 恢复逻辑
+  - `resource_meta` 写回逻辑
+  - `build_*` 的 kind/spec 校验模板
+  - `get_from` / `delete_from` 的重复结构
+- 在不引入过度抽象的前提下，提取少量共享 helper 或统一模式，降低未来新增资源类型的维护成本。
+- 控制模块职责清晰度，避免“逻辑拆散但心智模型更复杂”。
+
+### 1.2 验收标准
+
+本轮改造完成后，至少应满足以下条件：
+
+1. `cargo check` 通过，且无新增 warning。
+2. `cargo test --lib resource` 全量通过。
+3. 新增测试明确覆盖 workflow `safety` 的反向转换与导出保真。
+4. `workflow_config_to_spec` 不再使用 `SafetySpec::default()` 直接兜底丢弃实际配置。
+5. `export.rs` 不再依赖通过 `workflow.rs` 转手暴露的内部转换函数。
+6. 代码审查视角下，`core/src/resource/` 的模块边界能够清晰说明“谁负责资源生命周期，谁负责转换，谁负责导入导出”。
+
+### 1.3 非目标
+
+本轮不追求：
+
+- 再次大规模拆分文件数量
+- 引入复杂泛型框架或宏系统来消灭所有重复代码
+- 改动 `resource` 模块之外的大范围调用方
+
+本轮重点是“补齐正确性 + 收敛边界 + 提升可维护性”，而不是继续追求更细碎的文件颗粒度。
 
 ---
 
