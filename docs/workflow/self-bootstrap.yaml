@@ -59,7 +59,7 @@ spec:
       - For BUG FIX tasks: QA should verify the fix and add a regression test.
 
       Current diff in this cycle: {diff}"
-      --model github-copilot/claude-opus-4.6
+      --model minimax-coding-plan/MiniMax-M2.5-highspeed
 
     # QA doc generation: produce executable QA test documents from the plan
     qa_doc_gen: >-
@@ -110,30 +110,26 @@ spec:
 
       After writing code, run 'cd {source_tree}/core && cargo check'
       to verify compilation before finishing."
-      --model google/antigravity-claude-sonnet-4-5
+      --model google/antigravity-claude-opus-4-5-thinking
 
     # Ticket fix: read tickets, verify, fix, re-run QA, delete ticket on success
     ticket_fix: >-
       opencode run
       "/ticket-fix {ticket_paths}
 
-      Project: {source_tree}
-      Fix the QA tickets. Read each ticket, verify the issue, apply fixes,
+      Fix the QA tickets. Read tickets from {ticket_paths}, verify the issue, apply fixes,
       re-run the failing scenario, and delete the ticket once verified."
-      --model google/antigravity-claude-sonnet-4-5
+      --model google/antigravity-claude-opus-4-5-thinking
 
     # Align tests: run cargo test + clippy + build, iterate until all pass
     align_tests: >-
       opencode run
       "/align-tests
 
-      Project: {source_tree}
-      Diff: {diff}
-
       Run unit tests, analyze failures caused by the recent changes,
       update tests and/or implementation to align, iterate until stable.
       Also fix all clippy warnings and compilation warnings."
-      --model google/antigravity-claude-sonnet-4-5
+      --model minimax-coding-plan/MiniMax-M2.5-highspeed
 ---
 # Tester agent (MiniMax-M2.5-highspeed) — QA scenario execution
 apiVersion: orchestrator.dev/v2
@@ -148,14 +144,10 @@ spec:
     # QA testing: rebuild CLI, execute QA scenarios, create tickets for failures
     qa_testing: >-
       opencode run
-      "读取文档：{rel_path}，执行QA测试
-
-      Project: {source_tree}
-      QA file: {rel_path}
-      Ticket dir: docs/ticket/
+      "/qa-testing {rel_path}
 
       Read the QA document at {rel_path}, then execute each scenario step by step.
-      Verify expected outcomes. Create tickets under docs/ticket/ for any failures."
+      Verify expected outcomes. Create tickets for any failures."
       --model minimax-coding-plan/MiniMax-M2.5-highspeed
 ---
 # Reviewer agent (MiniMax-M2.5-highspeed) — doc audit and code review
@@ -175,7 +167,6 @@ spec:
       opencode run
       "/qa-doc-governance
 
-      Project: {source_tree}
       Audit QA documentation quality across docs/qa/.
       Fix doc drift, enforce scenario limits and checklist conventions,
       ensure README/manifest consistency."

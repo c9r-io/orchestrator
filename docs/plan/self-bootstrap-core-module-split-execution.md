@@ -1,11 +1,6 @@
-# self-bootstrap 课题执行计划模板
+# self-bootstrap 课题执行计划：拆分超大核心模块
 
-本文档是通用模板，用于把某个课题直接交给 orchestrator 的 `self-bootstrap` workflow 执行。使用方式是复制本文件，替换占位符，把课题目标传给 orchestrator；人工只负责启动、监控、记录，并在异常时介入。
-
-建议参考历史实例：
-
-1. [`docs/plan/resource-rs-refactor-execution.md`](/Volumes/Yotta/ai_native_sdlc/docs/plan/resource-rs-refactor-execution.md)（如该文件仍保留）
-2. [`docs/plan/self-bootstrap-builtin-self-test-workaround-execution.md`](/Volumes/Yotta/ai_native_sdlc/docs/plan/self-bootstrap-builtin-self-test-workaround-execution.md)
+本文档基于 `docs/plan/self-bootstrap-execution-template.md` 生成，用于把“拆分超大核心模块”这一治理课题直接交给 orchestrator 的 `self-bootstrap` workflow 执行。人工只负责启动、监控、记录，并在异常时介入。
 
 ---
 
@@ -13,18 +8,18 @@
 
 将下面这段目标原文直接传递给 orchestrator，作为本轮 self-bootstrap 的课题：
 
-> 课题名称：`<课题标题>`
+> 课题名称：`拆分超大核心模块`
 >
 > 背景：
-> `<简要描述当前问题、技术债、缺陷或待优化点>`
+> 当前核心代码中存在多个超大文件，尤其是 `config_load.rs`、`config.rs`、`dynamic_orchestration.rs`、`collab.rs`，已经同时承载规范化、兼容、自愈、数据结构、DAG、消息总线、artifact 解析等多类职责。这会持续抬高理解成本、修改风险和后续服务化改造成本。
 >
 > 本轮任务目标：
-> `<说明希望 orchestrator 完成的结果>`
+> 在不改变既有外部行为和核心语义的前提下，拆分超大核心模块，建立更清晰的职责边界和内部模块布局；优先切开 `config_load.rs`、`config.rs`、`dynamic_orchestration.rs`、`collab.rs`，将高耦合逻辑迁移到子模块，同时保持现有测试通过、CLI/trace/事件行为不回归。
 >
 > 约束：
 > 1. 优先解决根因，不接受仅做表面绕过。
-> 2. 保留已有核心语义、兼容性要求、关键事件或状态行为：`<需要保留的行为>`
-> 3. 最终目标是：`<明确的完成态>`
+> 2. 保留已有核心语义、兼容性要求、关键事件或状态行为：`保留现有 CLI 契约、配置格式、步骤语义、trace 结构、message bus 对外语义、artifact 解析与测试覆盖`
+> 3. 最终目标是：`超大文件被按职责拆分，模块边界更清晰，对外行为与测试结果保持稳定，文档同步说明新的内部结构`
 
 ### 1.1 预期产出
 
@@ -89,11 +84,11 @@ cd core && cargo build --release && cd ..
 
 ```bash
 ./scripts/orchestrator.sh task create \
-  -n "<任务名>" \
+  -n "self-bootstrap-core-module-split" \
   -w self -W self-bootstrap \
   --no-start \
-  -g "<将上方任务目标压缩成单行，直接作为 goal 传入>" \
-  -t <主目标文件或主目标路径>
+  -g "课题名称：拆分超大核心模块；背景：config_load.rs、config.rs、dynamic_orchestration.rs、collab.rs 等文件体量过大且职责混杂，已形成维护和演进成本；本轮任务目标：在不改变外部行为的前提下按职责拆分这些超大模块，优先切开配置规范化/自愈、动态编排、消息总线与 artifact 相关逻辑，并保持测试通过；约束：必须保留 CLI 契约、配置格式、步骤语义、trace、事件和 message bus 对外行为；最终目标：超大文件完成高价值拆分，模块边界更清晰，测试与文档同步更新。" \
+  -t core/src
 ```
 
 记录返回的 `<task_id>`，然后启动：
@@ -133,10 +128,10 @@ cd core && cargo build --release && cd ..
 
 重点观察：
 
-1. `plan` 是否正确理解课题目标
-2. `implement` 是否在解决根因，而不是做表面绕过
+1. `plan` 是否明确给出“按职责切分”的治理思路，而不是机械搬文件
+2. `implement` 是否优先拆高耦合逻辑并保持内部接口清晰，而不是只新增转发层
 3. `self_test` 是否仍能发挥自举安全闸门作用
-4. `qa_testing` / `ticket_fix` 是否发现并回收回归问题
+4. `qa_testing` / `ticket_fix` 是否能发现拆分后引入的行为回归
 5. 分步骤日志是否能定位卡住或偏题发生在哪一段
 
 ### 4.3 进程监控
@@ -178,21 +173,21 @@ sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events 
 
 确认 orchestrator 理解的问题是：
 
-1. 根因是什么
-2. 完成态是什么
-3. 哪些核心语义必须保留
+1. 根因是职责混杂和模块边界失衡，而不是单纯“文件太长”
+2. 完成态是按职责拆分且行为不变
+3. 哪些核心接口和外部语义必须保持稳定
 
-如果 plan 明显偏题，或把课题降级成表面修补，应判定为偏题。
+如果 plan 明显偏题，或把课题降级成“仅拆文件名不拆职责”，应判定为偏题。
 
 ### 5.2 Implement 阶段检查点
 
 确认代码改动至少满足以下其一：
 
-1. 直接修复根因
-2. 补齐缺失的回归保护
-3. 消除临时 workaround
+1. 将配置规范化/自愈/校验等职责从超大文件中拆到子模块
+2. 将动态编排或消息总线中的高耦合逻辑拆出独立子模块
+3. 保持对外 API 稳定并补齐回归测试
 
-如果改动只发生在外围文档或配置，且未触及根因，应判定为不满足目标。
+如果改动只增加 `mod` 包装层、未实质降低耦合和理解成本，应判定为不满足目标。
 
 ### 5.3 Self-Test 阶段检查点
 
@@ -206,10 +201,10 @@ sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events 
 
 Cycle 2 中重点观察：
 
-1. `qa_testing` 是否产出回归 ticket
-2. `ticket_fix` 是否回收新问题
-3. `align_tests` 是否补齐单测
-4. `doc_governance` 是否未引入文档漂移
+1. `qa_testing` 是否覆盖配置读取、动态编排、协作总线、trace 等受影响区域
+2. `ticket_fix` 是否回收由模块拆分引入的接口回归
+3. `align_tests` 是否补齐新的单测或迁移旧测试
+4. `doc_governance` 是否同步说明新的内部模块结构，避免文档仍指向过时单文件结构
 
 ---
 
@@ -218,8 +213,8 @@ Cycle 2 中重点观察：
 当以下条件同时成立，可判定本轮课题完成：
 
 1. orchestrator 完整跑完 `self-bootstrap` 流程，或在 `loop_guard` 正常收口。
-2. 核心修复不是表面绕过，而是解决了目标中定义的根因。
-3. 关键完成态达成：`<在此填写课题的明确完成条件>`
+2. 核心修复不是表面绕过，而是完成有价值的职责拆分并降低核心模块耦合。
+3. 关键完成态达成：`至少对 config_load.rs、config.rs、dynamic_orchestration.rs、collab.rs 中的高耦合部分完成职责拆分或建立明确子模块边界；对外行为与测试保持稳定`
 4. `self_test` 仍能作为 builtin 正常执行。
 5. 本轮没有留下新的未解决 ticket；若有 ticket，必须由同一轮 `ticket_fix` 回收，或明确记录未收口原因。
 
@@ -229,10 +224,10 @@ Cycle 2 中重点观察：
 
 若出现以下情况，人工应停止“仅监控”模式并记录异常：
 
-1. `plan` 明显偏题
-2. `implement` 长时间无输出、无代码变更
+1. `plan` 把课题误解为单纯移动文件
+2. `implement` 大量改动但没有清晰职责边界改善
 3. `self_test` 失效或被绕过
-4. `qa_testing` 持续产生同类 ticket，进入无效循环
+4. `qa_testing` 持续暴露同类回归，进入无效循环
 
 建议记录方式：
 
@@ -255,4 +250,4 @@ git diff --stat
 3. 监控状态
 4. 在异常时中断并记录
 
-人工不提前替 orchestrator 写实现计划，不预设代码改法，不把任务拆成手工子步骤。这个模板的目的，是复用一种稳定的执行方式来验证：当前 orchestrator 是否已经能围绕一个明确目标，自主完成自举课题。
+人工不提前替 orchestrator 写实现计划，不预设代码改法，不把任务拆成手工子步骤。本计划的目的，是以稳定的 self-bootstrap 执行方式验证：当前 orchestrator 是否已经能围绕“核心模块治理与职责重构”这一明确目标，自主完成治理课题。
