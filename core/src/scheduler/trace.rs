@@ -1,7 +1,7 @@
 use crate::dto::{CommandRunDto, EventDto};
 use chrono::TimeZone;
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 // ── Data structures ──────────────────────────────────────────────────
 
@@ -139,6 +139,7 @@ pub fn build_trace_with_meta(
     detect_nonzero_exit(command_runs, &mut anomalies);
     detect_unexpanded_template_var(command_runs, &mut anomalies);
     detect_long_running_steps(&cycles, &mut anomalies);
+    detect_low_output_steps(events, &mut anomalies);
 
     let total_steps: u32 = cycles.iter().map(|c| c.steps.len() as u32).sum();
     let total_commands = command_runs.len() as u32;
@@ -834,6 +835,41 @@ fn detect_long_running_steps(cycles: &[CycleTrace], anomalies: &mut Vec<Anomaly>
     }
 }
 
+fn detect_low_output_steps(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
+    let mut seen_steps = HashSet::new();
+
+    for event in events {
+        if event.event_type != "step_heartbeat" {
+            continue;
+        }
+        let output_state = event.payload["output_state"].as_str();
+        let pid_alive = event.payload["pid_alive"].as_bool().unwrap_or(false);
+        if output_state != Some("low_output") || !pid_alive {
+            continue;
+        }
+
+        let step = event.payload["step"]
+            .as_str()
+            .or_else(|| event.payload["step_id"].as_str())
+            .unwrap_or("unknown");
+        if !seen_steps.insert(step.to_string()) {
+            continue;
+        }
+
+        let elapsed_secs = event.payload["elapsed_secs"].as_u64().unwrap_or(0);
+        let stagnant_heartbeats = event.payload["stagnant_heartbeats"].as_u64().unwrap_or(0);
+        anomalies.push(Anomaly {
+            rule: "low_output_step".to_string(),
+            severity: Severity::Warning,
+            message: format!(
+                "Step '{}' entered low-output state after {}s with {} quiet heartbeats",
+                step, elapsed_secs, stagnant_heartbeats
+            ),
+            at: Some(event.created_at.clone()),
+        });
+    }
+}
+
 // ── Terminal rendering ───────────────────────────────────────────────
 
 pub fn render_trace_terminal(trace: &TaskTrace, verbose: bool) {
@@ -1445,6 +1481,99 @@ mod tests {
             .iter()
             .find(|a| a.rule == "long_running_step");
         assert!(long.is_some(), "should detect long running step");
+    }
+
+    #[test]
+    fn detect_low_output_step_anomaly() {
+        let events = vec![
+            make_item_event(
+                1,
+                "step_started",
+                json!({"step": "plan"}),
+                "2025-01-01 10:00:00",
+                "item-1",
+            ),
+            make_item_event(
+                2,
+                "step_heartbeat",
+                json!({
+                    "step": "plan",
+                    "output_state": "low_output",
+                    "pid_alive": true,
+                    "elapsed_secs": 120,
+                    "stagnant_heartbeats": 3
+                }),
+                "2025-01-01 10:02:00",
+                "item-1",
+            ),
+        ];
+
+        let trace = build_trace("test-task", "running", &events, &[]);
+        let low_output = trace.anomalies.iter().find(|a| a.rule == "low_output_step");
+        assert!(low_output.is_some(), "should detect low output step");
+    }
+
+    #[test]
+    fn quiet_heartbeat_does_not_create_low_output_anomaly() {
+        let events = vec![make_item_event(
+            1,
+            "step_heartbeat",
+            json!({
+                "step": "plan",
+                "output_state": "quiet",
+                "pid_alive": true,
+                "elapsed_secs": 60,
+                "stagnant_heartbeats": 2
+            }),
+            "2025-01-01 10:01:00",
+            "item-1",
+        )];
+
+        let trace = build_trace("test-task", "running", &events, &[]);
+        assert!(
+            trace.anomalies.iter().all(|a| a.rule != "low_output_step"),
+            "quiet heartbeat should not create low output anomaly"
+        );
+    }
+
+    #[test]
+    fn multiple_low_output_heartbeats_for_same_step_deduplicate() {
+        let events = vec![
+            make_item_event(
+                1,
+                "step_heartbeat",
+                json!({
+                    "step": "plan",
+                    "output_state": "low_output",
+                    "pid_alive": true,
+                    "elapsed_secs": 120,
+                    "stagnant_heartbeats": 3
+                }),
+                "2025-01-01 10:02:00",
+                "item-1",
+            ),
+            make_item_event(
+                2,
+                "step_heartbeat",
+                json!({
+                    "step": "plan",
+                    "output_state": "low_output",
+                    "pid_alive": true,
+                    "elapsed_secs": 150,
+                    "stagnant_heartbeats": 4
+                }),
+                "2025-01-01 10:02:30",
+                "item-1",
+            ),
+        ];
+
+        let trace = build_trace("test-task", "running", &events, &[]);
+        let count = trace
+            .anomalies
+            .iter()
+            .filter(|a| a.rule == "low_output_step")
+            .count();
+        assert_eq!(count, 1, "same step should only emit one low_output_step");
     }
 
     // ── Edge cases ────────────────────────────────────────

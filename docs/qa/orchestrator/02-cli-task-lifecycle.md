@@ -79,6 +79,8 @@ Expected:
 - Repeated `task info` calls keep returning valid JSON and do not fail on transient reads.
 - `task logs` succeeds even if some run logs are not yet readable, using per-run placeholders when needed.
 - `task watch` renders a frame immediately and should not clear to a blank screen before data is available.
+- For a long-running command step with no meaningful new output for multiple heartbeats, `task watch` surfaces a `LOW OUTPUT` indicator instead of only showing a live PID.
+- For a long-running step that keeps producing output, `task watch` continues to show progress details without entering `LOW OUTPUT`.
 
 ---
 

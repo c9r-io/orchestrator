@@ -25,10 +25,29 @@ use super::RunningTask;
 
 const DEFAULT_STEP_TIMEOUT_SECS: u64 = 1800;
 const HEARTBEAT_INTERVAL_SECS: u64 = 30;
+const LOW_OUTPUT_DELTA_THRESHOLD_BYTES: u64 = 32;
+const LOW_OUTPUT_MIN_ELAPSED_SECS: u64 = 90;
+const LOW_OUTPUT_CONSECUTIVE_HEARTBEATS: u32 = 3;
 
 struct LimitedOutput {
     text: String,
     truncated_prefix_bytes: u64,
+}
+
+#[derive(Default)]
+struct HeartbeatProgress {
+    last_stdout_bytes: u64,
+    last_stderr_bytes: u64,
+    stagnant_heartbeats: u32,
+}
+
+struct HeartbeatSample {
+    stdout_bytes: u64,
+    stderr_bytes: u64,
+    stdout_delta_bytes: u64,
+    stderr_delta_bytes: u64,
+    stagnant_heartbeats: u32,
+    output_state: &'static str,
 }
 
 pub struct PhaseRunRequest<'a> {
@@ -68,6 +87,49 @@ pub(crate) fn shell_escape(s: &str) -> String {
 
 fn resolved_step_timeout_secs(step_timeout_secs: Option<u64>) -> u64 {
     step_timeout_secs.unwrap_or(DEFAULT_STEP_TIMEOUT_SECS)
+}
+
+fn sample_heartbeat_progress(
+    progress: &mut HeartbeatProgress,
+    stdout_bytes: u64,
+    stderr_bytes: u64,
+    elapsed_secs: u64,
+    pid_alive: bool,
+) -> HeartbeatSample {
+    let stdout_delta_bytes = stdout_bytes.saturating_sub(progress.last_stdout_bytes);
+    let stderr_delta_bytes = stderr_bytes.saturating_sub(progress.last_stderr_bytes);
+    let total_delta = stdout_delta_bytes + stderr_delta_bytes;
+
+    if total_delta <= LOW_OUTPUT_DELTA_THRESHOLD_BYTES {
+        progress.stagnant_heartbeats += 1;
+    } else {
+        progress.stagnant_heartbeats = 0;
+    }
+
+    let output_state = if !pid_alive {
+        "quiet"
+    } else if elapsed_secs >= LOW_OUTPUT_MIN_ELAPSED_SECS
+        && progress.stagnant_heartbeats >= LOW_OUTPUT_CONSECUTIVE_HEARTBEATS
+        && total_delta <= LOW_OUTPUT_DELTA_THRESHOLD_BYTES
+    {
+        "low_output"
+    } else if total_delta <= LOW_OUTPUT_DELTA_THRESHOLD_BYTES {
+        "quiet"
+    } else {
+        "active"
+    };
+
+    progress.last_stdout_bytes = stdout_bytes;
+    progress.last_stderr_bytes = stderr_bytes;
+
+    HeartbeatSample {
+        stdout_bytes,
+        stderr_bytes,
+        stdout_delta_bytes,
+        stderr_delta_bytes,
+        stagnant_heartbeats: progress.stagnant_heartbeats,
+        output_state,
+    }
 }
 
 async fn read_output_with_limit(path: &Path, max_bytes: u64) -> Result<LimitedOutput> {
@@ -307,6 +369,7 @@ async fn run_phase_with_timeout(
     let deadline = start + std::time::Duration::from_secs(step_timeout_secs);
     let heartbeat_interval = std::time::Duration::from_secs(HEARTBEAT_INTERVAL_SECS);
     let mut timed_out = false;
+    let mut heartbeat_progress = HeartbeatProgress::default();
 
     let exit_code: i32 = loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
@@ -371,6 +434,13 @@ async fn run_phase_with_timeout(
                             .unwrap_or(false)
                     })
                     .unwrap_or(false);
+                let heartbeat = sample_heartbeat_progress(
+                    &mut heartbeat_progress,
+                    stdout_bytes,
+                    stderr_bytes,
+                    elapsed.as_secs(),
+                    pid_alive,
+                );
 
                 insert_event(
                     state,
@@ -381,8 +451,12 @@ async fn run_phase_with_timeout(
                         "step": phase,
                         "step_id": step_id,
                         "elapsed_secs": elapsed.as_secs(),
-                        "stdout_bytes": stdout_bytes,
-                        "stderr_bytes": stderr_bytes,
+                        "stdout_bytes": heartbeat.stdout_bytes,
+                        "stderr_bytes": heartbeat.stderr_bytes,
+                        "stdout_delta_bytes": heartbeat.stdout_delta_bytes,
+                        "stderr_delta_bytes": heartbeat.stderr_delta_bytes,
+                        "stagnant_heartbeats": heartbeat.stagnant_heartbeats,
+                        "output_state": heartbeat.output_state,
                         "pid": child_pid,
                         "pid_alive": pid_alive,
                     }),
@@ -699,5 +773,58 @@ mod tests {
         assert_eq!(resolved_step_timeout_secs(None), DEFAULT_STEP_TIMEOUT_SECS);
         assert_eq!(resolved_step_timeout_secs(Some(60)), 60);
         assert_eq!(resolved_step_timeout_secs(Some(0)), 0);
+    }
+
+    #[test]
+    fn heartbeat_sample_active_when_output_grows() {
+        let mut progress = HeartbeatProgress::default();
+        let sample = sample_heartbeat_progress(&mut progress, 256, 0, 30, true);
+
+        assert_eq!(sample.stdout_delta_bytes, 256);
+        assert_eq!(sample.stderr_delta_bytes, 0);
+        assert_eq!(sample.stagnant_heartbeats, 0);
+        assert_eq!(sample.output_state, "active");
+    }
+
+    #[test]
+    fn heartbeat_sample_quiet_before_threshold() {
+        let mut progress = HeartbeatProgress::default();
+
+        let first = sample_heartbeat_progress(&mut progress, 0, 0, 30, true);
+        let second = sample_heartbeat_progress(&mut progress, 0, 0, 60, true);
+
+        assert_eq!(first.output_state, "quiet");
+        assert_eq!(second.output_state, "quiet");
+        assert_eq!(second.stagnant_heartbeats, 2);
+    }
+
+    #[test]
+    fn heartbeat_sample_low_output_after_three_quiet_heartbeats() {
+        let mut progress = HeartbeatProgress::default();
+
+        let _ = sample_heartbeat_progress(&mut progress, 0, 0, 30, true);
+        let _ = sample_heartbeat_progress(&mut progress, 0, 0, 60, true);
+        let third = sample_heartbeat_progress(&mut progress, 0, 0, 90, true);
+
+        assert_eq!(third.stagnant_heartbeats, 3);
+        assert_eq!(third.output_state, "low_output");
+    }
+
+    #[test]
+    fn heartbeat_sample_resets_quiet_counter_after_output_resumes() {
+        let mut progress = HeartbeatProgress::default();
+
+        let _ = sample_heartbeat_progress(&mut progress, 0, 0, 30, true);
+        let _ = sample_heartbeat_progress(&mut progress, 0, 0, 60, true);
+        let resumed = sample_heartbeat_progress(
+            &mut progress,
+            LOW_OUTPUT_DELTA_THRESHOLD_BYTES + 64,
+            0,
+            90,
+            true,
+        );
+
+        assert_eq!(resumed.stagnant_heartbeats, 0);
+        assert_eq!(resumed.output_state, "active");
     }
 }

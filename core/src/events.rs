@@ -50,9 +50,15 @@ pub struct StepEvent {
     pub duration_ms: Option<u64>,
     pub confidence: Option<f64>,
     pub reason: Option<String>,
+    pub elapsed_secs: Option<u64>,
     pub stdout_bytes: Option<u64>,
+    pub stderr_bytes: Option<u64>,
+    pub stdout_delta_bytes: Option<u64>,
+    pub stderr_delta_bytes: Option<u64>,
+    pub stagnant_heartbeats: Option<u32>,
     pub pid: Option<u32>,
     pub pid_alive: Option<bool>,
+    pub output_state: Option<String>,
     pub created_at: String,
 }
 
@@ -124,9 +130,15 @@ pub fn query_step_events(db_path: &Path, task_id: &str) -> Result<Vec<StepEvent>
             duration_ms: v["duration_ms"].as_u64(),
             confidence: v["confidence"].as_f64(),
             reason: v["reason"].as_str().map(String::from),
+            elapsed_secs: v["elapsed_secs"].as_u64(),
             stdout_bytes: v["stdout_bytes"].as_u64(),
+            stderr_bytes: v["stderr_bytes"].as_u64(),
+            stdout_delta_bytes: v["stdout_delta_bytes"].as_u64(),
+            stderr_delta_bytes: v["stderr_delta_bytes"].as_u64(),
+            stagnant_heartbeats: v["stagnant_heartbeats"].as_u64().map(|v| v as u32),
             pid: v["pid"].as_u64().map(|p| p as u32),
             pid_alive: v["pid_alive"].as_bool(),
+            output_state: v["output_state"].as_str().map(String::from),
             created_at,
         });
     }
@@ -276,17 +288,29 @@ mod tests {
             "step_heartbeat",
             serde_json::json!({
                 "step": "implement",
+                "elapsed_secs": 120,
                 "stdout_bytes": 4096,
+                "stderr_bytes": 256,
+                "stdout_delta_bytes": 0,
+                "stderr_delta_bytes": 4,
+                "stagnant_heartbeats": 3,
                 "pid": 12345,
-                "pid_alive": true
+                "pid_alive": true,
+                "output_state": "low_output"
             }),
         )
         .unwrap();
 
         let events = query_step_events(&state.db_path, "task1").unwrap();
         assert_eq!(events.len(), 1);
+        assert_eq!(events[0].elapsed_secs, Some(120));
         assert_eq!(events[0].stdout_bytes, Some(4096));
+        assert_eq!(events[0].stderr_bytes, Some(256));
+        assert_eq!(events[0].stdout_delta_bytes, Some(0));
+        assert_eq!(events[0].stderr_delta_bytes, Some(4));
+        assert_eq!(events[0].stagnant_heartbeats, Some(3));
         assert_eq!(events[0].pid, Some(12345));
         assert_eq!(events[0].pid_alive, Some(true));
+        assert_eq!(events[0].output_state.as_deref(), Some("low_output"));
     }
 }

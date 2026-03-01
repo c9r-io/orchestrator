@@ -447,14 +447,38 @@ fn render_watch_frame(
                     .find(|s| s.step == step && s.status == "running")
                 {
                     let stdout_b = ev.stdout_bytes.unwrap_or(0);
+                    let stderr_b = ev.stderr_bytes.unwrap_or(0);
+                    let stdout_delta_b = ev.stdout_delta_bytes.unwrap_or(0);
+                    let stderr_delta_b = ev.stderr_delta_bytes.unwrap_or(0);
+                    let total_delta = stdout_delta_b + stderr_delta_b;
                     let pid = ev.pid.unwrap_or(0);
                     let alive = ev.pid_alive.unwrap_or(false);
-                    existing.details = format!(
-                        "pid={} {} stdout={}",
-                        pid,
-                        if alive { "alive" } else { "DEAD" },
-                        format_bytes(stdout_b)
-                    );
+                    existing.details = match ev.output_state.as_deref() {
+                        Some("low_output") => format!(
+                            "LOW OUTPUT pid={} {} out={} err={} Δ={} quiet={}",
+                            pid,
+                            if alive { "alive" } else { "DEAD" },
+                            format_bytes(stdout_b),
+                            format_bytes(stderr_b),
+                            format_bytes(total_delta),
+                            ev.stagnant_heartbeats.unwrap_or(0)
+                        ),
+                        Some(state) => format!(
+                            "pid={} {} out={} err={} Δ={} state={}",
+                            pid,
+                            if alive { "alive" } else { "DEAD" },
+                            format_bytes(stdout_b),
+                            format_bytes(stderr_b),
+                            format_bytes(total_delta),
+                            state
+                        ),
+                        None => format!(
+                            "pid={} {} stdout={}",
+                            pid,
+                            if alive { "alive" } else { "DEAD" },
+                            format_bytes(stdout_b)
+                        ),
+                    };
                 }
             }
             _ => {}
@@ -1423,9 +1447,15 @@ mod tests {
                 duration_ms: None,
                 confidence: None,
                 reason: None,
+                elapsed_secs: None,
                 stdout_bytes: None,
+                stderr_bytes: None,
+                stdout_delta_bytes: None,
+                stderr_delta_bytes: None,
+                stagnant_heartbeats: None,
                 pid: None,
                 pid_alive: None,
+                output_state: None,
                 created_at: "2026-03-01T00:00:00Z".to_string(),
             },
             crate::events::StepEvent {
@@ -1436,9 +1466,15 @@ mod tests {
                 duration_ms: None,
                 confidence: None,
                 reason: None,
+                elapsed_secs: None,
                 stdout_bytes: None,
+                stderr_bytes: None,
+                stdout_delta_bytes: None,
+                stderr_delta_bytes: None,
+                stagnant_heartbeats: None,
                 pid: None,
                 pid_alive: None,
+                output_state: None,
                 created_at: "2026-03-01T00:00:01Z".to_string(),
             },
         ];
@@ -1448,5 +1484,136 @@ mod tests {
         assert!(frame.contains("Cycle: 1"));
         assert!(frame.contains("plan"));
         assert!(frame.contains("echo"));
+    }
+
+    #[test]
+    fn render_watch_frame_shows_low_output_details_for_heartbeat() {
+        let task = TaskSummary {
+            id: "12345678-1234-1234-1234-123456789abc".to_string(),
+            name: "watch".to_string(),
+            status: "running".to_string(),
+            started_at: Some("2026-03-01T00:00:00Z".to_string()),
+            completed_at: None,
+            goal: "observe".to_string(),
+            project_id: "default".to_string(),
+            workspace_id: "default".to_string(),
+            workflow_id: "basic".to_string(),
+            target_files: vec![],
+            total_items: 1,
+            finished_items: 0,
+            failed_items: 0,
+            created_at: "2026-03-01T00:00:00Z".to_string(),
+            updated_at: "2026-03-01T00:01:31Z".to_string(),
+        };
+        let events = vec![
+            crate::events::StepEvent {
+                event_type: "step_started".to_string(),
+                step: Some("plan".to_string()),
+                agent_id: Some("echo".to_string()),
+                success: None,
+                duration_ms: None,
+                confidence: None,
+                reason: None,
+                elapsed_secs: None,
+                stdout_bytes: None,
+                stderr_bytes: None,
+                stdout_delta_bytes: None,
+                stderr_delta_bytes: None,
+                stagnant_heartbeats: None,
+                pid: None,
+                pid_alive: None,
+                output_state: None,
+                created_at: "2026-03-01T00:00:01Z".to_string(),
+            },
+            crate::events::StepEvent {
+                event_type: "step_heartbeat".to_string(),
+                step: Some("plan".to_string()),
+                agent_id: None,
+                success: None,
+                duration_ms: None,
+                confidence: None,
+                reason: None,
+                elapsed_secs: Some(90),
+                stdout_bytes: Some(137),
+                stderr_bytes: Some(0),
+                stdout_delta_bytes: Some(0),
+                stderr_delta_bytes: Some(0),
+                stagnant_heartbeats: Some(3),
+                pid: Some(4321),
+                pid_alive: Some(true),
+                output_state: Some("low_output".to_string()),
+                created_at: "2026-03-01T00:01:31Z".to_string(),
+            },
+        ];
+
+        let frame = render_watch_frame(&task, &events, &task.id);
+        assert!(frame.contains("LOW OUTPUT"));
+        assert!(frame.contains("Δ=0B"));
+        assert!(frame.contains("quiet=3"));
+    }
+
+    #[test]
+    fn render_watch_frame_keeps_active_state_for_active_heartbeat() {
+        let task = TaskSummary {
+            id: "12345678-1234-1234-1234-123456789abc".to_string(),
+            name: "watch".to_string(),
+            status: "running".to_string(),
+            started_at: Some("2026-03-01T00:00:00Z".to_string()),
+            completed_at: None,
+            goal: "observe".to_string(),
+            project_id: "default".to_string(),
+            workspace_id: "default".to_string(),
+            workflow_id: "basic".to_string(),
+            target_files: vec![],
+            total_items: 1,
+            finished_items: 0,
+            failed_items: 0,
+            created_at: "2026-03-01T00:00:00Z".to_string(),
+            updated_at: "2026-03-01T00:00:31Z".to_string(),
+        };
+        let events = vec![
+            crate::events::StepEvent {
+                event_type: "step_started".to_string(),
+                step: Some("plan".to_string()),
+                agent_id: Some("echo".to_string()),
+                success: None,
+                duration_ms: None,
+                confidence: None,
+                reason: None,
+                elapsed_secs: None,
+                stdout_bytes: None,
+                stderr_bytes: None,
+                stdout_delta_bytes: None,
+                stderr_delta_bytes: None,
+                stagnant_heartbeats: None,
+                pid: None,
+                pid_alive: None,
+                output_state: None,
+                created_at: "2026-03-01T00:00:01Z".to_string(),
+            },
+            crate::events::StepEvent {
+                event_type: "step_heartbeat".to_string(),
+                step: Some("plan".to_string()),
+                agent_id: None,
+                success: None,
+                duration_ms: None,
+                confidence: None,
+                reason: None,
+                elapsed_secs: Some(30),
+                stdout_bytes: Some(256),
+                stderr_bytes: Some(0),
+                stdout_delta_bytes: Some(64),
+                stderr_delta_bytes: Some(0),
+                stagnant_heartbeats: Some(0),
+                pid: Some(4321),
+                pid_alive: Some(true),
+                output_state: Some("active".to_string()),
+                created_at: "2026-03-01T00:00:31Z".to_string(),
+            },
+        ];
+
+        let frame = render_watch_frame(&task, &events, &task.id);
+        assert!(frame.contains("state=active"));
+        assert!(!frame.contains("LOW OUTPUT"));
     }
 }

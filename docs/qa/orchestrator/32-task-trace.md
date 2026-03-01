@@ -16,6 +16,7 @@ The latest regression fix also requires:
 - normal two-cycle tasks must not emit false `overlapping_cycles`
 - `summary.wall_time_secs` must be populated for completed tasks, including RFC3339 timestamps with timezone offsets
 - `task trace` must remain available even when the current active config is invalid for execution
+- low-output heartbeats must be distinguishable from ordinary long-running steps in anomaly output
 
 ### Common Preconditions
 
@@ -145,10 +146,14 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 - `two_cycle_completed_task_closes_first_cycle_without_overlap` passes
 - `completed_task_wall_time_uses_task_meta_when_events_are_sparse` passes
 - `completed_task_backfills_last_cycle_end_from_completed_at` passes
+- `detect_low_output_step_anomaly` passes
+- `quiet_heartbeat_does_not_create_low_output_anomaly` passes
+- `multiple_low_output_heartbeats_for_same_step_deduplicate` passes
 - When a real failing task with non-zero exit is available, anomaly section shows `WARN nonzero_exit` with the phase and exit code
 - When a real failing task with non-zero exit is available, JSON output includes `rule: "nonzero_exit"`, `severity: "warning"`, and a message containing the exit code
 - Normal completed multi-cycle traces do not report `overlapping_cycles`
 - Completed traces expose non-null `summary.wall_time_secs`
+- A trace built from low-output heartbeats reports `low_output_step` exactly once per affected step
 
 ---
 
