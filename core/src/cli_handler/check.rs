@@ -1,5 +1,5 @@
 use crate::cli::OutputFormat;
-use crate::config_load::read_active_config;
+use crate::config_load::{read_active_config, ConfigSelfHealReport};
 use crate::scheduler::check::{run_checks, CheckReport};
 use crate::scheduler::trace::Severity;
 use anyhow::Result;
@@ -9,7 +9,12 @@ use super::CliHandler;
 impl CliHandler {
     pub(super) fn handle_check(&self, workflow: Option<&str>, output: OutputFormat) -> Result<i32> {
         let active = read_active_config(&self.state)?;
-        let report = run_checks(&active, &self.state.app_root, workflow);
+        let mut report = run_checks(&active, &self.state.app_root, workflow);
+        if let Ok(notice) = self.state.active_config_notice.read() {
+            if let Some(notice) = notice.as_ref() {
+                append_active_config_notice(&mut report, notice);
+            }
+        }
 
         match output {
             OutputFormat::Json => {
@@ -53,10 +58,30 @@ impl CliHandler {
     }
 }
 
+fn append_active_config_notice(report: &mut CheckReport, notice: &ConfigSelfHealReport) {
+    report.checks.push(crate::scheduler::check::CheckResult {
+        rule: "config_auto_healed".into(),
+        severity: Severity::Warning,
+        passed: false,
+        message: format!(
+            "active config was auto-healed from persisted drift ({} changes, version {})",
+            notice.changes.len(),
+            notice.healed_version
+        ),
+        context: Some(notice.original_error.clone()),
+    });
+    report.summary.total += 1;
+    report.summary.warnings += 1;
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::CliHandler;
+    use super::append_active_config_notice;
     use crate::cli::{Cli, Commands, OutputFormat};
+    use crate::config_load::{ConfigSelfHealChange, ConfigSelfHealReport, ConfigSelfHealRule};
+    use crate::scheduler::check::{CheckReport, CheckSummary};
+    use crate::scheduler::trace::Severity;
     use crate::test_utils::TestState;
 
     #[test]
@@ -114,5 +139,43 @@ mod tests {
                 .expect("check with workflow filter should succeed"),
             0
         );
+    }
+
+    #[test]
+    fn append_active_config_notice_adds_warning_check() {
+        let mut report = CheckReport {
+            checks: Vec::new(),
+            summary: CheckSummary {
+                total: 0,
+                passed: 0,
+                errors: 0,
+                warnings: 0,
+            },
+        };
+        let notice = ConfigSelfHealReport {
+            original_error: "legacy drift".to_string(),
+            healed_version: 7,
+            healed_at: "2026-01-01T00:00:00Z".to_string(),
+            changes: vec![ConfigSelfHealChange {
+                workflow_id: "wf".to_string(),
+                step_id: "self_test".to_string(),
+                rule: ConfigSelfHealRule::DropRequiredCapabilityFromBuiltinStep,
+                detail: "removed legacy required_capability".to_string(),
+            }],
+        };
+
+        append_active_config_notice(&mut report, &notice);
+
+        assert_eq!(report.summary.total, 1);
+        assert_eq!(report.summary.warnings, 1);
+        let check = report
+            .checks
+            .first()
+            .expect("expected injected config_auto_healed check");
+        assert_eq!(check.rule, "config_auto_healed");
+        assert_eq!(check.severity, Severity::Warning);
+        assert!(!check.passed);
+        assert!(check.message.contains("version 7"));
+        assert_eq!(check.context.as_deref(), Some("legacy drift"));
     }
 }

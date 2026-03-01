@@ -241,6 +241,7 @@ impl TestState {
             logs_dir,
             active_config: RwLock::new(active),
             active_config_error: RwLock::new(None),
+            active_config_notice: RwLock::new(None),
             running: Mutex::new(HashMap::new()),
             agent_health: std::sync::RwLock::new(HashMap::new()),
             agent_metrics: std::sync::RwLock::new(HashMap::new()),

@@ -1158,6 +1158,9 @@ mod tests {
         assert_eq!(spec.safety.checkpoint_strategy, "git_tag");
         assert_eq!(spec.safety.step_timeout_secs, Some(600));
         assert!(spec.safety.binary_snapshot);
-        assert_eq!(spec.safety.profile.as_deref(), Some("self_referential_probe"));
+        assert_eq!(
+            spec.safety.profile.as_deref(),
+            Some("self_referential_probe")
+        );
     }
 }

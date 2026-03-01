@@ -233,7 +233,8 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
             &workspace_id,
             self_referential,
         )?;
-    } else if workflow.safety.profile == crate::config::WorkflowSafetyProfile::SelfReferentialProbe {
+    } else if workflow.safety.profile == crate::config::WorkflowSafetyProfile::SelfReferentialProbe
+    {
         crate::config_load::validate_self_referential_safety(
             workflow,
             &workflow_id,

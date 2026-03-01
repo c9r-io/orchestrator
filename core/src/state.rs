@@ -1,5 +1,6 @@
 use crate::collab::MessageBus;
 use crate::config::ActiveConfig;
+use crate::config_load::ConfigSelfHealReport;
 use crate::events::EventSink;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -26,6 +27,7 @@ pub struct InnerState {
     pub logs_dir: PathBuf,
     pub active_config: RwLock<ActiveConfig>,
     pub active_config_error: RwLock<Option<String>>,
+    pub active_config_notice: RwLock<Option<ConfigSelfHealReport>>,
     pub running: Mutex<HashMap<String, RunningTask>>,
     pub agent_health: std::sync::RwLock<HashMap<String, crate::metrics::AgentHealthState>>,
     pub agent_metrics: std::sync::RwLock<HashMap<String, crate::metrics::AgentMetrics>>,

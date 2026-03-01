@@ -1,9 +1,9 @@
 use crate::config::{
     default_builtin_for_step_id, default_required_capability_for_step_id,
-    default_scope_for_step_id, normalize_step_execution_mode, resolve_step_semantic_kind,
-    ActiveConfig, CaptureDecl, CaptureSource, OrchestratorConfig, PostAction, ResolvedProject,
-    ResolvedWorkspace, StepBehavior, StepScope, StepSemanticKind, TaskExecutionPlan,
-    WorkflowConfig, WorkflowSafetyProfile, WorkflowStepConfig,
+    default_scope_for_step_id, is_known_builtin_step_name, normalize_step_execution_mode,
+    resolve_step_semantic_kind, ActiveConfig, CaptureDecl, CaptureSource, OrchestratorConfig,
+    PostAction, ResolvedProject, ResolvedWorkspace, StepBehavior, StepScope, StepSemanticKind,
+    TaskExecutionPlan, WorkflowConfig, WorkflowSafetyProfile, WorkflowStepConfig,
 };
 use crate::db::{count_tasks_by_workflow, count_tasks_by_workspace, open_conn};
 use crate::dto::ConfigOverview;
@@ -12,6 +12,28 @@ use anyhow::{Context, Result};
 use rusqlite::{params, OptionalExtension, Transaction};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigSelfHealRule {
+    DropRequiredCapabilityFromBuiltinStep,
+    NormalizeStepExecutionMode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigSelfHealChange {
+    pub workflow_id: String,
+    pub step_id: String,
+    pub rule: ConfigSelfHealRule,
+    pub detail: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConfigSelfHealReport {
+    pub original_error: String,
+    pub healed_version: i64,
+    pub healed_at: String,
+    pub changes: Vec<ConfigSelfHealChange>,
+}
 
 pub fn now_ts() -> String {
     chrono::Utc::now().to_rfc3339()
@@ -194,6 +216,93 @@ fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorConfig {
         normalize_workflow_config(workflow);
     }
     config
+}
+
+fn apply_self_heal_to_step(
+    workflow_id: &str,
+    step: &mut WorkflowStepConfig,
+    changes: &mut Vec<ConfigSelfHealChange>,
+) -> Result<()> {
+    if let Some(builtin) = step.builtin.as_deref() {
+        if is_known_builtin_step_name(builtin) {
+            if let Some(required_capability) = step.required_capability.take() {
+                changes.push(ConfigSelfHealChange {
+                    workflow_id: workflow_id.to_string(),
+                    step_id: step.id.clone(),
+                    rule: ConfigSelfHealRule::DropRequiredCapabilityFromBuiltinStep,
+                    detail: format!(
+                        "removed legacy required_capability '{}' from builtin '{}'",
+                        required_capability, builtin
+                    ),
+                });
+            }
+        }
+    }
+
+    let previous_execution = step.behavior.execution.clone();
+    normalize_step_execution_mode(step).map_err(anyhow::Error::msg)?;
+    if step.behavior.execution != previous_execution {
+        changes.push(ConfigSelfHealChange {
+            workflow_id: workflow_id.to_string(),
+            step_id: step.id.clone(),
+            rule: ConfigSelfHealRule::NormalizeStepExecutionMode,
+            detail: format!(
+                "normalized behavior.execution from {:?} to {:?}",
+                previous_execution, step.behavior.execution
+            ),
+        });
+    }
+
+    for chain_step in &mut step.chain_steps {
+        apply_self_heal_to_step(workflow_id, chain_step, changes)?;
+    }
+
+    Ok(())
+}
+
+fn apply_self_heal_to_workflow(
+    workflow_id: &str,
+    workflow: &mut WorkflowConfig,
+    changes: &mut Vec<ConfigSelfHealChange>,
+) -> Result<()> {
+    for step in &mut workflow.steps {
+        apply_self_heal_to_step(workflow_id, step, changes)?;
+    }
+    Ok(())
+}
+
+fn serialize_config_snapshot(config: &OrchestratorConfig) -> Result<(String, String)> {
+    let yaml = export_manifest_resources(config)
+        .iter()
+        .map(crate::resource::Resource::to_yaml)
+        .collect::<Result<Vec<_>>>()?
+        .join("---\n");
+    let json_raw = serde_json::to_string(config).context("failed to serialize config json")?;
+    Ok((yaml, json_raw))
+}
+
+fn apply_self_heal_pass(
+    config: &OrchestratorConfig,
+) -> Result<Option<(OrchestratorConfig, Vec<ConfigSelfHealChange>)>> {
+    let mut healed = config.clone();
+    let mut changes = Vec::new();
+
+    for (workflow_id, workflow) in &mut healed.workflows {
+        apply_self_heal_to_workflow(workflow_id, workflow, &mut changes)?;
+    }
+
+    for (project_id, project) in &mut healed.projects {
+        for (workflow_id, workflow) in &mut project.workflows {
+            let scoped_workflow_id = format!("{project_id}/{workflow_id}");
+            apply_self_heal_to_workflow(&scoped_workflow_id, workflow, &mut changes)?;
+        }
+    }
+
+    if changes.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some((healed, changes)))
+    }
 }
 
 pub fn validate_workflow_config(
@@ -391,7 +500,10 @@ fn validate_probe_workflow_shape(workflow: &WorkflowConfig, workflow_id: &str) -
         return Ok(());
     }
 
-    if !matches!(workflow.safety.checkpoint_strategy, crate::config::CheckpointStrategy::GitTag) {
+    if !matches!(
+        workflow.safety.checkpoint_strategy,
+        crate::config::CheckpointStrategy::GitTag
+    ) {
         anyhow::bail!(
             "workflow '{}' with self_referential_probe profile requires safety.checkpoint_strategy=git_tag",
             workflow_id
@@ -417,7 +529,9 @@ fn validate_probe_workflow_shape(workflow: &WorkflowConfig, workflow_id: &str) -
             continue;
         }
 
-        let scope = step.scope.unwrap_or_else(|| default_scope_for_step_id(&step.id));
+        let scope = step
+            .scope
+            .unwrap_or_else(|| default_scope_for_step_id(&step.id));
         if scope != StepScope::Task {
             anyhow::bail!(
                 "workflow '{}' with self_referential_probe profile only allows task-scoped steps",
@@ -442,8 +556,7 @@ fn validate_probe_workflow_shape(workflow: &WorkflowConfig, workflow_id: &str) -
 
         if matches!(
             step.id.as_str(),
-            "qa"
-                | "qa_testing"
+            "qa" | "qa_testing"
                 | "fix"
                 | "ticket_fix"
                 | "retest"
@@ -616,6 +729,50 @@ pub fn build_active_config(app_root: &Path, config: OrchestratorConfig) -> Resul
     })
 }
 
+pub fn build_active_config_with_self_heal(
+    app_root: &Path,
+    db_path: &Path,
+    config: OrchestratorConfig,
+) -> Result<(ActiveConfig, Option<ConfigSelfHealReport>)> {
+    match build_active_config(app_root, config.clone()) {
+        Ok(active) => Ok((active, None)),
+        Err(error) => {
+            let original_error = error.to_string();
+            let maybe_healed = match apply_self_heal_pass(&config) {
+                Ok(result) => result,
+                Err(_) => anyhow::bail!(original_error),
+            };
+            let Some((healed_config, changes)) = maybe_healed else {
+                anyhow::bail!(original_error);
+            };
+
+            let healed_active = match build_active_config(app_root, healed_config) {
+                Ok(active) => active,
+                Err(_) => anyhow::bail!(original_error),
+            };
+            let normalized = healed_active.config.clone();
+            let (yaml, json_raw) = serialize_config_snapshot(&normalized)?;
+            let conn = open_conn(db_path)?;
+            let tx = conn.unchecked_transaction()?;
+            let (healed_version, healed_at) =
+                persist_config_versioned(&tx, &yaml, &json_raw, "self-heal")
+                    .context("failed to persist self-healed config")?;
+            tx.commit()
+                .context("failed to commit self-healed config version")?;
+
+            Ok((
+                healed_active,
+                Some(ConfigSelfHealReport {
+                    original_error,
+                    healed_version,
+                    healed_at,
+                    changes,
+                }),
+            ))
+        }
+    }
+}
+
 pub fn resolve_and_validate_projects(
     app_root: &Path,
     config: &OrchestratorConfig,
@@ -660,11 +817,7 @@ pub fn load_or_seed_config(db_path: &Path) -> Result<(OrchestratorConfig, String
         let config = serde_json::from_str::<OrchestratorConfig>(&json_raw)
             .context("failed to parse config_json from sqlite")?;
         let config = normalize_config(config);
-        let yaml = export_manifest_resources(&config)
-            .iter()
-            .map(crate::resource::Resource::to_yaml)
-            .collect::<Result<Vec<_>>>()?
-            .join("---\n");
+        let (yaml, _json_raw) = serialize_config_snapshot(&config)?;
         return Ok((config, yaml, version, updated_at));
     }
 
@@ -757,12 +910,7 @@ pub fn persist_config_and_reload(
 ) -> Result<ConfigOverview> {
     let candidate = build_active_config(&state.app_root, config.clone())?;
     let normalized = candidate.config.clone();
-    let yaml = export_manifest_resources(&normalized)
-        .iter()
-        .map(crate::resource::Resource::to_yaml)
-        .collect::<Result<Vec<_>>>()?
-        .join("---\n");
-    let json_raw = serde_json::to_string(&normalized).context("failed to serialize config json")?;
+    let (yaml, json_raw) = serialize_config_snapshot(&normalized)?;
 
     let previous_config = {
         let active = read_active_config(state)?;
@@ -778,6 +926,12 @@ pub fn persist_config_and_reload(
     {
         let mut active = crate::state::write_active_config(state)?;
         *active = candidate;
+    }
+    if let Ok(mut error) = state.active_config_error.write() {
+        *error = None;
+    }
+    if let Ok(mut notice) = state.active_config_notice.write() {
+        *notice = None;
     }
 
     Ok(ConfigOverview {
@@ -815,12 +969,7 @@ pub fn persist_raw_config(
     author: &str,
 ) -> Result<ConfigOverview> {
     let normalized = normalize_config(config);
-    let yaml = export_manifest_resources(&normalized)
-        .iter()
-        .map(crate::resource::Resource::to_yaml)
-        .collect::<Result<Vec<_>>>()?
-        .join("---\n");
-    let json_raw = serde_json::to_string(&normalized).context("failed to serialize config json")?;
+    let (yaml, json_raw) = serialize_config_snapshot(&normalized)?;
     let conn = open_conn(db_path)?;
     let tx = conn.unchecked_transaction()?;
     let (next_version, now) = persist_config_versioned(&tx, &yaml, &json_raw, author)?;
@@ -1470,6 +1619,201 @@ mod tests {
         );
     }
 
+    #[test]
+    fn self_heal_drops_required_capability_from_known_builtin_step() {
+        let mut config = make_minimal_buildable_config();
+        let workflow = config
+            .workflows
+            .get_mut("basic")
+            .expect("missing basic workflow");
+        let step = workflow
+            .steps
+            .first_mut()
+            .expect("missing builtin self_test step");
+        step.required_capability = Some("self_test".to_string());
+
+        let healed = apply_self_heal_pass(&config)
+            .expect("self-heal pass should run")
+            .expect("expected a self-heal change");
+
+        let healed_step = healed
+            .0
+            .workflows
+            .get("basic")
+            .and_then(|wf| wf.steps.first())
+            .expect("missing healed step");
+        assert!(healed_step.required_capability.is_none());
+        assert!(
+            healed
+                .1
+                .iter()
+                .any(|change| change.rule
+                    == ConfigSelfHealRule::DropRequiredCapabilityFromBuiltinStep)
+        );
+    }
+
+    #[test]
+    fn self_heal_normalizes_execution_mode_mismatch() {
+        let mut config = make_minimal_buildable_config();
+        let workflow = config
+            .workflows
+            .get_mut("basic")
+            .expect("missing basic workflow");
+        let step = workflow
+            .steps
+            .first_mut()
+            .expect("missing builtin self_test step");
+        step.behavior.execution = ExecutionMode::Agent;
+
+        let healed = apply_self_heal_pass(&config)
+            .expect("self-heal pass should run")
+            .expect("expected a normalization change");
+
+        let healed_step = healed
+            .0
+            .workflows
+            .get("basic")
+            .and_then(|wf| wf.steps.first())
+            .expect("missing healed step");
+        assert_eq!(
+            healed_step.behavior.execution,
+            ExecutionMode::Builtin {
+                name: "self_test".to_string()
+            }
+        );
+        assert!(healed
+            .1
+            .iter()
+            .any(|change| change.rule == ConfigSelfHealRule::NormalizeStepExecutionMode));
+    }
+
+    #[test]
+    fn self_heal_returns_none_when_config_is_canonical() {
+        let config = make_minimal_buildable_config();
+
+        let healed = apply_self_heal_pass(&config).expect("self-heal pass should run");
+
+        assert!(healed.is_none(), "canonical config should not be rewritten");
+    }
+
+    #[test]
+    fn self_heal_does_not_fix_missing_workspace() {
+        let mut config = make_minimal_buildable_config();
+        config.defaults.workspace = "missing".to_string();
+
+        let healed = apply_self_heal_pass(&config).expect("self-heal pass should run");
+
+        assert!(
+            healed.is_none(),
+            "missing workspace is not a healable drift"
+        );
+    }
+
+    #[test]
+    fn build_active_config_with_self_heal_recovers_builtin_capability_conflict() {
+        let app_root = detect_app_root();
+        let (_temp_dir, db_path) = make_test_db();
+        let mut config = make_minimal_buildable_config();
+        let workflow = config
+            .workflows
+            .get_mut("basic")
+            .expect("missing basic workflow");
+        let step = workflow
+            .steps
+            .first_mut()
+            .expect("missing builtin self_test step");
+        step.required_capability = Some("self_test".to_string());
+        persist_raw_config(&db_path, config.clone(), "test-seed").expect("seed config");
+
+        let direct_error = build_active_config(&app_root, config)
+            .expect_err("legacy drift should fail direct active config construction");
+        assert!(direct_error
+            .to_string()
+            .contains("cannot define both builtin and required_capability"));
+
+        let (active, report) = build_active_config_with_self_heal(
+            &app_root,
+            &db_path,
+            load_raw_config_from_db(&db_path)
+                .expect("load raw config")
+                .expect("config row")
+                .0,
+        )
+        .expect("self-heal wrapper should recover");
+
+        assert_eq!(active.default_workflow_id, "basic");
+        let report = report.expect("expected self-heal report");
+        assert!(
+            !report.changes.is_empty(),
+            "expected recorded self-heal changes"
+        );
+    }
+
+    #[test]
+    fn build_active_config_with_self_heal_persists_self_heal_version() {
+        let app_root = detect_app_root();
+        let (_temp_dir, db_path) = make_test_db();
+        let mut config = make_minimal_buildable_config();
+        let workflow = config
+            .workflows
+            .get_mut("basic")
+            .expect("missing basic workflow");
+        workflow.steps.first_mut().unwrap().required_capability = Some("self_test".to_string());
+        let seeded = persist_raw_config(&db_path, config, "test-seed").expect("seed config");
+
+        let (_active, report) = build_active_config_with_self_heal(
+            &app_root,
+            &db_path,
+            load_raw_config_from_db(&db_path)
+                .expect("load raw config")
+                .expect("config row")
+                .0,
+        )
+        .expect("self-heal wrapper should recover");
+
+        let report = report.expect("expected self-heal report");
+        assert_eq!(report.healed_version, seeded.version + 1);
+        let conn = open_conn(&db_path).expect("open sqlite connection");
+        let latest_author: String = conn
+            .query_row(
+                "SELECT author FROM orchestrator_config_versions ORDER BY version DESC LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query latest config version author");
+        assert_eq!(latest_author, "self-heal");
+    }
+
+    #[test]
+    fn build_active_config_with_self_heal_returns_original_error_for_unhealable_config() {
+        let app_root = detect_app_root();
+        let (_temp_dir, db_path) = make_test_db();
+        let mut config = make_minimal_buildable_config();
+        config.defaults.workspace = "missing".to_string();
+        persist_raw_config(&db_path, config.clone(), "test-seed").expect("seed config");
+
+        let err = build_active_config_with_self_heal(&app_root, &db_path, config)
+            .expect_err("unhealable config should still fail");
+
+        assert!(
+            err.to_string()
+                .contains("defaults.workspace 'missing' does not exist"),
+            "expected original error to be preserved, got: {err}"
+        );
+        let conn = open_conn(&db_path).expect("open sqlite connection");
+        let version_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM orchestrator_config_versions",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count config versions");
+        assert_eq!(
+            version_count, 1,
+            "unhealable config must not persist new version"
+        );
+    }
+
     // --- Helper to build a minimal step ---
     fn make_step(id: &str, enabled: bool) -> WorkflowStepConfig {
         WorkflowStepConfig {
@@ -1541,6 +1885,36 @@ mod tests {
             agents,
             ..OrchestratorConfig::default()
         }
+    }
+
+    fn make_minimal_buildable_config() -> OrchestratorConfig {
+        let mut config = OrchestratorConfig::default();
+        config.defaults.workspace = "default".to_string();
+        config.defaults.workflow = "basic".to_string();
+        config.agents = make_config_with_agent("qa", "echo qa").agents;
+        config.workspaces.insert(
+            "default".to_string(),
+            crate::config::WorkspaceConfig {
+                root_path: ".".to_string(),
+                qa_targets: vec!["fixtures/qa-probe-targets".to_string()],
+                ticket_dir: "fixtures/ticket".to_string(),
+                self_referential: false,
+            },
+        );
+        config.workflows.insert(
+            "basic".to_string(),
+            make_workflow(vec![make_builtin_step("self_test", "self_test", true)]),
+        );
+        normalize_config(config)
+    }
+
+    fn make_test_db() -> (std::path::PathBuf, std::path::PathBuf) {
+        let temp_dir =
+            std::env::temp_dir().join(format!("config-load-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).expect("create config-load temp dir");
+        let db_path = temp_dir.join("agent_orchestrator.db");
+        crate::db::init_schema(&db_path).expect("initialize test schema");
+        (temp_dir, db_path)
     }
 
     // ======= now_ts tests =======

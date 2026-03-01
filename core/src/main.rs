@@ -47,8 +47,9 @@ fn init_state() -> Result<ManagedState> {
     let (db_path, logs_dir) = initialize_runtime(&app_root)?;
 
     let (config, _yaml, _version, _updated_at) = load_or_seed_config(&db_path)?;
-    let (active, active_config_error) = match config_load::build_active_config(&app_root, config.clone()) {
-        Ok(active) => {
+    let (active, active_config_error, active_config_notice) =
+        match config_load::build_active_config_with_self_heal(&app_root, &db_path, config.clone()) {
+            Ok((active, report)) => {
             let default_workspace = active
                 .workspaces
                 .get(&active.default_workspace_id)
@@ -59,15 +60,16 @@ fn init_state() -> Result<ManagedState> {
                 &active.default_workflow_id,
                 default_workspace,
             )?;
-            (active, None)
-        }
-        Err(error) => (
-            placeholder_active_config(config),
-            Some(format!(
-                "active config is not runnable; continue applying resources until configuration is complete: {error}"
-            )),
-        ),
-    };
+                (active, None, report)
+            }
+            Err(error) => (
+                placeholder_active_config(config),
+                Some(format!(
+                    "active config is not runnable; continue applying resources until configuration is complete: {error}"
+                )),
+                None,
+            ),
+        };
 
     let db_writer = Arc::new(crate::db_write::DbWriteCoordinator::new(&db_path)?);
     Ok(ManagedState {
@@ -77,6 +79,7 @@ fn init_state() -> Result<ManagedState> {
             logs_dir,
             active_config: RwLock::new(active),
             active_config_error: RwLock::new(active_config_error),
+            active_config_notice: RwLock::new(active_config_notice),
             running: Mutex::new(std::collections::HashMap::new()),
             agent_health: std::sync::RwLock::new(std::collections::HashMap::new()),
             agent_metrics: std::sync::RwLock::new(std::collections::HashMap::new()),

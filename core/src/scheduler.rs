@@ -625,6 +625,7 @@ mod tests {
                 default_workflow_id: String::new(),
             }),
             active_config_error: RwLock::new(None),
+            active_config_notice: RwLock::new(None),
             running: tokio::sync::Mutex::new(HashMap::new()),
             agent_health: RwLock::new(HashMap::new()),
             agent_metrics: RwLock::new(HashMap::new()),
