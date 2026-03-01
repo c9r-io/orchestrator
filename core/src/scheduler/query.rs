@@ -450,11 +450,8 @@ mod tests {
     use std::io::Write;
 
     fn test_dir(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "query-test-{}-{}",
-            name,
-            uuid::Uuid::new_v4()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("query-test-{}-{}", name, uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -903,8 +900,7 @@ mod tests {
         })
         .expect("insert command run");
 
-        let chunks =
-            stream_task_logs_impl(&state, &task_id, 10, false).expect("stream task logs");
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).expect("stream task logs");
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0].run_id, "run-stream-1");
         assert_eq!(chunks[0].phase, "qa");
@@ -953,8 +949,7 @@ mod tests {
         })
         .expect("insert command run");
 
-        let chunks =
-            stream_task_logs_impl(&state, &task_id, 10, false).expect("stream task logs");
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).expect("stream task logs");
         assert_eq!(chunks.len(), 1);
         assert!(chunks[0].content.contains("stdout content"));
         assert!(chunks[0].content.contains("[stderr]"));
@@ -1065,8 +1060,7 @@ mod tests {
     fn stream_task_logs_impl_no_runs_returns_empty() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
-        let chunks =
-            stream_task_logs_impl(&state, &task_id, 10, false).expect("stream empty logs");
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).expect("stream empty logs");
         assert!(chunks.is_empty());
     }
 }

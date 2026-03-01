@@ -140,8 +140,18 @@ mod tests {
     #[test]
     fn noop_sink_does_not_panic() {
         let sink = NoopSink;
-        sink.emit("task1", Some("item1"), "step_started", serde_json::json!({}));
-        sink.emit("task1", None, "task_completed", serde_json::json!({"status": "ok"}));
+        sink.emit(
+            "task1",
+            Some("item1"),
+            "step_started",
+            serde_json::json!({}),
+        );
+        sink.emit(
+            "task1",
+            None,
+            "task_completed",
+            serde_json::json!({"status": "ok"}),
+        );
     }
 
     #[test]

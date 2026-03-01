@@ -208,7 +208,9 @@ async fn run_task_loop_core(
             // Fallback: no steps in execution plan, run legacy path
             for item in &items {
                 process_item(&state, task_id, item, &task_item_paths, &task_ctx, &runtime).await?;
-                if runtime.stop_flag.load(Ordering::SeqCst) || is_task_paused_in_db(&state, task_id)? {
+                if runtime.stop_flag.load(Ordering::SeqCst)
+                    || is_task_paused_in_db(&state, task_id)?
+                {
                     continue 'cycle;
                 }
             }
@@ -249,7 +251,9 @@ async fn run_task_loop_core(
                         }
                     }
                 }
-                if runtime.stop_flag.load(Ordering::SeqCst) || is_task_paused_in_db(&state, task_id)? {
+                if runtime.stop_flag.load(Ordering::SeqCst)
+                    || is_task_paused_in_db(&state, task_id)?
+                {
                     continue 'cycle;
                 }
             }

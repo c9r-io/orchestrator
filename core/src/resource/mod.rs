@@ -279,9 +279,7 @@ impl Resource for RegisteredResource {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli_types::{
-        AgentSpec, AgentTemplatesSpec, ResourceSpec, WorkspaceSpec,
-    };
+    use crate::cli_types::{AgentSpec, AgentTemplatesSpec, ResourceSpec, WorkspaceSpec};
     use crate::config_load::read_active_config;
     use crate::test_utils::TestState;
 

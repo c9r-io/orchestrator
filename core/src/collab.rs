@@ -656,10 +656,14 @@ impl AgentContext {
 
         // Pipeline variables from previous steps
         if let Some(pipeline) = pipeline {
-            result =
-                result.replace("{build_output}", &escape_for_bash_dquote(&pipeline.prev_stdout));
-            result =
-                result.replace("{test_output}", &escape_for_bash_dquote(&pipeline.prev_stdout));
+            result = result.replace(
+                "{build_output}",
+                &escape_for_bash_dquote(&pipeline.prev_stdout),
+            );
+            result = result.replace(
+                "{test_output}",
+                &escape_for_bash_dquote(&pipeline.prev_stdout),
+            );
             result = result.replace("{diff}", &escape_for_bash_dquote(&pipeline.diff));
 
             // Build errors as JSON for AI agents to parse
@@ -681,8 +685,7 @@ impl AgentContext {
 
             // Custom pipeline vars
             for (key, value) in &pipeline.vars {
-                result =
-                    result.replace(&format!("{{{}}}", key), &escape_for_bash_dquote(value));
+                result = result.replace(&format!("{{{}}}", key), &escape_for_bash_dquote(value));
             }
         }
 
@@ -1256,10 +1259,7 @@ mod tests {
     #[test]
     fn test_escape_for_bash_dquote() {
         // Backticks (the exact issue: markdown with `resource.rs` etc.)
-        assert_eq!(
-            escape_for_bash_dquote("`resource.rs`"),
-            "\\`resource.rs\\`"
-        );
+        assert_eq!(escape_for_bash_dquote("`resource.rs`"), "\\`resource.rs\\`");
 
         // Dollar signs (prevent variable expansion)
         assert_eq!(escape_for_bash_dquote("$HOME"), "\\$HOME");
@@ -1396,10 +1396,8 @@ mod tests {
             vec![AgentEndpoint::agent("bob")],
             MessagePayload::Custom(serde_json::json!("req")),
         );
-        let response = AgentMessage::response_to(
-            &original,
-            MessagePayload::Custom(serde_json::json!("resp")),
-        );
+        let response =
+            AgentMessage::response_to(&original, MessagePayload::Custom(serde_json::json!("resp")));
         assert_eq!(response.msg_type, MessageType::Response);
         assert_eq!(response.correlation_id, Some(original.id));
         assert_eq!(response.sender.agent_id, "bob");

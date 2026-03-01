@@ -45,11 +45,8 @@ impl CliHandler {
                             println!("{}", serde_yaml::to_string(wf)?);
                         }
                         OutputFormat::Table => {
-                            let step_types: Vec<String> = wf
-                                .steps
-                                .iter()
-                                .map(|s| s.id.clone())
-                                .collect();
+                            let step_types: Vec<String> =
+                                wf.steps.iter().map(|s| s.id.clone()).collect();
                             println!("{:<20} {:<40}", name, step_types.join(", "));
                         }
                     }
@@ -241,11 +238,8 @@ impl CliHandler {
                         if !matches_selector(&metadata.labels, &selector_terms) {
                             return None;
                         }
-                        let steps: Vec<String> = workflow
-                            .steps
-                            .iter()
-                            .map(|s| s.id.clone())
-                            .collect();
+                        let steps: Vec<String> =
+                            workflow.steps.iter().map(|s| s.id.clone()).collect();
                         Some(json!({
                             "name": name,
                             "steps": steps,
@@ -311,11 +305,8 @@ impl CliHandler {
                             println!("{}", serde_yaml::to_string(wf)?);
                         }
                         OutputFormat::Table => {
-                            let step_types: Vec<String> = wf
-                                .steps
-                                .iter()
-                                .map(|s| s.id.clone())
-                                .collect();
+                            let step_types: Vec<String> =
+                                wf.steps.iter().map(|s| s.id.clone()).collect();
                             println!("{:<20} {:<40}", name, step_types.join(", "));
                         }
                     }

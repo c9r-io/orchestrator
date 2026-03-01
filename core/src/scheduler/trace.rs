@@ -237,8 +237,7 @@ fn build_cycles(events: &[EventDto], command_runs: &[CommandRunDto]) -> Vec<Cycl
                             Some(false) => Some(1),
                             None => None,
                         };
-                        step.duration_secs =
-                            duration_ms.map(|ms| ms as f64 / 1000.0);
+                        step.duration_secs = duration_ms.map(|ms| ms as f64 / 1000.0);
                         if agent_id.is_some() {
                             step.agent_id = agent_id;
                         }
@@ -340,7 +339,9 @@ fn detect_duplicate_runner(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
 
     for event in events {
         match event.event_type.as_str() {
-            "task_started" | "cycle_started" if event.payload.get("cycle").and_then(|v| v.as_u64()) == Some(1) => {
+            "task_started" | "cycle_started"
+                if event.payload.get("cycle").and_then(|v| v.as_u64()) == Some(1) =>
+            {
                 task_started_count += 1;
                 if task_started_count > 1 {
                     anomalies.push(Anomaly {
@@ -459,8 +460,7 @@ fn detect_missing_step_end(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
                     open.insert(key, event.created_at.clone());
                 }
             }
-            "step_finished" | "step_skipped" | "chain_step_finished"
-            | "dynamic_step_finished" => {
+            "step_finished" | "step_skipped" | "chain_step_finished" | "dynamic_step_finished" => {
                 if let Some(step) = step_id {
                     let key = (step.to_string(), event.task_item_id.clone());
                     open.remove(&key);
@@ -526,7 +526,10 @@ fn detect_empty_cycles(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
                 cycle_start = Some((cycle, event.created_at.clone()));
                 has_steps = false;
             }
-            "step_started" | "step_finished" | "step_skipped" | "chain_step_started"
+            "step_started"
+            | "step_finished"
+            | "step_skipped"
+            | "chain_step_started"
             | "dynamic_step_started" => {
                 has_steps = true;
             }
@@ -616,10 +619,7 @@ fn detect_unexpanded_template_var(command_runs: &[CommandRunDto], anomalies: &mu
             anomalies.push(Anomaly {
                 rule: "unexpanded_template_var".to_string(),
                 severity: Severity::Warning,
-                message: format!(
-                    "Command contains literal {} (phase={})",
-                    var, run.phase,
-                ),
+                message: format!("Command contains literal {} (phase={})", var, run.phase,),
                 at: Some(run.started_at.clone()),
             });
         }
@@ -691,11 +691,23 @@ pub fn render_trace_terminal(trace: &TaskTrace, verbose: bool) {
         "Wall time: {} | {} cycle{} | {} step{} | {} command{} ({} failed)",
         wall,
         trace.summary.total_cycles,
-        if trace.summary.total_cycles == 1 { "" } else { "s" },
+        if trace.summary.total_cycles == 1 {
+            ""
+        } else {
+            "s"
+        },
         trace.summary.total_steps,
-        if trace.summary.total_steps == 1 { "" } else { "s" },
+        if trace.summary.total_steps == 1 {
+            ""
+        } else {
+            "s"
+        },
         trace.summary.total_commands,
-        if trace.summary.total_commands == 1 { "" } else { "s" },
+        if trace.summary.total_commands == 1 {
+            ""
+        } else {
+            "s"
+        },
         trace.summary.failed_commands,
     );
 
@@ -721,10 +733,7 @@ pub fn render_trace_terminal(trace: &TaskTrace, verbose: bool) {
     // Cycles
     for cycle in &trace.cycles {
         println!();
-        println!(
-            "── Cycle {} ─────────────────────────────────",
-            cycle.cycle,
-        );
+        println!("── Cycle {} ─────────────────────────────────", cycle.cycle,);
         for step in &cycle.steps {
             let time = step
                 .started_at
@@ -766,14 +775,7 @@ pub fn render_trace_terminal(trace: &TaskTrace, verbose: bool) {
 
             println!(
                 "  {}  {}{} {:<14}\x1b[0m  {}{}{}{}",
-                time,
-                color,
-                icon,
-                step.step_id,
-                dur,
-                agent,
-                exit,
-                skip_info,
+                time, color, icon, step.step_id, dur, agent, exit, skip_info,
             );
 
             if verbose {
@@ -799,7 +801,12 @@ fn colorize_status(status: &str) -> String {
 fn format_duration(secs: f64) -> String {
     let total = secs as u64;
     if total >= 3600 {
-        format!("{}h {:02}m {:02}s", total / 3600, (total % 3600) / 60, total % 60)
+        format!(
+            "{}h {:02}m {:02}s",
+            total / 3600,
+            (total % 3600) / 60,
+            total % 60
+        )
     } else if total >= 60 {
         format!("{}m {:02}s", total / 60, total % 60)
     } else {
@@ -883,11 +890,40 @@ mod tests {
     #[test]
     fn single_cycle_with_steps() {
         let events = vec![
-            make_event(1, "cycle_started", json!({"cycle": 1}), "2025-01-01 10:00:00"),
-            make_item_event(2, "step_started", json!({"step": "plan"}), "2025-01-01 10:00:01", "item-1"),
-            make_item_event(3, "step_finished", json!({"step": "plan", "success": true, "duration_ms": 5000}), "2025-01-01 10:00:06", "item-1"),
-            make_item_event(4, "step_started", json!({"step": "implement"}), "2025-01-01 10:00:07", "item-1"),
-            make_item_event(5, "step_finished", json!({"step": "implement", "success": true, "duration_ms": 12000}), "2025-01-01 10:00:19", "item-1"),
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
+            make_item_event(
+                2,
+                "step_started",
+                json!({"step": "plan"}),
+                "2025-01-01 10:00:01",
+                "item-1",
+            ),
+            make_item_event(
+                3,
+                "step_finished",
+                json!({"step": "plan", "success": true, "duration_ms": 5000}),
+                "2025-01-01 10:00:06",
+                "item-1",
+            ),
+            make_item_event(
+                4,
+                "step_started",
+                json!({"step": "implement"}),
+                "2025-01-01 10:00:07",
+                "item-1",
+            ),
+            make_item_event(
+                5,
+                "step_finished",
+                json!({"step": "implement", "success": true, "duration_ms": 12000}),
+                "2025-01-01 10:00:19",
+                "item-1",
+            ),
             make_event(6, "task_completed", json!({}), "2025-01-01 10:00:20"),
         ];
 
@@ -905,12 +941,46 @@ mod tests {
     #[test]
     fn multi_cycle_trace() {
         let events = vec![
-            make_event(1, "cycle_started", json!({"cycle": 1}), "2025-01-01 10:00:00"),
-            make_item_event(2, "step_started", json!({"step": "plan"}), "2025-01-01 10:00:01", "item-1"),
-            make_item_event(3, "step_finished", json!({"step": "plan", "success": true, "duration_ms": 3000}), "2025-01-01 10:00:04", "item-1"),
-            make_event(4, "cycle_started", json!({"cycle": 2}), "2025-01-01 10:01:00"),
-            make_item_event(5, "step_started", json!({"step": "plan"}), "2025-01-01 10:01:01", "item-1"),
-            make_item_event(6, "step_finished", json!({"step": "plan", "success": true, "duration_ms": 2000}), "2025-01-01 10:01:03", "item-1"),
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
+            make_item_event(
+                2,
+                "step_started",
+                json!({"step": "plan"}),
+                "2025-01-01 10:00:01",
+                "item-1",
+            ),
+            make_item_event(
+                3,
+                "step_finished",
+                json!({"step": "plan", "success": true, "duration_ms": 3000}),
+                "2025-01-01 10:00:04",
+                "item-1",
+            ),
+            make_event(
+                4,
+                "cycle_started",
+                json!({"cycle": 2}),
+                "2025-01-01 10:01:00",
+            ),
+            make_item_event(
+                5,
+                "step_started",
+                json!({"step": "plan"}),
+                "2025-01-01 10:01:01",
+                "item-1",
+            ),
+            make_item_event(
+                6,
+                "step_finished",
+                json!({"step": "plan", "success": true, "duration_ms": 2000}),
+                "2025-01-01 10:01:03",
+                "item-1",
+            ),
             make_event(7, "task_completed", json!({}), "2025-01-01 10:01:04"),
         ];
 
@@ -924,8 +994,19 @@ mod tests {
     #[test]
     fn skipped_step_recorded() {
         let events = vec![
-            make_event(1, "cycle_started", json!({"cycle": 1}), "2025-01-01 10:00:00"),
-            make_item_event(2, "step_skipped", json!({"step": "qa", "reason": "prehook: build_failed"}), "2025-01-01 10:00:05", "item-1"),
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
+            make_item_event(
+                2,
+                "step_skipped",
+                json!({"step": "qa", "reason": "prehook: build_failed"}),
+                "2025-01-01 10:00:05",
+                "item-1",
+            ),
             make_event(3, "task_completed", json!({}), "2025-01-01 10:00:06"),
         ];
 
@@ -941,14 +1022,34 @@ mod tests {
     #[test]
     fn command_run_enriches_step() {
         let events = vec![
-            make_event(1, "cycle_started", json!({"cycle": 1}), "2025-01-01 10:00:00"),
-            make_item_event(2, "step_started", json!({"step": "plan"}), "2025-01-01 10:00:01", "item-1"),
-            make_item_event(3, "step_finished", json!({"step": "plan", "success": true, "duration_ms": 5000}), "2025-01-01 10:00:06", "item-1"),
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
+            make_item_event(
+                2,
+                "step_started",
+                json!({"step": "plan"}),
+                "2025-01-01 10:00:01",
+                "item-1",
+            ),
+            make_item_event(
+                3,
+                "step_finished",
+                json!({"step": "plan", "success": true, "duration_ms": 5000}),
+                "2025-01-01 10:00:06",
+                "item-1",
+            ),
         ];
         let runs = vec![make_run("plan", "item-1", Some(0), "agent-minimax")];
 
         let trace = build_trace("test-task", "completed", &events, &runs);
-        assert_eq!(trace.cycles[0].steps[0].agent_id.as_deref(), Some("agent-minimax"));
+        assert_eq!(
+            trace.cycles[0].steps[0].agent_id.as_deref(),
+            Some("agent-minimax")
+        );
         assert_eq!(trace.cycles[0].steps[0].exit_code, Some(0));
     }
 
@@ -957,12 +1058,25 @@ mod tests {
     #[test]
     fn detect_duplicate_runner_anomaly() {
         let events = vec![
-            make_event(1, "cycle_started", json!({"cycle": 1}), "2025-01-01 10:00:00"),
-            make_event(2, "cycle_started", json!({"cycle": 1}), "2025-01-01 10:00:05"),
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
+            make_event(
+                2,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:05",
+            ),
         ];
 
         let trace = build_trace("test-task", "running", &events, &[]);
-        let dup = trace.anomalies.iter().find(|a| a.rule == "duplicate_runner");
+        let dup = trace
+            .anomalies
+            .iter()
+            .find(|a| a.rule == "duplicate_runner");
         assert!(dup.is_some(), "should detect duplicate runner");
         assert_eq!(dup.unwrap().severity, Severity::Error);
     }
@@ -970,8 +1084,18 @@ mod tests {
     #[test]
     fn detect_overlapping_cycles_anomaly() {
         let events = vec![
-            make_event(1, "cycle_started", json!({"cycle": 1}), "2025-01-01 10:00:00"),
-            make_event(2, "cycle_started", json!({"cycle": 2}), "2025-01-01 10:00:05"),
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
+            make_event(
+                2,
+                "cycle_started",
+                json!({"cycle": 2}),
+                "2025-01-01 10:00:05",
+            ),
         ];
 
         let trace = build_trace("test-task", "running", &events, &[]);
@@ -986,9 +1110,26 @@ mod tests {
     #[test]
     fn detect_overlapping_steps_anomaly() {
         let events = vec![
-            make_event(1, "cycle_started", json!({"cycle": 1}), "2025-01-01 10:00:00"),
-            make_item_event(2, "step_started", json!({"step": "plan"}), "2025-01-01 10:00:01", "item-1"),
-            make_item_event(3, "step_started", json!({"step": "plan"}), "2025-01-01 10:00:02", "item-1"),
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
+            make_item_event(
+                2,
+                "step_started",
+                json!({"step": "plan"}),
+                "2025-01-01 10:00:01",
+                "item-1",
+            ),
+            make_item_event(
+                3,
+                "step_started",
+                json!({"step": "plan"}),
+                "2025-01-01 10:00:02",
+                "item-1",
+            ),
         ];
 
         let trace = build_trace("test-task", "running", &events, &[]);
@@ -1038,7 +1179,12 @@ mod tests {
     #[test]
     fn detect_orphan_command_anomaly() {
         let events = vec![
-            make_event(1, "cycle_started", json!({"cycle": 1}), "2025-01-01 10:00:00"),
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
             // No step_started for "plan" on "item-1"
         ];
         let runs = vec![make_run("plan", "item-1", Some(0), "agent-1")];
@@ -1051,8 +1197,19 @@ mod tests {
     #[test]
     fn detect_missing_step_end_anomaly() {
         let events = vec![
-            make_event(1, "cycle_started", json!({"cycle": 1}), "2025-01-01 10:00:00"),
-            make_item_event(2, "step_started", json!({"step": "plan"}), "2025-01-01 10:00:01", "item-1"),
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
+            make_item_event(
+                2,
+                "step_started",
+                json!({"step": "plan"}),
+                "2025-01-01 10:00:01",
+                "item-1",
+            ),
             // No step_finished for "plan"
             make_event(3, "task_completed", json!({}), "2025-01-01 10:00:10"),
         ];
@@ -1068,7 +1225,12 @@ mod tests {
     #[test]
     fn detect_empty_cycle_anomaly() {
         let events = vec![
-            make_event(1, "cycle_started", json!({"cycle": 1}), "2025-01-01 10:00:00"),
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
             make_event(2, "task_completed", json!({}), "2025-01-01 10:00:05"),
         ];
 
@@ -1080,9 +1242,26 @@ mod tests {
     #[test]
     fn detect_long_running_step_anomaly() {
         let events = vec![
-            make_event(1, "cycle_started", json!({"cycle": 1}), "2025-01-01 10:00:00"),
-            make_item_event(2, "step_started", json!({"step": "implement"}), "2025-01-01 10:00:01", "item-1"),
-            make_item_event(3, "step_finished", json!({"step": "implement", "success": true, "duration_ms": 700000}), "2025-01-01 10:11:41", "item-1"),
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
+            make_item_event(
+                2,
+                "step_started",
+                json!({"step": "implement"}),
+                "2025-01-01 10:00:01",
+                "item-1",
+            ),
+            make_item_event(
+                3,
+                "step_finished",
+                json!({"step": "implement", "success": true, "duration_ms": 700000}),
+                "2025-01-01 10:11:41",
+                "item-1",
+            ),
         ];
 
         let trace = build_trace("test-task", "completed", &events, &[]);
@@ -1107,9 +1286,26 @@ mod tests {
     #[test]
     fn clean_sequence_no_anomalies() {
         let events = vec![
-            make_event(1, "cycle_started", json!({"cycle": 1}), "2025-01-01 10:00:00"),
-            make_item_event(2, "step_started", json!({"step": "plan"}), "2025-01-01 10:00:01", "item-1"),
-            make_item_event(3, "step_finished", json!({"step": "plan", "success": true, "duration_ms": 5000}), "2025-01-01 10:00:06", "item-1"),
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
+            make_item_event(
+                2,
+                "step_started",
+                json!({"step": "plan"}),
+                "2025-01-01 10:00:01",
+                "item-1",
+            ),
+            make_item_event(
+                3,
+                "step_finished",
+                json!({"step": "plan", "success": true, "duration_ms": 5000}),
+                "2025-01-01 10:00:06",
+                "item-1",
+            ),
             make_event(4, "task_completed", json!({}), "2025-01-01 10:00:07"),
         ];
         let runs = vec![make_run("plan", "item-1", Some(0), "agent-1")];
@@ -1125,9 +1321,26 @@ mod tests {
     #[test]
     fn json_serialization_roundtrip() {
         let events = vec![
-            make_event(1, "cycle_started", json!({"cycle": 1}), "2025-01-01 10:00:00"),
-            make_item_event(2, "step_started", json!({"step": "plan"}), "2025-01-01 10:00:01", "item-1"),
-            make_item_event(3, "step_finished", json!({"step": "plan", "success": true, "duration_ms": 3000}), "2025-01-01 10:00:04", "item-1"),
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
+            make_item_event(
+                2,
+                "step_started",
+                json!({"step": "plan"}),
+                "2025-01-01 10:00:01",
+                "item-1",
+            ),
+            make_item_event(
+                3,
+                "step_finished",
+                json!({"step": "plan", "success": true, "duration_ms": 3000}),
+                "2025-01-01 10:00:04",
+                "item-1",
+            ),
             make_event(4, "task_completed", json!({}), "2025-01-01 10:00:05"),
         ];
 
@@ -1144,13 +1357,22 @@ mod tests {
     #[test]
     fn wall_time_calculated() {
         let events = vec![
-            make_event(1, "cycle_started", json!({"cycle": 1}), "2025-01-01 10:00:00"),
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
             make_event(2, "task_completed", json!({}), "2025-01-01 10:04:32"),
         ];
 
         let trace = build_trace("test-task", "completed", &events, &[]);
         assert!(trace.summary.wall_time_secs.is_some());
         let wall = trace.summary.wall_time_secs.unwrap();
-        assert!((wall - 272.0).abs() < 1.0, "wall time should be ~272s, got {}", wall);
+        assert!(
+            (wall - 272.0).abs() < 1.0,
+            "wall time should be ~272s, got {}",
+            wall
+        );
     }
 }

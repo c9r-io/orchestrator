@@ -379,11 +379,7 @@ pub fn reset_db(
     reset_db_by_path(&state.db_path, include_history, include_config)
 }
 
-pub fn reset_db_by_path(
-    db_path: &Path,
-    include_history: bool,
-    include_config: bool,
-) -> Result<()> {
+pub fn reset_db_by_path(db_path: &Path, include_history: bool, include_config: bool) -> Result<()> {
     let conn = open_conn(db_path)?;
     conn.execute("DELETE FROM events", [])?;
     conn.execute("DELETE FROM command_runs", [])?;

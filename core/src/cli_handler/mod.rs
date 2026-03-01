@@ -68,9 +68,7 @@ impl CliHandler {
                 command,
             } => self.handle_exec(*stdin, *tty, target, command),
             Commands::Verify(cmd) => self.handle_verify(cmd),
-            Commands::Check { workflow, output } => {
-                self.handle_check(workflow.as_deref(), *output)
-            }
+            Commands::Check { workflow, output } => self.handle_check(workflow.as_deref(), *output),
         }
     }
 }

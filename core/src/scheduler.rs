@@ -1,9 +1,9 @@
+pub mod check;
 mod item_executor;
 mod loop_engine;
 mod phase_runner;
 mod query;
 mod runtime;
-pub mod check;
 pub mod safety;
 mod task_state;
 pub mod trace;
@@ -488,10 +488,7 @@ mod tests {
         );
 
         // Verify the spill file exists and contains the full content
-        let spill_file = state
-            .logs_dir
-            .join(&created.id)
-            .join("plan_output.txt");
+        let spill_file = state.logs_dir.join(&created.id).join("plan_output.txt");
         assert!(
             spill_file.exists(),
             "spill file should exist at {}",
@@ -511,11 +508,20 @@ mod tests {
 
         let mut pipeline = crate::config::PipelineVariables::default();
         let small_value = "short value".to_string();
-        item_executor::spill_large_var(&dir, "task1", "plan_output", small_value.clone(), &mut pipeline);
+        item_executor::spill_large_var(
+            &dir,
+            "task1",
+            "plan_output",
+            small_value.clone(),
+            &mut pipeline,
+        );
 
         assert_eq!(pipeline.vars.get("plan_output").unwrap(), &small_value);
         // _path is always set now (even for small values)
-        let p = pipeline.vars.get("plan_output_path").expect("plan_output_path must be set");
+        let p = pipeline
+            .vars
+            .get("plan_output_path")
+            .expect("plan_output_path must be set");
         assert_eq!(std::fs::read_to_string(p).unwrap(), small_value);
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -528,7 +534,13 @@ mod tests {
 
         let mut pipeline = crate::config::PipelineVariables::default();
         let large_value = "X".repeat(PIPELINE_VAR_INLINE_LIMIT + 500);
-        item_executor::spill_large_var(&dir, "task1", "plan_output", large_value.clone(), &mut pipeline);
+        item_executor::spill_large_var(
+            &dir,
+            "task1",
+            "plan_output",
+            large_value.clone(),
+            &mut pipeline,
+        );
 
         let inline = pipeline.vars.get("plan_output").unwrap();
         assert!(inline.contains("truncated"));

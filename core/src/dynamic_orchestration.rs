@@ -1560,11 +1560,19 @@ mod tests {
         })
         .unwrap();
 
-        let entries: Vec<&str> = plan.get_entry_nodes().iter().map(|n| n.id.as_str()).collect();
+        let entries: Vec<&str> = plan
+            .get_entry_nodes()
+            .iter()
+            .map(|n| n.id.as_str())
+            .collect();
         assert_eq!(entries.len(), 1);
         assert!(entries.contains(&"start"));
 
-        let exits: Vec<&str> = plan.get_exit_nodes().iter().map(|n| n.id.as_str()).collect();
+        let exits: Vec<&str> = plan
+            .get_exit_nodes()
+            .iter()
+            .map(|n| n.id.as_str())
+            .collect();
         assert_eq!(exits.len(), 1);
         assert!(exits.contains(&"end"));
     }
@@ -1700,10 +1708,30 @@ mod tests {
             .unwrap();
         }
         // a -> b, a -> c, b -> d, c -> d
-        plan.add_edge(WorkflowEdge { from: "a".to_string(), to: "b".to_string(), condition: None }).unwrap();
-        plan.add_edge(WorkflowEdge { from: "a".to_string(), to: "c".to_string(), condition: None }).unwrap();
-        plan.add_edge(WorkflowEdge { from: "b".to_string(), to: "d".to_string(), condition: None }).unwrap();
-        plan.add_edge(WorkflowEdge { from: "c".to_string(), to: "d".to_string(), condition: None }).unwrap();
+        plan.add_edge(WorkflowEdge {
+            from: "a".to_string(),
+            to: "b".to_string(),
+            condition: None,
+        })
+        .unwrap();
+        plan.add_edge(WorkflowEdge {
+            from: "a".to_string(),
+            to: "c".to_string(),
+            condition: None,
+        })
+        .unwrap();
+        plan.add_edge(WorkflowEdge {
+            from: "b".to_string(),
+            to: "d".to_string(),
+            condition: None,
+        })
+        .unwrap();
+        plan.add_edge(WorkflowEdge {
+            from: "c".to_string(),
+            to: "d".to_string(),
+            condition: None,
+        })
+        .unwrap();
 
         let sorted = plan.topological_sort().unwrap();
         assert_eq!(sorted.len(), 4);

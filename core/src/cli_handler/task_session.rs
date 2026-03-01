@@ -101,12 +101,8 @@ impl CliHandler {
         repeatable: bool,
     ) -> Result<i32> {
         let resolved_id = resolve_task_id(&self.state, task_id)?;
-        crate::config::validate_step_type(step).map_err(|e| {
-            anyhow::anyhow!(
-                "invalid --step '{}': {}",
-                step, e
-            )
-        })?;
+        crate::config::validate_step_type(step)
+            .map_err(|e| anyhow::anyhow!("invalid --step '{}': {}", step, e))?;
 
         let repo = SqliteTaskRepository::new(self.state.db_path.clone());
         let runtime_row = repo.load_task_runtime_row(&resolved_id)?;
@@ -135,11 +131,9 @@ impl CliHandler {
             "init_once" | "ticket_scan" | "loop_guard" => Some(step.to_string()),
             _ => None,
         };
-        let required_capability = capability.map(|v| v.to_string()).or_else(|| {
-            match step {
-                "plan" | "qa" | "fix" | "retest" => Some(step.to_string()),
-                _ => None,
-            }
+        let required_capability = capability.map(|v| v.to_string()).or_else(|| match step {
+            "plan" | "qa" | "fix" | "retest" => Some(step.to_string()),
+            _ => None,
         });
         let is_guard = step == "loop_guard";
         let inserted_step = TaskExecutionStep {

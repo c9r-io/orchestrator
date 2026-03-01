@@ -242,12 +242,8 @@ pub fn should_seed_targets_from_active_tickets(
     execution_plan: &crate::config::TaskExecutionPlan,
 ) -> bool {
     target_files.is_none()
-        && execution_plan
-            .step_by_id("qa")
-            .is_none()
-        && execution_plan
-            .step_by_id("ticket_scan")
-            .is_some()
+        && execution_plan.step_by_id("qa").is_none()
+        && execution_plan.step_by_id("ticket_scan").is_some()
 }
 
 pub fn create_ticket_for_qa_failure(
@@ -570,7 +566,10 @@ mod tests {
             loop_policy: crate::config::WorkflowLoopConfig::default(),
             finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
         };
-        assert!(!should_seed_targets_from_active_tickets(None, &plan_with_qa));
+        assert!(!should_seed_targets_from_active_tickets(
+            None,
+            &plan_with_qa
+        ));
     }
 
     #[test]
@@ -656,7 +655,7 @@ mod tests {
             "docs/qa/test1.md".to_string(),
             "docs/qa/test2.md".to_string(),
             "docs/qa/nonexistent.md".to_string(), // should be filtered
-            "".to_string(),                         // should be filtered
+            "".to_string(),                       // should be filtered
         ];
 
         let result = collect_target_files(&dir, &[], Some(input)).unwrap();
@@ -675,8 +674,7 @@ mod tests {
         std::fs::write(qa_dir.join("README.md"), "# README").unwrap();
         std::fs::write(qa_dir.join("data.json"), "{}").unwrap();
 
-        let result =
-            collect_target_files(&dir, &["docs/qa".to_string()], None).unwrap();
+        let result = collect_target_files(&dir, &["docs/qa".to_string()], None).unwrap();
         assert_eq!(result.len(), 1);
         assert!(result[0].contains("auth.md"));
 

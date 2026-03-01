@@ -334,8 +334,7 @@ mod tests {
             .join("workspace/default/docs/qa/db_write_test.md");
         std::fs::write(&qa_file, "# db_write test\n").expect("seed qa file");
 
-        let created =
-            create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
+        let created = create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
         let task_id = created.id.clone();
 
         let conn = open_conn(&state.db_path).expect("open sqlite");
@@ -448,7 +447,10 @@ mod tests {
             .expect("query task");
 
         assert_eq!(status, "running");
-        assert!(completed_at.is_none(), "completed_at should be cleared for running");
+        assert!(
+            completed_at.is_none(),
+            "completed_at should be cleared for running"
+        );
     }
 
     #[test]
@@ -474,7 +476,10 @@ mod tests {
             )
             .expect("query task");
 
-        assert!(completed_at.is_none(), "completed_at should be cleared for pending");
+        assert!(
+            completed_at.is_none(),
+            "completed_at should be cleared for pending"
+        );
     }
 
     #[test]
@@ -503,7 +508,10 @@ mod tests {
             .expect("query task");
 
         assert_eq!(status, "failed");
-        assert!(completed_at.is_some(), "completed_at should be preserved for non-clearing status");
+        assert!(
+            completed_at.is_some(),
+            "completed_at should be preserved for non-clearing status"
+        );
     }
 
     // ── update_task_cycle_state ──

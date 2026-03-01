@@ -160,9 +160,7 @@ mod tests {
     /// Helper to seed a qa file and create a task, returning the state and task id.
     fn seed_task(fixture: &mut TestState) -> (std::sync::Arc<crate::state::InnerState>, String) {
         let state = fixture.build();
-        let qa_file = state
-            .app_root
-            .join("workspace/default/docs/qa/svc_test.md");
+        let qa_file = state.app_root.join("workspace/default/docs/qa/svc_test.md");
         std::fs::write(&qa_file, "# svc test\n").expect("seed qa file");
         let created = create_task_impl(
             &state,

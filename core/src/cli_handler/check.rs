@@ -7,11 +7,7 @@ use anyhow::Result;
 use super::CliHandler;
 
 impl CliHandler {
-    pub(super) fn handle_check(
-        &self,
-        workflow: Option<&str>,
-        output: OutputFormat,
-    ) -> Result<i32> {
+    pub(super) fn handle_check(&self, workflow: Option<&str>, output: OutputFormat) -> Result<i32> {
         let active = read_active_config(&self.state)?;
         let report = run_checks(&active, &self.state.app_root, workflow);
 
@@ -77,10 +73,7 @@ mod tests {
             verbose: false,
         };
 
-        assert_eq!(
-            handler.execute(&cli).expect("check should succeed"),
-            0
-        );
+        assert_eq!(handler.execute(&cli).expect("check should succeed"), 0);
     }
 
     #[test]
@@ -97,10 +90,7 @@ mod tests {
             verbose: false,
         };
 
-        assert_eq!(
-            handler.execute(&cli).expect("check json should succeed"),
-            0
-        );
+        assert_eq!(handler.execute(&cli).expect("check json should succeed"), 0);
     }
 
     #[test]

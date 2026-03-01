@@ -1,7 +1,7 @@
 use crate::config::{
     CaptureSource, ExecutionMode, ItemFinalizeContext, OnFailureAction, OnSuccessAction,
-    PipelineVariables, PostAction, StepPrehookContext, TaskExecutionStep,
-    TaskRuntimeContext, PIPELINE_VAR_INLINE_LIMIT,
+    PipelineVariables, PostAction, StepPrehookContext, TaskExecutionStep, TaskRuntimeContext,
+    PIPELINE_VAR_INLINE_LIMIT,
 };
 use crate::events::insert_event;
 use crate::prehook::{emit_item_finalize_event, evaluate_step_prehook};
@@ -159,8 +159,16 @@ impl StepExecutionAccumulator {
             qa_file_path: item.qa_file_path.clone(),
             item_status: self.item_status.clone(),
             task_status: "running".to_string(),
-            qa_exit_code: self.exit_codes.get("qa").or(self.exit_codes.get("qa_testing")).copied(),
-            fix_exit_code: self.exit_codes.get("fix").or(self.exit_codes.get("ticket_fix")).copied(),
+            qa_exit_code: self
+                .exit_codes
+                .get("qa")
+                .or(self.exit_codes.get("qa_testing"))
+                .copied(),
+            fix_exit_code: self
+                .exit_codes
+                .get("fix")
+                .or(self.exit_codes.get("ticket_fix"))
+                .copied(),
             retest_exit_code: self.exit_codes.get("retest").copied(),
             active_ticket_count: self.active_tickets.len() as i64,
             new_ticket_count: self.new_ticket_count,
@@ -198,21 +206,47 @@ impl StepExecutionAccumulator {
         item: &crate::dto::TaskItemRow,
         task_ctx: &TaskRuntimeContext,
     ) -> ItemFinalizeContext {
-        let qa_ran = self.step_ran.get("qa").or(self.step_ran.get("qa_testing")).copied().unwrap_or(false);
-        let qa_skipped = self.step_skipped.get("qa").or(self.step_skipped.get("qa_testing")).copied().unwrap_or(false);
+        let qa_ran = self
+            .step_ran
+            .get("qa")
+            .or(self.step_ran.get("qa_testing"))
+            .copied()
+            .unwrap_or(false);
+        let qa_skipped = self
+            .step_skipped
+            .get("qa")
+            .or(self.step_skipped.get("qa_testing"))
+            .copied()
+            .unwrap_or(false);
         let qa_enabled = qa_ran || qa_skipped;
-        let fix_ran = self.step_ran.get("fix").or(self.step_ran.get("ticket_fix")).copied().unwrap_or(false);
+        let fix_ran = self
+            .step_ran
+            .get("fix")
+            .or(self.step_ran.get("ticket_fix"))
+            .copied()
+            .unwrap_or(false);
         let fix_success = self.flags.get("fix_success").copied().unwrap_or(false);
         let fix_enabled = fix_ran
-            || self.step_skipped.get("fix").or(self.step_skipped.get("ticket_fix")).copied().unwrap_or(false)
-            || task_ctx.execution_plan.steps.iter().any(|s| {
-                (s.id == "fix" || s.id == "ticket_fix") && s.enabled
-            });
+            || self
+                .step_skipped
+                .get("fix")
+                .or(self.step_skipped.get("ticket_fix"))
+                .copied()
+                .unwrap_or(false)
+            || task_ctx
+                .execution_plan
+                .steps
+                .iter()
+                .any(|s| (s.id == "fix" || s.id == "ticket_fix") && s.enabled);
         let retest_ran = self.step_ran.get("retest").copied().unwrap_or(false);
         let retest_success = self.flags.get("retest_success").copied().unwrap_or(false);
         let retest_enabled = retest_ran
             || self.step_skipped.get("retest").copied().unwrap_or(false)
-            || task_ctx.execution_plan.steps.iter().any(|s| s.id == "retest" && s.enabled);
+            || task_ctx
+                .execution_plan
+                .steps
+                .iter()
+                .any(|s| s.id == "retest" && s.enabled);
 
         ItemFinalizeContext {
             task_id: task_id.to_string(),
@@ -221,8 +255,16 @@ impl StepExecutionAccumulator {
             qa_file_path: item.qa_file_path.clone(),
             item_status: self.item_status.clone(),
             task_status: "running".to_string(),
-            qa_exit_code: self.exit_codes.get("qa").or(self.exit_codes.get("qa_testing")).copied(),
-            fix_exit_code: self.exit_codes.get("fix").or(self.exit_codes.get("ticket_fix")).copied(),
+            qa_exit_code: self
+                .exit_codes
+                .get("qa")
+                .or(self.exit_codes.get("qa_testing"))
+                .copied(),
+            fix_exit_code: self
+                .exit_codes
+                .get("fix")
+                .or(self.exit_codes.get("ticket_fix"))
+                .copied(),
             retest_exit_code: self.exit_codes.get("retest").copied(),
             active_ticket_count: self.active_tickets.len() as i64,
             new_ticket_count: self.new_ticket_count,
@@ -271,7 +313,8 @@ impl StepExecutionAccumulator {
         for cap in captures {
             match cap.source {
                 CaptureSource::ExitCode => {
-                    self.exit_codes.insert(step_id.to_string(), result.exit_code);
+                    self.exit_codes
+                        .insert(step_id.to_string(), result.exit_code);
                     self.pipeline_vars
                         .vars
                         .insert(cap.var.clone(), result.exit_code.to_string());
@@ -548,7 +591,16 @@ pub async fn process_item(
     task_ctx: &TaskRuntimeContext,
     runtime: &RunningTask,
 ) -> Result<()> {
-    process_item_filtered(state, task_id, item, task_item_paths, task_ctx, runtime, None).await?;
+    process_item_filtered(
+        state,
+        task_id,
+        item,
+        task_item_paths,
+        task_ctx,
+        runtime,
+        None,
+    )
+    .await?;
     Ok(())
 }
 
@@ -569,9 +621,8 @@ pub async fn process_item_filtered(
     step_filter: Option<&HashSet<String>>,
 ) -> Result<PipelineVariables> {
     let item_id = item.id.as_str();
-    let should_run_step = |step_id: &str| -> bool {
-        step_filter.map_or(true, |f| f.contains(step_id))
-    };
+    let should_run_step =
+        |step_id: &str| -> bool { step_filter.map_or(true, |f| f.contains(step_id)) };
     let mut acc = StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone());
     // ── Unified step loop ────────────────────────────────────────────
 
@@ -687,10 +738,7 @@ pub async fn process_item_filtered(
                     json!({"step": "ticket_scan"}),
                 )?;
                 let tickets = scan_active_tickets_for_task_items(task_ctx, task_item_paths)?;
-                acc.active_tickets = tickets
-                    .get(&item.qa_file_path)
-                    .cloned()
-                    .unwrap_or_default();
+                acc.active_tickets = tickets.get(&item.qa_file_path).cloned().unwrap_or_default();
                 acc.new_ticket_count = acc.active_tickets.len() as i64;
                 acc.step_ran.insert(step.id.clone(), true);
                 insert_event(
@@ -908,10 +956,8 @@ pub async fn process_item_filtered(
                 }
                 PostAction::ScanTickets => {
                     let tickets = scan_active_tickets_for_task_items(task_ctx, task_item_paths)?;
-                    acc.active_tickets = tickets
-                        .get(&item.qa_file_path)
-                        .cloned()
-                        .unwrap_or_default();
+                    acc.active_tickets =
+                        tickets.get(&item.qa_file_path).cloned().unwrap_or_default();
                     acc.new_ticket_count = acc.active_tickets.len() as i64;
                 }
                 _ => {}
@@ -1073,9 +1119,7 @@ pub async fn process_item_filtered(
     }
 
     // Seed active tickets from existing ticket files if no scan step ran
-    if acc.active_tickets.is_empty()
-        && !acc.step_ran.contains_key("ticket_scan")
-    {
+    if acc.active_tickets.is_empty() && !acc.step_ran.contains_key("ticket_scan") {
         acc.active_tickets = list_existing_tickets_for_item(task_ctx, &item.qa_file_path)?;
         acc.new_ticket_count = acc.active_tickets.len() as i64;
     }
@@ -1126,11 +1170,8 @@ mod tests {
     use std::collections::HashMap;
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "item-exec-test-{}-{}",
-            name,
-            uuid::Uuid::new_v4()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("item-exec-test-{}-{}", name, uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -1158,7 +1199,10 @@ mod tests {
 
         assert_eq!(pipeline.vars.get("stdout").unwrap(), "hello world");
         // _path is always set now (even for small values)
-        let p = pipeline.vars.get("stdout_path").expect("stdout_path must be set");
+        let p = pipeline
+            .vars
+            .get("stdout_path")
+            .expect("stdout_path must be set");
         assert_eq!(std::fs::read_to_string(p).unwrap(), "hello world");
         std::fs::remove_dir_all(&dir).ok();
     }

@@ -175,7 +175,11 @@ mod tests {
             target_files: None,
         };
         let result = create_task_impl(&state, payload);
-        assert!(result.is_ok(), "create_task_impl should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "create_task_impl should succeed: {:?}",
+            result.err()
+        );
         let summary = result.unwrap();
         assert_eq!(summary.status, "pending");
         assert!(!summary.id.is_empty());
@@ -228,7 +232,11 @@ mod tests {
         let result = create_task_impl(&state, payload);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("workspace not found"), "unexpected error: {}", err);
+        assert!(
+            err.contains("workspace not found"),
+            "unexpected error: {}",
+            err
+        );
     }
 
     #[test]
@@ -247,7 +255,11 @@ mod tests {
         let result = create_task_impl(&state, payload);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("workflow not found"), "unexpected error: {}", err);
+        assert!(
+            err.contains("workflow not found"),
+            "unexpected error: {}",
+            err
+        );
     }
 
     #[test]

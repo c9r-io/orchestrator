@@ -1100,7 +1100,12 @@ mod tests {
 
     #[test]
     fn test_evaluate_finalize_rule_expression_true() {
-        let rule = make_rule("r1", "qa_skipped && active_ticket_count == 0", "skipped", None);
+        let rule = make_rule(
+            "r1",
+            "qa_skipped && active_ticket_count == 0",
+            "skipped",
+            None,
+        );
         let context = ItemFinalizeContext {
             qa_skipped: true,
             active_ticket_count: 0,
@@ -1113,7 +1118,12 @@ mod tests {
 
     #[test]
     fn test_evaluate_finalize_rule_expression_false() {
-        let rule = make_rule("r1", "qa_skipped && active_ticket_count == 0", "skipped", None);
+        let rule = make_rule(
+            "r1",
+            "qa_skipped && active_ticket_count == 0",
+            "skipped",
+            None,
+        );
         let context = ItemFinalizeContext {
             qa_skipped: false,
             active_ticket_count: 0,
@@ -1245,7 +1255,12 @@ mod tests {
 
     #[test]
     fn test_evaluate_finalize_rule_exit_codes() {
-        let rule = make_rule("r1", "qa_exit_code == 1 && fix_exit_code == 0", "fixed", None);
+        let rule = make_rule(
+            "r1",
+            "qa_exit_code == 1 && fix_exit_code == 0",
+            "fixed",
+            None,
+        );
         let context = ItemFinalizeContext {
             qa_exit_code: Some(1),
             fix_exit_code: Some(0),
@@ -1283,7 +1298,12 @@ mod tests {
 
     #[test]
     fn test_evaluate_finalize_rule_task_and_item_ids() {
-        let rule = make_rule("r1", "task_id == \"my-task\" && task_item_id == \"my-item\"", "matched", None);
+        let rule = make_rule(
+            "r1",
+            "task_id == \"my-task\" && task_item_id == \"my-item\"",
+            "matched",
+            None,
+        );
         let context = ItemFinalizeContext {
             task_id: "my-task".to_string(),
             task_item_id: "my-item".to_string(),
@@ -1360,7 +1380,12 @@ mod tests {
     #[test]
     fn test_resolve_workflow_finalize_outcome_no_match() {
         let finalize = WorkflowFinalizeConfig {
-            rules: vec![make_rule("r1", "active_ticket_count > 100", "skipped", None)],
+            rules: vec![make_rule(
+                "r1",
+                "active_ticket_count > 100",
+                "skipped",
+                None,
+            )],
         };
         let context = default_item_finalize_context();
         let result = resolve_workflow_finalize_outcome(&finalize, &context);
@@ -1521,8 +1546,7 @@ mod tests {
             step: "fix".to_string(),
             ..default_step_prehook_context()
         };
-        let result =
-            evaluate_step_prehook_expression("item_status == \"build_failed\"", &context);
+        let result = evaluate_step_prehook_expression("item_status == \"build_failed\"", &context);
         assert!(result.is_ok());
         assert!(result.unwrap());
     }
@@ -1544,8 +1568,7 @@ mod tests {
             task_id: "special-task".to_string(),
             ..default_step_prehook_context()
         };
-        let result =
-            evaluate_step_prehook_expression("task_id == \"special-task\"", &context);
+        let result = evaluate_step_prehook_expression("task_id == \"special-task\"", &context);
         assert!(result.is_ok());
         assert!(result.unwrap());
     }
@@ -1556,8 +1579,7 @@ mod tests {
             task_item_id: "item-42".to_string(),
             ..default_step_prehook_context()
         };
-        let result =
-            evaluate_step_prehook_expression("task_item_id == \"item-42\"", &context);
+        let result = evaluate_step_prehook_expression("task_item_id == \"item-42\"", &context);
         assert!(result.is_ok());
         assert!(result.unwrap());
     }
@@ -1568,10 +1590,8 @@ mod tests {
             qa_file_path: "/tmp/qa_report.md".to_string(),
             ..default_step_prehook_context()
         };
-        let result = evaluate_step_prehook_expression(
-            "qa_file_path == \"/tmp/qa_report.md\"",
-            &context,
-        );
+        let result =
+            evaluate_step_prehook_expression("qa_file_path == \"/tmp/qa_report.md\"", &context);
         assert!(result.is_ok());
         assert!(result.unwrap());
     }
@@ -1698,8 +1718,7 @@ mod tests {
             fix_required: true,
             ..default_step_prehook_context()
         };
-        let result =
-            evaluate_step_prehook_expression("qa_failed || fix_required", &context);
+        let result = evaluate_step_prehook_expression("qa_failed || fix_required", &context);
         assert!(result.is_ok());
         assert!(result.unwrap());
     }
@@ -1711,8 +1730,7 @@ mod tests {
             max_cycles: 5,
             ..default_step_prehook_context()
         };
-        let result =
-            evaluate_step_prehook_expression("cycle > 1 && cycle < max_cycles", &context);
+        let result = evaluate_step_prehook_expression("cycle > 1 && cycle < max_cycles", &context);
         assert!(result.is_ok());
         assert!(result.unwrap());
     }
