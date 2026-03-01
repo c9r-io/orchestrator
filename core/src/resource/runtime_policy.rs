@@ -1,0 +1,253 @@
+use crate::cli_types::{
+    OrchestratorResource, ResourceKind, ResourceSpec, ResumeSpec, RunnerSpec, RuntimePolicySpec,
+};
+use crate::config::{
+    OrchestratorConfig, ResumeConfig, RunnerConfig, RunnerExecutorKind, RunnerPolicy,
+};
+use anyhow::{anyhow, Result};
+
+use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
+
+#[derive(Debug, Clone)]
+pub struct RuntimePolicyResource {
+    pub metadata: ResourceMetadata,
+    pub spec: RuntimePolicySpec,
+}
+
+impl Resource for RuntimePolicyResource {
+    fn kind(&self) -> ResourceKind {
+        ResourceKind::RuntimePolicy
+    }
+
+    fn name(&self) -> &str {
+        &self.metadata.name
+    }
+
+    fn validate(&self) -> Result<()> {
+        super::validate_resource_name(self.name())
+    }
+
+    fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+        let incoming_runner = runner_spec_to_config(&self.spec.runner);
+        let incoming_resume = ResumeConfig {
+            auto: self.spec.resume.auto,
+        };
+        if super::serializes_equal(&config.runner, &incoming_runner)
+            && super::serializes_equal(&config.resume, &incoming_resume)
+        {
+            return ApplyResult::Unchanged;
+        }
+        config.runner = incoming_runner;
+        config.resume = incoming_resume;
+        ApplyResult::Configured
+    }
+
+    fn to_yaml(&self) -> Result<String> {
+        super::manifest_yaml(
+            ResourceKind::RuntimePolicy,
+            &self.metadata,
+            ResourceSpec::RuntimePolicy(self.spec.clone()),
+        )
+    }
+
+    fn get_from(config: &OrchestratorConfig, _name: &str) -> Option<Self> {
+        Some(Self {
+            metadata: super::metadata_with_name("runtime"),
+            spec: RuntimePolicySpec {
+                runner: runner_config_to_spec(&config.runner),
+                resume: ResumeSpec {
+                    auto: config.resume.auto,
+                },
+            },
+        })
+    }
+
+    fn delete_from(_config: &mut OrchestratorConfig, _name: &str) -> bool {
+        false
+    }
+}
+
+pub(super) fn build_runtime_policy(resource: OrchestratorResource) -> Result<RegisteredResource> {
+    let OrchestratorResource {
+        kind,
+        metadata,
+        spec,
+        ..
+    } = resource;
+    if kind != ResourceKind::RuntimePolicy {
+        return Err(anyhow!("resource kind/spec mismatch for RuntimePolicy"));
+    }
+    match spec {
+        ResourceSpec::RuntimePolicy(spec) => {
+            Ok(RegisteredResource::RuntimePolicy(RuntimePolicyResource {
+                metadata,
+                spec,
+            }))
+        }
+        _ => Err(anyhow!("resource kind/spec mismatch for RuntimePolicy")),
+    }
+}
+
+pub(super) fn runner_spec_to_config(spec: &RunnerSpec) -> RunnerConfig {
+    RunnerConfig {
+        shell: spec.shell.clone(),
+        shell_arg: spec.shell_arg.clone(),
+        policy: match spec.policy.as_str() {
+            "allowlist" => RunnerPolicy::Allowlist,
+            _ => RunnerPolicy::Legacy,
+        },
+        executor: match spec.executor.as_str() {
+            "shell" => RunnerExecutorKind::Shell,
+            _ => RunnerExecutorKind::Shell,
+        },
+        allowed_shells: spec.allowed_shells.clone(),
+        allowed_shell_args: spec.allowed_shell_args.clone(),
+        env_allowlist: spec.env_allowlist.clone(),
+        redaction_patterns: spec.redaction_patterns.clone(),
+    }
+}
+
+pub(super) fn runner_config_to_spec(config: &RunnerConfig) -> RunnerSpec {
+    RunnerSpec {
+        shell: config.shell.clone(),
+        shell_arg: config.shell_arg.clone(),
+        policy: match config.policy {
+            RunnerPolicy::Legacy => "legacy".to_string(),
+            RunnerPolicy::Allowlist => "allowlist".to_string(),
+        },
+        executor: match config.executor {
+            RunnerExecutorKind::Shell => "shell".to_string(),
+        },
+        allowed_shells: config.allowed_shells.clone(),
+        allowed_shell_args: config.allowed_shell_args.clone(),
+        env_allowlist: config.env_allowlist.clone(),
+        redaction_patterns: config.redaction_patterns.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli_types::{ProjectSpec, ResourceMetadata, ResourceSpec};
+    use crate::resource::{dispatch_resource, API_VERSION};
+
+    use super::super::test_fixtures::{make_config, runtime_policy_manifest};
+
+    #[test]
+    fn runtime_policy_dispatch_and_kind() {
+        let resource =
+            dispatch_resource(runtime_policy_manifest()).expect("dispatch should succeed");
+        assert_eq!(resource.kind(), ResourceKind::RuntimePolicy);
+        assert_eq!(resource.name(), "runtime");
+    }
+
+    #[test]
+    fn runtime_policy_apply_unchanged_when_same() {
+        let mut config = make_config();
+        let r1 = dispatch_resource(runtime_policy_manifest()).expect("dispatch should succeed");
+        r1.apply(&mut config);
+        assert_eq!(r1.apply(&mut config), ApplyResult::Unchanged);
+    }
+
+    #[test]
+    fn runtime_policy_apply_configured_on_change() {
+        let mut config = make_config();
+        let r1 = dispatch_resource(runtime_policy_manifest()).expect("dispatch should succeed");
+        r1.apply(&mut config);
+
+        // Change the runner policy
+        let mut manifest = runtime_policy_manifest();
+        if let ResourceSpec::RuntimePolicy(ref mut spec) = manifest.spec {
+            spec.runner.policy = "allowlist".to_string();
+        }
+        let r2 = dispatch_resource(manifest).expect("dispatch should succeed");
+        assert_eq!(r2.apply(&mut config), ApplyResult::Configured);
+    }
+
+    #[test]
+    fn runtime_policy_get_from_always_returns_some() {
+        let config = make_config();
+        let loaded = RuntimePolicyResource::get_from(&config, "runtime");
+        assert!(loaded.is_some());
+        assert_eq!(loaded.unwrap().metadata.name, "runtime");
+    }
+
+    #[test]
+    fn runtime_policy_delete_returns_false() {
+        let mut config = make_config();
+        assert!(!RuntimePolicyResource::delete_from(&mut config, "runtime"));
+    }
+
+    #[test]
+    fn runtime_policy_to_yaml() {
+        let resource =
+            dispatch_resource(runtime_policy_manifest()).expect("dispatch should succeed");
+        let yaml = resource.to_yaml().expect("should serialize");
+        assert!(yaml.contains("kind: RuntimePolicy"));
+        assert!(yaml.contains("/bin/bash"));
+    }
+
+    #[test]
+    fn build_runtime_policy_rejects_wrong_kind() {
+        let resource = OrchestratorResource {
+            api_version: API_VERSION.to_string(),
+            kind: ResourceKind::RuntimePolicy,
+            metadata: ResourceMetadata {
+                name: "bad".to_string(),
+                project: None,
+                labels: None,
+                annotations: None,
+            },
+            spec: ResourceSpec::Project(ProjectSpec { description: None }),
+        };
+        let err = dispatch_resource(resource).unwrap_err();
+        assert!(err.to_string().contains("mismatch"));
+    }
+
+    // ── runner_spec_to_config / runner_config_to_spec roundtrip ──────
+
+    #[test]
+    fn runner_spec_config_roundtrip() {
+        let spec = RunnerSpec {
+            shell: "/bin/zsh".to_string(),
+            shell_arg: "-c".to_string(),
+            policy: "allowlist".to_string(),
+            executor: "shell".to_string(),
+            allowed_shells: vec!["/bin/bash".to_string()],
+            allowed_shell_args: vec!["-c".to_string()],
+            env_allowlist: vec!["PATH".to_string()],
+            redaction_patterns: vec!["SECRET_.*".to_string()],
+        };
+
+        let config = runner_spec_to_config(&spec);
+        assert_eq!(config.shell, "/bin/zsh");
+        assert!(matches!(config.policy, RunnerPolicy::Allowlist));
+        assert!(matches!(config.executor, RunnerExecutorKind::Shell));
+        assert_eq!(config.allowed_shells, vec!["/bin/bash".to_string()]);
+        assert_eq!(config.env_allowlist, vec!["PATH".to_string()]);
+
+        let roundtripped = runner_config_to_spec(&config);
+        assert_eq!(roundtripped.shell, "/bin/zsh");
+        assert_eq!(roundtripped.policy, "allowlist");
+        assert_eq!(roundtripped.executor, "shell");
+        assert_eq!(roundtripped.allowed_shells, vec!["/bin/bash".to_string()]);
+    }
+
+    #[test]
+    fn runner_spec_legacy_policy() {
+        let spec = RunnerSpec {
+            shell: "/bin/sh".to_string(),
+            shell_arg: "-c".to_string(),
+            policy: "legacy".to_string(),
+            executor: "shell".to_string(),
+            allowed_shells: vec![],
+            allowed_shell_args: vec![],
+            env_allowlist: vec![],
+            redaction_patterns: vec![],
+        };
+        let config = runner_spec_to_config(&spec);
+        assert!(matches!(config.policy, RunnerPolicy::Legacy));
+        let back = runner_config_to_spec(&config);
+        assert_eq!(back.policy, "legacy");
+    }
+}
