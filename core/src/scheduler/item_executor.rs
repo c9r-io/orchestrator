@@ -617,6 +617,15 @@ pub async fn execute_guard_step(
     })
 }
 
+pub struct ProcessItemRequest<'a> {
+    pub task_id: &'a str,
+    pub item: &'a crate::dto::TaskItemRow,
+    pub task_item_paths: &'a [String],
+    pub task_ctx: &'a TaskRuntimeContext,
+    pub runtime: &'a RunningTask,
+    pub step_filter: Option<&'a HashSet<String>>,
+}
+
 pub async fn process_item(
     state: &Arc<InnerState>,
     task_id: &str,
@@ -628,12 +637,14 @@ pub async fn process_item(
     let mut acc = StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone());
     process_item_filtered(
         state,
-        task_id,
-        item,
-        task_item_paths,
-        task_ctx,
-        runtime,
-        None,
+        ProcessItemRequest {
+            task_id,
+            item,
+            task_item_paths,
+            task_ctx,
+            runtime,
+            step_filter: None,
+        },
         &mut acc,
     )
     .await?;
@@ -650,14 +661,17 @@ pub async fn process_item(
 /// Step-specific behaviors (on_failure, captures, post_actions) are declared as data in `StepBehavior`.
 pub async fn process_item_filtered(
     state: &Arc<InnerState>,
-    task_id: &str,
-    item: &crate::dto::TaskItemRow,
-    task_item_paths: &[String],
-    task_ctx: &TaskRuntimeContext,
-    runtime: &RunningTask,
-    step_filter: Option<&HashSet<String>>,
+    request: ProcessItemRequest<'_>,
     acc: &mut StepExecutionAccumulator,
 ) -> Result<()> {
+    let ProcessItemRequest {
+        task_id,
+        item,
+        task_item_paths,
+        task_ctx,
+        runtime,
+        step_filter,
+    } = request;
     let item_id = item.id.as_str();
     let should_run_step =
         |step_id: &str| -> bool { step_filter.map_or(true, |f| f.contains(step_id)) };

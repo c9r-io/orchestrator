@@ -256,7 +256,7 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    static ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     fn create_mock_binary(path: &Path, content: &[u8]) -> std::io::Result<()> {
         let parent = path.parent().unwrap();
@@ -587,7 +587,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_self_test_step_returns_nonzero_when_cargo_check_fails() {
-        let _env_guard = ENV_LOCK.lock().expect("lock env");
+        let _env_guard = ENV_LOCK.lock().await;
         let mut fixture = TestState::new();
         let state = fixture.build();
         let workspace_root = state.app_root.clone();
@@ -619,7 +619,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_self_test_step_success_with_manifest_validate() {
-        let _env_guard = ENV_LOCK.lock().expect("lock env");
+        let _env_guard = ENV_LOCK.lock().await;
         let mut fixture = TestState::new();
         let state = fixture.build();
         let workspace_root = state.app_root.clone();

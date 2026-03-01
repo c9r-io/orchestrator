@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use super::item_executor::{
     execute_guard_step, finalize_item_execution, process_item, process_item_filtered,
-    StepExecutionAccumulator,
+    ProcessItemRequest, StepExecutionAccumulator,
 };
 use super::phase_runner::{run_phase_with_rotation, RotatingPhaseRunRequest};
 use super::runtime::load_task_runtime_context;
@@ -230,12 +230,14 @@ async fn run_task_loop_core(
                                 StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone());
                             process_item_filtered(
                                 &state,
-                                task_id,
-                                anchor_item,
-                                &task_item_paths,
-                                &task_ctx,
-                                &runtime,
-                                Some(&segment.step_ids),
+                                ProcessItemRequest {
+                                    task_id,
+                                    item: anchor_item,
+                                    task_item_paths: &task_item_paths,
+                                    task_ctx: &task_ctx,
+                                    runtime: &runtime,
+                                    step_filter: Some(&segment.step_ids),
+                                },
                                 &mut task_acc,
                             )
                             .await?;
@@ -260,12 +262,14 @@ async fn run_task_loop_core(
                             });
                             process_item_filtered(
                                 &state,
-                                task_id,
-                                item,
-                                &task_item_paths,
-                                &task_ctx,
-                                &runtime,
-                                Some(&segment.step_ids),
+                                ProcessItemRequest {
+                                    task_id,
+                                    item,
+                                    task_item_paths: &task_item_paths,
+                                    task_ctx: &task_ctx,
+                                    runtime: &runtime,
+                                    step_filter: Some(&segment.step_ids),
+                                },
                                 acc,
                             )
                             .await?;
