@@ -387,7 +387,9 @@ pub fn validate_workflow_config(
             workflow_id
         );
     }
-    if workflow.loop_policy.guard.enabled {
+    if workflow.loop_policy.guard.enabled
+        && !matches!(workflow.loop_policy.mode, crate::config::LoopMode::Once)
+    {
         let has_loop_guard = config
             .agents
             .values()
@@ -481,7 +483,9 @@ fn validate_workflow_config_with_agents(
             workflow_id
         );
     }
-    if workflow.loop_policy.guard.enabled {
+    if workflow.loop_policy.guard.enabled
+        && !matches!(workflow.loop_policy.mode, crate::config::LoopMode::Once)
+    {
         let has_loop_guard = all_agents
             .values()
             .any(|a| a.get_template("loop_guard").is_some());
@@ -2451,6 +2455,7 @@ mod tests {
     #[test]
     fn validate_workflow_rejects_guard_enabled_without_loop_guard_agent() {
         let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.loop_policy.mode = LoopMode::Infinite;
         workflow.loop_policy.guard.enabled = true;
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
@@ -2464,12 +2469,27 @@ mod tests {
     #[test]
     fn validate_workflow_accepts_guard_enabled_with_loop_guard_agent() {
         let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.loop_policy.mode = LoopMode::Infinite;
         workflow.loop_policy.guard.enabled = true;
         let config = make_config_with_agent("loop_guard", "loop_guard_template.md");
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(
             result.is_ok(),
             "guard with agent should pass: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn validate_workflow_skips_guard_check_for_once_mode() {
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.loop_policy.mode = LoopMode::Once;
+        workflow.loop_policy.guard.enabled = true;
+        let config = OrchestratorConfig::default();
+        let result = validate_workflow_config(&config, &workflow, "test-wf");
+        assert!(
+            result.is_ok(),
+            "once mode should skip guard agent check: {:?}",
             result.err()
         );
     }

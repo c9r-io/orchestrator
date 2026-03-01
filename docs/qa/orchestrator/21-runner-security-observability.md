@@ -36,43 +36,20 @@ Ensure `policy=allowlist` is rejected when `allowed_shells` or `allowed_shell_ar
 1. Create invalid config:
    ```bash
    cat > /tmp/runner-allowlist-invalid.yaml << 'YAML'
-   runner:
-     policy: allowlist
-     executor: shell
-     shell: /bin/bash
-     shell_arg: -lc
-     allowed_shells: []
-     allowed_shell_args: []
-   resume:
-     auto: false
-   defaults:
-     workspace: default
-     workflow: qa_only
-   workspaces:
-     default:
-       root_path: .
-       qa_targets: [docs/qa]
-       ticket_dir: docs/ticket
-   agents:
-     mock:
-       metadata:
-         name: mock
-       capabilities: [qa]
-       templates:
-         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[]}'"
-   workflows:
-     qa_only:
-       steps:
-         - id: qa
-           required_capability: qa
-           enabled: true
-       loop:
-         mode: once
-         guard:
-           enabled: false
-           stop_when_no_unresolved: true
-       finalize:
-         rules: []
+   apiVersion: orchestrator.dev/v2
+   kind: RuntimePolicy
+   metadata:
+     name: runtime
+   spec:
+     runner:
+       policy: allowlist
+       executor: shell
+       shell: /bin/bash
+       shell_arg: -lc
+       allowed_shells: []
+       allowed_shell_args: []
+     resume:
+       auto: false
    YAML
    ```
 2. Validate config:

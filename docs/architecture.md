@@ -144,3 +144,19 @@ The Agent Orchestrator is distributed as a single binary or run via cargo/script
 - **Structured Logs**: All significant actions are recorded in the `events` table in SQLite.
 - **Execution Logs**: Detailed stdout/stderr from every agent command is stored in `data/logs/{task_id}/`.
 - **Debug Command**: The CLI provides a `debug` command to inspect internal state and configuration.
+
+## 7. Self-Bootstrap & Survival Capabilities
+
+The orchestrator is designed with a unique capability to safely modify and compile its own source code through the `self-bootstrap` workflow. This is achieved via a **2-Cycle Execution Strategy** and protected by a robust **4-Layer Survival Mechanism**:
+
+### 7.1 2-Cycle Strategy for Self-Recursion
+To isolate production environment modifications from the validation pipeline, the self-bootstrap workflow operates in two distinct cycles:
+*   **Cycle 1 (Production)**: Focuses purely on feature development (`plan` -> `qa_doc_gen` -> `implement` -> `self_test`).
+*   **Cycle 2 (Validation)**: Acts as a convergence/review phase (`qa_testing` -> `ticket_fix` -> `align_tests` -> `doc_governance`).
+
+### 7.2 The 4-Layer Survival Mechanism
+Because the AI agents are given the authority to modify the core orchestrator, structural safeguards prevent the system from permanently destroying its own execution environment:
+1.  **Layer 1 (Binary Snapshot)**: At the beginning of a cycle, a known-good release binary is snapshotted to a `.stable` backup file.
+2.  **Layer 2 (Self-Test Gate)**: Following any code modifications (the `implement` step), a mandatory `self_test` step compiles the code and runs unit tests (`cargo check && cargo test`). If it fails, the execution halts before permanent damage occurs.
+3.  **Layer 3 (Self-Referential Enforcement)**: Workspaces marked as `self_referential: true` enforce strict configuration rules. The orchestrator will refuse to start if it lacks an automated rollback policy or a defined checkpoint strategy.
+4.  **Layer 4 (Watchdog script)**: A background watchdog monitors the live system. If consecutive runtime crashes are detected (indicating a corrupt compiler output managed to slip through), it forcefully restores the `.stable` binary snapshot and restarts the service.

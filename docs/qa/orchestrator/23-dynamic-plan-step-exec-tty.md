@@ -61,17 +61,22 @@ SELECT COUNT(*) FROM tasks;
 ### Preconditions
 
 - Runtime is initialized and a valid orchestrator config is applied.
+- Config includes at least one agent with both `plan` and `qa` capabilities (required for Scenario 3 execution).
 - At least one task exists and has step `qa` in `execution_plan_json`.
 
 ### Steps
 
-1. Create isolated task:
+1. Apply manifest with plan-capable agent and create isolated task:
    ```bash
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/output-formats.yaml
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
    ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
    TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "plan-insert" --goal "insert plan before qa" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
+
+   > **Troubleshooting**: If `task start` in Scenario 3 fails with `No healthy agent found with capability: plan`, verify the applied config includes an agent with `plan` capability: `./scripts/orchestrator.sh get agents | grep plan`.
 2. Insert plan step:
    ```bash
    ./scripts/orchestrator.sh task edit "${TASK_ID}" --insert-before qa --step plan --tty

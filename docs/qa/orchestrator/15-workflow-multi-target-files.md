@@ -16,11 +16,18 @@ Entry point: `./scripts/orchestrator.sh task <command>`
 Project setup (run once):
 
 ```bash
+./scripts/orchestrator.sh db reset --force --include-config
+./scripts/orchestrator.sh init
+
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
 ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
 ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
 ```
+
+> Note: DB reset is required to clear any residual workflows from prior test runs
+> that may cause config validation errors (e.g., stale workflows requiring
+> missing agent templates).
 
 ---
 
@@ -28,6 +35,7 @@ QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 
 ### Preconditions
 
+- DB reset and project setup completed (see Background).
 - Workspace and workflow are available.
 - Multiple target files exist in repository.
 - Project is prepared: `./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force`
@@ -60,6 +68,13 @@ QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 - A separate task item is created for each `--target-file` input.
 - Progress reflects multi-item execution (`X/Y`).
 - Task status is consistent with combined item results.
+
+### Troubleshooting
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| `Error: active config is not runnable ... loop.guard enabled but no agent has loop_guard template` | Residual workflow from a prior test run exists in the DB | Reset DB: `./scripts/orchestrator.sh db reset --force --include-config && ./scripts/orchestrator.sh init` |
+| `Error: load task details failed ... task not found` | Task failed during execution and info lookup uses wrong project scope | Ensure `--project "${QA_PROJECT}"` is passed to `task info` |
 
 ---
 

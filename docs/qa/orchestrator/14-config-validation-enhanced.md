@@ -73,29 +73,48 @@ cd ..
 
 ### Goal
 
-验证配置校验能识别多个结构性错误并聚合输出。
+验证配置校验能识别多个资源级错误并逐个报告。
 
-> Note: Config must be serde-deserializable (all required struct fields present)
-> for post-deserialization semantic validation to aggregate errors.
-> Maps with `#[serde(default)]` deserialize as empty maps, so empty `workspaces`,
-> `agents`, and `workflows` maps pass serde but fail semantic validation.
+> Note: `manifest validate` requires multi-document YAML with `apiVersion/kind/metadata/spec`.
+> Per-document resource-level errors are aggregated; cross-resource semantic errors
+> (e.g., empty workspaces) are reported as a single error from `build_active_config`.
+
+### Preconditions
+
+```bash
+./scripts/orchestrator.sh db reset --force --include-config
+./scripts/orchestrator.sh init
+```
 
 ### Steps
 
-1. 创建包含多个语义错误的配置 (serde 可解析但语义无效):
+1. 创建包含多个资源级错误的配置 (每个文档都包含一个校验错误):
    ```bash
    cat > /tmp/multi-error.yaml << 'YAML'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   resume:
-     auto: false
-   defaults:
-     workspace: nonexistent
-     workflow: nonexistent
-   workspaces: {}
-   agents: {}
-   workflows: {}
+   apiVersion: orchestrator.dev/v2
+   kind: Workspace
+   metadata:
+     name: ""
+   spec:
+     root_path: /tmp
+     qa_targets:
+       - docs/qa
+     ticket_dir: docs/ticket
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: RuntimePolicy
+   metadata:
+     name: runtime
+   spec:
+     runner:
+       shell: /bin/bash
+       shell_arg: -lc
+       policy: allowlist
+       executor: shell
+       allowed_shells: []
+       allowed_shell_args: []
+     resume:
+       auto: false
    YAML
    ```
 2. 执行:
@@ -106,7 +125,13 @@ cd ..
 ### Expected
 
 - 命令返回非零退出码
-- 输出包含多个校验错误信息 (e.g., workspaces empty, agents empty, workflows empty, invalid defaults references)
+- 输出包含多个校验错误 (e.g., `metadata.name cannot be empty`, `runner.allowed_shells cannot be empty when policy=allowlist`)
+
+### Troubleshooting
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| Error: `missing field apiVersion` | Config uses flat format instead of resource format | Use multi-document YAML with `apiVersion/kind/metadata/spec` |
 
 ---
 
@@ -227,8 +252,7 @@ cd ..
 ### Expected
 
 - 命令返回 0
-- 输出包含 "Configuration is valid"
-- 输出包含规范化后的 YAML
+- 输出包含 "Manifest is valid"
 
 ---
 

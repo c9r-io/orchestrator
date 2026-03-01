@@ -135,6 +135,31 @@ mod tests {
     }
 
     #[test]
+    fn export_validate_roundtrip_all_kinds() {
+        use crate::resource::parse::parse_resources_from_yaml;
+
+        let config = make_config();
+        let resources = export_manifest_resources(&config);
+        let mut yaml_parts: Vec<String> = Vec::new();
+        for r in &resources {
+            let yaml = r.to_yaml().unwrap();
+            yaml_parts.push(yaml);
+        }
+        let combined = yaml_parts.join("---\n");
+        let reparsed = parse_resources_from_yaml(&combined).expect("round-trip parse should work");
+        for res in &reparsed {
+            let dispatched = dispatch_resource(res.clone());
+            assert!(
+                dispatched.is_ok(),
+                "dispatch failed for kind {:?}, spec variant: {:?}\nyaml:\n{}",
+                res.kind,
+                std::mem::discriminant(&res.spec),
+                combined
+            );
+        }
+    }
+
+    #[test]
     fn export_manifest_resources_preserves_labels_annotations() {
         let mut config = make_config();
         let resource = OrchestratorResource {

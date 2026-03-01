@@ -202,11 +202,6 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 - Fresh sqlite state (`manifest validate` merges the manifest with existing DB config; residual agents with matching templates will cause validation to pass)
 
-```bash
-./scripts/orchestrator.sh db reset --force --include-config
-./scripts/orchestrator.sh init
-```
-
 ### Goal
 
 验证检测到 workflow 引用不存在的 agent 模板。
@@ -215,7 +210,13 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 ### Steps
 
-1. 创建无效配置 (workflow 需要 qa 但没有 agent 提供 qa 模板):
+1. **Reset DB** (critical — residual agents in DB with matching templates will cause a false pass):
+   ```bash
+   ./scripts/orchestrator.sh db reset --force --include-config
+   ./scripts/orchestrator.sh init
+   ```
+
+2. 创建无效配置 (workflow 需要 qa 但没有 agent 提供 qa 模板):
    ```bash
    cat > /tmp/invalid-template.yaml << 'EOF'
    apiVersion: orchestrator.dev/v2
@@ -252,14 +253,14 @@ Entry point: `./scripts/orchestrator.sh <command>`
    EOF
    ```
 
-2. 验证配置:
+3. 验证配置:
    ```bash
    ./scripts/orchestrator.sh manifest validate -f /tmp/invalid-template.yaml
    ```
 
 ### Expected
 
-- 错误信息包含: `No agent has template for step 'qa'` 或类似
+- 错误信息包含: `no agent has template for step 'qa'` 或类似
 
 ### Troubleshooting
 

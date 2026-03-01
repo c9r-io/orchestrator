@@ -98,6 +98,7 @@ pub enum ResourceSpec {
 
 /// Project resource specification.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(deny_unknown_fields)]
 pub struct ProjectSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -267,6 +268,7 @@ pub struct AgentTemplatesSpec {
 /// Workflow resource specification.
 /// Defines a workflow pipeline with steps, loop policy, and finalization rules.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct WorkflowSpec {
     /// Workflow execution steps
     #[serde(default)]

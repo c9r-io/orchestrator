@@ -24,7 +24,20 @@ impl Resource for RuntimePolicyResource {
     }
 
     fn validate(&self) -> Result<()> {
-        super::validate_resource_name(self.name())
+        super::validate_resource_name(self.name())?;
+        if self.spec.runner.policy == "allowlist" {
+            if self.spec.runner.allowed_shells.is_empty() {
+                return Err(anyhow!(
+                    "runner.allowed_shells cannot be empty when policy=allowlist"
+                ));
+            }
+            if self.spec.runner.allowed_shell_args.is_empty() {
+                return Err(anyhow!(
+                    "runner.allowed_shell_args cannot be empty when policy=allowlist"
+                ));
+            }
+        }
+        Ok(())
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
@@ -231,6 +244,57 @@ mod tests {
         assert_eq!(roundtripped.policy, "allowlist");
         assert_eq!(roundtripped.executor, "shell");
         assert_eq!(roundtripped.allowed_shells, vec!["/bin/bash".to_string()]);
+    }
+
+    #[test]
+    fn validate_rejects_allowlist_with_empty_shells() {
+        let mut manifest = runtime_policy_manifest();
+        if let ResourceSpec::RuntimePolicy(ref mut spec) = manifest.spec {
+            spec.runner.policy = "allowlist".to_string();
+            spec.runner.allowed_shells = vec![];
+            spec.runner.allowed_shell_args = vec!["-lc".to_string()];
+        }
+        let resource = dispatch_resource(manifest).expect("dispatch should succeed");
+        let err = resource.validate().unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("runner.allowed_shells cannot be empty")
+        );
+    }
+
+    #[test]
+    fn validate_rejects_allowlist_with_empty_shell_args() {
+        let mut manifest = runtime_policy_manifest();
+        if let ResourceSpec::RuntimePolicy(ref mut spec) = manifest.spec {
+            spec.runner.policy = "allowlist".to_string();
+            spec.runner.allowed_shells = vec!["/bin/bash".to_string()];
+            spec.runner.allowed_shell_args = vec![];
+        }
+        let resource = dispatch_resource(manifest).expect("dispatch should succeed");
+        let err = resource.validate().unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("runner.allowed_shell_args cannot be empty")
+        );
+    }
+
+    #[test]
+    fn validate_accepts_allowlist_with_populated_lists() {
+        let mut manifest = runtime_policy_manifest();
+        if let ResourceSpec::RuntimePolicy(ref mut spec) = manifest.spec {
+            spec.runner.policy = "allowlist".to_string();
+            spec.runner.allowed_shells = vec!["/bin/bash".to_string()];
+            spec.runner.allowed_shell_args = vec!["-lc".to_string()];
+        }
+        let resource = dispatch_resource(manifest).expect("dispatch should succeed");
+        assert!(resource.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_accepts_legacy_with_empty_lists() {
+        let manifest = runtime_policy_manifest();
+        let resource = dispatch_resource(manifest).expect("dispatch should succeed");
+        assert!(resource.validate().is_ok());
     }
 
     #[test]

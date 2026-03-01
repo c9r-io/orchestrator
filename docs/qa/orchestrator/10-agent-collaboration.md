@@ -22,11 +22,17 @@ Entry point: `./scripts/orchestrator.sh`
 ### Project Isolation Setup
 
 ```bash
+./scripts/orchestrator.sh db reset --force --include-config
+./scripts/orchestrator.sh init
+
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
 ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
 ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
 ```
+
+> Note: DB reset is required to clear residual workflows from prior test runs
+> that may cause config validation or FOREIGN KEY errors.
 
 ---
 
