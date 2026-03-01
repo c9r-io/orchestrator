@@ -38,36 +38,38 @@ Run once before scenarios:
 
 ```bash
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
+./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --from-workspace cli_probe_ws --workflow probe_task_scoped --force
 ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/output-formats.yaml
 ```
 
 ### Target Resolution Supplemental Checks
 
-Before Scenario 1, also verify `task create --project <project> ...` target resolution in an isolated app root with a minimal config:
+Before Scenario 1, verify `task create --project <project> ...` target resolution using the fixed probe fixtures:
 
-1. Prepare isolated runtime and apply a task-scoped-only workflow plus an item-scoped workflow.
-2. For the task-scoped-only workflow:
-   - omit `--target-file`, confirm `task create --project <project> --no-start` succeeds
-   - pass one `--target-file`, confirm success
-   - pass two `--target-file`, confirm the command fails
-3. For the item-scoped workflow:
-   - omit `--target-file`, confirm the command fails when `qa_targets` is empty
-   - pass one or more `--target-file`, confirm the command succeeds
+1. For the task-scoped workflow on the populated workspace:
+   - `./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_task_scoped --name "task-default" --goal "task default" --no-start`
+   - `./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_task_scoped --name "task-single" --goal "task single" --target-file fixtures/qa-probe-targets/sample-a.md --no-start`
+   - `./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_task_scoped --name "task-multi" --goal "task multi" --target-file fixtures/qa-probe-targets/sample-a.md --target-file fixtures/qa-probe-targets/sample-b.md --no-start`
+2. For the item-scoped workflow on the empty workspace:
+   - `./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workspace cli_probe_empty_ws --workflow probe_item_scoped --name "item-empty" --goal "item empty" --no-start`
+3. For the item-scoped workflow with explicit targets:
+   - `./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_item_scoped --name "item-explicit" --goal "item explicit" --target-file fixtures/qa-probe-targets/sample-a.md --target-file fixtures/qa-probe-targets/sample-b.md --no-start`
 
 Expected:
-- Task-scoped-only workflows use a synthetic anchor when `--target-file` is omitted.
+- `probe_task_scoped` uses a synthetic anchor when `--target-file` is omitted.
 - Explicit `--target-file` overrides the default source.
-- Multiple explicit targets are rejected only for task-scoped-only workflows.
+- Multiple explicit targets are rejected for `probe_task_scoped`.
+- `probe_item_scoped` fails on `cli_probe_empty_ws` when `--target-file` is omitted.
+- `probe_item_scoped` succeeds with one or more explicit targets.
 
 ### Runtime Control Supplemental Checks
 
-Before Scenario 4, verify the runtime control commands against a real in-flight task:
+Before Scenario 4, verify the runtime control commands against a real in-flight task from the fixed probe fixtures:
 
 1. Create a detached task that will run long enough to observe live state:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "runtime-control" --goal "runtime control validation" --detach | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_runtime_control --name "runtime-control" --goal "runtime control validation" --detach | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 2. Start a worker in another terminal and wait for the task to enter `running`.
 3. While the task is still running:
@@ -81,8 +83,8 @@ Expected:
 - `task logs` succeeds even if some run logs are not yet readable, using per-run placeholders when needed.
 - `task watch` renders a frame immediately and should not clear to a blank screen before data is available.
 - `task watch` includes a `Scope` column and reports `task` vs `item` from explicit step metadata, not from whether an anchor item exists.
-- For a long-running command step with no meaningful new output for multiple heartbeats, `task watch` surfaces a `LOW OUTPUT` indicator instead of only showing a live PID.
-- For a long-running step that keeps producing output, `task watch` continues to show progress details without entering `LOW OUTPUT`.
+- For `probe_low_output`, `task watch` surfaces a `LOW OUTPUT` indicator instead of only showing a live PID.
+- For `probe_active_output`, `task watch` continues to show progress details without entering `LOW OUTPUT`.
 
 ---
 

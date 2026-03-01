@@ -1,0 +1,116 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: cli_probe_ws
+spec:
+  root_path: "."
+  qa_targets:
+    - fixtures/qa-probe-targets
+  ticket_dir: fixtures/ticket
+  self_referential: false
+---
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: cli_probe_empty_ws
+spec:
+  root_path: "."
+  qa_targets:
+    - fixtures/qa-probe-empty
+  ticket_dir: fixtures/ticket
+  self_referential: false
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: probe_fallback
+spec:
+  capabilities:
+    - plan
+    - implement
+    - qa
+    - align_tests
+    - doc_governance
+  templates:
+    plan: "echo 'plan fallback'"
+    implement: "echo 'implement fallback'"
+    qa: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"probe-qa\",\"description\":\"probe qa fallback\",\"severity\":\"info\"}]}]}'"
+    align_tests: "echo 'align fallback'"
+    doc_governance: "echo 'doc fallback'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: probe_task_scoped
+spec:
+  steps:
+    - id: plan
+      type: plan
+      enabled: true
+      command: "echo 'probe plan ok'"
+    - id: implement
+      type: implement
+      enabled: true
+      command: "echo 'probe implement ok'"
+    - id: align_tests
+      type: align_tests
+      enabled: true
+      command: "echo 'probe align ok'"
+    - id: doc_governance
+      type: doc_governance
+      enabled: true
+      command: "echo 'probe docs ok'"
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: probe_item_scoped
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+      command: "echo '{\"confidence\":0.97,\"quality_score\":0.93,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"probe-qa-pass\",\"description\":\"item-scoped probe completed\",\"severity\":\"info\"}]}]}'"
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: probe_runtime_control
+spec:
+  steps:
+    - id: implement
+      type: implement
+      enabled: true
+      command: "bash -lc 'for i in 1 2 3 4; do echo runtime-tick-$i; sleep 15; done'"
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: probe_low_output
+spec:
+  steps:
+    - id: implement
+      type: implement
+      enabled: true
+      command: "bash -lc 'sleep 125'"
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: probe_active_output
+spec:
+  steps:
+    - id: implement
+      type: implement
+      enabled: true
+      command: "bash -lc 'for i in 1 2 3 4; do printf \"active-output-%02d-abcdefghijklmnopqrstuvwxyz0123456789\\n\" \"$i\"; sleep 30; done'"
+  loop:
+    mode: once

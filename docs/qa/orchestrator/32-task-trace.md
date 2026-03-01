@@ -24,9 +24,9 @@ Every scenario starts from a clean project with at least one completed task:
 
 ```bash
 QA_PROJECT="qa-trace-$(date +%s)"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
+./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --from-workspace cli_probe_ws --workflow probe_task_scoped --force
 ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
 ```
 
 ---
@@ -46,7 +46,7 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 
 1. Create and run a task to completion:
    ```bash
-   ./scripts/orchestrator.sh task create --goal "trace test" --project "${QA_PROJECT}" --from fixtures/manifests/bundles/echo-workflow.yaml
+   ./scripts/orchestrator.sh task create --goal "trace test" --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_task_scoped
    ```
 2. Note the `{task_id}` from output
 3. Run trace:
@@ -69,7 +69,8 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 
 ### Preconditions
 
-- Same task as Scenario 1
+- One completed task from `probe_task_scoped`
+- One completed task from `probe_item_scoped`
 
 ### Steps
 
@@ -95,7 +96,7 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 
 ---
 
-## Scenario 3: Verbose Mode Shows Item IDs
+## Scenario 3: Verbose Mode Shows Scope And Binding
 
 ### Preconditions
 
@@ -103,16 +104,20 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 
 ### Steps
 
-1. Run trace with `--verbose`:
+1. Run trace with `--verbose` for the task-scoped fixture:
    ```bash
-   ./scripts/orchestrator.sh task trace {task_id} --verbose
+   ./scripts/orchestrator.sh task trace {task_scoped_task_id} --verbose
+   ```
+2. Run trace with `--verbose` for the item-scoped fixture:
+   ```bash
+   ./scripts/orchestrator.sh task trace {item_scoped_task_id} --verbose
    ```
 
 ### Expected
 
 - Every verbose step prints an indented scope line
-- Item-scoped steps show `scope=item item={item_id}`
-- Task-scoped steps show `scope=task`, and if an execution anchor exists it is rendered as `anchor_item={item_id}`
+- `probe_item_scoped` steps show `scope=item item={item_id}`
+- `probe_task_scoped` steps show `scope=task`, and if an execution anchor exists it is rendered as `anchor_item={item_id}`
 - Legacy tasks without explicit scope metadata may show `scope=unknown`; they must not silently relabel the anchor as a true `item=...`
 
 ---
@@ -124,6 +129,7 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 - Orchestrator binary built and available
 - A workflow fixture that produces a failing step
 - A normal completed task with two cycles (or the unit-level regression suite as fallback)
+- Prefer completed tasks from `probe_low_output` and `probe_active_output` when validating low-output anomaly presence vs absence
 
 ### Steps
 
@@ -193,6 +199,6 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 |---|----------|--------|-----------|--------|-------|
 | 1 | Basic Trace Output | ☐ | | | |
 | 2 | JSON Output | ☐ | | | |
-| 3 | Verbose Mode Shows Item IDs | ☐ | | | |
+| 3 | Verbose Mode Shows Scope And Binding | ☐ | | | |
 | 4 | Anomaly Detection - Real Failure vs False Overlap | ☐ | | | |
 | 5 | Trace Works When Active Config Is Not Runnable | ☐ | | | |
