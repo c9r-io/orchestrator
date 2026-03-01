@@ -250,8 +250,8 @@ spec:
       tty: false
       prehook:
         engine: cel
-        when: "is_last_cycle"
-        reason: "QA testing deferred to final cycle"
+        when: "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\")"
+        reason: "QA testing deferred to final cycle and restricted to QA markdown documents"
 
     - id: ticket_fix
       type: ticket_fix
@@ -262,8 +262,8 @@ spec:
       tty: false
       prehook:
         engine: cel
-        when: "is_last_cycle && active_ticket_count > 0"
-        reason: "Only fix tickets on last cycle when there are active tickets"
+        when: "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && active_ticket_count > 0"
+        reason: "Only fix tickets on last cycle for QA markdown documents when there are active tickets"
 
     # ── Task segment: align_tests + doc_governance ──
     # Deferred to Cycle 2 for full validation pass
