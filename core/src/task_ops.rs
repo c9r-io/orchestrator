@@ -226,11 +226,13 @@ pub fn reset_task_item_for_retry(
 mod tests {
     use super::*;
     use crate::config::{
-        LoopMode, SafetyConfig, StepBehavior, WorkflowConfig, WorkflowFinalizeConfig,
-        WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
+        LoopMode, ProjectConfig, ResolvedProject, SafetyConfig, StepBehavior, WorkflowConfig,
+        WorkflowFinalizeConfig, WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
     };
     use crate::dto::CreateTaskPayload;
+    use crate::state::write_active_config;
     use crate::test_utils::TestState;
+    use std::collections::HashMap;
 
     fn make_workflow(steps: Vec<WorkflowStepConfig>) -> WorkflowConfig {
         WorkflowConfig {
@@ -550,6 +552,50 @@ mod tests {
         let (target_files, item_paths) = load_task_storage(&state, &result.id);
         assert_eq!(target_files, vec!["src/lib.rs".to_string()]);
         assert_eq!(item_paths, vec!["src/lib.rs".to_string()]);
+    }
+
+    #[test]
+    fn create_task_with_explicit_project_falls_back_to_global_workspace_and_workflow() {
+        let mut ts = TestState::new().with_workflow("task_only", task_only_workflow());
+        let state = ts.build();
+
+        {
+            let mut active = write_active_config(&state).unwrap();
+            active.config.projects.insert(
+                "proj-a".to_string(),
+                ProjectConfig {
+                    description: None,
+                    workspaces: HashMap::new(),
+                    agents: HashMap::new(),
+                    workflows: HashMap::new(),
+                },
+            );
+            active.projects.insert(
+                "proj-a".to_string(),
+                ResolvedProject {
+                    workspaces: HashMap::new(),
+                    agents: HashMap::new(),
+                    workflows: HashMap::new(),
+                },
+            );
+        }
+
+        let payload = CreateTaskPayload {
+            name: Some("Project Fallback".to_string()),
+            goal: None,
+            project_id: Some("proj-a".to_string()),
+            workspace_id: Some("default".to_string()),
+            workflow_id: Some("task_only".to_string()),
+            target_files: None,
+        };
+        let result = create_task_impl(&state, payload).unwrap();
+        assert_eq!(result.project_id, "proj-a");
+        assert_eq!(result.workspace_id, "default");
+        assert_eq!(result.workflow_id, "task_only");
+        assert_eq!(result.total_items, 1);
+        let (target_files, item_paths) = load_task_storage(&state, &result.id);
+        assert!(target_files.is_empty());
+        assert_eq!(item_paths, vec![UNASSIGNED_QA_FILE_PATH.to_string()]);
     }
 
     #[test]
