@@ -2841,7 +2841,7 @@ mod tests {
             ..OrchestratorConfig::default()
         };
         let normalized = normalize_config(config);
-        for (_, wf) in &normalized.workflows {
+        for wf in normalized.workflows.values() {
             assert!(!wf.steps.is_empty(), "all workflows should be normalized");
         }
     }
