@@ -3,15 +3,16 @@
 //! Pure logic layer — no DB, no async. The CLI handler loads the config and
 //! calls [`run_checks`], then renders the resulting [`CheckReport`].
 
-use crate::config::{ActiveConfig, OrchestratorConfig, WorkflowStepConfig};
+use crate::config::{
+    is_known_builtin_step_name, resolve_step_semantic_kind, ActiveConfig, ExecutionMode,
+    OrchestratorConfig, StepSemanticKind, WorkflowStepConfig,
+};
 use crate::scheduler::trace::{find_template_vars, Severity};
 use serde::Serialize;
 use std::collections::HashSet;
 use std::path::Path;
 
 // ── Known constants ─────────────────────────────────────────────────
-
-const KNOWN_BUILTINS: &[&str] = &["loop_guard", "self_test", "ticket_scan", "init_once"];
 
 const KNOWN_SYSTEM_VARS: &[&str] = &[
     "task_id",
@@ -172,7 +173,8 @@ fn check_steps_capability(
         if !step.enabled {
             continue;
         }
-        if let Some(ref cap) = step.required_capability {
+        if let Ok(StepSemanticKind::Agent { capability }) = resolve_step_semantic_kind(step) {
+            let cap = capability;
             let covered = all_caps.contains(cap.as_str());
             out.push(CheckResult {
                 rule: "capability_no_agent".into(),
@@ -180,13 +182,13 @@ fn check_steps_capability(
                 passed: covered,
                 message: if covered {
                     format!(
-                        "workflow \"{wf_id}\" step \"{}\": capability \"{cap}\" is provided",
-                        step.id
+                        "workflow \"{wf_id}\" step \"{}\": capability \"{}\" is provided",
+                        step.id, cap
                     )
                 } else {
                     format!(
-                        "workflow \"{wf_id}\" step \"{}\": requires capability \"{cap}\" but no agent provides it",
-                        step.id
+                        "workflow \"{wf_id}\" step \"{}\": requires capability \"{}\" but no agent provides it",
+                        step.id, cap
                     )
                 },
                 context: None,
@@ -240,8 +242,20 @@ fn check_steps_builtin(steps: &[WorkflowStepConfig], wf_id: &str, out: &mut Vec<
         if !step.enabled {
             continue;
         }
+        if step.builtin.is_some() && step.required_capability.is_some() {
+            out.push(CheckResult {
+                rule: "step_semantic_conflict".into(),
+                severity: Severity::Error,
+                passed: false,
+                message: format!(
+                    "workflow \"{wf_id}\" step \"{}\": cannot define both builtin and required_capability",
+                    step.id
+                ),
+                context: None,
+            });
+        }
         if let Some(ref builtin) = step.builtin {
-            let known = KNOWN_BUILTINS.contains(&builtin.as_str());
+            let known = is_known_builtin_step_name(builtin);
             out.push(CheckResult {
                 rule: "builtin_unknown".into(),
                 severity: Severity::Error,
@@ -257,8 +271,54 @@ fn check_steps_builtin(steps: &[WorkflowStepConfig], wf_id: &str, out: &mut Vec<
                         step.id
                     )
                 },
-                context: Some(format!("known builtins: {:?}", KNOWN_BUILTINS)),
+                context: Some(
+                    "known builtins: [\"init_once\", \"loop_guard\", \"ticket_scan\", \"self_test\"]"
+                        .to_string(),
+                ),
             });
+        }
+        match resolve_step_semantic_kind(step) {
+            Ok(semantic) => {
+                let matches_execution = match semantic {
+                    StepSemanticKind::Builtin { ref name } => {
+                        step.behavior.execution == ExecutionMode::Builtin { name: name.clone() }
+                    }
+                    StepSemanticKind::Agent { .. } => {
+                        step.behavior.execution == ExecutionMode::Agent
+                    }
+                    StepSemanticKind::Command => {
+                        step.behavior.execution
+                            == ExecutionMode::Builtin {
+                                name: step.id.clone(),
+                            }
+                    }
+                    StepSemanticKind::Chain => step.behavior.execution == ExecutionMode::Chain,
+                };
+                out.push(CheckResult {
+                    rule: "execution_mode_mismatch".into(),
+                    severity: Severity::Error,
+                    passed: matches_execution,
+                    message: if matches_execution {
+                        format!(
+                            "workflow \"{wf_id}\" step \"{}\": execution mode matches semantic meaning",
+                            step.id
+                        )
+                    } else {
+                        format!(
+                            "workflow \"{wf_id}\" step \"{}\": execution mode does not match builtin/capability semantics",
+                            step.id
+                        )
+                    },
+                    context: None,
+                });
+            }
+            Err(err) => out.push(CheckResult {
+                rule: "step_semantic_invalid".into(),
+                severity: Severity::Error,
+                passed: false,
+                message: format!("workflow \"{wf_id}\" step \"{}\": {err}", step.id),
+                context: None,
+            }),
         }
         if !step.chain_steps.is_empty() {
             check_steps_builtin(&step.chain_steps, wf_id, out);
@@ -503,7 +563,12 @@ mod tests {
                         command: None,
                         chain_steps: vec![],
                         scope: None,
-                        behavior: StepBehavior::default(),
+                        behavior: StepBehavior {
+                            execution: ExecutionMode::Builtin {
+                                name: "loop_guard".into(),
+                            },
+                            ..StepBehavior::default()
+                        },
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
@@ -679,14 +744,102 @@ mod tests {
     }
 
     #[test]
-    fn pipe_to_unknown() {
+    fn step_semantic_conflict() {
         let mut cfg = base_config();
         cfg.config
             .workflows
             .get_mut("test-wf")
             .unwrap()
-            .steps[0]
-            .pipe_to = Some("ghost".into());
+            .steps
+            .push(WorkflowStepConfig {
+                id: "conflict".into(),
+                description: None,
+                required_capability: Some("plan".into()),
+                builtin: Some("self_test".into()),
+                enabled: true,
+                repeatable: false,
+                is_guard: false,
+                cost_preference: None,
+                prehook: None,
+                tty: false,
+                outputs: vec![],
+                pipe_to: None,
+                command: None,
+                chain_steps: vec![],
+                scope: None,
+                behavior: StepBehavior::default(),
+            });
+
+        let tmp = tempfile::tempdir().unwrap();
+        make_temp_ws(tmp.path());
+        let report = run_checks(&cfg, tmp.path(), None);
+        let found = report
+            .checks
+            .iter()
+            .any(|c| c.rule == "step_semantic_conflict" && !c.passed);
+        assert!(found, "expected step_semantic_conflict error");
+    }
+
+    #[test]
+    fn execution_mode_mismatch() {
+        let mut cfg = base_config();
+        cfg.config.workflows.get_mut("test-wf").unwrap().steps[0]
+            .behavior
+            .execution = ExecutionMode::Builtin {
+            name: "plan".into(),
+        };
+
+        let tmp = tempfile::tempdir().unwrap();
+        make_temp_ws(tmp.path());
+        let report = run_checks(&cfg, tmp.path(), None);
+        let found = report
+            .checks
+            .iter()
+            .any(|c| c.rule == "execution_mode_mismatch" && !c.passed);
+        assert!(found, "expected execution_mode_mismatch error");
+    }
+
+    #[test]
+    fn command_steps_skip_capability_requirement() {
+        let mut cfg = base_config();
+        cfg.config.workflows.get_mut("test-wf").unwrap().steps = vec![WorkflowStepConfig {
+            id: "shell".into(),
+            description: None,
+            required_capability: None,
+            builtin: None,
+            enabled: true,
+            repeatable: false,
+            is_guard: false,
+            cost_preference: None,
+            prehook: None,
+            tty: false,
+            outputs: vec![],
+            pipe_to: None,
+            command: Some("echo ok".into()),
+            chain_steps: vec![],
+            scope: None,
+            behavior: StepBehavior {
+                execution: ExecutionMode::Builtin {
+                    name: "shell".into(),
+                },
+                ..StepBehavior::default()
+            },
+        }];
+
+        let tmp = tempfile::tempdir().unwrap();
+        make_temp_ws(tmp.path());
+        let report = run_checks(&cfg, tmp.path(), None);
+        let found = report
+            .checks
+            .iter()
+            .any(|c| c.rule == "capability_no_agent" && !c.passed);
+        assert!(!found, "command step should not require agent capability");
+    }
+
+    #[test]
+    fn pipe_to_unknown() {
+        let mut cfg = base_config();
+        cfg.config.workflows.get_mut("test-wf").unwrap().steps[0].pipe_to = Some("ghost".into());
 
         let tmp = tempfile::tempdir().unwrap();
         make_temp_ws(tmp.path());
@@ -747,9 +900,7 @@ mod tests {
         make_temp_ws(tmp.path());
         let report = run_checks(&cfg, tmp.path(), None);
         let bad = report.checks.iter().any(|c| {
-            c.rule == "template_unknown_var"
-                && !c.passed
-                && c.message.contains("plan_output")
+            c.rule == "template_unknown_var" && !c.passed && c.message.contains("plan_output")
         });
         assert!(
             !bad,
@@ -849,9 +1000,10 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         make_temp_ws(tmp.path());
         let report = run_checks(&cfg, tmp.path(), None);
-        let found = report.checks.iter().any(|c| {
-            c.rule == "capability_no_agent" && !c.passed && c.message.contains("child")
-        });
+        let found = report
+            .checks
+            .iter()
+            .any(|c| c.rule == "capability_no_agent" && !c.passed && c.message.contains("child"));
         assert!(found, "chain_step child should be checked for capability");
     }
 

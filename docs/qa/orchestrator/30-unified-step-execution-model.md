@@ -1,7 +1,7 @@
 # Orchestrator - Unified Step Execution Model
 
 **Module**: orchestrator
-**Scope**: Validate string-based step identification, StepBehavior data structures, StepExecutionAccumulator, and unified execution loop correctness after WorkflowStepType removal
+**Scope**: Validate string-based step identification, unified step semantic resolution, StepBehavior execution alignment, and unified execution loop correctness after WorkflowStepType removal
 **Scenarios**: 5
 **Priority**: High
 
@@ -9,7 +9,7 @@
 
 ## Background
 
-The orchestrator step execution model was refactored to remove the `WorkflowStepType` enum. Steps are now identified by their string `id` field, and behavior is declared via `StepBehavior` data structures rather than hardcoded match arms.
+The orchestrator step execution model was refactored to remove the `WorkflowStepType` enum. Steps are now identified by their string `id` field, and behavior is declared via `StepBehavior` data structures rather than hardcoded match arms. The latest regression update also requires `builtin`, `required_capability`, `command`, `chain_steps`, and `behavior.execution` to resolve through one shared semantic rule set.
 
 **Design doc**: `docs/design_doc/orchestrator/13-unified-step-execution-model.md`
 
@@ -23,14 +23,17 @@ The orchestrator step execution model was refactored to remove the `WorkflowStep
 | `WorkflowStepType::from_str("self_test")` | `validate_step_type("self_test")` |
 | `step_type.default_scope()` method | `default_scope_for_step_id(&step.id)` free function |
 | ~900-line `process_item_filtered()` with hardcoded steps | Unified loop with `StepExecutionAccumulator` |
+| Implicit default `ExecutionMode::Agent` drift | Explicit semantic normalization and execution-mode alignment |
 
 ### Key Files
 
 | File | Role |
 |------|------|
-| `core/src/config.rs` | `validate_step_type()`, `default_scope_for_step_id()`, `has_structured_output()`, `StepBehavior` types |
+| `core/src/config.rs` | `validate_step_type()`, `default_scope_for_step_id()`, `resolve_step_semantic_kind()`, `normalize_step_execution_mode()` |
 | `core/src/scheduler/item_executor.rs` | `StepExecutionAccumulator`, unified `process_item_filtered()` loop |
-| `core/src/config_load.rs` | `normalize_workflow_config()` with string-based identification |
+| `core/src/config_load.rs` | `normalize_workflow_config()`, `validate_workflow_config()`, `build_execution_plan()` |
+| `core/src/resource/workflow/workflow_convert.rs` | `workflow_spec_to_config()` semantic normalization |
+| `core/src/scheduler/check.rs` | Static semantic consistency checks |
 
 ---
 
@@ -98,7 +101,7 @@ cd core && cargo test --lib test_default_scope test_resolved_scope 2>&1 | grep "
 
 ---
 
-## Scenario 3: StepExecutionAccumulator and Unified Loop
+## Scenario 3: Semantic Normalization And Execution Rehydration
 
 ### Preconditions
 
@@ -106,32 +109,39 @@ cd core && cargo test --lib test_default_scope test_resolved_scope 2>&1 | grep "
 
 ### Goal
 
-Verify the unified execution loop in `process_item_filtered()` correctly handles agent execution, builtin steps (self_test, ticket_scan), prehook evaluation, and pipeline variable propagation via `StepExecutionAccumulator`.
+Verify normalization and execution-plan building keep declarative step semantics and runtime `ExecutionMode` in sync.
 
 ### Steps
 
-1. Run all item_executor unit tests:
+1. Run normalization-focused tests:
    ```bash
-   cd core && cargo test --test '*' item_executor -- --nocapture 2>&1 || true
-   cd core && cargo test --lib -- item_executor --nocapture 2>&1 | tail -5
+   cd core && cargo test --lib normalize_workflow_ -- --nocapture
    ```
 
-2. Run the full lib test suite to confirm no regressions:
+2. Run execution-plan-focused tests:
+   ```bash
+   cd core && cargo test --lib build_execution_plan_ -- --nocapture
+   ```
+
+3. Run the full lib test suite to confirm no regressions:
    ```bash
    cd core && cargo test --lib 2>&1 | grep "test result"
    ```
 
 ### Expected
 
-- All 80 item_executor tests pass
-- All 670 lib tests pass
-- No test references `WorkflowStepType` or `step_type` field
+- `normalize_workflow_sets_builtin_for_self_test` passes
+- `normalize_workflow_sets_builtin_execution_for_loop_guard` passes
+- `normalize_workflow_sets_agent_execution_for_plan` passes
+- `build_execution_plan_rehydrates_builtin_execution_from_builtin_field` passes
+- Chain parent steps keep `ExecutionMode::Chain`, while command children are emitted as self-contained builtin-style execution
+- Full library suite passes without regression
 
 ### Expected Data State
 
 ```bash
 cd core && cargo test --lib 2>&1 | grep "test result"
-# Expected: test result: ok. 670 passed; 0 failed
+# Expected: test result: ok. 719 passed; 0 failed
 ```
 
 ---
@@ -171,48 +181,51 @@ Verify that no references to `WorkflowStepType` enum or `step_type` field on `Wo
 
 ---
 
-## Scenario 5: Self-Bootstrap Pipeline Backward Compatibility
+## Scenario 5: Static Checks And Resource Conversion Stay In Sync
 
 ### Preconditions
 
-- Self-bootstrap test fixture available: `fixtures/manifests/bundles/self-bootstrap-test.yaml`
+- None (unit test only)
 
 ### Goal
 
-Verify that self-bootstrap workflows continue to work after the refactoring — steps are identified by `id`, normalization sets correct defaults, and the full SDLC pipeline executes.
+Verify resource conversion and static checks share the same step semantic rules as runtime normalization.
 
 ### Steps
 
-1. Run integration tests that exercise self-bootstrap fixture parsing:
+1. Run workflow resource conversion tests:
    ```bash
-   cd core && cargo test --test integration_test -- --nocapture
+   cd core && cargo test --lib workflow_spec_to_config_ -- --nocapture
    ```
 
-2. Run the normalize workflow tests:
+2. Run targeted static-check tests:
    ```bash
-   cd core && cargo test --lib normalize_workflow -- --nocapture
+   cd core && cargo test --lib step_semantic_conflict -- --nocapture
+   cd core && cargo test --lib execution_mode_mismatch -- --nocapture
+   cd core && cargo test --lib command_steps_skip_capability_requirement -- --nocapture
+   cd core && cargo test --lib clean_config_no_errors -- --nocapture
    ```
 
-3. Verify the self-bootstrap fixture applies without errors:
+3. Run the full lib test suite:
    ```bash
-   QA_PROJECT="qa-unified-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml --dry-run
+   cd core && cargo test --lib
    ```
 
 ### Expected
 
-- 24 integration tests pass
-- All normalization tests pass (scope defaults, builtin flags, is_guard flags set by string matching)
-- Self-bootstrap fixture dry-run succeeds without validation errors
-- Steps correctly classified: plan → Task, qa_testing → Item, etc. (via `default_scope_for_step_id`)
+- `workflow_spec_to_config_self_test_sets_builtin_execution` passes
+- `workflow_spec_to_config_init_once_sets_builtin` passes
+- `step_semantic_conflict` passes and catches steps that set both `builtin` and `required_capability`
+- `execution_mode_mismatch` passes and catches stale `behavior.execution`
+- `command_steps_skip_capability_requirement` passes and confirms command steps remain self-contained
+- `clean_config_no_errors` passes with the scheduler-check fixture aligned to builtin `loop_guard`
+- Full library suite passes without regression
 
 ### Expected Data State
 
 ```bash
-cd core && cargo test --test integration_test 2>&1 | grep "test result"
-# Expected: test result: ok. 24 passed; 0 failed
+cd core && cargo test --lib 2>&1 | grep "test result"
+# Expected: test result: ok. 719 passed; 0 failed
 ```
 
 ---
@@ -223,6 +236,6 @@ cd core && cargo test --test integration_test 2>&1 | grep "test result"
 |---|----------|--------|-----------|--------|-------|
 | 1 | Step Type Validation (Known and Unknown IDs) | ☐ | | | |
 | 2 | Default Scope Classification (Task vs Item) | ☐ | | | |
-| 3 | StepExecutionAccumulator and Unified Loop | ☐ | | | |
+| 3 | Semantic Normalization And Execution Rehydration | ☐ | | | |
 | 4 | WorkflowStepType Fully Removed From Codebase | ☐ | | | |
-| 5 | Self-Bootstrap Pipeline Backward Compatibility | ☐ | | | |
+| 5 | Static Checks And Resource Conversion Stay In Sync | ☐ | | | |

@@ -1,6 +1,8 @@
 use crate::config::{
-    ActiveConfig, CaptureDecl, CaptureSource, OrchestratorConfig, PostAction, ResolvedProject,
-    ResolvedWorkspace, StepBehavior, TaskExecutionPlan, WorkflowConfig, WorkflowStepConfig,
+    default_builtin_for_step_id, default_required_capability_for_step_id,
+    normalize_step_execution_mode, resolve_step_semantic_kind, ActiveConfig, CaptureDecl,
+    CaptureSource, OrchestratorConfig, PostAction, ResolvedProject, ResolvedWorkspace,
+    StepBehavior, StepSemanticKind, TaskExecutionPlan, WorkflowConfig, WorkflowStepConfig,
 };
 use crate::db::{count_tasks_by_workflow, count_tasks_by_workspace, open_conn};
 use crate::dto::ConfigOverview;
@@ -34,10 +36,7 @@ pub fn detect_app_root() -> PathBuf {
 }
 
 pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
-    let had_ticket_scan_step = workflow
-        .steps
-        .iter()
-        .any(|step| step.id == "ticket_scan");
+    let had_ticket_scan_step = workflow.steps.iter().any(|step| step.id == "ticket_scan");
     if workflow.steps.is_empty() {
         workflow.steps = crate::config::default_workflow_steps(
             workflow.qa.as_deref(),
@@ -52,47 +51,32 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
     // then add missing standard steps as disabled placeholders.
     let mut seen_ids: HashSet<String> = HashSet::new();
     for mut step in workflow.steps.drain(..) {
-        let key = step
-            .builtin
-            .clone()
-            .or_else(|| step.required_capability.clone())
-            .unwrap_or(step.id.clone());
-
         seen_ids.insert(step.id.clone());
 
-        // Apply defaults based on step id
-        if step.required_capability.is_none()
-            && step.builtin.is_none()
-            && step.command.is_none()
-        {
-            match key.as_str() {
-                "qa" | "fix" | "retest" | "plan" | "build" | "test" | "lint"
-                | "implement" | "review" | "git_ops" | "qa_doc_gen" | "qa_testing"
-                | "ticket_fix" | "doc_governance" | "align_tests" | "smoke_chain" => {
-                    step.required_capability = Some(key.clone());
-                }
-                "loop_guard" => {
-                    step.builtin = Some("loop_guard".to_string());
-                    step.is_guard = true;
-                }
-                "self_test" => {
-                    step.builtin = Some("self_test".to_string());
-                }
-                "init_once" | "ticket_scan" => {
-                    step.builtin = Some(key.clone());
-                }
-                _ => {}
+        if step.required_capability.is_none() && step.builtin.is_none() && step.command.is_none() {
+            if let Some(builtin) = default_builtin_for_step_id(&step.id) {
+                step.builtin = Some(builtin.to_string());
+            } else if let Some(capability) = default_required_capability_for_step_id(&step.id) {
+                step.required_capability = Some(capability.to_string());
             }
         }
 
+        if step
+            .builtin
+            .as_deref()
+            .or_else(|| default_builtin_for_step_id(&step.id))
+            == Some("loop_guard")
+        {
+            step.is_guard = true;
+        }
+
         apply_default_step_behavior(&mut step);
+        let _ = normalize_step_execution_mode_recursive(&mut step);
         normalized.push(step);
     }
 
     // Add missing standard steps as disabled placeholders (except LoopGuard)
-    let standard_step_ids = [
-        "init_once", "plan", "qa", "ticket_scan", "fix", "retest",
-    ];
+    let standard_step_ids = ["init_once", "plan", "qa", "ticket_scan", "fix", "retest"];
     for step_id in &standard_step_ids {
         if !seen_ids.contains(*step_id) {
             let mut placeholder = WorkflowStepConfig {
@@ -114,6 +98,7 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                 behavior: StepBehavior::default(),
             };
             apply_default_step_behavior(&mut placeholder);
+            let _ = normalize_step_execution_mode_recursive(&mut placeholder);
             normalized.push(placeholder);
         }
     }
@@ -195,6 +180,14 @@ fn apply_default_step_behavior(step: &mut WorkflowStepConfig) {
     }
 }
 
+fn normalize_step_execution_mode_recursive(step: &mut WorkflowStepConfig) -> Result<()> {
+    normalize_step_execution_mode(step).map_err(|e| anyhow::anyhow!(e))?;
+    for chain_step in &mut step.chain_steps {
+        normalize_step_execution_mode_recursive(chain_step)?;
+    }
+    Ok(())
+}
+
 fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorConfig {
     for workflow in config.workflows.values_mut() {
         normalize_workflow_config(workflow);
@@ -230,15 +223,20 @@ pub fn validate_workflow_config(
             continue;
         }
         enabled_count += 1;
-        if step.id == "ticket_scan" {
+        let semantic = resolve_step_semantic_kind(step).map_err(anyhow::Error::msg)?;
+        if matches!(
+            semantic,
+            StepSemanticKind::Builtin { ref name } if name == "ticket_scan"
+        ) {
             if let Some(prehook) = step.prehook.as_ref() {
                 crate::prehook::validate_step_prehook(prehook, workflow_id, key)?;
             }
             continue;
         }
-        // Steps with a builtin, command, or chain_steps are self-contained
-        let is_self_contained =
-            step.builtin.is_some() || step.command.is_some() || !step.chain_steps.is_empty();
+        let is_self_contained = matches!(
+            semantic,
+            StepSemanticKind::Builtin { .. } | StepSemanticKind::Command | StepSemanticKind::Chain
+        );
         if !is_self_contained {
             let has_agent = config
                 .agents
@@ -321,14 +319,20 @@ fn validate_workflow_config_with_agents(
             continue;
         }
         enabled_count += 1;
-        if step.id == "ticket_scan" {
+        let semantic = resolve_step_semantic_kind(step).map_err(anyhow::Error::msg)?;
+        if matches!(
+            semantic,
+            StepSemanticKind::Builtin { ref name } if name == "ticket_scan"
+        ) {
             if let Some(prehook) = step.prehook.as_ref() {
                 crate::prehook::validate_step_prehook(prehook, workflow_id, key)?;
             }
             continue;
         }
-        let is_self_contained =
-            step.builtin.is_some() || step.command.is_some() || !step.chain_steps.is_empty();
+        let is_self_contained = matches!(
+            semantic,
+            StepSemanticKind::Builtin { .. } | StepSemanticKind::Command | StepSemanticKind::Chain
+        );
         if !is_self_contained {
             let has_agent = all_agents.values().any(|a| a.get_template(key).is_some());
             if !has_agent {
@@ -765,49 +769,43 @@ pub fn build_execution_plan(
         if !step.enabled {
             continue;
         }
-        steps.push(crate::config::TaskExecutionStep {
-            id: step.id.clone(),
-            required_capability: step.required_capability.clone(),
-            builtin: step.builtin.clone(),
-            enabled: step.enabled,
-            repeatable: step.repeatable,
-            is_guard: step.is_guard,
-            cost_preference: step.cost_preference.clone(),
-            prehook: step.prehook.clone(),
-            tty: step.tty,
-            outputs: step.outputs.clone(),
-            pipe_to: step.pipe_to.clone(),
-            command: step.command.clone(),
-            chain_steps: step
-                .chain_steps
-                .iter()
-                .map(|cs| crate::config::TaskExecutionStep {
-                    id: cs.id.clone(),
-                    required_capability: cs.required_capability.clone(),
-                    builtin: cs.builtin.clone(),
-                    enabled: cs.enabled,
-                    repeatable: cs.repeatable,
-                    is_guard: cs.is_guard,
-                    cost_preference: cs.cost_preference.clone(),
-                    prehook: cs.prehook.clone(),
-                    tty: cs.tty,
-                    outputs: cs.outputs.clone(),
-                    pipe_to: cs.pipe_to.clone(),
-                    command: cs.command.clone(),
-                    chain_steps: vec![],
-                    scope: cs.scope,
-                    behavior: cs.behavior.clone(),
-                })
-                .collect(),
-            scope: step.scope,
-            behavior: step.behavior.clone(),
-        });
+        let normalized_step = task_step_from_workflow_step(step)?;
+        steps.push(normalized_step);
     }
     let loop_policy = workflow.loop_policy.clone();
     Ok(TaskExecutionPlan {
         steps,
         loop_policy,
         finalize: workflow.finalize.clone(),
+    })
+}
+
+fn task_step_from_workflow_step(
+    step: &WorkflowStepConfig,
+) -> Result<crate::config::TaskExecutionStep> {
+    let mut normalized = step.clone();
+    normalize_step_execution_mode_recursive(&mut normalized)?;
+
+    Ok(crate::config::TaskExecutionStep {
+        id: normalized.id.clone(),
+        required_capability: normalized.required_capability.clone(),
+        builtin: normalized.builtin.clone(),
+        enabled: normalized.enabled,
+        repeatable: normalized.repeatable,
+        is_guard: normalized.is_guard,
+        cost_preference: normalized.cost_preference.clone(),
+        prehook: normalized.prehook.clone(),
+        tty: normalized.tty,
+        outputs: normalized.outputs.clone(),
+        pipe_to: normalized.pipe_to.clone(),
+        command: normalized.command.clone(),
+        chain_steps: normalized
+            .chain_steps
+            .iter()
+            .map(task_step_from_workflow_step)
+            .collect::<Result<Vec<_>>>()?,
+        scope: normalized.scope,
+        behavior: normalized.behavior.clone(),
     })
 }
 
@@ -855,7 +853,8 @@ pub fn validate_self_referential_safety(
 mod tests {
     use super::*;
     use crate::config::{
-        LoopMode, WorkflowFinalizeConfig, WorkflowLoopConfig, WorkflowLoopGuardConfig,
+        ExecutionMode, LoopMode, WorkflowFinalizeConfig, WorkflowLoopConfig,
+        WorkflowLoopGuardConfig,
     };
     #[allow(unused_imports)]
     use std::collections::HashMap;
@@ -908,6 +907,48 @@ mod tests {
             Some("self_test"),
             "builtin should be set to 'self_test' for SelfTest step type"
         );
+        assert_eq!(
+            self_test_step.behavior.execution,
+            ExecutionMode::Builtin {
+                name: "self_test".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn normalize_workflow_sets_builtin_execution_for_loop_guard() {
+        let mut workflow = make_workflow(vec![make_step("loop_guard", true)]);
+
+        normalize_workflow_config(&mut workflow);
+
+        let guard_step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "loop_guard")
+            .expect("loop_guard step should exist");
+        assert_eq!(guard_step.builtin.as_deref(), Some("loop_guard"));
+        assert!(guard_step.is_guard);
+        assert_eq!(
+            guard_step.behavior.execution,
+            ExecutionMode::Builtin {
+                name: "loop_guard".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn normalize_workflow_sets_agent_execution_for_plan() {
+        let mut workflow = make_workflow(vec![make_step("plan", true)]);
+
+        normalize_workflow_config(&mut workflow);
+
+        let plan_step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "plan")
+            .expect("plan step should exist");
+        assert_eq!(plan_step.required_capability.as_deref(), Some("plan"));
+        assert_eq!(plan_step.behavior.execution, ExecutionMode::Agent);
     }
 
     #[test]
@@ -1497,7 +1538,11 @@ mod tests {
     fn normalize_sets_required_capability_for_qa_doc_gen_step() {
         let mut workflow = make_workflow(vec![make_step("qa_doc_gen", true)]);
         normalize_workflow_config(&mut workflow);
-        let step = workflow.steps.iter().find(|s| s.id == "qa_doc_gen").unwrap();
+        let step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "qa_doc_gen")
+            .unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("qa_doc_gen"));
     }
 
@@ -1505,7 +1550,11 @@ mod tests {
     fn normalize_sets_required_capability_for_qa_testing_step() {
         let mut workflow = make_workflow(vec![make_step("qa_testing", true)]);
         normalize_workflow_config(&mut workflow);
-        let step = workflow.steps.iter().find(|s| s.id == "qa_testing").unwrap();
+        let step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "qa_testing")
+            .unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("qa_testing"));
     }
 
@@ -1513,7 +1562,11 @@ mod tests {
     fn normalize_sets_required_capability_for_ticket_fix_step() {
         let mut workflow = make_workflow(vec![make_step("ticket_fix", true)]);
         normalize_workflow_config(&mut workflow);
-        let step = workflow.steps.iter().find(|s| s.id == "ticket_fix").unwrap();
+        let step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "ticket_fix")
+            .unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("ticket_fix"));
     }
 
@@ -1521,7 +1574,11 @@ mod tests {
     fn normalize_sets_required_capability_for_doc_governance_step() {
         let mut workflow = make_workflow(vec![make_step("doc_governance", true)]);
         normalize_workflow_config(&mut workflow);
-        let step = workflow.steps.iter().find(|s| s.id == "doc_governance").unwrap();
+        let step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "doc_governance")
+            .unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("doc_governance"));
     }
 
@@ -1529,7 +1586,11 @@ mod tests {
     fn normalize_sets_required_capability_for_align_tests_step() {
         let mut workflow = make_workflow(vec![make_step("align_tests", true)]);
         normalize_workflow_config(&mut workflow);
-        let step = workflow.steps.iter().find(|s| s.id == "align_tests").unwrap();
+        let step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "align_tests")
+            .unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("align_tests"));
     }
 
@@ -1545,7 +1606,11 @@ mod tests {
     fn normalize_sets_required_capability_for_smoke_chain_step() {
         let mut workflow = make_workflow(vec![make_step("smoke_chain", true)]);
         normalize_workflow_config(&mut workflow);
-        let step = workflow.steps.iter().find(|s| s.id == "smoke_chain").unwrap();
+        let step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "smoke_chain")
+            .unwrap();
         assert_eq!(step.required_capability.as_deref(), Some("smoke_chain"));
     }
 
@@ -1553,7 +1618,11 @@ mod tests {
     fn normalize_sets_loop_guard_builtin_and_is_guard() {
         let mut workflow = make_workflow(vec![make_step("loop_guard", true)]);
         normalize_workflow_config(&mut workflow);
-        let step = workflow.steps.iter().find(|s| s.id == "loop_guard").unwrap();
+        let step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "loop_guard")
+            .unwrap();
         assert_eq!(step.builtin.as_deref(), Some("loop_guard"));
         assert!(step.is_guard, "LoopGuard step should have is_guard=true");
     }
@@ -1568,8 +1637,10 @@ mod tests {
             "qa step should have collect_artifacts=true"
         );
         assert!(
-            qa.behavior.captures.iter().any(|c| c.var == "qa_failed"
-                && c.source == CaptureSource::FailedFlag),
+            qa.behavior
+                .captures
+                .iter()
+                .any(|c| c.var == "qa_failed" && c.source == CaptureSource::FailedFlag),
             "qa step should capture qa_failed from FailedFlag"
         );
     }
@@ -1580,8 +1651,10 @@ mod tests {
         normalize_workflow_config(&mut workflow);
         let fix = workflow.steps.iter().find(|s| s.id == "fix").unwrap();
         assert!(
-            fix.behavior.captures.iter().any(|c| c.var == "fix_success"
-                && c.source == CaptureSource::SuccessFlag),
+            fix.behavior
+                .captures
+                .iter()
+                .any(|c| c.var == "fix_success" && c.source == CaptureSource::SuccessFlag),
             "fix step should capture fix_success from SuccessFlag"
         );
     }
@@ -1596,8 +1669,11 @@ mod tests {
             "retest step should have collect_artifacts=true"
         );
         assert!(
-            retest.behavior.captures.iter().any(|c| c.var == "retest_success"
-                && c.source == CaptureSource::SuccessFlag),
+            retest
+                .behavior
+                .captures
+                .iter()
+                .any(|c| c.var == "retest_success" && c.source == CaptureSource::SuccessFlag),
             "retest step should capture retest_success from SuccessFlag"
         );
     }
@@ -1612,10 +1688,16 @@ mod tests {
         let mut workflow = make_workflow(vec![step]);
         normalize_workflow_config(&mut workflow);
         let qa = workflow.steps.iter().find(|s| s.id == "qa").unwrap();
-        let qa_failed_count = qa.behavior.captures.iter()
+        let qa_failed_count = qa
+            .behavior
+            .captures
+            .iter()
             .filter(|c| c.var == "qa_failed")
             .count();
-        assert_eq!(qa_failed_count, 1, "should not duplicate existing qa_failed capture");
+        assert_eq!(
+            qa_failed_count, 1,
+            "should not duplicate existing qa_failed capture"
+        );
     }
 
     #[test]
@@ -1642,14 +1724,15 @@ mod tests {
 
     #[test]
     fn normalize_adds_missing_standard_steps_as_disabled() {
-        let mut workflow = make_workflow(vec![
-            make_builtin_step("self_test", "self_test", true),
-        ]);
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         normalize_workflow_config(&mut workflow);
         // Should add init_once, plan, qa, ticket_scan, fix, retest as disabled
         let init_step = workflow.steps.iter().find(|s| s.id == "init_once");
         assert!(init_step.is_some(), "should add init_once step");
-        assert!(!init_step.unwrap().enabled, "added init_once should be disabled");
+        assert!(
+            !init_step.unwrap().enabled,
+            "added init_once should be disabled"
+        );
 
         let plan_step = workflow.steps.iter().find(|s| s.id == "plan");
         assert!(plan_step.is_some(), "should add plan step");
@@ -1658,12 +1741,13 @@ mod tests {
 
     #[test]
     fn normalize_does_not_duplicate_existing_step_types() {
-        let mut workflow = make_workflow(vec![
-            make_step("plan", true),
-        ]);
+        let mut workflow = make_workflow(vec![make_step("plan", true)]);
         normalize_workflow_config(&mut workflow);
         let plan_count = workflow.steps.iter().filter(|s| s.id == "plan").count();
-        assert_eq!(plan_count, 1, "should not duplicate already-present plan step");
+        assert_eq!(
+            plan_count, 1,
+            "should not duplicate already-present plan step"
+        );
     }
 
     #[test]
@@ -1722,13 +1806,14 @@ mod tests {
     #[test]
     fn normalize_enables_ticket_scan_when_fix_only() {
         // fix enabled, qa disabled, retest disabled, no prior ticket_scan
-        let mut workflow = make_workflow(vec![
-            make_command_step("fix", "echo fix"),
-        ]);
+        let mut workflow = make_workflow(vec![make_command_step("fix", "echo fix")]);
         normalize_workflow_config(&mut workflow);
         let scan = workflow.steps.iter().find(|s| s.id == "ticket_scan");
         assert!(scan.is_some(), "ticket_scan should exist");
-        assert!(scan.unwrap().enabled, "ticket_scan should be enabled when fix is enabled but qa is not");
+        assert!(
+            scan.unwrap().enabled,
+            "ticket_scan should be enabled when fix is enabled but qa is not"
+        );
     }
 
     #[test]
@@ -1741,7 +1826,10 @@ mod tests {
         let scan = workflow.steps.iter().find(|s| s.id == "ticket_scan");
         // ticket_scan should still exist (as disabled placeholder) since it wasn't in steps
         if let Some(s) = scan {
-            assert!(!s.enabled, "ticket_scan should NOT be auto-enabled when qa is also enabled");
+            assert!(
+                !s.enabled,
+                "ticket_scan should NOT be auto-enabled when qa is also enabled"
+            );
         }
     }
 
@@ -1753,14 +1841,15 @@ mod tests {
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("at least one step"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("at least one step"));
     }
 
     #[test]
     fn validate_workflow_rejects_no_enabled_steps() {
-        let workflow = make_workflow(vec![
-            make_step("qa", false),
-        ]);
+        let workflow = make_workflow(vec![make_step("qa", false)]);
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
@@ -1770,43 +1859,50 @@ mod tests {
     #[test]
     fn validate_workflow_rejects_missing_agent_template() {
         // Step has no builtin, command, or chain_steps, and no agent provides the template
-        let workflow = make_workflow(vec![
-            make_step("qa", true),
-        ]);
+        let workflow = make_workflow(vec![make_step("qa", true)]);
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("no agent has template"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("no agent has template"));
     }
 
     #[test]
     fn validate_workflow_accepts_step_with_agent_template() {
-        let workflow = make_workflow(vec![
-            make_step("qa", true),
-        ]);
+        let workflow = make_workflow(vec![make_step("qa", true)]);
         let config = make_config_with_agent("qa", "qa_template.md");
         let result = validate_workflow_config(&config, &workflow, "test-wf");
-        assert!(result.is_ok(), "should accept step when agent has template: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "should accept step when agent has template: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn validate_workflow_accepts_builtin_step_without_agent() {
-        let workflow = make_workflow(vec![
-            make_builtin_step("self_test", "self_test", true),
-        ]);
+        let workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
-        assert!(result.is_ok(), "builtin steps should not require agent: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "builtin steps should not require agent: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn validate_workflow_accepts_command_step_without_agent() {
-        let workflow = make_workflow(vec![
-            make_command_step("build", "cargo build"),
-        ]);
+        let workflow = make_workflow(vec![make_command_step("build", "cargo build")]);
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
-        assert!(result.is_ok(), "command steps should not require agent: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "command steps should not require agent: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -1816,67 +1912,78 @@ mod tests {
         let workflow = make_workflow(vec![step]);
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
-        assert!(result.is_ok(), "chain_steps should count as self-contained: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "chain_steps should count as self-contained: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn validate_workflow_rejects_zero_max_cycles() {
-        let mut workflow = make_workflow(vec![
-            make_builtin_step("self_test", "self_test", true),
-        ]);
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         workflow.loop_policy.guard.max_cycles = Some(0);
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("max_cycles must be > 0"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("max_cycles must be > 0"));
     }
 
     #[test]
     fn validate_workflow_rejects_fixed_without_max_cycles() {
-        let mut workflow = make_workflow(vec![
-            make_builtin_step("self_test", "self_test", true),
-        ]);
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         workflow.loop_policy.mode = LoopMode::Fixed;
         workflow.loop_policy.guard.max_cycles = None;
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("loop.mode=fixed requires guard.max_cycles"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("loop.mode=fixed requires guard.max_cycles"));
     }
 
     #[test]
     fn validate_workflow_accepts_fixed_with_max_cycles() {
-        let mut workflow = make_workflow(vec![
-            make_builtin_step("self_test", "self_test", true),
-        ]);
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         workflow.loop_policy.mode = LoopMode::Fixed;
         workflow.loop_policy.guard.max_cycles = Some(2);
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
-        assert!(result.is_ok(), "fixed mode with max_cycles should pass: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "fixed mode with max_cycles should pass: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn validate_workflow_rejects_guard_enabled_without_loop_guard_agent() {
-        let mut workflow = make_workflow(vec![
-            make_builtin_step("self_test", "self_test", true),
-        ]);
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         workflow.loop_policy.guard.enabled = true;
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("no agent has loop_guard template"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("no agent has loop_guard template"));
     }
 
     #[test]
     fn validate_workflow_accepts_guard_enabled_with_loop_guard_agent() {
-        let mut workflow = make_workflow(vec![
-            make_builtin_step("self_test", "self_test", true),
-        ]);
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         workflow.loop_policy.guard.enabled = true;
         let config = make_config_with_agent("loop_guard", "loop_guard_template.md");
         let result = validate_workflow_config(&config, &workflow, "test-wf");
-        assert!(result.is_ok(), "guard with agent should pass: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "guard with agent should pass: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -1888,7 +1995,11 @@ mod tests {
         ]);
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
-        assert!(result.is_ok(), "disabled step missing agent should not error: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "disabled step missing agent should not error: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -1899,7 +2010,30 @@ mod tests {
         ]);
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
-        assert!(result.is_ok(), "ticket_scan should not require agent: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "ticket_scan should not require agent: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn validate_workflow_rejects_step_with_builtin_and_required_capability() {
+        let mut step = make_builtin_step("self_test", "self_test", true);
+        step.required_capability = Some("self_test".to_string());
+        let workflow = make_workflow(vec![step]);
+        let config = OrchestratorConfig::default();
+
+        let result = validate_workflow_config(&config, &workflow, "test-wf");
+
+        assert!(
+            result.is_err(),
+            "conflicting semantic fields should fail validation"
+        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot define both builtin and required_capability"));
     }
 
     // ======= build_execution_plan tests =======
@@ -1935,7 +2069,10 @@ mod tests {
         assert!(s.tty);
         assert_eq!(s.outputs, vec!["result"]);
         assert_eq!(s.pipe_to.as_deref(), Some("next_step"));
-        assert_eq!(s.cost_preference, Some(crate::config::CostPreference::Quality));
+        assert_eq!(
+            s.cost_preference,
+            Some(crate::config::CostPreference::Quality)
+        );
         assert_eq!(s.scope, Some(crate::config::StepScope::Task));
     }
 
@@ -1952,13 +2089,18 @@ mod tests {
         assert_eq!(plan.steps[0].chain_steps.len(), 2);
         assert_eq!(plan.steps[0].chain_steps[0].id, "sub1");
         assert_eq!(plan.steps[0].chain_steps[1].id, "sub2");
+        assert_eq!(plan.steps[0].behavior.execution, ExecutionMode::Chain);
+        assert_eq!(
+            plan.steps[0].chain_steps[0].behavior.execution,
+            ExecutionMode::Builtin {
+                name: "sub1".to_string()
+            }
+        );
     }
 
     #[test]
     fn build_execution_plan_copies_loop_policy() {
-        let mut workflow = make_workflow(vec![
-            make_builtin_step("self_test", "self_test", true),
-        ]);
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         workflow.loop_policy.mode = LoopMode::Fixed;
         workflow.loop_policy.guard.max_cycles = Some(3);
         let config = OrchestratorConfig::default();
@@ -1969,9 +2111,7 @@ mod tests {
 
     #[test]
     fn build_execution_plan_copies_finalize_config() {
-        let mut workflow = make_workflow(vec![
-            make_builtin_step("self_test", "self_test", true),
-        ]);
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         workflow.finalize = crate::config::default_workflow_finalize_config();
         let config = OrchestratorConfig::default();
         let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
@@ -1987,6 +2127,24 @@ mod tests {
         let config = OrchestratorConfig::default();
         let result = build_execution_plan(&config, &workflow, "test-wf");
         assert!(result.is_err(), "should fail validation");
+    }
+
+    #[test]
+    fn build_execution_plan_rehydrates_builtin_execution_from_builtin_field() {
+        let mut step = make_builtin_step("self_test", "self_test", true);
+        step.behavior.execution = ExecutionMode::Agent;
+        let workflow = make_workflow(vec![step]);
+        let config = OrchestratorConfig::default();
+
+        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+
+        assert_eq!(
+            plan.steps[0].behavior.execution,
+            ExecutionMode::Builtin {
+                name: "self_test".to_string()
+            }
+        );
+        assert_eq!(plan.steps[0].required_capability, None);
     }
 
     // ======= resolve_workspace_path tests =======
@@ -2031,7 +2189,11 @@ mod tests {
         std::fs::create_dir_all(&sub).unwrap();
         let rel = sub.file_name().unwrap().to_str().unwrap();
         let result = resolve_workspace_path(&root, rel, "test_field");
-        assert!(result.is_ok(), "existing subdir within root should pass: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "existing subdir within root should pass: {:?}",
+            result.err()
+        );
         std::fs::remove_dir_all(&sub).ok();
     }
 
@@ -2078,10 +2240,7 @@ mod tests {
     #[test]
     fn validate_self_referential_safety_passes_with_git_stash() {
         let workflow = WorkflowConfig {
-            steps: vec![
-                make_step("implement", true),
-                make_step("self_test", true),
-            ],
+            steps: vec![make_step("implement", true), make_step("self_test", true)],
             safety: crate::config::SafetyConfig {
                 checkpoint_strategy: crate::config::CheckpointStrategy::GitStash,
                 auto_rollback: true,
@@ -2223,7 +2382,10 @@ mod tests {
         let mut agents = HashMap::new();
         agents.insert("agent1".to_string(), AgentConfig::default());
         let mut workflows = HashMap::new();
-        workflows.insert("wf1".to_string(), make_workflow(vec![make_builtin_step("self_test", "self_test", true)]));
+        workflows.insert(
+            "wf1".to_string(),
+            make_workflow(vec![make_builtin_step("self_test", "self_test", true)]),
+        );
         let config = OrchestratorConfig {
             workspaces,
             agents,
@@ -2237,7 +2399,10 @@ mod tests {
         };
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("INVALID_WORKSPACE"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("INVALID_WORKSPACE"));
     }
 
     #[test]
@@ -2256,7 +2421,10 @@ mod tests {
         let mut agents = HashMap::new();
         agents.insert("agent1".to_string(), AgentConfig::default());
         let mut workflows = HashMap::new();
-        workflows.insert("wf1".to_string(), make_workflow(vec![make_builtin_step("self_test", "self_test", true)]));
+        workflows.insert(
+            "wf1".to_string(),
+            make_workflow(vec![make_builtin_step("self_test", "self_test", true)]),
+        );
         let config = OrchestratorConfig {
             workspaces,
             agents,
@@ -2270,7 +2438,10 @@ mod tests {
         };
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("qa_targets cannot be empty"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("qa_targets cannot be empty"));
     }
 
     #[test]
@@ -2296,7 +2467,10 @@ mod tests {
         let mut agents = HashMap::new();
         agents.insert("agent1".to_string(), AgentConfig::default());
         let mut workflows = HashMap::new();
-        workflows.insert("wf1".to_string(), make_workflow(vec![make_builtin_step("self_test", "self_test", true)]));
+        workflows.insert(
+            "wf1".to_string(),
+            make_workflow(vec![make_builtin_step("self_test", "self_test", true)]),
+        );
         let config = OrchestratorConfig {
             workspaces,
             agents,
@@ -2310,7 +2484,10 @@ mod tests {
         };
         let result = resolve_and_validate_workspaces(Path::new("/"), &config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("defaults.workflow"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("defaults.workflow"));
         std::fs::remove_dir_all(&ws_root).ok();
     }
 
@@ -2393,7 +2570,10 @@ mod tests {
         };
         let candidate = OrchestratorConfig::default(); // ws removed
         let result = enforce_deletion_guards(&conn, &previous, &candidate);
-        assert!(result.is_ok(), "removing unused workspace should be allowed");
+        assert!(
+            result.is_ok(),
+            "removing unused workspace should be allowed"
+        );
         std::fs::remove_file(&db_path).ok();
     }
 

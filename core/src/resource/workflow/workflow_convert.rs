@@ -3,9 +3,10 @@ use crate::cli_types::{
     WorkflowPrehookSpec, WorkflowSpec, WorkflowStepSpec,
 };
 use crate::config::{
-    CheckpointStrategy, CostPreference, LoopMode, SafetyConfig, StepBehavior, StepHookEngine,
-    StepPrehookConfig, StepPrehookUiConfig, StepScope, WorkflowConfig, WorkflowFinalizeConfig,
-    WorkflowFinalizeRule, WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
+    normalize_step_execution_mode, CheckpointStrategy, CostPreference, LoopMode, SafetyConfig,
+    StepBehavior, StepHookEngine, StepPrehookConfig, StepPrehookUiConfig, StepScope,
+    WorkflowConfig, WorkflowFinalizeConfig, WorkflowFinalizeRule, WorkflowLoopConfig,
+    WorkflowLoopGuardConfig, WorkflowStepConfig,
 };
 use anyhow::{anyhow, Result};
 
@@ -16,7 +17,10 @@ pub(in crate::resource) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Resul
         .map(|step| {
             crate::config::validate_step_type(&step.step_type).map_err(|e| anyhow!(e))?;
             let is_guard = step.step_type == "loop_guard";
-            let builtin = if matches!(step.step_type.as_str(), "init_once" | "loop_guard") {
+            let builtin = if matches!(
+                step.step_type.as_str(),
+                "init_once" | "loop_guard" | "self_test"
+            ) {
                 Some(step.step_type.clone())
             } else {
                 None
@@ -43,7 +47,7 @@ pub(in crate::resource) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Resul
             };
             let is_builtin_type = matches!(
                 step.step_type.as_str(),
-                "init_once" | "loop_guard" | "ticket_scan"
+                "init_once" | "loop_guard" | "ticket_scan" | "self_test"
             );
             let required_capability = step.required_capability.clone().or_else(|| {
                 if is_builtin_type {
@@ -57,7 +61,7 @@ pub(in crate::resource) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Resul
             } else {
                 builtin
             };
-            Ok(WorkflowStepConfig {
+            let mut config_step = WorkflowStepConfig {
                 id: step.id.clone(),
                 description: None,
                 required_capability,
@@ -74,7 +78,9 @@ pub(in crate::resource) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Resul
                 chain_steps: vec![],
                 scope,
                 behavior: StepBehavior::default(),
-            })
+            };
+            normalize_step_execution_mode(&mut config_step).map_err(|e| anyhow!(e))?;
+            Ok(config_step)
         })
         .collect::<Result<Vec<_>>>()?;
 
@@ -294,9 +300,9 @@ mod tests {
         WorkflowLoopSpec, WorkflowPrehookSpec, WorkflowSpec, WorkflowStepSpec,
     };
     use crate::config::{
-        CheckpointStrategy, CostPreference, LoopMode, SafetyConfig, StepBehavior, StepHookEngine,
-        StepPrehookConfig, StepScope, WorkflowConfig, WorkflowFinalizeConfig, WorkflowFinalizeRule,
-        WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
+        CheckpointStrategy, CostPreference, ExecutionMode, LoopMode, SafetyConfig, StepBehavior,
+        StepHookEngine, StepPrehookConfig, StepScope, WorkflowConfig, WorkflowFinalizeConfig,
+        WorkflowFinalizeRule, WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
     };
 
     // ── parse_cost_preference tests ─────────────────────────────────
@@ -488,6 +494,53 @@ mod tests {
         };
         let config = workflow_spec_to_config(&spec).unwrap();
         assert_eq!(config.steps[0].builtin.as_deref(), Some("init_once"));
+        assert_eq!(
+            config.steps[0].behavior.execution,
+            ExecutionMode::Builtin {
+                name: "init_once".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn workflow_spec_to_config_self_test_sets_builtin_execution() {
+        let spec = WorkflowSpec {
+            steps: vec![WorkflowStepSpec {
+                id: "self_test".to_string(),
+                step_type: "self_test".to_string(),
+                required_capability: None,
+                builtin: None,
+                enabled: true,
+                repeatable: false,
+                is_guard: false,
+                cost_preference: None,
+                prehook: None,
+                tty: false,
+                command: None,
+                scope: None,
+            }],
+            loop_policy: WorkflowLoopSpec {
+                mode: "once".to_string(),
+                max_cycles: None,
+                enabled: true,
+                stop_when_no_unresolved: true,
+                agent_template: None,
+            },
+            finalize: WorkflowFinalizeSpec { rules: vec![] },
+            dynamic_steps: vec![],
+            safety: SafetySpec::default(),
+        };
+
+        let config = workflow_spec_to_config(&spec).unwrap();
+
+        assert_eq!(config.steps[0].builtin.as_deref(), Some("self_test"));
+        assert_eq!(config.steps[0].required_capability, None);
+        assert_eq!(
+            config.steps[0].behavior.execution,
+            ExecutionMode::Builtin {
+                name: "self_test".to_string()
+            }
+        );
     }
 
     #[test]

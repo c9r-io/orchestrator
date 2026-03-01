@@ -391,8 +391,12 @@ pub struct StepBehavior {
 pub enum OnFailureAction {
     #[default]
     Continue,
-    SetStatus { status: String },
-    EarlyReturn { status: String },
+    SetStatus {
+        status: String,
+    },
+    EarlyReturn {
+        status: String,
+    },
 }
 
 /// What to do when a step succeeds.
@@ -401,7 +405,9 @@ pub enum OnFailureAction {
 pub enum OnSuccessAction {
     #[default]
     Continue,
-    SetStatus { status: String },
+    SetStatus {
+        status: String,
+    },
 }
 
 /// A single capture declaration: what to extract from a step result.
@@ -436,17 +442,46 @@ pub enum PostAction {
 pub enum ExecutionMode {
     #[default]
     Agent,
+    Builtin {
+        name: String,
+    },
+    Chain,
+}
+
+/// Resolved semantic meaning for a workflow step after applying defaults.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StepSemanticKind {
     Builtin { name: String },
+    Agent { capability: String },
+    Command,
     Chain,
 }
 
 /// Known workflow step IDs
 const KNOWN_STEP_IDS: &[&str] = &[
-    "init_once", "plan", "qa", "ticket_scan", "fix", "retest", "loop_guard",
-    "build", "test", "lint", "implement", "review", "git_ops",
-    "qa_doc_gen", "qa_testing", "ticket_fix", "doc_governance",
-    "align_tests", "self_test", "smoke_chain",
+    "init_once",
+    "plan",
+    "qa",
+    "ticket_scan",
+    "fix",
+    "retest",
+    "loop_guard",
+    "build",
+    "test",
+    "lint",
+    "implement",
+    "review",
+    "git_ops",
+    "qa_doc_gen",
+    "qa_testing",
+    "ticket_fix",
+    "doc_governance",
+    "align_tests",
+    "self_test",
+    "smoke_chain",
 ];
+
+const KNOWN_BUILTIN_STEP_NAMES: &[&str] = &["init_once", "loop_guard", "ticket_scan", "self_test"];
 
 /// Validate that a step type string is a known step ID.
 pub fn validate_step_type(value: &str) -> Result<String, String> {
@@ -457,9 +492,123 @@ pub fn validate_step_type(value: &str) -> Result<String, String> {
     }
 }
 
+pub fn is_known_builtin_step_name(value: &str) -> bool {
+    KNOWN_BUILTIN_STEP_NAMES.contains(&value)
+}
+
+pub fn default_builtin_for_step_id(step_id: &str) -> Option<&'static str> {
+    match step_id {
+        "init_once" => Some("init_once"),
+        "loop_guard" => Some("loop_guard"),
+        "ticket_scan" => Some("ticket_scan"),
+        "self_test" => Some("self_test"),
+        _ => None,
+    }
+}
+
+pub fn default_required_capability_for_step_id(step_id: &str) -> Option<&'static str> {
+    match step_id {
+        "qa" => Some("qa"),
+        "fix" => Some("fix"),
+        "retest" => Some("retest"),
+        "plan" => Some("plan"),
+        "build" => Some("build"),
+        "test" => Some("test"),
+        "lint" => Some("lint"),
+        "implement" => Some("implement"),
+        "review" => Some("review"),
+        "git_ops" => Some("git_ops"),
+        "qa_doc_gen" => Some("qa_doc_gen"),
+        "qa_testing" => Some("qa_testing"),
+        "ticket_fix" => Some("ticket_fix"),
+        "doc_governance" => Some("doc_governance"),
+        "align_tests" => Some("align_tests"),
+        "smoke_chain" => Some("smoke_chain"),
+        _ => None,
+    }
+}
+
+pub fn resolve_step_semantic_kind(step: &WorkflowStepConfig) -> Result<StepSemanticKind, String> {
+    if step.builtin.is_some() && step.required_capability.is_some() {
+        return Err(format!(
+            "step '{}' cannot define both builtin and required_capability",
+            step.id
+        ));
+    }
+
+    if !step.chain_steps.is_empty() {
+        return Ok(StepSemanticKind::Chain);
+    }
+
+    if step.command.is_some() {
+        return Ok(StepSemanticKind::Command);
+    }
+
+    if let Some(ref builtin) = step.builtin {
+        if !is_known_builtin_step_name(builtin) {
+            return Err(format!(
+                "step '{}' uses unknown builtin '{}'",
+                step.id, builtin
+            ));
+        }
+        return Ok(StepSemanticKind::Builtin {
+            name: builtin.clone(),
+        });
+    }
+
+    if let Some(ref capability) = step.required_capability {
+        return Ok(StepSemanticKind::Agent {
+            capability: capability.clone(),
+        });
+    }
+
+    if let Some(builtin) = default_builtin_for_step_id(&step.id) {
+        return Ok(StepSemanticKind::Builtin {
+            name: builtin.to_string(),
+        });
+    }
+
+    if let Some(capability) = default_required_capability_for_step_id(&step.id) {
+        return Ok(StepSemanticKind::Agent {
+            capability: capability.to_string(),
+        });
+    }
+
+    Err(format!(
+        "step '{}' is missing builtin, required_capability, command, or chain_steps",
+        step.id
+    ))
+}
+
+pub fn normalize_step_execution_mode(step: &mut WorkflowStepConfig) -> Result<(), String> {
+    match resolve_step_semantic_kind(step)? {
+        StepSemanticKind::Builtin { name } => {
+            step.builtin = Some(name.clone());
+            step.required_capability = None;
+            step.behavior.execution = ExecutionMode::Builtin { name };
+        }
+        StepSemanticKind::Agent { capability } => {
+            step.required_capability = Some(capability);
+            step.behavior.execution = ExecutionMode::Agent;
+        }
+        StepSemanticKind::Command => {
+            step.behavior.execution = ExecutionMode::Builtin {
+                name: step.id.clone(),
+            };
+        }
+        StepSemanticKind::Chain => {
+            step.behavior.execution = ExecutionMode::Chain;
+        }
+    }
+    Ok(())
+}
+
 /// Returns true if a step ID produces structured output for pipeline variables
 pub fn has_structured_output(step_id: &str) -> bool {
-    matches!(step_id, "build" | "test" | "lint" | "qa_testing" | "self_test" | "smoke_chain")
+    matches!(
+        step_id,
+        "build" | "test" | "lint" | "qa_testing" | "self_test" | "smoke_chain"
+    )
 }
 
 /// Returns the default execution scope for a step ID.
@@ -686,7 +835,8 @@ pub struct TaskExecutionStep {
 impl TaskExecutionStep {
     /// Returns the resolved scope: explicit override or default based on step id.
     pub fn resolved_scope(&self) -> StepScope {
-        self.scope.unwrap_or_else(|| default_scope_for_step_id(&self.id))
+        self.scope
+            .unwrap_or_else(|| default_scope_for_step_id(&self.id))
     }
 }
 
@@ -907,9 +1057,23 @@ pub fn default_workflow_steps(
         step_config("init_once", None, Some("init_once"), false, false, false),
         step_config("plan", Some("plan"), None, false, false, true),
         step_config("qa", Some("qa"), None, qa.is_some(), true, false),
-        step_config("ticket_scan", None, Some("ticket_scan"), ticket_scan, true, false),
+        step_config(
+            "ticket_scan",
+            None,
+            Some("ticket_scan"),
+            ticket_scan,
+            true,
+            false,
+        ),
         step_config("fix", Some("fix"), None, fix.is_some(), true, false),
-        step_config("retest", Some("retest"), None, retest.is_some(), true, false),
+        step_config(
+            "retest",
+            Some("retest"),
+            None,
+            retest.is_some(),
+            true,
+            false,
+        ),
     ]
 }
 
@@ -1150,8 +1314,14 @@ mod tests {
 
     #[test]
     fn test_loop_mode_from_str_valid() {
-        assert!(matches!(LoopMode::from_str("once").unwrap(), LoopMode::Once));
-        assert!(matches!(LoopMode::from_str("fixed").unwrap(), LoopMode::Fixed));
+        assert!(matches!(
+            LoopMode::from_str("once").unwrap(),
+            LoopMode::Once
+        ));
+        assert!(matches!(
+            LoopMode::from_str("fixed").unwrap(),
+            LoopMode::Fixed
+        ));
         assert!(matches!(
             LoopMode::from_str("infinite").unwrap(),
             LoopMode::Infinite
@@ -1168,10 +1338,26 @@ mod tests {
     #[test]
     fn test_validate_step_type_known_ids() {
         for id in &[
-            "init_once", "plan", "qa", "ticket_scan", "fix", "retest",
-            "loop_guard", "build", "test", "lint", "implement", "review",
-            "git_ops", "qa_doc_gen", "qa_testing", "ticket_fix",
-            "doc_governance", "align_tests", "self_test", "smoke_chain",
+            "init_once",
+            "plan",
+            "qa",
+            "ticket_scan",
+            "fix",
+            "retest",
+            "loop_guard",
+            "build",
+            "test",
+            "lint",
+            "implement",
+            "review",
+            "git_ops",
+            "qa_doc_gen",
+            "qa_testing",
+            "ticket_fix",
+            "doc_governance",
+            "align_tests",
+            "self_test",
+            "smoke_chain",
         ] {
             assert!(validate_step_type(id).is_ok(), "expected valid for {}", id);
         }
@@ -1208,22 +1394,48 @@ mod tests {
     #[test]
     fn test_default_scope_task_steps() {
         let task_scoped = vec![
-            "plan", "qa_doc_gen", "implement", "self_test", "align_tests",
-            "doc_governance", "review", "build", "test", "lint", "git_ops",
-            "smoke_chain", "loop_guard", "init_once",
+            "plan",
+            "qa_doc_gen",
+            "implement",
+            "self_test",
+            "align_tests",
+            "doc_governance",
+            "review",
+            "build",
+            "test",
+            "lint",
+            "git_ops",
+            "smoke_chain",
+            "loop_guard",
+            "init_once",
         ];
         for id in task_scoped {
-            assert_eq!(default_scope_for_step_id(id), StepScope::Task, "expected Task for {}", id);
+            assert_eq!(
+                default_scope_for_step_id(id),
+                StepScope::Task,
+                "expected Task for {}",
+                id
+            );
         }
     }
 
     #[test]
     fn test_default_scope_item_steps() {
         let item_scoped = vec![
-            "qa", "qa_testing", "ticket_fix", "ticket_scan", "fix", "retest",
+            "qa",
+            "qa_testing",
+            "ticket_fix",
+            "ticket_scan",
+            "fix",
+            "retest",
         ];
         for id in item_scoped {
-            assert_eq!(default_scope_for_step_id(id), StepScope::Item, "expected Item for {}", id);
+            assert_eq!(
+                default_scope_for_step_id(id),
+                StepScope::Item,
+                "expected Item for {}",
+                id
+            );
         }
     }
 
@@ -1241,8 +1453,13 @@ mod tests {
     #[test]
     fn test_agent_get_template() {
         let mut agent = AgentConfig::new();
-        agent.templates.insert("plan".to_string(), "plan template".to_string());
-        assert_eq!(agent.get_template("plan"), Some(&"plan template".to_string()));
+        agent
+            .templates
+            .insert("plan".to_string(), "plan template".to_string());
+        assert_eq!(
+            agent.get_template("plan"),
+            Some(&"plan template".to_string())
+        );
         assert_eq!(agent.get_template("fix"), None);
     }
 
@@ -1400,7 +1617,12 @@ mod tests {
 
     #[test]
     fn test_default_workflow_steps_all_enabled() {
-        let steps = default_workflow_steps(Some("qa_agent"), true, Some("fix_agent"), Some("retest_agent"));
+        let steps = default_workflow_steps(
+            Some("qa_agent"),
+            true,
+            Some("fix_agent"),
+            Some("retest_agent"),
+        );
         let qa = steps.iter().find(|s| s.id == "qa").unwrap();
         assert!(qa.enabled);
         let ts = steps.iter().find(|s| s.id == "ticket_scan").unwrap();
@@ -1447,7 +1669,11 @@ mod tests {
     #[test]
     fn test_default_workflow_finalize_config_skip_without_tickets_has_is_last_cycle() {
         let cfg = default_workflow_finalize_config();
-        let rule = cfg.rules.iter().find(|r| r.id == "skip_without_tickets").unwrap();
+        let rule = cfg
+            .rules
+            .iter()
+            .find(|r| r.id == "skip_without_tickets")
+            .unwrap();
         assert!(
             rule.when.contains("is_last_cycle"),
             "skip_without_tickets must include is_last_cycle guard"
@@ -1480,7 +1706,13 @@ mod tests {
     #[test]
     fn test_default_workflow_finalize_config_fallback_rules_last() {
         let cfg = default_workflow_finalize_config();
-        let last_two: Vec<&str> = cfg.rules.iter().rev().take(2).map(|r| r.id.as_str()).collect();
+        let last_two: Vec<&str> = cfg
+            .rules
+            .iter()
+            .rev()
+            .take(2)
+            .map(|r| r.id.as_str())
+            .collect();
         assert!(last_two.contains(&"fallback_qa_passed"));
         assert!(last_two.contains(&"fallback_unresolved_with_tickets"));
     }
@@ -1562,7 +1794,10 @@ mod tests {
         let cfg2: SafetyConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(cfg2.max_consecutive_failures, 5);
         assert!(cfg2.auto_rollback);
-        assert!(matches!(cfg2.checkpoint_strategy, CheckpointStrategy::GitTag));
+        assert!(matches!(
+            cfg2.checkpoint_strategy,
+            CheckpointStrategy::GitTag
+        ));
         assert_eq!(cfg2.step_timeout_secs, Some(600));
         assert!(cfg2.binary_snapshot);
     }

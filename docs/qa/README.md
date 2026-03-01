@@ -85,7 +85,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/27-self-test-step.md` | 5 | Self-test builtin step: cargo check, test --lib, pipeline variables, self-referential safety |
 | orchestrator | `docs/qa/orchestrator/28-self-bootstrap-pipeline.md` | 5 | Self-bootstrap pipeline: full SDLC, ticket fix chain, pipeline variables (Part 2) |
 | orchestrator | `docs/qa/orchestrator/29-step-scope-segment-execution.md` | 5 | StepScope segment execution: task-scoped steps run once, item-scoped fan out per QA file |
-| orchestrator | `docs/qa/orchestrator/30-unified-step-execution-model.md` | 5 | Unified step execution: WorkflowStepType removal, StepBehavior, StepExecutionAccumulator |
+| orchestrator | `docs/qa/orchestrator/30-unified-step-execution-model.md` | 5 | Unified step execution: WorkflowStepType removal, semantic resolution, StepBehavior alignment, and static-check parity |
 | orchestrator | `docs/qa/orchestrator/32-task-trace.md` | 5 | Task trace: execution timeline reconstruction and anomaly detection |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | 1 | Smoke test: core CLI and DB initialization |
 | orchestrator | `docs/qa/script/` | 7 | Executable QA scripts |
