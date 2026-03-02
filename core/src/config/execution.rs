@@ -405,12 +405,12 @@ mod tests {
         };
 
         let found = plan.step_by_id("qa");
-        assert!(found.is_some());
-        assert_eq!(found.unwrap().id, "qa");
+        let found = found.expect("qa step should be found");
+        assert_eq!(found.id, "qa");
 
         let found_plan = plan.step_by_id("plan");
-        assert!(found_plan.is_some());
-        assert_eq!(found_plan.unwrap().id, "plan");
+        let found_plan = found_plan.expect("plan step should be found");
+        assert_eq!(found_plan.id, "plan");
     }
 
     #[test]

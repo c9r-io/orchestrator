@@ -148,8 +148,8 @@ mod tests {
         resource.apply(&mut config);
 
         let loaded = ProjectResource::get_from(&config, "proj-del");
-        assert!(loaded.is_some());
-        assert_eq!(loaded.unwrap().spec.description, Some("desc".to_string()));
+        let loaded = loaded.expect("project resource should load after apply");
+        assert_eq!(loaded.spec.description, Some("desc".to_string()));
 
         assert!(ProjectResource::delete_from(&mut config, "proj-del"));
         assert!(ProjectResource::get_from(&config, "proj-del").is_none());
@@ -188,7 +188,7 @@ mod tests {
                 workflow: String::new(),
             }),
         };
-        let err = dispatch_resource(resource).unwrap_err();
+        let err = dispatch_resource(resource).expect_err("operation should fail");
         assert!(err.to_string().contains("mismatch"));
     }
 }

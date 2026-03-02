@@ -110,8 +110,8 @@ mod tests {
             binary_snapshot: true,
             profile: WorkflowSafetyProfile::SelfReferentialProbe,
         };
-        let json = serde_json::to_string(&cfg).unwrap();
-        let cfg2: SafetyConfig = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&cfg).expect("serialize safety config");
+        let cfg2: SafetyConfig = serde_json::from_str(&json).expect("deserialize safety config");
         assert_eq!(cfg2.max_consecutive_failures, 5);
         assert!(cfg2.auto_rollback);
         assert!(matches!(
@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn test_safety_config_deserialize_minimal() {
         let json = r#"{}"#;
-        let cfg: SafetyConfig = serde_json::from_str(json).unwrap();
+        let cfg: SafetyConfig = serde_json::from_str(json).expect("deserialize minimal safety");
         assert_eq!(cfg.max_consecutive_failures, 3);
         assert!(!cfg.auto_rollback);
         assert_eq!(cfg.profile, WorkflowSafetyProfile::Standard);
@@ -141,8 +141,9 @@ mod tests {
     #[test]
     fn test_checkpoint_strategy_serde_round_trip() {
         for s in &["\"none\"", "\"git_tag\"", "\"git_stash\""] {
-            let strat: CheckpointStrategy = serde_json::from_str(s).unwrap();
-            let json = serde_json::to_string(&strat).unwrap();
+            let strat: CheckpointStrategy =
+                serde_json::from_str(s).expect("deserialize checkpoint strategy");
+            let json = serde_json::to_string(&strat).expect("serialize checkpoint strategy");
             assert_eq!(&json, s);
         }
     }

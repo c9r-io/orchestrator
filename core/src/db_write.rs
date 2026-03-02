@@ -875,6 +875,8 @@ mod tests {
 
         assert_eq!(phase, "qa");
         assert_eq!(cmd, "echo test");
-        assert!((confidence.unwrap() - 0.95).abs() < 0.01);
+        assert!(
+            (confidence.expect("confidence should be persisted") - 0.95).abs() < 0.01
+        );
     }
 }

@@ -326,23 +326,23 @@ mod tests {
     #[test]
     fn parse_cost_preference_all_variants() {
         assert_eq!(
-            parse_cost_preference(Some("performance")).unwrap(),
+            parse_cost_preference(Some("performance")).expect("parse performance"),
             Some(CostPreference::Performance)
         );
         assert_eq!(
-            parse_cost_preference(Some("quality")).unwrap(),
+            parse_cost_preference(Some("quality")).expect("parse quality"),
             Some(CostPreference::Quality)
         );
         assert_eq!(
-            parse_cost_preference(Some("balance")).unwrap(),
+            parse_cost_preference(Some("balance")).expect("parse balance"),
             Some(CostPreference::Balance)
         );
-        assert_eq!(parse_cost_preference(None).unwrap(), None);
+        assert_eq!(parse_cost_preference(None).expect("parse none"), None);
     }
 
     #[test]
     fn parse_cost_preference_rejects_unknown() {
-        let err = parse_cost_preference(Some("turbo")).unwrap_err();
+        let err = parse_cost_preference(Some("turbo")).expect_err("operation should fail");
         assert!(err.to_string().contains("unknown cost_preference"));
     }
 
@@ -367,7 +367,7 @@ mod tests {
         let mode = parse_loop_mode("infinite").expect("infinite should parse");
         match mode {
             LoopMode::Infinite => (), // pass
-            _ => panic!("expected Infinite"),
+            other => assert!(matches!(other, LoopMode::Infinite), "expected Infinite"),
         }
     }
 
@@ -452,7 +452,7 @@ mod tests {
         assert_eq!(step.id, "qa");
         assert_eq!(step.cost_preference, Some(CostPreference::Quality));
         assert!(step.prehook.is_some());
-        let prehook = step.prehook.as_ref().unwrap();
+        let prehook = step.prehook.as_ref().expect("prehook should exist");
         assert_eq!(prehook.when, "is_last_cycle");
         assert_eq!(prehook.reason.as_deref(), Some("only run on last cycle"));
         assert!(step.tty);
@@ -508,7 +508,7 @@ mod tests {
             dynamic_steps: vec![],
             safety: SafetySpec::default(),
         };
-        let config = workflow_spec_to_config(&spec).unwrap();
+        let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert_eq!(config.steps[0].builtin.as_deref(), Some("init_once"));
         assert_eq!(
             config.steps[0].behavior.execution,
@@ -547,7 +547,7 @@ mod tests {
             safety: SafetySpec::default(),
         };
 
-        let config = workflow_spec_to_config(&spec).unwrap();
+        let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
 
         assert_eq!(config.steps[0].builtin.as_deref(), Some("self_test"));
         assert_eq!(config.steps[0].required_capability, None);
@@ -587,7 +587,7 @@ mod tests {
             dynamic_steps: vec![],
             safety: SafetySpec::default(),
         };
-        let config = workflow_spec_to_config(&spec).unwrap();
+        let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert!(config.steps[0].is_guard);
         assert_eq!(config.steps[0].builtin.as_deref(), Some("loop_guard"));
     }
@@ -620,7 +620,7 @@ mod tests {
             dynamic_steps: vec![],
             safety: SafetySpec::default(),
         };
-        let config = workflow_spec_to_config(&spec).unwrap();
+        let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert_eq!(config.steps[0].scope, Some(StepScope::Item));
     }
 
@@ -659,7 +659,7 @@ mod tests {
                 profile: Some("self_referential_probe".to_string()),
             },
         };
-        let config = workflow_spec_to_config(&spec).unwrap();
+        let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert_eq!(config.safety.max_consecutive_failures, 5);
         assert!(config.safety.auto_rollback);
         assert!(matches!(
@@ -709,7 +709,7 @@ mod tests {
                 profile: None,
             },
         };
-        let config = workflow_spec_to_config(&spec).unwrap();
+        let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert!(matches!(
             config.safety.checkpoint_strategy,
             crate::config::CheckpointStrategy::GitStash
@@ -751,7 +751,7 @@ mod tests {
                 profile: None,
             },
         };
-        let config = workflow_spec_to_config(&spec).unwrap();
+        let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert!(matches!(
             config.safety.checkpoint_strategy,
             crate::config::CheckpointStrategy::None
@@ -942,7 +942,10 @@ mod tests {
             safety: crate::config::SafetyConfig::default(),
         };
         let spec = workflow_config_to_spec(&config);
-        let prehook = spec.steps[0].prehook.as_ref().unwrap();
+        let prehook = spec.steps[0]
+            .prehook
+            .as_ref()
+            .expect("prehook should round-trip");
         assert_eq!(prehook.engine, "cel");
         assert_eq!(prehook.when, "is_last_cycle");
         assert_eq!(prehook.reason.as_deref(), Some("deferred"));

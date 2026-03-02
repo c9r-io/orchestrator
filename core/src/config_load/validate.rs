@@ -564,7 +564,7 @@ mod tests {
             result.is_err(),
             "validation should reject duplicate step ids"
         );
-        let err = result.unwrap_err().to_string();
+        let err = result.expect_err("operation should fail").to_string();
         assert!(
             err.contains("duplicate step id 'duplicate_step'"),
             "unexpected error: {}",
@@ -708,7 +708,7 @@ mod tests {
 
         let result = validate_self_referential_safety(&workflow, "test-workflow", "test-ws", true);
         assert!(result.is_err(), "should error without checkpoint_strategy");
-        let err_msg = result.unwrap_err().to_string();
+        let err_msg = result.expect_err("operation should fail").to_string();
         assert!(
             err_msg.contains("checkpoint_strategy"),
             "error should mention checkpoint_strategy"
@@ -722,7 +722,7 @@ mod tests {
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("operation should fail")
             .to_string()
             .contains("at least one step"));
     }
@@ -733,7 +733,7 @@ mod tests {
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("no enabled steps"));
+        assert!(result.expect_err("operation should fail").to_string().contains("no enabled steps"));
     }
 
     #[test]
@@ -743,7 +743,7 @@ mod tests {
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("operation should fail")
             .to_string()
             .contains("no agent has template"));
     }
@@ -806,7 +806,7 @@ mod tests {
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("operation should fail")
             .to_string()
             .contains("max_cycles must be > 0"));
     }
@@ -820,7 +820,7 @@ mod tests {
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("operation should fail")
             .to_string()
             .contains("loop.mode=fixed requires guard.max_cycles"));
     }
@@ -848,7 +848,7 @@ mod tests {
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("operation should fail")
             .to_string()
             .contains("no agent has loop_guard template"));
     }
@@ -925,7 +925,7 @@ mod tests {
             "conflicting semantic fields should fail validation"
         );
         assert!(result
-            .unwrap_err()
+            .expect_err("operation should fail")
             .to_string()
             .contains("cannot define both builtin and required_capability"));
     }
@@ -1055,7 +1055,7 @@ mod tests {
     fn ensure_within_root_accepts_child_path() {
         let root = std::env::temp_dir();
         let child = root.join(format!("test-within-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&child).unwrap();
+        std::fs::create_dir_all(&child).expect("create child directory");
         let result = ensure_within_root(&root, &child, "test");
         assert!(result.is_ok());
         std::fs::remove_dir_all(&child).ok();

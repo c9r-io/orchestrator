@@ -349,7 +349,11 @@ mod tests {
     fn normalize_sets_required_capability_for_qa_step() {
         let mut workflow = make_workflow(vec![make_step("qa", true)]);
         normalize_workflow_config(&mut workflow);
-        let qa_step = workflow.steps.iter().find(|s| s.id == "qa").unwrap();
+        let qa_step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "qa")
+            .expect("qa step should exist");
         assert_eq!(qa_step.required_capability.as_deref(), Some("qa"));
     }
 
@@ -357,7 +361,11 @@ mod tests {
     fn normalize_sets_required_capability_for_fix_step() {
         let mut workflow = make_workflow(vec![make_step("fix", true)]);
         normalize_workflow_config(&mut workflow);
-        let fix_step = workflow.steps.iter().find(|s| s.id == "fix").unwrap();
+        let fix_step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "fix")
+            .expect("fix step should exist");
         assert_eq!(fix_step.required_capability.as_deref(), Some("fix"));
     }
 
@@ -365,7 +373,11 @@ mod tests {
     fn normalize_sets_required_capability_for_plan_step() {
         let mut workflow = make_workflow(vec![make_step("plan", true)]);
         normalize_workflow_config(&mut workflow);
-        let plan_step = workflow.steps.iter().find(|s| s.id == "plan").unwrap();
+        let plan_step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "plan")
+            .expect("plan step should exist");
         assert_eq!(plan_step.required_capability.as_deref(), Some("plan"));
     }
 
@@ -373,7 +385,11 @@ mod tests {
     fn normalize_sets_required_capability_for_implement_step() {
         let mut workflow = make_workflow(vec![make_step("implement", true)]);
         normalize_workflow_config(&mut workflow);
-        let step = workflow.steps.iter().find(|s| s.id == "implement").unwrap();
+        let step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "implement")
+            .expect("implement step should exist");
         assert_eq!(step.required_capability.as_deref(), Some("implement"));
     }
 
@@ -381,7 +397,11 @@ mod tests {
     fn normalize_sets_required_capability_for_review_step() {
         let mut workflow = make_workflow(vec![make_step("review", true)]);
         normalize_workflow_config(&mut workflow);
-        let step = workflow.steps.iter().find(|s| s.id == "review").unwrap();
+        let step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "review")
+            .expect("review step should exist");
         assert_eq!(step.required_capability.as_deref(), Some("review"));
     }
 
@@ -389,7 +409,11 @@ mod tests {
     fn normalize_sets_required_capability_for_build_step() {
         let mut workflow = make_workflow(vec![make_step("build", true)]);
         normalize_workflow_config(&mut workflow);
-        let step = workflow.steps.iter().find(|s| s.id == "build").unwrap();
+        let step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "build")
+            .expect("build step should exist");
         assert_eq!(step.required_capability.as_deref(), Some("build"));
     }
 
@@ -397,7 +421,11 @@ mod tests {
     fn normalize_sets_required_capability_for_test_step() {
         let mut workflow = make_workflow(vec![make_step("test", true)]);
         normalize_workflow_config(&mut workflow);
-        let step = workflow.steps.iter().find(|s| s.id == "test").unwrap();
+        let step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "test")
+            .expect("test step should exist");
         assert_eq!(step.required_capability.as_deref(), Some("test"));
     }
 
@@ -405,7 +433,11 @@ mod tests {
     fn normalize_sets_required_capability_for_lint_step() {
         let mut workflow = make_workflow(vec![make_step("lint", true)]);
         normalize_workflow_config(&mut workflow);
-        let step = workflow.steps.iter().find(|s| s.id == "lint").unwrap();
+        let step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "lint")
+            .expect("lint step should exist");
         assert_eq!(step.required_capability.as_deref(), Some("lint"));
     }
 
@@ -413,7 +445,11 @@ mod tests {
     fn normalize_sets_required_capability_for_gitops_step() {
         let mut workflow = make_workflow(vec![make_step("git_ops", true)]);
         normalize_workflow_config(&mut workflow);
-        let step = workflow.steps.iter().find(|s| s.id == "git_ops").unwrap();
+        let step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "git_ops")
+            .expect("git_ops step should exist");
         assert_eq!(step.required_capability.as_deref(), Some("git_ops"));
     }
 
@@ -425,7 +461,7 @@ mod tests {
             .steps
             .iter()
             .find(|s| s.id == "qa_doc_gen")
-            .unwrap();
+            .expect("qa_doc_gen step should exist");
         assert_eq!(step.required_capability.as_deref(), Some("qa_doc_gen"));
     }
 
@@ -437,7 +473,7 @@ mod tests {
             .steps
             .iter()
             .find(|s| s.id == "qa_testing")
-            .unwrap();
+            .expect("qa_testing step should exist");
         assert_eq!(step.required_capability.as_deref(), Some("qa_testing"));
     }
 
@@ -449,7 +485,7 @@ mod tests {
             .steps
             .iter()
             .find(|s| s.id == "ticket_fix")
-            .unwrap();
+            .expect("ticket_fix step should exist");
         assert_eq!(step.required_capability.as_deref(), Some("ticket_fix"));
     }
 
@@ -461,7 +497,7 @@ mod tests {
             .steps
             .iter()
             .find(|s| s.id == "doc_governance")
-            .unwrap();
+            .expect("doc_governance step should exist");
         assert_eq!(step.required_capability.as_deref(), Some("doc_governance"));
     }
 
@@ -473,7 +509,7 @@ mod tests {
             .steps
             .iter()
             .find(|s| s.id == "align_tests")
-            .unwrap();
+            .expect("align_tests step should exist");
         assert_eq!(step.required_capability.as_deref(), Some("align_tests"));
     }
 
@@ -481,7 +517,11 @@ mod tests {
     fn normalize_sets_required_capability_for_retest_step() {
         let mut workflow = make_workflow(vec![make_step("retest", true)]);
         normalize_workflow_config(&mut workflow);
-        let step = workflow.steps.iter().find(|s| s.id == "retest").unwrap();
+        let step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "retest")
+            .expect("retest step should exist");
         assert_eq!(step.required_capability.as_deref(), Some("retest"));
     }
 
@@ -493,7 +533,7 @@ mod tests {
             .steps
             .iter()
             .find(|s| s.id == "smoke_chain")
-            .unwrap();
+            .expect("smoke_chain step should exist");
         assert_eq!(step.required_capability.as_deref(), Some("smoke_chain"));
     }
 
@@ -505,7 +545,7 @@ mod tests {
             .steps
             .iter()
             .find(|s| s.id == "loop_guard")
-            .unwrap();
+            .expect("loop_guard step should exist");
         assert_eq!(step.builtin.as_deref(), Some("loop_guard"));
         assert!(step.is_guard, "LoopGuard step should have is_guard=true");
     }
@@ -514,7 +554,11 @@ mod tests {
     fn normalize_sets_default_behavior_for_qa_step() {
         let mut workflow = make_workflow(vec![make_step("qa", true)]);
         normalize_workflow_config(&mut workflow);
-        let qa = workflow.steps.iter().find(|s| s.id == "qa").unwrap();
+        let qa = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "qa")
+            .expect("qa step should exist");
         assert!(
             qa.behavior.collect_artifacts,
             "qa step should have collect_artifacts=true"
@@ -532,7 +576,11 @@ mod tests {
     fn normalize_sets_default_behavior_for_fix_step() {
         let mut workflow = make_workflow(vec![make_step("fix", true)]);
         normalize_workflow_config(&mut workflow);
-        let fix = workflow.steps.iter().find(|s| s.id == "fix").unwrap();
+        let fix = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "fix")
+            .expect("fix step should exist");
         assert!(
             fix.behavior
                 .captures
@@ -546,7 +594,11 @@ mod tests {
     fn normalize_sets_default_behavior_for_retest_step() {
         let mut workflow = make_workflow(vec![make_step("retest", true)]);
         normalize_workflow_config(&mut workflow);
-        let retest = workflow.steps.iter().find(|s| s.id == "retest").unwrap();
+        let retest = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "retest")
+            .expect("retest step should exist");
         assert!(
             retest.behavior.collect_artifacts,
             "retest step should have collect_artifacts=true"
@@ -570,7 +622,11 @@ mod tests {
         });
         let mut workflow = make_workflow(vec![step]);
         normalize_workflow_config(&mut workflow);
-        let qa = workflow.steps.iter().find(|s| s.id == "qa").unwrap();
+        let qa = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "qa")
+            .expect("qa step should exist");
         let qa_failed_count = qa
             .behavior
             .captures
@@ -589,7 +645,11 @@ mod tests {
         step.builtin = Some("custom_builtin".to_string());
         let mut workflow = make_workflow(vec![step]);
         normalize_workflow_config(&mut workflow);
-        let qa_step = workflow.steps.iter().find(|s| s.id == "qa").unwrap();
+        let qa_step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "qa")
+            .expect("qa step should exist");
         // builtin was set, so required_capability should NOT be overridden
         assert_eq!(qa_step.builtin.as_deref(), Some("custom_builtin"));
         assert!(qa_step.required_capability.is_none());
@@ -601,7 +661,11 @@ mod tests {
         step.command = Some("echo test".to_string());
         let mut workflow = make_workflow(vec![step]);
         normalize_workflow_config(&mut workflow);
-        let qa_step = workflow.steps.iter().find(|s| s.id == "qa").unwrap();
+        let qa_step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "qa")
+            .expect("qa step should exist");
         assert!(qa_step.required_capability.is_none());
     }
 
@@ -613,13 +677,16 @@ mod tests {
         let init_step = workflow.steps.iter().find(|s| s.id == "init_once");
         assert!(init_step.is_some(), "should add init_once step");
         assert!(
-            !init_step.unwrap().enabled,
+            !init_step.expect("init_once step should exist").enabled,
             "added init_once should be disabled"
         );
 
         let plan_step = workflow.steps.iter().find(|s| s.id == "plan");
         assert!(plan_step.is_some(), "should add plan step");
-        assert!(!plan_step.unwrap().enabled, "added plan should be disabled");
+        assert!(
+            !plan_step.expect("plan step should exist").enabled,
+            "added plan should be disabled"
+        );
     }
 
     #[test]
@@ -672,7 +739,11 @@ mod tests {
         let step = make_step("plan", true);
         let mut workflow = make_workflow(vec![step]);
         normalize_workflow_config(&mut workflow);
-        let plan_step = workflow.steps.iter().find(|s| s.id == "plan").unwrap();
+        let plan_step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "plan")
+            .expect("plan step should exist");
         assert_eq!(plan_step.id, "plan", "step id should be preserved");
     }
 
@@ -681,7 +752,11 @@ mod tests {
         let step = make_step("plan", true);
         let mut workflow = make_workflow(vec![step]);
         normalize_workflow_config(&mut workflow);
-        let step = workflow.steps.iter().find(|s| s.id == "plan").unwrap();
+        let step = workflow
+            .steps
+            .iter()
+            .find(|s| s.id == "plan")
+            .expect("plan step should exist");
         assert_eq!(step.required_capability.as_deref(), Some("plan"));
     }
 
@@ -692,7 +767,7 @@ mod tests {
         let scan = workflow.steps.iter().find(|s| s.id == "ticket_scan");
         assert!(scan.is_some(), "ticket_scan should exist");
         assert!(
-            scan.unwrap().enabled,
+            scan.expect("ticket_scan should exist").enabled,
             "ticket_scan should be enabled when fix is enabled but qa is not"
         );
     }
@@ -752,14 +827,18 @@ mod tests {
         let mut wf = make_workflow(steps);
         normalize_workflow_config(&mut wf);
 
-        let run_qa = wf.steps.iter().find(|s| s.id == "run_qa").unwrap();
+        let run_qa = wf
+            .steps
+            .iter()
+            .find(|s| s.id == "run_qa")
+            .expect("run_qa should exist");
         assert_eq!(
             run_qa.required_capability,
             Some("qa".to_string()),
             "required_capability must survive normalization"
         );
 
-        let json = serde_json::to_string_pretty(run_qa).unwrap();
+        let json = serde_json::to_string_pretty(run_qa).expect("serialize run_qa");
         assert!(
             json.contains("required_capability"),
             "required_capability must appear in JSON: {}",

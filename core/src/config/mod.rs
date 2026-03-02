@@ -128,8 +128,9 @@ mod tests {
     #[test]
     fn test_orchestrator_config_serde_round_trip() {
         let cfg = OrchestratorConfig::default();
-        let json = serde_json::to_string(&cfg).unwrap();
-        let cfg2: OrchestratorConfig = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&cfg).expect("config should serialize");
+        let cfg2: OrchestratorConfig =
+            serde_json::from_str(&json).expect("config should deserialize");
         assert_eq!(cfg2.defaults.project, cfg.defaults.project);
         assert!(cfg2.projects.is_empty());
     }

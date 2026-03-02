@@ -29,7 +29,11 @@ impl CliHandler {
                     OutputFormat::Json => serde_json::to_string_pretty(
                         &crate::resource::export_manifest_documents(&active.config),
                     )?,
-                    OutputFormat::Table => unreachable!(),
+                    OutputFormat::Table => {
+                        return Err(anyhow::anyhow!(
+                            "table output is not supported for manifest export"
+                        ));
+                    }
                 };
                 if let Some(path) = file {
                     std::fs::write(path, &content)

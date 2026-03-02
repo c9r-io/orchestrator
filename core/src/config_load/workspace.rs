@@ -161,7 +161,7 @@ mod tests {
         let root = std::env::temp_dir();
         let result = resolve_workspace_path(&root, "subdir/file.md", "test_field");
         assert!(result.is_ok());
-        let path = result.unwrap();
+        let path = result.expect("relative path should resolve");
         assert!(path.starts_with(&root));
         assert!(path.ends_with("subdir/file.md"));
     }
@@ -191,8 +191,11 @@ mod tests {
     fn resolve_workspace_path_validates_existing_path_within_root() {
         let root = std::env::temp_dir();
         let sub = root.join(format!("test-resolve-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&sub).unwrap();
-        let rel = sub.file_name().unwrap().to_str().unwrap();
+        std::fs::create_dir_all(&sub).expect("create nested workspace dir");
+        let rel = sub
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("subdir should have valid UTF-8 file name");
         let result = resolve_workspace_path(&root, rel, "test_field");
         assert!(
             result.is_ok(),
@@ -207,7 +210,7 @@ mod tests {
         let config = OrchestratorConfig::default();
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("EMPTY_WORKSPACES"));
+        assert!(result.expect_err("operation should fail").to_string().contains("EMPTY_WORKSPACES"));
     }
 
     #[test]
@@ -229,7 +232,7 @@ mod tests {
         };
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("EMPTY_AGENTS"));
+        assert!(result.expect_err("operation should fail").to_string().contains("EMPTY_AGENTS"));
     }
 
     #[test]
@@ -254,7 +257,7 @@ mod tests {
         };
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("EMPTY_WORKFLOWS"));
+        assert!(result.expect_err("operation should fail").to_string().contains("EMPTY_WORKFLOWS"));
     }
 
     #[test]
@@ -291,7 +294,7 @@ mod tests {
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("operation should fail")
             .to_string()
             .contains("INVALID_WORKSPACE"));
     }
@@ -330,7 +333,7 @@ mod tests {
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("operation should fail")
             .to_string()
             .contains("qa_targets cannot be empty"));
     }
@@ -339,11 +342,11 @@ mod tests {
     fn resolve_and_validate_rejects_missing_default_workflow() {
         use crate::config::{AgentConfig, WorkspaceConfig};
         let ws_root = std::env::temp_dir().join(format!("test-ws-root-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&ws_root).unwrap();
+        std::fs::create_dir_all(&ws_root).expect("create workspace root");
         let qa_dir = ws_root.join("docs");
-        std::fs::create_dir_all(&qa_dir).unwrap();
+        std::fs::create_dir_all(&qa_dir).expect("create qa dir");
         let ticket_dir = ws_root.join("tickets");
-        std::fs::create_dir_all(&ticket_dir).unwrap();
+        std::fs::create_dir_all(&ticket_dir).expect("create ticket dir");
 
         let mut workspaces = HashMap::new();
         workspaces.insert(
@@ -376,7 +379,7 @@ mod tests {
         let result = resolve_and_validate_workspaces(Path::new("/"), &config);
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("operation should fail")
             .to_string()
             .contains("defaults.workflow"));
         std::fs::remove_dir_all(&ws_root).ok();
@@ -387,7 +390,7 @@ mod tests {
         let config = OrchestratorConfig::default();
         let result = resolve_and_validate_projects(Path::new("/tmp"), &config);
         assert!(result.is_ok());
-        assert!(result.unwrap().is_empty());
+        assert!(result.expect("empty project config should validate").is_empty());
     }
 
     #[test]
@@ -417,7 +420,8 @@ mod tests {
             projects,
             ..OrchestratorConfig::default()
         };
-        let result = resolve_and_validate_projects(Path::new("/app"), &config).unwrap();
+        let result =
+            resolve_and_validate_projects(Path::new("/app"), &config).expect("resolve projects");
         assert!(result.contains_key("proj1"));
         let proj = &result["proj1"];
         assert!(proj.workspaces.contains_key("proj-ws"));

@@ -264,7 +264,10 @@ mod tests {
             max_runs: Some(3),
         });
         assert!(pool.get("s1").is_some());
-        assert_eq!(pool.get("s1").unwrap().max_runs, Some(3));
+        assert_eq!(
+            pool.get("s1").expect("s1 should exist").max_runs,
+            Some(3)
+        );
         assert!(pool.get("nonexistent").is_none());
     }
 
@@ -292,8 +295,8 @@ mod tests {
             max_runs: None,
         });
         assert_eq!(pool.steps.len(), 1);
-        assert_eq!(pool.get("s1").unwrap().step_type, "qa");
-        assert_eq!(pool.get("s1").unwrap().priority, 99);
+        assert_eq!(pool.get("s1").expect("s1 should exist").step_type, "qa");
+        assert_eq!(pool.get("s1").expect("s1 should exist").priority, 99);
     }
 
     #[test]
@@ -580,10 +583,11 @@ mod tests {
             priority: 42,
             max_runs: Some(3),
         });
-        let json = serde_json::to_string(&pool).unwrap();
-        let pool2: DynamicStepPool = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&pool).expect("serialize dynamic step pool");
+        let pool2: DynamicStepPool =
+            serde_json::from_str(&json).expect("deserialize dynamic step pool");
         assert_eq!(pool2.steps.len(), 1);
-        let s = pool2.get("s1").unwrap();
+        let s = pool2.get("s1").expect("s1 should exist after round-trip");
         assert_eq!(s.priority, 42);
         assert_eq!(s.max_runs, Some(3));
     }

@@ -580,7 +580,7 @@ mod tests {
         let result = validate_step_prehook(&prehook, "test-workflow", "qa");
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("operation should fail")
             .to_string()
             .contains("prehook.when cannot be empty"));
     }
@@ -622,7 +622,7 @@ mod tests {
         };
         let result = validate_workflow_finalize_rule(&rule, "test-workflow");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("empty id"));
+        assert!(result.expect_err("operation should fail").to_string().contains("empty id"));
     }
 
     #[test]
@@ -636,7 +636,7 @@ mod tests {
         };
         let result = validate_workflow_finalize_rule(&rule, "test-workflow");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("empty status"));
+        assert!(result.expect_err("operation should fail").to_string().contains("empty status"));
     }
 
     #[test]
@@ -650,7 +650,7 @@ mod tests {
         };
         let result = validate_workflow_finalize_rule(&rule, "test-workflow");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("empty when"));
+        assert!(result.expect_err("operation should fail").to_string().contains("empty when"));
     }
 
     #[test]
@@ -685,7 +685,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("expression should evaluate to true"));
     }
 
     #[test]
@@ -720,7 +720,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
         assert!(result.is_ok());
-        assert!(!result.unwrap());
+        assert!(!result.expect("expression should evaluate to false"));
     }
 
     #[test]
@@ -789,7 +789,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("qa_failed == true", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("qa_failed expression should be true"));
     }
 
     #[test]
@@ -827,7 +827,7 @@ mod tests {
             &context,
         );
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("compound expression should be true"));
     }
 
     #[test]
@@ -867,7 +867,7 @@ mod tests {
         );
         assert!(result.is_ok());
         assert!(
-            result.unwrap(),
+            result.expect("build error expression should evaluate"),
             "should trigger fix when build errors exist"
         );
 
@@ -883,7 +883,10 @@ mod tests {
             &context_no_errors,
         );
         assert!(result.is_ok());
-        assert!(!result.unwrap(), "should not trigger fix when no errors");
+        assert!(
+            !result.expect("no-error expression should evaluate"),
+            "should not trigger fix when no errors"
+        );
     }
 
     // --- Helper to create a default StepPrehookContext ---
@@ -1002,11 +1005,11 @@ mod tests {
         // cycle 1 of 2: not last cycle, skip qa_testing
         let result = evaluate_step_prehook_expression("is_last_cycle", &context);
         assert!(result.is_ok());
-        assert!(!result.unwrap());
+        assert!(!result.expect("is_last_cycle should be false"));
 
         let result = evaluate_step_prehook_expression("max_cycles == 2", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("max_cycles expression should be true"));
 
         // cycle 2 of 2: is last cycle, run qa_testing
         let last_ctx = StepPrehookContext {
@@ -1016,7 +1019,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("is_last_cycle", &last_ctx);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("last cycle expression should be true"));
     }
 
     // ========================================================================
@@ -1035,7 +1038,7 @@ mod tests {
         let result = validate_step_prehook(&prehook, "wf", "step");
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("operation should fail")
             .to_string()
             .contains("prehook.when cannot be empty"));
     }
@@ -1062,7 +1065,7 @@ mod tests {
         let rule = make_rule("bad-cel", "invalid @#$% expression", "failed", None);
         let result = validate_workflow_finalize_rule(&rule, "wf");
         assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
+        let err_msg = result.expect_err("operation should fail").to_string();
         assert!(
             err_msg.contains("invalid CEL") || err_msg.contains("parser panic"),
             "expected CEL error, got: {}",
@@ -1075,7 +1078,7 @@ mod tests {
         let rule = make_rule("  ", "true", "skipped", None);
         let result = validate_workflow_finalize_rule(&rule, "wf");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("empty id"));
+        assert!(result.expect_err("operation should fail").to_string().contains("empty id"));
     }
 
     #[test]
@@ -1089,7 +1092,7 @@ mod tests {
         };
         let result = validate_workflow_finalize_rule(&rule, "wf");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("empty status"));
+        assert!(result.expect_err("operation should fail").to_string().contains("empty status"));
     }
 
     #[test]
@@ -1103,7 +1106,7 @@ mod tests {
         };
         let result = validate_workflow_finalize_rule(&rule, "wf");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("empty when"));
+        assert!(result.expect_err("operation should fail").to_string().contains("empty when"));
     }
 
     // ========================================================================
@@ -1125,7 +1128,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("finalize rule should match"));
     }
 
     #[test]
@@ -1143,7 +1146,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(!result.unwrap());
+        assert!(!result.expect("finalize rule should not match"));
     }
 
     #[test]
@@ -1161,7 +1164,7 @@ mod tests {
         let context = default_item_finalize_context();
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("must return bool"));
+        assert!(result.expect_err("operation should fail").to_string().contains("must return bool"));
     }
 
     #[test]
@@ -1175,7 +1178,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("qa_enabled rule should match"));
     }
 
     #[test]
@@ -1189,7 +1192,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("fix rule should match"));
     }
 
     #[test]
@@ -1208,7 +1211,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("retest rule should match"));
     }
 
     #[test]
@@ -1228,7 +1231,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(!result.unwrap());
+        assert!(!result.expect("rule should not match before last cycle"));
 
         // Last cycle -- rule should match
         let context_last = ItemFinalizeContext {
@@ -1237,7 +1240,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context_last);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("rule should match on last cycle"));
     }
 
     #[test]
@@ -1249,7 +1252,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("retest_new_ticket_count rule should match"));
     }
 
     #[test]
@@ -1262,7 +1265,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("new_ticket_count rule should match"));
     }
 
     #[test]
@@ -1280,7 +1283,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("exit code rule should match"));
     }
 
     #[test]
@@ -1292,7 +1295,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("retest exit code rule should match"));
     }
 
     #[test]
@@ -1305,7 +1308,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("fix_required rule should match"));
     }
 
     #[test]
@@ -1323,7 +1326,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("task/item id rule should match"));
     }
 
     #[test]
@@ -1335,7 +1338,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("cycle rule should match"));
 
         let context_early = ItemFinalizeContext {
             cycle: 1,
@@ -1343,7 +1346,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context_early);
         assert!(result.is_ok());
-        assert!(!result.unwrap());
+        assert!(!result.expect("early cycle rule should not match"));
     }
 
     #[test]
@@ -1355,7 +1358,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("item_status rule should match"));
     }
 
     #[test]
@@ -1364,7 +1367,7 @@ mod tests {
         let context = default_item_finalize_context();
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("task_status rule should match"));
     }
 
     #[test]
@@ -1373,7 +1376,7 @@ mod tests {
         let context = default_item_finalize_context();
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("qa_file_path rule should match"));
     }
 
     // ========================================================================
@@ -1386,7 +1389,11 @@ mod tests {
         let context = default_item_finalize_context();
         let result = resolve_workflow_finalize_outcome(&finalize, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap().is_none());
+        assert!(
+            result
+                .expect("finalize without rules should resolve")
+                .is_none()
+        );
     }
 
     #[test]
@@ -1402,7 +1409,11 @@ mod tests {
         let context = default_item_finalize_context();
         let result = resolve_workflow_finalize_outcome(&finalize, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap().is_none());
+        assert!(
+            result
+                .expect("finalize without matches should resolve")
+                .is_none()
+        );
     }
 
     #[test]
@@ -1414,9 +1425,9 @@ mod tests {
             ],
         };
         let context = default_item_finalize_context();
-        let result = resolve_workflow_finalize_outcome(&finalize, &context).unwrap();
-        assert!(result.is_some());
-        let outcome = result.unwrap();
+        let outcome = resolve_workflow_finalize_outcome(&finalize, &context)
+            .expect("finalize should resolve")
+            .expect("first rule should match");
         assert_eq!(outcome.rule_id, "r1");
         assert_eq!(outcome.status, "first_status");
         assert_eq!(outcome.reason, "first reason");
@@ -1431,9 +1442,9 @@ mod tests {
             ],
         };
         let context = default_item_finalize_context();
-        let result = resolve_workflow_finalize_outcome(&finalize, &context).unwrap();
-        assert!(result.is_some());
-        let outcome = result.unwrap();
+        let outcome = resolve_workflow_finalize_outcome(&finalize, &context)
+            .expect("finalize should resolve")
+            .expect("second rule should match");
         assert_eq!(outcome.rule_id, "r2");
         assert_eq!(outcome.status, "passed");
         assert_eq!(outcome.reason, "pass reason");
@@ -1445,8 +1456,9 @@ mod tests {
             rules: vec![make_rule("my-rule", "true", "done", None)],
         };
         let context = default_item_finalize_context();
-        let result = resolve_workflow_finalize_outcome(&finalize, &context).unwrap();
-        let outcome = result.unwrap();
+        let outcome = resolve_workflow_finalize_outcome(&finalize, &context)
+            .expect("finalize should resolve")
+            .expect("default reason rule should match");
         assert_eq!(outcome.reason, "finalize rule 'my-rule' matched");
     }
 
@@ -1484,8 +1496,8 @@ mod tests {
             ..default_item_finalize_context()
         };
         let outcome = resolve_workflow_finalize_outcome(&finalize, &ctx1)
-            .unwrap()
-            .unwrap();
+            .expect("ctx1 finalize should resolve")
+            .expect("ctx1 should match first rule");
         assert_eq!(outcome.rule_id, "skip_without_tickets");
 
         // Case 2: QA skipped, NOT last cycle => skip rule doesn't match, qa_ran also false
@@ -1496,7 +1508,8 @@ mod tests {
             is_last_cycle: false,
             ..default_item_finalize_context()
         };
-        let result = resolve_workflow_finalize_outcome(&finalize, &ctx2).unwrap();
+        let result =
+            resolve_workflow_finalize_outcome(&finalize, &ctx2).expect("finalize should resolve");
         assert!(result.is_none());
 
         // Case 3: QA ran and passed => qa_passed
@@ -1507,8 +1520,8 @@ mod tests {
             ..default_item_finalize_context()
         };
         let outcome = resolve_workflow_finalize_outcome(&finalize, &ctx3)
-            .unwrap()
-            .unwrap();
+            .expect("ctx3 finalize should resolve")
+            .expect("ctx3 should match qa_passed");
         assert_eq!(outcome.rule_id, "qa_passed");
 
         // Case 4: QA failed, fix ran and succeeded, retest succeeded
@@ -1523,8 +1536,8 @@ mod tests {
         };
         // First matching rule: qa_ran && !qa_failed is false, so check qa_failed_fixed
         let outcome = resolve_workflow_finalize_outcome(&finalize, &ctx4)
-            .unwrap()
-            .unwrap();
+            .expect("ctx4 finalize should resolve")
+            .expect("ctx4 should match qa_failed_fixed");
         assert_eq!(outcome.rule_id, "qa_failed_fixed");
     }
 
@@ -1548,7 +1561,7 @@ mod tests {
         // Expression returns an integer, not a bool
         let result = evaluate_step_prehook_expression("active_ticket_count + 1", &context);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("must return bool"));
+        assert!(result.expect_err("operation should fail").to_string().contains("must return bool"));
     }
 
     #[test]
@@ -1560,7 +1573,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("item_status == \"build_failed\"", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("string comparison should be true"));
     }
 
     #[test]
@@ -1571,7 +1584,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("step == \"qa_testing\"", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("step variable should match"));
     }
 
     #[test]
@@ -1582,7 +1595,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("task_id == \"special-task\"", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("task_id should match"));
     }
 
     #[test]
@@ -1593,7 +1606,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("task_item_id == \"item-42\"", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("task_item_id should match"));
     }
 
     #[test]
@@ -1605,7 +1618,7 @@ mod tests {
         let result =
             evaluate_step_prehook_expression("qa_file_path == \"/tmp/qa_report.md\"", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("qa_file_path should match"));
     }
 
     #[test]
@@ -1616,7 +1629,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("task_status == \"paused\"", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("task_status should match"));
     }
 
     #[test]
@@ -1627,7 +1640,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("new_ticket_count >= 5", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("new_ticket_count should match"));
     }
 
     #[test]
@@ -1638,7 +1651,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("fix_required", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("fix_required should be true"));
     }
 
     #[test]
@@ -1649,7 +1662,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("fix_exit_code == 1", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("fix_exit_code should match"));
     }
 
     #[test]
@@ -1660,7 +1673,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("retest_exit_code == 2", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("retest_exit_code should match"));
     }
 
     #[test]
@@ -1671,7 +1684,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("build_exit_code == 1", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("build_exit_code should match"));
     }
 
     #[test]
@@ -1682,7 +1695,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("test_exit_code == 1", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("test_exit_code should match"));
     }
 
     #[test]
@@ -1693,7 +1706,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("test_failures > 0", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("test_failures should match"));
     }
 
     #[test]
@@ -1701,7 +1714,7 @@ mod tests {
         let context = default_step_prehook_context();
         let result = evaluate_step_prehook_expression("true", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("literal true should evaluate"));
     }
 
     #[test]
@@ -1709,7 +1722,7 @@ mod tests {
         let context = default_step_prehook_context();
         let result = evaluate_step_prehook_expression("false", &context);
         assert!(result.is_ok());
-        assert!(!result.unwrap());
+        assert!(!result.expect("literal false should evaluate"));
     }
 
     #[test]
@@ -1720,7 +1733,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("!qa_failed", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("negation should evaluate true"));
     }
 
     #[test]
@@ -1732,7 +1745,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("qa_failed || fix_required", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("or operator should evaluate true"));
     }
 
     #[test]
@@ -1744,7 +1757,7 @@ mod tests {
         };
         let result = evaluate_step_prehook_expression("cycle > 1 && cycle < max_cycles", &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("cycle arithmetic should evaluate true"));
     }
 
     // ========================================================================
@@ -1775,7 +1788,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("all false flags rule should match"));
     }
 
     #[test]
@@ -1802,7 +1815,7 @@ mod tests {
         };
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.expect("all true flags rule should match"));
     }
 
     // ========================================================================
@@ -1819,7 +1832,8 @@ mod tests {
             ],
         };
         let context = default_item_finalize_context();
-        let result = resolve_workflow_finalize_outcome(&finalize, &context).unwrap();
+        let result = resolve_workflow_finalize_outcome(&finalize, &context)
+            .expect("finalize all-false should resolve");
         assert!(result.is_none());
     }
 
@@ -1834,8 +1848,8 @@ mod tests {
         };
         let context = default_item_finalize_context();
         let outcome = resolve_workflow_finalize_outcome(&finalize, &context)
-            .unwrap()
-            .unwrap();
+            .expect("finalize third-rule should resolve")
+            .expect("third rule should match");
         assert_eq!(outcome.rule_id, "r3");
         assert_eq!(outcome.status, "third");
         assert_eq!(outcome.reason, "third wins");
@@ -1892,6 +1906,8 @@ mod tests {
         let result = evaluate_step_prehook_expression("self_test_passed == true", &context);
         // This should either error or return false depending on CEL semantics
         // The important thing is it doesn't panic
-        assert!(result.is_err() || !result.unwrap());
+        assert!(
+            result.is_err() || !result.expect("self_test_passed expression should evaluate")
+        );
     }
 }

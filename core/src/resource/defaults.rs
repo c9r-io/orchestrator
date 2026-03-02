@@ -123,7 +123,10 @@ mod tests {
         let config = make_config();
         let loaded = DefaultsResource::get_from(&config, "anything");
         assert!(loaded.is_some());
-        assert_eq!(loaded.unwrap().metadata.name, "defaults");
+        assert_eq!(
+            loaded.expect("defaults resource should always be returned").metadata.name,
+            "defaults"
+        );
     }
 
     #[test]
@@ -154,7 +157,7 @@ mod tests {
             },
             spec: ResourceSpec::Project(ProjectSpec { description: None }),
         };
-        let err = dispatch_resource(resource).unwrap_err();
+        let err = dispatch_resource(resource).expect_err("operation should fail");
         assert!(err.to_string().contains("mismatch"));
     }
 }

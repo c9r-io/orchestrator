@@ -87,8 +87,9 @@ mod tests {
     #[test]
     fn test_workflow_finalize_config_serde_round_trip() {
         let cfg = super::super::default_workflow_finalize_config();
-        let json = serde_json::to_string(&cfg).unwrap();
-        let cfg2: WorkflowFinalizeConfig = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&cfg).expect("workflow finalize config should serialize");
+        let cfg2: WorkflowFinalizeConfig =
+            serde_json::from_str(&json).expect("workflow finalize config should deserialize");
         assert_eq!(cfg2.rules.len(), cfg.rules.len());
         assert_eq!(cfg2.rules[0].id, cfg.rules[0].id);
     }

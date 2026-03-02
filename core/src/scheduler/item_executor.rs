@@ -6,7 +6,7 @@ use crate::config::{
 use crate::events::insert_event;
 use crate::prehook::{emit_item_finalize_event, evaluate_step_prehook};
 use crate::selection::{select_agent_advanced, select_agent_by_preference};
-use crate::state::InnerState;
+use crate::state::{read_agent_health, read_agent_metrics, write_agent_metrics, InnerState};
 use crate::task_repository::{SqliteTaskRepository, TaskRepository};
 use crate::ticket::{
     create_ticket_for_qa_failure, list_existing_tickets_for_item,
@@ -560,8 +560,8 @@ pub async fn execute_guard_step(
 
     let (agent_id, template) = {
         let active = crate::config_load::read_active_config(state)?;
-        let health_map = state.agent_health.read().unwrap();
-        let metrics_map = state.agent_metrics.read().unwrap();
+        let health_map = read_agent_health(state);
+        let metrics_map = read_agent_metrics(state);
         if let Some(capability) = &step.required_capability {
             select_agent_advanced(
                 capability,
@@ -576,7 +576,7 @@ pub async fn execute_guard_step(
     };
 
     {
-        let mut metrics_map = state.agent_metrics.write().unwrap();
+        let mut metrics_map = write_agent_metrics(state);
         let metrics = metrics_map
             .entry(agent_id.clone())
             .or_insert_with(crate::metrics::MetricsCollector::new_agent_metrics);
@@ -1283,7 +1283,7 @@ mod tests {
     fn temp_dir(name: &str) -> std::path::PathBuf {
         let dir =
             std::env::temp_dir().join(format!("item-exec-test-{}-{}", name, uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(&dir).expect("create item executor temp dir");
         dir
     }
 
@@ -1344,13 +1344,19 @@ mod tests {
 
         spill_large_var(&dir, "task1", "stdout", value.clone(), &mut pipeline);
 
-        assert_eq!(pipeline.vars.get("stdout").unwrap(), "hello world");
+        assert_eq!(
+            pipeline.vars.get("stdout").expect("stdout should be set"),
+            "hello world"
+        );
         // _path is always set now (even for small values)
         let p = pipeline
             .vars
             .get("stdout_path")
             .expect("stdout_path must be set");
-        assert_eq!(std::fs::read_to_string(p).unwrap(), "hello world");
+        assert_eq!(
+            std::fs::read_to_string(p).expect("read stdout spill file"),
+            "hello world"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1362,10 +1368,10 @@ mod tests {
 
         spill_large_var(&dir, "task1", "out", value.clone(), &mut pipeline);
 
-        assert_eq!(pipeline.vars.get("out").unwrap(), &value);
+        assert_eq!(pipeline.vars.get("out").expect("out should be set"), &value);
         // _path is always set now (even for small values)
         let p = pipeline.vars.get("out_path").expect("out_path must be set");
-        assert_eq!(std::fs::read_to_string(p).unwrap(), value);
+        assert_eq!(std::fs::read_to_string(p).expect("read out spill file"), value);
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1378,19 +1384,21 @@ mod tests {
         spill_large_var(&dir, "task1", "big", value.clone(), &mut pipeline);
 
         // Inline value should be truncated with the marker
-        let inline = pipeline.vars.get("big").unwrap();
+        let inline = pipeline.vars.get("big").expect("big should be set");
         assert!(inline.contains("...\n[truncated — full content at "));
         // The inline prefix (before the marker) should be at most PIPELINE_VAR_INLINE_LIMIT bytes
-        let prefix_end = inline.find("...\n[truncated").unwrap();
+        let prefix_end = inline
+            .find("...\n[truncated")
+            .expect("truncation marker should exist");
         assert!(prefix_end <= PIPELINE_VAR_INLINE_LIMIT);
 
         // Companion path variable should exist
-        let path_str = pipeline.vars.get("big_path").unwrap();
+        let path_str = pipeline.vars.get("big_path").expect("big_path should be set");
         let spill_path = std::path::Path::new(path_str);
         assert!(spill_path.exists());
 
         // File should contain the full original value
-        let on_disk = std::fs::read_to_string(spill_path).unwrap();
+        let on_disk = std::fs::read_to_string(spill_path).expect("read spilled big value");
         assert_eq!(on_disk, value);
 
         std::fs::remove_dir_all(&dir).ok();
@@ -1404,7 +1412,10 @@ mod tests {
 
         spill_large_var(&dir, "t42", "my_key", value, &mut pipeline);
 
-        let path_str = pipeline.vars.get("my_key_path").unwrap();
+        let path_str = pipeline
+            .vars
+            .get("my_key_path")
+            .expect("my_key_path should be set");
         assert!(path_str.contains("t42"));
         assert!(path_str.ends_with("my_key.txt"));
     }
@@ -1424,13 +1435,13 @@ mod tests {
 
         spill_large_var(&dir, "task1", "mb", value.clone(), &mut pipeline);
 
-        let inline = pipeline.vars.get("mb").unwrap();
+        let inline = pipeline.vars.get("mb").expect("mb should be set");
         // The truncated portion must be valid UTF-8 (guaranteed by safe_end logic)
         assert!(inline.contains("...\n[truncated"));
 
         // Verify the full file content is intact
-        let path_str = pipeline.vars.get("mb_path").unwrap();
-        let on_disk = std::fs::read_to_string(path_str).unwrap();
+        let path_str = pipeline.vars.get("mb_path").expect("mb_path should be set");
+        let on_disk = std::fs::read_to_string(path_str).expect("read multibyte spill file");
         assert_eq!(on_disk, value);
 
         std::fs::remove_dir_all(&dir).ok();
@@ -1468,13 +1479,13 @@ mod tests {
         let result = spill_to_file(&dir, "task1", "key", &value);
         assert!(result.is_some());
 
-        let (truncated, path_str) = result.unwrap();
+        let (truncated, path_str) = result.expect("spill should occur");
         assert!(truncated.starts_with("zzzz"));
         assert!(truncated.contains("...\n[truncated — full content at "));
         assert!(path_str.ends_with("key.txt"));
 
         // Verify file on disk
-        let on_disk = std::fs::read_to_string(&path_str).unwrap();
+        let on_disk = std::fs::read_to_string(&path_str).expect("read spilled file");
         assert_eq!(on_disk, value);
 
         std::fs::remove_dir_all(&dir).ok();
@@ -1485,7 +1496,8 @@ mod tests {
         let dir = temp_dir("stf-fmt");
         let value = "A".repeat(PIPELINE_VAR_INLINE_LIMIT + 500);
 
-        let (truncated, path_str) = spill_to_file(&dir, "task1", "output", &value).unwrap();
+        let (truncated, path_str) =
+            spill_to_file(&dir, "task1", "output", &value).expect("spill should occur");
 
         // The truncated string should contain the marker text
         assert!(truncated.contains("...\n[truncated — full content at "));
@@ -1510,10 +1522,12 @@ mod tests {
         let result = spill_to_file(&dir, "task1", "key", &value);
         assert!(result.is_some());
 
-        let (truncated, _path_str) = result.unwrap();
+        let (truncated, _path_str) = result.expect("spill should occur");
         // The truncated text should be valid UTF-8 (it is a String, so guaranteed)
         // and should NOT split a multi-byte character
-        let prefix_end = truncated.find("...\n[truncated").unwrap();
+        let prefix_end = truncated
+            .find("...\n[truncated")
+            .expect("truncation marker should exist");
         let prefix = &truncated[..prefix_end];
         // The prefix should end before the multi-byte char since it can't fit
         // within the limit without splitting
@@ -1521,7 +1535,7 @@ mod tests {
         assert!(prefix.chars().all(|c| c == 'b'));
 
         // Full content on disk should be intact
-        let on_disk = std::fs::read_to_string(&_path_str).unwrap();
+        let on_disk = std::fs::read_to_string(&_path_str).expect("read spilled multibyte file");
         assert_eq!(on_disk, value);
 
         std::fs::remove_dir_all(&dir).ok();
@@ -1535,8 +1549,11 @@ mod tests {
         let mut value = "c".repeat(PIPELINE_VAR_INLINE_LIMIT - 2);
         value.push_str("你好世界"); // 12 bytes, total = 4094 + 12 = 4106
 
-        let (truncated, _) = spill_to_file(&dir, "task1", "k", &value).unwrap();
-        let prefix_end = truncated.find("...\n[truncated").unwrap();
+        let (truncated, _) =
+            spill_to_file(&dir, "task1", "k", &value).expect("spill should occur");
+        let prefix_end = truncated
+            .find("...\n[truncated")
+            .expect("truncation marker should exist");
         let prefix = &truncated[..prefix_end];
         // safe_end should back up to the start of the multibyte char
         // 4094 bytes of 'c', then "你" starts at 4094 and needs bytes 4094..4097

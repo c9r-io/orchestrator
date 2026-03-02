@@ -664,6 +664,12 @@ mod tests {
     use super::*;
     use clap::Parser;
 
+    macro_rules! assert_variant {
+        ($value:expr, $pattern:pat, $message:literal) => {
+            assert!(matches!($value, $pattern), $message)
+        };
+    }
+
     #[test]
     fn parse_apply_file_and_dry_run_flags() {
         let cli = Cli::parse_from(["orchestrator", "apply", "-f", "resources.yaml", "--dry-run"]);
@@ -673,7 +679,7 @@ mod tests {
                 assert_eq!(file, "resources.yaml");
                 assert!(dry_run);
             }
-            _ => panic!("expected apply command"),
+            other => assert_variant!(other, Commands::Apply { .. }, "expected apply command"),
         }
     }
 
@@ -686,7 +692,7 @@ mod tests {
                 assert_eq!(file, "resources.yaml");
                 assert!(!dry_run);
             }
-            _ => panic!("expected apply command"),
+            other => assert_variant!(other, Commands::Apply { .. }, "expected apply command"),
         }
     }
 
@@ -698,7 +704,11 @@ mod tests {
             Commands::Edit(EditCommands::Export { selector }) => {
                 assert_eq!(selector, "workspace/default");
             }
-            _ => panic!("expected edit export command"),
+            other => assert_variant!(
+                other,
+                Commands::Edit(EditCommands::Export { .. }),
+                "expected edit export command"
+            ),
         }
     }
 
@@ -710,7 +720,11 @@ mod tests {
             Commands::Edit(EditCommands::Export { selector }) => {
                 assert_eq!(selector, "agent/opencode");
             }
-            _ => panic!("expected edit export command"),
+            other => assert_variant!(
+                other,
+                Commands::Edit(EditCommands::Export { .. }),
+                "expected edit export command"
+            ),
         }
     }
 
@@ -722,7 +736,11 @@ mod tests {
             Commands::Edit(EditCommands::Open { selector }) => {
                 assert_eq!(selector, "workspace/default");
             }
-            _ => panic!("expected edit open command"),
+            other => assert_variant!(
+                other,
+                Commands::Edit(EditCommands::Open { .. }),
+                "expected edit open command"
+            ),
         }
     }
 
@@ -738,7 +756,11 @@ mod tests {
                 assert_eq!(workspace_id, "new-workspace");
                 assert_eq!(output, OutputFormat::Table);
             }
-            _ => panic!("expected workspace info command"),
+            other => assert_variant!(
+                other,
+                Commands::Workspace(WorkspaceCommands::Info { .. }),
+                "expected workspace info command"
+            ),
         }
     }
 
@@ -754,7 +776,11 @@ mod tests {
                 assert_eq!(workspace_id, "my-ws");
                 assert_eq!(output, OutputFormat::Json);
             }
-            _ => panic!("expected workspace info command"),
+            other => assert_variant!(
+                other,
+                Commands::Workspace(WorkspaceCommands::Info { .. }),
+                "expected workspace info command"
+            ),
         }
     }
 
@@ -793,7 +819,11 @@ mod tests {
                 assert!(dry_run);
                 assert_eq!(output, OutputFormat::Json);
             }
-            _ => panic!("expected workspace create command"),
+            other => assert_variant!(
+                other,
+                Commands::Workspace(WorkspaceCommands::Create { .. }),
+                "expected workspace create command"
+            ),
         }
     }
 
@@ -821,7 +851,11 @@ mod tests {
                 assert_eq!(template_qa, Some("echo qa".to_string()));
                 assert_eq!(capability, vec!["qa"]);
             }
-            _ => panic!("expected agent create command"),
+            other => assert_variant!(
+                other,
+                Commands::Agent(AgentCommands::Create { .. }),
+                "expected agent create command"
+            ),
         }
     }
 
@@ -846,7 +880,11 @@ mod tests {
                 assert_eq!(poll_ms, 250);
                 assert_eq!(workers, 6);
             }
-            _ => panic!("expected task worker start command"),
+            other => assert_variant!(
+                other,
+                Commands::Task(TaskCommands::Worker(TaskWorkerCommands::Start { .. })),
+                "expected task worker start command"
+            ),
         }
     }
 
@@ -862,7 +900,11 @@ mod tests {
                 assert_eq!(poll_ms, 1000);
                 assert_eq!(workers, 1);
             }
-            _ => panic!("expected task worker start command"),
+            other => assert_variant!(
+                other,
+                Commands::Task(TaskCommands::Worker(TaskWorkerCommands::Start { .. })),
+                "expected task worker start command"
+            ),
         }
     }
 
@@ -896,7 +938,11 @@ mod tests {
                 assert_eq!(loop_mode, "infinite");
                 assert_eq!(max_cycles, Some(5));
             }
-            _ => panic!("expected workflow create command"),
+            other => assert_variant!(
+                other,
+                Commands::Workflow(WorkflowCommands::Create { .. }),
+                "expected workflow create command"
+            ),
         }
     }
 
@@ -909,7 +955,7 @@ mod tests {
                 assert_eq!(root, None);
                 assert!(!force);
             }
-            _ => panic!("expected init command"),
+            other => assert_variant!(other, Commands::Init { .. }, "expected init command"),
         }
     }
 
@@ -922,7 +968,7 @@ mod tests {
                 assert_eq!(root, Some("/tmp/test".to_string()));
                 assert!(force);
             }
-            _ => panic!("expected init command"),
+            other => assert_variant!(other, Commands::Init { .. }, "expected init command"),
         }
     }
 
@@ -940,7 +986,7 @@ mod tests {
                 assert_eq!(output, OutputFormat::Table);
                 assert_eq!(selector, None);
             }
-            _ => panic!("expected get command"),
+            other => assert_variant!(other, Commands::Get { .. }, "expected get command"),
         }
     }
 
@@ -958,7 +1004,7 @@ mod tests {
                 assert_eq!(output, OutputFormat::Yaml);
                 assert_eq!(selector, None);
             }
-            _ => panic!("expected get command"),
+            other => assert_variant!(other, Commands::Get { .. }, "expected get command"),
         }
     }
 
@@ -976,7 +1022,7 @@ mod tests {
                 assert_eq!(output, OutputFormat::Table);
                 assert_eq!(selector, Some("env=prod".to_string()));
             }
-            _ => panic!("expected get command"),
+            other => assert_variant!(other, Commands::Get { .. }, "expected get command"),
         }
     }
 
@@ -989,7 +1035,7 @@ mod tests {
                 assert_eq!(resource, "workflow/basic");
                 assert_eq!(output, OutputFormat::Yaml);
             }
-            _ => panic!("expected describe command"),
+            other => assert_variant!(other, Commands::Describe { .. }, "expected describe command"),
         }
     }
 
@@ -1002,7 +1048,7 @@ mod tests {
                 assert_eq!(resource, "workspace/old-ws");
                 assert!(!force);
             }
-            _ => panic!("expected delete command"),
+            other => assert_variant!(other, Commands::Delete { .. }, "expected delete command"),
         }
     }
 
@@ -1015,7 +1061,7 @@ mod tests {
                 assert_eq!(resource, "agent/old");
                 assert!(force);
             }
-            _ => panic!("expected delete command"),
+            other => assert_variant!(other, Commands::Delete { .. }, "expected delete command"),
         }
     }
 
@@ -1028,7 +1074,7 @@ mod tests {
                 assert_eq!(resource, "workflow/old-wf");
                 assert!(force);
             }
-            _ => panic!("expected delete command via rm alias"),
+            other => assert_variant!(other, Commands::Delete { .. }, "expected delete command via rm alias"),
         }
     }
 
@@ -1046,7 +1092,11 @@ mod tests {
                 assert!(!include_history);
                 assert!(!include_config);
             }
-            _ => panic!("expected db reset command"),
+            other => assert_variant!(
+                other,
+                Commands::Db(DbCommands::Reset { .. }),
+                "expected db reset command"
+            ),
         }
     }
 
@@ -1064,7 +1114,11 @@ mod tests {
                 assert!(!include_history);
                 assert!(!include_config);
             }
-            _ => panic!("expected db reset command"),
+            other => assert_variant!(
+                other,
+                Commands::Db(DbCommands::Reset { .. }),
+                "expected db reset command"
+            ),
         }
     }
 
@@ -1088,7 +1142,11 @@ mod tests {
                 assert!(include_history);
                 assert!(!include_config);
             }
-            _ => panic!("expected db reset command"),
+            other => assert_variant!(
+                other,
+                Commands::Db(DbCommands::Reset { .. }),
+                "expected db reset command"
+            ),
         }
     }
 
@@ -1106,7 +1164,11 @@ mod tests {
                 assert!(!include_history);
                 assert!(include_config);
             }
-            _ => panic!("expected db reset command"),
+            other => assert_variant!(
+                other,
+                Commands::Db(DbCommands::Reset { .. }),
+                "expected db reset command"
+            ),
         }
     }
 
@@ -1116,7 +1178,11 @@ mod tests {
 
         match cli.command {
             Commands::Completion(CompletionCommands::Bash) => {}
-            _ => panic!("expected completion bash command"),
+            other => assert_variant!(
+                other,
+                Commands::Completion(CompletionCommands::Bash),
+                "expected completion bash command"
+            ),
         }
     }
 
@@ -1148,7 +1214,11 @@ mod tests {
                 assert_eq!(workflow, Some("qa_only".to_string()));
                 assert!(force);
             }
-            _ => panic!("expected qa project create command"),
+            other => assert_variant!(
+                other,
+                Commands::Qa(QaCommands::Project(QaProjectCommands::Create { .. })),
+                "expected qa project create command"
+            ),
         }
     }
 
@@ -1174,7 +1244,11 @@ mod tests {
                 assert!(keep_config);
                 assert!(force);
             }
-            _ => panic!("expected qa project reset command"),
+            other => assert_variant!(
+                other,
+                Commands::Qa(QaCommands::Project(QaProjectCommands::Reset { .. })),
+                "expected qa project reset command"
+            ),
         }
     }
 
@@ -1186,7 +1260,11 @@ mod tests {
             Commands::Qa(QaCommands::Doctor { output }) => {
                 assert_eq!(output, OutputFormat::Json);
             }
-            _ => panic!("expected qa doctor command"),
+            other => assert_variant!(
+                other,
+                Commands::Qa(QaCommands::Doctor { .. }),
+                "expected qa doctor command"
+            ),
         }
     }
 
@@ -1199,7 +1277,11 @@ mod tests {
                 assert_eq!(task_id, "task-123");
                 assert_eq!(output, OutputFormat::Table);
             }
-            _ => panic!("expected task info command"),
+            other => assert_variant!(
+                other,
+                Commands::Task(TaskCommands::Info { .. }),
+                "expected task info command"
+            ),
         }
     }
 
@@ -1214,7 +1296,11 @@ mod tests {
                 assert_eq!(task_id, Some("task-123".to_string()));
                 assert!(!latest);
             }
-            _ => panic!("expected task start command"),
+            other => assert_variant!(
+                other,
+                Commands::Task(TaskCommands::Start { .. }),
+                "expected task start command"
+            ),
         }
     }
 
@@ -1229,7 +1315,11 @@ mod tests {
                 assert_eq!(task_id, None);
                 assert!(latest);
             }
-            _ => panic!("expected task start command"),
+            other => assert_variant!(
+                other,
+                Commands::Task(TaskCommands::Start { .. }),
+                "expected task start command"
+            ),
         }
     }
 
@@ -1261,7 +1351,11 @@ mod tests {
                 assert_eq!(goal, Some("goal".to_string()));
                 assert!(no_start);
             }
-            _ => panic!("expected task create command"),
+            other => assert_variant!(
+                other,
+                Commands::Task(TaskCommands::Create { .. }),
+                "expected task create command"
+            ),
         }
     }
 
@@ -1279,7 +1373,11 @@ mod tests {
                 assert_eq!(output, OutputFormat::Table);
                 assert!(!verbose);
             }
-            _ => panic!("expected task list command"),
+            other => assert_variant!(
+                other,
+                Commands::Task(TaskCommands::List { .. }),
+                "expected task list command"
+            ),
         }
     }
 
@@ -1306,7 +1404,11 @@ mod tests {
                 assert_eq!(output, OutputFormat::Json);
                 assert!(verbose);
             }
-            _ => panic!("expected task list command"),
+            other => assert_variant!(
+                other,
+                Commands::Task(TaskCommands::List { .. }),
+                "expected task list command"
+            ),
         }
     }
 
@@ -1319,7 +1421,11 @@ mod tests {
                 assert_eq!(task_id, "task-123");
                 assert!(!force);
             }
-            _ => panic!("expected task delete command"),
+            other => assert_variant!(
+                other,
+                Commands::Task(TaskCommands::Delete { .. }),
+                "expected task delete command"
+            ),
         }
     }
 
@@ -1332,7 +1438,11 @@ mod tests {
                 assert_eq!(task_id, "task-123");
                 assert!(force);
             }
-            _ => panic!("expected task delete command"),
+            other => assert_variant!(
+                other,
+                Commands::Task(TaskCommands::Delete { .. }),
+                "expected task delete command"
+            ),
         }
     }
 
@@ -1344,7 +1454,11 @@ mod tests {
             Commands::Task(TaskCommands::Retry { task_item_id, .. }) => {
                 assert_eq!(task_item_id, "item-123");
             }
-            _ => panic!("expected task retry command"),
+            other => assert_variant!(
+                other,
+                Commands::Task(TaskCommands::Retry { .. }),
+                "expected task retry command"
+            ),
         }
     }
 
@@ -1356,7 +1470,11 @@ mod tests {
             Commands::Task(TaskCommands::Pause { task_id }) => {
                 assert_eq!(task_id, "task-123");
             }
-            _ => panic!("expected task pause command"),
+            other => assert_variant!(
+                other,
+                Commands::Task(TaskCommands::Pause { .. }),
+                "expected task pause command"
+            ),
         }
     }
 
@@ -1368,7 +1486,11 @@ mod tests {
             Commands::Task(TaskCommands::Resume { task_id, .. }) => {
                 assert_eq!(task_id, "task-123");
             }
-            _ => panic!("expected task resume command"),
+            other => assert_variant!(
+                other,
+                Commands::Task(TaskCommands::Resume { .. }),
+                "expected task resume command"
+            ),
         }
     }
 
@@ -1401,7 +1523,11 @@ mod tests {
                 assert!(tty);
                 assert!(!repeatable);
             }
-            _ => panic!("expected task edit command"),
+            other => assert_variant!(
+                other,
+                Commands::Task(TaskCommands::Edit { .. }),
+                "expected task edit command"
+            ),
         }
     }
 
@@ -1417,7 +1543,11 @@ mod tests {
                 assert_eq!(task_id, "task-123");
                 assert_eq!(output, OutputFormat::Table);
             }
-            _ => panic!("expected task session list command"),
+            other => assert_variant!(
+                other,
+                Commands::Task(TaskCommands::Session(TaskSessionCommands::List { .. })),
+                "expected task session list command"
+            ),
         }
     }
 
@@ -1441,7 +1571,11 @@ mod tests {
                 assert_eq!(session_id, "sess-123");
                 assert_eq!(output, OutputFormat::Json);
             }
-            _ => panic!("expected task session info command"),
+            other => assert_variant!(
+                other,
+                Commands::Task(TaskCommands::Session(TaskSessionCommands::Info { .. })),
+                "expected task session info command"
+            ),
         }
     }
 
@@ -1464,7 +1598,11 @@ mod tests {
                 assert_eq!(session_id, "sess-123");
                 assert!(force);
             }
-            _ => panic!("expected task session close command"),
+            other => assert_variant!(
+                other,
+                Commands::Task(TaskCommands::Session(TaskSessionCommands::Close { .. })),
+                "expected task session close command"
+            ),
         }
     }
 
@@ -1492,7 +1630,7 @@ mod tests {
                 assert_eq!(target, "task/task-123/step/plan-1");
                 assert_eq!(command, vec!["echo".to_string(), "hello".to_string()]);
             }
-            _ => panic!("expected exec command"),
+            other => assert_variant!(other, Commands::Exec { .. }, "expected exec command"),
         }
     }
 
@@ -1513,7 +1651,11 @@ mod tests {
                 assert_eq!(output, OutputFormat::Json);
                 assert_eq!(file, Some("/tmp/out.json".to_string()));
             }
-            _ => panic!("expected manifest export command"),
+            other => assert_variant!(
+                other,
+                Commands::Manifest(ManifestCommands::Export { .. }),
+                "expected manifest export command"
+            ),
         }
     }
 
@@ -1531,7 +1673,11 @@ mod tests {
             Commands::Manifest(ManifestCommands::Validate { file }) => {
                 assert_eq!(file, "/tmp/input.yaml");
             }
-            _ => panic!("expected manifest validate command"),
+            other => assert_variant!(
+                other,
+                Commands::Manifest(ManifestCommands::Validate { .. }),
+                "expected manifest validate command"
+            ),
         }
     }
 
@@ -1543,7 +1689,11 @@ mod tests {
             Commands::Verify(VerifyCommands::BinarySnapshot { root }) => {
                 assert_eq!(root, None);
             }
-            _ => panic!("expected verify binary-snapshot command"),
+            other => assert_variant!(
+                other,
+                Commands::Verify(VerifyCommands::BinarySnapshot { .. }),
+                "expected verify binary-snapshot command"
+            ),
         }
     }
 
@@ -1561,7 +1711,11 @@ mod tests {
             Commands::Verify(VerifyCommands::BinarySnapshot { root }) => {
                 assert_eq!(root, Some("/path/to/workspace".to_string()));
             }
-            _ => panic!("expected verify binary-snapshot command"),
+            other => assert_variant!(
+                other,
+                Commands::Verify(VerifyCommands::BinarySnapshot { .. }),
+                "expected verify binary-snapshot command"
+            ),
         }
     }
 
@@ -1579,7 +1733,11 @@ mod tests {
             Commands::Verify(VerifyCommands::BinarySnapshot { root }) => {
                 assert_eq!(root, Some("/another/path".to_string()));
             }
-            _ => panic!("expected verify binary-snapshot command"),
+            other => assert_variant!(
+                other,
+                Commands::Verify(VerifyCommands::BinarySnapshot { .. }),
+                "expected verify binary-snapshot command"
+            ),
         }
     }
 
@@ -1592,7 +1750,7 @@ mod tests {
                 assert_eq!(workflow, None);
                 assert_eq!(output, OutputFormat::Table);
             }
-            _ => panic!("expected check command"),
+            other => assert_variant!(other, Commands::Check { .. }, "expected check command"),
         }
     }
 
@@ -1605,7 +1763,7 @@ mod tests {
                 assert_eq!(workflow, Some("self-bootstrap".to_string()));
                 assert_eq!(output, OutputFormat::Table);
             }
-            _ => panic!("expected check command"),
+            other => assert_variant!(other, Commands::Check { .. }, "expected check command"),
         }
     }
 
@@ -1618,7 +1776,7 @@ mod tests {
                 assert_eq!(workflow, None);
                 assert_eq!(output, OutputFormat::Json);
             }
-            _ => panic!("expected check command"),
+            other => assert_variant!(other, Commands::Check { .. }, "expected check command"),
         }
     }
 
@@ -1628,7 +1786,7 @@ mod tests {
 
         match cli.command {
             Commands::Check { .. } => {}
-            _ => panic!("expected check command via alias"),
+            other => assert_variant!(other, Commands::Check { .. }, "expected check command via alias"),
         }
     }
 }

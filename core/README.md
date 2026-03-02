@@ -29,6 +29,13 @@ cd core
 cargo test --lib --bins
 ```
 
+## Lint
+
+```bash
+cd core
+cargo clippy --all-targets -- -D clippy::unwrap_used -D clippy::panic
+```
+
 ## Config And Data
 
 When run from repo root, runtime paths are:

@@ -417,71 +417,105 @@ mod tests {
 
     #[test]
     fn registered_resource_kind_name_for_all_variants() {
-        let ws = dispatch_resource(workspace_manifest("rr-ws", "workspace/rr")).unwrap();
+        let ws =
+            dispatch_resource(workspace_manifest("rr-ws", "workspace/rr")).expect("dispatch ws");
         assert_eq!(ws.kind(), ResourceKind::Workspace);
         assert_eq!(ws.name(), "rr-ws");
 
-        let ag = dispatch_resource(agent_manifest("rr-ag", "cmd")).unwrap();
+        let ag = dispatch_resource(agent_manifest("rr-ag", "cmd")).expect("dispatch agent");
         assert_eq!(ag.kind(), ResourceKind::Agent);
         assert_eq!(ag.name(), "rr-ag");
 
-        let wf = dispatch_resource(workflow_manifest("rr-wf")).unwrap();
+        let wf = dispatch_resource(workflow_manifest("rr-wf")).expect("dispatch workflow");
         assert_eq!(wf.kind(), ResourceKind::Workflow);
         assert_eq!(wf.name(), "rr-wf");
 
-        let pr = dispatch_resource(project_manifest("rr-pr", "d")).unwrap();
+        let pr = dispatch_resource(project_manifest("rr-pr", "d")).expect("dispatch project");
         assert_eq!(pr.kind(), ResourceKind::Project);
         assert_eq!(pr.name(), "rr-pr");
 
-        let df = dispatch_resource(defaults_manifest("", "", "")).unwrap();
+        let df = dispatch_resource(defaults_manifest("", "", "")).expect("dispatch defaults");
         assert_eq!(df.kind(), ResourceKind::Defaults);
         assert_eq!(df.name(), "defaults");
 
-        let rp = dispatch_resource(runtime_policy_manifest()).unwrap();
+        let rp = dispatch_resource(runtime_policy_manifest()).expect("dispatch runtime policy");
         assert_eq!(rp.kind(), ResourceKind::RuntimePolicy);
         assert_eq!(rp.name(), "runtime");
     }
 
     #[test]
     fn registered_resource_validate_delegates() {
-        let ws = dispatch_resource(workspace_manifest("v-ws", "workspace/v")).unwrap();
+        let ws = dispatch_resource(workspace_manifest("v-ws", "workspace/v"))
+            .expect("dispatch validation ws");
         assert!(ws.validate().is_ok());
 
-        let ag = dispatch_resource(agent_manifest("v-ag", "cmd")).unwrap();
+        let ag = dispatch_resource(agent_manifest("v-ag", "cmd"))
+            .expect("dispatch validation agent");
         assert!(ag.validate().is_ok());
 
-        let wf = dispatch_resource(workflow_manifest("v-wf")).unwrap();
+        let wf = dispatch_resource(workflow_manifest("v-wf"))
+            .expect("dispatch validation workflow");
         assert!(wf.validate().is_ok());
 
-        let pr = dispatch_resource(project_manifest("v-pr", "d")).unwrap();
+        let pr = dispatch_resource(project_manifest("v-pr", "d"))
+            .expect("dispatch validation project");
         assert!(pr.validate().is_ok());
 
-        let df = dispatch_resource(defaults_manifest("", "", "")).unwrap();
+        let df =
+            dispatch_resource(defaults_manifest("", "", "")).expect("dispatch validation defaults");
         assert!(df.validate().is_ok());
 
-        let rp = dispatch_resource(runtime_policy_manifest()).unwrap();
+        let rp = dispatch_resource(runtime_policy_manifest())
+            .expect("dispatch validation runtime policy");
         assert!(rp.validate().is_ok());
     }
 
     #[test]
     fn registered_resource_to_yaml_delegates() {
-        let ws = dispatch_resource(workspace_manifest("ty-ws", "workspace/ty")).unwrap();
-        assert!(ws.to_yaml().unwrap().contains("Workspace"));
+        let ws = dispatch_resource(workspace_manifest("ty-ws", "workspace/ty"))
+            .expect("dispatch yaml ws");
+        assert!(
+            ws.to_yaml()
+                .expect("serialize workspace yaml")
+                .contains("Workspace")
+        );
 
-        let ag = dispatch_resource(agent_manifest("ty-ag", "cmd")).unwrap();
-        assert!(ag.to_yaml().unwrap().contains("Agent"));
+        let ag = dispatch_resource(agent_manifest("ty-ag", "cmd")).expect("dispatch yaml agent");
+        assert!(
+            ag.to_yaml()
+                .expect("serialize agent yaml")
+                .contains("Agent")
+        );
 
-        let wf = dispatch_resource(workflow_manifest("ty-wf")).unwrap();
-        assert!(wf.to_yaml().unwrap().contains("Workflow"));
+        let wf =
+            dispatch_resource(workflow_manifest("ty-wf")).expect("dispatch yaml workflow");
+        assert!(
+            wf.to_yaml()
+                .expect("serialize workflow yaml")
+                .contains("Workflow")
+        );
 
-        let pr = dispatch_resource(project_manifest("ty-pr", "d")).unwrap();
-        assert!(pr.to_yaml().unwrap().contains("Project"));
+        let pr = dispatch_resource(project_manifest("ty-pr", "d")).expect("dispatch yaml project");
+        assert!(
+            pr.to_yaml()
+                .expect("serialize project yaml")
+                .contains("Project")
+        );
 
-        let df = dispatch_resource(defaults_manifest("", "", "")).unwrap();
-        assert!(df.to_yaml().unwrap().contains("Defaults"));
+        let df = dispatch_resource(defaults_manifest("", "", "")).expect("dispatch yaml defaults");
+        assert!(
+            df.to_yaml()
+                .expect("serialize defaults yaml")
+                .contains("Defaults")
+        );
 
-        let rp = dispatch_resource(runtime_policy_manifest()).unwrap();
-        assert!(rp.to_yaml().unwrap().contains("RuntimePolicy"));
+        let rp =
+            dispatch_resource(runtime_policy_manifest()).expect("dispatch yaml runtime policy");
+        assert!(
+            rp.to_yaml()
+                .expect("serialize runtime policy yaml")
+                .contains("RuntimePolicy")
+        );
     }
 
     #[test]
@@ -489,11 +523,17 @@ mod tests {
         let config = make_config();
         let defaults = RegisteredResource::get_from(&config, "defaults");
         assert!(defaults.is_some());
-        assert_eq!(defaults.unwrap().kind(), ResourceKind::Defaults);
+        assert_eq!(
+            defaults.expect("defaults resource should exist").kind(),
+            ResourceKind::Defaults
+        );
 
         let runtime = RegisteredResource::get_from(&config, "runtime");
         assert!(runtime.is_some());
-        assert_eq!(runtime.unwrap().kind(), ResourceKind::RuntimePolicy);
+        assert_eq!(
+            runtime.expect("runtime policy should exist").kind(),
+            ResourceKind::RuntimePolicy
+        );
     }
 
     #[test]
@@ -505,7 +545,8 @@ mod tests {
     #[test]
     fn registered_resource_delete_from_removes_workspace() {
         let mut config = make_config();
-        let ws = dispatch_resource(workspace_manifest("rd-ws", "workspace/rd")).unwrap();
+        let ws = dispatch_resource(workspace_manifest("rd-ws", "workspace/rd"))
+            .expect("dispatch delete ws");
         ws.apply(&mut config);
         assert!(RegisteredResource::delete_from(&mut config, "rd-ws"));
         assert!(!config.workspaces.contains_key("rd-ws"));
@@ -514,7 +555,7 @@ mod tests {
     #[test]
     fn registered_resource_delete_from_removes_agent() {
         let mut config = make_config();
-        let ag = dispatch_resource(agent_manifest("rd-ag", "cmd")).unwrap();
+        let ag = dispatch_resource(agent_manifest("rd-ag", "cmd")).expect("dispatch delete agent");
         ag.apply(&mut config);
         assert!(RegisteredResource::delete_from(&mut config, "rd-ag"));
         assert!(!config.agents.contains_key("rd-ag"));
@@ -523,7 +564,8 @@ mod tests {
     #[test]
     fn registered_resource_delete_from_removes_workflow() {
         let mut config = make_config();
-        let wf = dispatch_resource(workflow_manifest("rd-wf")).unwrap();
+        let wf =
+            dispatch_resource(workflow_manifest("rd-wf")).expect("dispatch delete workflow");
         wf.apply(&mut config);
         assert!(RegisteredResource::delete_from(&mut config, "rd-wf"));
         assert!(!config.workflows.contains_key("rd-wf"));
@@ -532,7 +574,8 @@ mod tests {
     #[test]
     fn registered_resource_delete_from_removes_project() {
         let mut config = make_config();
-        let pr = dispatch_resource(project_manifest("rd-pr", "d")).unwrap();
+        let pr =
+            dispatch_resource(project_manifest("rd-pr", "d")).expect("dispatch delete project");
         pr.apply(&mut config);
         assert!(RegisteredResource::delete_from(&mut config, "rd-pr"));
         assert!(!config.projects.contains_key("rd-pr"));

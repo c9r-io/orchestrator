@@ -167,16 +167,22 @@ mod tests {
         let steps = default_workflow_steps(None, false, None, None);
         assert_eq!(steps.len(), 6);
         // qa disabled
-        let qa = steps.iter().find(|s| s.id == "qa").unwrap();
+        let qa = steps.iter().find(|s| s.id == "qa").expect("qa step should exist");
         assert!(!qa.enabled);
         // ticket_scan disabled
-        let ts = steps.iter().find(|s| s.id == "ticket_scan").unwrap();
+        let ts = steps
+            .iter()
+            .find(|s| s.id == "ticket_scan")
+            .expect("ticket_scan step should exist");
         assert!(!ts.enabled);
         // fix disabled
-        let fix = steps.iter().find(|s| s.id == "fix").unwrap();
+        let fix = steps.iter().find(|s| s.id == "fix").expect("fix step should exist");
         assert!(!fix.enabled);
         // retest disabled
-        let retest = steps.iter().find(|s| s.id == "retest").unwrap();
+        let retest = steps
+            .iter()
+            .find(|s| s.id == "retest")
+            .expect("retest step should exist");
         assert!(!retest.enabled);
     }
 
@@ -188,13 +194,19 @@ mod tests {
             Some("fix_agent"),
             Some("retest_agent"),
         );
-        let qa = steps.iter().find(|s| s.id == "qa").unwrap();
+        let qa = steps.iter().find(|s| s.id == "qa").expect("qa step should exist");
         assert!(qa.enabled);
-        let ts = steps.iter().find(|s| s.id == "ticket_scan").unwrap();
+        let ts = steps
+            .iter()
+            .find(|s| s.id == "ticket_scan")
+            .expect("ticket_scan step should exist");
         assert!(ts.enabled);
-        let fix = steps.iter().find(|s| s.id == "fix").unwrap();
+        let fix = steps.iter().find(|s| s.id == "fix").expect("fix step should exist");
         assert!(fix.enabled);
-        let retest = steps.iter().find(|s| s.id == "retest").unwrap();
+        let retest = steps
+            .iter()
+            .find(|s| s.id == "retest")
+            .expect("retest step should exist");
         assert!(retest.enabled);
     }
 
@@ -202,7 +214,10 @@ mod tests {
     fn test_default_workflow_steps_tty_flags() {
         let steps = default_workflow_steps(None, false, None, None);
         // only plan should have tty=true
-        let plan = steps.iter().find(|s| s.id == "plan").unwrap();
+        let plan = steps
+            .iter()
+            .find(|s| s.id == "plan")
+            .expect("plan step should exist");
         assert!(plan.tty);
         for s in steps.iter().filter(|s| s.id != "plan") {
             assert!(!s.tty, "step {} should not have tty", s.id);
@@ -212,13 +227,22 @@ mod tests {
     #[test]
     fn test_default_workflow_steps_repeatable() {
         let steps = default_workflow_steps(Some("qa"), true, Some("fix"), Some("retest"));
-        let init = steps.iter().find(|s| s.id == "init_once").unwrap();
+        let init = steps
+            .iter()
+            .find(|s| s.id == "init_once")
+            .expect("init_once step should exist");
         assert!(!init.repeatable);
-        let plan = steps.iter().find(|s| s.id == "plan").unwrap();
+        let plan = steps
+            .iter()
+            .find(|s| s.id == "plan")
+            .expect("plan step should exist");
         assert!(!plan.repeatable);
         // qa, ticket_scan, fix, retest are repeatable
         for id in &["qa", "ticket_scan", "fix", "retest"] {
-            let s = steps.iter().find(|s| s.id == *id).unwrap();
+            let s = steps
+                .iter()
+                .find(|s| s.id == *id)
+                .expect("repeatable step should exist");
             assert!(s.repeatable, "step {} should be repeatable", id);
         }
     }
@@ -236,7 +260,7 @@ mod tests {
             .rules
             .iter()
             .find(|r| r.id == "skip_without_tickets")
-            .unwrap();
+            .expect("skip_without_tickets rule should exist");
         assert!(
             rule.when.contains("is_last_cycle"),
             "skip_without_tickets must include is_last_cycle guard"

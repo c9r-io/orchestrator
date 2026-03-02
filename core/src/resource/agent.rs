@@ -311,7 +311,7 @@ mod tests {
                 selection: None,
             },
         };
-        let err = agent.validate().unwrap_err();
+        let err = agent.validate().expect_err("operation should fail");
         assert!(err.to_string().contains("cannot be empty strings"));
     }
 
@@ -343,7 +343,7 @@ mod tests {
                 selection: None,
             },
         };
-        let err = agent.validate().unwrap_err();
+        let err = agent.validate().expect_err("operation should fail");
         assert!(err.to_string().contains("cannot be an empty string"));
     }
 
@@ -412,7 +412,7 @@ mod tests {
         let result = agent.validate();
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("operation should fail")
             .to_string()
             .contains("at least one template"));
     }
@@ -429,7 +429,8 @@ mod tests {
                 selection: AgentSelectionConfig::default(),
             },
         );
-        let loaded = AgentResource::get_from(&config, "bare-ag").unwrap();
+        let loaded = AgentResource::get_from(&config, "bare-ag")
+            .expect("bare agent should be returned");
         assert_eq!(loaded.metadata.name, "bare-ag");
         assert!(loaded.metadata.labels.is_none());
     }
@@ -443,7 +444,8 @@ mod tests {
     #[test]
     fn agent_delete_cleans_up_metadata() {
         let mut config = make_config();
-        let ag = dispatch_resource(agent_manifest("meta-ag", "cmd")).unwrap();
+        let ag = dispatch_resource(agent_manifest("meta-ag", "cmd"))
+            .expect("dispatch agent resource");
         ag.apply(&mut config);
         assert!(config.resource_meta.agents.contains_key("meta-ag"));
 
@@ -622,12 +624,21 @@ mod tests {
                 selection: None,
             })),
         };
-        let rr = dispatch_resource(resource).unwrap();
+        let rr = dispatch_resource(resource).expect("dispatch agent resource");
         rr.apply(&mut config);
 
-        let stored = config.resource_meta.agents.get("store-meta-ag").unwrap();
+        let stored = config
+            .resource_meta
+            .agents
+            .get("store-meta-ag")
+            .expect("stored agent metadata should exist");
         assert_eq!(
-            stored.labels.as_ref().unwrap().get("tier").unwrap(),
+            stored
+                .labels
+                .as_ref()
+                .expect("labels should exist")
+                .get("tier")
+                .expect("tier label should exist"),
             "primary"
         );
     }

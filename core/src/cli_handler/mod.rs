@@ -14,7 +14,7 @@ mod task_worker;
 
 use crate::cli::{Cli, Commands};
 use crate::state::InnerState;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::sync::{Arc, OnceLock};
 
 pub(super) fn cli_runtime() -> &'static tokio::runtime::Runtime {
@@ -43,7 +43,7 @@ impl CliHandler {
                 Ok(0)
             }
             Commands::Apply { .. } => {
-                unreachable!("apply is handled as a preflight command in main.rs")
+                Err(anyhow!("apply is handled as a preflight command in main.rs"))
             }
             Commands::Get {
                 resource,

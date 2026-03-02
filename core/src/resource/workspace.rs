@@ -153,7 +153,7 @@ mod tests {
                 self_referential: false,
             },
         };
-        let err = ws.validate().unwrap_err();
+        let err = ws.validate().expect_err("operation should fail");
         assert!(err.to_string().contains("root_path"));
     }
 
@@ -168,7 +168,7 @@ mod tests {
                 self_referential: false,
             },
         };
-        let err = ws.validate().unwrap_err();
+        let err = ws.validate().expect_err("operation should fail");
         assert!(err.to_string().contains("ticket_dir"));
     }
 
@@ -185,7 +185,8 @@ mod tests {
                 self_referential: false,
             },
         );
-        let loaded = WorkspaceResource::get_from(&config, "bare-ws").unwrap();
+        let loaded = WorkspaceResource::get_from(&config, "bare-ws")
+            .expect("bare workspace should be returned");
         assert_eq!(loaded.metadata.name, "bare-ws");
         assert!(loaded.metadata.labels.is_none());
     }
@@ -215,7 +216,7 @@ mod tests {
                 self_referential: false,
             }),
         };
-        let rr = dispatch_resource(resource).unwrap();
+        let rr = dispatch_resource(resource).expect("dispatch workspace resource");
         rr.apply(&mut config);
         assert!(config.resource_meta.workspaces.contains_key("meta-ws"));
 
@@ -285,20 +286,30 @@ mod tests {
                 self_referential: false,
             }),
         };
-        let rr = dispatch_resource(resource).unwrap();
+        let rr = dispatch_resource(resource).expect("dispatch workspace resource");
         rr.apply(&mut config);
 
         let stored = config
             .resource_meta
             .workspaces
             .get("store-meta-ws")
-            .unwrap();
+            .expect("stored workspace metadata should exist");
         assert_eq!(
-            stored.labels.as_ref().unwrap().get("env").unwrap(),
+            stored
+                .labels
+                .as_ref()
+                .expect("labels should exist")
+                .get("env")
+                .expect("env label should exist"),
             "staging"
         );
         assert_eq!(
-            stored.annotations.as_ref().unwrap().get("note").unwrap(),
+            stored
+                .annotations
+                .as_ref()
+                .expect("annotations should exist")
+                .get("note")
+                .expect("note annotation should exist"),
             "test"
         );
     }

@@ -240,7 +240,9 @@ mod tests {
         };
         let planner = AdaptivePlanner::new(config);
         let ctx = StepPrehookContext::default();
-        let plan = planner.generate_plan(&ctx).unwrap();
+        let plan = planner
+            .generate_plan(&ctx)
+            .expect("adaptive planner should generate a plan when enabled");
         assert!(plan.nodes.contains_key("qa"));
         assert!(plan.nodes.contains_key("fix"));
         assert_eq!(plan.edges.len(), 1);

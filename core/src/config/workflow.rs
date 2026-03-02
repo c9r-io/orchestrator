@@ -150,22 +150,22 @@ mod tests {
     #[test]
     fn test_loop_mode_from_str_valid() {
         assert!(matches!(
-            LoopMode::from_str("once").unwrap(),
+            LoopMode::from_str("once").expect("parse once"),
             LoopMode::Once
         ));
         assert!(matches!(
-            LoopMode::from_str("fixed").unwrap(),
+            LoopMode::from_str("fixed").expect("parse fixed"),
             LoopMode::Fixed
         ));
         assert!(matches!(
-            LoopMode::from_str("infinite").unwrap(),
+            LoopMode::from_str("infinite").expect("parse infinite"),
             LoopMode::Infinite
         ));
     }
 
     #[test]
     fn test_loop_mode_from_str_invalid() {
-        let err = LoopMode::from_str("bogus").unwrap_err();
+        let err = LoopMode::from_str("bogus").expect_err("operation should fail");
         assert!(err.contains("unknown loop mode"));
         assert!(err.contains("bogus"));
     }
@@ -173,8 +173,8 @@ mod tests {
     #[test]
     fn test_loop_mode_serde_round_trip() {
         for mode_str in &["\"once\"", "\"fixed\"", "\"infinite\""] {
-            let mode: LoopMode = serde_json::from_str(mode_str).unwrap();
-            let json = serde_json::to_string(&mode).unwrap();
+            let mode: LoopMode = serde_json::from_str(mode_str).expect("deserialize loop mode");
+            let json = serde_json::to_string(&mode).expect("serialize loop mode");
             assert_eq!(&json, mode_str);
         }
     }

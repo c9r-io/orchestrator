@@ -109,7 +109,10 @@ impl TaskRepository for SqliteTaskRepository {
             .query_map(params![pattern], |row| row.get(0))?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         match matches.len() {
-            1 => Ok(matches.into_iter().next().unwrap()),
+            1 => matches
+                .into_iter()
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("single task match disappeared unexpectedly")),
             0 => anyhow::bail!("task not found: {}", task_id_or_prefix),
             _ => anyhow::bail!(
                 "multiple tasks match prefix '{}': {:?}",
@@ -1111,7 +1114,7 @@ mod tests {
             .expect("list should succeed");
         assert!(items.len() >= 2, "should have at least 2 items");
         // Last item should be our inserted one
-        let last = items.last().unwrap();
+        let last = items.last().expect("last item should exist");
         assert_eq!(last.id, "item-second");
         assert_eq!(last.qa_file_path, "/tmp/qa_second.md");
     }

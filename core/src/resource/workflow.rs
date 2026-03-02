@@ -184,7 +184,7 @@ mod tests {
                 safety: SafetySpec::default(),
             },
         };
-        let err = wf.validate().unwrap_err();
+        let err = wf.validate().expect_err("operation should fail");
         assert!(err.to_string().contains("id cannot be empty"));
     }
 
@@ -219,7 +219,7 @@ mod tests {
                 safety: SafetySpec::default(),
             },
         };
-        let err = wf.validate().unwrap_err();
+        let err = wf.validate().expect_err("operation should fail");
         assert!(err.to_string().contains("type cannot be empty"));
     }
 
@@ -254,7 +254,7 @@ mod tests {
                 safety: SafetySpec::default(),
             },
         };
-        let err = wf.validate().unwrap_err();
+        let err = wf.validate().expect_err("operation should fail");
         assert!(err.to_string().contains("max_cycles > 0"));
     }
 
@@ -289,7 +289,7 @@ mod tests {
                 safety: SafetySpec::default(),
             },
         };
-        let err = wf.validate().unwrap_err();
+        let err = wf.validate().expect_err("operation should fail");
         assert!(err.to_string().contains("max_cycles > 0"));
     }
 
@@ -352,7 +352,7 @@ mod tests {
         };
         let result = workflow.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("cannot be empty"));
+        assert!(result.expect_err("operation should fail").to_string().contains("cannot be empty"));
     }
 
     #[test]
@@ -364,7 +364,8 @@ mod tests {
     #[test]
     fn workflow_delete_cleans_up_metadata() {
         let mut config = make_config();
-        let wf = dispatch_resource(workflow_manifest("meta-wf")).unwrap();
+        let wf = dispatch_resource(workflow_manifest("meta-wf"))
+            .expect("dispatch workflow resource");
         wf.apply(&mut config);
         assert!(config.resource_meta.workflows.contains_key("meta-wf"));
 
@@ -411,12 +412,21 @@ mod tests {
                 safety: SafetySpec::default(),
             }),
         };
-        let rr = dispatch_resource(resource).unwrap();
+        let rr = dispatch_resource(resource).expect("dispatch workflow resource");
         rr.apply(&mut config);
 
-        let stored = config.resource_meta.workflows.get("store-meta-wf").unwrap();
+        let stored = config
+            .resource_meta
+            .workflows
+            .get("store-meta-wf")
+            .expect("stored workflow metadata should exist");
         assert_eq!(
-            stored.labels.as_ref().unwrap().get("version").unwrap(),
+            stored
+                .labels
+                .as_ref()
+                .expect("labels should exist")
+                .get("version")
+                .expect("version label should exist"),
             "v2"
         );
     }
@@ -435,7 +445,7 @@ mod tests {
             },
             spec: ResourceSpec::Project(ProjectSpec { description: None }),
         };
-        let err = dispatch_resource(resource).unwrap_err();
+        let err = dispatch_resource(resource).expect_err("operation should fail");
         assert!(err.to_string().contains("mismatch"));
     }
 }

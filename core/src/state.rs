@@ -2,11 +2,12 @@ use crate::collab::MessageBus;
 use crate::config::ActiveConfig;
 use crate::config_load::ConfigSelfHealReport;
 use crate::events::EventSink;
+use crate::metrics::{AgentHealthState, AgentMetrics};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use tokio::process::Child;
 use tokio::sync::Mutex;
 
@@ -78,4 +79,40 @@ pub fn write_active_config<'a>(
         .active_config
         .write()
         .map_err(|_| anyhow::anyhow!("active config lock is poisoned"))
+}
+
+pub fn read_agent_health<'a>(
+    state: &'a InnerState,
+) -> RwLockReadGuard<'a, HashMap<String, AgentHealthState>> {
+    match state.agent_health.read() {
+        Ok(guard) => guard,
+        Err(err) => err.into_inner(),
+    }
+}
+
+pub fn write_agent_health<'a>(
+    state: &'a InnerState,
+) -> RwLockWriteGuard<'a, HashMap<String, AgentHealthState>> {
+    match state.agent_health.write() {
+        Ok(guard) => guard,
+        Err(err) => err.into_inner(),
+    }
+}
+
+pub fn read_agent_metrics<'a>(
+    state: &'a InnerState,
+) -> RwLockReadGuard<'a, HashMap<String, AgentMetrics>> {
+    match state.agent_metrics.read() {
+        Ok(guard) => guard,
+        Err(err) => err.into_inner(),
+    }
+}
+
+pub fn write_agent_metrics<'a>(
+    state: &'a InnerState,
+) -> RwLockWriteGuard<'a, HashMap<String, AgentMetrics>> {
+    match state.agent_metrics.write() {
+        Ok(guard) => guard,
+        Err(err) => err.into_inner(),
+    }
 }

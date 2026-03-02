@@ -460,7 +460,7 @@ mod tests {
 
         let result = handler.execute(&cli);
         assert!(result.is_err());
-        let err_msg = format!("{:#}", result.unwrap_err());
+        let err_msg = format!("{:#}", result.expect_err("operation should fail"));
         assert!(err_msg.contains("default workspace"));
     }
 
@@ -480,7 +480,7 @@ mod tests {
 
         let result = handler.execute(&cli);
         assert!(result.is_err());
-        let err_msg = format!("{:#}", result.unwrap_err());
+        let err_msg = format!("{:#}", result.expect_err("operation should fail"));
         assert!(err_msg.contains("default workflow"));
     }
 
@@ -500,7 +500,7 @@ mod tests {
 
         let result = handler.execute(&cli);
         assert!(result.is_err());
-        let err_msg = format!("{:#}", result.unwrap_err());
+        let err_msg = format!("{:#}", result.expect_err("operation should fail"));
         assert!(err_msg.contains("not found"));
     }
 

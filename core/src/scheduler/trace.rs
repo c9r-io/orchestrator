@@ -1331,7 +1331,10 @@ mod tests {
             .iter()
             .find(|a| a.rule == "duplicate_runner");
         assert!(dup.is_some(), "should detect duplicate runner");
-        assert_eq!(dup.unwrap().severity, Severity::Error);
+        assert_eq!(
+            dup.expect("duplicate_runner anomaly should exist").severity,
+            Severity::Error
+        );
     }
 
     #[test]
@@ -1355,7 +1358,10 @@ mod tests {
         detect_overlapping_cycles(&cycles, &mut anomalies);
         let overlap = anomalies.iter().find(|a| a.rule == "overlapping_cycles");
         assert!(overlap.is_some(), "should detect overlapping cycles");
-        assert_eq!(overlap.unwrap().severity, Severity::Error);
+        assert_eq!(
+            overlap.expect("overlapping_cycles anomaly should exist").severity,
+            Severity::Error
+        );
     }
 
     #[test]
@@ -1415,7 +1421,11 @@ mod tests {
             .iter()
             .find(|a| a.rule == "unexpanded_template_var");
         assert!(tmpl.is_some(), "should detect unexpanded template var");
-        assert!(tmpl.unwrap().message.contains("{plan_output}"));
+        assert!(
+            tmpl.expect("unexpanded_template_var anomaly should exist")
+                .message
+                .contains("{plan_output}")
+        );
     }
 
     #[test]
@@ -1712,7 +1722,10 @@ mod tests {
 
         let trace = build_trace("test-task", "completed", &events, &[]);
         assert!(trace.summary.wall_time_secs.is_some());
-        let wall = trace.summary.wall_time_secs.unwrap();
+        let wall = trace
+            .summary
+            .wall_time_secs
+            .expect("wall time should be computed");
         assert!(
             (wall - 272.0).abs() < 1.0,
             "wall time should be ~272s, got {}",

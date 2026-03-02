@@ -292,7 +292,7 @@ mod tests {
                 assert_eq!(task_id, "task-1");
                 assert_eq!(step_id, "plan-1");
             }
-            _ => panic!("expected task-step target"),
+            other => assert!(matches!(other, ExecTargetRef::TaskStep { .. }), "expected task-step target"),
         }
     }
 
@@ -301,7 +301,7 @@ mod tests {
         let parsed = parse_exec_target("session/sess-1").expect("parsing should succeed");
         match parsed {
             ExecTargetRef::SessionId { session_id } => assert_eq!(session_id, "sess-1"),
-            _ => panic!("expected session target"),
+            other => assert!(matches!(other, ExecTargetRef::SessionId { .. }), "expected session target"),
         }
     }
 

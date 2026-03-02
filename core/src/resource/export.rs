@@ -98,13 +98,17 @@ mod tests {
     fn export_manifest_resources_includes_all_resource_types() {
         let mut config = make_config();
         // Add one of each
-        let ws = dispatch_resource(workspace_manifest("exp-ws", "workspace/exp")).unwrap();
+        let ws = dispatch_resource(workspace_manifest("exp-ws", "workspace/exp"))
+            .expect("dispatch export workspace");
         ws.apply(&mut config);
-        let ag = dispatch_resource(agent_manifest("exp-ag", "cmd")).unwrap();
+        let ag = dispatch_resource(agent_manifest("exp-ag", "cmd"))
+            .expect("dispatch export agent");
         ag.apply(&mut config);
-        let wf = dispatch_resource(workflow_manifest("exp-wf")).unwrap();
+        let wf = dispatch_resource(workflow_manifest("exp-wf"))
+            .expect("dispatch export workflow");
         wf.apply(&mut config);
-        let pr = dispatch_resource(project_manifest("exp-pr", "d")).unwrap();
+        let pr = dispatch_resource(project_manifest("exp-pr", "d"))
+            .expect("dispatch export project");
         pr.apply(&mut config);
 
         let resources = export_manifest_resources(&config);
@@ -120,7 +124,8 @@ mod tests {
     #[test]
     fn export_manifest_documents_produces_orchestrator_resources() {
         let mut config = make_config();
-        let ws = dispatch_resource(workspace_manifest("doc-ws", "workspace/doc")).unwrap();
+        let ws = dispatch_resource(workspace_manifest("doc-ws", "workspace/doc"))
+            .expect("dispatch doc workspace");
         ws.apply(&mut config);
 
         let docs = export_manifest_documents(&config);
@@ -142,7 +147,7 @@ mod tests {
         let resources = export_manifest_resources(&config);
         let mut yaml_parts: Vec<String> = Vec::new();
         for r in &resources {
-            let yaml = r.to_yaml().unwrap();
+            let yaml = r.to_yaml().expect("serialize resource yaml");
             yaml_parts.push(yaml);
         }
         let combined = yaml_parts.join("---\n");
@@ -178,16 +183,23 @@ mod tests {
                 self_referential: false,
             }),
         };
-        let rr = dispatch_resource(resource).unwrap();
+        let rr = dispatch_resource(resource).expect("dispatch labeled workspace");
         rr.apply(&mut config);
 
         let exported = export_manifest_resources(&config);
         let ws = exported.iter().find(|r| r.name() == "labeled-ws");
         assert!(ws.is_some());
         // Verify via get_from
-        let loaded = WorkspaceResource::get_from(&config, "labeled-ws").unwrap();
+        let loaded = WorkspaceResource::get_from(&config, "labeled-ws")
+            .expect("labeled workspace should exist");
         assert_eq!(
-            loaded.metadata.labels.as_ref().unwrap().get("env").unwrap(),
+            loaded
+                .metadata
+                .labels
+                .as_ref()
+                .expect("labels should exist")
+                .get("env")
+                .expect("env label should exist"),
             "prod"
         );
         assert_eq!(
@@ -195,9 +207,9 @@ mod tests {
                 .metadata
                 .annotations
                 .as_ref()
-                .unwrap()
+                .expect("annotations should exist")
                 .get("team")
-                .unwrap(),
+                .expect("team annotation should exist"),
             "infra"
         );
     }

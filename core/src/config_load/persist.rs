@@ -253,8 +253,8 @@ mod tests {
     use crate::config_load::{ConfigSelfHealChange, ConfigSelfHealRule};
 
     fn seed_heal_log(db_path: &Path, version: i64) {
-        let conn = open_conn(db_path).unwrap();
-        let tx = conn.unchecked_transaction().unwrap();
+        let conn = open_conn(db_path).expect("open test db");
+        let tx = conn.unchecked_transaction().expect("begin unchecked transaction");
         let changes = vec![
             ConfigSelfHealChange {
                 workflow_id: "basic".to_string(),
@@ -270,8 +270,9 @@ mod tests {
                 detail: "normalized behavior.execution from Agent to Builtin".to_string(),
             },
         ];
-        persist_heal_log(&tx, version, "builtin/capability conflict", &changes).unwrap();
-        tx.commit().unwrap();
+        persist_heal_log(&tx, version, "builtin/capability conflict", &changes)
+            .expect("persist heal log");
+        tx.commit().expect("commit heal log transaction");
     }
 
     #[test]
@@ -279,7 +280,7 @@ mod tests {
         let (_temp_dir, db_path) = make_test_db();
         seed_heal_log(&db_path, 3);
 
-        let entries = query_heal_log_entries(&db_path, 10).unwrap();
+        let entries = query_heal_log_entries(&db_path, 10).expect("query heal log entries");
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].version, 3);
         // DESC order: most recent entry first
@@ -292,21 +293,21 @@ mod tests {
         let (_temp_dir, db_path) = make_test_db();
         seed_heal_log(&db_path, 3);
 
-        let entries = query_heal_log_entries(&db_path, 1).unwrap();
+        let entries = query_heal_log_entries(&db_path, 1).expect("query limited heal log");
         assert_eq!(entries.len(), 1);
     }
 
     #[test]
     fn query_heal_log_entries_returns_empty_when_no_records() {
         let (_temp_dir, db_path) = make_test_db();
-        let entries = query_heal_log_entries(&db_path, 10).unwrap();
+        let entries = query_heal_log_entries(&db_path, 10).expect("query empty heal log");
         assert!(entries.is_empty());
     }
 
     #[test]
     fn query_latest_heal_summary_returns_none_when_empty() {
         let (_temp_dir, db_path) = make_test_db();
-        let result = query_latest_heal_summary(&db_path, 1).unwrap();
+        let result = query_latest_heal_summary(&db_path, 1).expect("query empty heal summary");
         assert!(result.is_none());
     }
 
@@ -315,9 +316,10 @@ mod tests {
         let (_temp_dir, db_path) = make_test_db();
         seed_heal_log(&db_path, 5);
 
-        let result = query_latest_heal_summary(&db_path, 5).unwrap();
+        let result = query_latest_heal_summary(&db_path, 5).expect("query matching heal summary");
         assert!(result.is_some());
-        let (version, original_error, count, _created_at) = result.unwrap();
+        let (version, original_error, count, _created_at) =
+            result.expect("matching heal summary should exist");
         assert_eq!(version, 5);
         assert_eq!(original_error, "builtin/capability conflict");
         assert_eq!(count, 2);
@@ -328,7 +330,8 @@ mod tests {
         let (_temp_dir, db_path) = make_test_db();
         seed_heal_log(&db_path, 5);
 
-        let result = query_latest_heal_summary(&db_path, 6).unwrap();
+        let result =
+            query_latest_heal_summary(&db_path, 6).expect("query non-matching heal summary");
         assert!(
             result.is_none(),
             "should not match when config version is newer"
@@ -340,7 +343,7 @@ mod tests {
         let (_temp_dir, db_path) = make_test_db();
         seed_heal_log(&db_path, 2);
 
-        let entries = query_heal_log_entries(&db_path, 10).unwrap();
+        let entries = query_heal_log_entries(&db_path, 10).expect("query heal log entries");
         for entry in &entries {
             assert_eq!(entry.original_error, "builtin/capability conflict");
         }

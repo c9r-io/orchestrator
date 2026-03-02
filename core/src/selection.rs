@@ -1,7 +1,7 @@
 use crate::config::AgentConfig;
 use crate::health::is_capability_healthy;
 use crate::metrics::{calculate_agent_score, AgentHealthState, AgentMetrics, SelectionRequirement};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 
@@ -88,6 +88,10 @@ pub fn select_agent_advanced(
 pub fn select_agent_by_preference(
     agents: &HashMap<String, AgentConfig>,
 ) -> Result<(String, String)> {
+    if agents.is_empty() {
+        return Err(anyhow!("no agents configured"));
+    }
+
     for (id, cfg) in agents {
         if cfg.capabilities.is_empty() || cfg.metadata.name == "default_agent" {
             let template = cfg
@@ -100,7 +104,10 @@ pub fn select_agent_by_preference(
     }
 
     let idx = rand::thread_rng().gen_range(0..agents.len());
-    let (agent_id, config) = agents.iter().nth(idx).unwrap();
+    let (agent_id, config) = agents
+        .iter()
+        .nth(idx)
+        .ok_or_else(|| anyhow!("failed to select agent at random index {}", idx))?;
     let template = config
         .templates
         .values()
@@ -139,7 +146,7 @@ mod tests {
 
         let result = select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded);
         assert!(result.is_ok());
-        let (agent_id, template) = result.unwrap();
+        let (agent_id, template) = result.expect("qa agent should be selected");
         assert_eq!(agent_id, "agent1");
         assert_eq!(template, "echo agent1");
     }
@@ -156,7 +163,7 @@ mod tests {
 
         let result = select_agent_advanced("fix", &agents, &health_map, &metrics_map, &excluded);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No healthy agent"));
+        assert!(result.expect_err("operation should fail").to_string().contains("No healthy agent"));
     }
 
     #[test]
@@ -174,7 +181,7 @@ mod tests {
 
         let result = select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded);
         assert!(result.is_ok());
-        let (agent_id, _) = result.unwrap();
+        let (agent_id, _) = result.expect("remaining agent should be selected");
         assert_eq!(agent_id, "agent2");
     }
 
@@ -189,7 +196,7 @@ mod tests {
 
         let result = select_agent_by_preference(&agents);
         assert!(result.is_ok());
-        let (agent_id, template) = result.unwrap();
+        let (agent_id, template) = result.expect("default agent should be returned");
         assert_eq!(agent_id, "default_agent");
         assert_eq!(template, "echo default template");
     }
@@ -214,7 +221,17 @@ mod tests {
 
         let result = select_agent_by_preference(&agents);
         assert!(result.is_ok());
-        let (agent_id, _template) = result.unwrap();
+        let (agent_id, _template) = result.expect("one agent should be selected");
         assert!(agent_id == "agent1" || agent_id == "agent2");
+    }
+
+    #[test]
+    fn test_select_agent_by_preference_rejects_empty_registry() {
+        let agents = HashMap::new();
+
+        let result = select_agent_by_preference(&agents);
+
+        assert!(result.is_err());
+        assert!(result.expect_err("operation should fail").to_string().contains("no agents configured"));
     }
 }

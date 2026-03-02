@@ -1,3 +1,5 @@
+#![cfg_attr(not(test), deny(clippy::panic, clippy::unwrap_used))]
+
 pub mod anomaly;
 pub mod cli_types;
 pub mod collab;

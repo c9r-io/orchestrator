@@ -709,7 +709,7 @@ mod tests {
     fn test_dir(name: &str) -> std::path::PathBuf {
         let dir =
             std::env::temp_dir().join(format!("query-test-{}-{}", name, uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(&dir).expect("create query test dir");
         dir
     }
 
@@ -789,8 +789,8 @@ mod tests {
     fn tail_lines_zero_limit_returns_empty() {
         let dir = test_dir("zero");
         let path = dir.join("log.txt");
-        std::fs::write(&path, "line1\nline2\n").unwrap();
-        let result = tail_lines(&path, 0).unwrap();
+        std::fs::write(&path, "line1\nline2\n").expect("write test log");
+        let result = tail_lines(&path, 0).expect("tail zero lines");
         assert_eq!(result, "");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -799,8 +799,8 @@ mod tests {
     fn tail_lines_empty_file_returns_empty() {
         let dir = test_dir("empty");
         let path = dir.join("log.txt");
-        std::fs::write(&path, "").unwrap();
-        let result = tail_lines(&path, 10).unwrap();
+        std::fs::write(&path, "").expect("write empty log");
+        let result = tail_lines(&path, 10).expect("tail empty log");
         assert_eq!(result, "");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -815,9 +815,9 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n")
             + "\n";
-        std::fs::write(&path, &content).unwrap();
+        std::fs::write(&path, &content).expect("write multi-line log");
 
-        let result = tail_lines(&path, 3).unwrap();
+        let result = tail_lines(&path, 3).expect("tail last n lines");
         let lines: Vec<&str> = result.lines().collect();
         assert_eq!(lines.len(), 3);
         assert_eq!(lines[0], "line 18");
@@ -829,9 +829,9 @@ mod tests {
     fn tail_lines_returns_all_when_limit_exceeds_file() {
         let dir = test_dir("exceed");
         let path = dir.join("log.txt");
-        std::fs::write(&path, "line1\nline2\nline3").unwrap();
+        std::fs::write(&path, "line1\nline2\nline3").expect("write small log");
 
-        let result = tail_lines(&path, 100).unwrap();
+        let result = tail_lines(&path, 100).expect("tail whole file");
         let lines: Vec<&str> = result.lines().collect();
         assert_eq!(lines.len(), 3);
         assert_eq!(lines[0], "line1");
@@ -848,13 +848,13 @@ mod tests {
     fn tail_lines_large_file() {
         let dir = test_dir("large");
         let path = dir.join("big.txt");
-        let mut f = std::fs::File::create(&path).unwrap();
+        let mut f = std::fs::File::create(&path).expect("create large log");
         for i in 0..500 {
-            writeln!(f, "line {:04}", i).unwrap();
+            writeln!(f, "line {:04}", i).expect("append line");
         }
         drop(f);
 
-        let result = tail_lines(&path, 5).unwrap();
+        let result = tail_lines(&path, 5).expect("tail large file");
         let lines: Vec<&str> = result.lines().collect();
         assert_eq!(lines.len(), 5);
         assert_eq!(lines[4], "line 0499");
@@ -1020,8 +1020,8 @@ mod tests {
         let dir = test_dir("details-run");
         let stdout_path = dir.join("stdout.log");
         let stderr_path = dir.join("stderr.log");
-        std::fs::write(&stdout_path, "output").unwrap();
-        std::fs::write(&stderr_path, "").unwrap();
+        std::fs::write(&stdout_path, "output").expect("write stdout");
+        std::fs::write(&stderr_path, "").expect("write stderr");
 
         let repo = SqliteTaskRepository::new(state.db_path.clone());
         repo.insert_command_run(&NewCommandRun {
@@ -1066,8 +1066,8 @@ mod tests {
         let dir = test_dir("delete-logs");
         let stdout_path = dir.join("delete_stdout.log");
         let stderr_path = dir.join("delete_stderr.log");
-        std::fs::write(&stdout_path, "stdout data").unwrap();
-        std::fs::write(&stderr_path, "stderr data").unwrap();
+        std::fs::write(&stdout_path, "stdout data").expect("write stdout");
+        std::fs::write(&stderr_path, "stderr data").expect("write stderr");
 
         let repo = SqliteTaskRepository::new(state.db_path.clone());
         repo.insert_command_run(&NewCommandRun {
@@ -1128,8 +1128,8 @@ mod tests {
         let dir = test_dir("stream-logs");
         let stdout_path = dir.join("stream_stdout.log");
         let stderr_path = dir.join("stream_stderr.log");
-        std::fs::write(&stdout_path, "line 1\nline 2\nline 3\n").unwrap();
-        std::fs::write(&stderr_path, "").unwrap();
+        std::fs::write(&stdout_path, "line 1\nline 2\nline 3\n").expect("write stdout");
+        std::fs::write(&stderr_path, "").expect("write stderr");
 
         let repo = SqliteTaskRepository::new(state.db_path.clone());
         repo.insert_command_run(&NewCommandRun {
@@ -1177,8 +1177,8 @@ mod tests {
         let dir = test_dir("stream-invalid-active");
         let stdout_path = dir.join("stdout.log");
         let stderr_path = dir.join("stderr.log");
-        std::fs::write(&stdout_path, "token=redacted\nvisible line\n").unwrap();
-        std::fs::write(&stderr_path, "").unwrap();
+        std::fs::write(&stdout_path, "token=redacted\nvisible line\n").expect("write stdout");
+        std::fs::write(&stderr_path, "").expect("write stderr");
 
         let repo = SqliteTaskRepository::new(state.db_path.clone());
         repo.insert_command_run(&NewCommandRun {
@@ -1206,7 +1206,10 @@ mod tests {
         })
         .expect("insert command run");
 
-        *state.active_config_error.write().unwrap() =
+        *state
+            .active_config_error
+            .write()
+            .expect("active_config_error lock should be writable") =
             Some("active config is not runnable".to_string());
 
         let chunks = stream_task_logs_impl(&state, &task_id, 10, false).expect("stream task logs");
@@ -1225,8 +1228,8 @@ mod tests {
         let dir = test_dir("stream-stderr");
         let stdout_path = dir.join("out.log");
         let stderr_path = dir.join("err.log");
-        std::fs::write(&stdout_path, "stdout content\n").unwrap();
-        std::fs::write(&stderr_path, "warning: something\n").unwrap();
+        std::fs::write(&stdout_path, "stdout content\n").expect("write stdout");
+        std::fs::write(&stderr_path, "warning: something\n").expect("write stderr");
 
         let repo = SqliteTaskRepository::new(state.db_path.clone());
         repo.insert_command_run(&NewCommandRun {
@@ -1271,8 +1274,8 @@ mod tests {
         let dir = test_dir("stream-ts");
         let stdout_path = dir.join("ts_out.log");
         let stderr_path = dir.join("ts_err.log");
-        std::fs::write(&stdout_path, "data\n").unwrap();
-        std::fs::write(&stderr_path, "").unwrap();
+        std::fs::write(&stdout_path, "data\n").expect("write stdout");
+        std::fs::write(&stderr_path, "").expect("write stderr");
 
         let ts = now_ts();
         let repo = SqliteTaskRepository::new(state.db_path.clone());
@@ -1325,8 +1328,9 @@ mod tests {
         for i in 0..3 {
             let stdout_path = dir.join(format!("tail_out_{}.log", i));
             let stderr_path = dir.join(format!("tail_err_{}.log", i));
-            std::fs::write(&stdout_path, format!("run {} output\n", i)).unwrap();
-            std::fs::write(&stderr_path, "").unwrap();
+            std::fs::write(&stdout_path, format!("run {} output\n", i))
+                .expect("write tail stdout");
+            std::fs::write(&stderr_path, "").expect("write tail stderr");
 
             repo.insert_command_run(&NewCommandRun {
                 id: format!("run-tail-{}", i),
@@ -1415,8 +1419,8 @@ mod tests {
 
         let stdout_path = dir.join("stdout.log");
         let stderr_path = dir.join("stderr.log");
-        std::fs::write(&stdout_path, "available output\n").unwrap();
-        std::fs::write(&stderr_path, "").unwrap();
+        std::fs::write(&stdout_path, "available output\n").expect("write available stdout");
+        std::fs::write(&stderr_path, "").expect("write available stderr");
 
         let repo = SqliteTaskRepository::new(state.db_path.clone());
         repo.insert_command_run(&NewCommandRun {

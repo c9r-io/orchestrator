@@ -163,22 +163,25 @@ mod tests {
     #[test]
     fn test_prehook_decision_serde_run() {
         let decision = PrehookDecision::Run;
-        let json = serde_json::to_string(&decision).unwrap();
-        let parsed: PrehookDecision = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&decision).expect("serialize run decision");
+        let parsed: PrehookDecision =
+            serde_json::from_str(&json).expect("deserialize run decision");
         assert!(parsed.should_run());
     }
 
     #[test]
     fn test_prehook_decision_serde_skip() {
         let json = r#"{"action":"Skip","data":{"reason":"no need"}}"#;
-        let decision: PrehookDecision = serde_json::from_str(json).unwrap();
+        let decision: PrehookDecision =
+            serde_json::from_str(json).expect("deserialize skip decision");
         assert!(!decision.should_run());
     }
 
     #[test]
     fn test_prehook_decision_serde_branch() {
         let json = r#"{"action":"Branch","data":{"target":"fix","context":{}}}"#;
-        let decision: PrehookDecision = serde_json::from_str(json).unwrap();
+        let decision: PrehookDecision =
+            serde_json::from_str(json).expect("deserialize branch decision");
         assert!(decision.is_branch());
     }
 }

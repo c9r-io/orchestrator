@@ -195,7 +195,10 @@ impl DynamicExecutionPlan {
             self.nodes.keys().map(|k| (k.as_str(), 0)).collect();
 
         for edge in &self.edges {
-            *in_degree.get_mut(&edge.to.as_str()).unwrap() += 1;
+            let degree = in_degree
+                .get_mut(edge.to.as_str())
+                .ok_or_else(|| anyhow!("Topological sort failed: missing target node {}", edge.to))?;
+            *degree += 1;
         }
 
         let mut queue: Vec<&str> = in_degree
@@ -210,7 +213,9 @@ impl DynamicExecutionPlan {
             result.push(node.to_string());
 
             for edge in self.get_outgoing_edges(node) {
-                let degree = in_degree.get_mut(&edge.to.as_str()).unwrap();
+                let degree = in_degree
+                    .get_mut(edge.to.as_str())
+                    .ok_or_else(|| anyhow!("Topological sort failed: missing target node {}", edge.to))?;
                 *degree -= 1;
                 if *degree == 0 {
                     queue.push(&edge.to);
@@ -306,7 +311,7 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add node a");
 
         plan.add_node(WorkflowNode {
             id: "b".to_string(),
@@ -317,16 +322,16 @@ mod tests {
             is_guard: false,
             repeatable: true,
         })
-        .unwrap();
+        .expect("add node b");
 
         plan.add_edge(WorkflowEdge {
             from: "a".to_string(),
             to: "b".to_string(),
             condition: None,
         })
-        .unwrap();
+        .expect("add edge a->b");
 
-        let sorted = plan.topological_sort().unwrap();
+        let sorted = plan.topological_sort().expect("topological sort");
         assert_eq!(sorted, vec!["a", "b"]);
     }
 
@@ -343,7 +348,7 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add node a");
 
         plan.add_node(WorkflowNode {
             id: "b".to_string(),
@@ -354,21 +359,21 @@ mod tests {
             is_guard: false,
             repeatable: true,
         })
-        .unwrap();
+        .expect("add node b");
 
         plan.add_edge(WorkflowEdge {
             from: "a".to_string(),
             to: "b".to_string(),
             condition: None,
         })
-        .unwrap();
+        .expect("add edge a->b");
 
         plan.add_edge(WorkflowEdge {
             from: "b".to_string(),
             to: "a".to_string(),
             condition: None,
         })
-        .unwrap();
+        .expect("add edge b->a");
 
         assert!(plan.has_cycles());
     }
@@ -386,7 +391,7 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add node qa");
 
         plan.add_node(WorkflowNode {
             id: "fix".to_string(),
@@ -397,7 +402,7 @@ mod tests {
             is_guard: false,
             repeatable: true,
         })
-        .unwrap();
+        .expect("add node fix");
 
         plan.add_node(WorkflowNode {
             id: "done".to_string(),
@@ -408,21 +413,21 @@ mod tests {
             is_guard: true,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add node done");
 
         plan.add_edge(WorkflowEdge {
             from: "qa".to_string(),
             to: "fix".to_string(),
             condition: None,
         })
-        .unwrap();
+        .expect("add edge qa->fix");
 
         plan.add_edge(WorkflowEdge {
             from: "fix".to_string(),
             to: "done".to_string(),
             condition: Some("active_ticket_count == 0".to_string()),
         })
-        .unwrap();
+        .expect("add edge fix->done");
 
         let context = StepPrehookContext {
             active_ticket_count: 0,
@@ -454,11 +459,11 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add node test");
 
         let node = plan.get_node("test");
         assert!(node.is_some());
-        assert_eq!(node.unwrap().id, "test");
+        assert_eq!(node.expect("node test should exist").id, "test");
 
         let none = plan.get_node("nonexistent");
         assert!(none.is_none());
@@ -476,7 +481,7 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("seed duplicate node a");
 
         let err = plan
             .add_node(WorkflowNode {
@@ -488,7 +493,7 @@ mod tests {
                 is_guard: false,
                 repeatable: true,
             })
-            .unwrap_err();
+            .expect_err("operation should fail");
         assert!(err.to_string().contains("already exists"));
     }
 
@@ -504,7 +509,7 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("seed node b");
 
         let err = plan
             .add_edge(WorkflowEdge {
@@ -512,7 +517,7 @@ mod tests {
                 to: "b".to_string(),
                 condition: None,
             })
-            .unwrap_err();
+            .expect_err("operation should fail");
         assert!(err.to_string().contains("Source node"));
     }
 
@@ -528,7 +533,7 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("seed node a");
 
         let err = plan
             .add_edge(WorkflowEdge {
@@ -536,7 +541,7 @@ mod tests {
                 to: "b".to_string(),
                 condition: None,
             })
-            .unwrap_err();
+            .expect_err("operation should fail");
         assert!(err.to_string().contains("Target node"));
     }
 
@@ -552,7 +557,7 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add start");
         plan.add_node(WorkflowNode {
             id: "mid".to_string(),
             step_type: "qa".to_string(),
@@ -562,7 +567,7 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add mid");
         plan.add_node(WorkflowNode {
             id: "end".to_string(),
             step_type: "done".to_string(),
@@ -572,19 +577,19 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add end");
         plan.add_edge(WorkflowEdge {
             from: "start".to_string(),
             to: "mid".to_string(),
             condition: None,
         })
-        .unwrap();
+        .expect("add edge start->mid");
         plan.add_edge(WorkflowEdge {
             from: "mid".to_string(),
             to: "end".to_string(),
             condition: None,
         })
-        .unwrap();
+        .expect("add edge mid->end");
 
         let entries: Vec<&str> = plan
             .get_entry_nodes()
@@ -623,7 +628,7 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add only node");
 
         assert_eq!(plan.get_entry_nodes().len(), 1);
         assert_eq!(plan.get_exit_nodes().len(), 1);
@@ -642,7 +647,7 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add node a");
         plan.add_node(WorkflowNode {
             id: "b".to_string(),
             step_type: "fix".to_string(),
@@ -652,13 +657,13 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add node b");
         plan.add_edge(WorkflowEdge {
             from: "a".to_string(),
             to: "b".to_string(),
             condition: None,
         })
-        .unwrap();
+        .expect("add edge a->b");
 
         assert_eq!(plan.get_outgoing_edges("a").len(), 1);
         assert_eq!(plan.get_incoming_edges("b").len(), 1);
@@ -679,7 +684,7 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add node a");
         plan.add_node(WorkflowNode {
             id: "b".to_string(),
             step_type: "fix".to_string(),
@@ -689,29 +694,52 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add node b");
         plan.add_edge(WorkflowEdge {
             from: "a".to_string(),
             to: "b".to_string(),
             condition: None,
         })
-        .unwrap();
+        .expect("add edge a->b");
         plan.add_edge(WorkflowEdge {
             from: "b".to_string(),
             to: "a".to_string(),
             condition: None,
         })
-        .unwrap();
+        .expect("add edge b->a");
 
-        let err = plan.topological_sort().unwrap_err();
+        let err = plan.topological_sort().expect_err("operation should fail");
         assert!(err.to_string().contains("cycles"));
     }
 
     #[test]
     fn test_dag_topological_sort_empty() {
         let plan = DynamicExecutionPlan::new();
-        let sorted = plan.topological_sort().unwrap();
+        let sorted = plan.topological_sort().expect("empty topological sort");
         assert!(sorted.is_empty());
+    }
+
+    #[test]
+    fn test_dag_topological_sort_rejects_unknown_target() {
+        let mut plan = DynamicExecutionPlan::new();
+        plan.add_node(WorkflowNode {
+            id: "a".to_string(),
+            step_type: "qa".to_string(),
+            agent_id: None,
+            template: None,
+            prehook: None,
+            is_guard: false,
+            repeatable: false,
+        })
+        .expect("add node a");
+        plan.edges.push(WorkflowEdge {
+            from: "a".to_string(),
+            to: "ghost".to_string(),
+            condition: None,
+        });
+
+        let err = plan.topological_sort().expect_err("operation should fail");
+        assert!(err.to_string().contains("missing target node ghost"));
     }
 
     #[test]
@@ -727,36 +755,41 @@ mod tests {
                 is_guard: false,
                 repeatable: false,
             })
-            .unwrap();
+            .expect("add diamond node");
         }
         plan.add_edge(WorkflowEdge {
             from: "a".to_string(),
             to: "b".to_string(),
             condition: None,
         })
-        .unwrap();
+        .expect("add edge a->b");
         plan.add_edge(WorkflowEdge {
             from: "a".to_string(),
             to: "c".to_string(),
             condition: None,
         })
-        .unwrap();
+        .expect("add edge a->c");
         plan.add_edge(WorkflowEdge {
             from: "b".to_string(),
             to: "d".to_string(),
             condition: None,
         })
-        .unwrap();
+        .expect("add edge b->d");
         plan.add_edge(WorkflowEdge {
             from: "c".to_string(),
             to: "d".to_string(),
             condition: None,
         })
-        .unwrap();
+        .expect("add edge c->d");
 
-        let sorted = plan.topological_sort().unwrap();
+        let sorted = plan.topological_sort().expect("diamond topological sort");
         assert_eq!(sorted.len(), 4);
-        let pos = |id: &str| sorted.iter().position(|s| s == id).unwrap();
+        let pos = |id: &str| {
+            sorted
+                .iter()
+                .position(|s| s == id)
+                .expect("id should be present in sorted output")
+        };
         assert!(pos("a") < pos("b"));
         assert!(pos("a") < pos("c"));
         assert!(pos("b") < pos("d"));
@@ -775,7 +808,7 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add node a");
         plan.add_node(WorkflowNode {
             id: "b".to_string(),
             step_type: "fix".to_string(),
@@ -785,13 +818,13 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add node b");
         plan.add_edge(WorkflowEdge {
             from: "a".to_string(),
             to: "b".to_string(),
             condition: Some("active_ticket_count > 0".to_string()),
         })
-        .unwrap();
+        .expect("add conditional edge a->b");
 
         let ctx = StepPrehookContext {
             active_ticket_count: 0,
@@ -821,7 +854,7 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add start node");
         plan.add_node(WorkflowNode {
             id: "end".to_string(),
             step_type: "done".to_string(),
@@ -831,13 +864,13 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add end node");
         plan.add_edge(WorkflowEdge {
             from: "start".to_string(),
             to: "end".to_string(),
             condition: None,
         })
-        .unwrap();
+        .expect("add edge start->end");
 
         let mut state = DagExecutionState::default();
         state.completed_nodes.insert("start".to_string());
@@ -865,11 +898,11 @@ mod tests {
             is_guard: false,
             repeatable: true,
         })
-        .unwrap();
+        .expect("add node n1");
         plan.entry = Some("n1".to_string());
 
-        let json = serde_json::to_string(&plan).unwrap();
-        let plan2: DynamicExecutionPlan = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&plan).expect("serialize plan");
+        let plan2: DynamicExecutionPlan = serde_json::from_str(&json).expect("deserialize plan");
         assert_eq!(plan2.entry, Some("n1".to_string()));
         assert!(plan2.nodes.contains_key("n1"));
     }
@@ -897,7 +930,7 @@ mod tests {
             is_guard: false,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add start node");
 
         plan.add_node(WorkflowNode {
             id: "end".to_string(),
@@ -908,14 +941,14 @@ mod tests {
             is_guard: true,
             repeatable: false,
         })
-        .unwrap();
+        .expect("add end node");
 
         plan.add_edge(WorkflowEdge {
             from: "start".to_string(),
             to: "end".to_string(),
             condition: None,
         })
-        .unwrap();
+        .expect("add edge start->end");
 
         let mut state = DagExecutionState::default();
 

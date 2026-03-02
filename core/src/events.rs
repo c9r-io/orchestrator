@@ -206,7 +206,7 @@ mod tests {
             "step_started",
             serde_json::json!({"step": "qa", "agent_id": "qa_agent"}),
         )
-        .unwrap();
+        .expect("insert step_started event");
 
         insert_event(
             &state,
@@ -215,7 +215,7 @@ mod tests {
             "step_finished",
             serde_json::json!({"step": "qa", "success": true, "duration_ms": 1500}),
         )
-        .unwrap();
+        .expect("insert step_finished event");
 
         insert_event(
             &state,
@@ -224,10 +224,10 @@ mod tests {
             "cycle_started",
             serde_json::json!({"cycle": 1}),
         )
-        .unwrap();
+        .expect("insert cycle_started event");
 
         // Query events back
-        let events = query_step_events(&state.db_path, "task1").unwrap();
+        let events = query_step_events(&state.db_path, "task1").expect("query roundtrip events");
         assert_eq!(events.len(), 3);
 
         assert_eq!(events[0].event_type, "step_started");
@@ -247,7 +247,8 @@ mod tests {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
 
-        let events = query_step_events(&state.db_path, "nonexistent_task").unwrap();
+        let events = query_step_events(&state.db_path, "nonexistent_task")
+            .expect("query empty events");
         assert!(events.is_empty());
     }
 
@@ -285,7 +286,8 @@ mod tests {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
 
-        let result = query_latest_step_log_paths(&state.db_path, "task1").unwrap();
+        let result = query_latest_step_log_paths(&state.db_path, "task1")
+            .expect("query latest log paths");
         assert!(result.is_none());
     }
 
@@ -305,11 +307,12 @@ mod tests {
                 "stderr_path": "/tmp/stderr.log"
             }),
         )
-        .unwrap();
+        .expect("insert step_spawned event");
 
-        let result = query_latest_step_log_paths(&state.db_path, "task1").unwrap();
+        let result = query_latest_step_log_paths(&state.db_path, "task1")
+            .expect("query latest spawned log paths");
         assert!(result.is_some());
-        let (phase, stdout, stderr) = result.unwrap();
+        let (phase, stdout, stderr) = result.expect("spawned log paths should exist");
         assert_eq!(phase, "qa");
         assert_eq!(stdout, "/tmp/stdout.log");
         assert_eq!(stderr, "/tmp/stderr.log");
@@ -327,9 +330,10 @@ mod tests {
             "step_started",
             serde_json::json!({"stdout_path": "/tmp/out.log"}),
         )
-        .unwrap();
+        .expect("insert step_started log event");
 
-        let result = query_latest_step_log_paths(&state.db_path, "task1").unwrap();
+        let result = query_latest_step_log_paths(&state.db_path, "task1")
+            .expect("query empty phase log paths");
         assert!(result.is_none());
     }
 
@@ -345,9 +349,9 @@ mod tests {
             "step_started",
             serde_json::json!({"step": "qa", "step_scope": "item"}),
         )
-        .unwrap();
+        .expect("insert scoped step_started event");
 
-        let events = query_step_events(&state.db_path, "task1").unwrap();
+        let events = query_step_events(&state.db_path, "task1").expect("query scoped events");
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].step_scope, Some(ObservedStepScope::Item));
         assert_eq!(events[0].task_item_id.as_deref(), Some("item1"));
@@ -377,9 +381,9 @@ mod tests {
                 "output_state": "low_output"
             }),
         )
-        .unwrap();
+        .expect("insert step_heartbeat event");
 
-        let events = query_step_events(&state.db_path, "task1").unwrap();
+        let events = query_step_events(&state.db_path, "task1").expect("query heartbeat events");
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].step_scope, Some(ObservedStepScope::Task));
         assert_eq!(events[0].elapsed_secs, Some(120));

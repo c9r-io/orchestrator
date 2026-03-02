@@ -168,7 +168,8 @@ pub(crate) mod tests {
         let before = chrono::Utc::now();
         let ts = super::now_ts();
         let after = chrono::Utc::now();
-        let parsed = chrono::DateTime::parse_from_rfc3339(&ts).unwrap();
+        let parsed =
+            chrono::DateTime::parse_from_rfc3339(&ts).expect("timestamp should parse as RFC3339");
         assert!(parsed >= before, "timestamp should be >= before");
         assert!(parsed <= after, "timestamp should be <= after");
     }

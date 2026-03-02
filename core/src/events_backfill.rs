@@ -92,7 +92,7 @@ mod tests {
     fn backfill_returns_zero_stats_on_empty_db() {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
-        let stats = backfill_event_step_scope(&state.db_path).unwrap();
+        let stats = backfill_event_step_scope(&state.db_path).expect("backfill empty db");
         assert_eq!(stats.scanned, 0);
         assert_eq!(stats.updated, 0);
         assert_eq!(stats.skipped, 0);
@@ -110,14 +110,15 @@ mod tests {
             "step_started",
             json!({"step": "qa"}),
         )
-        .unwrap();
+        .expect("insert legacy item-scoped event");
 
-        let stats = backfill_event_step_scope(&state.db_path).unwrap();
+        let stats = backfill_event_step_scope(&state.db_path).expect("backfill item scope");
         assert_eq!(stats.scanned, 1);
         assert_eq!(stats.updated, 1);
         assert_eq!(stats.skipped, 0);
 
-        let events = crate::events::query_step_events(&state.db_path, "task1").unwrap();
+        let events =
+            crate::events::query_step_events(&state.db_path, "task1").expect("query step events");
         assert_eq!(
             events[0].step_scope,
             Some(crate::events::ObservedStepScope::Item)
@@ -136,13 +137,14 @@ mod tests {
             "step_started",
             json!({"step": "plan"}),
         )
-        .unwrap();
+        .expect("insert legacy task-scoped event");
 
-        let stats = backfill_event_step_scope(&state.db_path).unwrap();
+        let stats = backfill_event_step_scope(&state.db_path).expect("backfill task scope");
         assert_eq!(stats.scanned, 1);
         assert_eq!(stats.updated, 1);
 
-        let events = crate::events::query_step_events(&state.db_path, "task1").unwrap();
+        let events =
+            crate::events::query_step_events(&state.db_path, "task1").expect("query step events");
         assert_eq!(
             events[0].step_scope,
             Some(crate::events::ObservedStepScope::Task)
@@ -161,12 +163,12 @@ mod tests {
             "step_finished",
             json!({"step": "qa", "success": true}),
         )
-        .unwrap();
+        .expect("insert finished event");
 
-        let stats1 = backfill_event_step_scope(&state.db_path).unwrap();
+        let stats1 = backfill_event_step_scope(&state.db_path).expect("first backfill pass");
         assert_eq!(stats1.updated, 1);
 
-        let stats2 = backfill_event_step_scope(&state.db_path).unwrap();
+        let stats2 = backfill_event_step_scope(&state.db_path).expect("second backfill pass");
         assert_eq!(stats2.scanned, 0, "second pass should find nothing to backfill");
         assert_eq!(stats2.updated, 0);
     }
@@ -183,9 +185,9 @@ mod tests {
             "step_started",
             json!({"step": "qa", "step_scope": "item"}),
         )
-        .unwrap();
+        .expect("insert scoped event");
 
-        let stats = backfill_event_step_scope(&state.db_path).unwrap();
+        let stats = backfill_event_step_scope(&state.db_path).expect("backfill pre-scoped event");
         assert_eq!(stats.scanned, 0);
         assert_eq!(stats.updated, 0);
     }
@@ -202,7 +204,7 @@ mod tests {
             "cycle_started",
             json!({"cycle": 1}),
         )
-        .unwrap();
+        .expect("insert cycle_started event");
         insert_event(
             &state,
             "task1",
@@ -210,9 +212,9 @@ mod tests {
             "task_completed",
             json!({}),
         )
-        .unwrap();
+        .expect("insert task_completed event");
 
-        let stats = backfill_event_step_scope(&state.db_path).unwrap();
+        let stats = backfill_event_step_scope(&state.db_path).expect("backfill non-step events");
         assert_eq!(stats.scanned, 0, "non-step events should not be scanned");
         assert_eq!(stats.updated, 0);
     }
@@ -230,7 +232,7 @@ mod tests {
             "step_started",
             json!({"step": "qa"}),
         )
-        .unwrap();
+        .expect("insert mixed legacy item event");
         // Modern event (has step_scope)
         insert_event(
             &state,
@@ -239,7 +241,7 @@ mod tests {
             "step_finished",
             json!({"step": "qa", "step_scope": "item", "success": true}),
         )
-        .unwrap();
+        .expect("insert mixed modern event");
         // Another legacy event
         insert_event(
             &state,
@@ -248,9 +250,9 @@ mod tests {
             "step_started",
             json!({"step": "plan"}),
         )
-        .unwrap();
+        .expect("insert mixed legacy task event");
 
-        let stats = backfill_event_step_scope(&state.db_path).unwrap();
+        let stats = backfill_event_step_scope(&state.db_path).expect("backfill mixed events");
         assert_eq!(stats.scanned, 2);
         assert_eq!(stats.updated, 2);
     }

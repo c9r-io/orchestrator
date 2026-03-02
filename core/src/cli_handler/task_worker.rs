@@ -228,7 +228,10 @@ mod tests {
                 break;
             }
             if std::time::Instant::now() > deadline {
-                panic!("timeout waiting worker queue drain");
+                assert!(
+                    std::time::Instant::now() <= deadline,
+                    "timeout waiting worker queue drain"
+                );
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }

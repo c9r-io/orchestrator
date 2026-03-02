@@ -301,7 +301,7 @@ pub enum MessagePattern {
     ByPhase(String),
     ByAgent(String),
     ByTaskItem(String, String),
-    Custom(Box<dyn Fn(&AgentMessage) -> bool + Send + Sync>),
+    Custom(Arc<dyn Fn(&AgentMessage) -> bool + Send + Sync>),
 }
 
 impl Clone for MessagePattern {
@@ -311,7 +311,7 @@ impl Clone for MessagePattern {
             MessagePattern::ByPhase(p) => MessagePattern::ByPhase(p.clone()),
             MessagePattern::ByAgent(a) => MessagePattern::ByAgent(a.clone()),
             MessagePattern::ByTaskItem(t, i) => MessagePattern::ByTaskItem(t.clone(), i.clone()),
-            MessagePattern::Custom(_) => panic!("Cannot clone Custom pattern"),
+            MessagePattern::Custom(f) => MessagePattern::Custom(Arc::clone(f)),
         }
     }
 }
@@ -446,11 +446,28 @@ mod tests {
     fn test_message_pattern_clone() {
         let pattern = MessagePattern::ByPhase("qa".to_string());
         let cloned = pattern.clone();
-        if let MessagePattern::ByPhase(p) = cloned {
-            assert_eq!(p, "qa");
-        } else {
-            panic!("unexpected pattern variant");
+        match cloned {
+            MessagePattern::ByPhase(p) => assert_eq!(p, "qa"),
+            other => assert!(
+                matches!(other, MessagePattern::ByPhase(_)),
+                "cloned variant should match original"
+            ),
         }
+    }
+
+    #[test]
+    fn test_message_pattern_custom_clone() {
+        let pattern = MessagePattern::Custom(Arc::new(|msg: &AgentMessage| {
+            msg.sender.agent_id == "qa_agent"
+        }));
+        let cloned = pattern.clone();
+        let msg = AgentMessage::new(
+            AgentEndpoint::agent("qa_agent"),
+            vec![],
+            MessagePayload::Custom(serde_json::json!("x")),
+        );
+
+        assert!(cloned.matches(&msg));
     }
 
     #[test]

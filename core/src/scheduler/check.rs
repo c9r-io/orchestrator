@@ -598,13 +598,13 @@ mod tests {
     }
 
     fn make_temp_ws(app_root: &Path) {
-        std::fs::create_dir_all(app_root.join("ws/docs/qa")).unwrap();
+        std::fs::create_dir_all(app_root.join("ws/docs/qa")).expect("create temp workspace");
     }
 
     #[test]
     fn clean_config_no_errors() {
         let cfg = base_config();
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().expect("create temp dir");
         let app_root = tmp.path();
         make_temp_ws(app_root);
 
@@ -621,7 +621,7 @@ mod tests {
     #[test]
     fn workspace_root_missing() {
         let cfg = base_config();
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().expect("create temp dir");
         // Do NOT create ws dir
         let report = run_checks(&cfg, tmp.path(), None);
         let found = report
@@ -635,9 +635,9 @@ mod tests {
     #[test]
     fn qa_targets_missing() {
         let cfg = base_config();
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().expect("create temp dir");
         // Create ws root but not docs/qa
-        std::fs::create_dir_all(tmp.path().join("ws")).unwrap();
+        std::fs::create_dir_all(tmp.path().join("ws")).expect("create ws dir");
 
         let report = run_checks(&cfg, tmp.path(), None);
         let found = report
@@ -655,7 +655,7 @@ mod tests {
         cfg.config
             .workflows
             .get_mut("test-wf")
-            .unwrap()
+            .expect("test-wf should exist")
             .steps
             .push(WorkflowStepConfig {
                 id: "deploy".into(),
@@ -676,7 +676,7 @@ mod tests {
                 behavior: StepBehavior::default(),
             });
 
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
         let report = run_checks(&cfg, tmp.path(), None);
         let found = report
@@ -693,11 +693,11 @@ mod tests {
         cfg.config
             .agents
             .get_mut("agent1")
-            .unwrap()
+            .expect("agent1 should exist")
             .capabilities
             .push("qa".into());
 
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
         let report = run_checks(&cfg, tmp.path(), None);
         let found = report
@@ -713,7 +713,7 @@ mod tests {
         cfg.config
             .workflows
             .get_mut("test-wf")
-            .unwrap()
+            .expect("test-wf should exist")
             .steps
             .push(WorkflowStepConfig {
                 id: "bad_builtin".into(),
@@ -734,7 +734,7 @@ mod tests {
                 behavior: StepBehavior::default(),
             });
 
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
         let report = run_checks(&cfg, tmp.path(), None);
         let found = report
@@ -750,7 +750,7 @@ mod tests {
         cfg.config
             .workflows
             .get_mut("test-wf")
-            .unwrap()
+            .expect("test-wf should exist")
             .steps
             .push(WorkflowStepConfig {
                 id: "conflict".into(),
@@ -771,7 +771,7 @@ mod tests {
                 behavior: StepBehavior::default(),
             });
 
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
         let report = run_checks(&cfg, tmp.path(), None);
         let found = report
@@ -784,13 +784,17 @@ mod tests {
     #[test]
     fn execution_mode_mismatch() {
         let mut cfg = base_config();
-        cfg.config.workflows.get_mut("test-wf").unwrap().steps[0]
+        cfg.config
+            .workflows
+            .get_mut("test-wf")
+            .expect("test-wf should exist")
+            .steps[0]
             .behavior
             .execution = ExecutionMode::Builtin {
             name: "plan".into(),
         };
 
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
         let report = run_checks(&cfg, tmp.path(), None);
         let found = report
@@ -803,7 +807,11 @@ mod tests {
     #[test]
     fn command_steps_skip_capability_requirement() {
         let mut cfg = base_config();
-        cfg.config.workflows.get_mut("test-wf").unwrap().steps = vec![WorkflowStepConfig {
+        cfg.config
+            .workflows
+            .get_mut("test-wf")
+            .expect("test-wf should exist")
+            .steps = vec![WorkflowStepConfig {
             id: "shell".into(),
             description: None,
             required_capability: None,
@@ -827,7 +835,7 @@ mod tests {
             },
         }];
 
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
         let report = run_checks(&cfg, tmp.path(), None);
         let found = report
@@ -840,9 +848,14 @@ mod tests {
     #[test]
     fn pipe_to_unknown() {
         let mut cfg = base_config();
-        cfg.config.workflows.get_mut("test-wf").unwrap().steps[0].pipe_to = Some("ghost".into());
+        cfg.config
+            .workflows
+            .get_mut("test-wf")
+            .expect("test-wf should exist")
+            .steps[0]
+            .pipe_to = Some("ghost".into());
 
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
         let report = run_checks(&cfg, tmp.path(), None);
         let found = report
@@ -858,11 +871,11 @@ mod tests {
         cfg.config
             .agents
             .get_mut("agent1")
-            .unwrap()
+            .expect("agent1 should exist")
             .templates
             .insert("plan".into(), "echo {unknown_var}".into());
 
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
         let report = run_checks(&cfg, tmp.path(), None);
         let found = report
@@ -875,7 +888,7 @@ mod tests {
     #[test]
     fn template_system_var_ok() {
         let cfg = base_config();
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
         let report = run_checks(&cfg, tmp.path(), None);
         // {task_id} and {diff} are system vars — should not trigger warning
@@ -893,11 +906,11 @@ mod tests {
         cfg.config
             .agents
             .get_mut("agent1")
-            .unwrap()
+            .expect("agent1 should exist")
             .templates
             .insert("implement".into(), "echo {plan_output}".into());
 
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
         let report = run_checks(&cfg, tmp.path(), None);
         let bad = report.checks.iter().any(|c| {
@@ -943,7 +956,7 @@ mod tests {
             },
         );
 
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
         let report = run_checks(&cfg, tmp.path(), None);
         let found = report
@@ -960,7 +973,7 @@ mod tests {
         cfg.config
             .workflows
             .get_mut("test-wf")
-            .unwrap()
+            .expect("test-wf should exist")
             .steps
             .push(WorkflowStepConfig {
                 id: "parent".into(),
@@ -998,7 +1011,7 @@ mod tests {
                 behavior: StepBehavior::default(),
             });
 
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
         let report = run_checks(&cfg, tmp.path(), None);
         let found = report
@@ -1011,7 +1024,7 @@ mod tests {
     #[test]
     fn json_roundtrip() {
         let cfg = base_config();
-        let tmp = tempfile::tempdir().unwrap();
+        let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
         let report = run_checks(&cfg, tmp.path(), None);
 

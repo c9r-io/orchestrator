@@ -259,7 +259,7 @@ mod tests {
     static ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     fn create_mock_binary(path: &Path, content: &[u8]) -> std::io::Result<()> {
-        let parent = path.parent().unwrap();
+        let parent = path.parent().expect("mock binary path should have parent");
         std::fs::create_dir_all(parent)?;
         let mut file = std::fs::File::create(path)?;
         file.write_all(content)?;
@@ -302,21 +302,21 @@ mod tests {
             "safety-test-snapshot-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after epoch")
                 .as_nanos()
         ));
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
 
         let binary_path = temp_dir.join("core/target/release/agent-orchestrator");
         let test_content = b"mock binary content for testing";
-        create_mock_binary(&binary_path, test_content).unwrap();
+        create_mock_binary(&binary_path, test_content).expect("create mock binary");
 
         let result = snapshot_binary(&temp_dir).await;
 
         assert!(result.is_ok());
-        let stable_path = result.unwrap();
+        let stable_path = result.expect("snapshot should succeed");
         assert!(stable_path.exists());
-        let restored_content = std::fs::read(&stable_path).unwrap();
+        let restored_content = std::fs::read(&stable_path).expect("read stable snapshot");
         assert_eq!(restored_content, test_content);
 
         std::fs::remove_dir_all(&temp_dir).ok();
@@ -328,15 +328,15 @@ mod tests {
             "safety-test-missing-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after epoch")
                 .as_nanos()
         ));
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
 
         let result = snapshot_binary(&temp_dir).await;
 
         assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
+        let err_msg = result.expect_err("operation should fail").to_string();
         assert!(err_msg.contains("release binary not found"));
 
         std::fs::remove_dir_all(&temp_dir).ok();
@@ -348,24 +348,24 @@ mod tests {
             "safety-test-restore-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after epoch")
                 .as_nanos()
         ));
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
 
         let stable_path = temp_dir.join(".stable");
         let binary_path = temp_dir.join("core/target/release");
-        std::fs::create_dir_all(&binary_path).unwrap();
+        std::fs::create_dir_all(&binary_path).expect("create binary dir");
 
         let test_content = b"stable binary snapshot content";
-        create_mock_binary(&stable_path, test_content).unwrap();
+        create_mock_binary(&stable_path, test_content).expect("create stable snapshot");
 
         let result = restore_binary_snapshot(&temp_dir).await;
 
         assert!(result.is_ok());
         let restored_binary_path = binary_path.join("agent-orchestrator");
         assert!(restored_binary_path.exists());
-        let restored_content = std::fs::read(&restored_binary_path).unwrap();
+        let restored_content = std::fs::read(&restored_binary_path).expect("read restored binary");
         assert_eq!(restored_content, test_content);
 
         std::fs::remove_dir_all(&temp_dir).ok();
@@ -377,15 +377,15 @@ mod tests {
             "safety-test-restore-missing-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after epoch")
                 .as_nanos()
         ));
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
 
         let result = restore_binary_snapshot(&temp_dir).await;
 
         assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
+        let err_msg = result.expect_err("operation should fail").to_string();
         assert!(err_msg.contains("no .stable binary snapshot found"));
 
         std::fs::remove_dir_all(&temp_dir).ok();
@@ -397,19 +397,21 @@ mod tests {
             "safety-test-integrity-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after epoch")
                 .as_nanos()
         ));
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
 
         let binary_path = temp_dir.join("core/target/release/agent-orchestrator");
         let original_content = vec![0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE];
-        create_mock_binary(&binary_path, &original_content).unwrap();
+        create_mock_binary(&binary_path, &original_content).expect("create original binary");
 
-        snapshot_binary(&temp_dir).await.unwrap();
-        restore_binary_snapshot(&temp_dir).await.unwrap();
+        snapshot_binary(&temp_dir).await.expect("snapshot binary");
+        restore_binary_snapshot(&temp_dir)
+            .await
+            .expect("restore binary snapshot");
 
-        let final_content = std::fs::read(&binary_path).unwrap();
+        let final_content = std::fs::read(&binary_path).expect("read final binary");
         assert_eq!(final_content, original_content);
 
         std::fs::remove_dir_all(&temp_dir).ok();
@@ -421,21 +423,21 @@ mod tests {
             "safety-test-verify-match-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after epoch")
                 .as_nanos()
         ));
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
 
         let binary_path = temp_dir.join("core/target/release/agent-orchestrator");
         let stable_path = temp_dir.join(".stable");
         let test_content = b"binary content for verification test";
-        create_mock_binary(&binary_path, test_content).unwrap();
-        create_mock_binary(&stable_path, test_content).unwrap();
+        create_mock_binary(&binary_path, test_content).expect("create current binary");
+        create_mock_binary(&stable_path, test_content).expect("create stable binary");
 
         let result = verify_binary_snapshot(&temp_dir).await;
 
         assert!(result.is_ok());
-        let verification = result.unwrap();
+        let verification = result.expect("verification should succeed");
         assert!(verification.verified);
         assert_eq!(
             verification.original_checksum,
@@ -451,22 +453,22 @@ mod tests {
             "safety-test-verify-mismatch-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after epoch")
                 .as_nanos()
         ));
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
 
         let binary_path = temp_dir.join("core/target/release/agent-orchestrator");
         let stable_path = temp_dir.join(".stable");
         let original_content = b"original binary content";
         let modified_content = b"modified binary content";
-        create_mock_binary(&binary_path, modified_content).unwrap();
-        create_mock_binary(&stable_path, original_content).unwrap();
+        create_mock_binary(&binary_path, modified_content).expect("create modified binary");
+        create_mock_binary(&stable_path, original_content).expect("create original stable binary");
 
         let result = verify_binary_snapshot(&temp_dir).await;
 
         assert!(result.is_ok());
-        let verification = result.unwrap();
+        let verification = result.expect("verification should succeed");
         assert!(!verification.verified);
         assert_ne!(
             verification.original_checksum,
@@ -482,18 +484,18 @@ mod tests {
             "safety-test-verify-no-stable-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after epoch")
                 .as_nanos()
         ));
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
 
         let binary_path = temp_dir.join("core/target/release/agent-orchestrator");
-        create_mock_binary(&binary_path, b"test").unwrap();
+        create_mock_binary(&binary_path, b"test").expect("create binary without stable");
 
         let result = verify_binary_snapshot(&temp_dir).await;
 
         assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
+        let err_msg = result.expect_err("operation should fail").to_string();
         assert!(err_msg.contains("no .stable binary snapshot found"));
 
         std::fs::remove_dir_all(&temp_dir).ok();
@@ -505,18 +507,18 @@ mod tests {
             "safety-test-verify-no-binary-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("system time should be after epoch")
                 .as_nanos()
         ));
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
 
         let stable_path = temp_dir.join(".stable");
-        create_mock_binary(&stable_path, b"test").unwrap();
+        create_mock_binary(&stable_path, b"test").expect("create stable snapshot");
 
         let result = verify_binary_snapshot(&temp_dir).await;
 
         assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
+        let err_msg = result.expect_err("operation should fail").to_string();
         assert!(err_msg.contains("release binary not found"));
 
         std::fs::remove_dir_all(&temp_dir).ok();

@@ -244,7 +244,7 @@ mod tests {
     fn config_self_heal_rule_serializes_as_string() {
         let json =
             serde_json::to_string(&ConfigSelfHealRule::DropRequiredCapabilityFromBuiltinStep)
-                .unwrap();
+                .expect("self-heal rule should serialize");
         assert!(json.contains("DropRequiredCapabilityFromBuiltinStep"));
     }
 }

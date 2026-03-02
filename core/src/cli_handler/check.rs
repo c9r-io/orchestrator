@@ -4,7 +4,7 @@ use crate::config_load::{
     query_latest_heal_summary, read_active_config, ConfigSelfHealReport,
 };
 use crate::scheduler::check::{run_checks, CheckReport};
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use super::CliHandler;
 
@@ -42,10 +42,17 @@ impl CliHandler {
 
         match output {
             OutputFormat::Json => {
-                println!("{}", serde_json::to_string_pretty(&report).unwrap());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&report)
+                        .context("serialize check report as json")?
+                );
             }
             OutputFormat::Yaml => {
-                println!("{}", serde_yaml::to_string(&report).unwrap());
+                println!(
+                    "{}",
+                    serde_yaml::to_string(&report).context("serialize check report as yaml")?
+                );
             }
             OutputFormat::Table => {
                 self.render_check_table(&report);

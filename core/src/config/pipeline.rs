@@ -75,16 +75,19 @@ mod tests {
     #[test]
     fn test_pipeline_variables_deserialize_minimal() {
         let json = r#"{}"#;
-        let pv: PipelineVariables = serde_json::from_str(json).unwrap();
+        let pv: PipelineVariables =
+            serde_json::from_str(json).expect("deserialize minimal pipeline variables");
         assert!(pv.vars.is_empty());
         assert!(pv.build_errors.is_empty());
     }
 
     #[test]
     fn test_build_error_level_serde() {
-        let err: BuildErrorLevel = serde_json::from_str("\"error\"").unwrap();
+        let err: BuildErrorLevel =
+            serde_json::from_str("\"error\"").expect("deserialize error level");
         assert_eq!(err, BuildErrorLevel::Error);
-        let warn: BuildErrorLevel = serde_json::from_str("\"warning\"").unwrap();
+        let warn: BuildErrorLevel =
+            serde_json::from_str("\"warning\"").expect("deserialize warning level");
         assert_eq!(warn, BuildErrorLevel::Warning);
     }
 

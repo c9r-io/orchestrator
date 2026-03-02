@@ -292,23 +292,24 @@ mod tests {
         state: &crate::state::InnerState,
         task_id: &str,
     ) -> (Vec<String>, Vec<String>) {
-        let conn = open_conn(&state.db_path).unwrap();
+        let conn = open_conn(&state.db_path).expect("open task storage database");
         let target_files_json: String = conn
             .query_row(
                 "SELECT target_files_json FROM tasks WHERE id = ?1",
                 params![task_id],
                 |row| row.get(0),
             )
-            .unwrap();
-        let target_files = serde_json::from_str::<Vec<String>>(&target_files_json).unwrap();
+            .expect("load serialized target_files");
+        let target_files = serde_json::from_str::<Vec<String>>(&target_files_json)
+            .expect("deserialize target_files");
         let mut stmt = conn
             .prepare("SELECT qa_file_path FROM task_items WHERE task_id = ?1 ORDER BY order_no")
-            .unwrap();
+            .expect("prepare task item query");
         let item_paths = stmt
             .query_map(params![task_id], |row| row.get::<_, String>(0))
-            .unwrap()
+            .expect("query task item paths")
             .collect::<rusqlite::Result<Vec<_>>>()
-            .unwrap();
+            .expect("collect task item paths");
         (target_files, item_paths)
     }
 
@@ -318,12 +319,15 @@ mod tests {
         let state = ts.build();
 
         // Create a QA file so target_files is non-empty
-        let active = crate::config_load::read_active_config(&state).unwrap();
-        let ws = active.workspaces.get("default").unwrap();
+        let active = crate::config_load::read_active_config(&state).expect("read active config");
+        let ws = active
+            .workspaces
+            .get("default")
+            .expect("default workspace should exist");
         let qa_dir = &ws.qa_targets[0];
         let qa_path = ws.root_path.join(qa_dir);
         std::fs::create_dir_all(&qa_path).ok();
-        std::fs::write(qa_path.join("test-qa.md"), "# QA Test\n").unwrap();
+        std::fs::write(qa_path.join("test-qa.md"), "# QA Test\n").expect("write qa file");
         drop(active);
 
         let payload = CreateTaskPayload {
@@ -340,7 +344,7 @@ mod tests {
             "create_task_impl should succeed: {:?}",
             result.err()
         );
-        let summary = result.unwrap();
+        let summary = result.expect("create_task_impl should produce summary");
         assert_eq!(summary.status, "pending");
         assert!(!summary.id.is_empty());
         assert!(summary.name.starts_with("QA Sprint"));
@@ -355,12 +359,16 @@ mod tests {
         let mut ts = TestState::new();
         let state = ts.build();
 
-        let active = crate::config_load::read_active_config(&state).unwrap();
-        let ws = active.workspaces.get("default").unwrap();
+        let active = crate::config_load::read_active_config(&state).expect("read active config");
+        let ws = active
+            .workspaces
+            .get("default")
+            .expect("default workspace should exist");
         let qa_dir = &ws.qa_targets[0];
         let qa_path = ws.root_path.join(qa_dir);
         std::fs::create_dir_all(&qa_path).ok();
-        std::fs::write(qa_path.join("custom-qa.md"), "# Custom QA\n").unwrap();
+        std::fs::write(qa_path.join("custom-qa.md"), "# Custom QA\n")
+            .expect("write custom qa file");
         drop(active);
 
         let payload = CreateTaskPayload {
@@ -371,7 +379,7 @@ mod tests {
             workflow_id: None,
             target_files: None,
         };
-        let result = create_task_impl(&state, payload).unwrap();
+        let result = create_task_impl(&state, payload).expect("create custom task");
         assert_eq!(result.name, "My Custom Task");
         assert_eq!(result.goal, "Custom goal description");
     }
@@ -391,7 +399,7 @@ mod tests {
         };
         let result = create_task_impl(&state, payload);
         assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
+        let err = result.expect_err("operation should fail").to_string();
         assert!(
             err.contains("workspace not found"),
             "unexpected error: {}",
@@ -414,7 +422,7 @@ mod tests {
         };
         let result = create_task_impl(&state, payload);
         assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
+        let err = result.expect_err("operation should fail").to_string();
         assert!(
             err.contains("workflow not found"),
             "unexpected error: {}",
@@ -438,7 +446,7 @@ mod tests {
         };
         let result = create_task_impl(&state, payload);
         assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
+        let err = result.expect_err("operation should fail").to_string();
         assert!(
             err.contains("No QA/Security markdown files found for item-scoped workflow"),
             "unexpected error: {}",
@@ -452,15 +460,18 @@ mod tests {
         let state = ts.build();
 
         // Create target files
-        let active = crate::config_load::read_active_config(&state).unwrap();
-        let ws = active.workspaces.get("default").unwrap();
+        let active = crate::config_load::read_active_config(&state).expect("read active config");
+        let ws = active
+            .workspaces
+            .get("default")
+            .expect("default workspace should exist");
         let qa_dir = &ws.qa_targets[0];
         let qa_path = ws.root_path.join(qa_dir);
         std::fs::create_dir_all(&qa_path).ok();
         let file1 = qa_path.join("file1.md");
         let file2 = qa_path.join("file2.md");
-        std::fs::write(&file1, "# File 1\n").unwrap();
-        std::fs::write(&file2, "# File 2\n").unwrap();
+        std::fs::write(&file1, "# File 1\n").expect("write file1");
+        std::fs::write(&file2, "# File 2\n").expect("write file2");
         let rel1 = format!("{}/file1.md", qa_dir);
         let rel2 = format!("{}/file2.md", qa_dir);
         drop(active);
@@ -473,7 +484,7 @@ mod tests {
             workflow_id: None,
             target_files: Some(vec![rel1, rel2]),
         };
-        let result = create_task_impl(&state, payload).unwrap();
+        let result = create_task_impl(&state, payload).expect("create targeted task");
         assert_eq!(result.total_items, 2, "should have 2 task items");
         let (target_files, item_paths) = load_task_storage(&state, &result.id);
         assert_eq!(target_files.len(), 2);
@@ -485,11 +496,14 @@ mod tests {
         let mut ts = TestState::new();
         let state = ts.build();
 
-        let active = crate::config_load::read_active_config(&state).unwrap();
-        let ws = active.workspaces.get("default").unwrap();
+        let active = crate::config_load::read_active_config(&state).expect("read active config");
+        let ws = active
+            .workspaces
+            .get("default")
+            .expect("default workspace should exist");
         let src_path = ws.root_path.join("src");
         std::fs::create_dir_all(&src_path).ok();
-        std::fs::write(src_path.join("lib.rs"), "fn main() {}\n").unwrap();
+        std::fs::write(src_path.join("lib.rs"), "fn main() {}\n").expect("write lib.rs");
         drop(active);
 
         let payload = CreateTaskPayload {
@@ -500,7 +514,7 @@ mod tests {
             workflow_id: None,
             target_files: Some(vec!["src/lib.rs".to_string()]),
         };
-        let result = create_task_impl(&state, payload).unwrap();
+        let result = create_task_impl(&state, payload).expect("create source task");
         assert_eq!(result.total_items, 1);
         let (target_files, item_paths) = load_task_storage(&state, &result.id);
         assert_eq!(target_files, vec!["src/lib.rs".to_string()]);
@@ -520,7 +534,7 @@ mod tests {
             workflow_id: Some("task_only".to_string()),
             target_files: None,
         };
-        let result = create_task_impl(&state, payload).unwrap();
+        let result = create_task_impl(&state, payload).expect("create task-scoped task");
         assert_eq!(result.total_items, 1);
         let (target_files, item_paths) = load_task_storage(&state, &result.id);
         assert!(target_files.is_empty());
@@ -532,11 +546,14 @@ mod tests {
         let mut ts = TestState::new().with_workflow("task_only", task_only_workflow());
         let state = ts.build();
 
-        let active = crate::config_load::read_active_config(&state).unwrap();
-        let ws = active.workspaces.get("default").unwrap();
+        let active = crate::config_load::read_active_config(&state).expect("read active config");
+        let ws = active
+            .workspaces
+            .get("default")
+            .expect("default workspace should exist");
         let src_path = ws.root_path.join("src");
         std::fs::create_dir_all(&src_path).ok();
-        std::fs::write(src_path.join("lib.rs"), "fn main() {}\n").unwrap();
+        std::fs::write(src_path.join("lib.rs"), "fn main() {}\n").expect("write lib.rs");
         drop(active);
 
         let payload = CreateTaskPayload {
@@ -547,7 +564,7 @@ mod tests {
             workflow_id: Some("task_only".to_string()),
             target_files: Some(vec!["src/lib.rs".to_string()]),
         };
-        let result = create_task_impl(&state, payload).unwrap();
+        let result = create_task_impl(&state, payload).expect("create task-only targeted task");
         assert_eq!(result.total_items, 1);
         let (target_files, item_paths) = load_task_storage(&state, &result.id);
         assert_eq!(target_files, vec!["src/lib.rs".to_string()]);
@@ -560,7 +577,7 @@ mod tests {
         let state = ts.build();
 
         {
-            let mut active = write_active_config(&state).unwrap();
+            let mut active = write_active_config(&state).expect("write active config");
             active.config.projects.insert(
                 "proj-a".to_string(),
                 ProjectConfig {
@@ -588,7 +605,7 @@ mod tests {
             workflow_id: Some("task_only".to_string()),
             target_files: None,
         };
-        let result = create_task_impl(&state, payload).unwrap();
+        let result = create_task_impl(&state, payload).expect("create project fallback task");
         assert_eq!(result.project_id, "proj-a");
         assert_eq!(result.workspace_id, "default");
         assert_eq!(result.workflow_id, "task_only");
@@ -603,12 +620,15 @@ mod tests {
         let mut ts = TestState::new().with_workflow("task_only", task_only_workflow());
         let state = ts.build();
 
-        let active = crate::config_load::read_active_config(&state).unwrap();
-        let ws = active.workspaces.get("default").unwrap();
+        let active = crate::config_load::read_active_config(&state).expect("read active config");
+        let ws = active
+            .workspaces
+            .get("default")
+            .expect("default workspace should exist");
         let src_path = ws.root_path.join("src");
         std::fs::create_dir_all(&src_path).ok();
-        std::fs::write(src_path.join("a.rs"), "fn a() {}\n").unwrap();
-        std::fs::write(src_path.join("b.rs"), "fn b() {}\n").unwrap();
+        std::fs::write(src_path.join("a.rs"), "fn a() {}\n").expect("write a.rs");
+        std::fs::write(src_path.join("b.rs"), "fn b() {}\n").expect("write b.rs");
         drop(active);
 
         let payload = CreateTaskPayload {
@@ -622,7 +642,7 @@ mod tests {
         let result = create_task_impl(&state, payload);
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("operation should fail")
             .to_string()
             .contains("task-scoped workflow accepts at most one --target-file"));
     }
@@ -640,7 +660,7 @@ mod tests {
             workflow_id: Some("ticket_only".to_string()),
             target_files: None,
         };
-        let result = create_task_impl(&state, payload).unwrap();
+        let result = create_task_impl(&state, payload).expect("create ticket seed empty task");
         assert_eq!(result.total_items, 1);
         let (target_files, item_paths) = load_task_storage(&state, &result.id);
         assert_eq!(target_files, vec![UNASSIGNED_QA_FILE_PATH.to_string()]);
@@ -652,17 +672,21 @@ mod tests {
         let mut ts = TestState::new().with_workflow("ticket_only", ticket_seed_workflow());
         let state = ts.build();
 
-        let active = crate::config_load::read_active_config(&state).unwrap();
-        let ws = active.workspaces.get("default").unwrap();
+        let active = crate::config_load::read_active_config(&state).expect("read active config");
+        let ws = active
+            .workspaces
+            .get("default")
+            .expect("default workspace should exist");
         let qa_dir = ws.root_path.join("docs/qa");
         std::fs::create_dir_all(&qa_dir).ok();
-        std::fs::write(qa_dir.join("from_ticket.md"), "# From Ticket\n").unwrap();
+        std::fs::write(qa_dir.join("from_ticket.md"), "# From Ticket\n")
+            .expect("write qa target from ticket");
         let ticket_dir = ws.root_path.join(&ws.ticket_dir);
         std::fs::write(
             ticket_dir.join("active_ticket.md"),
             "**Status**: OPEN\n**QA Document**: `docs/qa/from_ticket.md`\n",
         )
-        .unwrap();
+        .expect("write active ticket file");
         drop(active);
 
         let payload = CreateTaskPayload {
@@ -673,7 +697,7 @@ mod tests {
             workflow_id: Some("ticket_only".to_string()),
             target_files: None,
         };
-        let result = create_task_impl(&state, payload).unwrap();
+        let result = create_task_impl(&state, payload).expect("create ticket-seed task");
         assert_eq!(result.total_items, 1);
         let (target_files, item_paths) = load_task_storage(&state, &result.id);
         assert_eq!(target_files, vec!["docs/qa/from_ticket.md".to_string()]);
@@ -685,12 +709,15 @@ mod tests {
         let mut ts = TestState::new();
         let state = ts.build();
 
-        let active = crate::config_load::read_active_config(&state).unwrap();
-        let ws = active.workspaces.get("default").unwrap();
+        let active = crate::config_load::read_active_config(&state).expect("read active config");
+        let ws = active
+            .workspaces
+            .get("default")
+            .expect("default workspace should exist");
         let qa_dir = &ws.qa_targets[0];
         let qa_path = ws.root_path.join(qa_dir);
         std::fs::create_dir_all(&qa_path).ok();
-        std::fs::write(qa_path.join("multi.md"), "# Multi\n").unwrap();
+        std::fs::write(qa_path.join("multi.md"), "# Multi\n").expect("write multi qa file");
         drop(active);
 
         let payload1 = CreateTaskPayload {
@@ -709,8 +736,8 @@ mod tests {
             workflow_id: None,
             target_files: None,
         };
-        let t1 = create_task_impl(&state, payload1).unwrap();
-        let t2 = create_task_impl(&state, payload2).unwrap();
+        let t1 = create_task_impl(&state, payload1).expect("create first task");
+        let t2 = create_task_impl(&state, payload2).expect("create second task");
         assert_ne!(t1.id, t2.id, "tasks should have unique ids");
     }
 
@@ -720,12 +747,15 @@ mod tests {
         let state = ts.build();
 
         // Create a task first
-        let active = crate::config_load::read_active_config(&state).unwrap();
-        let ws = active.workspaces.get("default").unwrap();
+        let active = crate::config_load::read_active_config(&state).expect("read active config");
+        let ws = active
+            .workspaces
+            .get("default")
+            .expect("default workspace should exist");
         let qa_dir = &ws.qa_targets[0];
         let qa_path = ws.root_path.join(qa_dir);
         std::fs::create_dir_all(&qa_path).ok();
-        std::fs::write(qa_path.join("retry.md"), "# Retry\n").unwrap();
+        std::fs::write(qa_path.join("retry.md"), "# Retry\n").expect("write retry qa file");
         drop(active);
 
         let payload = CreateTaskPayload {
@@ -736,26 +766,28 @@ mod tests {
             workflow_id: None,
             target_files: None,
         };
-        let task = create_task_impl(&state, payload).unwrap();
+        let task = create_task_impl(&state, payload).expect("create retry task");
 
         // Get an item id
-        let conn = open_conn(&state.db_path).unwrap();
+        let conn = open_conn(&state.db_path).expect("open retry task database");
         let item_id: String = conn
             .query_row(
                 "SELECT id FROM task_items WHERE task_id = ?1 LIMIT 1",
                 params![task.id],
                 |row| row.get(0),
             )
-            .unwrap();
+            .expect("load task item id");
 
         // Update item to simulate completed/failed state
         conn.execute(
             "UPDATE task_items SET status = 'failed', fix_required = 1, last_error = 'some error', started_at = '2024-01-01', completed_at = '2024-01-01' WHERE id = ?1",
             params![item_id],
-        ).unwrap();
+        )
+        .expect("seed failed task item state");
 
         // Reset it
-        let returned_task_id = reset_task_item_for_retry(&state, &item_id).unwrap();
+        let returned_task_id =
+            reset_task_item_for_retry(&state, &item_id).expect("reset task item for retry");
         assert_eq!(returned_task_id, task.id);
 
         // Verify reset
@@ -771,7 +803,7 @@ mod tests {
                 params![item_id],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
             )
-            .unwrap();
+            .expect("reload reset task item");
         assert_eq!(status, "pending");
         assert_eq!(fix_required, 0);
         assert_eq!(last_error, "");

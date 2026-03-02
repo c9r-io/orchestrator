@@ -1,5 +1,5 @@
 use crate::metrics::{AgentHealthState, CapabilityHealth};
-use crate::state::InnerState;
+use crate::state::{write_agent_health, InnerState};
 use chrono::Utc;
 use std::collections::HashMap;
 
@@ -37,7 +37,7 @@ pub fn is_capability_healthy(
 }
 
 pub fn mark_agent_diseased(state: &InnerState, agent_id: &str) {
-    let mut health = state.agent_health.write().unwrap();
+    let mut health = write_agent_health(state);
     let entry = health
         .entry(agent_id.to_string())
         .or_insert(AgentHealthState {
@@ -64,7 +64,7 @@ pub fn mark_agent_diseased(state: &InnerState, agent_id: &str) {
 }
 
 pub fn increment_consecutive_errors(state: &InnerState, agent_id: &str) -> u32 {
-    let mut health = state.agent_health.write().unwrap();
+    let mut health = write_agent_health(state);
     let entry = health
         .entry(agent_id.to_string())
         .or_insert(AgentHealthState {
@@ -96,7 +96,7 @@ pub fn increment_consecutive_errors(state: &InnerState, agent_id: &str) -> u32 {
 }
 
 pub fn reset_consecutive_errors(state: &InnerState, agent_id: &str) {
-    let mut health = state.agent_health.write().unwrap();
+    let mut health = write_agent_health(state);
     if let Some(entry) = health.get_mut(agent_id) {
         if entry.consecutive_errors == 0 {
             return;
@@ -129,7 +129,7 @@ pub fn update_capability_health(
     success: bool,
 ) {
     if let Some(cap) = capability {
-        let mut health = state.agent_health.write().unwrap();
+        let mut health = write_agent_health(state);
         let entry = health
             .entry(agent_id.to_string())
             .or_insert_with(|| AgentHealthState {
@@ -306,7 +306,7 @@ mod tests {
 
         // Initially healthy
         assert!(is_agent_healthy(
-            &state.agent_health.read().unwrap(),
+            &crate::state::read_agent_health(&state),
             "test_agent"
         ));
 
@@ -318,13 +318,19 @@ mod tests {
 
         // Reset errors
         reset_consecutive_errors(&state, "test_agent");
-        let health = state.agent_health.read().unwrap();
-        assert_eq!(health.get("test_agent").unwrap().consecutive_errors, 0);
+        let health = crate::state::read_agent_health(&state);
+        assert_eq!(
+            health
+                .get("test_agent")
+                .expect("test_agent should exist after increments")
+                .consecutive_errors,
+            0
+        );
         drop(health);
 
         // Mark diseased
         mark_agent_diseased(&state, "test_agent");
-        let health = state.agent_health.read().unwrap();
+        let health = crate::state::read_agent_health(&state);
         assert!(!is_agent_healthy(&health, "test_agent"));
         drop(health);
 
@@ -333,13 +339,13 @@ mod tests {
         update_capability_health(&state, "test_agent", Some("qa"), true);
         update_capability_health(&state, "test_agent", Some("qa"), false);
 
-        let health = state.agent_health.read().unwrap();
+        let health = crate::state::read_agent_health(&state);
         let cap = health
             .get("test_agent")
-            .unwrap()
+            .expect("test_agent should exist for capability tracking")
             .capability_health
             .get("qa")
-            .unwrap();
+            .expect("qa capability should exist");
         assert_eq!(cap.success_count, 2);
         assert_eq!(cap.failure_count, 1);
         assert!(cap.last_error_at.is_some());
@@ -352,7 +358,7 @@ mod tests {
 
         // Reset on non-existent agent - should be a no-op
         reset_consecutive_errors(&state, "nonexistent");
-        let health = state.agent_health.read().unwrap();
+        let health = crate::state::read_agent_health(&state);
         assert!(health.get("nonexistent").is_none());
     }
 
@@ -362,7 +368,7 @@ mod tests {
         let state = fixture.build();
 
         update_capability_health(&state, "agent1", None, true);
-        let health = state.agent_health.read().unwrap();
+        let health = crate::state::read_agent_health(&state);
         assert!(health.get("agent1").is_none());
     }
 }

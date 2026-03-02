@@ -251,7 +251,7 @@ mod tests {
             "dup".to_string(),
             None,
         );
-        let json = serde_json::to_value(&a).unwrap();
+        let json = serde_json::to_value(&a).expect("anomaly should serialize");
         assert_eq!(json["escalation"], "intervene");
         assert_eq!(json["severity"], "error");
         assert_eq!(json["rule"], "duplicate_runner");

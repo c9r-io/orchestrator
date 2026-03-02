@@ -4,6 +4,11 @@ use agent_orchestrator::resource::{
     ApplyResult, Resource,
 };
 
+fn only<T>(mut items: Vec<T>) -> T {
+    assert_eq!(items.len(), 1, "expected exactly one item");
+    items.pop().expect("single item should exist")
+}
+
 fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
     use agent_orchestrator::config::*;
     use std::collections::HashMap;
@@ -127,7 +132,7 @@ fn apply_creates_new_workspace_in_config() {
     let resources = parse_resources_from_yaml(&yaml).expect("should parse");
     assert_eq!(resources.len(), 1);
 
-    let registered = dispatch_resource(resources.into_iter().next().unwrap()).expect("dispatch");
+    let registered = dispatch_resource(only(resources)).expect("dispatch");
     assert_eq!(registered.kind(), ResourceKind::Workspace);
     assert_eq!(registered.name(), "new-ws");
     registered.validate().expect("should be valid");
@@ -142,14 +147,16 @@ fn apply_creates_new_workspace_in_config() {
 fn apply_updates_existing_workspace() {
     let mut config = minimal_config();
 
-    let v1 = parse_resources_from_yaml(&workspace_yaml("default", "workspace/v1")).unwrap();
-    let r1 = dispatch_resource(v1.into_iter().next().unwrap()).unwrap();
+    let v1 =
+        parse_resources_from_yaml(&workspace_yaml("default", "workspace/v1")).expect("parse v1");
+    let r1 = dispatch_resource(only(v1)).expect("dispatch v1");
     let result = r1.apply(&mut config);
     assert_eq!(result, ApplyResult::Configured);
     assert_eq!(config.workspaces["default"].root_path, "workspace/v1");
 
-    let v2 = parse_resources_from_yaml(&workspace_yaml("default", "workspace/v2")).unwrap();
-    let r2 = dispatch_resource(v2.into_iter().next().unwrap()).unwrap();
+    let v2 =
+        parse_resources_from_yaml(&workspace_yaml("default", "workspace/v2")).expect("parse v2");
+    let r2 = dispatch_resource(only(v2)).expect("dispatch v2");
     let result = r2.apply(&mut config);
     assert_eq!(result, ApplyResult::Configured);
     assert_eq!(config.workspaces["default"].root_path, "workspace/v2");
@@ -160,8 +167,8 @@ fn apply_returns_unchanged_for_identical_resource() {
     let mut config = minimal_config();
     let yaml = workspace_yaml("default", "workspace/default");
 
-    let resources = parse_resources_from_yaml(&yaml).unwrap();
-    let registered = dispatch_resource(resources.into_iter().next().unwrap()).unwrap();
+    let resources = parse_resources_from_yaml(&yaml).expect("parse identical resource");
+    let registered = dispatch_resource(only(resources)).expect("dispatch identical resource");
     let result = registered.apply(&mut config);
     assert_eq!(result, ApplyResult::Unchanged);
 }
@@ -171,8 +178,8 @@ fn apply_preserves_unmentioned_resources() {
     let mut config = minimal_config();
 
     let yaml = workspace_yaml("new-ws", "workspace/new-ws");
-    let resources = parse_resources_from_yaml(&yaml).unwrap();
-    let registered = dispatch_resource(resources.into_iter().next().unwrap()).unwrap();
+    let resources = parse_resources_from_yaml(&yaml).expect("parse new workspace resource");
+    let registered = dispatch_resource(only(resources)).expect("dispatch new workspace");
     registered.apply(&mut config);
 
     assert!(config.workspaces.contains_key("default"));
@@ -207,10 +214,10 @@ fn multi_document_apply_all_to_config() {
         agent_yaml("agent-extra", "echo extra")
     );
 
-    let resources = parse_resources_from_yaml(&yaml).unwrap();
+    let resources = parse_resources_from_yaml(&yaml).expect("parse multi resource payload");
     for resource in resources {
-        let registered = dispatch_resource(resource).unwrap();
-        registered.validate().unwrap();
+        let registered = dispatch_resource(resource).expect("dispatch multi resource");
+        registered.validate().expect("validate multi resource");
         registered.apply(&mut config);
     }
 
@@ -229,11 +236,11 @@ spec:
   qa_targets: []
   ticket_dir: docs/ticket
 "#;
-    let resources = parse_resources_from_yaml(yaml).unwrap();
-    let registered = dispatch_resource(resources.into_iter().next().unwrap()).unwrap();
+    let resources = parse_resources_from_yaml(yaml).expect("parse invalid workspace");
+    let registered = dispatch_resource(only(resources)).expect("dispatch invalid workspace");
     let result = registered.validate();
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("root_path"));
+    assert!(result.expect_err("operation should fail").to_string().contains("root_path"));
 }
 
 #[test]
@@ -245,12 +252,12 @@ metadata:
 spec:
   templates: {}
 "#;
-    let resources = parse_resources_from_yaml(yaml).unwrap();
-    let registered = dispatch_resource(resources.into_iter().next().unwrap()).unwrap();
+    let resources = parse_resources_from_yaml(yaml).expect("parse invalid agent");
+    let registered = dispatch_resource(only(resources)).expect("dispatch invalid agent");
     let result = registered.validate();
     assert!(result.is_err());
     assert!(result
-        .unwrap_err()
+        .expect_err("operation should fail")
         .to_string()
         .contains("at least one template"));
 }
@@ -266,11 +273,11 @@ spec:
   qa_targets: []
   ticket_dir: docs/ticket
 "#;
-    let resources = parse_resources_from_yaml(yaml).unwrap();
+    let resources = parse_resources_from_yaml(yaml).expect("parse invalid api version");
     let resource = &resources[0];
     let result = resource.validate_version();
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("wrong/v2"));
+    assert!(result.expect_err("operation should fail").contains("wrong/v2"));
 }
 
 #[test]
@@ -320,12 +327,13 @@ fn apply_then_delete_roundtrip() {
     let mut config = minimal_config();
 
     let yaml = agent_yaml("temp-agent", "echo temp");
-    let resources = parse_resources_from_yaml(&yaml).unwrap();
-    let registered = dispatch_resource(resources.into_iter().next().unwrap()).unwrap();
+    let resources = parse_resources_from_yaml(&yaml).expect("parse temp agent");
+    let registered = dispatch_resource(only(resources)).expect("dispatch temp agent");
     assert_eq!(registered.apply(&mut config), ApplyResult::Created);
     assert!(config.agents.contains_key("temp-agent"));
 
-    let deleted = delete_resource_by_kind(&mut config, "agent", "temp-agent").unwrap();
+    let deleted =
+        delete_resource_by_kind(&mut config, "agent", "temp-agent").expect("delete temp agent");
     assert!(deleted);
     assert!(!config.agents.contains_key("temp-agent"));
 }
@@ -334,8 +342,8 @@ fn apply_then_delete_roundtrip() {
 fn resource_to_yaml_roundtrip() {
     let mut config = minimal_config();
     let yaml = workspace_yaml("roundtrip-ws", "workspace/roundtrip");
-    let resources = parse_resources_from_yaml(&yaml).unwrap();
-    let registered = dispatch_resource(resources.into_iter().next().unwrap()).unwrap();
+    let resources = parse_resources_from_yaml(&yaml).expect("parse roundtrip workspace");
+    let registered = dispatch_resource(only(resources)).expect("dispatch roundtrip workspace");
     registered.apply(&mut config);
 
     let exported = registered.to_yaml().expect("should serialize to yaml");
@@ -344,7 +352,7 @@ fn resource_to_yaml_roundtrip() {
     assert!(exported.contains("name: roundtrip-ws"));
     assert!(exported.contains("workspace/roundtrip"));
 
-    let re_parsed = parse_resources_from_yaml(&exported).unwrap();
+    let re_parsed = parse_resources_from_yaml(&exported).expect("re-parse exported yaml");
     assert_eq!(re_parsed.len(), 1);
     assert_eq!(re_parsed[0].metadata.name, "roundtrip-ws");
 }
@@ -367,8 +375,8 @@ spec:
   ticket_dir: docs/ticket
 "#;
 
-    let resources = parse_resources_from_yaml(yaml).unwrap();
-    let registered = dispatch_resource(resources.into_iter().next().unwrap()).unwrap();
+    let resources = parse_resources_from_yaml(yaml).expect("parse labeled workspace");
+    let registered = dispatch_resource(only(resources)).expect("dispatch labeled workspace");
     assert_eq!(registered.apply(&mut config), ApplyResult::Created);
 
     let stored = config
@@ -405,7 +413,11 @@ fn sdlc_step_types_round_trip() {
     for s in &sdlc_types {
         let result = validate_step_type(s);
         assert!(result.is_ok(), "validate_step_type({s}) should succeed");
-        assert_eq!(result.unwrap(), *s, "round-trip failed for '{s}'");
+        assert_eq!(
+            result.expect("step type should round-trip"),
+            *s,
+            "round-trip failed for '{s}'"
+        );
     }
 }
 
@@ -459,7 +471,7 @@ spec:
   self_referential: true
 "#;
     let resources = parse_resources_from_yaml(yaml).expect("should parse");
-    let registered = dispatch_resource(resources.into_iter().next().unwrap()).unwrap();
+    let registered = dispatch_resource(only(resources)).expect("dispatch self workspace");
     let mut config = minimal_config();
     registered.apply(&mut config);
 
@@ -723,7 +735,10 @@ fn multi_agent_capability_config_validates() {
     use agent_orchestrator::config_load::validate_workflow_config;
 
     let config = multi_agent_config();
-    let workflow = config.workflows.get("bootstrap").unwrap();
+    let workflow = config
+        .workflows
+        .get("bootstrap")
+        .expect("bootstrap workflow should exist");
     let result = validate_workflow_config(&config, workflow, "bootstrap");
     assert!(
         result.is_ok(),
@@ -737,7 +752,10 @@ fn build_execution_plan_contains_all_bootstrap_steps() {
     use agent_orchestrator::config_load::build_execution_plan;
 
     let config = multi_agent_config();
-    let workflow = config.workflows.get("bootstrap").unwrap();
+    let workflow = config
+        .workflows
+        .get("bootstrap")
+        .expect("bootstrap workflow should exist");
     let plan =
         build_execution_plan(&config, workflow, "bootstrap").expect("execution plan should build");
 
@@ -758,11 +776,19 @@ fn build_execution_plan_contains_all_bootstrap_steps() {
     assert!(step_ids.contains(&"loop_guard"), "missing loop_guard step");
 
     // Verify expected step properties
-    let plan_step = plan.steps.iter().find(|s| s.id == "plan").unwrap();
+    let plan_step = plan
+        .steps
+        .iter()
+        .find(|s| s.id == "plan")
+        .expect("plan step should exist");
     assert_eq!(plan_step.id, "plan");
     assert!(!plan_step.repeatable, "plan step should not be repeatable");
 
-    let loop_guard_step = plan.steps.iter().find(|s| s.id == "loop_guard").unwrap();
+    let loop_guard_step = plan
+        .steps
+        .iter()
+        .find(|s| s.id == "loop_guard")
+        .expect("loop_guard step should exist");
     assert!(
         loop_guard_step.is_guard,
         "loop_guard should be a guard step"
@@ -861,7 +887,7 @@ fn sdlc_full_pipeline_workflow_parses_from_fixture() {
     let resources = parse_resources_from_yaml(&yaml).expect("should parse");
     let mut config = minimal_config();
     for resource in resources {
-        let registered = dispatch_resource(resource).unwrap();
+        let registered = dispatch_resource(resource).expect("dispatch fixture resource");
         registered.apply(&mut config);
     }
 
@@ -910,41 +936,53 @@ fn binary_snapshot_smoke_verify_integration() {
         "smoke-verify-integration-{}",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("system time should be after epoch")
             .as_nanos()
     ));
-    std::fs::create_dir_all(&temp_dir).unwrap();
+    std::fs::create_dir_all(&temp_dir).expect("create temp dir");
 
     let binary_path = temp_dir.join("core/target/release/agent-orchestrator");
     let original_content = vec![0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE];
     {
-        let parent = binary_path.parent().unwrap();
-        std::fs::create_dir_all(parent).unwrap();
-        let mut file = std::fs::File::create(&binary_path).unwrap();
-        file.write_all(&original_content).unwrap();
+        let parent = binary_path.parent().expect("binary path should have parent");
+        std::fs::create_dir_all(parent).expect("create binary parent dir");
+        let mut file = std::fs::File::create(&binary_path).expect("create binary file");
+        file.write_all(&original_content)
+            .expect("write original binary content");
     }
 
-    let rt = Runtime::new().unwrap();
+    let rt = Runtime::new().expect("create tokio runtime");
     let result: std::path::PathBuf =
-        rt.block_on(async { snapshot_binary(&temp_dir).await.unwrap() });
+        rt.block_on(async { snapshot_binary(&temp_dir).await.expect("snapshot binary") });
     assert!(result.exists(), "stable snapshot should exist");
 
     {
-        let mut file = std::fs::File::create(&binary_path).unwrap();
-        file.write_all(b"modified content").unwrap();
+        let mut file = std::fs::File::create(&binary_path).expect("reopen binary file");
+        file.write_all(b"modified content")
+            .expect("write modified binary content");
     }
 
-    let verification_result =
-        rt.block_on(async { verify_binary_snapshot(&temp_dir).await.unwrap() });
+    let verification_result = rt.block_on(async {
+        verify_binary_snapshot(&temp_dir)
+            .await
+            .expect("verify binary snapshot after modification")
+    });
     assert!(
         !verification_result.verified,
         "should detect mismatch after modification"
     );
 
-    rt.block_on(async { restore_binary_snapshot(&temp_dir).await.unwrap() });
+    rt.block_on(async {
+        restore_binary_snapshot(&temp_dir)
+            .await
+            .expect("restore binary snapshot")
+    });
 
-    let final_verification =
-        rt.block_on(async { verify_binary_snapshot(&temp_dir).await.unwrap() });
+    let final_verification = rt.block_on(async {
+        verify_binary_snapshot(&temp_dir)
+            .await
+            .expect("verify binary snapshot after restore")
+    });
     assert!(
         final_verification.verified,
         "binary should match after restore"

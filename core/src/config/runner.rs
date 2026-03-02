@@ -127,8 +127,8 @@ mod tests {
     #[test]
     fn test_runner_config_serde_round_trip() {
         let cfg = RunnerConfig::default();
-        let json = serde_json::to_string(&cfg).unwrap();
-        let cfg2: RunnerConfig = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&cfg).expect("serialize runner config");
+        let cfg2: RunnerConfig = serde_json::from_str(&json).expect("deserialize runner config");
         assert_eq!(cfg2.shell, cfg.shell);
         assert_eq!(cfg2.policy, cfg.policy);
     }
@@ -136,7 +136,7 @@ mod tests {
     #[test]
     fn test_runner_config_deserialize_minimal() {
         let json = r#"{"shell": "/bin/sh"}"#;
-        let cfg: RunnerConfig = serde_json::from_str(json).unwrap();
+        let cfg: RunnerConfig = serde_json::from_str(json).expect("deserialize minimal runner");
         assert_eq!(cfg.shell, "/bin/sh");
         // defaults should kick in
         assert_eq!(cfg.shell_arg, "-lc");
@@ -147,7 +147,8 @@ mod tests {
     #[test]
     fn test_legacy_alias_deserializes_to_unsafe() {
         let json = r#"{"shell":"/bin/bash","policy":"legacy"}"#;
-        let cfg: RunnerConfig = serde_json::from_str(json).unwrap();
+        let cfg: RunnerConfig =
+            serde_json::from_str(json).expect("deserialize legacy alias runner");
         assert_eq!(cfg.policy, RunnerPolicy::Unsafe);
     }
 
@@ -157,7 +158,7 @@ mod tests {
             policy: RunnerPolicy::Unsafe,
             ..RunnerConfig::default()
         };
-        let json = serde_json::to_string(&cfg).unwrap();
+        let json = serde_json::to_string(&cfg).expect("serialize unsafe runner");
         assert!(json.contains(r#""policy":"unsafe""#));
         assert!(!json.contains(r#""policy":"legacy""#));
     }

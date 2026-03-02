@@ -234,7 +234,11 @@ mod tests {
             .workflows
             .get_mut("basic")
             .expect("missing basic workflow");
-        workflow.steps.first_mut().unwrap().required_capability = Some("self_test".to_string());
+        workflow
+            .steps
+            .first_mut()
+            .expect("basic workflow should have a step")
+            .required_capability = Some("self_test".to_string());
         let seeded = persist_raw_config(&db_path, config, "test-seed").expect("seed config");
 
         let (_active, report) = build_active_config_with_self_heal(
@@ -269,7 +273,11 @@ mod tests {
             .workflows
             .get_mut("basic")
             .expect("missing basic workflow");
-        workflow.steps.first_mut().unwrap().required_capability = Some("self_test".to_string());
+        workflow
+            .steps
+            .first_mut()
+            .expect("basic workflow should have a step")
+            .required_capability = Some("self_test".to_string());
         persist_raw_config(&db_path, config, "test-seed").expect("seed config");
 
         let (_active, report) = build_active_config_with_self_heal(
@@ -330,7 +338,8 @@ mod tests {
             make_step("qa", false),
         ]);
         let config = OrchestratorConfig::default();
-        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+        let plan = build_execution_plan(&config, &workflow, "test-wf")
+            .expect("build execution plan");
         assert_eq!(plan.steps.len(), 1, "should only contain enabled steps");
         assert_eq!(plan.steps[0].id, "self_test");
     }
@@ -346,7 +355,8 @@ mod tests {
         step.scope = Some(crate::config::StepScope::Task);
         let workflow = make_workflow(vec![step]);
         let config = OrchestratorConfig::default();
-        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+        let plan = build_execution_plan(&config, &workflow, "test-wf")
+            .expect("build execution plan");
         let s = &plan.steps[0];
         assert_eq!(s.id, "build");
         assert_eq!(s.command.as_deref(), Some("cargo build"));
@@ -370,7 +380,8 @@ mod tests {
         ];
         let workflow = make_workflow(vec![step]);
         let config = OrchestratorConfig::default();
-        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+        let plan = build_execution_plan(&config, &workflow, "test-wf")
+            .expect("build execution plan");
         assert_eq!(plan.steps[0].chain_steps.len(), 2);
         assert_eq!(plan.steps[0].chain_steps[0].id, "sub1");
         assert_eq!(plan.steps[0].chain_steps[1].id, "sub2");
@@ -389,7 +400,8 @@ mod tests {
         workflow.loop_policy.mode = LoopMode::Fixed;
         workflow.loop_policy.guard.max_cycles = Some(3);
         let config = OrchestratorConfig::default();
-        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+        let plan = build_execution_plan(&config, &workflow, "test-wf")
+            .expect("build execution plan");
         assert!(matches!(plan.loop_policy.mode, LoopMode::Fixed));
         assert_eq!(plan.loop_policy.guard.max_cycles, Some(3));
     }
@@ -399,7 +411,8 @@ mod tests {
         let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         workflow.finalize = crate::config::default_workflow_finalize_config();
         let config = OrchestratorConfig::default();
-        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+        let plan = build_execution_plan(&config, &workflow, "test-wf")
+            .expect("build execution plan");
         assert!(
             !plan.finalize.rules.is_empty(),
             "finalize rules should be copied"
@@ -421,7 +434,8 @@ mod tests {
         let workflow = make_workflow(vec![step]);
         let config = OrchestratorConfig::default();
 
-        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+        let plan = build_execution_plan(&config, &workflow, "test-wf")
+            .expect("build execution plan");
 
         assert_eq!(
             plan.steps[0].behavior.execution,
@@ -435,8 +449,8 @@ mod tests {
     #[test]
     fn enforce_deletion_guards_allows_no_removals() {
         let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
-        crate::db::init_schema(&db_path).unwrap();
-        let conn = crate::db::open_conn(&db_path).unwrap();
+        crate::db::init_schema(&db_path).expect("init schema");
+        let conn = crate::db::open_conn(&db_path).expect("open db");
         let config = OrchestratorConfig::default();
         let result = enforce_deletion_guards(&conn, &config, &config);
         assert!(result.is_ok());
@@ -447,8 +461,8 @@ mod tests {
     fn enforce_deletion_guards_allows_removing_unused_workspace() {
         use crate::config::WorkspaceConfig;
         let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
-        crate::db::init_schema(&db_path).unwrap();
-        let conn = crate::db::open_conn(&db_path).unwrap();
+        crate::db::init_schema(&db_path).expect("init schema");
+        let conn = crate::db::open_conn(&db_path).expect("open db");
         let mut previous_workspaces = HashMap::new();
         previous_workspaces.insert(
             "ws-to-remove".to_string(),
@@ -475,8 +489,8 @@ mod tests {
     #[test]
     fn enforce_deletion_guards_allows_removing_unused_workflow() {
         let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
-        crate::db::init_schema(&db_path).unwrap();
-        let conn = crate::db::open_conn(&db_path).unwrap();
+        crate::db::init_schema(&db_path).expect("init schema");
+        let conn = crate::db::open_conn(&db_path).expect("open db");
         let mut previous_workflows = HashMap::new();
         previous_workflows.insert("wf-to-remove".to_string(), make_workflow(vec![]));
         let previous = OrchestratorConfig {

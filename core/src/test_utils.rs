@@ -260,27 +260,30 @@ impl TestState {
     fn ensure_workspace_dirs(&self) {
         for workspace in self.config.workspaces.values() {
             let root_path = self.temp_root.join(&workspace.root_path);
-            std::fs::create_dir_all(&root_path).unwrap_or_else(|_| {
-                panic!("failed to create workspace root {}", root_path.display())
-            });
+            let root_result = std::fs::create_dir_all(&root_path);
+            assert!(
+                root_result.is_ok(),
+                "failed to create workspace root {}",
+                root_path.display()
+            );
 
             for target in &workspace.qa_targets {
                 let target_path = root_path.join(target);
-                std::fs::create_dir_all(&target_path).unwrap_or_else(|_| {
-                    panic!(
-                        "failed to create workspace qa_target {}",
-                        target_path.display()
-                    )
-                });
+                let target_result = std::fs::create_dir_all(&target_path);
+                assert!(
+                    target_result.is_ok(),
+                    "failed to create workspace qa_target {}",
+                    target_path.display()
+                );
             }
 
             let ticket_dir = root_path.join(&workspace.ticket_dir);
-            std::fs::create_dir_all(&ticket_dir).unwrap_or_else(|_| {
-                panic!(
-                    "failed to create workspace ticket_dir {}",
-                    ticket_dir.display()
-                )
-            });
+            let ticket_result = std::fs::create_dir_all(&ticket_dir);
+            assert!(
+                ticket_result.is_ok(),
+                "failed to create workspace ticket_dir {}",
+                ticket_dir.display()
+            );
         }
     }
 }

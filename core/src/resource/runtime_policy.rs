@@ -181,8 +181,8 @@ mod tests {
     fn runtime_policy_get_from_always_returns_some() {
         let config = make_config();
         let loaded = RuntimePolicyResource::get_from(&config, "runtime");
-        assert!(loaded.is_some());
-        assert_eq!(loaded.unwrap().metadata.name, "runtime");
+        let loaded = loaded.expect("runtime policy should always be present");
+        assert_eq!(loaded.metadata.name, "runtime");
     }
 
     #[test]
@@ -213,7 +213,7 @@ mod tests {
             },
             spec: ResourceSpec::Project(ProjectSpec { description: None }),
         };
-        let err = dispatch_resource(resource).unwrap_err();
+        let err = dispatch_resource(resource).expect_err("operation should fail");
         assert!(err.to_string().contains("mismatch"));
     }
 
@@ -255,7 +255,7 @@ mod tests {
             spec.runner.allowed_shell_args = vec!["-lc".to_string()];
         }
         let resource = dispatch_resource(manifest).expect("dispatch should succeed");
-        let err = resource.validate().unwrap_err();
+        let err = resource.validate().expect_err("operation should fail");
         assert!(err
             .to_string()
             .contains("runner.allowed_shells cannot be empty"));
@@ -270,7 +270,7 @@ mod tests {
             spec.runner.allowed_shell_args = vec![];
         }
         let resource = dispatch_resource(manifest).expect("dispatch should succeed");
-        let err = resource.validate().unwrap_err();
+        let err = resource.validate().expect_err("operation should fail");
         assert!(err
             .to_string()
             .contains("runner.allowed_shell_args cannot be empty"));
@@ -332,7 +332,8 @@ mod tests {
     #[test]
     fn default_runner_spec_produces_allowlist() {
         let json = r#"{"shell":"/bin/bash"}"#;
-        let spec: RunnerSpec = serde_json::from_str(json).unwrap();
+        let spec: RunnerSpec =
+            serde_json::from_str(json).expect("runner spec json should deserialize");
         assert_eq!(spec.policy, "allowlist");
         assert!(!spec.allowed_shells.is_empty());
         assert!(!spec.allowed_shell_args.is_empty());

@@ -378,7 +378,10 @@ mod tests {
         .with_content(serde_json::json!({"lines_added": 10}))
         .with_checksum("abc123".to_string());
 
-        assert_eq!(artifact.path.unwrap(), "/tmp/diff.patch");
+        assert_eq!(
+            artifact.path.expect("artifact path should be populated"),
+            "/tmp/diff.patch"
+        );
         assert!(artifact.content.is_some());
         assert_eq!(artifact.checksum, "abc123");
     }
@@ -456,7 +459,7 @@ mod tests {
             }),
         );
 
-        let latest = registry.get_latest("qa").unwrap();
+        let latest = registry.get_latest("qa").expect("latest qa artifact should exist");
         if let ArtifactKind::Custom { name } = &latest.kind {
             assert_eq!(name, "second");
         }
@@ -498,7 +501,10 @@ mod tests {
         assert!(state.get("key").is_none());
 
         state.set("key", serde_json::json!("value"));
-        assert_eq!(state.get("key").unwrap(), &serde_json::json!("value"));
+        assert_eq!(
+            state.get("key").expect("shared state key should exist"),
+            &serde_json::json!("value")
+        );
 
         let removed = state.remove("key");
         assert!(removed.is_some());
@@ -523,7 +529,10 @@ mod tests {
             assert_eq!(*severity, Severity::High);
             assert_eq!(category, "bug");
         } else {
-            panic!("expected Ticket");
+            assert!(
+                matches!(&artifacts[0].kind, ArtifactKind::Ticket { .. }),
+                "expected Ticket"
+            );
         }
     }
 
@@ -536,7 +545,10 @@ mod tests {
             assert_eq!(*severity, Severity::High);
             assert_eq!(category, "capability");
         } else {
-            panic!("expected Ticket from nested artifacts array");
+            assert!(
+                matches!(&artifacts[0].kind, ArtifactKind::Ticket { .. }),
+                "expected Ticket from nested artifacts array"
+            );
         }
     }
 
@@ -605,12 +617,15 @@ mod tests {
             "choice": "option_a",
             "rationale": "better performance"
         });
-        let kind = extract_artifact_kind(&value).unwrap();
-        if let ArtifactKind::Decision { choice, rationale } = kind {
+        let kind = extract_artifact_kind(&value).expect("decision artifact should parse");
+        if let ArtifactKind::Decision { choice, rationale } = &kind {
             assert_eq!(choice, "option_a");
             assert_eq!(rationale, "better performance");
         } else {
-            panic!("expected Decision");
+            assert!(
+                matches!(&kind, ArtifactKind::Decision { .. }),
+                "expected Decision"
+            );
         }
     }
 
@@ -622,7 +637,7 @@ mod tests {
                 {"title": "Issue 1", "severity": "high", "description": "desc"}
             ]
         });
-        let kind = extract_artifact_kind(&value).unwrap();
+        let kind = extract_artifact_kind(&value).expect("analysis artifact should parse");
         if let ArtifactKind::Analysis { findings } = kind {
             assert_eq!(findings.len(), 1);
             assert_eq!(findings[0].title, "Issue 1");

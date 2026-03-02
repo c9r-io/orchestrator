@@ -600,7 +600,10 @@ spec:
                 .expect("self_test step should exist");
             assert_eq!(self_test_step.step_type.as_str(), "self_test");
         } else {
-            panic!("Expected Workflow spec");
+            assert!(
+                matches!(&resource.spec, ResourceSpec::Workflow(_)),
+                "Expected Workflow spec"
+            );
         }
     }
 
@@ -608,6 +611,9 @@ spec:
     fn self_test_step_type_validates_correctly() {
         let result = crate::config::validate_step_type("self_test");
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), "self_test");
+        assert_eq!(
+            result.expect("self_test should be a valid step type"),
+            "self_test"
+        );
     }
 }

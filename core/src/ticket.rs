@@ -500,17 +500,19 @@ mod tests {
     fn test_list_ticket_files_in_workspace() {
         let dir = std::env::temp_dir().join(format!("ticket-test-{}", uuid::Uuid::new_v4()));
         let ticket_dir = dir.join("docs/ticket");
-        std::fs::create_dir_all(&ticket_dir).unwrap();
+        std::fs::create_dir_all(&ticket_dir).expect("create ticket dir");
 
         // Create ticket files
-        std::fs::write(ticket_dir.join("auto_test_001.md"), "# Ticket").unwrap();
-        std::fs::write(ticket_dir.join("auto_test_002.md"), "# Ticket 2").unwrap();
+        std::fs::write(ticket_dir.join("auto_test_001.md"), "# Ticket").expect("write ticket 1");
+        std::fs::write(ticket_dir.join("auto_test_002.md"), "# Ticket 2")
+            .expect("write ticket 2");
         // README should be excluded
-        std::fs::write(ticket_dir.join("README.md"), "# Readme").unwrap();
+        std::fs::write(ticket_dir.join("README.md"), "# Readme").expect("write readme");
         // Non-md files should be excluded
-        std::fs::write(ticket_dir.join("notes.txt"), "notes").unwrap();
+        std::fs::write(ticket_dir.join("notes.txt"), "notes").expect("write notes");
 
-        let result = list_ticket_files_in_workspace(&dir, "docs/ticket").unwrap();
+        let result = list_ticket_files_in_workspace(&dir, "docs/ticket")
+            .expect("list ticket files in workspace");
         assert_eq!(result.len(), 2);
         assert!(result.iter().all(|p| p.ends_with(".md")));
         assert!(!result.iter().any(|p| p.contains("README")));
@@ -521,9 +523,10 @@ mod tests {
     #[test]
     fn test_list_ticket_files_in_workspace_missing_dir() {
         let dir = std::env::temp_dir().join(format!("ticket-test-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(&dir).expect("create workspace dir");
 
-        let result = list_ticket_files_in_workspace(&dir, "docs/ticket").unwrap();
+        let result = list_ticket_files_in_workspace(&dir, "docs/ticket")
+            .expect("list ticket files in missing dir");
         assert!(result.is_empty());
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -532,12 +535,13 @@ mod tests {
     #[test]
     fn test_create_ticket_for_qa_failure() {
         let dir = std::env::temp_dir().join(format!("ticket-create-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(&dir).expect("create temp dir");
 
         let stdout_path = dir.join("stdout.log");
         let stderr_path = dir.join("stderr.log");
-        std::fs::write(&stdout_path, "test output line 1\ntest output line 2").unwrap();
-        std::fs::write(&stderr_path, "error detail").unwrap();
+        std::fs::write(&stdout_path, "test output line 1\ntest output line 2")
+            .expect("write stdout log");
+        std::fs::write(&stderr_path, "error detail").expect("write stderr log");
 
         let result = create_ticket_for_qa_failure(
             &dir,
@@ -545,19 +549,19 @@ mod tests {
             "test-task",
             "docs/qa/auth.md",
             1,
-            stdout_path.to_str().unwrap(),
-            stderr_path.to_str().unwrap(),
+            stdout_path.to_str().expect("stdout path should be utf-8"),
+            stderr_path.to_str().expect("stderr path should be utf-8"),
         )
-        .unwrap();
+        .expect("create ticket for qa failure");
 
         assert!(result.is_some());
-        let ticket_path = result.unwrap();
+        let ticket_path = result.expect("ticket path should be returned");
         assert!(ticket_path.starts_with("docs/ticket/auto_auth_"));
         assert!(ticket_path.ends_with(".md"));
 
         // Verify content
         let abs_path = dir.join(&ticket_path);
-        let content = std::fs::read_to_string(&abs_path).unwrap();
+        let content = std::fs::read_to_string(&abs_path).expect("read generated ticket");
         assert!(content.contains("**Status**: FAILED"));
         assert!(content.contains("**QA Document**: `docs/qa/auth.md`"));
         assert!(content.contains("exited with code 1"));
@@ -570,10 +574,10 @@ mod tests {
     fn test_collect_target_files_with_explicit_list() {
         let dir = std::env::temp_dir().join(format!("target-files-{}", uuid::Uuid::new_v4()));
         let qa_dir = dir.join("docs/qa");
-        std::fs::create_dir_all(&qa_dir).unwrap();
+        std::fs::create_dir_all(&qa_dir).expect("create qa dir");
 
-        std::fs::write(qa_dir.join("test1.md"), "# Test 1").unwrap();
-        std::fs::write(qa_dir.join("test2.md"), "# Test 2").unwrap();
+        std::fs::write(qa_dir.join("test1.md"), "# Test 1").expect("write test1");
+        std::fs::write(qa_dir.join("test2.md"), "# Test 2").expect("write test2");
 
         let input = vec![
             "docs/qa/test1.md".to_string(),
@@ -582,7 +586,8 @@ mod tests {
             "".to_string(),                       // should be filtered
         ];
 
-        let result = collect_target_files(&dir, &[], Some(input)).unwrap();
+        let result =
+            collect_target_files(&dir, &[], Some(input)).expect("collect explicit target files");
         assert_eq!(result.len(), 2);
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -592,13 +597,14 @@ mod tests {
     fn test_collect_target_files_from_directory_scan() {
         let dir = std::env::temp_dir().join(format!("target-scan-{}", uuid::Uuid::new_v4()));
         let qa_dir = dir.join("docs/qa");
-        std::fs::create_dir_all(&qa_dir).unwrap();
+        std::fs::create_dir_all(&qa_dir).expect("create qa dir");
 
-        std::fs::write(qa_dir.join("auth.md"), "# Auth QA").unwrap();
-        std::fs::write(qa_dir.join("README.md"), "# README").unwrap();
-        std::fs::write(qa_dir.join("data.json"), "{}").unwrap();
+        std::fs::write(qa_dir.join("auth.md"), "# Auth QA").expect("write auth qa");
+        std::fs::write(qa_dir.join("README.md"), "# README").expect("write readme");
+        std::fs::write(qa_dir.join("data.json"), "{}").expect("write data json");
 
-        let result = collect_target_files(&dir, &["docs/qa".to_string()], None).unwrap();
+        let result = collect_target_files(&dir, &["docs/qa".to_string()], None)
+            .expect("collect scanned target files");
         assert_eq!(result.len(), 1);
         assert!(result[0].contains("auth.md"));
 
@@ -608,12 +614,12 @@ mod tests {
     #[test]
     fn test_read_ticket_preview_from_workspace() {
         let dir = std::env::temp_dir().join(format!("preview-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(&dir).expect("create preview dir");
         std::fs::write(
             dir.join("ticket.md"),
             "**Status**: FAILED\n**QA Document**: `docs/qa/test.md`\n",
         )
-        .unwrap();
+        .expect("write ticket preview file");
 
         let preview = read_ticket_preview_from_workspace(&dir, "ticket.md");
         assert_eq!(preview.status, "FAILED");
@@ -632,12 +638,12 @@ mod tests {
 
         let dir = std::env::temp_dir().join(format!("read-preview-{}", uuid::Uuid::new_v4()));
         let ticket_dir = dir.join("docs/ticket");
-        std::fs::create_dir_all(&ticket_dir).unwrap();
+        std::fs::create_dir_all(&ticket_dir).expect("create nested ticket dir");
         std::fs::write(
             ticket_dir.join("t1.md"),
             "**Status**: OPEN\n**QA Document**: `docs/qa/a.md`\n",
         )
-        .unwrap();
+        .expect("write nested ticket");
 
         let task_ctx = TaskRuntimeContext {
             workspace_id: "ws".to_string(),

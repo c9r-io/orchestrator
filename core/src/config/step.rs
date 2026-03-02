@@ -315,7 +315,7 @@ mod tests {
     fn test_validate_step_type_unknown_id() {
         let result = validate_step_type("my_custom_step");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("unknown workflow step type"));
+        assert!(result.expect_err("operation should fail").contains("unknown workflow step type"));
     }
 
     #[test]
@@ -398,8 +398,9 @@ mod tests {
     #[test]
     fn test_cost_preference_serde_round_trip() {
         for pref_str in &["\"performance\"", "\"quality\"", "\"balance\""] {
-            let pref: CostPreference = serde_json::from_str(pref_str).unwrap();
-            let json = serde_json::to_string(&pref).unwrap();
+            let pref: CostPreference =
+                serde_json::from_str(pref_str).expect("deserialize cost preference");
+            let json = serde_json::to_string(&pref).expect("serialize cost preference");
             assert_eq!(&json, pref_str);
         }
     }
@@ -407,8 +408,8 @@ mod tests {
     #[test]
     fn test_step_scope_serde_round_trip() {
         for scope_str in &["\"task\"", "\"item\""] {
-            let scope: StepScope = serde_json::from_str(scope_str).unwrap();
-            let json = serde_json::to_string(&scope).unwrap();
+            let scope: StepScope = serde_json::from_str(scope_str).expect("deserialize step scope");
+            let json = serde_json::to_string(&scope).expect("serialize step scope");
             assert_eq!(&json, scope_str);
         }
     }

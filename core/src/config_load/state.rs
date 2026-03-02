@@ -32,11 +32,14 @@ mod tests {
     fn read_active_config_rejects_non_runnable_state() {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
-        *state.active_config_error.write().unwrap() =
+        *state
+            .active_config_error
+            .write()
+            .expect("active_config_error lock should be writable") =
             Some("active config is not runnable".to_string());
 
         let result = read_active_config(&state);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("not runnable"));
+        assert!(result.expect_err("operation should fail").to_string().contains("not runnable"));
     }
 }

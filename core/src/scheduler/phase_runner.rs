@@ -10,7 +10,7 @@ use crate::output_validation::validate_phase_output;
 use crate::runner::{kill_child_process_group, redact_text, spawn_with_runner};
 use crate::selection::{select_agent_advanced, select_agent_by_preference};
 use crate::session_store;
-use crate::state::InnerState;
+use crate::state::{read_agent_health, read_agent_metrics, write_agent_metrics, InnerState};
 use crate::task_repository::NewCommandRun;
 use anyhow::{Context, Result};
 use serde_json::json;
@@ -627,7 +627,7 @@ async fn run_phase_with_timeout(
 
     let duration_ms = duration.as_millis() as u64;
     {
-        let mut metrics_map = state.agent_metrics.write().unwrap();
+        let mut metrics_map = write_agent_metrics(state);
         let metrics = metrics_map
             .entry(agent_id.to_string())
             .or_insert_with(MetricsCollector::new_agent_metrics);
@@ -709,8 +709,8 @@ pub async fn run_phase_with_rotation(
         let agents = active.config.agents.clone();
 
         if let Some(cap) = effective_capability {
-            let health_map = state.agent_health.read().unwrap();
-            let metrics_map = state.agent_metrics.read().unwrap();
+            let health_map = read_agent_health(state);
+            let metrics_map = read_agent_metrics(state);
             select_agent_advanced(cap, &agents, &health_map, &metrics_map, &HashSet::new())?
         } else {
             select_agent_by_preference(&agents)?
@@ -718,7 +718,7 @@ pub async fn run_phase_with_rotation(
     };
 
     {
-        let mut metrics_map = state.agent_metrics.write().unwrap();
+        let mut metrics_map = write_agent_metrics(state);
         let metrics = metrics_map
             .entry(agent_id.clone())
             .or_insert_with(MetricsCollector::new_agent_metrics);
