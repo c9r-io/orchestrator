@@ -52,10 +52,21 @@ pub struct TaskExecutionStep {
 }
 
 impl TaskExecutionStep {
-    /// Returns the resolved scope: explicit override or default based on step id.
+    /// Returns the resolved scope: explicit override or default based on step id,
+    /// falling back to required_capability when the id is not a known step type.
     pub fn resolved_scope(&self) -> StepScope {
-        self.scope
-            .unwrap_or_else(|| default_scope_for_step_id(&self.id))
+        self.scope.unwrap_or_else(|| {
+            let scope = default_scope_for_step_id(&self.id);
+            if scope == StepScope::Task {
+                if let Some(ref cap) = self.required_capability {
+                    let cap_scope = default_scope_for_step_id(cap);
+                    if cap_scope == StepScope::Item {
+                        return cap_scope;
+                    }
+                }
+            }
+            scope
+        })
     }
 
     /// Returns the authoritative execution mode for this step.

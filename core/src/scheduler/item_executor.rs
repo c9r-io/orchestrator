@@ -154,6 +154,23 @@ impl StepExecutionAccumulator {
         }
     }
 
+    /// Collect all step IDs that match a capability, including canonical aliases.
+    fn step_ids_for_capability(
+        task_ctx: &TaskRuntimeContext,
+        capability: &str,
+        canonical_ids: &[&str],
+    ) -> Vec<String> {
+        let mut ids: Vec<String> = canonical_ids.iter().map(|s| s.to_string()).collect();
+        for step in &task_ctx.execution_plan.steps {
+            if step.required_capability.as_deref() == Some(capability)
+                && !ids.contains(&step.id)
+            {
+                ids.push(step.id.clone());
+            }
+        }
+        ids
+    }
+
     /// Build a StepPrehookContext from accumulated state.
     pub fn to_prehook_context(
         &self,
@@ -162,6 +179,9 @@ impl StepExecutionAccumulator {
         task_ctx: &TaskRuntimeContext,
         step_id: &str,
     ) -> StepPrehookContext {
+        let qa_step_ids = Self::step_ids_for_capability(task_ctx, "qa", &["qa", "qa_testing"]);
+        let fix_step_ids = Self::step_ids_for_capability(task_ctx, "fix", &["fix", "ticket_fix"]);
+        let retest_step_ids = Self::step_ids_for_capability(task_ctx, "retest", &["retest"]);
         let max_cycles = task_ctx
             .execution_plan
             .loop_policy
@@ -176,17 +196,18 @@ impl StepExecutionAccumulator {
             qa_file_path: item.qa_file_path.clone(),
             item_status: self.item_status.clone(),
             task_status: "running".to_string(),
-            qa_exit_code: self
-                .exit_codes
-                .get("qa")
-                .or(self.exit_codes.get("qa_testing"))
+            qa_exit_code: qa_step_ids
+                .iter()
+                .find_map(|id| self.exit_codes.get(id.as_str()))
                 .copied(),
-            fix_exit_code: self
-                .exit_codes
-                .get("fix")
-                .or(self.exit_codes.get("ticket_fix"))
+            fix_exit_code: fix_step_ids
+                .iter()
+                .find_map(|id| self.exit_codes.get(id.as_str()))
                 .copied(),
-            retest_exit_code: self.exit_codes.get("retest").copied(),
+            retest_exit_code: retest_step_ids
+                .iter()
+                .find_map(|id| self.exit_codes.get(id.as_str()))
+                .copied(),
             active_ticket_count: self.active_tickets.len() as i64,
             new_ticket_count: self.new_ticket_count,
             qa_failed: self.flags.get("qa_failed").copied().unwrap_or(false),
@@ -223,54 +244,51 @@ impl StepExecutionAccumulator {
         item: &crate::dto::TaskItemRow,
         task_ctx: &TaskRuntimeContext,
     ) -> ItemFinalizeContext {
-        let qa_ran = self
-            .step_ran
-            .get("qa")
-            .or(self.step_ran.get("qa_testing"))
-            .copied()
-            .unwrap_or(false);
-        let qa_skipped = self
-            .step_skipped
-            .get("qa")
-            .or(self.step_skipped.get("qa_testing"))
-            .copied()
-            .unwrap_or(false);
+        let qa_step_ids = Self::step_ids_for_capability(task_ctx, "qa", &["qa", "qa_testing"]);
+        let fix_step_ids = Self::step_ids_for_capability(task_ctx, "fix", &["fix", "ticket_fix"]);
+        let retest_step_ids =
+            Self::step_ids_for_capability(task_ctx, "retest", &["retest"]);
+
+        let qa_ran = qa_step_ids
+            .iter()
+            .any(|id| self.step_ran.get(id.as_str()).copied().unwrap_or(false));
+        let qa_skipped = qa_step_ids
+            .iter()
+            .any(|id| self.step_skipped.get(id.as_str()).copied().unwrap_or(false));
         let qa_configured = task_ctx.execution_plan.steps.iter().any(|s| {
-            (s.id == "qa" || s.id == "qa_testing")
+            qa_step_ids.contains(&s.id)
                 && s.enabled
                 && (s.repeatable || task_ctx.current_cycle <= 1)
         });
         let qa_observed = qa_ran || qa_skipped;
         let qa_enabled = qa_configured;
-        let fix_ran = self
-            .step_ran
-            .get("fix")
-            .or(self.step_ran.get("ticket_fix"))
-            .copied()
-            .unwrap_or(false);
+        let fix_ran = fix_step_ids
+            .iter()
+            .any(|id| self.step_ran.get(id.as_str()).copied().unwrap_or(false));
         let fix_success = self.flags.get("fix_success").copied().unwrap_or(false);
         let fix_configured = task_ctx.execution_plan.steps.iter().any(|s| {
-            (s.id == "fix" || s.id == "ticket_fix")
+            fix_step_ids.contains(&s.id)
                 && s.enabled
                 && (s.repeatable || task_ctx.current_cycle <= 1)
         });
         let fix_enabled = fix_ran
-            || self
-                .step_skipped
-                .get("fix")
-                .or(self.step_skipped.get("ticket_fix"))
-                .copied()
-                .unwrap_or(false)
+            || fix_step_ids
+                .iter()
+                .any(|id| self.step_skipped.get(id.as_str()).copied().unwrap_or(false))
             || fix_configured;
-        let retest_ran = self.step_ran.get("retest").copied().unwrap_or(false);
+        let retest_ran = retest_step_ids
+            .iter()
+            .any(|id| self.step_ran.get(id.as_str()).copied().unwrap_or(false));
         let retest_success = self.flags.get("retest_success").copied().unwrap_or(false);
         let retest_enabled = retest_ran
-            || self.step_skipped.get("retest").copied().unwrap_or(false)
+            || retest_step_ids
+                .iter()
+                .any(|id| self.step_skipped.get(id.as_str()).copied().unwrap_or(false))
             || task_ctx
                 .execution_plan
                 .steps
                 .iter()
-                .any(|s| s.id == "retest" && s.enabled);
+                .any(|s| retest_step_ids.contains(&s.id) && s.enabled);
 
         ItemFinalizeContext {
             task_id: task_id.to_string(),
@@ -279,17 +297,18 @@ impl StepExecutionAccumulator {
             qa_file_path: item.qa_file_path.clone(),
             item_status: self.item_status.clone(),
             task_status: "running".to_string(),
-            qa_exit_code: self
-                .exit_codes
-                .get("qa")
-                .or(self.exit_codes.get("qa_testing"))
+            qa_exit_code: qa_step_ids
+                .iter()
+                .find_map(|id| self.exit_codes.get(id.as_str()))
                 .copied(),
-            fix_exit_code: self
-                .exit_codes
-                .get("fix")
-                .or(self.exit_codes.get("ticket_fix"))
+            fix_exit_code: fix_step_ids
+                .iter()
+                .find_map(|id| self.exit_codes.get(id.as_str()))
                 .copied(),
-            retest_exit_code: self.exit_codes.get("retest").copied(),
+            retest_exit_code: retest_step_ids
+                .iter()
+                .find_map(|id| self.exit_codes.get(id.as_str()))
+                .copied(),
             active_ticket_count: self.active_tickets.len() as i64,
             new_ticket_count: self.new_ticket_count,
             retest_new_ticket_count: 0,
