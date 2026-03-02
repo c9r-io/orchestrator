@@ -1,4 +1,5 @@
 mod check;
+mod config_lifecycle;
 mod definition;
 mod edit;
 mod output;
@@ -68,6 +69,7 @@ impl CliHandler {
                 command,
             } => self.handle_exec(*stdin, *tty, target, command),
             Commands::Verify(cmd) => self.handle_verify(cmd),
+            Commands::Config(cmd) => self.handle_config_lifecycle(cmd),
             Commands::Check { workflow, output } => self.handle_check(workflow.as_deref(), *output),
         }
     }

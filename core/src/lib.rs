@@ -8,6 +8,7 @@ pub mod db_write;
 pub mod dto;
 pub mod dynamic_orchestration;
 pub mod events;
+pub mod events_backfill;
 pub mod health;
 pub mod metrics;
 pub mod output_validation;

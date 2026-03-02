@@ -3,11 +3,30 @@ use crate::config::{
     WorkflowStepConfig,
 };
 use anyhow::Result;
+use serde::Serialize;
+use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum ConfigSelfHealRule {
     DropRequiredCapabilityFromBuiltinStep,
     NormalizeStepExecutionMode,
+}
+
+impl ConfigSelfHealRule {
+    pub fn as_label(&self) -> &'static str {
+        match self {
+            Self::DropRequiredCapabilityFromBuiltinStep => {
+                "DropRequiredCapabilityFromBuiltinStep"
+            }
+            Self::NormalizeStepExecutionMode => "NormalizeStepExecutionMode",
+        }
+    }
+}
+
+impl fmt::Display for ConfigSelfHealRule {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_label())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -197,5 +216,35 @@ mod tests {
             healed.is_none(),
             "missing workspace is not a healable drift"
         );
+    }
+
+    #[test]
+    fn config_self_heal_rule_display_returns_label() {
+        assert_eq!(
+            ConfigSelfHealRule::DropRequiredCapabilityFromBuiltinStep.to_string(),
+            "DropRequiredCapabilityFromBuiltinStep"
+        );
+        assert_eq!(
+            ConfigSelfHealRule::NormalizeStepExecutionMode.to_string(),
+            "NormalizeStepExecutionMode"
+        );
+    }
+
+    #[test]
+    fn config_self_heal_rule_as_label_matches_display() {
+        for rule in [
+            ConfigSelfHealRule::DropRequiredCapabilityFromBuiltinStep,
+            ConfigSelfHealRule::NormalizeStepExecutionMode,
+        ] {
+            assert_eq!(rule.as_label(), rule.to_string());
+        }
+    }
+
+    #[test]
+    fn config_self_heal_rule_serializes_as_string() {
+        let json =
+            serde_json::to_string(&ConfigSelfHealRule::DropRequiredCapabilityFromBuiltinStep)
+                .unwrap();
+        assert!(json.contains("DropRequiredCapabilityFromBuiltinStep"));
     }
 }

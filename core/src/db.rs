@@ -198,6 +198,17 @@ pub fn init_schema(db_path: &Path) -> Result<()> {
             reason TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS config_heal_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            version INTEGER NOT NULL,
+            original_error TEXT NOT NULL,
+            workflow_id TEXT NOT NULL,
+            step_id TEXT NOT NULL,
+            rule TEXT NOT NULL,
+            detail TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
         CREATE INDEX IF NOT EXISTS idx_task_items_task_order ON task_items(task_id, order_no);
         CREATE INDEX IF NOT EXISTS idx_task_items_status ON task_items(status);
@@ -209,6 +220,7 @@ pub fn init_schema(db_path: &Path) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_agent_sessions_task_step_state ON agent_sessions(task_id, step_id, state);
         CREATE INDEX IF NOT EXISTS idx_agent_sessions_pid_state ON agent_sessions(pid, state);
         CREATE INDEX IF NOT EXISTS idx_session_attachments_session_attached ON session_attachments(session_id, attached_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_config_heal_log_version ON config_heal_log(version DESC);
         "#,
     )
     .context("failed to initialize schema")?;

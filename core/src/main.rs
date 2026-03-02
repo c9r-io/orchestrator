@@ -14,6 +14,7 @@ use agent_orchestrator::db;
 use agent_orchestrator::db_write;
 use agent_orchestrator::dto;
 use agent_orchestrator::events;
+use agent_orchestrator::events_backfill;
 use agent_orchestrator::resource;
 use agent_orchestrator::scheduler;
 use agent_orchestrator::scheduler_service;
@@ -141,6 +142,15 @@ fn backfill_legacy_data(
         "UPDATE command_runs SET agent_id = 'legacy' WHERE agent_id = ''",
         [],
     )?;
+    drop(conn);
+
+    let stats = crate::events_backfill::backfill_event_step_scope(db_path)?;
+    if stats.updated > 0 {
+        eprintln!(
+            "[backfill] step_scope: {} legacy events updated ({} scanned, {} skipped)",
+            stats.updated, stats.scanned, stats.skipped
+        );
+    }
     Ok(())
 }
 

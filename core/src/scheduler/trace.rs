@@ -84,7 +84,7 @@ fn split_observed_item_binding(
             None,
             task_item_id.clone(),
         ),
-        None => ("unknown".to_string(), None, task_item_id.clone()),
+        None => ("legacy".to_string(), None, task_item_id.clone()),
     }
 }
 
@@ -977,7 +977,12 @@ pub fn render_trace_terminal(trace: &TaskTrace, verbose: bool) {
             );
 
             if verbose {
-                let mut parts = vec![format!("scope={}", step.scope)];
+                let scope_display = if step.scope == "legacy" {
+                    "scope=legacy (pre-scope event, step_scope not recorded)".to_string()
+                } else {
+                    format!("scope={}", step.scope)
+                };
+                let mut parts = vec![scope_display];
                 if let Some(item_id) = &step.item_id {
                     parts.push(format!("item={item_id}"));
                 }
@@ -1902,7 +1907,7 @@ mod tests {
     }
 
     #[test]
-    fn build_trace_marks_legacy_step_scope_as_unknown() {
+    fn build_trace_marks_legacy_step_scope_as_legacy() {
         let events = vec![
             make_event(
                 1,
@@ -1936,7 +1941,7 @@ mod tests {
 
         let trace = build_trace("test-task", "completed", &events, &[]);
         let step = &trace.cycles[0].steps[0];
-        assert_eq!(step.scope, "unknown");
+        assert_eq!(step.scope, "legacy");
         assert_eq!(step.item_id, None);
         assert_eq!(step.anchor_item_id.as_deref(), Some("item-1"));
     }

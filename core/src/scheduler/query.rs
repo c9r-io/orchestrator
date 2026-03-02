@@ -590,7 +590,7 @@ fn render_watch_frame(
             s.step,
             match s.scope {
                 Some(scope) => crate::events::observed_step_scope_label(Some(scope)),
-                None => "?",
+                None => "~",
             },
             if s.agent_id.is_empty() {
                 "-"
@@ -1732,7 +1732,7 @@ mod tests {
     }
 
     #[test]
-    fn render_watch_frame_shows_unknown_scope_for_legacy_event() {
+    fn render_watch_frame_shows_legacy_scope_for_legacy_event() {
         let task = TaskSummary {
             id: "12345678-1234-1234-1234-123456789abc".to_string(),
             name: "watch".to_string(),
@@ -1773,6 +1773,6 @@ mod tests {
         }];
 
         let frame = render_watch_frame(&task, &events, &task.id);
-        assert!(frame.contains(" ? "));
+        assert!(frame.contains(" ~ "), "legacy scope should display as ~");
     }
 }

@@ -128,7 +128,7 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 - Every verbose step prints an indented scope line
 - `probe_item_scoped` steps show `scope=item item={item_id}`
 - `probe_task_scoped` steps show `scope=task`, and if an execution anchor exists it is rendered as `anchor_item={item_id}`
-- Legacy tasks without explicit scope metadata may show `scope=unknown`; they must not silently relabel the anchor as a true `item=...`
+- Legacy tasks without explicit scope metadata show `scope=legacy` (not `scope=unknown`); they must not silently relabel the anchor as a true `item=...`
 
 ---
 

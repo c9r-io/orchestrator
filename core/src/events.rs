@@ -23,7 +23,7 @@ pub fn observed_step_scope_label(scope: Option<ObservedStepScope>) -> &'static s
     match scope {
         Some(ObservedStepScope::Task) => "task",
         Some(ObservedStepScope::Item) => "item",
-        None => "unknown",
+        None => "legacy",
     }
 }
 
@@ -264,6 +264,19 @@ mod tests {
         assert_eq!(
             observed_step_scope_from_payload(&serde_json::json!({})),
             None
+        );
+    }
+
+    #[test]
+    fn observed_step_scope_label_returns_legacy_for_none() {
+        assert_eq!(observed_step_scope_label(None), "legacy");
+        assert_eq!(
+            observed_step_scope_label(Some(ObservedStepScope::Task)),
+            "task"
+        );
+        assert_eq!(
+            observed_step_scope_label(Some(ObservedStepScope::Item)),
+            "item"
         );
     }
 

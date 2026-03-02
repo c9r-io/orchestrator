@@ -15,7 +15,7 @@ pub use validate::*;
 pub use workspace::*;
 
 pub(crate) use normalize::{normalize_config, normalize_step_execution_mode_recursive};
-pub(crate) use persist::{persist_config_versioned, serialize_config_snapshot};
+pub(crate) use persist::{persist_config_versioned, persist_heal_log, serialize_config_snapshot};
 pub(crate) use self_heal::apply_self_heal_pass;
 pub(crate) use validate::validate_workflow_config_with_agents;
 

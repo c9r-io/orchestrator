@@ -1,6 +1,8 @@
 use crate::anomaly::Severity;
 use crate::cli::OutputFormat;
-use crate::config_load::{read_active_config, ConfigSelfHealReport};
+use crate::config_load::{
+    query_latest_heal_summary, read_active_config, ConfigSelfHealReport,
+};
 use crate::scheduler::check::{run_checks, CheckReport};
 use anyhow::Result;
 
@@ -10,9 +12,31 @@ impl CliHandler {
     pub(super) fn handle_check(&self, workflow: Option<&str>, output: OutputFormat) -> Result<i32> {
         let active = read_active_config(&self.state)?;
         let mut report = run_checks(&active, &self.state.app_root, workflow);
-        if let Ok(notice) = self.state.active_config_notice.read() {
+
+        let has_memory_notice = if let Ok(notice) = self.state.active_config_notice.read() {
             if let Some(notice) = notice.as_ref() {
                 append_active_config_notice(&mut report, notice);
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if !has_memory_notice {
+            if let Ok(current_version) = current_config_version(&self.state.db_path) {
+                if let Ok(Some((version, original_error, changes_count, created_at))) =
+                    query_latest_heal_summary(&self.state.db_path, current_version)
+                {
+                    append_persisted_heal_notice(
+                        &mut report,
+                        version,
+                        &original_error,
+                        changes_count,
+                        &created_at,
+                    );
+                }
             }
         }
 
@@ -72,6 +96,37 @@ fn append_active_config_notice(report: &mut CheckReport, notice: &ConfigSelfHeal
     });
     report.summary.total += 1;
     report.summary.warnings += 1;
+}
+
+fn append_persisted_heal_notice(
+    report: &mut CheckReport,
+    version: i64,
+    original_error: &str,
+    changes_count: usize,
+    created_at: &str,
+) {
+    report.checks.push(crate::scheduler::check::CheckResult {
+        rule: "config_auto_healed_persisted".into(),
+        severity: Severity::Warning,
+        passed: false,
+        message: format!(
+            "active config was previously auto-healed ({} changes, version {}, at {})",
+            changes_count, version, created_at
+        ),
+        context: Some(original_error.to_string()),
+    });
+    report.summary.total += 1;
+    report.summary.warnings += 1;
+}
+
+fn current_config_version(db_path: &std::path::Path) -> Result<i64> {
+    let conn = crate::db::open_conn(db_path)?;
+    let version: i64 = conn.query_row(
+        "SELECT COALESCE(version, 0) FROM orchestrator_config WHERE id = 1",
+        [],
+        |row| row.get(0),
+    )?;
+    Ok(version)
 }
 
 #[cfg(test)]
@@ -138,6 +193,43 @@ mod tests {
                 .execute(&cli)
                 .expect("check with workflow filter should succeed"),
             0
+        );
+    }
+
+    #[test]
+    fn append_persisted_heal_notice_adds_warning_check() {
+        let mut report = CheckReport {
+            checks: Vec::new(),
+            summary: CheckSummary {
+                total: 0,
+                passed: 0,
+                errors: 0,
+                warnings: 0,
+            },
+        };
+
+        super::append_persisted_heal_notice(
+            &mut report,
+            7,
+            "builtin/capability conflict",
+            2,
+            "2026-02-28T10:00:00Z",
+        );
+
+        assert_eq!(report.summary.total, 1);
+        assert_eq!(report.summary.warnings, 1);
+        let check = report
+            .checks
+            .first()
+            .expect("expected injected persisted heal notice");
+        assert_eq!(check.rule, "config_auto_healed_persisted");
+        assert_eq!(check.severity, Severity::Warning);
+        assert!(!check.passed);
+        assert!(check.message.contains("version 7"));
+        assert!(check.message.contains("2 changes"));
+        assert_eq!(
+            check.context.as_deref(),
+            Some("builtin/capability conflict")
         );
     }
 

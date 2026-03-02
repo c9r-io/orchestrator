@@ -5,8 +5,9 @@ use std::path::Path;
 
 use super::{
     apply_self_heal_pass, normalize_config, normalize_step_execution_mode_recursive,
-    persist_config_versioned, resolve_and_validate_projects, resolve_and_validate_workspaces,
-    serialize_config_snapshot, validate_workflow_config, ConfigSelfHealReport,
+    persist_config_versioned, persist_heal_log, resolve_and_validate_projects,
+    resolve_and_validate_workspaces, serialize_config_snapshot, validate_workflow_config,
+    ConfigSelfHealReport,
 };
 
 pub fn build_active_config(app_root: &Path, config: OrchestratorConfig) -> Result<ActiveConfig> {
@@ -54,6 +55,8 @@ pub fn build_active_config_with_self_heal(
             let (healed_version, healed_at) =
                 persist_config_versioned(&tx, &yaml, &json_raw, "self-heal")
                     .context("failed to persist self-healed config")?;
+            persist_heal_log(&tx, healed_version, &original_error, &changes)
+                .context("failed to persist self-heal log entries")?;
             tx.commit()
                 .context("failed to commit self-healed config version")?;
 
@@ -255,6 +258,39 @@ mod tests {
             )
             .expect("query latest config version author");
         assert_eq!(latest_author, "self-heal");
+    }
+
+    #[test]
+    fn build_active_config_with_self_heal_persists_heal_log_entries() {
+        let app_root = detect_app_root();
+        let (_temp_dir, db_path) = make_test_db();
+        let mut config = make_minimal_buildable_config();
+        let workflow = config
+            .workflows
+            .get_mut("basic")
+            .expect("missing basic workflow");
+        workflow.steps.first_mut().unwrap().required_capability = Some("self_test".to_string());
+        persist_raw_config(&db_path, config, "test-seed").expect("seed config");
+
+        let (_active, report) = build_active_config_with_self_heal(
+            &app_root,
+            &db_path,
+            load_raw_config_from_db(&db_path)
+                .expect("load raw config")
+                .expect("config row")
+                .0,
+        )
+        .expect("self-heal wrapper should recover");
+
+        let report = report.expect("expected self-heal report");
+        let entries =
+            crate::config_load::query_heal_log_entries(&db_path, 10).expect("query heal log");
+        assert!(
+            !entries.is_empty(),
+            "heal log entries should be persisted during self-heal"
+        );
+        assert_eq!(entries[0].version, report.healed_version);
+        assert!(entries[0].original_error.contains("builtin and required_capability"));
     }
 
     #[test]

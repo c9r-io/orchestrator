@@ -130,6 +130,10 @@ pub enum Commands {
     #[command(subcommand)]
     Verify(VerifyCommands),
 
+    /// Config lifecycle operations (heal-log, backfill)
+    #[command(alias = "cfg", subcommand)]
+    Config(ConfigLifecycleCommands),
+
     /// Preflight validation: cross-reference checks on config, agents, workflows
     #[command(alias = "ck")]
     Check {
@@ -618,6 +622,23 @@ pub enum VerifyCommands {
         #[arg(short, long)]
         root: Option<String>,
     },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum ConfigLifecycleCommands {
+    /// Show self-heal audit log
+    HealLog {
+        /// Maximum number of entries to display
+        #[arg(long, default_value = "20")]
+        limit: usize,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Backfill missing step_scope in legacy event payloads
+    BackfillEvents,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
