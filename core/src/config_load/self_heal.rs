@@ -1,0 +1,201 @@
+use crate::config::{
+    is_known_builtin_step_name, normalize_step_execution_mode, OrchestratorConfig, WorkflowConfig,
+    WorkflowStepConfig,
+};
+use anyhow::Result;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigSelfHealRule {
+    DropRequiredCapabilityFromBuiltinStep,
+    NormalizeStepExecutionMode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigSelfHealChange {
+    pub workflow_id: String,
+    pub step_id: String,
+    pub rule: ConfigSelfHealRule,
+    pub detail: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConfigSelfHealReport {
+    pub original_error: String,
+    pub healed_version: i64,
+    pub healed_at: String,
+    pub changes: Vec<ConfigSelfHealChange>,
+}
+
+pub(crate) fn apply_self_heal_to_step(
+    workflow_id: &str,
+    step: &mut WorkflowStepConfig,
+    changes: &mut Vec<ConfigSelfHealChange>,
+) -> Result<()> {
+    if let Some(builtin) = step.builtin.as_deref() {
+        if is_known_builtin_step_name(builtin) {
+            if let Some(required_capability) = step.required_capability.take() {
+                changes.push(ConfigSelfHealChange {
+                    workflow_id: workflow_id.to_string(),
+                    step_id: step.id.clone(),
+                    rule: ConfigSelfHealRule::DropRequiredCapabilityFromBuiltinStep,
+                    detail: format!(
+                        "removed legacy required_capability '{}' from builtin '{}'",
+                        required_capability, builtin
+                    ),
+                });
+            }
+        }
+    }
+
+    let previous_execution = step.behavior.execution.clone();
+    normalize_step_execution_mode(step).map_err(anyhow::Error::msg)?;
+    if step.behavior.execution != previous_execution {
+        changes.push(ConfigSelfHealChange {
+            workflow_id: workflow_id.to_string(),
+            step_id: step.id.clone(),
+            rule: ConfigSelfHealRule::NormalizeStepExecutionMode,
+            detail: format!(
+                "normalized behavior.execution from {:?} to {:?}",
+                previous_execution, step.behavior.execution
+            ),
+        });
+    }
+
+    for chain_step in &mut step.chain_steps {
+        apply_self_heal_to_step(workflow_id, chain_step, changes)?;
+    }
+
+    Ok(())
+}
+
+pub(crate) fn apply_self_heal_to_workflow(
+    workflow_id: &str,
+    workflow: &mut WorkflowConfig,
+    changes: &mut Vec<ConfigSelfHealChange>,
+) -> Result<()> {
+    for step in &mut workflow.steps {
+        apply_self_heal_to_step(workflow_id, step, changes)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn apply_self_heal_pass(
+    config: &OrchestratorConfig,
+) -> Result<Option<(OrchestratorConfig, Vec<ConfigSelfHealChange>)>> {
+    let mut healed = config.clone();
+    let mut changes = Vec::new();
+
+    for (workflow_id, workflow) in &mut healed.workflows {
+        apply_self_heal_to_workflow(workflow_id, workflow, &mut changes)?;
+    }
+
+    for (project_id, project) in &mut healed.projects {
+        for (workflow_id, workflow) in &mut project.workflows {
+            let scoped_workflow_id = format!("{project_id}/{workflow_id}");
+            apply_self_heal_to_workflow(&scoped_workflow_id, workflow, &mut changes)?;
+        }
+    }
+
+    if changes.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some((healed, changes)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::ExecutionMode;
+    use crate::config_load::tests::make_minimal_buildable_config;
+
+    #[test]
+    fn self_heal_drops_required_capability_from_known_builtin_step() {
+        let mut config = make_minimal_buildable_config();
+        let workflow = config
+            .workflows
+            .get_mut("basic")
+            .expect("missing basic workflow");
+        let step = workflow
+            .steps
+            .first_mut()
+            .expect("missing builtin self_test step");
+        step.required_capability = Some("self_test".to_string());
+
+        let healed = apply_self_heal_pass(&config)
+            .expect("self-heal pass should run")
+            .expect("expected a self-heal change");
+
+        let healed_step = healed
+            .0
+            .workflows
+            .get("basic")
+            .and_then(|wf| wf.steps.first())
+            .expect("missing healed step");
+        assert!(healed_step.required_capability.is_none());
+        assert!(
+            healed
+                .1
+                .iter()
+                .any(|change| change.rule
+                    == ConfigSelfHealRule::DropRequiredCapabilityFromBuiltinStep)
+        );
+    }
+
+    #[test]
+    fn self_heal_normalizes_execution_mode_mismatch() {
+        let mut config = make_minimal_buildable_config();
+        let workflow = config
+            .workflows
+            .get_mut("basic")
+            .expect("missing basic workflow");
+        let step = workflow
+            .steps
+            .first_mut()
+            .expect("missing builtin self_test step");
+        step.behavior.execution = ExecutionMode::Agent;
+
+        let healed = apply_self_heal_pass(&config)
+            .expect("self-heal pass should run")
+            .expect("expected a normalization change");
+
+        let healed_step = healed
+            .0
+            .workflows
+            .get("basic")
+            .and_then(|wf| wf.steps.first())
+            .expect("missing healed step");
+        assert_eq!(
+            healed_step.behavior.execution,
+            ExecutionMode::Builtin {
+                name: "self_test".to_string()
+            }
+        );
+        assert!(healed
+            .1
+            .iter()
+            .any(|change| change.rule == ConfigSelfHealRule::NormalizeStepExecutionMode));
+    }
+
+    #[test]
+    fn self_heal_returns_none_when_config_is_canonical() {
+        let config = make_minimal_buildable_config();
+
+        let healed = apply_self_heal_pass(&config).expect("self-heal pass should run");
+
+        assert!(healed.is_none(), "canonical config should not be rewritten");
+    }
+
+    #[test]
+    fn self_heal_does_not_fix_missing_workspace() {
+        let mut config = make_minimal_buildable_config();
+        config.defaults.workspace = "missing".to_string();
+
+        let healed = apply_self_heal_pass(&config).expect("self-heal pass should run");
+
+        assert!(
+            healed.is_none(),
+            "missing workspace is not a healable drift"
+        );
+    }
+}

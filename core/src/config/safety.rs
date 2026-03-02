@@ -1,0 +1,149 @@
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+use super::{AgentConfig, WorkflowConfig};
+
+/// Safety configuration for self-bootstrap and dangerous operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SafetyConfig {
+    /// Maximum consecutive failures before auto-rollback
+    #[serde(default = "default_max_consecutive_failures")]
+    pub max_consecutive_failures: u32,
+    /// Automatically rollback on repeated failures
+    #[serde(default)]
+    pub auto_rollback: bool,
+    /// Strategy for creating checkpoints
+    #[serde(default)]
+    pub checkpoint_strategy: CheckpointStrategy,
+    /// Per-step timeout in seconds (default: 1800 = 30 min)
+    #[serde(default)]
+    pub step_timeout_secs: Option<u64>,
+    /// Snapshot the release binary at cycle start for rollback
+    #[serde(default)]
+    pub binary_snapshot: bool,
+    /// Safety policy profile for self-referential workflows
+    #[serde(default)]
+    pub profile: WorkflowSafetyProfile,
+}
+
+fn default_max_consecutive_failures() -> u32 {
+    3
+}
+
+impl Default for SafetyConfig {
+    fn default() -> Self {
+        Self {
+            max_consecutive_failures: 3,
+            auto_rollback: false,
+            checkpoint_strategy: CheckpointStrategy::default(),
+            step_timeout_secs: None,
+            binary_snapshot: false,
+            profile: WorkflowSafetyProfile::default(),
+        }
+    }
+}
+
+/// Checkpoint strategy for rollback support
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum CheckpointStrategy {
+    #[default]
+    None,
+    GitTag,
+    GitStash,
+}
+
+/// Safety profile for self-referential workflows.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowSafetyProfile {
+    #[default]
+    Standard,
+    SelfReferentialProbe,
+}
+
+/// Workspace configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceConfig {
+    pub root_path: String,
+    pub qa_targets: Vec<String>,
+    pub ticket_dir: String,
+    /// When true, the workspace points to the orchestrator's own source tree
+    #[serde(default)]
+    pub self_referential: bool,
+}
+
+/// Project-level configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub workspaces: HashMap<String, WorkspaceConfig>,
+    #[serde(default)]
+    pub agents: HashMap<String, AgentConfig>,
+    #[serde(default)]
+    pub workflows: HashMap<String, WorkflowConfig>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_safety_config_default() {
+        let cfg = SafetyConfig::default();
+        assert_eq!(cfg.max_consecutive_failures, 3);
+        assert!(!cfg.auto_rollback);
+        assert!(matches!(cfg.checkpoint_strategy, CheckpointStrategy::None));
+        assert!(cfg.step_timeout_secs.is_none());
+        assert!(!cfg.binary_snapshot);
+    }
+
+    #[test]
+    fn test_safety_config_serde_round_trip() {
+        let cfg = SafetyConfig {
+            max_consecutive_failures: 5,
+            auto_rollback: true,
+            checkpoint_strategy: CheckpointStrategy::GitTag,
+            step_timeout_secs: Some(600),
+            binary_snapshot: true,
+            profile: WorkflowSafetyProfile::SelfReferentialProbe,
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        let cfg2: SafetyConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(cfg2.max_consecutive_failures, 5);
+        assert!(cfg2.auto_rollback);
+        assert!(matches!(
+            cfg2.checkpoint_strategy,
+            CheckpointStrategy::GitTag
+        ));
+        assert_eq!(cfg2.step_timeout_secs, Some(600));
+        assert!(cfg2.binary_snapshot);
+        assert_eq!(cfg2.profile, WorkflowSafetyProfile::SelfReferentialProbe);
+    }
+
+    #[test]
+    fn test_safety_config_deserialize_minimal() {
+        let json = r#"{}"#;
+        let cfg: SafetyConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.max_consecutive_failures, 3);
+        assert!(!cfg.auto_rollback);
+        assert_eq!(cfg.profile, WorkflowSafetyProfile::Standard);
+    }
+
+    #[test]
+    fn test_checkpoint_strategy_default() {
+        let strat = CheckpointStrategy::default();
+        assert!(matches!(strat, CheckpointStrategy::None));
+    }
+
+    #[test]
+    fn test_checkpoint_strategy_serde_round_trip() {
+        for s in &["\"none\"", "\"git_tag\"", "\"git_stash\""] {
+            let strat: CheckpointStrategy = serde_json::from_str(s).unwrap();
+            let json = serde_json::to_string(&strat).unwrap();
+            assert_eq!(&json, s);
+        }
+    }
+}

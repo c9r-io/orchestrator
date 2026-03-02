@@ -1,0 +1,452 @@
+use crate::config::{ActiveConfig, OrchestratorConfig, TaskExecutionPlan, WorkflowConfig};
+use crate::db::{count_tasks_by_workflow, count_tasks_by_workspace, open_conn};
+use anyhow::{Context, Result};
+use std::path::Path;
+
+use super::{
+    apply_self_heal_pass, normalize_config, normalize_step_execution_mode_recursive,
+    persist_config_versioned, resolve_and_validate_projects, resolve_and_validate_workspaces,
+    serialize_config_snapshot, validate_workflow_config, ConfigSelfHealReport,
+};
+
+pub fn build_active_config(app_root: &Path, config: OrchestratorConfig) -> Result<ActiveConfig> {
+    let config = normalize_config(config);
+    let workspaces = resolve_and_validate_workspaces(app_root, &config)?;
+    let projects = resolve_and_validate_projects(app_root, &config)?;
+    Ok(ActiveConfig {
+        default_project_id: config.defaults.project.clone(),
+        default_workspace_id: config.defaults.workspace.clone(),
+        default_workflow_id: config.defaults.workflow.clone(),
+        workspaces,
+        projects,
+        config,
+    })
+}
+
+pub fn build_active_config_with_self_heal(
+    app_root: &Path,
+    db_path: &Path,
+    config: OrchestratorConfig,
+) -> Result<(ActiveConfig, Option<ConfigSelfHealReport>)> {
+    match build_active_config(app_root, config.clone()) {
+        Ok(active) => Ok((active, None)),
+        Err(error) => {
+            let original_error = error.to_string();
+            let maybe_healed = match apply_self_heal_pass(&config) {
+                Ok(result) => result,
+                Err(_) => anyhow::bail!(original_error),
+            };
+            let Some((healed_config, changes)) = maybe_healed else {
+                anyhow::bail!(original_error);
+            };
+
+            let healed_active = match build_active_config(app_root, healed_config) {
+                Ok(active) => active,
+                Err(_) => anyhow::bail!(original_error),
+            };
+            let normalized = healed_active.config.clone();
+            let (yaml, json_raw) = serialize_config_snapshot(&normalized)?;
+            let conn = open_conn(db_path)?;
+            let tx = conn.unchecked_transaction()?;
+            let (healed_version, healed_at) =
+                persist_config_versioned(&tx, &yaml, &json_raw, "self-heal")
+                    .context("failed to persist self-healed config")?;
+            tx.commit()
+                .context("failed to commit self-healed config version")?;
+
+            Ok((
+                healed_active,
+                Some(ConfigSelfHealReport {
+                    original_error,
+                    healed_version,
+                    healed_at,
+                    changes,
+                }),
+            ))
+        }
+    }
+}
+
+pub fn build_execution_plan(
+    config: &OrchestratorConfig,
+    workflow: &WorkflowConfig,
+    workflow_id: &str,
+) -> Result<TaskExecutionPlan> {
+    validate_workflow_config(config, workflow, workflow_id)?;
+    let mut steps = Vec::new();
+    for step in &workflow.steps {
+        if !step.enabled {
+            continue;
+        }
+        let normalized_step = task_step_from_workflow_step(step)?;
+        steps.push(normalized_step);
+    }
+    let loop_policy = workflow.loop_policy.clone();
+    Ok(TaskExecutionPlan {
+        steps,
+        loop_policy,
+        finalize: workflow.finalize.clone(),
+    })
+}
+
+pub(crate) fn task_step_from_workflow_step(
+    step: &crate::config::WorkflowStepConfig,
+) -> Result<crate::config::TaskExecutionStep> {
+    let mut normalized = step.clone();
+    normalize_step_execution_mode_recursive(&mut normalized)?;
+
+    Ok(crate::config::TaskExecutionStep {
+        id: normalized.id.clone(),
+        required_capability: normalized.required_capability.clone(),
+        builtin: normalized.builtin.clone(),
+        enabled: normalized.enabled,
+        repeatable: normalized.repeatable,
+        is_guard: normalized.is_guard,
+        cost_preference: normalized.cost_preference.clone(),
+        prehook: normalized.prehook.clone(),
+        tty: normalized.tty,
+        outputs: normalized.outputs.clone(),
+        pipe_to: normalized.pipe_to.clone(),
+        command: normalized.command.clone(),
+        chain_steps: normalized
+            .chain_steps
+            .iter()
+            .map(task_step_from_workflow_step)
+            .collect::<Result<Vec<_>>>()?,
+        scope: normalized.scope,
+        behavior: normalized.behavior.clone(),
+    })
+}
+
+pub fn enforce_deletion_guards(
+    conn: &rusqlite::Connection,
+    previous: &OrchestratorConfig,
+    candidate: &OrchestratorConfig,
+) -> Result<()> {
+    let removed_workspaces: Vec<String> = previous
+        .workspaces
+        .keys()
+        .filter(|id| !candidate.workspaces.contains_key(*id))
+        .cloned()
+        .collect();
+    for workspace_id in removed_workspaces {
+        let task_count = count_tasks_by_workspace(conn, &workspace_id)?;
+        if task_count > 0 {
+            anyhow::bail!(
+                "cannot delete workspace '{}' because {} tasks reference it",
+                workspace_id,
+                task_count
+            );
+        }
+    }
+
+    let removed_workflows: Vec<String> = previous
+        .workflows
+        .keys()
+        .filter(|id| !candidate.workflows.contains_key(*id))
+        .cloned()
+        .collect();
+    for workflow_id in removed_workflows {
+        let task_count = count_tasks_by_workflow(conn, &workflow_id)?;
+        if task_count > 0 {
+            anyhow::bail!(
+                "cannot delete workflow '{}' because {} tasks reference it",
+                workflow_id,
+                task_count
+            );
+        }
+    }
+
+    let _removed_agents: Vec<String> = previous
+        .agents
+        .keys()
+        .filter(|id| !candidate.agents.contains_key(*id))
+        .cloned()
+        .collect();
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{ExecutionMode, LoopMode, OrchestratorConfig};
+    use crate::config_load::tests::{
+        make_builtin_step, make_command_step, make_minimal_buildable_config, make_step,
+        make_test_db, make_workflow,
+    };
+    use crate::config_load::{detect_app_root, load_raw_config_from_db, persist_raw_config};
+    #[allow(unused_imports)]
+    use std::collections::HashMap;
+
+    #[test]
+    fn build_active_config_with_self_heal_recovers_builtin_capability_conflict() {
+        let app_root = detect_app_root();
+        let (_temp_dir, db_path) = make_test_db();
+        let mut config = make_minimal_buildable_config();
+        let workflow = config
+            .workflows
+            .get_mut("basic")
+            .expect("missing basic workflow");
+        let step = workflow
+            .steps
+            .first_mut()
+            .expect("missing builtin self_test step");
+        step.required_capability = Some("self_test".to_string());
+        persist_raw_config(&db_path, config.clone(), "test-seed").expect("seed config");
+
+        let direct_error = build_active_config(&app_root, config)
+            .expect_err("legacy drift should fail direct active config construction");
+        assert!(direct_error
+            .to_string()
+            .contains("cannot define both builtin and required_capability"));
+
+        let (active, report) = build_active_config_with_self_heal(
+            &app_root,
+            &db_path,
+            load_raw_config_from_db(&db_path)
+                .expect("load raw config")
+                .expect("config row")
+                .0,
+        )
+        .expect("self-heal wrapper should recover");
+
+        assert_eq!(active.default_workflow_id, "basic");
+        let report = report.expect("expected self-heal report");
+        assert!(
+            !report.changes.is_empty(),
+            "expected recorded self-heal changes"
+        );
+    }
+
+    #[test]
+    fn build_active_config_with_self_heal_persists_self_heal_version() {
+        let app_root = detect_app_root();
+        let (_temp_dir, db_path) = make_test_db();
+        let mut config = make_minimal_buildable_config();
+        let workflow = config
+            .workflows
+            .get_mut("basic")
+            .expect("missing basic workflow");
+        workflow.steps.first_mut().unwrap().required_capability = Some("self_test".to_string());
+        let seeded = persist_raw_config(&db_path, config, "test-seed").expect("seed config");
+
+        let (_active, report) = build_active_config_with_self_heal(
+            &app_root,
+            &db_path,
+            load_raw_config_from_db(&db_path)
+                .expect("load raw config")
+                .expect("config row")
+                .0,
+        )
+        .expect("self-heal wrapper should recover");
+
+        let report = report.expect("expected self-heal report");
+        assert_eq!(report.healed_version, seeded.version + 1);
+        let conn = open_conn(&db_path).expect("open sqlite connection");
+        let latest_author: String = conn
+            .query_row(
+                "SELECT author FROM orchestrator_config_versions ORDER BY version DESC LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query latest config version author");
+        assert_eq!(latest_author, "self-heal");
+    }
+
+    #[test]
+    fn build_active_config_with_self_heal_returns_original_error_for_unhealable_config() {
+        let app_root = detect_app_root();
+        let (_temp_dir, db_path) = make_test_db();
+        let mut config = make_minimal_buildable_config();
+        config.defaults.workspace = "missing".to_string();
+        persist_raw_config(&db_path, config.clone(), "test-seed").expect("seed config");
+
+        let err = build_active_config_with_self_heal(&app_root, &db_path, config)
+            .expect_err("unhealable config should still fail");
+
+        assert!(
+            err.to_string()
+                .contains("defaults.workspace 'missing' does not exist"),
+            "expected original error to be preserved, got: {err}"
+        );
+        let conn = open_conn(&db_path).expect("open sqlite connection");
+        let version_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM orchestrator_config_versions",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count config versions");
+        assert_eq!(
+            version_count, 1,
+            "unhealable config must not persist new version"
+        );
+    }
+
+    #[test]
+    fn build_execution_plan_returns_only_enabled_steps() {
+        let workflow = make_workflow(vec![
+            make_builtin_step("self_test", "self_test", true),
+            make_step("qa", false),
+        ]);
+        let config = OrchestratorConfig::default();
+        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+        assert_eq!(plan.steps.len(), 1, "should only contain enabled steps");
+        assert_eq!(plan.steps[0].id, "self_test");
+    }
+
+    #[test]
+    fn build_execution_plan_copies_step_fields() {
+        let mut step = make_command_step("build", "cargo build");
+        step.repeatable = false;
+        step.tty = true;
+        step.outputs = vec!["result".to_string()];
+        step.pipe_to = Some("next_step".to_string());
+        step.cost_preference = Some(crate::config::CostPreference::Quality);
+        step.scope = Some(crate::config::StepScope::Task);
+        let workflow = make_workflow(vec![step]);
+        let config = OrchestratorConfig::default();
+        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+        let s = &plan.steps[0];
+        assert_eq!(s.id, "build");
+        assert_eq!(s.command.as_deref(), Some("cargo build"));
+        assert!(!s.repeatable);
+        assert!(s.tty);
+        assert_eq!(s.outputs, vec!["result"]);
+        assert_eq!(s.pipe_to.as_deref(), Some("next_step"));
+        assert_eq!(
+            s.cost_preference,
+            Some(crate::config::CostPreference::Quality)
+        );
+        assert_eq!(s.scope, Some(crate::config::StepScope::Task));
+    }
+
+    #[test]
+    fn build_execution_plan_includes_chain_steps() {
+        let mut step = make_step("smoke_chain", true);
+        step.chain_steps = vec![
+            make_command_step("sub1", "cargo build"),
+            make_command_step("sub2", "cargo test"),
+        ];
+        let workflow = make_workflow(vec![step]);
+        let config = OrchestratorConfig::default();
+        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+        assert_eq!(plan.steps[0].chain_steps.len(), 2);
+        assert_eq!(plan.steps[0].chain_steps[0].id, "sub1");
+        assert_eq!(plan.steps[0].chain_steps[1].id, "sub2");
+        assert_eq!(plan.steps[0].behavior.execution, ExecutionMode::Chain);
+        assert_eq!(
+            plan.steps[0].chain_steps[0].behavior.execution,
+            ExecutionMode::Builtin {
+                name: "sub1".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn build_execution_plan_copies_loop_policy() {
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.loop_policy.mode = LoopMode::Fixed;
+        workflow.loop_policy.guard.max_cycles = Some(3);
+        let config = OrchestratorConfig::default();
+        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+        assert!(matches!(plan.loop_policy.mode, LoopMode::Fixed));
+        assert_eq!(plan.loop_policy.guard.max_cycles, Some(3));
+    }
+
+    #[test]
+    fn build_execution_plan_copies_finalize_config() {
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.finalize = crate::config::default_workflow_finalize_config();
+        let config = OrchestratorConfig::default();
+        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+        assert!(
+            !plan.finalize.rules.is_empty(),
+            "finalize rules should be copied"
+        );
+    }
+
+    #[test]
+    fn build_execution_plan_fails_on_invalid_workflow() {
+        let workflow = make_workflow(vec![]);
+        let config = OrchestratorConfig::default();
+        let result = build_execution_plan(&config, &workflow, "test-wf");
+        assert!(result.is_err(), "should fail validation");
+    }
+
+    #[test]
+    fn build_execution_plan_rehydrates_builtin_execution_from_builtin_field() {
+        let mut step = make_builtin_step("self_test", "self_test", true);
+        step.behavior.execution = ExecutionMode::Agent;
+        let workflow = make_workflow(vec![step]);
+        let config = OrchestratorConfig::default();
+
+        let plan = build_execution_plan(&config, &workflow, "test-wf").unwrap();
+
+        assert_eq!(
+            plan.steps[0].behavior.execution,
+            ExecutionMode::Builtin {
+                name: "self_test".to_string()
+            }
+        );
+        assert_eq!(plan.steps[0].required_capability, None);
+    }
+
+    #[test]
+    fn enforce_deletion_guards_allows_no_removals() {
+        let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
+        crate::db::init_schema(&db_path).unwrap();
+        let conn = crate::db::open_conn(&db_path).unwrap();
+        let config = OrchestratorConfig::default();
+        let result = enforce_deletion_guards(&conn, &config, &config);
+        assert!(result.is_ok());
+        std::fs::remove_file(&db_path).ok();
+    }
+
+    #[test]
+    fn enforce_deletion_guards_allows_removing_unused_workspace() {
+        use crate::config::WorkspaceConfig;
+        let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
+        crate::db::init_schema(&db_path).unwrap();
+        let conn = crate::db::open_conn(&db_path).unwrap();
+        let mut previous_workspaces = HashMap::new();
+        previous_workspaces.insert(
+            "ws-to-remove".to_string(),
+            WorkspaceConfig {
+                root_path: "/tmp".to_string(),
+                qa_targets: vec!["docs".to_string()],
+                ticket_dir: "tickets".to_string(),
+                self_referential: false,
+            },
+        );
+        let previous = OrchestratorConfig {
+            workspaces: previous_workspaces,
+            ..OrchestratorConfig::default()
+        };
+        let candidate = OrchestratorConfig::default();
+        let result = enforce_deletion_guards(&conn, &previous, &candidate);
+        assert!(
+            result.is_ok(),
+            "removing unused workspace should be allowed"
+        );
+        std::fs::remove_file(&db_path).ok();
+    }
+
+    #[test]
+    fn enforce_deletion_guards_allows_removing_unused_workflow() {
+        let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
+        crate::db::init_schema(&db_path).unwrap();
+        let conn = crate::db::open_conn(&db_path).unwrap();
+        let mut previous_workflows = HashMap::new();
+        previous_workflows.insert("wf-to-remove".to_string(), make_workflow(vec![]));
+        let previous = OrchestratorConfig {
+            workflows: previous_workflows,
+            ..OrchestratorConfig::default()
+        };
+        let candidate = OrchestratorConfig::default();
+        let result = enforce_deletion_guards(&conn, &previous, &candidate);
+        assert!(result.is_ok(), "removing unused workflow should be allowed");
+        std::fs::remove_file(&db_path).ok();
+    }
+}
