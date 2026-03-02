@@ -253,6 +253,45 @@ fn list_task_log_runs_returns_empty_when_no_runs() {
     assert!(runs.is_empty(), "should have no runs initially");
 }
 
+// ── pooled connection tests ────────────────────────────────────────────
+
+// These tests verify the pooled connection path (Database) works correctly
+
+// alongside the direct connection path (db_path) tested above.
+
+#[test]
+fn pooled_connection_read_path_works() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    // Use database (pooled connection) instead of db_path (direct connection)
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.database.clone()));
+
+    // Test a representative read operation
+    let summary = repo
+        .load_task_summary(&task_id)
+        .expect("summary should load via pooled connection");
+    assert_eq!(summary.id, task_id);
+    assert!(!summary.created_at.is_empty());
+}
+
+#[test]
+fn pooled_connection_write_path_works() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    // Use database (pooled connection) instead of db_path (direct connection)
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.database.clone()));
+
+    // Test a representative write operation
+    repo.set_task_status(&task_id, "running", false)
+        .expect("set status should work via pooled connection");
+
+    // Verify the write via a read
+    let status = repo
+        .load_task_status(&task_id)
+        .expect("status should be readable");
+    assert_eq!(status, Some("running".to_string()));
+}
+
 #[test]
 fn list_task_log_runs_respects_limit() {
     let mut fixture = TestState::new();
