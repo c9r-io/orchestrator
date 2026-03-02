@@ -151,9 +151,7 @@ pub(crate) fn apply_default_step_behavior(step: &mut WorkflowStepConfig) {
     }
 }
 
-pub(crate) fn normalize_step_execution_mode_recursive(
-    step: &mut WorkflowStepConfig,
-) -> Result<()> {
+pub(crate) fn normalize_step_execution_mode_recursive(step: &mut WorkflowStepConfig) -> Result<()> {
     normalize_step_execution_mode(step).map_err(|e| anyhow::anyhow!(e))?;
     for chain_step in &mut step.chain_steps {
         normalize_step_execution_mode_recursive(chain_step)?;

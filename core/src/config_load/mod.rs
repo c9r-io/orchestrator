@@ -172,5 +172,4 @@ pub(crate) mod tests {
         assert!(parsed >= before, "timestamp should be >= before");
         assert!(parsed <= after, "timestamp should be <= after");
     }
-
 }

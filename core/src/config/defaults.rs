@@ -1,6 +1,5 @@
 use super::{
-    StepBehavior, StepHookEngine, WorkflowFinalizeConfig, WorkflowFinalizeRule,
-    WorkflowStepConfig,
+    StepBehavior, StepHookEngine, WorkflowFinalizeConfig, WorkflowFinalizeRule, WorkflowStepConfig,
 };
 
 fn step_config(
