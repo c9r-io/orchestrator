@@ -49,6 +49,47 @@ fn insert_and_list_task_log_runs_work() {
 }
 
 #[test]
+fn insert_command_run_with_all_optional_fields() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let item_id = get_item_id(&state, &task_id);
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let run = NewCommandRun {
+        id: "run-with-optionals".to_string(),
+        task_item_id: item_id,
+        phase: "fix".to_string(),
+        command: "cargo test".to_string(),
+        cwd: state.app_root.to_string_lossy().to_string(),
+        workspace_id: "test-workspace".to_string(),
+        agent_id: "claude".to_string(),
+        exit_code: 0,
+        stdout_path: "/tmp/out.log".to_string(),
+        stderr_path: "/tmp/err.log".to_string(),
+        started_at: now_ts(),
+        ended_at: now_ts(),
+        interrupted: 0,
+        output_json: r#"{"result":"passed"}"#.to_string(),
+        artifacts_json: r#"[{"path":"artifact.txt"}]"#.to_string(),
+        confidence: Some(0.95),
+        quality_score: Some(0.88),
+        validation_status: "passed".to_string(),
+        session_id: Some("session-123".to_string()),
+        machine_output_source: "json".to_string(),
+        output_json_path: Some("/tmp/output.json".to_string()),
+    };
+    repo.insert_command_run(&run).expect("insert command run with optionals");
+
+    // Verify it was inserted correctly
+    let runs = repo
+        .list_task_log_runs(&task_id, 10)
+        .expect("list task log runs");
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].run_id, "run-with-optionals");
+    assert_eq!(runs[0].phase, "fix");
+}
+
+#[test]
 fn delete_task_and_collect_log_paths_cleans_data() {
     let mut fixture = TestState::new();
     let (state, task_id) = seed_task(&mut fixture);
@@ -98,6 +139,128 @@ fn delete_task_and_collect_log_paths_cleans_data() {
         )
         .expect("count tasks");
     assert_eq!(remaining, 0);
+}
+
+#[test]
+fn delete_task_and_collect_log_paths_errors_for_missing_task() {
+    let mut fixture = TestState::new();
+    let (state, _task_id) = seed_task(&mut fixture);
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+
+    let err = repo
+        .delete_task_and_collect_log_paths("nonexistent-task-id")
+        .expect_err("should error for missing task");
+    assert!(
+        err.to_string().contains("task not found"),
+        "error should mention 'task not found', got: {}",
+        err
+    );
+}
+
+#[test]
+fn delete_task_and_collect_log_paths_returns_empty_when_no_command_runs() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+
+    // Don't insert any command runs
+    let paths = repo
+        .delete_task_and_collect_log_paths(&task_id)
+        .expect("delete task");
+    assert!(paths.is_empty(), "should have no log paths without command runs");
+
+    // Verify task was still deleted
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let remaining: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .expect("count tasks");
+    assert_eq!(remaining, 0);
+}
+
+#[test]
+fn delete_task_and_collect_log_paths_filters_empty_paths() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let _conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id = get_item_id(&state, &task_id);
+
+    // Insert run with empty paths
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let run = NewCommandRun {
+        id: "run-empty-paths".to_string(),
+        task_item_id: item_id,
+        phase: "qa".to_string(),
+        command: "echo test".to_string(),
+        cwd: state.app_root.to_string_lossy().to_string(),
+        workspace_id: "default".to_string(),
+        agent_id: "echo".to_string(),
+        exit_code: 0,
+        stdout_path: "   ".to_string(),  // whitespace only
+        stderr_path: "".to_string(),     // empty
+        started_at: now_ts(),
+        ended_at: now_ts(),
+        interrupted: 0,
+        output_json: "{}".to_string(),
+        artifacts_json: "[]".to_string(),
+        confidence: None,
+        quality_score: None,
+        validation_status: "unknown".to_string(),
+        session_id: None,
+        machine_output_source: "stdout".to_string(),
+        output_json_path: None,
+    };
+    repo.insert_command_run(&run).expect("insert command run");
+
+    let paths = repo
+        .delete_task_and_collect_log_paths(&task_id)
+        .expect("delete task");
+    assert!(paths.is_empty(), "empty/whitespace paths should be filtered");
+}
+
+#[test]
+fn delete_task_and_collect_log_paths_deletes_cascaded_data() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id = get_item_id(&state, &task_id);
+
+    // Insert command run and event
+    let ts = now_ts();
+    conn.execute(
+        "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, workspace_id, agent_id, exit_code, stdout_path, stderr_path, output_json, artifacts_json, confidence, quality_score, validation_status, started_at, ended_at, interrupted) VALUES ('cr-cascade', ?1, 'qa', 'test', '/tmp', 'default', 'agent', 0, '/tmp/out.log', '/tmp/err.log', '{}', '[]', NULL, NULL, 'unknown', ?2, ?2, 0)",
+        params![item_id, ts],
+    )
+    .expect("insert command run");
+
+    conn.execute(
+        "INSERT INTO events (id, task_id, task_item_id, event_type, payload_json, created_at) VALUES (1, ?1, NULL, 'test_event', '{}', ?2)",
+        params![task_id, ts],
+    )
+    .expect("insert event");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    repo.delete_task_and_collect_log_paths(&task_id)
+        .expect("delete task");
+
+    // Verify all related data is deleted
+    let events_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM events WHERE task_id = ?1", params![task_id], |row| row.get(0))
+        .expect("count events");
+    assert_eq!(events_count, 0, "events should be deleted");
+
+    let runs_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM command_runs WHERE id = 'cr-cascade'", [], |row| row.get(0))
+        .expect("count runs");
+    assert_eq!(runs_count, 0, "command_runs should be deleted");
+
+    let items_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM task_items WHERE task_id = ?1", params![task_id], |row| row.get(0))
+        .expect("count items");
+    assert_eq!(items_count, 0, "task_items should be deleted");
 }
 
 // ── update_task_item_status ────────────────────────────────────────

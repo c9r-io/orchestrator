@@ -67,6 +67,79 @@ fn prepare_task_for_start_batch_rejects_already_running() {
     );
 }
 
+#[test]
+fn prepare_task_for_start_batch_errors_for_missing_task() {
+    let mut fixture = TestState::new();
+    let (state, _task_id) = seed_task(&mut fixture);
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+
+    let err = repo
+        .prepare_task_for_start_batch("nonexistent-task-id")
+        .expect_err("should error for missing task");
+    assert!(
+        err.to_string().contains("task not found"),
+        "error should mention 'task not found', got: {}",
+        err
+    );
+}
+
+#[test]
+fn prepare_task_for_start_batch_sets_started_at_when_previously_null() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+
+    // Verify started_at is initially null
+    let started_at_before: Option<String> = conn
+        .query_row(
+            "SELECT started_at FROM tasks WHERE id = ?1",
+            params![task_id.clone()],
+            |row| row.get(0),
+        )
+        .expect("query started_at");
+    assert!(
+        started_at_before.is_none(),
+        "started_at should be null before batch start"
+    );
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    repo.prepare_task_for_start_batch(&task_id)
+        .expect("prepare should succeed");
+
+    let started_at_after: Option<String> = conn
+        .query_row(
+            "SELECT started_at FROM tasks WHERE id = ?1",
+            params![task_id.clone()],
+            |row| row.get(0),
+        )
+        .expect("query started_at");
+    assert!(
+        started_at_after.is_some(),
+        "started_at should be set after batch start"
+    );
+}
+
+#[test]
+fn prepare_task_for_start_batch_works_for_pending_status() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    // Task is created with 'pending' status by default
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    repo.prepare_task_for_start_batch(&task_id)
+        .expect("prepare should succeed for pending task");
+
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let status: String = conn
+        .query_row(
+            "SELECT status FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .expect("query status");
+    assert_eq!(status, "running");
+}
+
 // ── set_task_status ────────────────────────────────────────────────
 
 #[test]
