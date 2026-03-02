@@ -1,3 +1,4 @@
+pub mod anomaly;
 pub mod cli_types;
 pub mod collab;
 pub mod config;

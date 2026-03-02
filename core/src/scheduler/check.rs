@@ -7,7 +7,8 @@ use crate::config::{
     is_known_builtin_step_name, resolve_step_semantic_kind, ActiveConfig, ExecutionMode,
     OrchestratorConfig, StepSemanticKind, WorkflowStepConfig,
 };
-use crate::scheduler::trace::{find_template_vars, Severity};
+use crate::anomaly::Severity;
+use crate::scheduler::trace::find_template_vars;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::path::Path;

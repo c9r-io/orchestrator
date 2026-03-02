@@ -1,3 +1,4 @@
+use crate::anomaly::AnomalyRule;
 use crate::config_load::read_loaded_config;
 use crate::dto::{LogChunk, TaskDetail, TaskSummary};
 use crate::runner::redact_text;
@@ -200,8 +201,9 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
                 continue;
             }
             Err(err) => {
-                maybe_emit_follow_warning(
-                    &format!("[transient log read error: {err}]"),
+                emit_anomaly_warning(
+                    &AnomalyRule::TransientReadError,
+                    &format!("{err}"),
                     &mut last_warning_at,
                 );
                 tokio::time::sleep(Duration::from_millis(FOLLOW_POLL_MS)).await;
@@ -220,15 +222,17 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
         waiting_notice_printed = false;
 
         if let Err(err) = follow_one_stream(&stdout_path, &mut stdout_pos, false).await {
-            maybe_emit_follow_warning(
-                &format!("[transient log read error: {err}]"),
+            emit_anomaly_warning(
+                &AnomalyRule::TransientReadError,
+                &format!("{err}"),
                 &mut last_warning_at,
             );
         }
 
         if let Err(err) = follow_one_stream(&stderr_path, &mut stderr_pos, true).await {
-            maybe_emit_follow_warning(
-                &format!("[transient log read error: {err}]"),
+            emit_anomaly_warning(
+                &AnomalyRule::TransientReadError,
+                &format!("{err}"),
                 &mut last_warning_at,
             );
         }
@@ -254,7 +258,12 @@ pub async fn watch_task(state: &InnerState, task_id: &str, interval_secs: u64) -
         let task = match load_task_summary(state, task_id) {
             Ok(task) => task,
             Err(err) if is_transient_query_error(&err) => {
-                let warning = format!("[transient task watch read error: {err}]");
+                let rule = AnomalyRule::TransientReadError;
+                let warning = format!(
+                    "[{}: {}] {err}",
+                    rule.escalation().label(),
+                    rule.canonical_name(),
+                );
                 if last_warning.as_deref() != Some(&warning) {
                     eprintln!("{warning}");
                     last_warning = Some(warning);
@@ -269,7 +278,12 @@ pub async fn watch_task(state: &InnerState, task_id: &str, interval_secs: u64) -
         }) {
             Ok(events) => events,
             Err(err) if is_transient_query_error(&err) => {
-                let warning = format!("[transient task watch read error: {err}]");
+                let rule = AnomalyRule::TransientReadError;
+                let warning = format!(
+                    "[{}: {}] {err}",
+                    rule.escalation().label(),
+                    rule.canonical_name(),
+                );
                 if last_warning.as_deref() != Some(&warning) {
                     eprintln!("{warning}");
                     last_warning = Some(warning);
@@ -354,13 +368,31 @@ async fn follow_one_stream(path: &str, pos: &mut u64, stderr: bool) -> Result<()
     Ok(())
 }
 
-fn maybe_emit_follow_warning(message: &str, last_warning_at: &mut Option<Instant>) {
+fn emit_anomaly_warning(rule: &AnomalyRule, message: &str, last_warning_at: &mut Option<Instant>) {
     let should_print = last_warning_at
         .map(|at| at.elapsed() >= Duration::from_secs(FOLLOW_WARNING_THROTTLE_SECS))
         .unwrap_or(true);
     if should_print {
-        eprintln!("{message}");
+        eprintln!(
+            "[{}: {}] {}",
+            rule.escalation().label(),
+            rule.canonical_name(),
+            message,
+        );
         *last_warning_at = Some(Instant::now());
+    }
+}
+
+#[derive(Default)]
+struct WatchAnomalyCounts {
+    intervene: u32,
+    attention: u32,
+    notice: u32,
+}
+
+impl WatchAnomalyCounts {
+    fn total(&self) -> u32 {
+        self.intervene + self.attention + self.notice
     }
 }
 
@@ -396,6 +428,7 @@ fn render_watch_frame(
     );
 
     let mut step_states: Vec<StepWatchInfo> = Vec::new();
+    let mut watch_anomaly_counts = WatchAnomalyCounts::default();
     for ev in events {
         match ev.event_type.as_str() {
             "step_started" => {
@@ -473,16 +506,26 @@ fn render_watch_frame(
                     let total_delta = stdout_delta_b + stderr_delta_b;
                     let pid = ev.pid.unwrap_or(0);
                     let alive = ev.pid_alive.unwrap_or(false);
+                    let elapsed = ev.elapsed_secs.unwrap_or(0);
+
+                    let lo_rule = AnomalyRule::LowOutput;
+                    let lr_rule = AnomalyRule::LongRunning;
+
                     existing.details = match ev.output_state.as_deref() {
-                        Some("low_output") => format!(
-                            "LOW OUTPUT pid={} {} out={} err={} Δ={} quiet={}",
-                            pid,
-                            if alive { "alive" } else { "DEAD" },
-                            format_bytes(stdout_b),
-                            format_bytes(stderr_b),
-                            format_bytes(total_delta),
-                            ev.stagnant_heartbeats.unwrap_or(0)
-                        ),
+                        Some("low_output") => {
+                            watch_anomaly_counts.intervene += 1;
+                            format!(
+                                "{} [{}] pid={} {} out={} err={} Δ={} quiet={}",
+                                lo_rule.display_tag(),
+                                lo_rule.escalation().label(),
+                                pid,
+                                if alive { "alive" } else { "DEAD" },
+                                format_bytes(stdout_b),
+                                format_bytes(stderr_b),
+                                format_bytes(total_delta),
+                                ev.stagnant_heartbeats.unwrap_or(0)
+                            )
+                        }
                         Some(state) => format!(
                             "pid={} {} out={} err={} Δ={} state={}",
                             pid,
@@ -499,6 +542,16 @@ fn render_watch_frame(
                             format_bytes(stdout_b)
                         ),
                     };
+
+                    if elapsed > 600 && ev.output_state.as_deref() != Some("low_output") {
+                        watch_anomaly_counts.notice += 1;
+                        existing.details.push_str(&format!(
+                            " {} [{}]",
+                            lr_rule.display_tag(),
+                            lr_rule.escalation().label(),
+                        ));
+                    }
+
                     if existing.scope == Some(crate::events::ObservedStepScope::Task) {
                         if let Some(anchor_item_id) = &existing.binding_item_id {
                             existing
@@ -551,6 +604,15 @@ fn render_watch_frame(
     }
 
     let _ = writeln!(frame);
+    if watch_anomaly_counts.total() > 0 {
+        let _ = writeln!(
+            frame,
+            "Anomalies: {} intervene, {} attention, {} notice",
+            watch_anomaly_counts.intervene,
+            watch_anomaly_counts.attention,
+            watch_anomaly_counts.notice,
+        );
+    }
     if task.status == "completed" || task.status == "failed" {
         let _ = writeln!(frame, "Task finished: {}", colorize_status(&task.status));
     }
@@ -1588,10 +1650,15 @@ mod tests {
         ];
 
         let frame = render_watch_frame(&task, &events, &task.id);
-        assert!(frame.contains("LOW OUTPUT"));
+        assert!(frame.contains("LOW_OUTPUT"), "should contain LOW_OUTPUT tag");
+        assert!(frame.contains("[INTERVENE]"), "should contain escalation tag");
         assert!(frame.contains("Δ=0B"));
         assert!(frame.contains("quiet=3"));
         assert!(frame.contains("anchor=item-1"));
+        assert!(
+            frame.contains("Anomalies: 1 intervene"),
+            "should show anomaly summary"
+        );
     }
 
     #[test]

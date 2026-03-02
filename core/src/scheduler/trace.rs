@@ -1,3 +1,4 @@
+use crate::anomaly::{Anomaly, AnomalyRule, Escalation, Severity};
 use crate::dto::{CommandRunDto, EventDto};
 use crate::events::{
     observed_step_scope_from_payload, observed_step_scope_label, ObservedStepScope,
@@ -38,22 +39,6 @@ pub struct StepTrace {
     pub duration_secs: Option<f64>,
     pub skipped: bool,
     pub skip_reason: Option<String>,
-}
-
-#[derive(Debug, Serialize, Clone)]
-pub struct Anomaly {
-    pub rule: String,
-    pub severity: Severity,
-    pub message: String,
-    pub at: Option<String>,
-}
-
-#[derive(Debug, Serialize, Clone, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum Severity {
-    Error,
-    Warning,
-    Info,
 }
 
 #[derive(Debug, Serialize)]
@@ -533,22 +518,20 @@ fn detect_duplicate_runner(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
             {
                 task_started_count += 1;
                 if task_started_count > 1 {
-                    anomalies.push(Anomaly {
-                        rule: "duplicate_runner".to_string(),
-                        severity: Severity::Error,
-                        message: format!(
+                    anomalies.push(Anomaly::new(
+                        AnomalyRule::DuplicateRunner,
+                        format!(
                             "Multiple task starts detected (#{}) at {} — previous at {}",
                             task_started_count,
                             event.created_at,
                             last_task_started_at.as_deref().unwrap_or("?"),
                         ),
-                        at: Some(event.created_at.clone()),
-                    });
+                        Some(event.created_at.clone()),
+                    ));
                 }
                 last_task_started_at = Some(event.created_at.clone());
             }
             "task_completed" | "task_failed" => {
-                // Reset — a clean stop means a subsequent start is OK
                 task_started_count = 0;
                 last_task_started_at = None;
             }
@@ -574,21 +557,19 @@ fn detect_overlapping_cycles(cycles: &[CycleTrace], anomalies: &mut Vec<Anomaly>
         };
 
         if prev_end_dt > next_start_dt {
-            anomalies.push(Anomaly {
-                rule: "overlapping_cycles".to_string(),
-                severity: Severity::Error,
-                message: format!(
+            anomalies.push(Anomaly::new(
+                AnomalyRule::OverlappingCycles,
+                format!(
                     "Cycle {} ended at {} after Cycle {} started at {}",
                     prev.cycle, prev_end, next.cycle, next_start,
                 ),
-                at: Some(next_start.to_string()),
-            });
+                Some(next_start.to_string()),
+            ));
         }
     }
 }
 
 fn detect_overlapping_steps(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
-    // Track open steps by (step_id, item_id)
     let mut open: HashMap<(String, Option<String>), String> = HashMap::new();
 
     for event in events {
@@ -603,15 +584,14 @@ fn detect_overlapping_steps(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
                 if let Some(step) = step_id {
                     let key = (step.to_string(), event.task_item_id.clone());
                     if let Some(prev_at) = open.get(&key) {
-                        anomalies.push(Anomaly {
-                            rule: "overlapping_steps".to_string(),
-                            severity: Severity::Error,
-                            message: format!(
+                        anomalies.push(Anomaly::new(
+                            AnomalyRule::OverlappingSteps,
+                            format!(
                                 "Step '{}' started at {} while previous instance (started {}) still running",
                                 step, event.created_at, prev_at,
                             ),
-                            at: Some(event.created_at.clone()),
-                        });
+                            Some(event.created_at.clone()),
+                        ));
                     }
                     open.insert(key, event.created_at.clone());
                 }
@@ -623,7 +603,6 @@ fn detect_overlapping_steps(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
                 }
             }
             "cycle_started" => {
-                // New cycle clears open steps
                 open.clear();
             }
             _ => {}
@@ -655,34 +634,30 @@ fn detect_missing_step_end(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
                 }
             }
             "task_completed" | "task_failed" => {
-                // At task end, any open steps are missing their end event
                 for ((step, _item_id), started_at) in open.drain() {
-                    anomalies.push(Anomaly {
-                        rule: "missing_step_end".to_string(),
-                        severity: Severity::Warning,
-                        message: format!(
+                    anomalies.push(Anomaly::new(
+                        AnomalyRule::MissingStepEnd,
+                        format!(
                             "Step '{}' started at {} has no corresponding step_finished/step_skipped",
                             step, started_at,
                         ),
-                        at: Some(started_at),
-                    });
+                        Some(started_at),
+                    ));
                 }
             }
             _ => {}
         }
     }
 
-    // If no terminal event, anything still open is missing
     for ((step, _item_id), started_at) in open.drain() {
-        anomalies.push(Anomaly {
-            rule: "missing_step_end".to_string(),
-            severity: Severity::Warning,
-            message: format!(
+        anomalies.push(Anomaly::new(
+            AnomalyRule::MissingStepEnd,
+            format!(
                 "Step '{}' started at {} has no corresponding step_finished/step_skipped",
                 step, started_at,
             ),
-            at: Some(started_at),
-        });
+            Some(started_at),
+        ));
     }
 }
 
@@ -695,15 +670,14 @@ fn detect_empty_cycles(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
             "cycle_started" => {
                 if let Some((prev_cycle, ref prev_at)) = cycle_start {
                     if !has_steps {
-                        anomalies.push(Anomaly {
-                            rule: "empty_cycle".to_string(),
-                            severity: Severity::Warning,
-                            message: format!(
+                        anomalies.push(Anomaly::new(
+                            AnomalyRule::EmptyCycle,
+                            format!(
                                 "Cycle {} (started {}) completed with no steps",
                                 prev_cycle, prev_at,
                             ),
-                            at: Some(prev_at.clone()),
-                        });
+                            Some(prev_at.clone()),
+                        ));
                     }
                 }
                 let cycle = event
@@ -724,15 +698,14 @@ fn detect_empty_cycles(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
             "task_completed" | "task_failed" => {
                 if let Some((prev_cycle, ref prev_at)) = cycle_start {
                     if !has_steps {
-                        anomalies.push(Anomaly {
-                            rule: "empty_cycle".to_string(),
-                            severity: Severity::Warning,
-                            message: format!(
+                        anomalies.push(Anomaly::new(
+                            AnomalyRule::EmptyCycle,
+                            format!(
                                 "Cycle {} (started {}) completed with no steps",
                                 prev_cycle, prev_at,
                             ),
-                            at: Some(prev_at.clone()),
-                        });
+                            Some(prev_at.clone()),
+                        ));
                     }
                 }
             }
@@ -746,7 +719,6 @@ fn detect_orphan_commands(
     command_runs: &[CommandRunDto],
     anomalies: &mut Vec<Anomaly>,
 ) {
-    // Collect all (item_id, phase) from step_started events
     let mut known_steps: std::collections::HashSet<(String, String)> =
         std::collections::HashSet::new();
     for event in events {
@@ -770,15 +742,14 @@ fn detect_orphan_commands(
     for run in command_runs {
         let key = (run.task_item_id.clone(), run.phase.clone());
         if !known_steps.contains(&key) {
-            anomalies.push(Anomaly {
-                rule: "orphan_command".to_string(),
-                severity: Severity::Warning,
-                message: format!(
+            anomalies.push(Anomaly::new(
+                AnomalyRule::OrphanCommand,
+                format!(
                     "Command run '{}' (phase={}, item={}) has no matching step_started event",
                     run.id, run.phase, run.task_item_id,
                 ),
-                at: Some(run.started_at.clone()),
-            });
+                Some(run.started_at.clone()),
+            ));
         }
     }
 }
@@ -787,15 +758,14 @@ fn detect_nonzero_exit(command_runs: &[CommandRunDto], anomalies: &mut Vec<Anoma
     for run in command_runs {
         if let Some(code) = run.exit_code {
             if code != 0 && code != -1 {
-                anomalies.push(Anomaly {
-                    rule: "nonzero_exit".to_string(),
-                    severity: Severity::Warning,
-                    message: format!(
+                anomalies.push(Anomaly::new(
+                    AnomalyRule::NonzeroExit,
+                    format!(
                         "Command '{}' (phase={}) exited with code {}",
                         &run.id, run.phase, code,
                     ),
-                    at: Some(run.started_at.clone()),
-                });
+                    Some(run.started_at.clone()),
+                ));
             }
         }
     }
@@ -804,12 +774,11 @@ fn detect_nonzero_exit(command_runs: &[CommandRunDto], anomalies: &mut Vec<Anoma
 fn detect_unexpanded_template_var(command_runs: &[CommandRunDto], anomalies: &mut Vec<Anomaly>) {
     for run in command_runs {
         for var in find_template_vars(&run.command) {
-            anomalies.push(Anomaly {
-                rule: "unexpanded_template_var".to_string(),
-                severity: Severity::Warning,
-                message: format!("Command contains literal {} (phase={})", var, run.phase,),
-                at: Some(run.started_at.clone()),
-            });
+            anomalies.push(Anomaly::new(
+                AnomalyRule::UnexpandedTemplateVar,
+                format!("Command contains literal {} (phase={})", var, run.phase),
+                Some(run.started_at.clone()),
+            ));
         }
     }
 }
@@ -843,17 +812,16 @@ fn detect_long_running_steps(cycles: &[CycleTrace], anomalies: &mut Vec<Anomaly>
         for step in &cycle.steps {
             if let Some(secs) = step.duration_secs {
                 if secs > 600.0 {
-                    anomalies.push(Anomaly {
-                        rule: "long_running_step".to_string(),
-                        severity: Severity::Info,
-                        message: format!(
+                    anomalies.push(Anomaly::new(
+                        AnomalyRule::LongRunning,
+                        format!(
                             "Step '{}' took {:.0}s (>{} min)",
                             step.step_id,
                             secs,
                             (secs / 60.0).ceil() as u32,
                         ),
-                        at: step.started_at.clone(),
-                    });
+                        step.started_at.clone(),
+                    ));
                 }
             }
         }
@@ -883,15 +851,14 @@ fn detect_low_output_steps(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
 
         let elapsed_secs = event.payload["elapsed_secs"].as_u64().unwrap_or(0);
         let stagnant_heartbeats = event.payload["stagnant_heartbeats"].as_u64().unwrap_or(0);
-        anomalies.push(Anomaly {
-            rule: "low_output_step".to_string(),
-            severity: Severity::Warning,
-            message: format!(
+        anomalies.push(Anomaly::new(
+            AnomalyRule::LowOutput,
+            format!(
                 "Step '{}' entered low-output state after {}s with {} quiet heartbeats",
                 step, elapsed_secs, stagnant_heartbeats
             ),
-            at: Some(event.created_at.clone()),
-        });
+            Some(event.created_at.clone()),
+        ));
     }
 }
 
@@ -949,7 +916,15 @@ pub fn render_trace_terminal(trace: &TaskTrace, verbose: bool) {
                 Severity::Warning => ("\x1b[33m", " WARN"),
                 Severity::Info => ("\x1b[36m", " INFO"),
             };
-            println!("  {}{}\x1b[0m  {} — {}", color, label, a.rule, a.message);
+            let esc_tag = match a.escalation {
+                Escalation::Intervene => " \x1b[41;37m[INTERVENE]\x1b[0m",
+                Escalation::Attention => " \x1b[33m[ATTENTION]\x1b[0m",
+                Escalation::Notice => "",
+            };
+            println!(
+                "  {}{}\x1b[0m  {} — {}{}",
+                color, label, a.rule, a.message, esc_tag
+            );
         }
     }
 
@@ -1539,7 +1514,7 @@ mod tests {
         let long = trace
             .anomalies
             .iter()
-            .find(|a| a.rule == "long_running_step");
+            .find(|a| a.rule == "long_running");
         assert!(long.is_some(), "should detect long running step");
     }
 
@@ -1569,7 +1544,7 @@ mod tests {
         ];
 
         let trace = build_trace("test-task", "running", &events, &[]);
-        let low_output = trace.anomalies.iter().find(|a| a.rule == "low_output_step");
+        let low_output = trace.anomalies.iter().find(|a| a.rule == "low_output");
         assert!(low_output.is_some(), "should detect low output step");
     }
 
@@ -1591,7 +1566,7 @@ mod tests {
 
         let trace = build_trace("test-task", "running", &events, &[]);
         assert!(
-            trace.anomalies.iter().all(|a| a.rule != "low_output_step"),
+            trace.anomalies.iter().all(|a| a.rule != "low_output"),
             "quiet heartbeat should not create low output anomaly"
         );
     }
@@ -1631,9 +1606,9 @@ mod tests {
         let count = trace
             .anomalies
             .iter()
-            .filter(|a| a.rule == "low_output_step")
+            .filter(|a| a.rule == "low_output")
             .count();
-        assert_eq!(count, 1, "same step should only emit one low_output_step");
+        assert_eq!(count, 1, "same step should only emit one low_output anomaly");
     }
 
     // ── Edge cases ────────────────────────────────────────

@@ -5,6 +5,7 @@ mod cli;
 mod cli_handler;
 
 // Re-export library modules — makes `crate::X` paths work in cli/cli_handler
+use agent_orchestrator::anomaly;
 use agent_orchestrator::cli_types;
 use agent_orchestrator::collab;
 use agent_orchestrator::config;

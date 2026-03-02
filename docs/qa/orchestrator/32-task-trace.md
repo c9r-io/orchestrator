@@ -19,6 +19,14 @@ The latest regression fix also requires:
 - low-output heartbeats must be distinguishable from ordinary long-running steps in anomaly output
 - self-referential probe traces must support official probe workflows without requiring `self_test`
 
+### Automated Regression
+
+The unified CLI probe regression runner covers trace scenarios automatically:
+
+```bash
+./scripts/regression/run-cli-probes.sh --group trace
+```
+
 ### Common Preconditions
 
 Every scenario starts from a clean project with at least one completed task:
@@ -163,7 +171,8 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 - When a real failing task with non-zero exit is available, JSON output includes `rule: "nonzero_exit"`, `severity: "warning"`, and a message containing the exit code
 - Normal completed multi-cycle traces do not report `overlapping_cycles`
 - Completed traces expose non-null `summary.wall_time_secs`
-- A trace built from low-output heartbeats reports `low_output_step` exactly once per affected step
+- A trace built from low-output heartbeats reports `low_output` exactly once per affected step
+- Each anomaly in JSON output includes `rule`, `severity`, `escalation`, `message`, and `at` fields
 
 ---
 
@@ -214,8 +223,8 @@ runtime fixtures, not control-plane reinitialization.
    ```
 
 Expected:
-- `self_ref_probe_low_output` emits `low_output_step`
-- `self_ref_probe_active_output` does not emit `low_output_step`
+- `self_ref_probe_low_output` emits `low_output` anomaly with `escalation: "intervene"`
+- `self_ref_probe_active_output` does not emit `low_output`
 - Neither workflow requires `self_test` to remain valid
 
 ---

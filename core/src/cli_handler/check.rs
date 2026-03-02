@@ -1,7 +1,7 @@
+use crate::anomaly::Severity;
 use crate::cli::OutputFormat;
 use crate::config_load::{read_active_config, ConfigSelfHealReport};
 use crate::scheduler::check::{run_checks, CheckReport};
-use crate::scheduler::trace::Severity;
 use anyhow::Result;
 
 use super::CliHandler;
@@ -81,7 +81,7 @@ mod tests {
     use crate::cli::{Cli, Commands, OutputFormat};
     use crate::config_load::{ConfigSelfHealChange, ConfigSelfHealReport, ConfigSelfHealRule};
     use crate::scheduler::check::{CheckReport, CheckSummary};
-    use crate::scheduler::trace::Severity;
+    use crate::anomaly::Severity;
     use crate::test_utils::TestState;
 
     #[test]

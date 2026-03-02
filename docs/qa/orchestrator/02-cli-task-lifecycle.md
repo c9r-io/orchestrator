@@ -66,7 +66,14 @@ Expected:
 
 ### Runtime Control Supplemental Checks
 
-Before Scenario 4, verify the runtime control commands against a real in-flight task from the fixed probe fixtures:
+**Automated regression**: Run the unified CLI probe regression runner to validate runtime control and low-output detection in a single pass:
+
+```bash
+./scripts/regression/run-cli-probes.sh --group runtime-control
+./scripts/regression/run-cli-probes.sh --group low-output
+```
+
+For manual verification against a real in-flight task from the fixed probe fixtures:
 
 1. Create a detached task that will run long enough to observe live state:
    ```bash
@@ -84,8 +91,8 @@ Expected:
 - `task logs` succeeds even if some run logs are not yet readable, using per-run placeholders when needed.
 - `task watch` renders a frame immediately and should not clear to a blank screen before data is available.
 - `task watch` includes a `Scope` column and reports `task` vs `item` from explicit step metadata, not from whether an anchor item exists.
-- For `probe_low_output`, `task watch` surfaces a `LOW OUTPUT` indicator instead of only showing a live PID.
-- For `probe_active_output`, `task watch` continues to show progress details without entering `LOW OUTPUT`.
+- For `probe_low_output`, `task watch` surfaces a `LOW_OUTPUT [INTERVENE]` indicator instead of only showing a live PID.
+- For `probe_active_output`, `task watch` continues to show progress details without entering `LOW_OUTPUT`.
 
 ### Self-Referential Probe Safety Checks
 
@@ -106,8 +113,8 @@ the active runtime config intact and only apply the dedicated probe fixtures.
 Expected:
 - The self-referential probe workflows create and run without requiring `self_test`.
 - They do not need to borrow `build` or any strict-output phase.
-- `self_ref_probe_low_output` surfaces `LOW OUTPUT` during execution.
-- `self_ref_probe_active_output` does not surface `LOW OUTPUT`.
+- `self_ref_probe_low_output` surfaces `LOW_OUTPUT [INTERVENE]` during execution.
+- `self_ref_probe_active_output` does not surface `LOW_OUTPUT`.
 
 ---
 
