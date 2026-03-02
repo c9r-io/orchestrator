@@ -3,8 +3,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RunnerPolicy {
+    #[serde(alias = "legacy")]
+    Unsafe,
     #[default]
-    Legacy,
     Allowlist,
 }
 
@@ -75,7 +76,7 @@ impl Default for RunnerConfig {
         Self {
             shell: "/bin/bash".to_string(),
             shell_arg: default_shell_arg(),
-            policy: RunnerPolicy::Legacy,
+            policy: RunnerPolicy::Allowlist,
             executor: RunnerExecutorKind::Shell,
             allowed_shells: default_allowed_shells(),
             allowed_shell_args: default_allowed_shell_args(),
@@ -100,7 +101,7 @@ mod tests {
         let cfg = RunnerConfig::default();
         assert_eq!(cfg.shell, "/bin/bash");
         assert_eq!(cfg.shell_arg, "-lc");
-        assert_eq!(cfg.policy, RunnerPolicy::Legacy);
+        assert_eq!(cfg.policy, RunnerPolicy::Allowlist);
         assert_eq!(cfg.executor, RunnerExecutorKind::Shell);
         assert_eq!(cfg.allowed_shells.len(), 3);
         assert!(cfg.allowed_shells.contains(&"/bin/bash".to_string()));
@@ -114,7 +115,7 @@ mod tests {
     #[test]
     fn test_runner_policy_default() {
         let policy = RunnerPolicy::default();
-        assert_eq!(policy, RunnerPolicy::Legacy);
+        assert_eq!(policy, RunnerPolicy::Allowlist);
     }
 
     #[test]
@@ -139,7 +140,25 @@ mod tests {
         assert_eq!(cfg.shell, "/bin/sh");
         // defaults should kick in
         assert_eq!(cfg.shell_arg, "-lc");
-        assert_eq!(cfg.policy, RunnerPolicy::Legacy);
+        assert_eq!(cfg.policy, RunnerPolicy::Allowlist);
         assert!(!cfg.allowed_shells.is_empty());
+    }
+
+    #[test]
+    fn test_legacy_alias_deserializes_to_unsafe() {
+        let json = r#"{"shell":"/bin/bash","policy":"legacy"}"#;
+        let cfg: RunnerConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.policy, RunnerPolicy::Unsafe);
+    }
+
+    #[test]
+    fn test_unsafe_serializes_as_unsafe() {
+        let cfg = RunnerConfig {
+            policy: RunnerPolicy::Unsafe,
+            ..RunnerConfig::default()
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(json.contains(r#""policy":"unsafe""#));
+        assert!(!json.contains(r#""policy":"legacy""#));
     }
 }

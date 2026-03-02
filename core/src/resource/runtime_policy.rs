@@ -106,8 +106,8 @@ pub(super) fn runner_spec_to_config(spec: &RunnerSpec) -> RunnerConfig {
         shell: spec.shell.clone(),
         shell_arg: spec.shell_arg.clone(),
         policy: match spec.policy.as_str() {
-            "allowlist" => RunnerPolicy::Allowlist,
-            _ => RunnerPolicy::Legacy,
+            "unsafe" | "legacy" => RunnerPolicy::Unsafe,
+            _ => RunnerPolicy::Allowlist,
         },
         executor: match spec.executor.as_str() {
             "shell" => RunnerExecutorKind::Shell,
@@ -125,7 +125,7 @@ pub(super) fn runner_config_to_spec(config: &RunnerConfig) -> RunnerSpec {
         shell: config.shell.clone(),
         shell_arg: config.shell_arg.clone(),
         policy: match config.policy {
-            RunnerPolicy::Legacy => "legacy".to_string(),
+            RunnerPolicy::Unsafe => "unsafe".to_string(),
             RunnerPolicy::Allowlist => "allowlist".to_string(),
         },
         executor: match config.executor {
@@ -289,14 +289,32 @@ mod tests {
     }
 
     #[test]
-    fn validate_accepts_legacy_with_empty_lists() {
+    fn validate_accepts_unsafe_with_empty_lists() {
         let manifest = runtime_policy_manifest();
         let resource = dispatch_resource(manifest).expect("dispatch should succeed");
         assert!(resource.validate().is_ok());
     }
 
     #[test]
-    fn runner_spec_legacy_policy() {
+    fn runner_spec_unsafe_policy() {
+        let spec = RunnerSpec {
+            shell: "/bin/sh".to_string(),
+            shell_arg: "-c".to_string(),
+            policy: "unsafe".to_string(),
+            executor: "shell".to_string(),
+            allowed_shells: vec![],
+            allowed_shell_args: vec![],
+            env_allowlist: vec![],
+            redaction_patterns: vec![],
+        };
+        let config = runner_spec_to_config(&spec);
+        assert!(matches!(config.policy, RunnerPolicy::Unsafe));
+        let back = runner_config_to_spec(&config);
+        assert_eq!(back.policy, "unsafe");
+    }
+
+    #[test]
+    fn runner_spec_legacy_alias_maps_to_unsafe() {
         let spec = RunnerSpec {
             shell: "/bin/sh".to_string(),
             shell_arg: "-c".to_string(),
@@ -308,8 +326,17 @@ mod tests {
             redaction_patterns: vec![],
         };
         let config = runner_spec_to_config(&spec);
-        assert!(matches!(config.policy, RunnerPolicy::Legacy));
-        let back = runner_config_to_spec(&config);
-        assert_eq!(back.policy, "legacy");
+        assert!(matches!(config.policy, RunnerPolicy::Unsafe));
+    }
+
+    #[test]
+    fn default_runner_spec_produces_allowlist() {
+        let json = r#"{"shell":"/bin/bash"}"#;
+        let spec: RunnerSpec = serde_json::from_str(json).unwrap();
+        assert_eq!(spec.policy, "allowlist");
+        assert!(!spec.allowed_shells.is_empty());
+        assert!(!spec.allowed_shell_args.is_empty());
+        let config = runner_spec_to_config(&spec);
+        assert!(matches!(config.policy, RunnerPolicy::Allowlist));
     }
 }

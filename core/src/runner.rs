@@ -13,7 +13,7 @@ mod tests {
         RunnerConfig {
             shell: "/bin/bash".to_string(),
             shell_arg: "-lc".to_string(),
-            policy: RunnerPolicy::Legacy,
+            policy: RunnerPolicy::Unsafe,
             executor: RunnerExecutorKind::Shell,
             allowed_shells: vec!["/bin/bash".to_string()],
             allowed_shell_args: vec!["-lc".to_string()],

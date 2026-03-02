@@ -812,7 +812,7 @@ pub(super) mod test_fixtures {
                 runner: RunnerSpec {
                     shell: "/bin/bash".to_string(),
                     shell_arg: "-lc".to_string(),
-                    policy: "legacy".to_string(),
+                    policy: "unsafe".to_string(),
                     executor: "shell".to_string(),
                     allowed_shells: vec![],
                     allowed_shell_args: vec![],

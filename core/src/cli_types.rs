@@ -128,13 +128,13 @@ pub struct RunnerSpec {
     pub policy: String,
     #[serde(default = "default_runner_executor")]
     pub executor: String,
-    #[serde(default)]
+    #[serde(default = "default_allowed_shells")]
     pub allowed_shells: Vec<String>,
-    #[serde(default)]
+    #[serde(default = "default_allowed_shell_args")]
     pub allowed_shell_args: Vec<String>,
-    #[serde(default)]
+    #[serde(default = "default_env_allowlist")]
     pub env_allowlist: Vec<String>,
-    #[serde(default)]
+    #[serde(default = "default_redaction_patterns")]
     pub redaction_patterns: Vec<String>,
 }
 
@@ -143,11 +143,43 @@ fn default_shell_arg() -> String {
 }
 
 fn default_runner_policy() -> String {
-    "legacy".to_string()
+    "allowlist".to_string()
 }
 
 fn default_runner_executor() -> String {
     "shell".to_string()
+}
+
+fn default_allowed_shells() -> Vec<String> {
+    vec![
+        "/bin/bash".to_string(),
+        "/bin/zsh".to_string(),
+        "/bin/sh".to_string(),
+    ]
+}
+
+fn default_allowed_shell_args() -> Vec<String> {
+    vec!["-lc".to_string(), "-c".to_string()]
+}
+
+fn default_env_allowlist() -> Vec<String> {
+    vec![
+        "PATH".to_string(),
+        "HOME".to_string(),
+        "USER".to_string(),
+        "LANG".to_string(),
+        "TERM".to_string(),
+    ]
+}
+
+fn default_redaction_patterns() -> Vec<String> {
+    vec![
+        "token".to_string(),
+        "password".to_string(),
+        "secret".to_string(),
+        "api_key".to_string(),
+        "authorization".to_string(),
+    ]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
