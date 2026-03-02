@@ -162,9 +162,7 @@ impl StepExecutionAccumulator {
     ) -> Vec<String> {
         let mut ids: Vec<String> = canonical_ids.iter().map(|s| s.to_string()).collect();
         for step in &task_ctx.execution_plan.steps {
-            if step.required_capability.as_deref() == Some(capability)
-                && !ids.contains(&step.id)
-            {
+            if step.required_capability.as_deref() == Some(capability) && !ids.contains(&step.id) {
                 ids.push(step.id.clone());
             }
         }
@@ -246,8 +244,7 @@ impl StepExecutionAccumulator {
     ) -> ItemFinalizeContext {
         let qa_step_ids = Self::step_ids_for_capability(task_ctx, "qa", &["qa", "qa_testing"]);
         let fix_step_ids = Self::step_ids_for_capability(task_ctx, "fix", &["fix", "ticket_fix"]);
-        let retest_step_ids =
-            Self::step_ids_for_capability(task_ctx, "retest", &["retest"]);
+        let retest_step_ids = Self::step_ids_for_capability(task_ctx, "retest", &["retest"]);
 
         let qa_ran = qa_step_ids
             .iter()
