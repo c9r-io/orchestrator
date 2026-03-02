@@ -202,7 +202,8 @@ fn run_apply_preflight(app_root: &Path, file: &str, dry_run: bool) -> Result<i32
         applied_results.push(result);
         let action = match result {
             ApplyResult::Created => "created",
-            ApplyResult::Configured | ApplyResult::Unchanged => "configured",
+            ApplyResult::Configured => "updated",
+            ApplyResult::Unchanged => "unchanged",
         };
         if dry_run {
             println!(

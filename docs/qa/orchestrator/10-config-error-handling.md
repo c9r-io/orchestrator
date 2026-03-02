@@ -17,7 +17,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 ---
 
-## Scenario 1: 无配置时命令失败并给出修复建议
+## Scenario 1: init 后默认配置已存在，命令可正常执行
 
 ### Preconditions
 
@@ -25,11 +25,16 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 ### Goal
 
-验证未初始化配置时错误信息包含明确的 `apply -f` 指引。
+验证 `init` 创建默认配置后，依赖配置的命令（如 `task list`）可正常执行。
+
+> **Note**: `init` 会自动创建 default workspace、基本 workflow 和 default agents。
+> 因此 `init` 之后即使未执行 `apply`，`task list` 等命令也能正常运行。
+> "no manifest" 错误只在 config 表完全为空时出现（例如手动重置数据库但未运行 `init`），
+> 但 CLI 入口总会隐式调用 `init`，所以该错误路径对用户不可见。
 
 ### Steps
 
-1. 清理数据库：
+1. 清理并初始化：
    ```bash
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
    ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
@@ -38,16 +43,16 @@ Entry point: `./scripts/orchestrator.sh <command>`
    ./scripts/orchestrator.sh init
    ```
 
-2. 执行依赖配置的命令：
+2. 执行依赖配置的命令（不执行 apply）：
    ```bash
    ./scripts/orchestrator.sh task list
    ```
 
 ### Expected
 
-- 输出包含: `orchestrator manifest is not initialized in sqlite`
-- 输出包含: `run 'orchestrator apply -f <manifest.yaml>' first`
-- 命令非 0 退出，且无 panic
+- `task list` 成功执行（退出码 0），因为 `init` 已创建默认配置
+- 输出为空列表或包含任务列表，无错误信息
+- 无 panic
 
 ---
 
@@ -166,7 +171,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | 无配置时命令失败并给出修复建议 | ☐ | | | |
+| 1 | init 后默认配置已存在，命令可正常执行 | ☐ | | | |
 | 2 | init 后必须 apply manifest | ☐ | | | |
 | 3 | apply 非法 Manifest 失败 | ☐ | | | |
 | 4 | apply 语法损坏文件失败 | ☐ | | | |

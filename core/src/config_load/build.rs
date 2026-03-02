@@ -13,6 +13,9 @@ pub fn build_active_config(app_root: &Path, config: OrchestratorConfig) -> Resul
     let config = normalize_config(config);
     let workspaces = resolve_and_validate_workspaces(app_root, &config)?;
     let projects = resolve_and_validate_projects(app_root, &config)?;
+    for (workflow_id, workflow) in &config.workflows {
+        validate_workflow_config(&config, workflow, workflow_id)?;
+    }
     Ok(ActiveConfig {
         default_project_id: config.defaults.project.clone(),
         default_workspace_id: config.defaults.workspace.clone(),

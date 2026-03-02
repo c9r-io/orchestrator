@@ -129,7 +129,8 @@ impl CliHandler {
 
             let action = match result {
                 ApplyResult::Created => "created",
-                ApplyResult::Configured | ApplyResult::Unchanged => "configured",
+                ApplyResult::Configured => "updated",
+                ApplyResult::Unchanged => "unchanged",
             };
             println!(
                 "{}/{} {}",
@@ -187,7 +188,8 @@ impl CliHandler {
 
         let action = match result {
             ApplyResult::Created => "created",
-            ApplyResult::Configured | ApplyResult::Unchanged => "configured",
+            ApplyResult::Configured => "updated",
+            ApplyResult::Unchanged => "unchanged",
         };
         println!(
             "{}/{} {}",

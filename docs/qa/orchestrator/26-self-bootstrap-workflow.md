@@ -46,6 +46,10 @@ rm -rf "workspace/${QA_PROJECT}"
 
 ### Preconditions
 - Common Preconditions applied
+- Clean ticket directory (leftover ticket files without QA document references get picked up as active tickets for `__UNASSIGNED__` task items, causing false failures):
+  ```bash
+  find fixtures/ticket/ -name '*.md' ! -name 'README.md' -delete
+  ```
 
 ### Steps
 1. Create task with `bootstrap_basic` workflow

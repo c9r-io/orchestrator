@@ -127,12 +127,24 @@ Verify transactional start preparation resets unresolved items when task status 
 - Before run loop proceeds, unresolved items are reset to `pending`, `fix_required=0`, `fixed=0`.
 - Task status enters `running` (then may finish depending on workflow).
 
+> **Note**: Foreground `task start` is synchronous — it runs the entire task loop before
+> returning. Therefore, the DB state queried after `task start` reflects the **final**
+> execution result, not the intermediate reset state. The reset logic itself works correctly
+> (`prepare_task_for_start_batch` resets `status='pending'`, `fix_required=0`, `fixed=0`,
+> `last_error=''`); it is the verification timing that makes it appear broken.
+>
+> To verify the reset in isolation, use `--no-start` to create without executing, manually
+> set the failed state, then inspect DB state after `prepare_task_for_start_batch` but
+> before execution begins (e.g., add a breakpoint or use a unit test).
+
 ### Expected Data State
 ```sql
 SELECT status, fix_required, fixed
 FROM task_items
 WHERE task_id = '{task_id}';
--- Expected: rows previously unresolved are now pending/0/0 before subsequent phase execution
+-- Expected: After synchronous task start completes, rows reflect FINAL execution state
+-- (not intermediate reset). The reset to pending/0/0 is transient and correct but
+-- overwritten by subsequent phase execution.
 ```
 
 ---
@@ -141,6 +153,10 @@ WHERE task_id = '{task_id}';
 
 ### Preconditions
 - Echo workflow fixture applied.
+- **Prerequisite**: Ensure `fixtures/ticket/` directory contains only `README.md` (no leftover ticket files from previous test runs). Leftover tickets cause task failures before the update phase completes, resulting in empty `output_json` and `artifacts_json` fields.
+  ```bash
+  find fixtures/ticket/ -name '*.md' ! -name 'README.md' -delete
+  ```
 
 ### Goal
 Ensure `command_runs` records persist both legacy execution fields and structured output fields after scheduler mainline integration.

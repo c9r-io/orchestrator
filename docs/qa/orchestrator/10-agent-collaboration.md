@@ -77,16 +77,21 @@ WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
 
 ### Preconditions
 - Runtime initialized.
+- **Important**: This scenario requires a custom agent fixture that produces non-JSON output for strict phases. The default `mock_echo` agent always returns valid JSON, so the `output_validation_failed` event cannot be triggered with it.
 
 ### Goal
 Verify non-JSON output is rejected for strict phases.
 
 ### Steps
-1. Run a task where `qa` phase emits plain text.
+1. Run a task where `qa` phase emits plain text (requires a custom agent — see Troubleshooting).
 2. Query validation failure events:
    ```bash
    sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id='{task_id}' AND event_type='output_validation_failed' ORDER BY id DESC LIMIT 5;"
    ```
+
+### Troubleshooting
+- If using `mock_echo`, all outputs will pass validation because it always returns valid JSON.
+- To test strict rejection, use an agent with a template like `echo "This is plain text"` for a strict phase (`qa`/`fix`/`retest`/`guard`). The strict phase validation code is correct — non-JSON strict phases produce exit code -6.
 
 ### Expected
 - `output_validation_failed` event appears for non-JSON strict-phase output.
