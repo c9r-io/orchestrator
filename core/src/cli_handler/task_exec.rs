@@ -29,7 +29,7 @@ impl CliHandler {
             );
         }
         let (workspace_root, qa_file_path) = {
-            let repo = SqliteTaskRepository::new(self.state.db_path.clone());
+            let repo = SqliteTaskRepository::new(self.state.database.clone());
             let runtime_row = repo.load_task_runtime_row(&task_id)?;
             let items = repo.list_task_items_for_cycle(&task_id)?;
             let first = items
@@ -42,7 +42,7 @@ impl CliHandler {
         };
 
         let (agent_id, template) = {
-            let repo = SqliteTaskRepository::new(self.state.db_path.clone());
+            let repo = SqliteTaskRepository::new(self.state.database.clone());
             let runtime_row = repo.load_task_runtime_row(&task_id)?;
             let plan = serde_json::from_str::<TaskExecutionPlan>(&runtime_row.execution_plan_json)
                 .with_context(|| format!("failed to parse execution plan for task {}", task_id))?;
@@ -69,7 +69,7 @@ impl CliHandler {
             }
         };
 
-        let runtime_row = SqliteTaskRepository::new(self.state.db_path.clone())
+        let runtime_row = SqliteTaskRepository::new(self.state.database.clone())
             .load_task_runtime_row(&task_id)?;
         let rendered = template
             .replace("{rel_path}", &qa_file_path)

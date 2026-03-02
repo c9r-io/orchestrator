@@ -201,6 +201,9 @@ impl CliHandler {
             "sqlite": {
                 "journal_mode": journal_mode,
                 "busy_timeout_ms": busy_timeout_ms,
+                "pool_max_size": self.state.database.pool_max_size(),
+                "pool_min_idle": self.state.database.pool_min_idle(),
+                "pool_connection_timeout_ms": self.state.database.pool_connection_timeout_ms(),
             },
             "observability": {
                 "task_execution_metrics_total": total_task_metrics,
@@ -227,6 +230,18 @@ impl CliHandler {
                 println!(
                     "sqlite.busy_timeout_ms: {}",
                     checks["sqlite"]["busy_timeout_ms"]
+                );
+                println!(
+                    "sqlite.pool_max_size: {}",
+                    checks["sqlite"]["pool_max_size"]
+                );
+                println!(
+                    "sqlite.pool_min_idle: {}",
+                    checks["sqlite"]["pool_min_idle"]
+                );
+                println!(
+                    "sqlite.pool_connection_timeout_ms: {}",
+                    checks["sqlite"]["pool_connection_timeout_ms"]
                 );
                 println!(
                     "config.default_project: {}",

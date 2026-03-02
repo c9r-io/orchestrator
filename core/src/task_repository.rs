@@ -1,11 +1,16 @@
 use crate::config_load::now_ts;
+use crate::database::Database;
 use crate::db::open_conn;
 use crate::dto::{CommandRunDto, EventDto, TaskItemDto, TaskItemRow, TaskSummary};
 use anyhow::{Context, Result};
+use r2d2::PooledConnection;
+use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::Connection;
 use rusqlite::{params, OptionalExtension};
 use serde_json::Value;
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 pub trait TaskRepository {
     fn resolve_task_id(&self, task_id_or_prefix: &str) -> Result<String>;
@@ -40,7 +45,38 @@ pub trait TaskRepository {
 }
 
 pub struct SqliteTaskRepository {
-    db_path: PathBuf,
+    source: TaskRepositorySource,
+}
+
+#[doc(hidden)]
+pub enum TaskRepositorySource {
+    Database(Arc<Database>),
+    Path(PathBuf),
+}
+
+pub enum TaskRepositoryConn {
+    Pooled(PooledConnection<SqliteConnectionManager>),
+    Direct(Connection),
+}
+
+impl std::ops::Deref for TaskRepositoryConn {
+    type Target = Connection;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Pooled(conn) => conn,
+            Self::Direct(conn) => conn,
+        }
+    }
+}
+
+impl std::ops::DerefMut for TaskRepositoryConn {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            Self::Pooled(conn) => conn,
+            Self::Direct(conn) => conn,
+        }
+    }
 }
 
 pub struct TaskRuntimeRow {
@@ -87,14 +123,42 @@ pub struct NewCommandRun {
 }
 
 impl SqliteTaskRepository {
-    pub fn new(db_path: PathBuf) -> Self {
-        Self { db_path }
+    pub fn new<T>(source: T) -> Self
+    where
+        T: Into<TaskRepositorySource>,
+    {
+        Self {
+            source: source.into(),
+        }
+    }
+
+    fn connection(&self) -> Result<TaskRepositoryConn> {
+        match &self.source {
+            TaskRepositorySource::Database(database) => {
+                Ok(TaskRepositoryConn::Pooled(database.connection()?))
+            }
+            TaskRepositorySource::Path(db_path) => {
+                Ok(TaskRepositoryConn::Direct(open_conn(db_path)?))
+            }
+        }
+    }
+}
+
+impl From<PathBuf> for TaskRepositorySource {
+    fn from(value: PathBuf) -> Self {
+        Self::Path(value)
+    }
+}
+
+impl From<Arc<Database>> for TaskRepositorySource {
+    fn from(value: Arc<Database>) -> Self {
+        Self::Database(value)
     }
 }
 
 impl TaskRepository for SqliteTaskRepository {
     fn resolve_task_id(&self, task_id_or_prefix: &str) -> Result<String> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         let mut stmt = conn.prepare("SELECT id FROM tasks WHERE id = ?1")?;
         let exact_match: Option<String> = stmt
             .query_row(params![task_id_or_prefix], |row| row.get(0))
@@ -123,7 +187,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn load_task_summary(&self, task_id: &str) -> Result<TaskSummary> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         let mut stmt = conn.prepare(
             "SELECT id, name, status, started_at, completed_at, goal, target_files_json, project_id, workspace_id, workflow_id, created_at, updated_at FROM tasks WHERE id = ?1",
         )?;
@@ -161,7 +225,7 @@ impl TaskRepository for SqliteTaskRepository {
         &self,
         task_id: &str,
     ) -> Result<(Vec<TaskItemDto>, Vec<CommandRunDto>, Vec<EventDto>)> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         let mut items_stmt = conn.prepare(
             "SELECT id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, updated_at FROM task_items WHERE task_id = ?1 ORDER BY order_no",
         )?;
@@ -242,7 +306,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn load_task_item_counts(&self, task_id: &str) -> Result<(i64, i64, i64)> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         conn.query_row(
             "SELECT COUNT(*), SUM(CASE WHEN status IN ('qa_passed','fixed','verified','skipped','unresolved') THEN 1 ELSE 0 END), SUM(CASE WHEN status IN ('qa_failed','unresolved') THEN 1 ELSE 0 END) FROM task_items WHERE task_id = ?1",
             params![task_id],
@@ -258,7 +322,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn list_task_ids_ordered_by_created_desc(&self) -> Result<Vec<String>> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         let mut stmt = conn.prepare("SELECT id FROM tasks ORDER BY created_at DESC")?;
         let ids = stmt
             .query_map([], |row| row.get::<_, String>(0))?
@@ -267,7 +331,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn find_latest_resumable_task_id(&self, include_pending: bool) -> Result<Option<String>> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         let mut stmt = conn.prepare("SELECT id, status FROM tasks ORDER BY updated_at DESC")?;
         let rows = stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
@@ -285,7 +349,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn load_task_runtime_row(&self, task_id: &str) -> Result<TaskRuntimeRow> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         let row = conn.query_row(
             "SELECT workspace_id, workflow_id, workspace_root, ticket_dir, execution_plan_json, current_cycle, init_done, COALESCE(goal,'') FROM tasks WHERE id = ?1",
             params![task_id],
@@ -306,7 +370,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn first_task_item_id(&self, task_id: &str) -> Result<Option<String>> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         conn.query_row(
             "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
             params![task_id],
@@ -317,7 +381,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn count_unresolved_items(&self, task_id: &str) -> Result<i64> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         conn.query_row(
             "SELECT COUNT(*) FROM task_items WHERE task_id = ?1 AND status IN ('unresolved','qa_failed')",
             params![task_id],
@@ -327,7 +391,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn list_task_items_for_cycle(&self, task_id: &str) -> Result<Vec<TaskItemRow>> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         let mut stmt = conn.prepare(
             "SELECT id, qa_file_path
              FROM task_items
@@ -346,7 +410,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn set_task_status(&self, task_id: &str, status: &str, set_completed: bool) -> Result<()> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         let now = now_ts();
         if set_completed {
             conn.execute(
@@ -373,7 +437,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn load_task_status(&self, task_id: &str) -> Result<Option<String>> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         conn.query_row(
             "SELECT status FROM tasks WHERE id = ?1",
             params![task_id],
@@ -384,7 +448,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn prepare_task_for_start_batch(&self, task_id: &str) -> Result<()> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         let tx = conn.unchecked_transaction()?;
         let status: Option<String> = tx
             .query_row(
@@ -427,7 +491,7 @@ impl TaskRepository for SqliteTaskRepository {
         current_cycle: u32,
         init_done: bool,
     ) -> Result<()> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         conn.execute(
             "UPDATE tasks SET current_cycle = ?2, init_done = ?3, updated_at = ?4 WHERE id = ?1",
             params![
@@ -441,7 +505,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn update_task_item_status(&self, task_item_id: &str, status: &str) -> Result<()> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         conn.execute(
             "UPDATE task_items SET status = ?2, updated_at = ?3 WHERE id = ?1",
             params![task_item_id, status, now_ts()],
@@ -450,7 +514,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn mark_task_item_running(&self, task_item_id: &str) -> Result<()> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         let now = now_ts();
         conn.execute(
             "UPDATE task_items SET status = 'running', started_at = COALESCE(started_at, ?2), completed_at = NULL, updated_at = ?3 WHERE id = ?1",
@@ -460,7 +524,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn set_task_item_terminal_status(&self, task_item_id: &str, status: &str) -> Result<()> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         let now = now_ts();
         conn.execute(
             "UPDATE task_items SET status = ?2, started_at = COALESCE(started_at, ?3), completed_at = ?4, updated_at = ?5 WHERE id = ?1",
@@ -470,7 +534,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn load_task_name(&self, task_id: &str) -> Result<Option<String>> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         conn.query_row(
             "SELECT name FROM tasks WHERE id = ?1",
             params![task_id],
@@ -481,7 +545,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn list_task_log_runs(&self, task_id: &str, limit: usize) -> Result<Vec<TaskLogRunRow>> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         let mut stmt = conn.prepare(
             "SELECT cr.id, cr.phase, cr.stdout_path, cr.stderr_path, cr.started_at
              FROM command_runs cr
@@ -505,7 +569,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn delete_task_and_collect_log_paths(&self, task_id: &str) -> Result<Vec<String>> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         let exists = conn
             .query_row(
                 "SELECT 1 FROM tasks WHERE id = ?1",
@@ -552,7 +616,7 @@ impl TaskRepository for SqliteTaskRepository {
     }
 
     fn insert_command_run(&self, run: &NewCommandRun) -> Result<()> {
-        let conn = open_conn(&self.db_path)?;
+        let conn = self.connection()?;
         conn.execute(
             "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, workspace_id, agent_id, exit_code, stdout_path, stderr_path, output_json, artifacts_json, confidence, quality_score, validation_status, started_at, ended_at, interrupted, session_id, machine_output_source, output_json_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
             params![

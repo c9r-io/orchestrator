@@ -28,6 +28,8 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "ansi", "json"] }
 uuid = { version = "1.11", features = ["serde", "v4"] }
 walkdir = "2.5"
 pathdiff = "0.2"
+r2d2 = "0.8.10"
+r2d2_sqlite = { version = "0.24.0", features = ["bundled"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

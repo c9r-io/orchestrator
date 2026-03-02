@@ -5,6 +5,7 @@ pub mod cli_types;
 pub mod collab;
 pub mod config;
 pub mod config_load;
+pub mod database;
 pub mod db;
 pub mod db_write;
 pub mod dto;

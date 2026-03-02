@@ -25,6 +25,7 @@ pub struct ManagedState {
 pub struct InnerState {
     pub app_root: PathBuf,
     pub db_path: PathBuf,
+    pub database: Arc<crate::database::Database>,
     pub logs_dir: PathBuf,
     pub active_config: RwLock<ActiveConfig>,
     pub active_config_error: RwLock<Option<String>>,
@@ -154,7 +155,12 @@ mod tests {
     fn emit_event_is_safe_with_noop_sink() {
         let mut fixture = TestState::new();
         let state = fixture.build();
-        state.emit_event("task-1", Some("item-1"), "heartbeat", serde_json::json!({"ok": true}));
+        state.emit_event(
+            "task-1",
+            Some("item-1"),
+            "heartbeat",
+            serde_json::json!({"ok": true}),
+        );
     }
 
     #[test]

@@ -170,7 +170,7 @@ fn kill_active_children_from_db(state: &InnerState, task_id: &str) {
 }
 
 pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<TaskRuntimeContext> {
-    let repo = SqliteTaskRepository::new(state.db_path.clone());
+    let repo = SqliteTaskRepository::new(state.database.clone());
     let runtime_row = repo.load_task_runtime_row(task_id)?;
     let workspace_id = runtime_row.workspace_id;
     let workflow_id = runtime_row.workflow_id;
@@ -402,7 +402,7 @@ mod tests {
             .expect("stop runtime");
 
         assert!(runtime.stop_flag.load(Ordering::SeqCst));
-        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let repo = SqliteTaskRepository::new(state.database.clone());
         assert_eq!(
             repo.load_task_status(&task_id).expect("load task status"),
             Some("paused".to_string())
@@ -442,7 +442,7 @@ mod tests {
         let running = state.running.lock().await;
         assert!(running.is_empty());
 
-        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let repo = SqliteTaskRepository::new(state.database.clone());
         assert_eq!(
             repo.load_task_status(&task_id).expect("load task status"),
             Some("paused".to_string())

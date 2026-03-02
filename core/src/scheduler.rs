@@ -687,8 +687,12 @@ mod tests {
         );
         let state = fixture.build();
 
-        let qa_file_a = state.app_root.join("workspace/default/docs/qa/early_return_a.md");
-        let qa_file_b = state.app_root.join("workspace/default/docs/qa/early_return_b.md");
+        let qa_file_a = state
+            .app_root
+            .join("workspace/default/docs/qa/early_return_a.md");
+        let qa_file_b = state
+            .app_root
+            .join("workspace/default/docs/qa/early_return_b.md");
         std::fs::write(&qa_file_a, "# early return A\n").expect("seed first qa file");
         std::fs::write(&qa_file_b, "# early return B\n").expect("seed second qa file");
 
@@ -952,9 +956,14 @@ mod tests {
         let core_dir = project_root.join("core");
         assert!(core_dir.exists());
 
+        let db_path = project_root.join("target").join("scheduler_self_test.db");
+        crate::db::init_schema(&db_path).expect("init self test db");
+        let database =
+            Arc::new(crate::database::Database::new(db_path.clone()).expect("create db pool"));
         let state = Arc::new(crate::state::InnerState {
             app_root: project_root.to_path_buf(),
-            db_path: PathBuf::new(),
+            db_path,
+            database: database.clone(),
             logs_dir: PathBuf::new(),
             active_config: RwLock::new(crate::config::ActiveConfig {
                 config: crate::config::OrchestratorConfig::default(),
@@ -971,10 +980,7 @@ mod tests {
             agent_metrics: RwLock::new(HashMap::new()),
             message_bus: Arc::new(MessageBus::new()),
             event_sink: RwLock::new(Arc::new(NoopSink)),
-            db_writer: Arc::new(
-                crate::db_write::DbWriteCoordinator::new(&PathBuf::new())
-                    .expect("create db writer"),
-            ),
+            db_writer: Arc::new(crate::db_write::DbWriteCoordinator::new(database)),
         });
 
         state.emit_event(

@@ -1,7 +1,8 @@
+use crate::database::Database;
 use crate::db::open_conn;
 use crate::state::InnerState;
 use anyhow::Result;
-use rusqlite::params;
+use rusqlite::{params, Connection};
 use serde_json::Value;
 use std::path::Path;
 use tracing::{debug, error, info, warn};
@@ -144,6 +145,21 @@ pub fn query_latest_step_log_paths(
     task_id: &str,
 ) -> Result<Option<(String, String, String)>> {
     let conn = open_conn(db_path)?;
+    query_latest_step_log_paths_with_conn(&conn, task_id)
+}
+
+pub fn query_latest_step_log_paths_db(
+    database: &Database,
+    task_id: &str,
+) -> Result<Option<(String, String, String)>> {
+    let conn = database.connection()?;
+    query_latest_step_log_paths_with_conn(&conn, task_id)
+}
+
+fn query_latest_step_log_paths_with_conn(
+    conn: &Connection,
+    task_id: &str,
+) -> Result<Option<(String, String, String)>> {
     let result: Option<(String,)> = conn
         .query_row(
             "SELECT payload_json FROM events
@@ -177,6 +193,15 @@ pub fn query_latest_step_log_paths(
 /// Query all step-related events for a task, parsed into StepEvent structs.
 pub fn query_step_events(db_path: &Path, task_id: &str) -> Result<Vec<StepEvent>> {
     let conn = open_conn(db_path)?;
+    query_step_events_with_conn(&conn, task_id)
+}
+
+pub fn query_step_events_db(database: &Database, task_id: &str) -> Result<Vec<StepEvent>> {
+    let conn = database.connection()?;
+    query_step_events_with_conn(&conn, task_id)
+}
+
+fn query_step_events_with_conn(conn: &Connection, task_id: &str) -> Result<Vec<StepEvent>> {
     let mut stmt = conn.prepare(
         "SELECT event_type, payload_json, created_at, task_item_id FROM events
          WHERE task_id = ?1

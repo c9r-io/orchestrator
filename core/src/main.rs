@@ -12,6 +12,7 @@ use agent_orchestrator::cli_types;
 use agent_orchestrator::collab;
 use agent_orchestrator::config;
 use agent_orchestrator::config_load;
+use agent_orchestrator::database;
 use agent_orchestrator::db;
 use agent_orchestrator::db_write;
 use agent_orchestrator::dto;
@@ -78,11 +79,13 @@ fn init_state() -> Result<ManagedState> {
             ),
         };
 
-    let db_writer = Arc::new(crate::db_write::DbWriteCoordinator::new(&db_path)?);
+    let database = Arc::new(crate::database::Database::new(db_path.clone())?);
+    let db_writer = Arc::new(crate::db_write::DbWriteCoordinator::new(database.clone()));
     Ok(ManagedState {
         inner: Arc::new(crate::state::InnerState {
             app_root,
             db_path,
+            database,
             logs_dir,
             active_config: RwLock::new(active),
             active_config_error: RwLock::new(active_config_error),

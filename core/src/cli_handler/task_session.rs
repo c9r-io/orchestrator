@@ -104,7 +104,7 @@ impl CliHandler {
         crate::config::validate_step_type(step)
             .map_err(|e| anyhow::anyhow!("invalid --step '{}': {}", step, e))?;
 
-        let repo = SqliteTaskRepository::new(self.state.db_path.clone());
+        let repo = SqliteTaskRepository::new(self.state.database.clone());
         let runtime_row = repo.load_task_runtime_row(&resolved_id)?;
         let mut plan = serde_json::from_str::<TaskExecutionPlan>(&runtime_row.execution_plan_json)
             .with_context(|| format!("failed to parse execution plan for task {}", resolved_id))?;

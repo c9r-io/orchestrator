@@ -53,13 +53,13 @@ where
 }
 
 pub fn resolve_task_id(state: &InnerState, task_id: &str) -> Result<String> {
-    SqliteTaskRepository::new(state.db_path.clone()).resolve_task_id(task_id)
+    SqliteTaskRepository::new(state.database.clone()).resolve_task_id(task_id)
 }
 
 pub fn load_task_summary(state: &InnerState, task_id: &str) -> Result<TaskSummary> {
     retry_query("load task summary", || {
         let resolved_id = resolve_task_id(state, task_id)?;
-        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let repo = SqliteTaskRepository::new(state.database.clone());
         let mut summary = repo.load_task_summary(&resolved_id)?;
         let (total, finished, failed) = repo.load_task_item_counts(&resolved_id)?;
 
@@ -71,7 +71,7 @@ pub fn load_task_summary(state: &InnerState, task_id: &str) -> Result<TaskSummar
 }
 
 pub fn list_tasks_impl(state: &InnerState) -> Result<Vec<TaskSummary>> {
-    let repo = SqliteTaskRepository::new(state.db_path.clone());
+    let repo = SqliteTaskRepository::new(state.database.clone());
     let ids = repo.list_task_ids_ordered_by_created_desc()?;
 
     let mut result = Vec::new();
@@ -87,7 +87,7 @@ pub fn get_task_details_impl(state: &InnerState, task_id: &str) -> Result<TaskDe
 
 pub fn delete_task_impl(state: &InnerState, task_id: &str) -> Result<()> {
     let resolved_id = resolve_task_id(state, task_id)?;
-    let repo = SqliteTaskRepository::new(state.db_path.clone());
+    let repo = SqliteTaskRepository::new(state.database.clone());
     let log_paths = repo.delete_task_and_collect_log_paths(&resolved_id)?;
 
     for path in log_paths {
@@ -106,7 +106,7 @@ pub fn stream_task_logs_impl(
     const PER_FILE_LINE_LIMIT: usize = 150;
 
     let resolved_id = resolve_task_id(state, task_id)?;
-    let repo = SqliteTaskRepository::new(state.db_path.clone());
+    let repo = SqliteTaskRepository::new(state.database.clone());
     let runs = retry_query("list task log runs", || {
         repo.list_task_log_runs(&resolved_id, 14)
     })?;
@@ -182,7 +182,7 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
     let mut last_warning_at: Option<Instant> = None;
 
     loop {
-        let latest = crate::events::query_latest_step_log_paths(&state.db_path, task_id);
+        let latest = crate::events::query_latest_step_log_paths_db(&state.database, task_id);
         let (phase, stdout_path, stderr_path) = match latest {
             Ok(Some(info)) => info,
             Ok(None) => {
@@ -190,7 +190,7 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
                     eprintln!("[waiting for first log stream]");
                     waiting_notice_printed = true;
                 }
-                let repo = SqliteTaskRepository::new(state.db_path.clone());
+                let repo = SqliteTaskRepository::new(state.database.clone());
                 if let Ok(Some(status)) = repo.load_task_status(task_id) {
                     if status == "completed" || status == "failed" {
                         eprintln!("\n--- task {} ---", status);
@@ -237,7 +237,7 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
             );
         }
 
-        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let repo = SqliteTaskRepository::new(state.database.clone());
         if let Ok(Some(status)) = repo.load_task_status(task_id) {
             if status == "completed" || status == "failed" {
                 tokio::time::sleep(Duration::from_millis(200)).await;
@@ -274,7 +274,7 @@ pub async fn watch_task(state: &InnerState, task_id: &str, interval_secs: u64) -
             Err(err) => return Err(err),
         };
         let events = match retry_query("query step events", || {
-            crate::events::query_step_events(&state.db_path, task_id)
+            crate::events::query_step_events_db(&state.database, task_id)
         }) {
             Ok(events) => events,
             Err(err) if is_transient_query_error(&err) => {
@@ -320,7 +320,7 @@ struct StepWatchInfo {
 fn load_task_detail_snapshot(state: &InnerState, task_id: &str) -> Result<TaskDetail> {
     retry_query("load task details", || {
         let task = load_task_summary(state, task_id)?;
-        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let repo = SqliteTaskRepository::new(state.database.clone());
         let (items, runs, events) = repo.load_task_detail_rows(&task.id)?;
 
         Ok(TaskDetail {
@@ -1023,7 +1023,7 @@ mod tests {
         std::fs::write(&stdout_path, "output").expect("write stdout");
         std::fs::write(&stderr_path, "").expect("write stderr");
 
-        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let repo = SqliteTaskRepository::new(state.database.clone());
         repo.insert_command_run(&NewCommandRun {
             id: "run-detail-1".to_string(),
             task_item_id: item_id,
@@ -1069,7 +1069,7 @@ mod tests {
         std::fs::write(&stdout_path, "stdout data").expect("write stdout");
         std::fs::write(&stderr_path, "stderr data").expect("write stderr");
 
-        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let repo = SqliteTaskRepository::new(state.database.clone());
         repo.insert_command_run(&NewCommandRun {
             id: "run-delete-1".to_string(),
             task_item_id: item_id,
@@ -1131,7 +1131,7 @@ mod tests {
         std::fs::write(&stdout_path, "line 1\nline 2\nline 3\n").expect("write stdout");
         std::fs::write(&stderr_path, "").expect("write stderr");
 
-        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let repo = SqliteTaskRepository::new(state.database.clone());
         repo.insert_command_run(&NewCommandRun {
             id: "run-stream-1".to_string(),
             task_item_id: item_id,
@@ -1180,7 +1180,7 @@ mod tests {
         std::fs::write(&stdout_path, "token=redacted\nvisible line\n").expect("write stdout");
         std::fs::write(&stderr_path, "").expect("write stderr");
 
-        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let repo = SqliteTaskRepository::new(state.database.clone());
         repo.insert_command_run(&NewCommandRun {
             id: "run-invalid-active-1".to_string(),
             task_item_id: item_id,
@@ -1231,7 +1231,7 @@ mod tests {
         std::fs::write(&stdout_path, "stdout content\n").expect("write stdout");
         std::fs::write(&stderr_path, "warning: something\n").expect("write stderr");
 
-        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let repo = SqliteTaskRepository::new(state.database.clone());
         repo.insert_command_run(&NewCommandRun {
             id: "run-stream-err".to_string(),
             task_item_id: item_id,
@@ -1278,7 +1278,7 @@ mod tests {
         std::fs::write(&stderr_path, "").expect("write stderr");
 
         let ts = now_ts();
-        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let repo = SqliteTaskRepository::new(state.database.clone());
         repo.insert_command_run(&NewCommandRun {
             id: "run-ts-1".to_string(),
             task_item_id: item_id,
@@ -1322,7 +1322,7 @@ mod tests {
         let item_id = first_item_id(&state, &task_id);
 
         let dir = test_dir("stream-tail");
-        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let repo = SqliteTaskRepository::new(state.database.clone());
 
         // Insert 3 command runs with distinct log files
         for i in 0..3 {
@@ -1378,7 +1378,7 @@ mod tests {
         let (state, task_id) = seed_task(&mut fixture);
         let item_id = first_item_id(&state, &task_id);
 
-        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let repo = SqliteTaskRepository::new(state.database.clone());
         repo.insert_command_run(&NewCommandRun {
             id: "run-missing-logs".to_string(),
             task_item_id: item_id,
@@ -1421,7 +1421,7 @@ mod tests {
         std::fs::write(&stdout_path, "available output\n").expect("write available stdout");
         std::fs::write(&stderr_path, "").expect("write available stderr");
 
-        let repo = SqliteTaskRepository::new(state.db_path.clone());
+        let repo = SqliteTaskRepository::new(state.database.clone());
         repo.insert_command_run(&NewCommandRun {
             id: "run-partial-good".to_string(),
             task_item_id: item_id.clone(),

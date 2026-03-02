@@ -233,12 +233,14 @@ impl TestState {
         )
         .expect("failed to backfill test data");
 
-        let writer = Arc::new(
-            crate::db_write::DbWriteCoordinator::new(&db_path).expect("failed to init db writer"),
+        let database = Arc::new(
+            crate::database::Database::new(db_path.clone()).expect("failed to init db pool"),
         );
+        let writer = Arc::new(crate::db_write::DbWriteCoordinator::new(database.clone()));
         let state = Arc::new(InnerState {
             app_root: self.temp_root.clone(),
             db_path,
+            database,
             logs_dir,
             active_config: RwLock::new(active),
             active_config_error: RwLock::new(None),

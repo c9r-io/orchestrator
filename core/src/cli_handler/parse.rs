@@ -91,7 +91,7 @@ pub(super) fn resolve_exec_target(
         }
         ExecTargetRef::TaskStep { task_id, step_id } => {
             let task_id = resolve_task_id(state, task_id)?;
-            let repo = SqliteTaskRepository::new(state.db_path.clone());
+            let repo = SqliteTaskRepository::new(state.database.clone());
             let runtime_row = repo.load_task_runtime_row(&task_id)?;
             let plan = serde_json::from_str::<TaskExecutionPlan>(&runtime_row.execution_plan_json)
                 .with_context(|| format!("failed to parse execution plan for task {}", task_id))?;

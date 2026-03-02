@@ -1004,7 +1004,7 @@ pub async fn process_item_filtered(
             match action {
                 PostAction::CreateTicket if !result.is_success() => {
                     if let Some(exit_code) = acc.exit_codes.get(&step.id) {
-                        let task_name = SqliteTaskRepository::new(state.db_path.clone())
+                        let task_name = SqliteTaskRepository::new(state.database.clone())
                             .load_task_name(task_id)?
                             .unwrap_or_else(|| task_id.to_string());
                         match create_ticket_for_qa_failure(

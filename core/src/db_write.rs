@@ -1,13 +1,12 @@
 use crate::config_load::now_ts;
-use crate::db::open_conn;
+use crate::database::Database;
 use crate::task_repository::NewCommandRun;
 use anyhow::Result;
-use rusqlite::{params, Connection};
-use std::path::Path;
-use std::sync::Mutex;
+use rusqlite::params;
+use std::sync::Arc;
 
 pub struct DbWriteCoordinator {
-    conn: Mutex<Connection>,
+    database: Arc<Database>,
 }
 
 pub struct DbEventRecord<'a> {
@@ -18,10 +17,8 @@ pub struct DbEventRecord<'a> {
 }
 
 impl DbWriteCoordinator {
-    pub fn new(db_path: &Path) -> Result<Self> {
-        Ok(Self {
-            conn: Mutex::new(open_conn(db_path)?),
-        })
+    pub fn new(database: Arc<Database>) -> Self {
+        Self { database }
     }
 
     pub fn insert_event(
@@ -31,10 +28,7 @@ impl DbWriteCoordinator {
         event_type: &str,
         payload_json: &str,
     ) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        let conn = self.database.connection()?;
         conn.execute(
             "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
             params![task_id, task_item_id, event_type, payload_json, now_ts()],
@@ -43,10 +37,7 @@ impl DbWriteCoordinator {
     }
 
     pub fn set_task_status(&self, task_id: &str, status: &str, set_completed: bool) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        let conn = self.database.connection()?;
         let now = now_ts();
         if set_completed {
             conn.execute(
@@ -73,10 +64,7 @@ impl DbWriteCoordinator {
     }
 
     pub fn insert_command_run(&self, run: &NewCommandRun) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        let conn = self.database.connection()?;
         conn.execute(
             "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, workspace_id, agent_id, exit_code, stdout_path, stderr_path, output_json, artifacts_json, confidence, quality_score, validation_status, started_at, ended_at, interrupted, session_id, machine_output_source, output_json_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
             params![
@@ -107,10 +95,7 @@ impl DbWriteCoordinator {
     }
 
     pub fn update_command_run(&self, run: &NewCommandRun) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        let conn = self.database.connection()?;
         conn.execute(
             "UPDATE command_runs SET exit_code = ?2, ended_at = ?3, interrupted = ?4, output_json = ?5, artifacts_json = ?6, confidence = ?7, quality_score = ?8, validation_status = ?9, session_id = ?10, machine_output_source = ?11, output_json_path = ?12 WHERE id = ?1",
             params![
@@ -136,10 +121,7 @@ impl DbWriteCoordinator {
         run: &NewCommandRun,
         events: &[DbEventRecord<'_>],
     ) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        let conn = self.database.connection()?;
         let tx = conn.unchecked_transaction()?;
         tx.execute(
             "UPDATE command_runs SET exit_code = ?2, ended_at = ?3, interrupted = ?4, output_json = ?5, artifacts_json = ?6, confidence = ?7, quality_score = ?8, validation_status = ?9, session_id = ?10, machine_output_source = ?11, output_json_path = ?12 WHERE id = ?1",
@@ -193,10 +175,7 @@ impl DbWriteCoordinator {
         run: &NewCommandRun,
         events: &[DbEventRecord<'_>],
     ) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        let conn = self.database.connection()?;
         let tx = conn.unchecked_transaction()?;
         tx.execute(
             "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, workspace_id, agent_id, exit_code, stdout_path, stderr_path, output_json, artifacts_json, confidence, quality_score, validation_status, started_at, ended_at, interrupted, session_id, machine_output_source, output_json_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
@@ -243,10 +222,7 @@ impl DbWriteCoordinator {
     }
 
     pub fn update_command_run_pid(&self, run_id: &str, pid: i64) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        let conn = self.database.connection()?;
         conn.execute(
             "UPDATE command_runs SET pid = ?2 WHERE id = ?1",
             params![run_id, pid],
@@ -255,10 +231,7 @@ impl DbWriteCoordinator {
     }
 
     pub fn find_active_child_pids(&self, task_id: &str) -> Result<Vec<i64>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        let conn = self.database.connection()?;
         let mut stmt = conn.prepare(
             "SELECT cr.pid FROM command_runs cr
              JOIN task_items ti ON cr.task_item_id = ti.id
@@ -276,10 +249,7 @@ impl DbWriteCoordinator {
         current_cycle: u32,
         init_done: bool,
     ) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        let conn = self.database.connection()?;
         conn.execute(
             "UPDATE tasks SET current_cycle = ?2, init_done = ?3, updated_at = ?4 WHERE id = ?1",
             params![
@@ -293,10 +263,7 @@ impl DbWriteCoordinator {
     }
 
     pub fn update_task_item_status(&self, task_item_id: &str, status: &str) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        let conn = self.database.connection()?;
         conn.execute(
             "UPDATE task_items SET status = ?2, updated_at = ?3 WHERE id = ?1",
             params![task_item_id, status, now_ts()],
@@ -305,10 +272,7 @@ impl DbWriteCoordinator {
     }
 
     pub fn mark_task_item_running(&self, task_item_id: &str) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        let conn = self.database.connection()?;
         let now = now_ts();
         conn.execute(
             "UPDATE task_items SET status = 'running', started_at = COALESCE(started_at, ?2), completed_at = NULL, updated_at = ?3 WHERE id = ?1",
@@ -318,10 +282,7 @@ impl DbWriteCoordinator {
     }
 
     pub fn set_task_item_terminal_status(&self, task_item_id: &str, status: &str) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        let conn = self.database.connection()?;
         let now = now_ts();
         conn.execute(
             "UPDATE task_items SET status = ?2, started_at = COALESCE(started_at, ?3), completed_at = ?4, updated_at = ?5 WHERE id = ?1",
@@ -336,10 +297,7 @@ impl DbWriteCoordinator {
         ticket_files_json: &str,
         ticket_content_json: &str,
     ) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|_| anyhow::anyhow!("db write coordinator lock poisoned"))?;
+        let conn = self.database.connection()?;
         conn.execute(
             "UPDATE task_items SET ticket_files_json = ?2, ticket_content_json = ?3, updated_at = ?4 WHERE id = ?1",
             params![task_item_id, ticket_files_json, ticket_content_json, now_ts()],
@@ -351,6 +309,7 @@ impl DbWriteCoordinator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::open_conn;
     use crate::dto::CreateTaskPayload;
     use crate::task_ops::create_task_impl;
     use crate::test_utils::TestState;

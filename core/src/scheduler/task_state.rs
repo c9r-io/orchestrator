@@ -12,9 +12,9 @@ fn persist_task_execution_metric(
     current_cycle: u32,
     unresolved_items: i64,
 ) -> Result<()> {
-    let repo = SqliteTaskRepository::new(state.db_path.clone());
+    let repo = SqliteTaskRepository::new(state.database.clone());
     let (total_items, _finished_items, failed_items) = repo.load_task_item_counts(task_id)?;
-    let conn = crate::db::open_conn(&state.db_path)?;
+    let conn = state.database.connection()?;
     let command_runs: i64 = conn.query_row(
         "SELECT COUNT(*) FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = ?1)",
         rusqlite::params![task_id],
@@ -30,7 +30,22 @@ fn persist_task_execution_metric(
         command_runs,
         created_at: now_ts(),
     };
-    crate::db::insert_task_execution_metric(&state.db_path, &metric)
+    let conn = state.database.connection()?;
+    conn.execute(
+        "INSERT INTO task_execution_metrics (task_id, status, current_cycle, unresolved_items, total_items, failed_items, command_runs, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        rusqlite::params![
+            metric.task_id,
+            metric.status,
+            metric.current_cycle as i64,
+            metric.unresolved_items,
+            metric.total_items,
+            metric.failed_items,
+            metric.command_runs,
+            metric.created_at
+        ],
+    )?;
+    Ok(())
 }
 
 pub(crate) fn record_task_execution_metric(
@@ -55,7 +70,7 @@ pub fn set_task_status(
 }
 
 pub fn prepare_task_for_start(state: &InnerState, task_id: &str) -> Result<()> {
-    SqliteTaskRepository::new(state.db_path.clone()).prepare_task_for_start_batch(task_id)?;
+    SqliteTaskRepository::new(state.database.clone()).prepare_task_for_start_batch(task_id)?;
     insert_event(
         state,
         task_id,
@@ -70,22 +85,22 @@ pub fn find_latest_resumable_task_id(
     state: &InnerState,
     include_pending: bool,
 ) -> Result<Option<String>> {
-    SqliteTaskRepository::new(state.db_path.clone()).find_latest_resumable_task_id(include_pending)
+    SqliteTaskRepository::new(state.database.clone()).find_latest_resumable_task_id(include_pending)
 }
 
 pub fn first_task_item_id(state: &InnerState, task_id: &str) -> Result<Option<String>> {
-    SqliteTaskRepository::new(state.db_path.clone()).first_task_item_id(task_id)
+    SqliteTaskRepository::new(state.database.clone()).first_task_item_id(task_id)
 }
 
 pub fn count_unresolved_items(state: &InnerState, task_id: &str) -> Result<i64> {
-    SqliteTaskRepository::new(state.db_path.clone()).count_unresolved_items(task_id)
+    SqliteTaskRepository::new(state.database.clone()).count_unresolved_items(task_id)
 }
 
 pub fn list_task_items_for_cycle(
     state: &InnerState,
     task_id: &str,
 ) -> Result<Vec<crate::dto::TaskItemRow>> {
-    SqliteTaskRepository::new(state.db_path.clone()).list_task_items_for_cycle(task_id)
+    SqliteTaskRepository::new(state.database.clone()).list_task_items_for_cycle(task_id)
 }
 
 pub fn update_task_cycle_state(
@@ -100,7 +115,7 @@ pub fn update_task_cycle_state(
 }
 
 pub(crate) fn is_task_paused_in_db(state: &InnerState, task_id: &str) -> Result<bool> {
-    let status = SqliteTaskRepository::new(state.db_path.clone()).load_task_status(task_id)?;
+    let status = SqliteTaskRepository::new(state.database.clone()).load_task_status(task_id)?;
     Ok(matches!(status.as_deref(), Some("paused")))
 }
 
@@ -114,7 +129,9 @@ mod tests {
 
     fn seed_task(fixture: &mut TestState) -> (std::sync::Arc<InnerState>, String) {
         let state = fixture.build();
-        let qa_file = state.app_root.join("workspace/default/docs/qa/task_state_test.md");
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/task_state_test.md");
         std::fs::write(&qa_file, "# task state test\n").expect("seed qa file");
         let created = create_task_impl(
             &state,

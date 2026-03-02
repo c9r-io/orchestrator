@@ -20,7 +20,7 @@ pub fn enqueue_task(state: &InnerState, task_id: &str) -> Result<()> {
 }
 
 pub fn next_pending_task_id(state: &InnerState) -> Result<Option<String>> {
-    let conn = crate::db::open_conn(&state.db_path)?;
+    let conn = state.database.connection()?;
     let mut stmt = conn
         .prepare("SELECT id FROM tasks WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1")?;
     let mut rows = stmt.query([])?;
@@ -31,7 +31,7 @@ pub fn next_pending_task_id(state: &InnerState) -> Result<Option<String>> {
 }
 
 pub fn claim_next_pending_task(state: &InnerState) -> Result<Option<String>> {
-    let mut conn = crate::db::open_conn(&state.db_path)?;
+    let mut conn = state.database.connection()?;
     let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
 
     let task_id: Option<String> = tx
@@ -60,7 +60,7 @@ pub fn claim_next_pending_task(state: &InnerState) -> Result<Option<String>> {
 }
 
 pub fn pending_task_count(state: &InnerState) -> Result<i64> {
-    let conn = crate::db::open_conn(&state.db_path)?;
+    let conn = state.database.connection()?;
     let count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM tasks WHERE status = 'pending'",
         [],

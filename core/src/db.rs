@@ -3,7 +3,7 @@ use rusqlite::{params, Connection};
 use std::path::Path;
 use std::time::Duration;
 
-const SQLITE_BUSY_TIMEOUT_MS: u64 = 5000;
+pub const SQLITE_BUSY_TIMEOUT_MS: u64 = 5000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectResetStats {
@@ -27,6 +27,11 @@ pub struct TaskExecutionMetric {
 
 pub fn open_conn(db_path: &Path) -> Result<Connection> {
     let conn = Connection::open(db_path).context("failed to open sqlite db")?;
+    configure_conn(&conn)?;
+    Ok(conn)
+}
+
+pub fn configure_conn(conn: &Connection) -> Result<()> {
     conn.busy_timeout(Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS))
         .context("failed to set sqlite busy timeout")?;
     conn.execute_batch(
@@ -35,7 +40,7 @@ pub fn open_conn(db_path: &Path) -> Result<Connection> {
         "#,
     )
     .context("failed to configure sqlite pragmas")?;
-    Ok(conn)
+    Ok(())
 }
 
 pub fn ensure_column(conn: &Connection, table: &str, column: &str, ddl: &str) -> Result<()> {
