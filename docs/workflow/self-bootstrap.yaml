@@ -23,7 +23,7 @@ spec:
   templates:
     # Plan: arch-guidance + rust-conventions, outputs implementation plan
     plan: >-
-      opencode run
+      glmcode -p
       "You are working on the Agent Orchestrator project at {source_tree}.
       Your task: create a detailed implementation plan for: {goal}.
       Output ONLY a plan document — do NOT write any code or make file changes.
@@ -59,11 +59,11 @@ spec:
       - For BUG FIX tasks: QA should verify the fix and add a regression test.
 
       Current diff in this cycle: {diff}"
-      --model google/gemini-3.1-pro-preview
+      --dangerously-skip-permissions --verbose --output-format stream-json
 
     # QA doc generation: produce executable QA test documents from the plan
     qa_doc_gen: >-
-      opencode run
+      minicode -p
       "/qa-doc-gen
 
       Project: {source_tree}
@@ -81,7 +81,7 @@ spec:
       Do NOT generate QA documents that duplicate what unit tests already cover.
       Focus on integration-level and end-to-end behaviors that unit tests cannot
       verify (CLI commands, cross-module interactions, YAML round-trips)."
-      --model minimax-coding-plan/MiniMax-M2.5-highspeed
+      --dangerously-skip-permissions --verbose --output-format stream-json
 ---
 # Coder agent (MiniMax-M2.5-highspeed) — code generation, fixing, and test alignment
 apiVersion: orchestrator.dev/v2
@@ -97,7 +97,7 @@ spec:
   templates:
     # Implement: write code + unit tests, run cargo check before finishing
     implement: >-
-      opencode run
+      glmcode -p
       "You are working on the Agent Orchestrator project at {source_tree}.
 
       Use /rust-conventions for all Rust code.
@@ -110,26 +110,26 @@ spec:
 
       After writing code, run 'cd {source_tree}/core && cargo check'
       to verify compilation before finishing."
-      --model google/antigravity-gemini-3.1-pro
+      --dangerously-skip-permissions --verbose --output-format stream-json
 
     # Ticket fix: read tickets, verify, fix, re-run QA, delete ticket on success
     ticket_fix: >-
-      opencode run
+      glmcode -p
       "/ticket-fix {ticket_paths}
 
       Fix the QA tickets. Read tickets from {ticket_paths}, verify the issue, apply fixes,
       re-run the failing scenario, and delete the ticket once verified."
-      --model google/antigravity-gemini-3.1-pro
+      --dangerously-skip-permissions --verbose --output-format stream-json
 
     # Align tests: run cargo test + clippy + build, iterate until all pass
     align_tests: >-
-      opencode run
+      glmcode -p
       "/align-tests
 
       Run unit tests, analyze failures caused by the recent changes,
       update tests and/or implementation to align, iterate until stable.
       Also fix all clippy warnings and compilation warnings."
-      --model minimax-coding-plan/MiniMax-M2.5-highspeed
+      --dangerously-skip-permissions --verbose --output-format stream-json
 ---
 # Tester agent (MiniMax-M2.5-highspeed) — QA scenario execution
 apiVersion: orchestrator.dev/v2
@@ -143,12 +143,12 @@ spec:
   templates:
     # QA testing: rebuild CLI, execute QA scenarios, create tickets for failures
     qa_testing: >-
-      opencode run
+      minicode -p
       "/qa-testing {rel_path}
 
       Read the QA document at {rel_path}, then execute each scenario step by step.
       Verify expected outcomes. Create tickets for any failures."
-      --model minimax-coding-plan/MiniMax-M2.5-highspeed
+      --dangerously-skip-permissions --verbose --output-format stream-json
 ---
 # Reviewer agent (MiniMax-M2.5-highspeed) — doc audit and code review
 apiVersion: orchestrator.dev/v2
@@ -164,17 +164,17 @@ spec:
   templates:
     # Doc governance: audit QA doc quality
     doc_governance: >-
-      opencode run
+      minicode -p
       "/qa-doc-governance
 
       Audit QA documentation quality across docs/qa/.
       Fix doc drift, enforce scenario limits and checklist conventions,
       ensure README/manifest consistency."
-      --model minimax-coding-plan/MiniMax-M2.5-highspeed
+      --dangerously-skip-permissions --verbose --output-format stream-json
 
     # Review: read-only code analysis (optional, not in default pipeline)
     review: >-
-      opencode run
+      minicode -p
       "Review the code changes in {source_tree}.
 
       Diff: {diff}
@@ -186,7 +186,7 @@ spec:
       4. Rust conventions compliance
 
       Report findings as structured JSON with severity levels."
-      --model minimax-coding-plan/MiniMax-M2.5-highspeed
+      --dangerously-skip-permissions --verbose --output-format stream-json
 
     # Loop guard: builtin no-op placeholder for validation
     loop_guard: "echo loop_guard"

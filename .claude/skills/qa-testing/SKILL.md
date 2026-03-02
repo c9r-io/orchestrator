@@ -25,7 +25,7 @@ Execute scenario-based QA testing driven by `docs/qa/**/*.md` documents.
    ```
 
 3. QA docs exist under `docs/qa/`.
-4. Optional: UI automation via Playwright tools.
+4. Optional: UI automation via browser tools.
 
 ## Conventions / Configuration
 
@@ -74,7 +74,7 @@ Notes:
 
 ## UI Automation (Optional)
 
-If the QA doc requires UI steps, use the Playwright MCP tools:
+If the QA doc requires UI steps, use the browser tools:
 - Always take a snapshot before interactions.
 - Use short incremental waits (1-3s) after navigation and major actions.
 - Capture a final snapshot for expected state verification.

@@ -8,3 +8,4 @@ data/logs/*
 fixtures/ticket/*.md
 workspace/*
 data/
+.playwright-cli
