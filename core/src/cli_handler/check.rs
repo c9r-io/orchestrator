@@ -1,8 +1,6 @@
 use crate::anomaly::Severity;
 use crate::cli::OutputFormat;
-use crate::config_load::{
-    query_latest_heal_summary, read_active_config, ConfigSelfHealReport,
-};
+use crate::config_load::{query_latest_heal_summary, read_active_config, ConfigSelfHealReport};
 use crate::scheduler::check::{run_checks, CheckReport};
 use anyhow::{Context, Result};
 
@@ -140,10 +138,10 @@ fn current_config_version(db_path: &std::path::Path) -> Result<i64> {
 mod tests {
     use super::super::CliHandler;
     use super::append_active_config_notice;
+    use crate::anomaly::Severity;
     use crate::cli::{Cli, Commands, OutputFormat};
     use crate::config_load::{ConfigSelfHealChange, ConfigSelfHealReport, ConfigSelfHealRule};
     use crate::scheduler::check::{CheckReport, CheckSummary};
-    use crate::anomaly::Severity;
     use crate::test_utils::TestState;
 
     #[test]
@@ -158,6 +156,8 @@ mod tests {
                 output: OutputFormat::Table,
             },
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
 
         assert_eq!(handler.execute(&cli).expect("check should succeed"), 0);
@@ -175,6 +175,8 @@ mod tests {
                 output: OutputFormat::Json,
             },
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
 
         assert_eq!(handler.execute(&cli).expect("check json should succeed"), 0);
@@ -192,6 +194,8 @@ mod tests {
                 output: OutputFormat::Table,
             },
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
 
         // Should succeed even if workflow doesn't exist (just no checks for it)

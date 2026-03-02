@@ -504,8 +504,7 @@ mod tests {
 
         // Create ticket files
         std::fs::write(ticket_dir.join("auto_test_001.md"), "# Ticket").expect("write ticket 1");
-        std::fs::write(ticket_dir.join("auto_test_002.md"), "# Ticket 2")
-            .expect("write ticket 2");
+        std::fs::write(ticket_dir.join("auto_test_002.md"), "# Ticket 2").expect("write ticket 2");
         // README should be excluded
         std::fs::write(ticket_dir.join("README.md"), "# Readme").expect("write readme");
         // Non-md files should be excluded

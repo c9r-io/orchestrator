@@ -101,14 +101,12 @@ mod tests {
         let ws = dispatch_resource(workspace_manifest("exp-ws", "workspace/exp"))
             .expect("dispatch export workspace");
         ws.apply(&mut config);
-        let ag = dispatch_resource(agent_manifest("exp-ag", "cmd"))
-            .expect("dispatch export agent");
+        let ag = dispatch_resource(agent_manifest("exp-ag", "cmd")).expect("dispatch export agent");
         ag.apply(&mut config);
-        let wf = dispatch_resource(workflow_manifest("exp-wf"))
-            .expect("dispatch export workflow");
+        let wf = dispatch_resource(workflow_manifest("exp-wf")).expect("dispatch export workflow");
         wf.apply(&mut config);
-        let pr = dispatch_resource(project_manifest("exp-pr", "d"))
-            .expect("dispatch export project");
+        let pr =
+            dispatch_resource(project_manifest("exp-pr", "d")).expect("dispatch export project");
         pr.apply(&mut config);
 
         let resources = export_manifest_resources(&config);

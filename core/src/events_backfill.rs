@@ -169,7 +169,10 @@ mod tests {
         assert_eq!(stats1.updated, 1);
 
         let stats2 = backfill_event_step_scope(&state.db_path).expect("second backfill pass");
-        assert_eq!(stats2.scanned, 0, "second pass should find nothing to backfill");
+        assert_eq!(
+            stats2.scanned, 0,
+            "second pass should find nothing to backfill"
+        );
         assert_eq!(stats2.updated, 0);
     }
 
@@ -197,22 +200,10 @@ mod tests {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
 
-        insert_event(
-            &state,
-            "task1",
-            None,
-            "cycle_started",
-            json!({"cycle": 1}),
-        )
-        .expect("insert cycle_started event");
-        insert_event(
-            &state,
-            "task1",
-            None,
-            "task_completed",
-            json!({}),
-        )
-        .expect("insert task_completed event");
+        insert_event(&state, "task1", None, "cycle_started", json!({"cycle": 1}))
+            .expect("insert cycle_started event");
+        insert_event(&state, "task1", None, "task_completed", json!({}))
+            .expect("insert task_completed event");
 
         let stats = backfill_event_step_scope(&state.db_path).expect("backfill non-step events");
         assert_eq!(stats.scanned, 0, "non-step events should not be scanned");

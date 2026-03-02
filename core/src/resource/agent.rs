@@ -429,8 +429,8 @@ mod tests {
                 selection: AgentSelectionConfig::default(),
             },
         );
-        let loaded = AgentResource::get_from(&config, "bare-ag")
-            .expect("bare agent should be returned");
+        let loaded =
+            AgentResource::get_from(&config, "bare-ag").expect("bare agent should be returned");
         assert_eq!(loaded.metadata.name, "bare-ag");
         assert!(loaded.metadata.labels.is_none());
     }
@@ -444,8 +444,8 @@ mod tests {
     #[test]
     fn agent_delete_cleans_up_metadata() {
         let mut config = make_config();
-        let ag = dispatch_resource(agent_manifest("meta-ag", "cmd"))
-            .expect("dispatch agent resource");
+        let ag =
+            dispatch_resource(agent_manifest("meta-ag", "cmd")).expect("dispatch agent resource");
         ag.apply(&mut config);
         assert!(config.resource_meta.agents.contains_key("meta-ag"));
 

@@ -34,7 +34,10 @@ mod tests {
         let runner = make_runner_config();
         let result = enforce_runner_policy(&runner, "");
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("cannot be empty"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("cannot be empty"));
     }
 
     #[test]
@@ -61,7 +64,10 @@ mod tests {
         let long_command = "x".repeat(16385);
         let result = enforce_runner_policy(&runner, &long_command);
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("too long"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("too long"));
     }
 
     #[test]
@@ -72,7 +78,10 @@ mod tests {
 
         let result = enforce_runner_policy(&runner, "echo hello");
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("runner.shell"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("runner.shell"));
     }
 
     #[test]
@@ -83,7 +92,10 @@ mod tests {
 
         let result = enforce_runner_policy(&runner, "echo hello");
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("runner.shell_arg"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("runner.shell_arg"));
     }
 
     #[test]

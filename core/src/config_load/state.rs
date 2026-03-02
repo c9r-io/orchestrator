@@ -40,6 +40,9 @@ mod tests {
 
         let result = read_active_config(&state);
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("not runnable"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("not runnable"));
     }
 }

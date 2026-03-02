@@ -42,9 +42,9 @@ impl CliHandler {
                 // Init command is handled in main.rs before reaching here
                 Ok(0)
             }
-            Commands::Apply { .. } => {
-                Err(anyhow!("apply is handled as a preflight command in main.rs"))
-            }
+            Commands::Apply { .. } => Err(anyhow!(
+                "apply is handled as a preflight command in main.rs"
+            )),
             Commands::Get {
                 resource,
                 output,

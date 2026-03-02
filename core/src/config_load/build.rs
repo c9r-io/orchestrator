@@ -298,7 +298,9 @@ mod tests {
             "heal log entries should be persisted during self-heal"
         );
         assert_eq!(entries[0].version, report.healed_version);
-        assert!(entries[0].original_error.contains("builtin and required_capability"));
+        assert!(entries[0]
+            .original_error
+            .contains("builtin and required_capability"));
     }
 
     #[test]
@@ -338,8 +340,8 @@ mod tests {
             make_step("qa", false),
         ]);
         let config = OrchestratorConfig::default();
-        let plan = build_execution_plan(&config, &workflow, "test-wf")
-            .expect("build execution plan");
+        let plan =
+            build_execution_plan(&config, &workflow, "test-wf").expect("build execution plan");
         assert_eq!(plan.steps.len(), 1, "should only contain enabled steps");
         assert_eq!(plan.steps[0].id, "self_test");
     }
@@ -355,8 +357,8 @@ mod tests {
         step.scope = Some(crate::config::StepScope::Task);
         let workflow = make_workflow(vec![step]);
         let config = OrchestratorConfig::default();
-        let plan = build_execution_plan(&config, &workflow, "test-wf")
-            .expect("build execution plan");
+        let plan =
+            build_execution_plan(&config, &workflow, "test-wf").expect("build execution plan");
         let s = &plan.steps[0];
         assert_eq!(s.id, "build");
         assert_eq!(s.command.as_deref(), Some("cargo build"));
@@ -380,8 +382,8 @@ mod tests {
         ];
         let workflow = make_workflow(vec![step]);
         let config = OrchestratorConfig::default();
-        let plan = build_execution_plan(&config, &workflow, "test-wf")
-            .expect("build execution plan");
+        let plan =
+            build_execution_plan(&config, &workflow, "test-wf").expect("build execution plan");
         assert_eq!(plan.steps[0].chain_steps.len(), 2);
         assert_eq!(plan.steps[0].chain_steps[0].id, "sub1");
         assert_eq!(plan.steps[0].chain_steps[1].id, "sub2");
@@ -400,8 +402,8 @@ mod tests {
         workflow.loop_policy.mode = LoopMode::Fixed;
         workflow.loop_policy.guard.max_cycles = Some(3);
         let config = OrchestratorConfig::default();
-        let plan = build_execution_plan(&config, &workflow, "test-wf")
-            .expect("build execution plan");
+        let plan =
+            build_execution_plan(&config, &workflow, "test-wf").expect("build execution plan");
         assert!(matches!(plan.loop_policy.mode, LoopMode::Fixed));
         assert_eq!(plan.loop_policy.guard.max_cycles, Some(3));
     }
@@ -411,8 +413,8 @@ mod tests {
         let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         workflow.finalize = crate::config::default_workflow_finalize_config();
         let config = OrchestratorConfig::default();
-        let plan = build_execution_plan(&config, &workflow, "test-wf")
-            .expect("build execution plan");
+        let plan =
+            build_execution_plan(&config, &workflow, "test-wf").expect("build execution plan");
         assert!(
             !plan.finalize.rules.is_empty(),
             "finalize rules should be copied"
@@ -434,8 +436,8 @@ mod tests {
         let workflow = make_workflow(vec![step]);
         let config = OrchestratorConfig::default();
 
-        let plan = build_execution_plan(&config, &workflow, "test-wf")
-            .expect("build execution plan");
+        let plan =
+            build_execution_plan(&config, &workflow, "test-wf").expect("build execution plan");
 
         assert_eq!(
             plan.steps[0].behavior.execution,

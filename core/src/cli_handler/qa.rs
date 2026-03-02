@@ -284,6 +284,8 @@ mod tests {
                 force: true,
             })),
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
         assert_eq!(
             handler
@@ -308,6 +310,8 @@ mod tests {
                 detach: false,
             }),
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
         assert_eq!(
             handler
@@ -333,6 +337,8 @@ mod tests {
                 force: true,
             })),
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
         assert_eq!(handler.execute(&reset).expect("qa reset should succeed"), 0);
 
@@ -369,6 +375,8 @@ mod tests {
                 force: true,
             })),
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
         handler
             .execute(&create)
@@ -381,6 +389,8 @@ mod tests {
                 force: true,
             })),
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
         handler
             .execute(&reset)

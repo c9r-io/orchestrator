@@ -50,7 +50,11 @@ pub fn init_observability(
         let (non_blocking, guard) = tracing_appender::non_blocking(appender);
         file_guard = Some(guard);
 
-        match (resolved.console_enabled, resolved.console_format, resolved.file_format) {
+        match (
+            resolved.console_enabled,
+            resolved.console_format,
+            resolved.file_format,
+        ) {
             (true, LoggingFormat::Pretty, LoggingFormat::Pretty) => tracing_subscriber::registry()
                 .with(
                     tracing_subscriber::fmt::layer()

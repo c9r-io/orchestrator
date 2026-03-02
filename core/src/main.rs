@@ -3,8 +3,8 @@
 
 // Binary-only modules (stay as mod)
 mod cli;
-mod cli_output;
 mod cli_handler;
+mod cli_output;
 
 // Re-export library modules — makes `crate::X` paths work in cli/cli_handler
 use agent_orchestrator::anomaly;
@@ -156,7 +156,9 @@ fn backfill_legacy_data(
             scanned = stats.scanned,
             skipped = stats.skipped,
             "[backfill] step_scope: {} legacy events updated ({} scanned, {} skipped)",
-            stats.updated, stats.scanned, stats.skipped
+            stats.updated,
+            stats.scanned,
+            stats.skipped
         );
     }
     Ok(())
@@ -401,7 +403,10 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     let app_root = detect_app_root();
     let db_path = app_root.join("data/agent_orchestrator.db");
-    let config = load_raw_config_from_db(&db_path).ok().flatten().map(|(cfg, _, _)| cfg);
+    let config = load_raw_config_from_db(&db_path)
+        .ok()
+        .flatten()
+        .map(|(cfg, _, _)| cfg);
     let _observability = init_observability(
         &app_root,
         config.as_ref(),

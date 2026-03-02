@@ -1328,8 +1328,7 @@ mod tests {
         for i in 0..3 {
             let stdout_path = dir.join(format!("tail_out_{}.log", i));
             let stderr_path = dir.join(format!("tail_err_{}.log", i));
-            std::fs::write(&stdout_path, format!("run {} output\n", i))
-                .expect("write tail stdout");
+            std::fs::write(&stdout_path, format!("run {} output\n", i)).expect("write tail stdout");
             std::fs::write(&stderr_path, "").expect("write tail stderr");
 
             repo.insert_command_run(&NewCommandRun {
@@ -1654,8 +1653,14 @@ mod tests {
         ];
 
         let frame = render_watch_frame(&task, &events, &task.id);
-        assert!(frame.contains("LOW_OUTPUT"), "should contain LOW_OUTPUT tag");
-        assert!(frame.contains("[INTERVENE]"), "should contain escalation tag");
+        assert!(
+            frame.contains("LOW_OUTPUT"),
+            "should contain LOW_OUTPUT tag"
+        );
+        assert!(
+            frame.contains("[INTERVENE]"),
+            "should contain escalation tag"
+        );
         assert!(frame.contains("Δ=0B"));
         assert!(frame.contains("quiet=3"));
         assert!(frame.contains("anchor=item-1"));

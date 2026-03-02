@@ -7,9 +7,7 @@ use super::CliHandler;
 impl CliHandler {
     pub(super) fn handle_config_lifecycle(&self, cmd: &ConfigLifecycleCommands) -> Result<i32> {
         match cmd {
-            ConfigLifecycleCommands::HealLog { limit, json } => {
-                self.handle_heal_log(*limit, *json)
-            }
+            ConfigLifecycleCommands::HealLog { limit, json } => self.handle_heal_log(*limit, *json),
             ConfigLifecycleCommands::BackfillEvents => self.handle_backfill_events(),
         }
     }
@@ -56,10 +54,7 @@ fn render_heal_log_table(entries: &[HealLogEntry]) {
             );
             current_version = Some(entry.version);
         }
-        println!(
-            "  {}/{}  {}",
-            entry.workflow_id, entry.step_id, entry.rule
-        );
+        println!("  {}/{}  {}", entry.workflow_id, entry.step_id, entry.rule);
         println!("      {}", entry.detail);
     }
 }

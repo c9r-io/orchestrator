@@ -1372,7 +1372,10 @@ mod tests {
         assert_eq!(pipeline.vars.get("out").expect("out should be set"), &value);
         // _path is always set now (even for small values)
         let p = pipeline.vars.get("out_path").expect("out_path must be set");
-        assert_eq!(std::fs::read_to_string(p).expect("read out spill file"), value);
+        assert_eq!(
+            std::fs::read_to_string(p).expect("read out spill file"),
+            value
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1394,7 +1397,10 @@ mod tests {
         assert!(prefix_end <= PIPELINE_VAR_INLINE_LIMIT);
 
         // Companion path variable should exist
-        let path_str = pipeline.vars.get("big_path").expect("big_path should be set");
+        let path_str = pipeline
+            .vars
+            .get("big_path")
+            .expect("big_path should be set");
         let spill_path = std::path::Path::new(path_str);
         assert!(spill_path.exists());
 
@@ -1550,8 +1556,7 @@ mod tests {
         let mut value = "c".repeat(PIPELINE_VAR_INLINE_LIMIT - 2);
         value.push_str("你好世界"); // 12 bytes, total = 4094 + 12 = 4106
 
-        let (truncated, _) =
-            spill_to_file(&dir, "task1", "k", &value).expect("spill should occur");
+        let (truncated, _) = spill_to_file(&dir, "task1", "k", &value).expect("spill should occur");
         let prefix_end = truncated
             .find("...\n[truncated")
             .expect("truncation marker should exist");

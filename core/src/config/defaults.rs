@@ -167,7 +167,10 @@ mod tests {
         let steps = default_workflow_steps(None, false, None, None);
         assert_eq!(steps.len(), 6);
         // qa disabled
-        let qa = steps.iter().find(|s| s.id == "qa").expect("qa step should exist");
+        let qa = steps
+            .iter()
+            .find(|s| s.id == "qa")
+            .expect("qa step should exist");
         assert!(!qa.enabled);
         // ticket_scan disabled
         let ts = steps
@@ -176,7 +179,10 @@ mod tests {
             .expect("ticket_scan step should exist");
         assert!(!ts.enabled);
         // fix disabled
-        let fix = steps.iter().find(|s| s.id == "fix").expect("fix step should exist");
+        let fix = steps
+            .iter()
+            .find(|s| s.id == "fix")
+            .expect("fix step should exist");
         assert!(!fix.enabled);
         // retest disabled
         let retest = steps
@@ -194,14 +200,20 @@ mod tests {
             Some("fix_agent"),
             Some("retest_agent"),
         );
-        let qa = steps.iter().find(|s| s.id == "qa").expect("qa step should exist");
+        let qa = steps
+            .iter()
+            .find(|s| s.id == "qa")
+            .expect("qa step should exist");
         assert!(qa.enabled);
         let ts = steps
             .iter()
             .find(|s| s.id == "ticket_scan")
             .expect("ticket_scan step should exist");
         assert!(ts.enabled);
-        let fix = steps.iter().find(|s| s.id == "fix").expect("fix step should exist");
+        let fix = steps
+            .iter()
+            .find(|s| s.id == "fix")
+            .expect("fix step should exist");
         assert!(fix.enabled);
         let retest = steps
             .iter()

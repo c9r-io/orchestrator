@@ -128,10 +128,8 @@ spec:
         let ws = dispatch_resource(workspace_manifest("del-ws", "workspace/del"))
             .expect("dispatch should succeed");
         ws.apply(&mut config);
-        assert!(
-            delete_resource_by_kind(&mut config, "workspace", "del-ws")
-                .expect("delete workspace resource")
-        );
+        assert!(delete_resource_by_kind(&mut config, "workspace", "del-ws")
+            .expect("delete workspace resource"));
         assert!(!config.workspaces.contains_key("del-ws"));
     }
 
@@ -150,10 +148,8 @@ spec:
         let agent = dispatch_resource(agent_manifest("del-agent", "cargo test"))
             .expect("dispatch should succeed");
         agent.apply(&mut config);
-        assert!(
-            delete_resource_by_kind(&mut config, "agent", "del-agent")
-                .expect("delete agent resource")
-        );
+        assert!(delete_resource_by_kind(&mut config, "agent", "del-agent")
+            .expect("delete agent resource"));
         assert!(!config.agents.contains_key("del-agent"));
     }
 
@@ -162,10 +158,8 @@ spec:
         let mut config = make_config();
         let wf = dispatch_resource(workflow_manifest("del-wf")).expect("dispatch should succeed");
         wf.apply(&mut config);
-        assert!(
-            delete_resource_by_kind(&mut config, "workflow", "del-wf")
-                .expect("delete workflow resource")
-        );
+        assert!(delete_resource_by_kind(&mut config, "workflow", "del-wf")
+            .expect("delete workflow resource"));
     }
 
     #[test]
@@ -184,10 +178,8 @@ spec:
         let proj = dispatch_resource(project_manifest("del-proj", "desc"))
             .expect("dispatch should succeed");
         proj.apply(&mut config);
-        assert!(
-            delete_resource_by_kind(&mut config, "project", "del-proj")
-                .expect("delete project resource")
-        );
+        assert!(delete_resource_by_kind(&mut config, "project", "del-proj")
+            .expect("delete project resource"));
     }
 
     #[test]
@@ -220,7 +212,8 @@ spec:
     #[test]
     fn delete_resource_by_kind_rejects_unknown() {
         let mut config = make_config();
-        let err = delete_resource_by_kind(&mut config, "foobar", "x").expect_err("operation should fail");
+        let err =
+            delete_resource_by_kind(&mut config, "foobar", "x").expect_err("operation should fail");
         assert!(err.to_string().contains("unknown resource type"));
     }
 }

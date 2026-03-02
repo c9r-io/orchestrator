@@ -1,6 +1,6 @@
 use crate::cli_handler::CliHandler;
-use agent_orchestrator::config::{LogLevel, LoggingFormat};
 use crate::state::InnerState;
+use agent_orchestrator::config::{LogLevel, LoggingFormat};
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
@@ -1080,7 +1080,11 @@ mod tests {
                 assert_eq!(resource, "workflow/basic");
                 assert_eq!(output, OutputFormat::Yaml);
             }
-            other => assert_variant!(other, Commands::Describe { .. }, "expected describe command"),
+            other => assert_variant!(
+                other,
+                Commands::Describe { .. },
+                "expected describe command"
+            ),
         }
     }
 
@@ -1119,7 +1123,11 @@ mod tests {
                 assert_eq!(resource, "workflow/old-wf");
                 assert!(force);
             }
-            other => assert_variant!(other, Commands::Delete { .. }, "expected delete command via rm alias"),
+            other => assert_variant!(
+                other,
+                Commands::Delete { .. },
+                "expected delete command via rm alias"
+            ),
         }
     }
 
@@ -1831,7 +1839,11 @@ mod tests {
 
         match cli.command {
             Commands::Check { .. } => {}
-            other => assert_variant!(other, Commands::Check { .. }, "expected check command via alias"),
+            other => assert_variant!(
+                other,
+                Commands::Check { .. },
+                "expected check command via alias"
+            ),
         }
     }
 }

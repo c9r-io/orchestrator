@@ -306,6 +306,8 @@ mod tests {
                 selector: "workspace/default".to_string(),
             }),
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
 
         let code = handler.execute(&cli).expect("edit export should succeed");
@@ -323,6 +325,8 @@ mod tests {
                 selector: "workspace/nonexistent".to_string(),
             }),
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
 
         let result = handler.execute(&cli);
@@ -342,6 +346,8 @@ mod tests {
                 selector: "workspace/default".to_string(),
             }),
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
 
         let result = with_editor_env(None, || handler.execute(&cli));
@@ -382,6 +388,8 @@ YAML"#,
                 selector: "workspace/default".to_string(),
             }),
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
 
         let code = with_editor_env(Some(&editor_path.display().to_string()), || {
@@ -453,6 +461,8 @@ fi"#,
                 selector: "workspace/default".to_string(),
             }),
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
 
         let code = with_editor_env(Some(&editor_path.display().to_string()), || {
@@ -488,6 +498,8 @@ fi"#,
                 selector: "workspace/default".to_string(),
             }),
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
 
         let code = with_editor_env(Some(&editor_path.display().to_string()), || {

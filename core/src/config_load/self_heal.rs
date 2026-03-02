@@ -15,9 +15,7 @@ pub enum ConfigSelfHealRule {
 impl ConfigSelfHealRule {
     pub fn as_label(&self) -> &'static str {
         match self {
-            Self::DropRequiredCapabilityFromBuiltinStep => {
-                "DropRequiredCapabilityFromBuiltinStep"
-            }
+            Self::DropRequiredCapabilityFromBuiltinStep => "DropRequiredCapabilityFromBuiltinStep",
             Self::NormalizeStepExecutionMode => "NormalizeStepExecutionMode",
         }
     }

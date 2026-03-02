@@ -449,16 +449,16 @@ mod tests {
             .expect("dispatch validation ws");
         assert!(ws.validate().is_ok());
 
-        let ag = dispatch_resource(agent_manifest("v-ag", "cmd"))
-            .expect("dispatch validation agent");
+        let ag =
+            dispatch_resource(agent_manifest("v-ag", "cmd")).expect("dispatch validation agent");
         assert!(ag.validate().is_ok());
 
-        let wf = dispatch_resource(workflow_manifest("v-wf"))
-            .expect("dispatch validation workflow");
+        let wf =
+            dispatch_resource(workflow_manifest("v-wf")).expect("dispatch validation workflow");
         assert!(wf.validate().is_ok());
 
-        let pr = dispatch_resource(project_manifest("v-pr", "d"))
-            .expect("dispatch validation project");
+        let pr =
+            dispatch_resource(project_manifest("v-pr", "d")).expect("dispatch validation project");
         assert!(pr.validate().is_ok());
 
         let df =
@@ -474,48 +474,41 @@ mod tests {
     fn registered_resource_to_yaml_delegates() {
         let ws = dispatch_resource(workspace_manifest("ty-ws", "workspace/ty"))
             .expect("dispatch yaml ws");
-        assert!(
-            ws.to_yaml()
-                .expect("serialize workspace yaml")
-                .contains("Workspace")
-        );
+        assert!(ws
+            .to_yaml()
+            .expect("serialize workspace yaml")
+            .contains("Workspace"));
 
         let ag = dispatch_resource(agent_manifest("ty-ag", "cmd")).expect("dispatch yaml agent");
-        assert!(
-            ag.to_yaml()
-                .expect("serialize agent yaml")
-                .contains("Agent")
-        );
+        assert!(ag
+            .to_yaml()
+            .expect("serialize agent yaml")
+            .contains("Agent"));
 
-        let wf =
-            dispatch_resource(workflow_manifest("ty-wf")).expect("dispatch yaml workflow");
-        assert!(
-            wf.to_yaml()
-                .expect("serialize workflow yaml")
-                .contains("Workflow")
-        );
+        let wf = dispatch_resource(workflow_manifest("ty-wf")).expect("dispatch yaml workflow");
+        assert!(wf
+            .to_yaml()
+            .expect("serialize workflow yaml")
+            .contains("Workflow"));
 
         let pr = dispatch_resource(project_manifest("ty-pr", "d")).expect("dispatch yaml project");
-        assert!(
-            pr.to_yaml()
-                .expect("serialize project yaml")
-                .contains("Project")
-        );
+        assert!(pr
+            .to_yaml()
+            .expect("serialize project yaml")
+            .contains("Project"));
 
         let df = dispatch_resource(defaults_manifest("", "", "")).expect("dispatch yaml defaults");
-        assert!(
-            df.to_yaml()
-                .expect("serialize defaults yaml")
-                .contains("Defaults")
-        );
+        assert!(df
+            .to_yaml()
+            .expect("serialize defaults yaml")
+            .contains("Defaults"));
 
         let rp =
             dispatch_resource(runtime_policy_manifest()).expect("dispatch yaml runtime policy");
-        assert!(
-            rp.to_yaml()
-                .expect("serialize runtime policy yaml")
-                .contains("RuntimePolicy")
-        );
+        assert!(rp
+            .to_yaml()
+            .expect("serialize runtime policy yaml")
+            .contains("RuntimePolicy"));
     }
 
     #[test]
@@ -564,8 +557,7 @@ mod tests {
     #[test]
     fn registered_resource_delete_from_removes_workflow() {
         let mut config = make_config();
-        let wf =
-            dispatch_resource(workflow_manifest("rd-wf")).expect("dispatch delete workflow");
+        let wf = dispatch_resource(workflow_manifest("rd-wf")).expect("dispatch delete workflow");
         wf.apply(&mut config);
         assert!(RegisteredResource::delete_from(&mut config, "rd-wf"));
         assert!(!config.workflows.contains_key("rd-wf"));

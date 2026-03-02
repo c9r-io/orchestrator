@@ -206,6 +206,8 @@ mod tests {
                 output: OutputFormat::Yaml,
             }),
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
 
         let code = handler.execute(&cli).expect("dry-run should pass");

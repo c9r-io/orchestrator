@@ -264,10 +264,7 @@ mod tests {
             max_runs: Some(3),
         });
         assert!(pool.get("s1").is_some());
-        assert_eq!(
-            pool.get("s1").expect("s1 should exist").max_runs,
-            Some(3)
-        );
+        assert_eq!(pool.get("s1").expect("s1 should exist").max_runs, Some(3));
         assert!(pool.get("nonexistent").is_none());
     }
 

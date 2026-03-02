@@ -191,16 +191,40 @@ mod tests {
 
     #[test]
     fn severity_mapping() {
-        assert_eq!(AnomalyRule::DuplicateRunner.default_severity(), Severity::Error);
-        assert_eq!(AnomalyRule::OverlappingCycles.default_severity(), Severity::Error);
-        assert_eq!(AnomalyRule::OverlappingSteps.default_severity(), Severity::Error);
+        assert_eq!(
+            AnomalyRule::DuplicateRunner.default_severity(),
+            Severity::Error
+        );
+        assert_eq!(
+            AnomalyRule::OverlappingCycles.default_severity(),
+            Severity::Error
+        );
+        assert_eq!(
+            AnomalyRule::OverlappingSteps.default_severity(),
+            Severity::Error
+        );
 
         assert_eq!(AnomalyRule::LowOutput.default_severity(), Severity::Warning);
-        assert_eq!(AnomalyRule::NonzeroExit.default_severity(), Severity::Warning);
-        assert_eq!(AnomalyRule::MissingStepEnd.default_severity(), Severity::Warning);
-        assert_eq!(AnomalyRule::OrphanCommand.default_severity(), Severity::Warning);
-        assert_eq!(AnomalyRule::UnexpandedTemplateVar.default_severity(), Severity::Warning);
-        assert_eq!(AnomalyRule::TransientReadError.default_severity(), Severity::Warning);
+        assert_eq!(
+            AnomalyRule::NonzeroExit.default_severity(),
+            Severity::Warning
+        );
+        assert_eq!(
+            AnomalyRule::MissingStepEnd.default_severity(),
+            Severity::Warning
+        );
+        assert_eq!(
+            AnomalyRule::OrphanCommand.default_severity(),
+            Severity::Warning
+        );
+        assert_eq!(
+            AnomalyRule::UnexpandedTemplateVar.default_severity(),
+            Severity::Warning
+        );
+        assert_eq!(
+            AnomalyRule::TransientReadError.default_severity(),
+            Severity::Warning
+        );
 
         assert_eq!(AnomalyRule::LongRunning.default_severity(), Severity::Info);
         assert_eq!(AnomalyRule::EmptyCycle.default_severity(), Severity::Info);
@@ -209,15 +233,36 @@ mod tests {
     #[test]
     fn escalation_mapping() {
         assert_eq!(AnomalyRule::LowOutput.escalation(), Escalation::Intervene);
-        assert_eq!(AnomalyRule::DuplicateRunner.escalation(), Escalation::Intervene);
-        assert_eq!(AnomalyRule::OverlappingCycles.escalation(), Escalation::Intervene);
-        assert_eq!(AnomalyRule::OverlappingSteps.escalation(), Escalation::Intervene);
+        assert_eq!(
+            AnomalyRule::DuplicateRunner.escalation(),
+            Escalation::Intervene
+        );
+        assert_eq!(
+            AnomalyRule::OverlappingCycles.escalation(),
+            Escalation::Intervene
+        );
+        assert_eq!(
+            AnomalyRule::OverlappingSteps.escalation(),
+            Escalation::Intervene
+        );
 
         assert_eq!(AnomalyRule::NonzeroExit.escalation(), Escalation::Attention);
-        assert_eq!(AnomalyRule::OrphanCommand.escalation(), Escalation::Attention);
-        assert_eq!(AnomalyRule::MissingStepEnd.escalation(), Escalation::Attention);
-        assert_eq!(AnomalyRule::UnexpandedTemplateVar.escalation(), Escalation::Attention);
-        assert_eq!(AnomalyRule::TransientReadError.escalation(), Escalation::Attention);
+        assert_eq!(
+            AnomalyRule::OrphanCommand.escalation(),
+            Escalation::Attention
+        );
+        assert_eq!(
+            AnomalyRule::MissingStepEnd.escalation(),
+            Escalation::Attention
+        );
+        assert_eq!(
+            AnomalyRule::UnexpandedTemplateVar.escalation(),
+            Escalation::Attention
+        );
+        assert_eq!(
+            AnomalyRule::TransientReadError.escalation(),
+            Escalation::Attention
+        );
 
         assert_eq!(AnomalyRule::LongRunning.escalation(), Escalation::Notice);
         assert_eq!(AnomalyRule::EmptyCycle.escalation(), Escalation::Notice);
@@ -246,11 +291,7 @@ mod tests {
 
     #[test]
     fn anomaly_serialization_includes_escalation() {
-        let a = Anomaly::new(
-            AnomalyRule::DuplicateRunner,
-            "dup".to_string(),
-            None,
-        );
+        let a = Anomaly::new(AnomalyRule::DuplicateRunner, "dup".to_string(), None);
         let json = serde_json::to_value(&a).expect("anomaly should serialize");
         assert_eq!(json["escalation"], "intervene");
         assert_eq!(json["severity"], "error");

@@ -38,39 +38,41 @@ pub async fn spawn_task_runner(state: Arc<InnerState>, task_id: String) -> Resul
         .map_err(|e| anyhow::anyhow!("Failed to acquire semaphore: {}", e))?;
     let span_task_id = task_id.clone();
 
-    tokio::spawn(async move {
-        let runtime = {
-            let running = state.running.lock().await;
-            running.get(&task_id).cloned()
-        };
+    tokio::spawn(
+        async move {
+            let runtime = {
+                let running = state.running.lock().await;
+                running.get(&task_id).cloned()
+            };
 
-        if let Some(runtime) = runtime {
-            let run_result = run_task_loop(state.clone(), &task_id, runtime.clone()).await;
-            if let Err(err) = run_result {
-                error!(task_id = %task_id, error = %err, "task runner failed");
-                let _ = set_task_status(&state, &task_id, "failed", false);
-                let _ = insert_event(
-                    &state,
-                    &task_id,
-                    None,
-                    "task_failed",
-                    json!({"error": err.to_string()}),
-                );
-                state.emit_event(
-                    &task_id,
-                    None,
-                    "task_failed",
-                    json!({"error": err.to_string()}),
-                );
+            if let Some(runtime) = runtime {
+                let run_result = run_task_loop(state.clone(), &task_id, runtime.clone()).await;
+                if let Err(err) = run_result {
+                    error!(task_id = %task_id, error = %err, "task runner failed");
+                    let _ = set_task_status(&state, &task_id, "failed", false);
+                    let _ = insert_event(
+                        &state,
+                        &task_id,
+                        None,
+                        "task_failed",
+                        json!({"error": err.to_string()}),
+                    );
+                    state.emit_event(
+                        &task_id,
+                        None,
+                        "task_failed",
+                        json!({"error": err.to_string()}),
+                    );
+                }
             }
+
+            drop(permit);
+
+            let mut running = state.running.lock().await;
+            running.remove(&task_id);
         }
-
-        drop(permit);
-
-        let mut running = state.running.lock().await;
-        running.remove(&task_id);
-    }
-    .instrument(info_span!("task_runner", task_id = %span_task_id)));
+        .instrument(info_span!("task_runner", task_id = %span_task_id)),
+    );
 
     Ok(())
 }

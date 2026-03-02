@@ -459,7 +459,9 @@ mod tests {
             }),
         );
 
-        let latest = registry.get_latest("qa").expect("latest qa artifact should exist");
+        let latest = registry
+            .get_latest("qa")
+            .expect("latest qa artifact should exist");
         if let ArtifactKind::Custom { name } = &latest.kind {
             assert_eq!(name, "second");
         }

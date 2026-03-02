@@ -1359,7 +1359,9 @@ mod tests {
         let overlap = anomalies.iter().find(|a| a.rule == "overlapping_cycles");
         assert!(overlap.is_some(), "should detect overlapping cycles");
         assert_eq!(
-            overlap.expect("overlapping_cycles anomaly should exist").severity,
+            overlap
+                .expect("overlapping_cycles anomaly should exist")
+                .severity,
             Severity::Error
         );
     }
@@ -1421,11 +1423,10 @@ mod tests {
             .iter()
             .find(|a| a.rule == "unexpanded_template_var");
         assert!(tmpl.is_some(), "should detect unexpanded template var");
-        assert!(
-            tmpl.expect("unexpanded_template_var anomaly should exist")
-                .message
-                .contains("{plan_output}")
-        );
+        assert!(tmpl
+            .expect("unexpanded_template_var anomaly should exist")
+            .message
+            .contains("{plan_output}"));
     }
 
     #[test]
@@ -1526,10 +1527,7 @@ mod tests {
         ];
 
         let trace = build_trace("test-task", "completed", &events, &[]);
-        let long = trace
-            .anomalies
-            .iter()
-            .find(|a| a.rule == "long_running");
+        let long = trace.anomalies.iter().find(|a| a.rule == "long_running");
         assert!(long.is_some(), "should detect long running step");
     }
 
@@ -1623,7 +1621,10 @@ mod tests {
             .iter()
             .filter(|a| a.rule == "low_output")
             .count();
-        assert_eq!(count, 1, "same step should only emit one low_output anomaly");
+        assert_eq!(
+            count, 1,
+            "same step should only emit one low_output anomaly"
+        );
     }
 
     // ── Edge cases ────────────────────────────────────────

@@ -352,7 +352,10 @@ mod tests {
         };
         let result = workflow.validate();
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("cannot be empty"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("cannot be empty"));
     }
 
     #[test]
@@ -364,8 +367,8 @@ mod tests {
     #[test]
     fn workflow_delete_cleans_up_metadata() {
         let mut config = make_config();
-        let wf = dispatch_resource(workflow_manifest("meta-wf"))
-            .expect("dispatch workflow resource");
+        let wf =
+            dispatch_resource(workflow_manifest("meta-wf")).expect("dispatch workflow resource");
         wf.apply(&mut config);
         assert!(config.resource_meta.workflows.contains_key("meta-wf"));
 

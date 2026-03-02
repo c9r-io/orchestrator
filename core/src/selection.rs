@@ -163,7 +163,10 @@ mod tests {
 
         let result = select_agent_advanced("fix", &agents, &health_map, &metrics_map, &excluded);
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("No healthy agent"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("No healthy agent"));
     }
 
     #[test]
@@ -232,6 +235,9 @@ mod tests {
         let result = select_agent_by_preference(&agents);
 
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("no agents configured"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("no agents configured"));
     }
 }

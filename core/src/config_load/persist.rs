@@ -254,7 +254,9 @@ mod tests {
 
     fn seed_heal_log(db_path: &Path, version: i64) {
         let conn = open_conn(db_path).expect("open test db");
-        let tx = conn.unchecked_transaction().expect("begin unchecked transaction");
+        let tx = conn
+            .unchecked_transaction()
+            .expect("begin unchecked transaction");
         let changes = vec![
             ConfigSelfHealChange {
                 workflow_id: "basic".to_string(),

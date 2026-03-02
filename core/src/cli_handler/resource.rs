@@ -433,6 +433,8 @@ mod tests {
                 force: false,
             },
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
 
         let code = handler
@@ -456,6 +458,8 @@ mod tests {
                 force: true,
             },
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
 
         let result = handler.execute(&cli);
@@ -476,6 +480,8 @@ mod tests {
                 force: true,
             },
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
 
         let result = handler.execute(&cli);
@@ -496,6 +502,8 @@ mod tests {
                 force: true,
             },
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
 
         let result = handler.execute(&cli);
@@ -516,6 +524,8 @@ mod tests {
                 selector: Some("env=dev".to_string()),
             },
             verbose: false,
+            log_level: None,
+            log_format: None,
         };
 
         let err = handler

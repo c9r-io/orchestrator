@@ -210,7 +210,10 @@ mod tests {
         let config = OrchestratorConfig::default();
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("EMPTY_WORKSPACES"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("EMPTY_WORKSPACES"));
     }
 
     #[test]
@@ -232,7 +235,10 @@ mod tests {
         };
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("EMPTY_AGENTS"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("EMPTY_AGENTS"));
     }
 
     #[test]
@@ -257,7 +263,10 @@ mod tests {
         };
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("EMPTY_WORKFLOWS"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("EMPTY_WORKFLOWS"));
     }
 
     #[test]
@@ -390,7 +399,9 @@ mod tests {
         let config = OrchestratorConfig::default();
         let result = resolve_and_validate_projects(Path::new("/tmp"), &config);
         assert!(result.is_ok());
-        assert!(result.expect("empty project config should validate").is_empty());
+        assert!(result
+            .expect("empty project config should validate")
+            .is_empty());
     }
 
     #[test]

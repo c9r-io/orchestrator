@@ -622,7 +622,10 @@ mod tests {
         };
         let result = validate_workflow_finalize_rule(&rule, "test-workflow");
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("empty id"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("empty id"));
     }
 
     #[test]
@@ -636,7 +639,10 @@ mod tests {
         };
         let result = validate_workflow_finalize_rule(&rule, "test-workflow");
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("empty status"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("empty status"));
     }
 
     #[test]
@@ -650,7 +656,10 @@ mod tests {
         };
         let result = validate_workflow_finalize_rule(&rule, "test-workflow");
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("empty when"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("empty when"));
     }
 
     #[test]
@@ -1078,7 +1087,10 @@ mod tests {
         let rule = make_rule("  ", "true", "skipped", None);
         let result = validate_workflow_finalize_rule(&rule, "wf");
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("empty id"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("empty id"));
     }
 
     #[test]
@@ -1092,7 +1104,10 @@ mod tests {
         };
         let result = validate_workflow_finalize_rule(&rule, "wf");
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("empty status"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("empty status"));
     }
 
     #[test]
@@ -1106,7 +1121,10 @@ mod tests {
         };
         let result = validate_workflow_finalize_rule(&rule, "wf");
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("empty when"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("empty when"));
     }
 
     // ========================================================================
@@ -1164,7 +1182,10 @@ mod tests {
         let context = default_item_finalize_context();
         let result = evaluate_finalize_rule_expression(&rule, &context);
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("must return bool"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("must return bool"));
     }
 
     #[test]
@@ -1389,11 +1410,9 @@ mod tests {
         let context = default_item_finalize_context();
         let result = resolve_workflow_finalize_outcome(&finalize, &context);
         assert!(result.is_ok());
-        assert!(
-            result
-                .expect("finalize without rules should resolve")
-                .is_none()
-        );
+        assert!(result
+            .expect("finalize without rules should resolve")
+            .is_none());
     }
 
     #[test]
@@ -1409,11 +1428,9 @@ mod tests {
         let context = default_item_finalize_context();
         let result = resolve_workflow_finalize_outcome(&finalize, &context);
         assert!(result.is_ok());
-        assert!(
-            result
-                .expect("finalize without matches should resolve")
-                .is_none()
-        );
+        assert!(result
+            .expect("finalize without matches should resolve")
+            .is_none());
     }
 
     #[test]
@@ -1561,7 +1578,10 @@ mod tests {
         // Expression returns an integer, not a bool
         let result = evaluate_step_prehook_expression("active_ticket_count + 1", &context);
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("must return bool"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("must return bool"));
     }
 
     #[test]
@@ -1906,8 +1926,6 @@ mod tests {
         let result = evaluate_step_prehook_expression("self_test_passed == true", &context);
         // This should either error or return false depending on CEL semantics
         // The important thing is it doesn't panic
-        assert!(
-            result.is_err() || !result.expect("self_test_passed expression should evaluate")
-        );
+        assert!(result.is_err() || !result.expect("self_test_passed expression should evaluate"));
     }
 }

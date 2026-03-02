@@ -298,8 +298,8 @@ mod tests {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
 
-        let events = query_step_events(&state.db_path, "nonexistent_task")
-            .expect("query empty events");
+        let events =
+            query_step_events(&state.db_path, "nonexistent_task").expect("query empty events");
         assert!(events.is_empty());
     }
 
@@ -337,8 +337,8 @@ mod tests {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
 
-        let result = query_latest_step_log_paths(&state.db_path, "task1")
-            .expect("query latest log paths");
+        let result =
+            query_latest_step_log_paths(&state.db_path, "task1").expect("query latest log paths");
         assert!(result.is_none());
     }
 

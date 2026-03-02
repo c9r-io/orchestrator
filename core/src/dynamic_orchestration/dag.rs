@@ -195,9 +195,9 @@ impl DynamicExecutionPlan {
             self.nodes.keys().map(|k| (k.as_str(), 0)).collect();
 
         for edge in &self.edges {
-            let degree = in_degree
-                .get_mut(edge.to.as_str())
-                .ok_or_else(|| anyhow!("Topological sort failed: missing target node {}", edge.to))?;
+            let degree = in_degree.get_mut(edge.to.as_str()).ok_or_else(|| {
+                anyhow!("Topological sort failed: missing target node {}", edge.to)
+            })?;
             *degree += 1;
         }
 
@@ -213,9 +213,9 @@ impl DynamicExecutionPlan {
             result.push(node.to_string());
 
             for edge in self.get_outgoing_edges(node) {
-                let degree = in_degree
-                    .get_mut(edge.to.as_str())
-                    .ok_or_else(|| anyhow!("Topological sort failed: missing target node {}", edge.to))?;
+                let degree = in_degree.get_mut(edge.to.as_str()).ok_or_else(|| {
+                    anyhow!("Topological sort failed: missing target node {}", edge.to)
+                })?;
                 *degree -= 1;
                 if *degree == 0 {
                     queue.push(&edge.to);

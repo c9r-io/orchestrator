@@ -204,6 +204,8 @@ mod tests {
                     workers: 3,
                 })),
                 verbose: false,
+                log_level: None,
+                log_format: None,
             })
         });
 
@@ -240,6 +242,8 @@ mod tests {
             .execute(&Cli {
                 command: Commands::Task(TaskCommands::Worker(TaskWorkerCommands::Stop)),
                 verbose: false,
+                log_level: None,
+                log_format: None,
             })
             .expect("stop worker");
 

@@ -732,7 +732,10 @@ mod tests {
         let config = OrchestratorConfig::default();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").to_string().contains("no enabled steps"));
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("no enabled steps"));
     }
 
     #[test]

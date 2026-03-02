@@ -315,7 +315,9 @@ mod tests {
     fn test_validate_step_type_unknown_id() {
         let result = validate_step_type("my_custom_step");
         assert!(result.is_err());
-        assert!(result.expect_err("operation should fail").contains("unknown workflow step type"));
+        assert!(result
+            .expect_err("operation should fail")
+            .contains("unknown workflow step type"));
     }
 
     #[test]

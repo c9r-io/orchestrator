@@ -124,7 +124,10 @@ mod tests {
         let loaded = DefaultsResource::get_from(&config, "anything");
         assert!(loaded.is_some());
         assert_eq!(
-            loaded.expect("defaults resource should always be returned").metadata.name,
+            loaded
+                .expect("defaults resource should always be returned")
+                .metadata
+                .name,
             "defaults"
         );
     }

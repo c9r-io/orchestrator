@@ -623,7 +623,9 @@ mod tests {
     #[tokio::test]
     async fn self_test_survives_smoke_test() {
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let project_root = manifest_dir.parent().expect("manifest dir should have parent");
+        let project_root = manifest_dir
+            .parent()
+            .expect("manifest dir should have parent");
         let core_dir = project_root.join("core");
         assert!(core_dir.exists());
 

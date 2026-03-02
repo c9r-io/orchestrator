@@ -241,7 +241,10 @@ spec:
     let registered = dispatch_resource(only(resources)).expect("dispatch invalid workspace");
     let result = registered.validate();
     assert!(result.is_err());
-    assert!(result.expect_err("operation should fail").to_string().contains("root_path"));
+    assert!(result
+        .expect_err("operation should fail")
+        .to_string()
+        .contains("root_path"));
 }
 
 #[test]
@@ -278,7 +281,9 @@ spec:
     let resource = &resources[0];
     let result = resource.validate_version();
     assert!(result.is_err());
-    assert!(result.expect_err("operation should fail").contains("wrong/v2"));
+    assert!(result
+        .expect_err("operation should fail")
+        .contains("wrong/v2"));
 }
 
 #[test]
@@ -534,6 +539,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
     OrchestratorConfig {
         runner: RunnerConfig::default(),
         resume: ResumeConfig { auto: false },
+        observability: ObservabilityConfig::default(),
         defaults: ConfigDefaults {
             project: String::new(),
             workspace: "default".to_string(),
@@ -945,7 +951,9 @@ fn binary_snapshot_smoke_verify_integration() {
     let binary_path = temp_dir.join("core/target/release/agent-orchestrator");
     let original_content = vec![0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE];
     {
-        let parent = binary_path.parent().expect("binary path should have parent");
+        let parent = binary_path
+            .parent()
+            .expect("binary path should have parent");
         std::fs::create_dir_all(parent).expect("create binary parent dir");
         let mut file = std::fs::File::create(&binary_path).expect("create binary file");
         file.write_all(&original_content)
