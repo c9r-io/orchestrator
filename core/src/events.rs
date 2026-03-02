@@ -4,6 +4,7 @@ use anyhow::Result;
 use rusqlite::params;
 use serde_json::Value;
 use std::path::Path;
+use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObservedStepScope {
@@ -44,6 +45,56 @@ impl EventSink for NoopSink {
         _event_type: &str,
         _payload: Value,
     ) {
+    }
+}
+
+pub struct TracingEventSink;
+
+impl TracingEventSink {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for TracingEventSink {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EventSink for TracingEventSink {
+    fn emit(&self, task_id: &str, task_item_id: Option<&str>, event_type: &str, payload: Value) {
+        let payload_text = payload.to_string();
+        match event_type {
+            "task_failed" => error!(
+                task_id,
+                task_item_id,
+                event_type,
+                payload = %payload_text,
+                "workflow event"
+            ),
+            "step_timeout" | "auto_rollback_failed" => warn!(
+                task_id,
+                task_item_id,
+                event_type,
+                payload = %payload_text,
+                "workflow event"
+            ),
+            "step_started" | "step_finished" | "task_completed" | "task_paused" => info!(
+                task_id,
+                task_item_id,
+                event_type,
+                payload = %payload_text,
+                "workflow event"
+            ),
+            _ => debug!(
+                task_id,
+                task_item_id,
+                event_type,
+                payload = %payload_text,
+                "workflow event"
+            ),
+        }
     }
 }
 

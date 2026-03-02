@@ -3,6 +3,7 @@
 mod agent;
 mod defaults;
 mod execution;
+mod observability;
 mod pipeline;
 mod prehook;
 mod runner;
@@ -13,6 +14,7 @@ mod workflow;
 pub use agent::*;
 pub use defaults::*;
 pub use execution::*;
+pub use observability::*;
 pub use pipeline::*;
 pub use prehook::*;
 pub use runner::*;
@@ -28,6 +30,8 @@ use std::collections::HashMap;
 pub struct OrchestratorConfig {
     pub runner: RunnerConfig,
     pub resume: ResumeConfig,
+    #[serde(default)]
+    pub observability: ObservabilityConfig,
     pub defaults: ConfigDefaults,
     #[serde(default)]
     pub projects: HashMap<String, ProjectConfig>,
@@ -46,6 +50,7 @@ impl Default for OrchestratorConfig {
         Self {
             runner: RunnerConfig::default(),
             resume: ResumeConfig { auto: false },
+            observability: ObservabilityConfig::default(),
             defaults: ConfigDefaults {
                 project: String::new(),
                 workspace: String::new(),
@@ -105,6 +110,7 @@ mod tests {
         assert!(cfg.agents.is_empty());
         assert!(cfg.workflows.is_empty());
         assert!(!cfg.resume.auto);
+        assert_eq!(cfg.observability, ObservabilityConfig::default());
         assert_eq!(cfg.defaults.project, "");
         assert_eq!(cfg.defaults.workspace, "");
         assert_eq!(cfg.defaults.workflow, "");

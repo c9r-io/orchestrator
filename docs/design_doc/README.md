@@ -44,3 +44,4 @@ docs/design_doc/
 | orchestrator | `docs/design_doc/orchestrator/14-check-command.md` | `docs/qa/orchestrator/31-check-command.md` | New check CLI command: workspace/agent/config/all subcommands with output formats |
 | self-bootstrap | `docs/design_doc/self-bootstrap/02-binary-snapshot-verification.md` | `docs/qa/self-bootstrap/03-survival-smoke-binary-snapshot-verification.md` | Binary verification function with MD5 checksum comparison |
 | orchestrator | `docs/design_doc/orchestrator/15-task-trace.md` | `docs/qa/orchestrator/32-task-trace.md` | Post-mortem diagnostics: execution timeline reconstruction and 9-rule anomaly detection |
+| orchestrator | `docs/design_doc/orchestrator/16-structured-logging.md` | `docs/qa/orchestrator/36-structured-logging.md` | Structured logging bootstrap, CLI log overrides, stderr/stdout separation, and rolling system log files |

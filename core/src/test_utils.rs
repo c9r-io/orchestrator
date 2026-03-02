@@ -37,6 +37,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
             ..RunnerConfig::default()
         },
         resume: ResumeConfig { auto: false },
+        observability: crate::config::ObservabilityConfig::default(),
         defaults: ConfigDefaults {
             project: String::new(),
             workspace: "default".to_string(),

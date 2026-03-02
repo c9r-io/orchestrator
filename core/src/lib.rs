@@ -13,6 +13,7 @@ pub mod events;
 pub mod events_backfill;
 pub mod health;
 pub mod metrics;
+pub mod observability;
 pub mod output_validation;
 pub mod prehook;
 pub mod qa_utils;

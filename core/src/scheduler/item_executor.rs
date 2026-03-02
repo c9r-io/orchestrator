@@ -17,6 +17,7 @@ use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
+use tracing::warn;
 
 use super::phase_runner::{
     run_phase, run_phase_with_rotation, shell_escape, PhaseRunRequest, RotatingPhaseRunRequest,
@@ -1026,7 +1027,7 @@ pub async fn process_item_filtered(
                                 )?;
                             }
                             Ok(None) => {}
-                            Err(e) => eprintln!("[warn] failed to auto-create ticket: {e}"),
+                            Err(e) => warn!(error = %e, "failed to auto-create ticket"),
                         }
                     }
                 }

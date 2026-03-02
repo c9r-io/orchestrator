@@ -4,6 +4,7 @@ use md5::{Digest, Md5};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::path::{Path, PathBuf};
+use tracing::error;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BinaryVerificationResult {
@@ -151,7 +152,7 @@ pub async fn execute_self_test_step(
 
     if !check_output.status.success() {
         let stderr = String::from_utf8_lossy(&check_output.stderr);
-        eprintln!("[self_test] cargo check failed:\n{}", stderr);
+        error!(phase = "cargo_check", stderr = %stderr.trim(), "self-test phase failed");
         state.emit_event(
             task_id,
             Some(item_id),
@@ -188,7 +189,11 @@ pub async fn execute_self_test_step(
 
     if !test_output.status.success() {
         let stderr = String::from_utf8_lossy(&test_output.stderr);
-        eprintln!("[self_test] cargo test --lib failed:\n{}", stderr);
+        error!(
+            phase = "cargo_test_lib",
+            stderr = %stderr.trim(),
+            "self-test phase failed"
+        );
         state.emit_event(
             task_id,
             Some(item_id),
@@ -226,7 +231,11 @@ pub async fn execute_self_test_step(
 
         if !validate_output.status.success() {
             let stderr = String::from_utf8_lossy(&validate_output.stderr);
-            eprintln!("[self_test] manifest validate failed:\n{}", stderr);
+            error!(
+                phase = "manifest_validate",
+                stderr = %stderr.trim(),
+                "self-test phase failed"
+            );
             state.emit_event(
                 task_id,
                 Some(item_id),

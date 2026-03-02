@@ -8,6 +8,7 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use tracing::{error, info_span, Instrument};
 
 use super::task_state::set_task_status;
 use super::{run_task_loop, RunningTask};
@@ -35,6 +36,7 @@ pub async fn spawn_task_runner(state: Arc<InnerState>, task_id: String) -> Resul
         .acquire_owned()
         .await
         .map_err(|e| anyhow::anyhow!("Failed to acquire semaphore: {}", e))?;
+    let span_task_id = task_id.clone();
 
     tokio::spawn(async move {
         let runtime = {
@@ -45,6 +47,7 @@ pub async fn spawn_task_runner(state: Arc<InnerState>, task_id: String) -> Resul
         if let Some(runtime) = runtime {
             let run_result = run_task_loop(state.clone(), &task_id, runtime.clone()).await;
             if let Err(err) = run_result {
+                error!(task_id = %task_id, error = %err, "task runner failed");
                 let _ = set_task_status(&state, &task_id, "failed", false);
                 let _ = insert_event(
                     &state,
@@ -66,7 +69,8 @@ pub async fn spawn_task_runner(state: Arc<InnerState>, task_id: String) -> Resul
 
         let mut running = state.running.lock().await;
         running.remove(&task_id);
-    });
+    }
+    .instrument(info_span!("task_runner", task_id = %span_task_id)));
 
     Ok(())
 }

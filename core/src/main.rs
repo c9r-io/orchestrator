@@ -3,6 +3,7 @@
 
 // Binary-only modules (stay as mod)
 mod cli;
+mod cli_output;
 mod cli_handler;
 
 // Re-export library modules — makes `crate::X` paths work in cli/cli_handler
@@ -16,6 +17,7 @@ use agent_orchestrator::db_write;
 use agent_orchestrator::dto;
 use agent_orchestrator::events;
 use agent_orchestrator::events_backfill;
+use agent_orchestrator::observability::{init_observability, CliLoggingOverrides};
 use agent_orchestrator::resource;
 use agent_orchestrator::scheduler;
 use agent_orchestrator::scheduler_service;
@@ -28,6 +30,7 @@ use agent_orchestrator::task_repository;
 mod test_utils;
 
 use crate::cli::{Cli, Commands, DbCommands, ManifestCommands};
+use crate::cli_output::{err_line, out_line};
 use crate::collab::MessageBus;
 use crate::config_load::{
     detect_app_root, load_or_seed_config, load_raw_config_from_db, persist_raw_config,
@@ -44,6 +47,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tokio::sync::Mutex;
+use tracing::{info, warn};
 
 fn init_state() -> Result<ManagedState> {
     let app_root = detect_app_root();
@@ -87,7 +91,7 @@ fn init_state() -> Result<ManagedState> {
             agent_health: std::sync::RwLock::new(std::collections::HashMap::new()),
             agent_metrics: std::sync::RwLock::new(std::collections::HashMap::new()),
             message_bus: Arc::new(MessageBus::new()),
-            event_sink: std::sync::RwLock::new(Arc::new(crate::events::NoopSink)),
+            event_sink: std::sync::RwLock::new(Arc::new(crate::events::TracingEventSink::new())),
             db_writer,
         }),
     })
@@ -147,7 +151,10 @@ fn backfill_legacy_data(
 
     let stats = crate::events_backfill::backfill_event_step_scope(db_path)?;
     if stats.updated > 0 {
-        eprintln!(
+        warn!(
+            updated = stats.updated,
+            scanned = stats.scanned,
+            skipped = stats.skipped,
             "[backfill] step_scope: {} legacy events updated ({} scanned, {} skipped)",
             stats.updated, stats.scanned, stats.skipped
         );
@@ -186,7 +193,7 @@ fn run_apply_preflight(app_root: &Path, file: &str, dry_run: bool) -> Result<i32
     let mut applied_results = Vec::new();
     for (index, manifest) in resources.into_iter().enumerate() {
         if let Err(error) = manifest.validate_version() {
-            eprintln!("document {}: {}", index + 1, error);
+            err_line(format!("document {}: {}", index + 1, error));
             has_errors = true;
             continue;
         }
@@ -194,18 +201,18 @@ fn run_apply_preflight(app_root: &Path, file: &str, dry_run: bool) -> Result<i32
         let registered = match dispatch_resource(manifest) {
             Ok(resource) => resource,
             Err(error) => {
-                eprintln!("document {}: {}", index + 1, error);
+                err_line(format!("document {}: {}", index + 1, error));
                 has_errors = true;
                 continue;
             }
         };
         if let Err(error) = registered.validate() {
-            eprintln!(
+            err_line(format!(
                 "{} / {} invalid: {}",
                 kind_as_str(registered.kind()),
                 registered.name(),
                 error
-            );
+            ));
             has_errors = true;
             continue;
         }
@@ -218,19 +225,19 @@ fn run_apply_preflight(app_root: &Path, file: &str, dry_run: bool) -> Result<i32
             ApplyResult::Unchanged => "unchanged",
         };
         if dry_run {
-            println!(
+            out_line(format!(
                 "{}/{} would be {} (dry run)",
                 kind_as_str(registered.kind()),
                 registered.name(),
                 action
-            );
+            ));
         } else {
-            println!(
+            out_line(format!(
                 "{}/{} {}",
                 kind_as_str(registered.kind()),
                 registered.name(),
                 action
-            );
+            ));
         }
     }
 
@@ -241,7 +248,7 @@ fn run_apply_preflight(app_root: &Path, file: &str, dry_run: bool) -> Result<i32
     if !dry_run && !applied_results.is_empty() {
         autofill_defaults_for_manifest_mode(&mut merged_config);
         let overview = persist_raw_config(&db_path, merged_config, "cli-apply")?;
-        println!("configuration version: {}", overview.version);
+        out_line(format!("configuration version: {}", overview.version));
     }
 
     Ok(0)
@@ -258,7 +265,7 @@ fn run_manifest_validate_preflight(app_root: &Path, file: &str) -> Result<i32> {
     let mut has_errors = false;
     for (index, manifest) in resources.into_iter().enumerate() {
         if let Err(error) = manifest.validate_version() {
-            eprintln!("document {}: {}", index + 1, error);
+            err_line(format!("document {}: {}", index + 1, error));
             has_errors = true;
             continue;
         }
@@ -266,18 +273,18 @@ fn run_manifest_validate_preflight(app_root: &Path, file: &str) -> Result<i32> {
         let registered = match dispatch_resource(manifest) {
             Ok(resource) => resource,
             Err(error) => {
-                eprintln!("document {}: {}", index + 1, error);
+                err_line(format!("document {}: {}", index + 1, error));
                 has_errors = true;
                 continue;
             }
         };
         if let Err(error) = registered.validate() {
-            eprintln!(
+            err_line(format!(
                 "{} / {} invalid: {}",
                 kind_as_str(registered.kind()),
                 registered.name(),
                 error
-            );
+            ));
             has_errors = true;
             continue;
         }
@@ -291,11 +298,11 @@ fn run_manifest_validate_preflight(app_root: &Path, file: &str) -> Result<i32> {
     autofill_defaults_for_manifest_mode(&mut merged_config);
     match config_load::build_active_config(app_root, merged_config) {
         Ok(_) => {
-            println!("Manifest is valid");
+            out_line("Manifest is valid");
             Ok(0)
         }
         Err(e) => {
-            eprintln!("Error: {}", e);
+            err_line(format!("Error: {}", e));
             Ok(1)
         }
     }
@@ -351,11 +358,11 @@ fn try_handle_preflight_command(cli: &Cli) -> Result<Option<i32>> {
                     format!("failed to create workspace root {}", path.display())
                 })?;
             }
-            println!(
+            out_line(format!(
                 "Orchestrator initialized at {} (sqlite: {})",
                 app_root.display(),
                 db_path.display()
-            );
+            ));
             Ok(Some(0))
         }
         Commands::Apply { file, dry_run } => {
@@ -372,17 +379,17 @@ fn try_handle_preflight_command(cli: &Cli) -> Result<Option<i32>> {
             include_config,
         }) => {
             if !force {
-                eprintln!("Use --force to confirm database reset");
+                err_line("Use --force to confirm database reset");
                 return Ok(Some(1));
             }
             let app_root = detect_app_root();
             let (db_path, _logs_dir) = initialize_runtime(&app_root)?;
             reset_db_by_path(&db_path, *include_history, *include_config)?;
-            println!("Database reset completed");
+            out_line("Database reset completed");
             if *include_config {
-                println!("All config versions deleted (next apply starts from blank)");
+                out_line("All config versions deleted (next apply starts from blank)");
             } else if *include_history {
-                println!("Config version history cleared (active version preserved)");
+                out_line("Config version history cleared (active version preserved)");
             }
             Ok(Some(0))
         }
@@ -392,6 +399,19 @@ fn try_handle_preflight_command(cli: &Cli) -> Result<Option<i32>> {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    let app_root = detect_app_root();
+    let db_path = app_root.join("data/agent_orchestrator.db");
+    let config = load_raw_config_from_db(&db_path).ok().flatten().map(|(cfg, _, _)| cfg);
+    let _observability = init_observability(
+        &app_root,
+        config.as_ref(),
+        CliLoggingOverrides {
+            verbose: cli.verbose,
+            level: cli.log_level.map(Into::into),
+            format: cli.log_format.map(Into::into),
+        },
+    )?;
+    info!(app_root = %app_root.display(), "structured logging initialized");
     if let Some(exit_code) = try_handle_preflight_command(&cli)? {
         std::process::exit(exit_code);
     }

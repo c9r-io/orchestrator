@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use tracing::warn;
 
 use super::item_executor::{
     execute_guard_step, finalize_item_execution, process_item, process_item_filtered,
@@ -183,18 +184,20 @@ async fn run_task_loop_core(
                                 )?;
                             }
                             Err(e) => {
-                                eprintln!(
-                                    "[warn] failed to create binary snapshot for cycle {}: {}",
-                                    task_ctx.current_cycle, e
+                                warn!(
+                                    cycle = task_ctx.current_cycle,
+                                    error = %e,
+                                    "failed to create binary snapshot"
                                 );
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!(
-                        "[warn] failed to create checkpoint for cycle {}: {}",
-                        task_ctx.current_cycle, e
+                    warn!(
+                        cycle = task_ctx.current_cycle,
+                        error = %e,
+                        "failed to create checkpoint"
                     );
                 }
             }
@@ -356,14 +359,14 @@ async fn run_task_loop_core(
                                     json!({"cycle": task_ctx.current_cycle}),
                                 )?;
                             }
-                            Err(e) => eprintln!("[warn] failed to restore binary snapshot: {}", e),
+                            Err(e) => warn!(error = %e, "failed to restore binary snapshot"),
                         }
                     }
 
                     task_ctx.consecutive_failures = 0;
                 }
                 Err(e) => {
-                    eprintln!("[warn] auto-rollback failed: {}", e);
+                    warn!(error = %e, "auto-rollback failed");
                     insert_event(
                         &state,
                         task_id,

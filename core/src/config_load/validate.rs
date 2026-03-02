@@ -5,6 +5,7 @@ use crate::config::{
 use anyhow::{Context, Result};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use tracing::warn;
 
 pub fn validate_workflow_config(
     config: &OrchestratorConfig,
@@ -321,20 +322,18 @@ pub fn validate_self_referential_safety(
 
     // Warning: auto_rollback should be enabled
     if !workflow.safety.auto_rollback {
-        eprintln!(
-            "[warn] workspace '{}' is self_referential but auto_rollback is disabled. \
-             Consider enabling auto_rollback for self-referential workspaces.",
-            workspace_id
+        warn!(
+            workspace_id,
+            "workspace is self_referential but auto_rollback is disabled; consider enabling it"
         );
     }
 
     // Warning: no self_test step in workflow
     let has_self_test = workflow.steps.iter().any(|s| s.id == "self_test");
     if !has_self_test {
-        eprintln!(
-            "[warn] workspace '{}' is self_referential but has no 'self_test' step in its workflow. \
-             Consider adding a self_test step after 'implement' to catch breaking changes early.",
-            workspace_id
+        warn!(
+            workspace_id,
+            "workspace is self_referential but workflow has no self_test step"
         );
     }
 

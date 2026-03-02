@@ -20,6 +20,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
             ..RunnerConfig::default()
         },
         resume: ResumeConfig { auto: false },
+        observability: ObservabilityConfig::default(),
         defaults: ConfigDefaults {
             project: String::new(),
             workspace: "default".to_string(),

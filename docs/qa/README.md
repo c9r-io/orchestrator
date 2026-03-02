@@ -123,6 +123,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/33-fatal-agent-error-detection.md` | 1 | Regression: fatal provider stderr must override outer exit code 0 and mark runs failed |
 | orchestrator | `docs/qa/orchestrator/34-config-heal-auditability.md` | 5 | Config self-heal audit log persistence, heal-log CLI, check enhancement |
 | orchestrator | `docs/qa/orchestrator/35-legacy-observability-backfill.md` | 5 | Legacy event step_scope backfill, unknown→legacy display, backfill-events CLI |
+| orchestrator | `docs/qa/orchestrator/36-structured-logging.md` | 5 | Structured logging bootstrap, CLI log overrides, stderr/stdout separation, and rolling file output |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | 1 | Smoke test: core CLI and DB initialization |
 | orchestrator | `docs/qa/script/` | 7 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |

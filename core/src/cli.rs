@@ -1,4 +1,5 @@
 use crate::cli_handler::CliHandler;
+use agent_orchestrator::config::{LogLevel, LoggingFormat};
 use crate::state::InnerState;
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
@@ -19,6 +20,14 @@ pub struct Cli {
     /// Enable verbose output
     #[arg(short, long, global = true)]
     pub verbose: bool,
+
+    /// Override structured log level
+    #[arg(long, global = true)]
+    pub log_level: Option<CliLogLevel>,
+
+    /// Override structured console log format
+    #[arg(long, global = true)]
+    pub log_format: Option<CliLogFormat>,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -646,6 +655,42 @@ pub enum OutputFormat {
     Table,
     Json,
     Yaml,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq, Eq)]
+pub enum CliLogLevel {
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+impl From<CliLogLevel> for LogLevel {
+    fn from(value: CliLogLevel) -> Self {
+        match value {
+            CliLogLevel::Error => LogLevel::Error,
+            CliLogLevel::Warn => LogLevel::Warn,
+            CliLogLevel::Info => LogLevel::Info,
+            CliLogLevel::Debug => LogLevel::Debug,
+            CliLogLevel::Trace => LogLevel::Trace,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq, Eq)]
+pub enum CliLogFormat {
+    Pretty,
+    Json,
+}
+
+impl From<CliLogFormat> for LoggingFormat {
+    fn from(value: CliLogFormat) -> Self {
+        match value {
+            CliLogFormat::Pretty => LoggingFormat::Pretty,
+            CliLogFormat::Json => LoggingFormat::Json,
+        }
+    }
 }
 
 pub fn generate_completion(shell: Shell) {
