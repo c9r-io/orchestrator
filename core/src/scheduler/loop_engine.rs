@@ -661,6 +661,7 @@ fn emit_skipped_item_step_events(
 mod tests {
     use super::*;
     use crate::config::{PipelineVariables, WorkflowLoopConfig, WorkflowLoopGuardConfig};
+    use crate::test_utils::TestState;
 
     fn make_loop_policy(mode: LoopMode, max_cycles: Option<u32>) -> WorkflowLoopConfig {
         WorkflowLoopConfig {
@@ -708,6 +709,14 @@ mod tests {
         assert_eq!(result, None); // guard enabled, no decision yet
         let result = evaluate_loop_guard_rules(&policy, 3, 0);
         assert_eq!(result, Some((false, "max_cycles_reached".to_string())));
+    }
+
+    #[test]
+    fn infinite_mode_with_disabled_guard_continues_immediately() {
+        let mut policy = make_loop_policy(LoopMode::Infinite, None);
+        policy.guard.enabled = false;
+        let result = evaluate_loop_guard_rules(&policy, 1, 0);
+        assert_eq!(result, Some((true, "guard_disabled".to_string())));
     }
 
     #[test]
@@ -1081,5 +1090,86 @@ mod tests {
             skipped,
             vec!["qa_testing".to_string(), "ticket_fix".to_string()]
         );
+    }
+
+    #[test]
+    fn collect_remaining_item_step_steps_skips_non_repeatable_steps_after_first_cycle() {
+        use crate::config::{
+            PipelineVariables, SafetyConfig, StepBehavior, TaskExecutionPlan, TaskExecutionStep,
+            TaskRuntimeContext, WorkflowFinalizeConfig, WorkflowLoopConfig,
+        };
+
+        let task_ctx = TaskRuntimeContext {
+            workspace_id: "ws".into(),
+            workspace_root: "/tmp".into(),
+            ticket_dir: "tickets".into(),
+            current_cycle: 2,
+            execution_plan: TaskExecutionPlan {
+                steps: vec![TaskExecutionStep {
+                    id: "qa_testing".into(),
+                    required_capability: None,
+                    builtin: None,
+                    enabled: true,
+                    repeatable: false,
+                    is_guard: false,
+                    cost_preference: None,
+                    prehook: None,
+                    tty: false,
+                    outputs: vec![],
+                    pipe_to: None,
+                    command: None,
+                    chain_steps: vec![],
+                    scope: Some(StepScope::Item),
+                    behavior: StepBehavior::default(),
+                }],
+                loop_policy: WorkflowLoopConfig::default(),
+                finalize: WorkflowFinalizeConfig::default(),
+            },
+            init_done: true,
+            dynamic_steps: vec![],
+            pipeline_vars: PipelineVariables::default(),
+            safety: SafetyConfig::default(),
+            self_referential: false,
+            consecutive_failures: 0,
+        };
+        let segments = build_scope_segments(&task_ctx);
+
+        assert!(collect_remaining_item_step_steps(&task_ctx, &segments, 0).is_empty());
+    }
+
+    #[test]
+    fn emit_skipped_item_step_events_writes_event_rows() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let items = vec![
+            crate::dto::TaskItemRow {
+                id: "item-1".to_string(),
+                qa_file_path: "a.md".to_string(),
+            },
+            crate::dto::TaskItemRow {
+                id: "item-2".to_string(),
+                qa_file_path: "b.md".to_string(),
+            },
+        ];
+        let task_id = "task-skip-events";
+
+        emit_skipped_item_step_events(
+            &state,
+            task_id,
+            &items,
+            &["qa_testing".to_string(), "ticket_fix".to_string()],
+        )
+        .expect("emit skipped events");
+
+        let conn = crate::db::open_conn(&state.db_path).expect("open sqlite");
+        let skipped_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM events WHERE task_id = ?1 AND event_type = 'step_skipped'",
+                rusqlite::params![task_id],
+                |row| row.get(0),
+            )
+            .expect("count skipped events");
+
+        assert_eq!(skipped_count, 4);
     }
 }

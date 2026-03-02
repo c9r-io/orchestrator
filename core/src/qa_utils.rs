@@ -367,4 +367,48 @@ mod tests {
         assert!(result.contains("foo"));
         assert!(result.contains("bar"));
     }
+
+    #[test]
+    fn advanced_template_context_supports_quality_score_replacement() {
+        let upstream = vec![serde_json::json!({
+            "exit_code": 0,
+            "confidence": 0.9,
+            "quality_score": 0.75
+        })];
+
+        let ctx = AdvancedTemplateContext::new().with_upstream_outputs(upstream);
+        let result = ctx.render(
+            "exit:{upstream[0].exit_code} conf:{upstream[0].confidence} quality:{upstream[0].quality_score}",
+        );
+
+        assert_eq!(result, "exit:0 conf:0.9 quality:0.75");
+    }
+
+    #[test]
+    fn render_template_with_context_replaces_phase_upstream_and_shared_state() {
+        let upstream = vec![serde_json::json!({
+            "exit_code": 7,
+            "confidence": 0.42
+        })];
+        let mut shared = HashMap::new();
+        shared.insert("status".to_string(), serde_json::json!("open"));
+        shared.insert("meta".to_string(), serde_json::json!({"owner": "qa"}));
+
+        let rendered = render_template_with_context(
+            "{phase} {rel_path} {ticket_paths} {upstream[0].exit_code} {upstream[0].confidence} {status} {meta}",
+            "docs/qa/test.md",
+            &["ticket-1.md".to_string(), "ticket-2.md".to_string()],
+            "qa_testing",
+            &upstream,
+            &shared,
+        );
+
+        assert!(rendered.contains("qa_testing"));
+        assert!(rendered.contains("docs/qa/test.md"));
+        assert!(rendered.contains("ticket-1.md ticket-2.md"));
+        assert!(rendered.contains("7"));
+        assert!(rendered.contains("0.42"));
+        assert!(rendered.contains("open"));
+        assert!(rendered.contains("owner"));
+    }
 }

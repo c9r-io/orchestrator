@@ -103,3 +103,63 @@ pub(crate) fn is_task_paused_in_db(state: &InnerState, task_id: &str) -> Result<
     let status = SqliteTaskRepository::new(state.db_path.clone()).load_task_status(task_id)?;
     Ok(matches!(status.as_deref(), Some("paused")))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::open_conn;
+    use crate::dto::CreateTaskPayload;
+    use crate::task_ops::create_task_impl;
+    use crate::test_utils::TestState;
+
+    fn seed_task(fixture: &mut TestState) -> (std::sync::Arc<InnerState>, String) {
+        let state = fixture.build();
+        let qa_file = state.app_root.join("workspace/default/docs/qa/task_state_test.md");
+        std::fs::write(&qa_file, "# task state test\n").expect("seed qa file");
+        let created = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("task-state-test".to_string()),
+                goal: Some("exercise task_state wrappers".to_string()),
+                ..Default::default()
+            },
+        )
+        .expect("create task");
+        (state, created.id)
+    }
+
+    #[test]
+    fn task_state_wrappers_delegate_to_repository_and_writer() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+
+        prepare_task_for_start(&state, &task_id).expect("prepare task");
+        let resumable = find_latest_resumable_task_id(&state, true).expect("find resumable task");
+        let first_item = first_task_item_id(&state, &task_id).expect("load first item");
+        let items = list_task_items_for_cycle(&state, &task_id).expect("list task items");
+
+        assert_eq!(resumable.as_deref(), Some(task_id.as_str()));
+        assert_eq!(items.len(), 1);
+        assert_eq!(first_item.as_deref(), Some(items[0].id.as_str()));
+        assert_eq!(
+            count_unresolved_items(&state, &task_id).expect("count unresolved items"),
+            0
+        );
+
+        update_task_cycle_state(&state, &task_id, 2, true).expect("update cycle state");
+        record_task_execution_metric(&state, &task_id, "running", 2, 0)
+            .expect("record task metric");
+        set_task_status(&state, &task_id, "paused", false).expect("pause task");
+        assert!(is_task_paused_in_db(&state, &task_id).expect("check paused status"));
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let metric_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM task_execution_metrics WHERE task_id = ?1",
+                rusqlite::params![task_id],
+                |row| row.get(0),
+            )
+            .expect("count task metrics");
+        assert_eq!(metric_rows, 1);
+    }
+}

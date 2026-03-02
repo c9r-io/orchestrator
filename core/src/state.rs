@@ -116,3 +116,68 @@ pub fn write_agent_metrics<'a>(
         Err(err) => err.into_inner(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::TestState;
+    use std::sync::atomic::Ordering;
+
+    #[test]
+    fn running_task_starts_with_defaults() {
+        let runtime = RunningTask::new();
+        assert!(!runtime.stop_flag.load(Ordering::SeqCst));
+        assert!(runtime.child.try_lock().expect("lock child").is_none());
+    }
+
+    #[test]
+    fn state_accessors_round_trip_agent_maps() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        write_agent_health(&state).insert(
+            "echo".to_string(),
+            AgentHealthState {
+                consecutive_errors: 1,
+                diseased_until: None,
+                total_lifetime_errors: 1,
+                capability_health: HashMap::new(),
+            },
+        );
+        write_agent_metrics(&state).insert("echo".to_string(), AgentMetrics::default());
+
+        assert!(read_agent_health(&state).contains_key("echo"));
+        assert!(read_agent_metrics(&state).contains_key("echo"));
+    }
+
+    #[test]
+    fn emit_event_is_safe_with_noop_sink() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        state.emit_event("task-1", Some("item-1"), "heartbeat", serde_json::json!({"ok": true}));
+    }
+
+    #[test]
+    fn write_active_config_returns_mutable_guard() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let original = state
+            .active_config
+            .read()
+            .expect("read active config")
+            .default_workflow_id
+            .clone();
+        let mut guard = write_active_config(&state).expect("lock active config");
+        guard.default_workflow_id = format!("{}-updated", original);
+        drop(guard);
+
+        let updated = state
+            .active_config
+            .read()
+            .expect("re-read active config")
+            .default_workflow_id
+            .clone();
+        assert_eq!(updated, format!("{}-updated", original));
+    }
+}

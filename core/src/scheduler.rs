@@ -34,9 +34,9 @@ mod tests {
     use super::*;
     use crate::collab::MessageBus;
     use crate::config::{
-        AgentConfig, AgentMetadata, AgentSelectionConfig, LoopMode, StepBehavior, WorkflowConfig,
-        WorkflowFinalizeConfig, WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
-        PIPELINE_VAR_INLINE_LIMIT,
+        AgentConfig, AgentMetadata, AgentSelectionConfig, LoopMode, OnFailureAction, StepBehavior,
+        StepScope, WorkflowConfig, WorkflowFinalizeConfig, WorkflowLoopConfig,
+        WorkflowLoopGuardConfig, WorkflowStepConfig, PIPELINE_VAR_INLINE_LIMIT,
     };
     use crate::db::open_conn;
     use crate::dto::CreateTaskPayload;
@@ -618,6 +618,329 @@ mod tests {
         assert!(inline.is_char_boundary(0));
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn task_scoped_early_return_skips_downstream_item_steps() {
+        let mut fixture = TestState::new().with_workflow(
+            "task-early-return",
+            WorkflowConfig {
+                steps: vec![
+                    WorkflowStepConfig {
+                        id: "task_gate".to_string(),
+                        description: None,
+                        builtin: None,
+                        required_capability: None,
+                        enabled: true,
+                        repeatable: false,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        outputs: Vec::new(),
+                        pipe_to: None,
+                        command: Some("printf 'gated' && exit 7".to_string()),
+                        chain_steps: vec![],
+                        scope: Some(StepScope::Task),
+                        behavior: StepBehavior {
+                            on_failure: OnFailureAction::EarlyReturn {
+                                status: "qa_failed".to_string(),
+                            },
+                            ..StepBehavior::default()
+                        },
+                    },
+                    WorkflowStepConfig {
+                        id: "item_verify".to_string(),
+                        description: None,
+                        builtin: None,
+                        required_capability: None,
+                        enabled: true,
+                        repeatable: false,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        outputs: Vec::new(),
+                        pipe_to: None,
+                        command: Some("echo should-not-run".to_string()),
+                        chain_steps: vec![],
+                        scope: Some(StepScope::Item),
+                        behavior: StepBehavior::default(),
+                    },
+                ],
+                loop_policy: WorkflowLoopConfig {
+                    mode: LoopMode::Once,
+                    guard: WorkflowLoopGuardConfig {
+                        enabled: false,
+                        stop_when_no_unresolved: false,
+                        max_cycles: None,
+                        agent_template: None,
+                    },
+                },
+                finalize: WorkflowFinalizeConfig { rules: vec![] },
+                qa: None,
+                fix: None,
+                retest: None,
+                dynamic_steps: vec![],
+                safety: crate::config::SafetyConfig::default(),
+            },
+        );
+        let state = fixture.build();
+
+        let qa_file_a = state.app_root.join("workspace/default/docs/qa/early_return_a.md");
+        let qa_file_b = state.app_root.join("workspace/default/docs/qa/early_return_b.md");
+        std::fs::write(&qa_file_a, "# early return A\n").expect("seed first qa file");
+        std::fs::write(&qa_file_b, "# early return B\n").expect("seed second qa file");
+
+        let created = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("task-early-return".to_string()),
+                goal: Some("exercise task scoped early return".to_string()),
+                workflow_id: Some("task-early-return".to_string()),
+                target_files: Some(vec![
+                    "docs/qa/early_return_a.md".to_string(),
+                    "docs/qa/early_return_b.md".to_string(),
+                ]),
+                ..Default::default()
+            },
+        )
+        .expect("task should be created");
+
+        prepare_task_for_start(&state, &created.id).expect("prepare task");
+        run_task_loop(state.clone(), &created.id, RunningTask::new())
+            .await
+            .expect("task loop should complete");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let task_gate_runs: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM command_runs WHERE task_item_id IN (
+                    SELECT id FROM task_items WHERE task_id = ?1
+                 ) AND phase = 'task_gate'",
+                params![created.id.clone()],
+                |row| row.get(0),
+            )
+            .expect("count task step runs");
+        let item_verify_runs: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM command_runs WHERE task_item_id IN (
+                    SELECT id FROM task_items WHERE task_id = ?1
+                 ) AND phase = 'item_verify'",
+                params![created.id.clone()],
+                |row| row.get(0),
+            )
+            .expect("count item step runs");
+
+        assert_eq!(task_gate_runs, 1);
+        assert_eq!(item_verify_runs, 0);
+    }
+
+    #[tokio::test]
+    async fn task_scoped_success_runs_item_step_for_each_task_item() {
+        let mut fixture = TestState::new().with_workflow(
+            "task-fanout",
+            WorkflowConfig {
+                steps: vec![
+                    WorkflowStepConfig {
+                        id: "task_gate".to_string(),
+                        description: None,
+                        builtin: None,
+                        required_capability: None,
+                        enabled: true,
+                        repeatable: false,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        outputs: Vec::new(),
+                        pipe_to: None,
+                        command: Some("echo task-ready".to_string()),
+                        chain_steps: vec![],
+                        scope: Some(StepScope::Task),
+                        behavior: StepBehavior::default(),
+                    },
+                    WorkflowStepConfig {
+                        id: "item_verify".to_string(),
+                        description: None,
+                        builtin: None,
+                        required_capability: None,
+                        enabled: true,
+                        repeatable: false,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        outputs: Vec::new(),
+                        pipe_to: None,
+                        command: Some("echo item-ok".to_string()),
+                        chain_steps: vec![],
+                        scope: Some(StepScope::Item),
+                        behavior: StepBehavior::default(),
+                    },
+                ],
+                loop_policy: WorkflowLoopConfig {
+                    mode: LoopMode::Once,
+                    guard: WorkflowLoopGuardConfig {
+                        enabled: false,
+                        stop_when_no_unresolved: false,
+                        max_cycles: None,
+                        agent_template: None,
+                    },
+                },
+                finalize: WorkflowFinalizeConfig { rules: vec![] },
+                qa: None,
+                fix: None,
+                retest: None,
+                dynamic_steps: vec![],
+                safety: crate::config::SafetyConfig::default(),
+            },
+        );
+        let state = fixture.build();
+
+        let qa_file_a = state.app_root.join("workspace/default/docs/qa/fanout_a.md");
+        let qa_file_b = state.app_root.join("workspace/default/docs/qa/fanout_b.md");
+        std::fs::write(&qa_file_a, "# fanout A\n").expect("seed first qa file");
+        std::fs::write(&qa_file_b, "# fanout B\n").expect("seed second qa file");
+
+        let created = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("task-fanout".to_string()),
+                goal: Some("exercise task scoped fanout".to_string()),
+                workflow_id: Some("task-fanout".to_string()),
+                target_files: Some(vec![
+                    "docs/qa/fanout_a.md".to_string(),
+                    "docs/qa/fanout_b.md".to_string(),
+                ]),
+                ..Default::default()
+            },
+        )
+        .expect("task should be created");
+
+        prepare_task_for_start(&state, &created.id).expect("prepare task");
+        run_task_loop(state.clone(), &created.id, RunningTask::new())
+            .await
+            .expect("task loop should complete");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let task_item_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM task_items WHERE task_id = ?1",
+                params![created.id.clone()],
+                |row| row.get(0),
+            )
+            .expect("count task items");
+        let task_gate_runs: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM command_runs WHERE task_item_id IN (
+                    SELECT id FROM task_items WHERE task_id = ?1
+                 ) AND phase = 'task_gate'",
+                params![created.id.clone()],
+                |row| row.get(0),
+            )
+            .expect("count task step runs");
+        let item_verify_runs: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM command_runs WHERE task_item_id IN (
+                    SELECT id FROM task_items WHERE task_id = ?1
+                 ) AND phase = 'item_verify'",
+                params![created.id.clone()],
+                |row| row.get(0),
+            )
+            .expect("count item step runs");
+
+        assert!(task_item_count >= 1);
+        assert_eq!(task_gate_runs, 1);
+        assert_eq!(item_verify_runs, task_item_count);
+    }
+
+    #[tokio::test]
+    async fn failing_cycle_records_auto_rollback_failure_when_git_checkpoint_is_unavailable() {
+        let mut fixture = TestState::new().with_workflow(
+            "auto-rollback-failure",
+            WorkflowConfig {
+                steps: vec![WorkflowStepConfig {
+                    id: "qa_verify".to_string(),
+                    description: None,
+                    builtin: None,
+                    required_capability: None,
+                    enabled: true,
+                    repeatable: true,
+                    is_guard: false,
+                    cost_preference: None,
+                    prehook: None,
+                    tty: false,
+                    outputs: Vec::new(),
+                    pipe_to: None,
+                    command: Some("exit 9".to_string()),
+                    chain_steps: vec![],
+                    scope: Some(StepScope::Item),
+                    behavior: StepBehavior {
+                        on_failure: OnFailureAction::SetStatus {
+                            status: "qa_failed".to_string(),
+                        },
+                        ..StepBehavior::default()
+                    },
+                }],
+                loop_policy: WorkflowLoopConfig {
+                    mode: LoopMode::Fixed,
+                    guard: WorkflowLoopGuardConfig {
+                        enabled: false,
+                        stop_when_no_unresolved: false,
+                        max_cycles: Some(1),
+                        agent_template: None,
+                    },
+                },
+                finalize: WorkflowFinalizeConfig { rules: vec![] },
+                qa: None,
+                fix: None,
+                retest: None,
+                dynamic_steps: vec![],
+                safety: crate::config::SafetyConfig {
+                    auto_rollback: true,
+                    max_consecutive_failures: 1,
+                    checkpoint_strategy: crate::config::CheckpointStrategy::GitTag,
+                    ..crate::config::SafetyConfig::default()
+                },
+            },
+        );
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/auto_rollback_failure.md");
+        std::fs::write(&qa_file, "# rollback failure\n").expect("seed qa file");
+
+        let created = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("auto-rollback-failure".to_string()),
+                goal: Some("exercise rollback failure branch".to_string()),
+                workflow_id: Some("auto-rollback-failure".to_string()),
+                target_files: Some(vec!["docs/qa/auto_rollback_failure.md".to_string()]),
+                ..Default::default()
+            },
+        )
+        .expect("task should be created");
+
+        prepare_task_for_start(&state, &created.id).expect("prepare task");
+        run_task_loop(state.clone(), &created.id, RunningTask::new())
+            .await
+            .expect("task loop should complete");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let failed_runs: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM command_runs WHERE task_item_id IN (
+                    SELECT id FROM task_items WHERE task_id = ?1
+                 ) AND phase = 'qa_verify' AND exit_code = 9",
+                params![created.id.clone()],
+                |row| row.get(0),
+            )
+            .expect("count failing command runs");
+
+        assert_eq!(failed_runs, 1);
     }
 
     #[tokio::test]

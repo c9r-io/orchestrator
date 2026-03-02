@@ -867,4 +867,33 @@ mod tests {
         assert_eq!(resumed.stagnant_heartbeats, 0);
         assert_eq!(resumed.output_state, "active");
     }
+
+    #[test]
+    fn heartbeat_sample_marks_quiet_when_process_is_not_alive() {
+        let mut progress = HeartbeatProgress::default();
+        let sample = sample_heartbeat_progress(&mut progress, 0, 0, 120, false);
+
+        assert_eq!(sample.output_state, "quiet");
+        assert_eq!(sample.stagnant_heartbeats, 1);
+    }
+
+    #[test]
+    fn step_scope_label_matches_both_variants() {
+        assert_eq!(step_scope_label(StepScope::Task), "task");
+        assert_eq!(step_scope_label(StepScope::Item), "item");
+    }
+
+    #[tokio::test]
+    async fn read_output_with_limit_returns_only_tail_bytes() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("phase_runner_tail.log");
+        std::fs::write(&path, "0123456789abcdef").expect("write log file");
+
+        let limited = read_output_with_limit(&path, 6)
+            .await
+            .expect("read limited output");
+
+        assert_eq!(limited.text, "abcdef");
+        assert_eq!(limited.truncated_prefix_bytes, 10);
+    }
 }
