@@ -46,7 +46,13 @@ rm -rf "workspace/${QA_PROJECT}"
 
 ### Target Resolution Supplemental Checks
 
-Before Scenario 1, verify `task create --project <project> ...` target resolution using the fixed probe fixtures:
+**Automated regression**: Run the unified CLI probe regression runner to validate task-create target resolution in a single pass:
+
+```bash
+./scripts/regression/run-cli-probes.sh --group task-create
+```
+
+For manual verification, verify `task create --project <project> ...` target resolution using the fixed probe fixtures:
 
 1. For the task-scoped workflow on the populated workspace:
    - `./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_task_scoped --name "task-default" --goal "task default" --no-start`

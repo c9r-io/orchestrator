@@ -45,6 +45,31 @@ Project isolation requirements for QA execution:
 - Do not run `orchestrator db reset --include-config`, `orchestrator db reset --force --include-config`, or any equivalent config-destructive reset as part of routine QA scenario execution.
 - Do not change `Defaults` to point the whole runtime at a QA-only workflow as part of scenario setup. QA fixtures must not hijack the default workspace/workflow used by unrelated runs such as `self-bootstrap`.
 
+## Regression Runner
+
+Unified CLI probe regression runner for automated scenario-group execution:
+
+| Entry Point | Usage |
+|-------------|-------|
+| `./scripts/regression/run-cli-probes.sh` | Run all probe groups |
+| `./scripts/regression/run-cli-probes.sh --group <name>` | Run a single group |
+| `./scripts/regression/run-cli-probes.sh --list` | List available groups |
+| `./scripts/regression/run-cli-probes.sh --json` | JSON output |
+
+Available groups:
+
+| Group | Scenario Script | Coverage |
+|-------|----------------|----------|
+| `task-create` | `probe-task-create.sh` | Task-scoped, item-scoped, and empty-workspace target resolution |
+| `runtime-control` | `probe-runtime-control.sh` | Pause / resume lifecycle |
+| `trace` | `probe-trace.sh` | Normal trace output and low-output anomaly detection |
+| `low-output` | `probe-low-output.sh` | Low-output detection and active-output false-positive guard |
+
+QA docs that reference the regression runner:
+
+- `docs/qa/orchestrator/02-cli-task-lifecycle.md` — `--group task-create`, `--group runtime-control`, `--group low-output`
+- `docs/qa/orchestrator/32-task-trace.md` — `--group trace`
+
 ## Lint Guard
 
 Run:
