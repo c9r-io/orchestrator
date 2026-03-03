@@ -11,7 +11,17 @@ pub struct ValidationOutcome {
 }
 
 fn detect_fatal_agent_error(stdout: &str, stderr: &str) -> Option<&'static str> {
-    let combined = format!("{}\n{}", stdout, stderr).to_ascii_lowercase();
+    // Scan stderr fully — provider errors (rate limits, auth failures) land here.
+    // For stdout, skip JSON lines to avoid false positives from stream-json tool
+    // outputs that embed source code containing error-pattern strings.
+    let stderr_lower = stderr.to_ascii_lowercase();
+    let stdout_plain: String = stdout
+        .lines()
+        .filter(|line| !line.starts_with('{'))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .to_ascii_lowercase();
+    let combined = format!("{}\n{}", stdout_plain, stderr_lower);
     let patterns = [
         ("rate-limited", "provider rate limit exceeded"),
         ("rate limited", "provider rate limit exceeded"),
@@ -398,5 +408,37 @@ warning: unused variable
                 .expect("validation should return outcome");
             assert_eq!(outcome.status, "passed", "phase {} should accept JSON", phase);
         }
+    }
+
+    #[test]
+    fn stream_json_with_embedded_error_patterns_no_false_positive() {
+        // Stream-json agents emit tool outputs as JSON lines. When an agent reads
+        // source files containing error-detection patterns (e.g. "authentication failed"),
+        // those strings appear inside JSON objects in stdout. This must NOT trigger
+        // a fatal error false positive.
+        let stream_json_stdout = concat!(
+            r#"{"type":"system","subtype":"init","model":"test"}"#, "\n",
+            r#"{"type":"tool_result","content":"(\"authentication failed\", \"provider authentication failed\")"}"#, "\n",
+            r#"{"type":"tool_result","content":"(\"rate-limited\", \"provider rate limit exceeded\")"}"#, "\n",
+            r#"{"type":"result","result":"done"}"#, "\n",
+        );
+        let outcome = validate_phase_output(
+            "implement", Uuid::new_v4(), "agent", 0, stream_json_stdout, "",
+        )
+        .expect("validation should return outcome");
+        assert_eq!(outcome.status, "passed");
+        assert!(outcome.error.is_none());
+    }
+
+    #[test]
+    fn plain_text_stdout_with_error_pattern_still_detected() {
+        // Non-JSON stdout lines containing error patterns should still be caught.
+        let stdout = "Error: authentication failed for provider";
+        let outcome = validate_phase_output(
+            "implement", Uuid::new_v4(), "agent", 0, stdout, "",
+        )
+        .expect("validation should return outcome");
+        assert_eq!(outcome.status, "failed");
+        assert_eq!(outcome.error.as_deref(), Some("provider authentication failed"));
     }
 }
