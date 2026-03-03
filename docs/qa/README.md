@@ -87,7 +87,7 @@ This checks:
 
 | Module | Doc | Scenarios | Notes |
 |--------|-----|-----------|-------|
-| orchestrator | `docs/qa/orchestrator/00-command-contract.md` | 3 | Canonical CLI command contract |
+| orchestrator | `docs/qa/orchestrator/00-command-contract.md` | 4 | Canonical CLI command contract |
 | orchestrator | `docs/qa/orchestrator/01-cli-agent-orchestration.md` | 5 | CLI lifecycle and apply dry-run |
 | orchestrator | `docs/qa/orchestrator/02-cli-task-lifecycle.md` | 5 | Start/pause/resume/logs/retry |
 | orchestrator | `docs/qa/orchestrator/03-cli-edit-export.md` | 4 | Edit and export commands |
@@ -125,7 +125,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/34-config-heal-auditability.md` | 5 | Config self-heal audit log persistence, heal-log CLI, check enhancement |
 | orchestrator | `docs/qa/orchestrator/35-legacy-observability-backfill.md` | 5 | Legacy event step_scope backfill, unknown→legacy display, backfill-events CLI |
 | orchestrator | `docs/qa/orchestrator/36-structured-logging.md` | 5 | Structured logging bootstrap, CLI log overrides, stderr/stdout separation, and rolling file output |
-| orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | 1 | Smoke test: core CLI and DB initialization |
+| orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
 | script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |
 | self-bootstrap | `docs/qa/self-bootstrap/01-survival-binary-checkpoint-self-test.md` | 5 | Survival Layer 1-2: binary snapshot/restore and self-test acceptance gate |

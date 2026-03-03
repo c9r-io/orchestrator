@@ -90,7 +90,8 @@ if (( missing_checklist > 0 )); then
 fi
 
 echo "[qa-doc-lint] Checking UI entry visibility hints (warning-only)..."
-ui_docs=$(rg -l "Portal UI|sidebar|navigation|Tab|Quick Links|button|侧边栏|导航" docs/qa --glob '*.md' || true)
+# Note: Use \bTab\b to avoid matching "Table" in markdown headers
+ui_docs=$(rg -l "Portal UI|sidebar|navigation|\bTab\b|Quick Links|button|侧边栏|导航" docs/qa --glob '*.md' || true)
 while IFS= read -r f; do
   [[ -z "$f" ]] && continue
   if ! rg -q "Entry Visibility|入口可见性" "$f"; then
