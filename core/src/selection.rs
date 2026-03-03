@@ -224,4 +224,207 @@ mod tests {
             .to_string()
             .contains("no agents configured"));
     }
+
+    #[test]
+    fn test_cost_differential_lower_cost_scores_higher() {
+        use crate::metrics::SelectionStrategy;
+        // 4 agents all with "qa". Costs: 1, 30, 60, 99.
+        // With CapabilityAware, cost_score = 100 - cost, weighted 0.15.
+        // Without metrics, success_rate=50 and perf=50 are equal for all agents,
+        // so cost is the only differentiator.
+        // Agent with cost=99 (total ~9.45) should never make the top-3 cut
+        // because agents with cost 1/30/60 all score higher.
+        let mut agents = HashMap::new();
+        for (name, cost) in [("best", 1u8), ("mid1", 30), ("mid2", 60), ("worst", 99)] {
+            let (id, mut cfg) = make_test_agent(name, "qa", cost);
+            cfg.selection.strategy = SelectionStrategy::CapabilityAware;
+            agents.insert(id, cfg);
+        }
+
+        let health_map = HashMap::new();
+        let metrics_map = HashMap::new();
+        let excluded = HashSet::new();
+
+        for _ in 0..20 {
+            let (agent_id, _) =
+                select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded)
+                    .expect("should select an agent");
+            assert_ne!(
+                agent_id, "worst",
+                "highest-cost agent should be excluded from top-3"
+            );
+        }
+    }
+
+    #[test]
+    fn test_metrics_impact_high_success_rate_preferred() {
+        use crate::metrics::SelectionStrategy;
+        // 4 agents with same cost=50 and capability "qa", strategy=CapabilityAware.
+        // Agent "good" has high success rate + low duration.
+        // Agent "bad" has terrible metrics and should rank last (outside top-3).
+        let mut agents = HashMap::new();
+        for name in ["good", "neutral1", "neutral2", "bad"] {
+            let (id, mut cfg) = make_test_agent(name, "qa", 50);
+            cfg.selection.strategy = SelectionStrategy::CapabilityAware;
+            agents.insert(id, cfg);
+        }
+
+        let health_map = HashMap::new();
+        let mut metrics_map = HashMap::new();
+        metrics_map.insert(
+            "good".to_string(),
+            AgentMetrics {
+                total_runs: 100,
+                successful_runs: 99,
+                avg_duration_ms: 1000,
+                ..Default::default()
+            },
+        );
+        metrics_map.insert(
+            "bad".to_string(),
+            AgentMetrics {
+                total_runs: 100,
+                successful_runs: 5,
+                avg_duration_ms: 59000,
+                ..Default::default()
+            },
+        );
+        let excluded = HashSet::new();
+
+        for _ in 0..20 {
+            let (agent_id, _) =
+                select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded)
+                    .expect("should select an agent");
+            assert_ne!(
+                agent_id, "bad",
+                "agent with terrible metrics should be excluded from top-3"
+            );
+        }
+    }
+
+    #[test]
+    fn test_health_penalty_consecutive_errors_lowers_score() {
+        use crate::metrics::SelectionStrategy;
+        // 4 agents all with "qa" and same cost=30, strategy=CapabilityAware.
+        // "sick" has consecutive_errors=5 (penalty = -75, capped at -50 in CapabilityAware).
+        // This should push "sick" below the other 3 agents in score, excluding it from top-3.
+        let mut agents = HashMap::new();
+        for name in ["healthy1", "healthy2", "healthy3", "sick"] {
+            let (id, mut cfg) = make_test_agent(name, "qa", 30);
+            cfg.selection.strategy = SelectionStrategy::CapabilityAware;
+            agents.insert(id, cfg);
+        }
+
+        let mut health_map = HashMap::new();
+        health_map.insert(
+            "sick".to_string(),
+            AgentHealthState {
+                consecutive_errors: 5,
+                ..Default::default()
+            },
+        );
+        let metrics_map = HashMap::new();
+        let excluded = HashSet::new();
+
+        for _ in 0..20 {
+            let (agent_id, _) =
+                select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded)
+                    .expect("should select an agent");
+            assert_ne!(
+                agent_id, "sick",
+                "agent with consecutive errors should be excluded from top-3"
+            );
+        }
+    }
+
+    #[test]
+    fn test_all_candidates_excluded_returns_error() {
+        let mut agents = HashMap::new();
+        let (id_a, cfg_a) = make_test_agent("agent1", "qa", 30);
+        let (id_b, cfg_b) = make_test_agent("agent2", "qa", 40);
+        agents.insert(id_a.clone(), cfg_a);
+        agents.insert(id_b.clone(), cfg_b);
+
+        let health_map = HashMap::new();
+        let metrics_map = HashMap::new();
+        let mut excluded = HashSet::new();
+        excluded.insert(id_a);
+        excluded.insert(id_b);
+
+        let result = select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded);
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("should fail when all excluded")
+            .to_string()
+            .contains("No healthy agent"));
+    }
+
+    #[test]
+    fn test_single_candidate_deterministic() {
+        let mut agents = HashMap::new();
+        let (id, cfg) = make_test_agent("solo_agent", "qa", 50);
+        agents.insert(id, cfg);
+
+        let health_map = HashMap::new();
+        let metrics_map = HashMap::new();
+        let excluded = HashSet::new();
+
+        for _ in 0..10 {
+            let (agent_id, command) =
+                select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded)
+                    .expect("should select the only agent");
+            assert_eq!(agent_id, "solo_agent");
+            assert_eq!(command, "echo solo_agent");
+        }
+    }
+
+    #[test]
+    fn test_preference_empty_capabilities_non_default_name() {
+        let mut agents = HashMap::new();
+        let mut cfg = AgentConfig::new();
+        cfg.metadata.name = "custom_blank".to_string();
+        cfg.capabilities = vec![];
+        cfg.command = "echo custom_blank".to_string();
+        agents.insert("custom_blank".to_string(), cfg);
+
+        let result = select_agent_by_preference(&agents);
+        assert!(result.is_ok());
+        let (agent_id, command) = result.expect("empty-capabilities agent should match");
+        assert_eq!(agent_id, "custom_blank");
+        assert_eq!(command, "echo custom_blank");
+    }
+
+    #[test]
+    fn test_diseased_agent_filtered_from_candidates() {
+        use chrono::{Duration, Utc};
+
+        let mut agents = HashMap::new();
+        let (id_sick, cfg_sick) = make_test_agent("sick_agent", "qa", 30);
+        let (id_ok, cfg_ok) = make_test_agent("ok_agent", "qa", 30);
+        agents.insert(id_sick.clone(), cfg_sick);
+        agents.insert(id_ok.clone(), cfg_ok);
+
+        let mut health_map = HashMap::new();
+        health_map.insert(
+            id_sick,
+            AgentHealthState {
+                diseased_until: Some(Utc::now() + Duration::hours(1)),
+                capability_health: HashMap::new(), // no capability data → is_capability_healthy returns false
+                ..Default::default()
+            },
+        );
+
+        let metrics_map = HashMap::new();
+        let excluded = HashSet::new();
+
+        for _ in 0..10 {
+            let (agent_id, _) =
+                select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded)
+                    .expect("healthy agent should be selected");
+            assert_eq!(
+                agent_id, "ok_agent",
+                "diseased agent should be filtered out"
+            );
+        }
+    }
 }
