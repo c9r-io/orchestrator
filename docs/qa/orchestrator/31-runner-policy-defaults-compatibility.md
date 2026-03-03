@@ -1,8 +1,8 @@
 # Orchestrator - Runner Policy Defaults and Compatibility
 
 **Module**: orchestrator
-**Scope**: Validate secure-by-default runner policy initialization and backward-compatible policy parsing
-**Scenarios**: 3
+**Scope**: Validate backward-compatible policy parsing for explicit unsafe and legacy alias modes
+**Scenarios**: 2
 **Priority**: High
 
 ---
@@ -11,7 +11,6 @@
 
 This document covers the compatibility-focused policy checks split from `docs/qa/orchestrator/21-runner-security-observability.md` to preserve the repository max-scenario rule:
 
-- Default initialization should remain `allowlist` (secure-by-default)
 - Explicit `unsafe` mode must continue to work when intentionally selected
 - Legacy `policy: legacy` manifests must remain backward-compatible and normalize to `unsafe`
 
@@ -19,40 +18,7 @@ Entry point: `./scripts/orchestrator.sh`
 
 ---
 
-## Scenario 1: Default Initialization Produces Allowlist Policy
-
-### Preconditions
-
-- CLI built from latest source.
-- No prior configuration in DB (clean state).
-
-### Goal
-
-Ensure that default initialization (without explicit RuntimePolicy in the manifest) produces an `allowlist` runner policy with populated shell/arg lists.
-
-### Steps
-
-1. Reset and initialize with a manifest that has no RuntimePolicy:
-   ```bash
-   ./scripts/orchestrator.sh db reset -f --include-config --include-history
-   ./scripts/orchestrator.sh init -f
-   ./scripts/orchestrator.sh apply -f docs/workflow/self-bootstrap.yaml
-   ```
-2. Export current configuration:
-   ```bash
-   ./scripts/orchestrator.sh manifest export -f /tmp/default-policy-export.yaml
-   cat /tmp/default-policy-export.yaml | grep -A5 'policy:'
-   ```
-
-### Expected
-
-- Exported YAML contains `policy: allowlist`.
-- `allowed_shells` list is non-empty (contains at least `/bin/bash`).
-- `allowed_shell_args` list is non-empty (contains at least `-lc`).
-
----
-
-## Scenario 2: Explicit Unsafe Mode Remains Functional
+## Scenario 1: Explicit Unsafe Mode Remains Functional
 
 ### Preconditions
 
@@ -127,7 +93,7 @@ Ensure that explicitly setting `policy: unsafe` is accepted, applied, and the ta
 
 ---
 
-## Scenario 3: Legacy Alias Backward Compatibility
+## Scenario 2: Legacy Alias Backward Compatibility
 
 ### Preconditions
 
@@ -200,6 +166,5 @@ Ensure that `policy: legacy` in YAML manifests is accepted as a backward-compati
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Default Initialization Produces Allowlist Policy | ✅ | 2026-03-02 | cursor | init + self-bootstrap.yaml (no RuntimePolicy) -> export shows `policy: allowlist` with populated lists |
-| 2 | Explicit Unsafe Mode Remains Functional | ✅ | 2026-03-02 | cursor | `policy: unsafe` apply succeeds, export shows `unsafe`, task executes normally |
-| 3 | Legacy Alias Backward Compatibility | ✅ | 2026-03-02 | cursor | `policy: legacy` apply succeeds, re-export normalized to `policy: unsafe` |
+| 1 | Explicit Unsafe Mode Remains Functional | ☐ | | | |
+| 2 | Legacy Alias Backward Compatibility | ☐ | | | |

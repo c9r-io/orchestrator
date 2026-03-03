@@ -18,10 +18,18 @@ Execute scenario-based QA testing driven by `docs/qa/**/*.md` documents.
 
 2. **Initialize orchestrator if needed** — only when the database does not exist yet:
    ```bash
-   # DANGER: NEVER run `rm -f data/agent_orchestrator.db` or `db reset` during
-   # an active workflow run. Doing so destroys all in-flight task state.
+   # DANGER: NEVER run `rm -f data/agent_orchestrator.db` or `db reset --include-config`
+   # during an active workflow run. Doing so destroys all in-flight task state.
    # Only initialize when no database exists at all.
    test -f data/agent_orchestrator.db || ./scripts/orchestrator.sh init
+   ```
+
+3. **For QA scenario isolation** — use project-scoped reset instead of destroying global state:
+   ```bash
+   # Reset a specific project's QA state (task data + config + auto-tickets)
+   ./scripts/orchestrator.sh qa project reset <project> --force
+   # Deploy fixtures into project scope (global config untouched)
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/<fixture>.yaml --project <project>
    ```
 
 3. QA docs exist under `docs/qa/`.
@@ -221,24 +229,27 @@ When splitting QA into sequential batches (e.g., docs 00-04, 05-09, 10-14, 15-17
 
 ### 3. Environment Reset Between Batches
 
-The correct reset sequence between batches:
+The correct reset sequence between batches uses **project-scoped isolation** instead of destroying the global DB:
 
 ```bash
-# Reset DB (required)
-rm -f data/agent_orchestrator.db
-./scripts/orchestrator.sh init
+# Reset project state (task data + project config + auto-tickets)
+./scripts/orchestrator.sh qa project reset <project> --force
 
-# Bootstrap config if needed by the next batch's QA docs
-./scripts/orchestrator.sh config bootstrap --from fixtures/<relevant>.yaml --force
+# Apply fixture into project scope (global config untouched)
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/<relevant>.yaml --project <project>
 
 # DO NOT delete docs/ticket/*.md — preserve prior batch tickets
+# DO NOT run `rm -f data/agent_orchestrator.db` — this destroys all state including bootstrap
 ```
 
-### 4. `init` vs `config bootstrap`
+**CRITICAL**: Never use `rm -f data/agent_orchestrator.db` for QA environment resets. Use `qa project reset` + `apply --project` to isolate each QA batch into its own project scope without affecting global/bootstrap agents.
 
-- `init` only creates the DB schema and a minimal default config. It does **not** load fixture data.
-- Most QA scenarios require `config bootstrap --from <fixture> --force` after `init` to load agents, workflows, and workspaces into SQLite.
-- QA scripts (`docs/qa/script/*.sh`) that call `task create` will fail if only `init` was run — they need bootstrapped config.
+### 4. `init` vs `qa project reset` vs `apply --project`
+
+- `init` creates the DB schema and a minimal default config. It does **not** load fixture data.
+- `qa project reset <project> --force` resets task data, project config, and auto-tickets for the named project — without touching global config or other projects.
+- `apply -f <fixture> --project <project>` deploys agents/workflows/workspaces into the project scope. Only project-scoped agents participate in selection for that project's tasks.
+- Most QA scenarios should use `qa project reset` + `apply --project` instead of `init` + `config bootstrap`.
 
 ### 5. Delegation Prompt Design for Batch Agents
 
@@ -259,30 +270,44 @@ If tickets are lost, they can be reconstructed from subagent session transcripts
 
 ## Reset Guidance
 
+For **QA scenario isolation** (recommended — preserves global/bootstrap state):
+
 ```bash
-rm -f data/agent_orchestrator.db config/default.yaml
-./scripts/orchestrator.sh init
+# Reset a specific project's QA state
+./scripts/orchestrator.sh qa project reset <project> --force
+
+# Deploy fixtures into project scope
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/<fixture>.yaml --project <project>
 ```
+
+For **full runtime re-initialization** (only when DB is missing or schema needs upgrade):
+
+```bash
+# Only if DB does not exist or is corrupted
+./scripts/orchestrator.sh init --force
+```
+
+**CRITICAL**: Do NOT use `rm -f data/agent_orchestrator.db` during routine QA. This destroys all in-flight task state, bootstrap config, and event history.
 
 ## Troubleshooting Configuration Issues
 
 ### Orchestrator: CLI Initialization
 
-The orchestrator no longer has hardcoded defaults. Use `init` command to create a minimal config:
+The orchestrator no longer has hardcoded defaults. For QA scenarios, prefer project-scoped isolation:
 
 ```bash
-# Full reset: remove DB and config
-rm -f data/agent_orchestrator.db config/default.yaml
+# Preferred: project-scoped reset (preserves global state)
+./scripts/orchestrator.sh qa project reset <project> --force
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/<fixture>.yaml --project <project>
 
-# Initialize with default settings
-./scripts/orchestrator.sh init
+# Only if DB does not exist at all:
+./scripts/orchestrator.sh init --force
 
 # Or with custom root path
 ./scripts/orchestrator.sh init --root /path/to/project
-
-# Force overwrite existing config
-./scripts/orchestrator.sh init --force
 ```
+
+**CRITICAL**: Do NOT use `rm -f data/agent_orchestrator.db` for QA resets. This destroys all state including bootstrap config, in-flight tasks, and event history. Use `qa project reset` for per-project isolation.
 
 This creates:
 - 1 workspace (`default`)

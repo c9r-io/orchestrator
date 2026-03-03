@@ -119,7 +119,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/28-self-bootstrap-pipeline.md` | 5 | Self-bootstrap pipeline: full SDLC, ticket fix chain, pipeline variables (Part 2) |
 | orchestrator | `docs/qa/orchestrator/29-step-scope-segment-execution.md` | 5 | StepScope segment execution: task-scoped steps run once, item-scoped fan out per QA file |
 | orchestrator | `docs/qa/orchestrator/30-unified-step-execution-model.md` | 5 | Unified step execution: WorkflowStepType removal, semantic resolution, StepBehavior alignment, and static-check parity |
-| orchestrator | `docs/qa/orchestrator/31-runner-policy-defaults-compatibility.md` | 3 | Split from doc 21: default allowlist initialization plus unsafe/legacy compatibility checks |
+| orchestrator | `docs/qa/orchestrator/31-runner-policy-defaults-compatibility.md` | 2 | Split from doc 21: unsafe/legacy policy compatibility checks |
 | orchestrator | `docs/qa/orchestrator/32-task-trace.md` | 5 | Task trace: execution timeline reconstruction and anomaly detection |
 | orchestrator | `docs/qa/orchestrator/33-fatal-agent-error-detection.md` | 1 | Regression: fatal provider stderr must override outer exit code 0 and mark runs failed |
 | orchestrator | `docs/qa/orchestrator/34-config-heal-auditability.md` | 5 | Config self-heal audit log persistence, heal-log CLI, check enhancement |

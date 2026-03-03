@@ -24,6 +24,17 @@ if rg -n "$LEGACY_RESET_PATTERN" docs/qa -g '*.md' >/tmp/qa_doc_lint_legacy_rese
   cat /tmp/qa_doc_lint_legacy_reset.txt
   fail=1
 fi
+# Also check skill files for actionable (non-warning) db-delete commands.
+# Match lines that contain `rm -f data/agent_orchestrator` as a bash command (starts with rm),
+# but skip lines that are comments/warnings (start with # or contain NEVER/CRITICAL/DO NOT).
+if rg -n "rm -f data/agent_orchestrator" .claude/skills -g '*.md' 2>/dev/null \
+   | rg -v '^\s*#|NEVER|CRITICAL|Do NOT|DO NOT' >/tmp/qa_doc_lint_skill_reset.txt 2>/dev/null; then
+  if [[ -s /tmp/qa_doc_lint_skill_reset.txt ]]; then
+    echo "[qa-doc-lint] Found actionable db-delete in skill files (use project reset flow):"
+    cat /tmp/qa_doc_lint_skill_reset.txt
+    fail=1
+  fi
+fi
 
 echo "[qa-doc-lint] Checking task create commands require --project..."
 while IFS=: read -r file line _; do
