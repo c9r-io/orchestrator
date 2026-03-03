@@ -184,7 +184,7 @@ spec:
   capabilities:
     - plan
     - qa_doc_gen
-  command: glmcode -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  command: claude -p "{prompt}" --model opus --dangerously-skip-permissions --verbose --output-format stream-json
 ---
 # Coder agent (MiniMax-M2.5-highspeed) — code generation, fixing, and test alignment
 apiVersion: orchestrator.dev/v2
@@ -197,7 +197,7 @@ spec:
     - implement
     - ticket_fix
     - align_tests
-  command: glmcode -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  command: claude -p "{prompt}" --model opus --dangerously-skip-permissions --verbose --output-format stream-json
 ---
 # Tester agent (MiniMax-M2.5-highspeed) — QA scenario execution
 apiVersion: orchestrator.dev/v2
@@ -208,7 +208,7 @@ metadata:
 spec:
   capabilities:
     - qa_testing
-  command: minicode -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  command: claude -p "{prompt}" --model sonnet --dangerously-skip-permissions --verbose --output-format stream-json
 ---
 # Reviewer agent (MiniMax-M2.5-highspeed) — doc audit and code review
 apiVersion: orchestrator.dev/v2
@@ -221,7 +221,7 @@ spec:
     - doc_governance
     - review
     - loop_guard
-  command: minicode -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  command: claude -p "{prompt}" --model sonnet --dangerously-skip-permissions --verbose --output-format stream-json
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow
