@@ -28,7 +28,11 @@ fn detect_fatal_agent_error(stdout: &str, stderr: &str) -> Option<&'static str> 
 }
 
 fn is_strict_phase(phase: &str) -> bool {
-    matches!(phase, "qa" | "fix" | "retest" | "guard")
+    matches!(
+        phase,
+        "qa" | "fix" | "retest" | "guard"
+            | "qa_testing" | "qa_doc_gen" | "ticket_fix" | "align_tests" | "doc_governance"
+    )
 }
 
 /// Returns true for phases that produce build/test structured output
@@ -162,18 +166,12 @@ fn parse_build_errors_from_text(stderr: &str, stdout: &str) -> Vec<BuildError> {
         // or "error: cannot find ..."
         // with location: " --> src/main.rs:10:5"
         if line.starts_with("error") {
-            let message = line.to_string();
-            let level = if line.starts_with("error") {
-                BuildErrorLevel::Error
-            } else {
-                BuildErrorLevel::Warning
-            };
             errors.push(BuildError {
                 file: None,
                 line: None,
                 column: None,
-                message,
-                level,
+                message: line.to_string(),
+                level: BuildErrorLevel::Error,
             });
         } else if line.starts_with("warning") {
             errors.push(BuildError {
@@ -367,5 +365,38 @@ warning: unused variable
             outcome.error.as_deref(),
             Some("provider authentication failed")
         );
+    }
+
+    #[test]
+    fn build_phase_parses_warnings() {
+        let stderr = "warning: unused variable `x`\n --> src/lib.rs:5:13";
+        let outcome = validate_phase_output("build", Uuid::new_v4(), "agent", 0, "", stderr)
+            .expect("validation should return outcome");
+        assert_eq!(outcome.output.build_errors.len(), 1);
+        assert_eq!(outcome.output.build_errors[0].level, BuildErrorLevel::Warning);
+        assert_eq!(outcome.output.build_errors[0].file.as_deref(), Some("src/lib.rs"));
+        assert_eq!(outcome.output.build_errors[0].line, Some(5));
+    }
+
+    #[test]
+    fn new_strict_phases_require_json() {
+        let new_phases = ["qa_testing", "qa_doc_gen", "ticket_fix", "align_tests", "doc_governance"];
+        for phase in new_phases {
+            let outcome = validate_phase_output(phase, Uuid::new_v4(), "agent", 0, "plain-text", "")
+                .expect("validation should return outcome");
+            assert_eq!(outcome.status, "failed", "phase {} should require JSON", phase);
+            assert!(outcome.error.is_some());
+        }
+    }
+
+    #[test]
+    fn new_strict_phases_accept_json() {
+        let new_phases = ["qa_testing", "qa_doc_gen", "ticket_fix", "align_tests", "doc_governance"];
+        let json_output = r#"{"confidence":0.9}"#;
+        for phase in new_phases {
+            let outcome = validate_phase_output(phase, Uuid::new_v4(), "agent", 0, json_output, "")
+                .expect("validation should return outcome");
+            assert_eq!(outcome.status, "passed", "phase {} should accept JSON", phase);
+        }
     }
 }
