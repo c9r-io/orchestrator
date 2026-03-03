@@ -38,11 +38,11 @@ fn detect_fatal_agent_error(stdout: &str, stderr: &str) -> Option<&'static str> 
 }
 
 fn is_strict_phase(phase: &str) -> bool {
-    matches!(
-        phase,
-        "qa" | "fix" | "retest" | "guard"
-            | "qa_testing" | "qa_doc_gen" | "ticket_fix" | "align_tests" | "doc_governance"
-    )
+    // Only phases that use simple echo-style agents with single-JSON-object stdout.
+    // SDLC phases (qa_testing, qa_doc_gen, ticket_fix, align_tests, doc_governance)
+    // use interactive CLI agents with stream-json output (multiple JSON lines),
+    // which cannot be parsed as a single JSON value.
+    matches!(phase, "qa" | "fix" | "retest" | "guard")
 }
 
 /// Returns true for phases that produce build/test structured output
@@ -389,24 +389,29 @@ warning: unused variable
     }
 
     #[test]
-    fn new_strict_phases_require_json() {
-        let new_phases = ["qa_testing", "qa_doc_gen", "ticket_fix", "align_tests", "doc_governance"];
-        for phase in new_phases {
-            let outcome = validate_phase_output(phase, Uuid::new_v4(), "agent", 0, "plain-text", "")
+    fn sdlc_phases_accept_stream_json_output() {
+        // SDLC phases use interactive CLI agents with stream-json output (multiple
+        // JSON lines), so they must NOT be strict (single-JSON validation would fail).
+        let sdlc_phases = ["qa_testing", "qa_doc_gen", "ticket_fix", "align_tests", "doc_governance"];
+        let stream_json = concat!(
+            r#"{"type":"system","subtype":"init"}"#, "\n",
+            r#"{"type":"result","result":"done"}"#, "\n",
+        );
+        for phase in sdlc_phases {
+            let outcome = validate_phase_output(phase, Uuid::new_v4(), "agent", 0, stream_json, "")
                 .expect("validation should return outcome");
-            assert_eq!(outcome.status, "failed", "phase {} should require JSON", phase);
-            assert!(outcome.error.is_some());
+            assert_eq!(outcome.status, "passed", "phase {} should accept stream-json", phase);
         }
     }
 
     #[test]
-    fn new_strict_phases_accept_json() {
-        let new_phases = ["qa_testing", "qa_doc_gen", "ticket_fix", "align_tests", "doc_governance"];
-        let json_output = r#"{"confidence":0.9}"#;
-        for phase in new_phases {
-            let outcome = validate_phase_output(phase, Uuid::new_v4(), "agent", 0, json_output, "")
+    fn sdlc_phases_accept_plain_text_output() {
+        // SDLC phases should also accept plain text (non-JSON) output without failing.
+        let sdlc_phases = ["qa_testing", "qa_doc_gen", "ticket_fix", "align_tests", "doc_governance"];
+        for phase in sdlc_phases {
+            let outcome = validate_phase_output(phase, Uuid::new_v4(), "agent", 0, "plain text output", "")
                 .expect("validation should return outcome");
-            assert_eq!(outcome.status, "passed", "phase {} should accept JSON", phase);
+            assert_eq!(outcome.status, "passed", "phase {} should accept plain text", phase);
         }
     }
 
