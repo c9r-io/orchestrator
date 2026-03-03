@@ -376,4 +376,385 @@ mod tests {
         assert!(score.total_score > 0.0);
         assert_eq!(score.cost_score, 70.0); // 100 - 30
     }
+
+    // Helper function to create test metrics
+    fn create_test_metrics(
+        total_runs: u32,
+        successful_runs: u32,
+        avg_duration_ms: u64,
+        current_load: u32,
+    ) -> AgentMetrics {
+        AgentMetrics {
+            total_runs,
+            successful_runs,
+            avg_duration_ms,
+            current_load,
+            ..Default::default()
+        }
+    }
+
+    // ===== SelectionStrategy Tests =====
+
+    #[test]
+    fn test_selection_strategy_cost_based() {
+        let cost = Some(25);
+        let metrics = Some(create_test_metrics(10, 8, 5000, 1));
+        let health = Some(AgentHealthState::default());
+        let requirement = SelectionRequirement {
+            strategy: SelectionStrategy::CostBased,
+            ..Default::default()
+        };
+
+        let score = calculate_agent_score("test_agent", cost, &metrics, &health, &requirement);
+
+        // CostBased: total_score = cost_score * 1.0 = (100 - 25) * 1.0 = 75.0
+        assert!((score.total_score - 75.0).abs() < 0.01);
+        assert!((score.cost_score - 75.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_selection_strategy_success_rate_weighted() {
+        let cost = Some(30);
+        // success_rate = 8/10 = 0.8, success_rate_score = 80.0
+        let metrics = Some(create_test_metrics(10, 8, 5000, 0));
+        let health = Some(AgentHealthState::default());
+        let requirement = SelectionRequirement {
+            strategy: SelectionStrategy::SuccessRateWeighted,
+            ..Default::default()
+        };
+
+        let score = calculate_agent_score("test_agent", cost, &metrics, &health, &requirement);
+
+        // cost_score = 100 - 30 = 70.0
+        // success_rate_score = 8/10 * 100 = 80.0
+        // total = cost*0.2 + success*0.8 = 70*0.2 + 80*0.8 = 14 + 64 = 78.0
+        let expected = 70.0 * 0.2 + 80.0 * 0.8;
+        assert!((score.total_score - expected).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_selection_strategy_performance_first() {
+        let cost = Some(20);
+        // avg_duration = 3000ms, performance_score = 60000/3000 = 20.0
+        let metrics = Some(create_test_metrics(10, 8, 3000, 0));
+        let health = Some(AgentHealthState::default());
+        let requirement = SelectionRequirement {
+            strategy: SelectionStrategy::PerformanceFirst,
+            ..Default::default()
+        };
+
+        let score = calculate_agent_score("test_agent", cost, &metrics, &health, &requirement);
+
+        // cost_score = 100 - 20 = 80.0
+        // success_rate_score = 8/10 * 100 = 80.0
+        // performance_score = 60000/3000 = 20.0
+        // total = cost*0.2 + perf*0.6 + success*0.2 = 80*0.2 + 20*0.6 + 80*0.2
+        //       = 16 + 12 + 16 = 44.0
+        let expected = 80.0 * 0.2 + 20.0 * 0.6 + 80.0 * 0.2;
+        assert!((score.total_score - expected).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_selection_strategy_load_balanced() {
+        let cost = Some(30);
+        // current_load = 3, load_penalty = -(3 * 10.0) = -30.0
+        let metrics = Some(create_test_metrics(10, 8, 5000, 3));
+        let health = Some(AgentHealthState::default());
+        let requirement = SelectionRequirement {
+            strategy: SelectionStrategy::LoadBalanced,
+            ..Default::default()
+        };
+
+        let score = calculate_agent_score("test_agent", cost, &metrics, &health, &requirement);
+
+        // cost_score = 100 - 30 = 70.0
+        // success_rate_score = 8/10 * 100 = 80.0
+        // load_penalty = -30.0
+        // total = cost*0.2 + success*0.3 + |load|*0.5 = 70*0.2 + 80*0.3 + 30*0.5
+        //       = 14 + 24 + 15 = 53.0
+        let expected = 70.0 * 0.2 + 80.0 * 0.3 + 30.0 * 0.5;
+        assert!((score.total_score - expected).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_selection_strategy_capability_aware() {
+        let cost = Some(40);
+        let metrics = Some(create_test_metrics(10, 9, 4000, 1));
+        // consecutive_errors = 2, health_penalty = -(2 * 15.0) = -30.0
+        let health = Some(AgentHealthState {
+            consecutive_errors: 2,
+            ..Default::default()
+        });
+        let requirement = SelectionRequirement {
+            strategy: SelectionStrategy::CapabilityAware,
+            ..Default::default()
+        };
+
+        let score = calculate_agent_score("test_agent", cost, &metrics, &health, &requirement);
+
+        // cost_score = 100 - 40 = 60.0
+        // success_rate_score = 9/10 * 100 = 90.0
+        // performance_score = 60000/4000 = 15.0
+        // health_penalty = -30.0, max(-50) = -30.0
+        // total = cost*0.15 + success*0.35 + perf*0.2 + health_penalty.max(-50)
+        //       = 60*0.15 + 90*0.35 + 15*0.2 + (-30.0)
+        //       = 9 + 31.5 + 3 - 30 = 13.5
+        let expected = 60.0 * 0.15 + 90.0 * 0.35 + 15.0 * 0.2 + (-30.0_f32).max(-50.0);
+        assert!((score.total_score - expected).abs() < 0.01);
+    }
+
+    // ===== EMA Convergence Tests =====
+
+    #[test]
+    fn test_ema_convergence_success() {
+        let mut metrics = AgentMetrics::default();
+        // Initial recent_success_rate = 0.5
+        // After many successes, should converge toward 1.0
+
+        for _ in 0..10 {
+            MetricsCollector::record_success(&mut metrics, 1000);
+        }
+
+        // After 10 successes: rate should be > 0.95
+        assert!(
+            metrics.recent_success_rate > 0.95,
+            "Expected rate > 0.95, got {}",
+            metrics.recent_success_rate
+        );
+    }
+
+    #[test]
+    fn test_ema_convergence_failure() {
+        let mut metrics = AgentMetrics::default();
+        // Initial recent_success_rate = 0.5
+        // After many failures, should converge toward 0.0
+
+        for _ in 0..10 {
+            MetricsCollector::record_failure(&mut metrics);
+        }
+
+        // After 10 failures: rate should be < 0.05
+        assert!(
+            metrics.recent_success_rate < 0.05,
+            "Expected rate < 0.05, got {}",
+            metrics.recent_success_rate
+        );
+    }
+
+    #[test]
+    fn test_ema_convergence_mixed() {
+        let mut metrics = AgentMetrics::default();
+        // Initial recent_success_rate = 0.5
+
+        // Apply 5 successes
+        for _ in 0..5 {
+            MetricsCollector::record_success(&mut metrics, 1000);
+        }
+        let rate_after_success = metrics.recent_success_rate;
+
+        // Apply 3 failures
+        for _ in 0..3 {
+            MetricsCollector::record_failure(&mut metrics);
+        }
+
+        // Rate should have decreased after failures
+        assert!(
+            metrics.recent_success_rate < rate_after_success,
+            "Rate should decrease after failures: before={}, after={}",
+            rate_after_success,
+            metrics.recent_success_rate
+        );
+
+        // But should still be positive
+        assert!(metrics.recent_success_rate > 0.0);
+    }
+
+    // ===== Boundary Condition Tests =====
+
+    #[test]
+    fn test_boundary_zero_total_runs() {
+        let cost = Some(30);
+        // total_runs = 0, so success_rate_score uses recent_success_rate * 100 = 0.5 * 100 = 50.0
+        let metrics = Some(AgentMetrics {
+            total_runs: 0,
+            recent_success_rate: 0.5,
+            ..Default::default()
+        });
+        let health = Some(AgentHealthState::default());
+        let requirement = SelectionRequirement {
+            strategy: SelectionStrategy::SuccessRateWeighted,
+            ..Default::default()
+        };
+
+        let score = calculate_agent_score("test_agent", cost, &metrics, &health, &requirement);
+
+        // success_rate_score = recent_success_rate * 100 = 50.0
+        // cost_score = 70.0
+        // total = 70*0.2 + 50*0.8 = 14 + 40 = 54.0
+        let expected = 70.0 * 0.2 + 50.0 * 0.8;
+        assert!((score.success_rate_score - 50.0).abs() < 0.01);
+        assert!((score.total_score - expected).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_boundary_none_metrics() {
+        let cost = Some(40);
+        let metrics: Option<AgentMetrics> = None;
+        let health = Some(AgentHealthState::default());
+        let requirement = SelectionRequirement {
+            strategy: SelectionStrategy::PerformanceFirst,
+            ..Default::default()
+        };
+
+        let score = calculate_agent_score("test_agent", cost, &metrics, &health, &requirement);
+
+        // With None metrics:
+        // success_rate_score = 50.0 (default neutral)
+        // performance_score = 50.0 (default neutral)
+        // cost_score = 60.0
+        // total = 60*0.2 + 50*0.6 + 50*0.2 = 12 + 30 + 10 = 52.0
+        assert!((score.success_rate_score - 50.0).abs() < 0.01);
+        assert!((score.performance_score - 50.0).abs() < 0.01);
+        let expected = 60.0 * 0.2 + 50.0 * 0.6 + 50.0 * 0.2;
+        assert!((score.total_score - expected).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_boundary_none_health() {
+        let cost = Some(30);
+        let metrics = Some(create_test_metrics(10, 8, 5000, 0));
+        let health: Option<AgentHealthState> = None;
+        let requirement = SelectionRequirement::default();
+
+        let score = calculate_agent_score("test_agent", cost, &metrics, &health, &requirement);
+
+        // With None health: health_penalty = 0.0
+        assert!((score.health_penalty - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_boundary_max_load() {
+        let cost = Some(30);
+        // current_load = 10, but load_penalty is capped at -50.0
+        let metrics = Some(create_test_metrics(10, 8, 5000, 10));
+        let health = Some(AgentHealthState::default());
+        let requirement = SelectionRequirement::default();
+
+        let score = calculate_agent_score("test_agent", cost, &metrics, &health, &requirement);
+
+        // load_penalty = -(10 * 10.0).min(50.0) = -50.0
+        assert!(
+            (score.load_penalty - (-50.0)).abs() < 0.01,
+            "Expected load_penalty -50.0, got {}",
+            score.load_penalty
+        );
+    }
+
+    // ===== Health Penalty Tests =====
+
+    #[test]
+    fn test_health_penalty_diseased_agent() {
+        let cost = Some(30);
+        let metrics = Some(create_test_metrics(10, 8, 5000, 0));
+        // diseased_until is in the future
+        let health = Some(AgentHealthState {
+            diseased_until: Some(Utc::now() + chrono::Duration::seconds(3600)),
+            ..Default::default()
+        });
+        let requirement = SelectionRequirement::default();
+
+        let score = calculate_agent_score("test_agent", cost, &metrics, &health, &requirement);
+
+        // Agent is diseased, so health_penalty = -100.0
+        assert!(
+            (score.health_penalty - (-100.0)).abs() < 0.01,
+            "Expected health_penalty -100.0, got {}",
+            score.health_penalty
+        );
+    }
+
+    #[test]
+    fn test_health_penalty_consecutive_errors() {
+        let cost = Some(30);
+        let metrics = Some(create_test_metrics(10, 8, 5000, 0));
+        // 3 consecutive errors
+        let health = Some(AgentHealthState {
+            consecutive_errors: 3,
+            ..Default::default()
+        });
+        let requirement = SelectionRequirement::default();
+
+        let score = calculate_agent_score("test_agent", cost, &metrics, &health, &requirement);
+
+        // health_penalty = -(3 * 15.0) = -45.0
+        assert!(
+            (score.health_penalty - (-45.0)).abs() < 0.01,
+            "Expected health_penalty -45.0, got {}",
+            score.health_penalty
+        );
+    }
+
+    // ===== CapabilityHealth Tests =====
+
+    #[test]
+    fn test_capability_health_zero_total() {
+        let cap_health = CapabilityHealth {
+            success_count: 0,
+            failure_count: 0,
+            last_error_at: None,
+        };
+
+        // When total is 0, success_rate should return 0.5 (neutral)
+        assert!(
+            (cap_health.success_rate() - 0.5).abs() < 0.001,
+            "Expected success_rate 0.5, got {}",
+            cap_health.success_rate()
+        );
+    }
+
+    // ===== Load Operation Tests =====
+
+    #[test]
+    fn test_load_decrement_from_zero() {
+        let mut metrics = AgentMetrics {
+            current_load: 0,
+            ..Default::default()
+        };
+
+        // Decrementing from 0 should stay at 0
+        MetricsCollector::decrement_load(&mut metrics);
+        assert_eq!(
+            metrics.current_load, 0,
+            "Expected load to stay at 0, got {}",
+            metrics.current_load
+        );
+    }
+
+    #[test]
+    fn test_load_increment_decrement_cycle() {
+        let mut metrics = AgentMetrics::default();
+
+        // Start at 0
+        assert_eq!(metrics.current_load, 0);
+
+        // Increment to 1
+        MetricsCollector::increment_load(&mut metrics);
+        assert_eq!(metrics.current_load, 1);
+
+        // Increment to 2
+        MetricsCollector::increment_load(&mut metrics);
+        assert_eq!(metrics.current_load, 2);
+
+        // Decrement to 1
+        MetricsCollector::decrement_load(&mut metrics);
+        assert_eq!(metrics.current_load, 1);
+
+        // Decrement to 0
+        MetricsCollector::decrement_load(&mut metrics);
+        assert_eq!(metrics.current_load, 0);
+
+        // Decrement from 0 should stay at 0
+        MetricsCollector::decrement_load(&mut metrics);
+        assert_eq!(metrics.current_load, 0);
+    }
 }
