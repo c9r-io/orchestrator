@@ -20,15 +20,36 @@ impl CliHandler {
                 }
                 let active = read_active_config(&self.state)?;
                 let resources = crate::resource::export_manifest_resources(&active.config);
+                let crd_docs = crate::resource::export_crd_documents(&active.config);
                 let content = match output {
-                    OutputFormat::Yaml => resources
-                        .iter()
-                        .map(Resource::to_yaml)
-                        .collect::<Result<Vec<_>>>()?
-                        .join("---\n"),
-                    OutputFormat::Json => serde_json::to_string_pretty(
-                        &crate::resource::export_manifest_documents(&active.config),
-                    )?,
+                    OutputFormat::Yaml => {
+                        let mut parts: Vec<String> = resources
+                            .iter()
+                            .map(Resource::to_yaml)
+                            .collect::<Result<Vec<_>>>()?;
+                        // Append CRD and CR documents
+                        for doc in &crd_docs {
+                            parts.push(serde_yaml::to_string(doc)?);
+                        }
+                        parts.join("---\n")
+                    }
+                    OutputFormat::Json => {
+                        let builtin_docs =
+                            crate::resource::export_manifest_documents(&active.config);
+                        // Convert CRD docs to OrchestratorResource-compatible JSON
+                        let crd_json: Vec<serde_json::Value> = crd_docs
+                            .iter()
+                            .filter_map(|doc| serde_json::to_value(doc).ok())
+                            .collect();
+                        // Combine both into a single JSON array
+                        let builtin_json: Vec<serde_json::Value> = builtin_docs
+                            .iter()
+                            .filter_map(|doc| serde_json::to_value(doc).ok())
+                            .collect();
+                        let combined: Vec<serde_json::Value> =
+                            builtin_json.into_iter().chain(crd_json).collect();
+                        serde_json::to_string_pretty(&combined)?
+                    }
                     OutputFormat::Table => {
                         return Err(anyhow::anyhow!(
                             "table output is not supported for manifest export"

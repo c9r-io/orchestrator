@@ -26,6 +26,7 @@ pub use step::*;
 pub use step_template::*;
 pub use workflow::*;
 
+use crate::crd::types::{CustomResource, CustomResourceDefinition};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -51,6 +52,10 @@ pub struct OrchestratorConfig {
     pub env_stores: HashMap<String, EnvStoreConfig>,
     #[serde(default)]
     pub resource_meta: ResourceMetadataStore,
+    #[serde(default)]
+    pub custom_resource_definitions: HashMap<String, CustomResourceDefinition>,
+    #[serde(default)]
+    pub custom_resources: HashMap<String, CustomResource>,
 }
 
 impl Default for OrchestratorConfig {
@@ -71,6 +76,8 @@ impl Default for OrchestratorConfig {
             step_templates: HashMap::new(),
             env_stores: HashMap::new(),
             resource_meta: ResourceMetadataStore::default(),
+            custom_resource_definitions: HashMap::new(),
+            custom_resources: HashMap::new(),
         }
     }
 }

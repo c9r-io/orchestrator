@@ -1,0 +1,6 @@
+apiVersion: extensions.orchestrator.dev/v1
+kind: PromptLibrary
+metadata:
+  name: invalid-prompts
+spec:
+  description: "This CR is missing the required 'prompts' field"

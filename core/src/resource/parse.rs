@@ -1,5 +1,8 @@
 use crate::cli_types::{OrchestratorResource, ResourceKind};
 use crate::config::OrchestratorConfig;
+use crate::crd::resolve::{find_crd_by_kind_or_alias, is_builtin_kind};
+use crate::crd::types::{CrdManifest, CustomResourceManifest};
+use crate::crd::ParsedManifest;
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
 
@@ -9,6 +12,7 @@ use super::{
     WorkspaceResource,
 };
 
+/// Parse YAML into builtin OrchestratorResource types only (backward-compatible).
 pub fn parse_resources_from_yaml(content: &str) -> Result<Vec<OrchestratorResource>> {
     let mut resources = Vec::new();
     for document in serde_yaml::Deserializer::from_str(content) {
@@ -20,6 +24,46 @@ pub fn parse_resources_from_yaml(content: &str) -> Result<Vec<OrchestratorResour
         resources.push(resource);
     }
     Ok(resources)
+}
+
+/// Two-phase YAML parsing: reads `kind` first, then routes to the appropriate type.
+pub fn parse_manifests_from_yaml(content: &str) -> Result<Vec<ParsedManifest>> {
+    let mut manifests = Vec::new();
+    for document in serde_yaml::Deserializer::from_str(content) {
+        let value = serde_yaml::Value::deserialize(document)?;
+        if value.is_null() {
+            continue;
+        }
+
+        // Phase 1: extract the `kind` string
+        let kind_str = value
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let manifest = match kind_str.as_deref() {
+            Some("CustomResourceDefinition") => {
+                let crd: CrdManifest = serde_yaml::from_value(value)?;
+                ParsedManifest::Crd(crd)
+            }
+            Some(kind) if is_builtin_kind(kind) => {
+                let resource: OrchestratorResource = serde_yaml::from_value(value)?;
+                ParsedManifest::Builtin(resource)
+            }
+            Some(_) => {
+                // Unknown kind → treat as custom resource
+                let cr: CustomResourceManifest = serde_yaml::from_value(value)?;
+                ParsedManifest::Custom(cr)
+            }
+            None => {
+                // No kind field — try as builtin (will error later on dispatch)
+                let resource: OrchestratorResource = serde_yaml::from_value(value)?;
+                ParsedManifest::Builtin(resource)
+            }
+        };
+        manifests.push(manifest);
+    }
+    Ok(manifests)
 }
 
 pub fn delete_resource_by_kind(
@@ -34,13 +78,28 @@ pub fn delete_resource_by_kind(
         "project" => Ok(ProjectResource::delete_from(config, name)),
         "defaults" => Ok(DefaultsResource::delete_from(config, name)),
         "runtimepolicy" | "runtime-policy" => Ok(RuntimePolicyResource::delete_from(config, name)),
-        "steptemplate" | "step_template" | "step-template" => Ok(StepTemplateResource::delete_from(config, name)),
+        "steptemplate" | "step_template" | "step-template" => {
+            Ok(StepTemplateResource::delete_from(config, name))
+        }
         "envstore" | "env-store" | "env_store" => Ok(EnvStoreResource::delete_from(config, name)),
-        "secretstore" | "secret-store" | "secret_store" => Ok(SecretStoreResource::delete_from(config, name)),
-        _ => Err(anyhow!(
-            "unknown resource type: {} (supported: workspace, agent, workflow, project, defaults, runtimepolicy, steptemplate, envstore, secretstore)",
-            kind
-        )),
+        "secretstore" | "secret-store" | "secret_store" => {
+            Ok(SecretStoreResource::delete_from(config, name))
+        }
+        "customresourcedefinition" | "crd" => crate::crd::delete_crd(config, name),
+        _ => {
+            // Try CRD-defined custom resource types
+            if find_crd_by_kind_or_alias(config, kind).is_some() {
+                // Resolve the actual kind name from the CRD
+                let crd_kind = find_crd_by_kind_or_alias(config, kind)
+                    .map(|crd| crd.kind.clone())
+                    .ok_or_else(|| anyhow!("CRD not found for '{}'", kind))?;
+                return crate::crd::delete_custom_resource(config, &crd_kind, name);
+            }
+            Err(anyhow!(
+                "unknown resource type: {} (supported: workspace, agent, workflow, project, defaults, runtimepolicy, steptemplate, envstore, secretstore, or CRD-defined types)",
+                kind
+            ))
+        }
     }
 }
 

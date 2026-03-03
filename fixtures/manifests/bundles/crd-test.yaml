@@ -1,0 +1,59 @@
+apiVersion: orchestrator.dev/v2
+kind: CustomResourceDefinition
+metadata:
+  name: promptlibraries.extensions.orchestrator.dev
+spec:
+  kind: PromptLibrary
+  plural: promptlibraries
+  short_names: [pl]
+  group: extensions.orchestrator.dev
+  versions:
+    - name: v1
+      served: true
+      schema:
+        type: object
+        required: [prompts]
+        properties:
+          prompts:
+            type: array
+            minItems: 1
+            items:
+              type: object
+              required: [name, template]
+              properties:
+                name:
+                  type: string
+                template:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+      cel_rules:
+        - rule: "size(self.prompts) > 0"
+          message: "at least one prompt is required"
+---
+apiVersion: extensions.orchestrator.dev/v1
+kind: PromptLibrary
+metadata:
+  name: qa-prompts
+  labels:
+    team: platform
+spec:
+  prompts:
+    - name: code-review
+      template: "Review the following code for {criteria}..."
+      tags: [qa, review]
+    - name: bug-report
+      template: "Describe the bug: {description}"
+      tags: [qa, bug]
+---
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: crd-test-ws
+spec:
+  root_path: workspace/crd-test
+  qa_targets: [docs/qa]
+  ticket_dir: tickets
+  self_referential: false

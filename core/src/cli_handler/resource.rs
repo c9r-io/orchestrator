@@ -78,10 +78,41 @@ impl CliHandler {
                 task_id: name.to_string(),
                 output,
             }),
-            _ => anyhow::bail!(
-                "unknown resource type: {} (supported: ws/workspace, wf/workflow, agent, task)",
-                kind
-            ),
+            _ => {
+                // Try CRD-defined custom resources
+                let active = read_active_config(&self.state)?;
+                if let Some(crd) = agent_orchestrator::crd::resolve::find_crd_by_kind_or_alias(
+                    &active.config,
+                    kind,
+                ) {
+                    let crd_kind = crd.kind.clone();
+                    let storage_key = format!("{}/{}", crd_kind, name);
+                    if let Some(cr) = active.config.custom_resources.get(&storage_key) {
+                        match output {
+                            OutputFormat::Json => {
+                                println!("{}", serde_json::to_string_pretty(cr)?);
+                            }
+                            OutputFormat::Yaml => {
+                                println!("{}", serde_yaml::to_string(cr)?);
+                            }
+                            OutputFormat::Table => {
+                                println!(
+                                    "{:<20} {:<20} gen:{}",
+                                    cr.metadata.name, cr.kind, cr.generation
+                                );
+                            }
+                        }
+                        Ok(0)
+                    } else {
+                        anyhow::bail!("{} not found: {}", crd_kind, name)
+                    }
+                } else {
+                    anyhow::bail!(
+                        "unknown resource type: {} (supported: ws/workspace, wf/workflow, agent, task, or CRD-defined types)",
+                        kind
+                    )
+                }
+            }
         }
     }
 
@@ -262,10 +293,54 @@ impl CliHandler {
                     )
                 })
             }
-            _ => anyhow::bail!(
-                "unknown list resource type: {} (supported: workspaces, agents, workflows)",
-                resource_type
-            ),
+            _ => {
+                // Try CRD-defined custom resource types
+                if let Some(crd) = agent_orchestrator::crd::resolve::find_crd_by_kind_or_alias(
+                    &active.config,
+                    resource_type,
+                ) {
+                    let crd_kind = crd.kind.clone();
+                    let prefix = format!("{}/", crd_kind);
+                    let rows: Vec<_> = active
+                        .config
+                        .custom_resources
+                        .iter()
+                        .filter(|(key, _)| key.starts_with(&prefix))
+                        .filter_map(|(_, cr)| {
+                            let metadata = &cr.metadata;
+                            if !super::parse::matches_selector(&metadata.labels, &selector_terms) {
+                                return None;
+                            }
+                            Some(json!({
+                                "name": cr.metadata.name,
+                                "kind": cr.kind,
+                                "apiVersion": cr.api_version,
+                                "generation": cr.generation,
+                                "labels": cr.metadata.labels,
+                            }))
+                        })
+                        .collect();
+                    let kind_upper = crd_kind.to_uppercase();
+                    self.print_resource_rows(&kind_upper, rows, output, |row| {
+                        let labels = row
+                            .get("labels")
+                            .and_then(|v| v.as_object())
+                            .map(super::parse::string_map_to_csv)
+                            .unwrap_or_else(|| "-".to_string());
+                        format!(
+                            "{:<20} gen:{:<5} {:<30}",
+                            row["name"].as_str().unwrap_or_default(),
+                            row["generation"].as_u64().unwrap_or(0),
+                            labels,
+                        )
+                    })
+                } else {
+                    anyhow::bail!(
+                        "unknown list resource type: {} (supported: workspaces, agents, workflows, or CRD-defined types)",
+                        resource_type
+                    )
+                }
+            }
         }
     }
 
@@ -348,10 +423,49 @@ impl CliHandler {
                 task_id: name.to_string(),
                 output,
             }),
-            _ => anyhow::bail!(
-                "unknown resource type: {} (supported: ws/workspace, wf/workflow, agent, task)",
-                kind
-            ),
+            _ => {
+                // Try CRD-defined custom resources
+                let active = read_active_config(&self.state)?;
+                if let Some(crd) = agent_orchestrator::crd::resolve::find_crd_by_kind_or_alias(
+                    &active.config,
+                    kind,
+                ) {
+                    let crd_kind = crd.kind.clone();
+                    let storage_key = format!("{}/{}", crd_kind, name);
+                    if let Some(cr) = active.config.custom_resources.get(&storage_key) {
+                        match output {
+                            OutputFormat::Json => {
+                                println!("{}", serde_json::to_string_pretty(cr)?);
+                            }
+                            OutputFormat::Yaml => {
+                                println!("{}", serde_yaml::to_string(cr)?);
+                            }
+                            OutputFormat::Table => {
+                                println!("{}: {}", cr.kind, cr.metadata.name);
+                                println!("  API Version: {}", cr.api_version);
+                                println!("  Generation:  {}", cr.generation);
+                                println!("  Created:     {}", cr.created_at);
+                                println!("  Updated:     {}", cr.updated_at);
+                                if let Some(labels) = &cr.metadata.labels {
+                                    println!("  Labels:      {:?}", labels);
+                                }
+                                println!(
+                                    "  Spec:        {}",
+                                    serde_json::to_string_pretty(&cr.spec)?
+                                );
+                            }
+                        }
+                        Ok(0)
+                    } else {
+                        anyhow::bail!("{} not found: {}", crd_kind, name)
+                    }
+                } else {
+                    anyhow::bail!(
+                        "unknown resource type: {} (supported: ws/workspace, wf/workflow, agent, task, or CRD-defined types)",
+                        kind
+                    )
+                }
+            }
         }
     }
 

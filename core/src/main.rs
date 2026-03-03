@@ -38,7 +38,7 @@ use crate::config_load::{
 };
 use crate::db::{init_schema, reset_db_by_path};
 use crate::resource::{
-    dispatch_resource, kind_as_str, parse_resources_from_yaml, ApplyResult, Resource,
+    dispatch_resource, kind_as_str, parse_manifests_from_yaml, ApplyResult, Resource,
 };
 use crate::state::ManagedState;
 use anyhow::{Context, Result};
@@ -187,62 +187,132 @@ fn initialize_runtime(app_root: &Path) -> Result<(PathBuf, PathBuf)> {
 }
 
 fn run_apply_preflight(app_root: &Path, file: &str, dry_run: bool) -> Result<i32> {
+    use agent_orchestrator::crd::{self, ParsedManifest};
+
     let (db_path, _logs_dir) = initialize_runtime(app_root)?;
     let content = read_manifest_input(file)?;
-    let resources = parse_resources_from_yaml(&content)?;
+    let manifests = parse_manifests_from_yaml(&content)?;
     let mut merged_config = load_raw_config_from_db(&db_path)?
         .map(|(cfg, _, _)| cfg)
         .unwrap_or_default();
 
     let mut has_errors = false;
     let mut applied_results = Vec::new();
-    for (index, manifest) in resources.into_iter().enumerate() {
-        if let Err(error) = manifest.validate_version() {
-            err_line(format!("document {}: {}", index + 1, error));
-            has_errors = true;
-            continue;
-        }
+    for (index, manifest) in manifests.into_iter().enumerate() {
+        match manifest {
+            ParsedManifest::Builtin(resource) => {
+                if let Err(error) = resource.validate_version() {
+                    err_line(format!("document {}: {}", index + 1, error));
+                    has_errors = true;
+                    continue;
+                }
 
-        let registered = match dispatch_resource(manifest) {
-            Ok(resource) => resource,
-            Err(error) => {
-                err_line(format!("document {}: {}", index + 1, error));
-                has_errors = true;
-                continue;
+                let registered = match dispatch_resource(resource) {
+                    Ok(resource) => resource,
+                    Err(error) => {
+                        err_line(format!("document {}: {}", index + 1, error));
+                        has_errors = true;
+                        continue;
+                    }
+                };
+                if let Err(error) = registered.validate() {
+                    err_line(format!(
+                        "{} / {} invalid: {}",
+                        kind_as_str(registered.kind()),
+                        registered.name(),
+                        error
+                    ));
+                    has_errors = true;
+                    continue;
+                }
+
+                let result = registered.apply(&mut merged_config);
+                applied_results.push(result);
+                let action = match result {
+                    ApplyResult::Created => "created",
+                    ApplyResult::Configured => "updated",
+                    ApplyResult::Unchanged => "unchanged",
+                };
+                if dry_run {
+                    out_line(format!(
+                        "{}/{} would be {} (dry run)",
+                        kind_as_str(registered.kind()),
+                        registered.name(),
+                        action
+                    ));
+                } else {
+                    out_line(format!(
+                        "{}/{} {}",
+                        kind_as_str(registered.kind()),
+                        registered.name(),
+                        action
+                    ));
+                }
             }
-        };
-        if let Err(error) = registered.validate() {
-            err_line(format!(
-                "{} / {} invalid: {}",
-                kind_as_str(registered.kind()),
-                registered.name(),
-                error
-            ));
-            has_errors = true;
-            continue;
-        }
-
-        let result = registered.apply(&mut merged_config);
-        applied_results.push(result);
-        let action = match result {
-            ApplyResult::Created => "created",
-            ApplyResult::Configured => "updated",
-            ApplyResult::Unchanged => "unchanged",
-        };
-        if dry_run {
-            out_line(format!(
-                "{}/{} would be {} (dry run)",
-                kind_as_str(registered.kind()),
-                registered.name(),
-                action
-            ));
-        } else {
-            out_line(format!(
-                "{}/{} {}",
-                kind_as_str(registered.kind()),
-                registered.name(),
-                action
-            ));
+            ParsedManifest::Crd(crd_manifest) => {
+                let crd_name = crd_manifest.metadata.name.clone();
+                let crd_kind = crd_manifest.spec.kind.clone();
+                match crd::apply_crd(&mut merged_config, crd_manifest) {
+                    Ok(result) => {
+                        applied_results.push(result);
+                        let action = match result {
+                            ApplyResult::Created => "created",
+                            ApplyResult::Configured => "updated",
+                            ApplyResult::Unchanged => "unchanged",
+                        };
+                        if dry_run {
+                            out_line(format!(
+                                "crd/{} (kind: {}) would be {} (dry run)",
+                                crd_name, crd_kind, action
+                            ));
+                        } else {
+                            out_line(format!("crd/{} (kind: {}) {}", crd_name, crd_kind, action));
+                        }
+                    }
+                    Err(error) => {
+                        err_line(format!(
+                            "document {} (CRD {}): {}",
+                            index + 1,
+                            crd_name,
+                            error
+                        ));
+                        has_errors = true;
+                    }
+                }
+            }
+            ParsedManifest::Custom(cr_manifest) => {
+                let cr_kind = cr_manifest.kind.clone();
+                let cr_name = cr_manifest.metadata.name.clone();
+                match crd::apply_custom_resource(&mut merged_config, cr_manifest) {
+                    Ok(result) => {
+                        applied_results.push(result);
+                        let action = match result {
+                            ApplyResult::Created => "created",
+                            ApplyResult::Configured => "updated",
+                            ApplyResult::Unchanged => "unchanged",
+                        };
+                        let display_kind = crd::crd_kind_display(&cr_kind);
+                        if dry_run {
+                            out_line(format!(
+                                "{}/{} would be {} (dry run)",
+                                display_kind, cr_name, action
+                            ));
+                        } else {
+                            out_line(format!("{}/{} {}", display_kind, cr_name, action));
+                        }
+                    }
+                    Err(error) => {
+                        err_line(format!(
+                            "document {} ({}/{}): {}",
+                            index + 1,
+                            cr_kind,
+                            cr_name,
+                            error
+                        ));
+                        has_errors = true;
+                    }
+                }
+            }
         }
     }
 
@@ -260,40 +330,57 @@ fn run_apply_preflight(app_root: &Path, file: &str, dry_run: bool) -> Result<i32
 }
 
 fn run_manifest_validate_preflight(app_root: &Path, file: &str) -> Result<i32> {
+    use agent_orchestrator::crd::{self, ParsedManifest};
+
     let (db_path, _logs_dir) = initialize_runtime(app_root)?;
     let content = read_manifest_input(file)?;
-    let resources = parse_resources_from_yaml(&content)?;
+    let manifests = parse_manifests_from_yaml(&content)?;
     let mut merged_config = load_raw_config_from_db(&db_path)?
         .map(|(cfg, _, _)| cfg)
         .unwrap_or_default();
 
     let mut has_errors = false;
-    for (index, manifest) in resources.into_iter().enumerate() {
-        if let Err(error) = manifest.validate_version() {
-            err_line(format!("document {}: {}", index + 1, error));
-            has_errors = true;
-            continue;
-        }
-
-        let registered = match dispatch_resource(manifest) {
-            Ok(resource) => resource,
-            Err(error) => {
-                err_line(format!("document {}: {}", index + 1, error));
-                has_errors = true;
-                continue;
+    for (index, manifest) in manifests.into_iter().enumerate() {
+        match manifest {
+            ParsedManifest::Builtin(resource) => {
+                if let Err(error) = resource.validate_version() {
+                    err_line(format!("document {}: {}", index + 1, error));
+                    has_errors = true;
+                    continue;
+                }
+                let registered = match dispatch_resource(resource) {
+                    Ok(resource) => resource,
+                    Err(error) => {
+                        err_line(format!("document {}: {}", index + 1, error));
+                        has_errors = true;
+                        continue;
+                    }
+                };
+                if let Err(error) = registered.validate() {
+                    err_line(format!(
+                        "{} / {} invalid: {}",
+                        kind_as_str(registered.kind()),
+                        registered.name(),
+                        error
+                    ));
+                    has_errors = true;
+                    continue;
+                }
+                registered.apply(&mut merged_config);
             }
-        };
-        if let Err(error) = registered.validate() {
-            err_line(format!(
-                "{} / {} invalid: {}",
-                kind_as_str(registered.kind()),
-                registered.name(),
-                error
-            ));
-            has_errors = true;
-            continue;
+            ParsedManifest::Crd(crd_manifest) => {
+                if let Err(error) = crd::apply_crd(&mut merged_config, crd_manifest) {
+                    err_line(format!("document {}: {}", index + 1, error));
+                    has_errors = true;
+                }
+            }
+            ParsedManifest::Custom(cr_manifest) => {
+                if let Err(error) = crd::apply_custom_resource(&mut merged_config, cr_manifest) {
+                    err_line(format!("document {}: {}", index + 1, error));
+                    has_errors = true;
+                }
+            }
         }
-        registered.apply(&mut merged_config);
     }
 
     if has_errors {

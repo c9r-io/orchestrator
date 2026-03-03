@@ -42,6 +42,64 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
     resources
 }
 
+/// Export CRD definitions and custom resource instances as YAML-serializable values.
+pub fn export_crd_documents(config: &OrchestratorConfig) -> Vec<serde_yaml::Value> {
+    let mut docs = Vec::new();
+
+    // Export CRD definitions first (sorted by kind for deterministic output)
+    let mut crd_keys: Vec<_> = config.custom_resource_definitions.keys().collect();
+    crd_keys.sort();
+    for key in crd_keys {
+        if let Some(crd) = config.custom_resource_definitions.get(key) {
+            let manifest = crate::crd::types::CrdManifest {
+                api_version: "orchestrator.dev/v2".to_string(),
+                metadata: crate::cli_types::ResourceMetadata {
+                    name: format!("{}.{}", crd.plural, crd.group),
+                    project: None,
+                    labels: None,
+                    annotations: None,
+                },
+                spec: crate::crd::types::CrdSpec {
+                    kind: crd.kind.clone(),
+                    plural: crd.plural.clone(),
+                    short_names: crd.short_names.clone(),
+                    group: crd.group.clone(),
+                    versions: crd.versions.clone(),
+                    hooks: crd.hooks.clone(),
+                },
+            };
+            // Wrap with `kind: CustomResourceDefinition`
+            let mut value = serde_yaml::to_value(&manifest).unwrap_or_default();
+            if let serde_yaml::Value::Mapping(ref mut map) = value {
+                map.insert(
+                    serde_yaml::Value::String("kind".to_string()),
+                    serde_yaml::Value::String("CustomResourceDefinition".to_string()),
+                );
+            }
+            docs.push(value);
+        }
+    }
+
+    // Export CR instances (sorted by storage key for deterministic output)
+    let mut cr_keys: Vec<_> = config.custom_resources.keys().collect();
+    cr_keys.sort();
+    for key in cr_keys {
+        if let Some(cr) = config.custom_resources.get(key) {
+            let manifest = crate::crd::types::CustomResourceManifest {
+                api_version: cr.api_version.clone(),
+                kind: cr.kind.clone(),
+                metadata: cr.metadata.clone(),
+                spec: cr.spec.clone(),
+            };
+            if let Ok(value) = serde_yaml::to_value(&manifest) {
+                docs.push(value);
+            }
+        }
+    }
+
+    docs
+}
+
 pub fn export_manifest_documents(config: &OrchestratorConfig) -> Vec<OrchestratorResource> {
     export_manifest_resources(config)
         .into_iter()

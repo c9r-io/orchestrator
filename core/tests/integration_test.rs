@@ -96,6 +96,8 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
         step_templates: HashMap::new(),
         env_stores: HashMap::new(),
         resource_meta: ResourceMetadataStore::default(),
+        custom_resource_definitions: HashMap::new(),
+        custom_resources: HashMap::new(),
     }
 }
 
@@ -737,6 +739,8 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
         step_templates: HashMap::new(),
         env_stores: HashMap::new(),
         resource_meta: ResourceMetadataStore::default(),
+        custom_resource_definitions: HashMap::new(),
+        custom_resources: HashMap::new(),
     }
 }
 

@@ -24,8 +24,10 @@ mod workspace;
 pub use agent::AgentResource;
 pub use defaults::DefaultsResource;
 pub use env_store::EnvStoreResource;
-pub use export::{export_manifest_documents, export_manifest_resources};
-pub use parse::{delete_resource_by_kind, kind_as_str, parse_resources_from_yaml};
+pub use export::{export_crd_documents, export_manifest_documents, export_manifest_resources};
+pub use parse::{
+    delete_resource_by_kind, kind_as_str, parse_manifests_from_yaml, parse_resources_from_yaml,
+};
 pub use project::ProjectResource;
 pub use runtime_policy::RuntimePolicyResource;
 pub use secret_store::SecretStoreResource;
