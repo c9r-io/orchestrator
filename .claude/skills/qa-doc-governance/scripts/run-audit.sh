@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 echo "[qa-doc-governance] root=$ROOT_DIR"
 
 docs=$(find docs/qa -name '*.md' | sort)
-qa_docs=$(printf "%s\n" "$docs" | grep -v 'docs/qa/README.md' | grep -v 'docs/qa/_' || true)
+qa_docs=$(printf "%s\n" "$docs" | grep -v 'docs/qa/README.md' | grep -v 'docs/qa/_' | grep -v 'docs/qa/script/README.md' || true)
 
 total_docs=$(printf "%s\n" "$qa_docs" | sed '/^$/d' | wc -l | tr -d ' ')
 total_scenarios=$(while IFS= read -r f; do
@@ -45,7 +45,7 @@ done < <(printf "%s\n" "$ui_docs")
 
 echo "[check] README index drift"
 all_without_readme=$(printf "%s\n" "$qa_docs" | sed 's#^docs/qa/##' | sort)
-indexed=$(rg -o "\(\./[^)]+\.md\)" docs/qa/README.md | sed -E 's#^\(\./##; s#\)$##' | grep -v '^_' | sort -u || true)
+indexed=$(rg -o '`docs/qa/[^`]+\.md`' docs/qa/README.md | sed -E 's#^`docs/qa/##; s#`$##' | grep -v '^_' | sort -u || true)
 
 not_indexed=$(comm -23 <(printf "%s\n" "$all_without_readme") <(printf "%s\n" "$indexed") || true)
 indexed_missing=$(comm -13 <(printf "%s\n" "$all_without_readme") <(printf "%s\n" "$indexed") || true)

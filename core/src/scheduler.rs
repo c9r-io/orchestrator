@@ -956,7 +956,9 @@ mod tests {
         let core_dir = project_root.join("core");
         assert!(core_dir.exists());
 
-        let db_path = project_root.join("target").join("scheduler_self_test.db");
+        let target_dir = project_root.join("target");
+        std::fs::create_dir_all(&target_dir).expect("create target dir");
+        let db_path = target_dir.join("scheduler_self_test.db");
         crate::db::init_schema(&db_path).expect("init self test db");
         let database =
             Arc::new(crate::database::Database::new(db_path.clone()).expect("create db pool"));

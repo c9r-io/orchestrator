@@ -126,7 +126,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/35-legacy-observability-backfill.md` | 5 | Legacy event step_scope backfill, unknown→legacy display, backfill-events CLI |
 | orchestrator | `docs/qa/orchestrator/36-structured-logging.md` | 5 | Structured logging bootstrap, CLI log overrides, stderr/stdout separation, and rolling file output |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | 1 | Smoke test: core CLI and DB initialization |
-| orchestrator | `docs/qa/script/` | 7 | Executable QA scripts |
+| script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |
 | self-bootstrap | `docs/qa/self-bootstrap/01-survival-binary-checkpoint-self-test.md` | 5 | Survival Layer 1-2: binary snapshot/restore and self-test acceptance gate |
 | self-bootstrap | `docs/qa/self-bootstrap/02-survival-smoke-binary-snapshot.md` | 5 | Unit tests for snapshot_binary() and restore_binary_snapshot() |
