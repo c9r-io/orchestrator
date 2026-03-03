@@ -4,6 +4,7 @@ data/logs/*.log
 config/default.yaml
 docs/ticket/*.md
 /core/target/
+/target/
 data/logs/*
 fixtures/ticket/*.md
 workspace/*
