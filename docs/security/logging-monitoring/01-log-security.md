@@ -68,9 +68,11 @@ Verify logs do not record plaintext passwords, tokens, secrets, or raw Authoriza
 ### Attack Steps
 1. Perform login, token exchange, password change
 2. Grep logs for: `password`, `secret`, JWT prefix `eyJ`
+3. For orchestrator task logs: execute an agent that references a `SecretStore` via `fromRef` or `refValue`, then verify the secret values are replaced with `[REDACTED]` in captured stdout/stderr (see `docs/qa/orchestrator/38-agent-env-resolution.md` Scenario 5)
 
 ### Expected Secure Behavior
 - All sensitive values are masked or not logged at all
+- Orchestrator `SecretStore` values are automatically collected by `collect_sensitive_values()` and redacted via `redact_text()` in task output logs
 
 ### Verification
 ```bash

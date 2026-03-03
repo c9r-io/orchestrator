@@ -1,3 +1,4 @@
+use crate::cli_types::AgentEnvEntry;
 use crate::metrics::{SelectionStrategy, SelectionWeights};
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +24,10 @@ pub struct AgentConfig {
     pub command: String,
     #[serde(default)]
     pub selection: AgentSelectionConfig,
+    /// Environment variable entries (direct values and store references).
+    /// Resolution happens at runtime via `resolve_agent_env()`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<Vec<AgentEnvEntry>>,
 }
 
 impl AgentConfig {
@@ -32,6 +37,7 @@ impl AgentConfig {
             capabilities: Vec::new(),
             command: String::new(),
             selection: AgentSelectionConfig::default(),
+            env: None,
         }
     }
 

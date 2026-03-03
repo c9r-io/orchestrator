@@ -1,7 +1,7 @@
 use crate::cli::{AgentCommands, WorkflowCommands, WorkspaceCommands};
 use crate::cli_types::{
-    AgentSpec, OrchestratorResource, ResourceKind, ResourceSpec, SafetySpec,
-    WorkflowFinalizeSpec, WorkflowLoopSpec, WorkflowSpec, WorkflowStepSpec, WorkspaceSpec,
+    AgentSpec, OrchestratorResource, ResourceKind, ResourceSpec, SafetySpec, WorkflowFinalizeSpec,
+    WorkflowLoopSpec, WorkflowSpec, WorkflowStepSpec, WorkspaceSpec,
 };
 use crate::config_load::read_active_config;
 use anyhow::{Context, Result};
@@ -91,6 +91,7 @@ impl CliHandler {
                     },
                     metadata: None,
                     selection: None,
+                    env: None,
                 };
                 let manifest = OrchestratorResource {
                     api_version: "orchestrator.dev/v2".to_string(),

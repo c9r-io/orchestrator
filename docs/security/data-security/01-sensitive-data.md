@@ -108,10 +108,13 @@ Verify secrets are not hardcoded in code/repo and are not exposed via logs or AP
 ### Attack Steps
 1. Search the repo for `password=`, `secret=`, `BEGIN PRIVATE KEY`
 2. Check whether config uses a secret store (Kubernetes Secret, Vault, etc.)
+3. For orchestrator agents: verify secrets are managed via `SecretStore` resources rather than hardcoded in agent `command` templates or direct `env` values
 
 ### Expected Secure Behavior
 - No hardcoded secrets
 - Secrets are injected via secure mechanisms
+- Orchestrator agents reference secrets through `SecretStore` resources (via `fromRef` or `refValue`), not literal values
+- SecretStore values are redacted (`[REDACTED]`) in task execution logs (see `docs/qa/orchestrator/38-agent-env-resolution.md` Scenario 5)
 
 ### Verification
 ```bash

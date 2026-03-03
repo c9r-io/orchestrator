@@ -203,9 +203,19 @@ async fn run_phase_with_timeout(
     let stdout_path = logs_dir.join(format!("{}_{}.stdout", phase, run_id));
     let stderr_path = logs_dir.join(format!("{}_{}.stderr", phase, run_id));
 
-    let runner = {
+    let (runner, resolved_extra_env) = {
         let active = crate::config_load::read_active_config(state)?;
-        active.config.runner.clone()
+        let runner = active.config.runner.clone();
+        let extra_env = if let Some(agent_cfg) = active.config.agents.get(agent_id) {
+            if let Some(ref env_entries) = agent_cfg.env {
+                crate::env_resolve::resolve_agent_env(env_entries, &active.config.env_stores)?
+            } else {
+                std::collections::HashMap::new()
+            }
+        } else {
+            std::collections::HashMap::new()
+        };
+        (runner, extra_env)
     };
     let redaction_patterns = runner.redaction_patterns.clone();
     if !logs_dir.starts_with(&state.logs_dir) {
@@ -336,6 +346,7 @@ async fn run_phase_with_timeout(
         workspace_root,
         stdout_file,
         stderr_file,
+        &resolved_extra_env,
     )?;
     if let Some(sid) = session_id.as_deref() {
         if let Some(pid) = child.id() {

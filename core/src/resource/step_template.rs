@@ -22,9 +22,7 @@ impl Resource for StepTemplateResource {
     fn validate(&self) -> Result<()> {
         super::validate_resource_name(self.name())?;
         if self.spec.prompt.trim().is_empty() {
-            return Err(anyhow!(
-                "step_template.spec.prompt cannot be empty"
-            ));
+            return Err(anyhow!("step_template.spec.prompt cannot be empty"));
         }
         Ok(())
     }
@@ -179,8 +177,7 @@ spec:
   prompt: "You are a planner for {source_tree}."
   description: "Planning template"
 "#;
-        let resource: OrchestratorResource =
-            serde_yaml::from_str(yaml).expect("should parse YAML");
+        let resource: OrchestratorResource = serde_yaml::from_str(yaml).expect("should parse YAML");
         resource
             .validate_version()
             .expect("version should be valid");

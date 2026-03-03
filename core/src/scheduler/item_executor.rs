@@ -448,7 +448,10 @@ pub async fn execute_builtin_step(
     } else {
         let resolved_prompt = step.template.as_ref().and_then(|tmpl_name| {
             let cfg = state.active_config.read().ok()?;
-            cfg.config.step_templates.get(tmpl_name).map(|t| t.prompt.clone())
+            cfg.config
+                .step_templates
+                .get(tmpl_name)
+                .map(|t| t.prompt.clone())
         });
         run_phase_with_rotation(
             state,

@@ -75,8 +75,8 @@ pub fn delete_task_impl(state: &InnerState, task_id: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::test_fixtures::{first_item_id, seed_task, test_dir};
+    use super::*;
     use crate::config_load::now_ts;
     use crate::dto::CreateTaskPayload;
     use crate::task_ops::create_task_impl;

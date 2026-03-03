@@ -51,10 +51,7 @@ pub fn validate_workflow_config(
             StepSemanticKind::Builtin { .. } | StepSemanticKind::Command | StepSemanticKind::Chain
         );
         if !is_self_contained {
-            let has_agent = config
-                .agents
-                .values()
-                .any(|a| a.supports_capability(key));
+            let has_agent = config.agents.values().any(|a| a.supports_capability(key));
             if !has_agent {
                 anyhow::bail!(
                     "no agent supports capability for step '{}' used by workflow '{}'",
@@ -337,6 +334,36 @@ pub fn validate_self_referential_safety(
         );
     }
 
+    Ok(())
+}
+
+/// Validates that all agent env store references (fromRef, refValue.name) point to
+/// existing entries in config.env_stores.
+pub fn validate_agent_env_store_refs(config: &OrchestratorConfig) -> Result<()> {
+    for (agent_name, agent_cfg) in &config.agents {
+        if let Some(ref entries) = agent_cfg.env {
+            for entry in entries {
+                if let Some(ref store_name) = entry.from_ref {
+                    if !config.env_stores.contains_key(store_name.as_str()) {
+                        anyhow::bail!(
+                            "agent '{}' env fromRef '{}' references unknown store",
+                            agent_name,
+                            store_name
+                        );
+                    }
+                }
+                if let Some(ref rv) = entry.ref_value {
+                    if !config.env_stores.contains_key(&rv.name) {
+                        anyhow::bail!(
+                            "agent '{}' env refValue.name '{}' references unknown store",
+                            agent_name,
+                            rv.name
+                        );
+                    }
+                }
+            }
+        }
+    }
     Ok(())
 }
 
@@ -1154,10 +1181,7 @@ mod tests {
         std::os::windows::fs::symlink_dir(&outside, &symlink).expect("create symlink");
 
         let result = ensure_within_root(&root, &symlink, "test_field");
-        assert!(
-            result.is_err(),
-            "symlink escaping root should be rejected"
-        );
+        assert!(result.is_err(), "symlink escaping root should be rejected");
         let err = result.expect_err("operation should fail").to_string();
         assert!(
             err.contains("resolves outside workspace root"),
@@ -1322,8 +1346,7 @@ mod tests {
         workflow.safety.profile = WorkflowSafetyProfile::Standard;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::None;
 
-        let result =
-            validate_self_referential_safety(&workflow, "standard-wf", "plain-ws", false);
+        let result = validate_self_referential_safety(&workflow, "standard-wf", "plain-ws", false);
         assert!(result.is_err(), "should reject checkpoint_strategy=None");
         assert!(result
             .expect_err("operation should fail")
@@ -1337,8 +1360,7 @@ mod tests {
         workflow.safety.profile = WorkflowSafetyProfile::Standard;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
 
-        let result =
-            validate_self_referential_safety(&workflow, "standard-wf", "plain-ws", false);
+        let result = validate_self_referential_safety(&workflow, "standard-wf", "plain-ws", false);
         assert!(
             result.is_ok(),
             "standard profile with valid checkpoint should pass: {:?}",
@@ -1356,10 +1378,7 @@ mod tests {
         let mut step = make_command_step("self_test", "echo forbidden");
         step.enabled = false;
         step.scope = Some(StepScope::Task);
-        let mut workflow = make_workflow(vec![
-            make_command_step("custom_task", "echo ok"),
-            step,
-        ]);
+        let mut workflow = make_workflow(vec![make_command_step("custom_task", "echo ok"), step]);
         workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
         workflow.safety.auto_rollback = true;
@@ -1402,5 +1421,103 @@ mod tests {
             "non-probe profile should skip all probe checks: {:?}",
             result.err()
         );
+    }
+
+    #[test]
+    fn validate_agent_env_store_refs_passes_with_valid_refs() {
+        use crate::cli_types::{AgentEnvEntry, AgentEnvRefValue};
+        use crate::config::{AgentConfig, EnvStoreConfig};
+
+        let mut config = OrchestratorConfig::default();
+        config.env_stores.insert(
+            "shared".to_string(),
+            EnvStoreConfig {
+                data: [("K".to_string(), "V".to_string())].into(),
+                sensitive: false,
+            },
+        );
+        config.agents.insert(
+            "agent1".to_string(),
+            AgentConfig {
+                env: Some(vec![
+                    AgentEnvEntry {
+                        name: None,
+                        value: None,
+                        from_ref: Some("shared".to_string()),
+                        ref_value: None,
+                    },
+                    AgentEnvEntry {
+                        name: Some("X".to_string()),
+                        value: None,
+                        from_ref: None,
+                        ref_value: Some(AgentEnvRefValue {
+                            name: "shared".to_string(),
+                            key: "K".to_string(),
+                        }),
+                    },
+                ]),
+                ..AgentConfig::default()
+            },
+        );
+        assert!(validate_agent_env_store_refs(&config).is_ok());
+    }
+
+    #[test]
+    fn validate_agent_env_store_refs_rejects_missing_from_ref() {
+        use crate::cli_types::AgentEnvEntry;
+        use crate::config::AgentConfig;
+
+        let mut config = OrchestratorConfig::default();
+        config.agents.insert(
+            "bad-agent".to_string(),
+            AgentConfig {
+                env: Some(vec![AgentEnvEntry {
+                    name: None,
+                    value: None,
+                    from_ref: Some("nonexistent".to_string()),
+                    ref_value: None,
+                }]),
+                ..AgentConfig::default()
+            },
+        );
+        let err = validate_agent_env_store_refs(&config).unwrap_err();
+        assert!(err.to_string().contains("unknown store"));
+        assert!(err.to_string().contains("bad-agent"));
+    }
+
+    #[test]
+    fn validate_agent_env_store_refs_rejects_missing_ref_value_store() {
+        use crate::cli_types::{AgentEnvEntry, AgentEnvRefValue};
+        use crate::config::AgentConfig;
+
+        let mut config = OrchestratorConfig::default();
+        config.agents.insert(
+            "bad-agent".to_string(),
+            AgentConfig {
+                env: Some(vec![AgentEnvEntry {
+                    name: Some("X".to_string()),
+                    value: None,
+                    from_ref: None,
+                    ref_value: Some(AgentEnvRefValue {
+                        name: "missing-store".to_string(),
+                        key: "KEY".to_string(),
+                    }),
+                }]),
+                ..AgentConfig::default()
+            },
+        );
+        let err = validate_agent_env_store_refs(&config).unwrap_err();
+        assert!(err.to_string().contains("unknown store"));
+    }
+
+    #[test]
+    fn validate_agent_env_store_refs_passes_with_no_env() {
+        use crate::config::AgentConfig;
+
+        let mut config = OrchestratorConfig::default();
+        config
+            .agents
+            .insert("basic-agent".to_string(), AgentConfig::default());
+        assert!(validate_agent_env_store_refs(&config).is_ok());
     }
 }

@@ -51,6 +51,8 @@ pub enum ResourceKind {
     Defaults,
     RuntimePolicy,
     StepTemplate,
+    EnvStore,
+    SecretStore,
 }
 
 /// Kubernetes-style resource metadata.
@@ -98,6 +100,10 @@ pub enum ResourceSpec {
 
     /// Step template resource spec
     StepTemplate(StepTemplateSpec),
+
+    /// Env store / Secret store resource spec (both share the same data shape).
+    /// The `ResourceKind` field on `OrchestratorResource` distinguishes them.
+    EnvStore(EnvStoreSpec),
 }
 
 /// Project resource specification.
@@ -223,6 +229,38 @@ pub struct StepTemplateSpec {
     pub description: Option<String>,
 }
 
+/// EnvStore resource specification.
+/// Declares reusable environment variable sets.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct EnvStoreSpec {
+    pub data: HashMap<String, String>,
+}
+
+/// A single entry in an Agent's env configuration.
+/// Exactly one of the three forms must be used:
+/// - `name` + `value`: direct env var
+/// - `fromRef`: import all keys from a named store
+/// - `name` + `refValue`: import a single key from a named store
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentEnvEntry {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "fromRef")]
+    pub from_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", rename = "refValue")]
+    pub ref_value: Option<AgentEnvRefValue>,
+}
+
+/// Reference to a specific key within an EnvStore or SecretStore.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentEnvRefValue {
+    pub name: String,
+    pub key: String,
+}
+
 /// Agent resource specification.
 /// Defines an agent with a command and capabilities.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -241,6 +279,10 @@ pub struct AgentSpec {
     /// Agent selection strategy and weights.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selection: Option<AgentSelectionSpec>,
+
+    /// Environment variables to inject into the agent process.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<Vec<AgentEnvEntry>>,
 }
 
 /// Agent metadata specification.
@@ -262,7 +304,6 @@ pub struct AgentSelectionSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub weights: Option<SelectionWeights>,
 }
-
 
 /// Workflow resource specification.
 /// Defines a workflow pipeline with steps, loop policy, and finalization rules.
@@ -586,5 +627,120 @@ spec:
             result.expect("self_test should be a valid step type"),
             "self_test"
         );
+    }
+
+    #[test]
+    fn parse_env_store_yaml() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+kind: EnvStore
+metadata:
+  name: shared-config
+spec:
+  data:
+    DATABASE_URL: "postgres://localhost/mydb"
+    LOG_LEVEL: "debug"
+"#;
+        let resource: OrchestratorResource =
+            serde_yaml::from_str(yaml).expect("Failed to parse EnvStore YAML");
+        resource.validate_version().expect("version ok");
+        assert_eq!(resource.kind, ResourceKind::EnvStore);
+        assert_eq!(resource.metadata.name, "shared-config");
+        if let ResourceSpec::EnvStore(spec) = &resource.spec {
+            assert_eq!(
+                spec.data.get("DATABASE_URL").unwrap(),
+                "postgres://localhost/mydb"
+            );
+            assert_eq!(spec.data.get("LOG_LEVEL").unwrap(), "debug");
+        } else {
+            panic!("Expected EnvStore spec");
+        }
+    }
+
+    #[test]
+    fn parse_secret_store_yaml() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+kind: SecretStore
+metadata:
+  name: api-keys
+spec:
+  data:
+    OPENAI_API_KEY: "sk-test123"
+"#;
+        let resource: OrchestratorResource =
+            serde_yaml::from_str(yaml).expect("Failed to parse SecretStore YAML");
+        resource.validate_version().expect("version ok");
+        assert_eq!(resource.kind, ResourceKind::SecretStore);
+        if let ResourceSpec::EnvStore(spec) = &resource.spec {
+            assert_eq!(spec.data.get("OPENAI_API_KEY").unwrap(), "sk-test123");
+        } else {
+            panic!("Expected EnvStore spec (SecretStore uses same spec shape)");
+        }
+    }
+
+    #[test]
+    fn parse_agent_with_env_yaml() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: coder
+spec:
+  command: claude -p "{prompt}"
+  env:
+    - name: LOG_LEVEL
+      value: "debug"
+    - fromRef: shared-config
+    - name: MY_API_KEY
+      refValue:
+        name: api-keys
+        key: OPENAI_API_KEY
+"#;
+        let resource: OrchestratorResource =
+            serde_yaml::from_str(yaml).expect("Failed to parse Agent with env YAML");
+        resource.validate_version().expect("version ok");
+        assert_eq!(resource.kind, ResourceKind::Agent);
+        if let ResourceSpec::Agent(spec) = &resource.spec {
+            let env = spec.env.as_ref().expect("env should be present");
+            assert_eq!(env.len(), 3);
+
+            // Direct value
+            assert_eq!(env[0].name.as_deref(), Some("LOG_LEVEL"));
+            assert_eq!(env[0].value.as_deref(), Some("debug"));
+
+            // fromRef
+            assert_eq!(env[1].from_ref.as_deref(), Some("shared-config"));
+
+            // refValue
+            assert_eq!(env[2].name.as_deref(), Some("MY_API_KEY"));
+            let rv = env[2]
+                .ref_value
+                .as_ref()
+                .expect("refValue should be present");
+            assert_eq!(rv.name, "api-keys");
+            assert_eq!(rv.key, "OPENAI_API_KEY");
+        } else {
+            panic!("Expected Agent spec");
+        }
+    }
+
+    #[test]
+    fn parse_agent_without_env_yaml() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: basic
+spec:
+  command: echo "{prompt}"
+"#;
+        let resource: OrchestratorResource =
+            serde_yaml::from_str(yaml).expect("Failed to parse Agent YAML");
+        if let ResourceSpec::Agent(spec) = &resource.spec {
+            assert!(spec.env.is_none());
+        } else {
+            panic!("Expected Agent spec");
+        }
     }
 }

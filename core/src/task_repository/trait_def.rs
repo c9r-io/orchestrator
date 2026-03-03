@@ -1,8 +1,8 @@
 use crate::dto::{CommandRunDto, EventDto, TaskItemDto, TaskItemRow, TaskSummary};
 use anyhow::Result;
 
-use super::types::{TaskLogRunRow, TaskRuntimeRow};
 use super::command_run::NewCommandRun;
+use super::types::{TaskLogRunRow, TaskRuntimeRow};
 
 pub trait TaskRepository {
     fn resolve_task_id(&self, task_id_or_prefix: &str) -> Result<String>;

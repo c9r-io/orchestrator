@@ -2,6 +2,7 @@
 
 mod agent;
 mod defaults;
+mod env_store;
 mod execution;
 mod observability;
 mod pipeline;
@@ -14,6 +15,7 @@ mod workflow;
 
 pub use agent::*;
 pub use defaults::*;
+pub use env_store::*;
 pub use execution::*;
 pub use observability::*;
 pub use pipeline::*;
@@ -46,6 +48,8 @@ pub struct OrchestratorConfig {
     #[serde(default)]
     pub step_templates: HashMap<String, StepTemplateConfig>,
     #[serde(default)]
+    pub env_stores: HashMap<String, EnvStoreConfig>,
+    #[serde(default)]
     pub resource_meta: ResourceMetadataStore,
 }
 
@@ -65,6 +69,7 @@ impl Default for OrchestratorConfig {
             agents: HashMap::new(),
             workflows: HashMap::new(),
             step_templates: HashMap::new(),
+            env_stores: HashMap::new(),
             resource_meta: ResourceMetadataStore::default(),
         }
     }

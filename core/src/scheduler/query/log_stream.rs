@@ -11,8 +11,8 @@ use std::io::{Read, Seek};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use super::{emit_anomaly_warning, retry_query};
 use super::task_queries::resolve_task_id;
+use super::{emit_anomaly_warning, retry_query};
 
 const FOLLOW_POLL_MS: u64 = 500;
 const LOG_UNAVAILABLE_MARKER: &str = "[log unavailable]";
@@ -261,8 +261,8 @@ async fn follow_one_stream(path: &str, pos: &mut u64, stderr: bool) -> Result<()
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::test_fixtures::{first_item_id, seed_task, test_dir};
+    use super::*;
     use crate::config_load::now_ts;
     use crate::task_repository::{NewCommandRun, SqliteTaskRepository, TaskRepository};
     use crate::test_utils::TestState;

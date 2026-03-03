@@ -232,7 +232,10 @@ pub fn count_unresolved_items(conn: &TaskRepositoryConn, task_id: &str) -> Resul
     .context("count unresolved items")
 }
 
-pub fn list_task_items_for_cycle(conn: &TaskRepositoryConn, task_id: &str) -> Result<Vec<TaskItemRow>> {
+pub fn list_task_items_for_cycle(
+    conn: &TaskRepositoryConn,
+    task_id: &str,
+) -> Result<Vec<TaskItemRow>> {
     let mut stmt = conn.prepare(
         "SELECT id, qa_file_path
          FROM task_items

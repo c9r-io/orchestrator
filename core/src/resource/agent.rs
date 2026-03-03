@@ -1,6 +1,6 @@
 use crate::cli_types::{
-    AgentMetadataSpec, AgentSelectionSpec, AgentSpec, OrchestratorResource,
-    ResourceKind, ResourceSpec,
+    AgentMetadataSpec, AgentSelectionSpec, AgentSpec, OrchestratorResource, ResourceKind,
+    ResourceSpec,
 };
 use crate::config::{AgentConfig, AgentMetadata, AgentSelectionConfig, OrchestratorConfig};
 use anyhow::{anyhow, Result};
@@ -25,9 +25,7 @@ impl Resource for AgentResource {
     fn validate(&self) -> Result<()> {
         super::validate_resource_name(self.name())?;
         if self.spec.command.trim().is_empty() {
-            return Err(anyhow!(
-                "agent.spec.command cannot be empty"
-            ));
+            return Err(anyhow!("agent.spec.command cannot be empty"));
         }
         Ok(())
     }
@@ -116,6 +114,7 @@ pub(super) fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
                 weights: selection.weights.clone(),
             })
             .unwrap_or_default(),
+        env: spec.env.clone(),
     }
 }
 
@@ -139,6 +138,7 @@ pub(super) fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
             strategy: config.selection.strategy,
             weights: config.selection.weights.clone(),
         }),
+        env: config.env.clone(),
     }
 }
 
@@ -154,8 +154,9 @@ mod tests {
     fn agent_resource_apply() {
         let mut config = make_config();
 
-        let resource = dispatch_resource(agent_manifest("agent-roundtrip", "glmcode -p \"{prompt}\""))
-            .expect("agent dispatch should succeed");
+        let resource =
+            dispatch_resource(agent_manifest("agent-roundtrip", "glmcode -p \"{prompt}\""))
+                .expect("agent dispatch should succeed");
         assert_eq!(resource.apply(&mut config), ApplyResult::Created);
 
         let loaded = AgentResource::get_from(&config, "agent-roundtrip")
@@ -173,6 +174,7 @@ mod tests {
                 capabilities: None,
                 metadata: None,
                 selection: None,
+                env: None,
             },
         };
         let err = agent.validate().expect_err("operation should fail");
@@ -188,6 +190,7 @@ mod tests {
                 capabilities: Some(vec!["plan".to_string()]),
                 metadata: None,
                 selection: None,
+                env: None,
             },
         };
         assert!(agent.validate().is_ok());
@@ -203,6 +206,7 @@ mod tests {
                 capabilities: vec!["qa".to_string()],
                 command: "glmcode -p \"{prompt}\"".to_string(),
                 selection: AgentSelectionConfig::default(),
+                env: None,
             },
         );
         let loaded =
@@ -220,8 +224,8 @@ mod tests {
     #[test]
     fn agent_delete_cleans_up_metadata() {
         let mut config = make_config();
-        let ag =
-            dispatch_resource(agent_manifest("meta-ag", "glmcode -p \"{prompt}\"")).expect("dispatch agent resource");
+        let ag = dispatch_resource(agent_manifest("meta-ag", "glmcode -p \"{prompt}\""))
+            .expect("dispatch agent resource");
         ag.apply(&mut config);
         assert!(config.resource_meta.agents.contains_key("meta-ag"));
 
@@ -243,6 +247,7 @@ mod tests {
                 capabilities: Some(vec!["plan".to_string(), "implement".to_string()]),
                 metadata: None,
                 selection: None,
+                env: None,
             },
         };
         let yaml = agent.to_yaml().expect("should serialize");
@@ -264,6 +269,7 @@ mod tests {
                 strategy: Default::default(),
                 weights: None,
             }),
+            env: None,
         };
 
         let config = agent_spec_to_config(&spec);
@@ -286,6 +292,7 @@ mod tests {
             capabilities: vec![],
             command: "echo".to_string(),
             selection: AgentSelectionConfig::default(),
+            env: None,
         };
         let spec = agent_config_to_spec(&config);
         assert!(spec.capabilities.is_none());
@@ -303,6 +310,7 @@ mod tests {
             capabilities: vec![],
             command: "echo".to_string(),
             selection: AgentSelectionConfig::default(),
+            env: None,
         };
         let spec = agent_config_to_spec(&config);
         assert!(spec.metadata.is_none());
@@ -325,6 +333,7 @@ mod tests {
                 capabilities: Some(vec!["qa".to_string()]),
                 metadata: None,
                 selection: None,
+                env: None,
             })),
         };
         let rr = dispatch_resource(resource).expect("dispatch agent resource");

@@ -97,6 +97,7 @@ mod tests {
                     capabilities: vec!["plan".to_string(), "qa_doc_gen".to_string()],
                     command: "echo {prompt}".to_string(),
                     selection: AgentSelectionConfig::default(),
+                    env: None,
                 },
             )
             .with_step_template(
@@ -334,6 +335,7 @@ mod tests {
                     capabilities: vec!["plan".to_string(), "qa_doc_gen".to_string()],
                     command: "echo {prompt}".to_string(),
                     selection: AgentSelectionConfig::default(),
+                    env: None,
                 },
             )
             .with_step_template(
@@ -362,7 +364,10 @@ mod tests {
                             template: None,
                             outputs: Vec::new(),
                             pipe_to: None,
-                            command: Some(format!("printf '{}'", "X".repeat(PIPELINE_VAR_INLINE_LIMIT + 1024))),
+                            command: Some(format!(
+                                "printf '{}'",
+                                "X".repeat(PIPELINE_VAR_INLINE_LIMIT + 1024)
+                            )),
                             chain_steps: vec![],
                             scope: None,
                             behavior: StepBehavior::default(),

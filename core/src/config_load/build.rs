@@ -6,8 +6,8 @@ use std::path::Path;
 use super::{
     apply_self_heal_pass, normalize_config, normalize_step_execution_mode_recursive,
     persist_config_versioned, persist_heal_log, resolve_and_validate_projects,
-    resolve_and_validate_workspaces, serialize_config_snapshot, validate_workflow_config,
-    ConfigSelfHealReport,
+    resolve_and_validate_workspaces, serialize_config_snapshot, validate_agent_env_store_refs,
+    validate_workflow_config, ConfigSelfHealReport,
 };
 
 pub fn build_active_config(app_root: &Path, config: OrchestratorConfig) -> Result<ActiveConfig> {
@@ -17,6 +17,7 @@ pub fn build_active_config(app_root: &Path, config: OrchestratorConfig) -> Resul
     for (workflow_id, workflow) in &config.workflows {
         validate_workflow_config(&config, workflow, workflow_id)?;
     }
+    validate_agent_env_store_refs(&config)?;
     Ok(ActiveConfig {
         default_project_id: config.defaults.project.clone(),
         default_workspace_id: config.defaults.workspace.clone(),

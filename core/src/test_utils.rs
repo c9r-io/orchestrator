@@ -71,6 +71,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                     capabilities: vec!["qa".to_string()],
                     command: "echo 'qa: {rel_path}'".to_string(),
                     selection: AgentSelectionConfig::default(),
+                    env: None,
                 },
             );
             agents
@@ -119,6 +120,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
             workflows
         },
         step_templates: HashMap::new(),
+        env_stores: HashMap::new(),
         resource_meta: ResourceMetadataStore::default(),
     }
 }

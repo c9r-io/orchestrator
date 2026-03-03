@@ -7,10 +7,12 @@ use anyhow::Result;
 use std::fmt::Write as _;
 use std::time::Duration;
 
-use super::{is_transient_query_error, retry_query};
-use crate::events::{ObservedStepScope, observed_step_scope_label, query_step_events_db, StepEvent};
 use super::format::{colorize_status, format_bytes, format_duration};
 use super::task_queries::load_task_summary;
+use super::{is_transient_query_error, retry_query};
+use crate::events::{
+    observed_step_scope_label, query_step_events_db, ObservedStepScope, StepEvent,
+};
 
 /// Watch a task in real-time, updating the display at the specified interval.
 pub async fn watch_task(state: &InnerState, task_id: &str, interval_secs: u64) -> Result<()> {
@@ -94,11 +96,7 @@ impl WatchAnomalyCounts {
     }
 }
 
-fn render_watch_frame(
-    task: &TaskSummary,
-    events: &[StepEvent],
-    task_id: &str,
-) -> String {
+fn render_watch_frame(task: &TaskSummary, events: &[StepEvent], task_id: &str) -> String {
     let mut frame = String::new();
     let _ = writeln!(
         frame,

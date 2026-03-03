@@ -1,8 +1,8 @@
-use super::fixtures::{seed_task, get_item_id};
 use super::super::command_run::NewCommandRun;
 use super::super::trait_def::TaskRepository;
 use super::super::types::TaskRepositorySource;
 use super::super::SqliteTaskRepository;
+use super::fixtures::{get_item_id, seed_task};
 use crate::config_load::now_ts;
 use crate::db::open_conn;
 use crate::test_utils::TestState;
@@ -78,7 +78,8 @@ fn insert_command_run_with_all_optional_fields() {
         machine_output_source: "json".to_string(),
         output_json_path: Some("/tmp/output.json".to_string()),
     };
-    repo.insert_command_run(&run).expect("insert command run with optionals");
+    repo.insert_command_run(&run)
+        .expect("insert command run with optionals");
 
     // Verify it was inserted correctly
     let runs = repo
@@ -167,7 +168,10 @@ fn delete_task_and_collect_log_paths_returns_empty_when_no_command_runs() {
     let paths = repo
         .delete_task_and_collect_log_paths(&task_id)
         .expect("delete task");
-    assert!(paths.is_empty(), "should have no log paths without command runs");
+    assert!(
+        paths.is_empty(),
+        "should have no log paths without command runs"
+    );
 
     // Verify task was still deleted
     let conn = open_conn(&state.db_path).expect("open sqlite");
@@ -199,8 +203,8 @@ fn delete_task_and_collect_log_paths_filters_empty_paths() {
         workspace_id: "default".to_string(),
         agent_id: "echo".to_string(),
         exit_code: 0,
-        stdout_path: "   ".to_string(),  // whitespace only
-        stderr_path: "".to_string(),     // empty
+        stdout_path: "   ".to_string(), // whitespace only
+        stderr_path: "".to_string(),    // empty
         started_at: now_ts(),
         ended_at: now_ts(),
         interrupted: 0,
@@ -218,7 +222,10 @@ fn delete_task_and_collect_log_paths_filters_empty_paths() {
     let paths = repo
         .delete_task_and_collect_log_paths(&task_id)
         .expect("delete task");
-    assert!(paths.is_empty(), "empty/whitespace paths should be filtered");
+    assert!(
+        paths.is_empty(),
+        "empty/whitespace paths should be filtered"
+    );
 }
 
 #[test]
@@ -248,17 +255,29 @@ fn delete_task_and_collect_log_paths_deletes_cascaded_data() {
 
     // Verify all related data is deleted
     let events_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM events WHERE task_id = ?1", params![task_id], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM events WHERE task_id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        )
         .expect("count events");
     assert_eq!(events_count, 0, "events should be deleted");
 
     let runs_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM command_runs WHERE id = 'cr-cascade'", [], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM command_runs WHERE id = 'cr-cascade'",
+            [],
+            |row| row.get(0),
+        )
         .expect("count runs");
     assert_eq!(runs_count, 0, "command_runs should be deleted");
 
     let items_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM task_items WHERE task_id = ?1", params![task_id], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM task_items WHERE task_id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        )
         .expect("count items");
     assert_eq!(items_count, 0, "task_items should be deleted");
 }

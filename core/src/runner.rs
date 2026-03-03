@@ -146,6 +146,7 @@ mod tests {
             temp.path(),
             stdout,
             stderr,
+            &std::collections::HashMap::new(),
         )
         .expect("spawn with allowlist");
 
@@ -175,9 +176,46 @@ mod tests {
         let mut runner = make_runner_config();
         runner.shell = "/definitely/missing-shell".to_string();
 
-        let err = spawn_with_runner(&runner, "echo hello", temp.path(), stdout, stderr)
-            .expect_err("missing shell should fail");
+        let err = spawn_with_runner(
+            &runner,
+            "echo hello",
+            temp.path(),
+            stdout,
+            stderr,
+            &std::collections::HashMap::new(),
+        )
+        .expect_err("missing shell should fail");
         assert!(err.to_string().contains("failed to spawn runner"));
+    }
+
+    #[tokio::test]
+    async fn test_spawn_with_extra_env_injects_variables() {
+        let temp = tempdir().expect("create tempdir");
+        let stdout_path = temp.path().join("stdout.log");
+        let stderr_path = temp.path().join("stderr.log");
+        let stdout = File::create(&stdout_path).expect("create stdout file");
+        let stderr = File::create(&stderr_path).expect("create stderr file");
+
+        let runner = make_runner_config();
+        let mut extra_env = std::collections::HashMap::new();
+        extra_env.insert("EXTRA_TEST_VAR".to_string(), "injected_value".to_string());
+
+        let mut child = spawn_with_runner(
+            &runner,
+            "printf '%s' \"${EXTRA_TEST_VAR:-missing}\"",
+            temp.path(),
+            stdout,
+            stderr,
+            &extra_env,
+        )
+        .expect("spawn with extra env");
+
+        let status = child.wait().await.expect("wait for child");
+        assert!(status.success());
+        assert_eq!(
+            std::fs::read_to_string(&stdout_path).expect("read stdout"),
+            "injected_value"
+        );
     }
 }
 
@@ -189,6 +227,7 @@ pub trait RunnerExecutor {
         cwd: &Path,
         stdout: File,
         stderr: File,
+        extra_env: &std::collections::HashMap<String, String>,
     ) -> Result<tokio::process::Child>;
 }
 
@@ -203,6 +242,7 @@ impl RunnerExecutor for ShellRunnerExecutor {
         cwd: &Path,
         stdout: File,
         stderr: File,
+        extra_env: &std::collections::HashMap<String, String>,
     ) -> Result<tokio::process::Child> {
         enforce_runner_policy(runner, command)?;
 
@@ -228,6 +268,11 @@ impl RunnerExecutor for ShellRunnerExecutor {
             }
         }
 
+        // Inject agent-specific extra env vars (from EnvStore/SecretStore/direct)
+        for (k, v) in extra_env {
+            cmd.env(k, v);
+        }
+
         // Remove CLAUDECODE env var so spawned `claude -p` processes don't
         // refuse to start due to nested session detection.
         cmd.env_remove("CLAUDECODE");
@@ -247,10 +292,11 @@ pub fn spawn_with_runner(
     cwd: &Path,
     stdout: File,
     stderr: File,
+    extra_env: &std::collections::HashMap<String, String>,
 ) -> Result<tokio::process::Child> {
     match runner.executor {
         RunnerExecutorKind::Shell => {
-            ShellRunnerExecutor.spawn(runner, command, cwd, stdout, stderr)
+            ShellRunnerExecutor.spawn(runner, command, cwd, stdout, stderr, extra_env)
         }
     }
 }

@@ -9,10 +9,12 @@ pub(crate) const API_VERSION: &str = "orchestrator.dev/v2";
 
 mod agent;
 mod defaults;
+mod env_store;
 mod export;
 mod parse;
 mod project;
 mod runtime_policy;
+mod secret_store;
 mod step_template;
 mod workflow;
 mod workspace;
@@ -21,10 +23,12 @@ mod workspace;
 
 pub use agent::AgentResource;
 pub use defaults::DefaultsResource;
+pub use env_store::EnvStoreResource;
 pub use export::{export_manifest_documents, export_manifest_resources};
 pub use parse::{delete_resource_by_kind, kind_as_str, parse_resources_from_yaml};
 pub use project::ProjectResource;
 pub use runtime_policy::RuntimePolicyResource;
+pub use secret_store::SecretStoreResource;
 pub use step_template::StepTemplateResource;
 pub use workflow::WorkflowResource;
 pub use workspace::WorkspaceResource;
@@ -57,6 +61,8 @@ pub enum RegisteredResource {
     Defaults(DefaultsResource),
     RuntimePolicy(RuntimePolicyResource),
     StepTemplate(StepTemplateResource),
+    EnvStore(EnvStoreResource),
+    SecretStore(SecretStoreResource),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -65,7 +71,7 @@ pub struct ResourceRegistration {
     pub build: fn(OrchestratorResource) -> Result<RegisteredResource>,
 }
 
-pub fn resource_registry() -> [ResourceRegistration; 7] {
+pub fn resource_registry() -> [ResourceRegistration; 9] {
     [
         ResourceRegistration {
             kind: ResourceKind::Workspace,
@@ -94,6 +100,14 @@ pub fn resource_registry() -> [ResourceRegistration; 7] {
         ResourceRegistration {
             kind: ResourceKind::StepTemplate,
             build: step_template::build_step_template,
+        },
+        ResourceRegistration {
+            kind: ResourceKind::EnvStore,
+            build: env_store::build_env_store,
+        },
+        ResourceRegistration {
+            kind: ResourceKind::SecretStore,
+            build: secret_store::build_secret_store,
         },
     ]
 }
@@ -189,6 +203,8 @@ impl Resource for RegisteredResource {
             Self::Defaults(_) => ResourceKind::Defaults,
             Self::RuntimePolicy(_) => ResourceKind::RuntimePolicy,
             Self::StepTemplate(_) => ResourceKind::StepTemplate,
+            Self::EnvStore(_) => ResourceKind::EnvStore,
+            Self::SecretStore(_) => ResourceKind::SecretStore,
         }
     }
 
@@ -201,6 +217,8 @@ impl Resource for RegisteredResource {
             Self::Defaults(resource) => &resource.metadata.name,
             Self::RuntimePolicy(resource) => &resource.metadata.name,
             Self::StepTemplate(resource) => &resource.metadata.name,
+            Self::EnvStore(resource) => &resource.metadata.name,
+            Self::SecretStore(resource) => &resource.metadata.name,
         }
     }
 
@@ -213,6 +231,8 @@ impl Resource for RegisteredResource {
             Self::Defaults(resource) => resource.validate(),
             Self::RuntimePolicy(resource) => resource.validate(),
             Self::StepTemplate(resource) => resource.validate(),
+            Self::EnvStore(resource) => resource.validate(),
+            Self::SecretStore(resource) => resource.validate(),
         }
     }
 
@@ -225,6 +245,8 @@ impl Resource for RegisteredResource {
             Self::Defaults(resource) => resource.apply(config),
             Self::RuntimePolicy(resource) => resource.apply(config),
             Self::StepTemplate(resource) => resource.apply(config),
+            Self::EnvStore(resource) => resource.apply(config),
+            Self::SecretStore(resource) => resource.apply(config),
         }
     }
 
@@ -237,6 +259,8 @@ impl Resource for RegisteredResource {
             Self::Defaults(resource) => resource.to_yaml(),
             Self::RuntimePolicy(resource) => resource.to_yaml(),
             Self::StepTemplate(resource) => resource.to_yaml(),
+            Self::EnvStore(resource) => resource.to_yaml(),
+            Self::SecretStore(resource) => resource.to_yaml(),
         }
     }
 
@@ -266,6 +290,12 @@ impl Resource for RegisteredResource {
                 return Some(Self::RuntimePolicy(runtime_policy));
             }
         }
+        if let Some(env_store) = EnvStoreResource::get_from(config, name) {
+            return Some(Self::EnvStore(env_store));
+        }
+        if let Some(secret_store) = SecretStoreResource::get_from(config, name) {
+            return Some(Self::SecretStore(secret_store));
+        }
         None
     }
 
@@ -286,6 +316,9 @@ impl Resource for RegisteredResource {
             return true;
         }
         if config.step_templates.remove(name).is_some() {
+            return true;
+        }
+        if config.env_stores.remove(name).is_some() {
             return true;
         }
         false
@@ -330,6 +363,7 @@ mod tests {
                 capabilities: None,
                 metadata: None,
                 selection: None,
+                env: None,
             })),
         };
 
@@ -338,9 +372,9 @@ mod tests {
     }
 
     #[test]
-    fn resource_registry_has_seven_entries() {
+    fn resource_registry_has_nine_entries() {
         let registry = resource_registry();
-        assert_eq!(registry.len(), 7);
+        assert_eq!(registry.len(), 9);
         let kinds: Vec<ResourceKind> = registry.iter().map(|r| r.kind).collect();
         assert!(kinds.contains(&ResourceKind::Workspace));
         assert!(kinds.contains(&ResourceKind::Agent));
@@ -349,6 +383,8 @@ mod tests {
         assert!(kinds.contains(&ResourceKind::Defaults));
         assert!(kinds.contains(&ResourceKind::RuntimePolicy));
         assert!(kinds.contains(&ResourceKind::StepTemplate));
+        assert!(kinds.contains(&ResourceKind::EnvStore));
+        assert!(kinds.contains(&ResourceKind::SecretStore));
     }
 
     #[test]
@@ -683,9 +719,9 @@ mod tests {
 #[cfg(test)]
 pub(super) mod test_fixtures {
     use crate::cli_types::{
-        AgentSpec, DefaultsSpec, OrchestratorResource, ProjectSpec,
-        ResourceKind, ResourceMetadata, ResourceSpec, ResumeSpec, RunnerSpec, RuntimePolicySpec,
-        SafetySpec, StepTemplateSpec, WorkflowFinalizeRuleSpec, WorkflowFinalizeSpec, WorkflowLoopSpec, WorkflowSpec,
+        AgentSpec, DefaultsSpec, OrchestratorResource, ProjectSpec, ResourceKind, ResourceMetadata,
+        ResourceSpec, ResumeSpec, RunnerSpec, RuntimePolicySpec, SafetySpec, StepTemplateSpec,
+        WorkflowFinalizeRuleSpec, WorkflowFinalizeSpec, WorkflowLoopSpec, WorkflowSpec,
         WorkflowStepSpec, WorkspaceSpec,
     };
     use crate::config::OrchestratorConfig;
@@ -735,6 +771,7 @@ pub(super) mod test_fixtures {
                 capabilities: None,
                 metadata: None,
                 selection: None,
+                env: None,
             })),
         }
     }

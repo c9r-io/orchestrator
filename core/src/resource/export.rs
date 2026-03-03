@@ -91,6 +91,18 @@ pub fn export_manifest_documents(config: &OrchestratorConfig) -> Vec<Orchestrato
                 metadata: item.metadata,
                 spec: ResourceSpec::StepTemplate(item.spec),
             },
+            RegisteredResource::EnvStore(item) => OrchestratorResource {
+                api_version: API_VERSION.to_string(),
+                kind: ResourceKind::EnvStore,
+                metadata: item.metadata,
+                spec: ResourceSpec::EnvStore(item.spec),
+            },
+            RegisteredResource::SecretStore(item) => OrchestratorResource {
+                api_version: API_VERSION.to_string(),
+                kind: ResourceKind::SecretStore,
+                metadata: item.metadata,
+                spec: ResourceSpec::EnvStore(item.spec),
+            },
         })
         .collect()
 }

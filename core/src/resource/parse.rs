@@ -4,8 +4,9 @@ use anyhow::{anyhow, Result};
 use serde::Deserialize;
 
 use super::{
-    AgentResource, DefaultsResource, ProjectResource, Resource, RuntimePolicyResource,
-    StepTemplateResource, WorkflowResource, WorkspaceResource,
+    AgentResource, DefaultsResource, EnvStoreResource, ProjectResource, Resource,
+    RuntimePolicyResource, SecretStoreResource, StepTemplateResource, WorkflowResource,
+    WorkspaceResource,
 };
 
 pub fn parse_resources_from_yaml(content: &str) -> Result<Vec<OrchestratorResource>> {
@@ -34,8 +35,10 @@ pub fn delete_resource_by_kind(
         "defaults" => Ok(DefaultsResource::delete_from(config, name)),
         "runtimepolicy" | "runtime-policy" => Ok(RuntimePolicyResource::delete_from(config, name)),
         "steptemplate" | "step_template" | "step-template" => Ok(StepTemplateResource::delete_from(config, name)),
+        "envstore" | "env-store" | "env_store" => Ok(EnvStoreResource::delete_from(config, name)),
+        "secretstore" | "secret-store" | "secret_store" => Ok(SecretStoreResource::delete_from(config, name)),
         _ => Err(anyhow!(
-            "unknown resource type: {} (supported: workspace, agent, workflow, project, defaults, runtimepolicy, steptemplate)",
+            "unknown resource type: {} (supported: workspace, agent, workflow, project, defaults, runtimepolicy, steptemplate, envstore, secretstore)",
             kind
         )),
     }
@@ -50,6 +53,8 @@ pub fn kind_as_str(kind: ResourceKind) -> &'static str {
         ResourceKind::Defaults => "defaults",
         ResourceKind::RuntimePolicy => "runtimepolicy",
         ResourceKind::StepTemplate => "steptemplate",
+        ResourceKind::EnvStore => "envstore",
+        ResourceKind::SecretStore => "secretstore",
     }
 }
 
@@ -217,5 +222,57 @@ spec:
         let err =
             delete_resource_by_kind(&mut config, "foobar", "x").expect_err("operation should fail");
         assert!(err.to_string().contains("unknown resource type"));
+    }
+
+    #[test]
+    fn kind_as_str_env_store_variants() {
+        assert_eq!(kind_as_str(ResourceKind::EnvStore), "envstore");
+        assert_eq!(kind_as_str(ResourceKind::SecretStore), "secretstore");
+    }
+
+    #[test]
+    fn parse_env_store_multi_document() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+kind: EnvStore
+metadata:
+  name: config
+spec:
+  data:
+    KEY: value
+---
+apiVersion: orchestrator.dev/v2
+kind: SecretStore
+metadata:
+  name: secrets
+spec:
+  data:
+    API_KEY: sk-test
+"#;
+        let resources = parse_resources_from_yaml(yaml).expect("should parse");
+        assert_eq!(resources.len(), 2);
+        assert_eq!(resources[0].kind, ResourceKind::EnvStore);
+        assert_eq!(resources[1].kind, ResourceKind::SecretStore);
+    }
+
+    #[test]
+    fn delete_resource_by_kind_env_store_aliases() {
+        let mut config = make_config();
+        // No store exists, so delete returns false
+        assert!(
+            !delete_resource_by_kind(&mut config, "envstore", "missing").expect("delete envstore")
+        );
+        assert!(
+            !delete_resource_by_kind(&mut config, "env-store", "missing")
+                .expect("delete env-store")
+        );
+        assert!(
+            !delete_resource_by_kind(&mut config, "secretstore", "missing")
+                .expect("delete secretstore")
+        );
+        assert!(
+            !delete_resource_by_kind(&mut config, "secret-store", "missing")
+                .expect("delete secret-store")
+        );
     }
 }

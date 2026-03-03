@@ -49,6 +49,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                     capabilities: vec!["qa".to_string()],
                     command: "echo test".to_string(),
                     selection: AgentSelectionConfig::default(),
+                    env: None,
                 },
             );
             agents
@@ -92,6 +93,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
             workflows
         },
         step_templates: HashMap::new(),
+        env_stores: HashMap::new(),
         resource_meta: ResourceMetadataStore::default(),
     }
 }
@@ -494,6 +496,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
             capabilities: capabilities.iter().map(|s| s.to_string()).collect(),
             command: "echo test".to_string(),
             selection: AgentSelectionConfig::default(),
+            env: None,
         }
     }
 
@@ -730,6 +733,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
             workflows
         },
         step_templates: HashMap::new(),
+        env_stores: HashMap::new(),
         resource_meta: ResourceMetadataStore::default(),
     }
 }

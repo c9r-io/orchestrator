@@ -481,6 +481,7 @@ mod tests {
                 capabilities: vec!["plan".into(), "implement".into()],
                 command: "echo test".to_string(),
                 selection: AgentSelectionConfig::default(),
+                env: None,
             },
         );
 

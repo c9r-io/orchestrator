@@ -17,10 +17,10 @@ mod log_stream;
 mod task_queries;
 mod watch;
 
+pub use log_stream::{follow_task_logs, stream_task_logs_impl};
 pub use task_queries::{
     delete_task_impl, get_task_details_impl, list_tasks_impl, load_task_summary, resolve_task_id,
 };
-pub use log_stream::{follow_task_logs, stream_task_logs_impl};
 pub use watch::watch_task;
 
 const QUERY_RETRY_ATTEMPTS: usize = 3;

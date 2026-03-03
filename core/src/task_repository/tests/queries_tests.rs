@@ -1,7 +1,7 @@
-use super::fixtures::seed_task;
 use super::super::trait_def::TaskRepository;
 use super::super::types::TaskRepositorySource;
 use super::super::SqliteTaskRepository;
+use super::fixtures::seed_task;
 use crate::db::open_conn;
 use crate::dto::CreateTaskPayload;
 use crate::task_ops::create_task_impl;
