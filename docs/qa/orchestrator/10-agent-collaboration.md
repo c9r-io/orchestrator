@@ -19,20 +19,16 @@ This document validates collaboration-related behavior after scheduler mainline 
 
 Entry point: `./scripts/orchestrator.sh`
 
-### Project Isolation Setup
+### Environment Isolation Setup
 
 ```bash
-./scripts/orchestrator.sh init --force
-
-QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
-rm -rf "workspace/${QA_PROJECT}"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+./scripts/orchestrator.sh qa project reset qa-collab --force
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml --project qa-collab
 ```
 
-> Note: Fixture application is additive. Re-apply the expected fixture and
-> recreate the isolated project scaffold instead of clearing global config.
+> **Note**: Use `qa project reset` + `apply --project` to isolate fixture agents
+> from global/bootstrap agents. Project-scoped agent selection ensures only
+> fixture-defined agents participate. Auto-ticket files are cleaned during reset.
 
 ---
 
@@ -48,7 +44,12 @@ Verify scheduler stores structured run payload and validation status.
 ### Steps
 1. Execute a task:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "agentoutput-mainline" --goal "structured output" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(./scripts/orchestrator.sh task create \
+     --project qa-collab \
+     --name "agentoutput-mainline" \
+     --goal "structured output" \
+     --workspace default \
+     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ./scripts/orchestrator.sh task start "${TASK_ID}" || true
    ```
 2. Inspect command run structured fields:
@@ -76,26 +77,64 @@ WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
 ## Scenario 2: Strict Phase Validation Behavior
 
 ### Preconditions
-- Runtime initialized.
-- **Important**: This scenario requires a custom agent fixture that produces non-JSON output for strict phases. The default `mock_echo` agent always returns valid JSON, so the `output_validation_failed` event cannot be triggered with it.
+- Reset previous QA state — `qa project reset` clears task data, config, and auto-tickets.
+- **Important**: This scenario requires the `plain-text-agent.yaml` fixture
+  which defines an agent that produces non-JSON output. The base
+  `echo-workflow.yaml` fixture must be applied first to provide the Workspace
+  resource.
 
 ### Goal
 Verify non-JSON output is rejected for strict phases.
 
 ### Steps
-1. Run a task where `qa` phase emits plain text (requires a custom agent — see Troubleshooting).
-2. Query validation failure events:
+1. Reset and apply into project scope (two fixtures — base workspace + plain-text agent):
    ```bash
-   sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id='{task_id}' AND event_type='output_validation_failed' ORDER BY id DESC LIMIT 5;"
+   ./scripts/orchestrator.sh qa project reset qa-strict --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml --project qa-strict
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/plain-text-agent.yaml --project qa-strict
+   ```
+
+2. Create and run task:
+   ```bash
+   TASK_ID=$(./scripts/orchestrator.sh task create \
+     --project qa-strict \
+     --name "strict-validation-test" \
+     --goal "Test strict phase validation" \
+     --workspace default \
+     --workflow plain_text_test \
+     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ./scripts/orchestrator.sh task start "${TASK_ID}"
+   ```
+
+3. Query validation failure events:
+   ```bash
+   sqlite3 data/agent_orchestrator.db \
+     "SELECT event_type, payload_json FROM events
+      WHERE task_id='${TASK_ID}' AND event_type='output_validation_failed'
+      ORDER BY id DESC LIMIT 5;"
+   ```
+
+4. Query agent selection distribution:
+   ```bash
+   sqlite3 data/agent_orchestrator.db \
+     "SELECT agent_id, validation_status, COUNT(*)
+      FROM command_runs
+      WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '${TASK_ID}')
+      GROUP BY agent_id, validation_status;"
    ```
 
 ### Troubleshooting
-- If using `mock_echo`, all outputs will pass validation because it always returns valid JSON.
-- To test strict rejection, use an agent with a template like `echo "This is plain text"` for a strict phase (`qa`/`fix`/`retest`/`guard`). The strict phase validation code is correct — non-JSON strict phases produce exit code -6.
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| `plain_text_agent` never selected | Fixture not applied with `--project`; global agents participate in selection | Use `apply -f ... --project <name>` to scope agents |
+| No `output_validation_failed` events | Only JSON-producing agents were selected | Verify only project agents exist via `describe agent` |
+| Workspace not found error | `plain-text-agent.yaml` does not define a Workspace resource | Apply `echo-workflow.yaml` first to provide the Workspace |
 
 ### Expected
-- `output_validation_failed` event appears for non-JSON strict-phase output.
-- Corresponding `command_runs.validation_status` is `failed`.
+- `plain_text_agent` appears in `command_runs` with `validation_status = 'failed'`
+- `output_validation_failed` event appears for non-JSON strict-phase output
+- Other fixture agents (e.g. `mock_echo`) appear with `validation_status = 'passed'`
 
 ### Expected Data State
 ```sql
@@ -103,7 +142,7 @@ SELECT phase, validation_status
 FROM command_runs
 WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
 ORDER BY started_at DESC;
--- Expected: strict phase rows with non-JSON output are marked failed
+-- Expected: plain_text_agent rows are marked failed; other agent rows are marked passed
 ```
 
 ---

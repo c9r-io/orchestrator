@@ -114,6 +114,24 @@ pub fn resource_registry() -> [ResourceRegistration; 9] {
     ]
 }
 
+impl RegisteredResource {
+    /// Return the metadata.project field if present on this resource
+    pub fn metadata_project(&self) -> Option<&str> {
+        let meta = match self {
+            Self::Workspace(r) => &r.metadata,
+            Self::Agent(r) => &r.metadata,
+            Self::Workflow(r) => &r.metadata,
+            Self::Project(r) => &r.metadata,
+            Self::Defaults(r) => &r.metadata,
+            Self::RuntimePolicy(r) => &r.metadata,
+            Self::StepTemplate(r) => &r.metadata,
+            Self::EnvStore(r) => &r.metadata,
+            Self::SecretStore(r) => &r.metadata,
+        };
+        meta.project.as_deref()
+    }
+}
+
 pub fn dispatch_resource(resource: OrchestratorResource) -> Result<RegisteredResource> {
     let kind = resource.kind;
     if let Some(registration) = resource_registry().iter().find(|entry| entry.kind == kind) {
@@ -191,6 +209,47 @@ pub(crate) fn apply_to_map<T: Clone + Serialize>(
 
 pub(crate) fn serializes_equal<T: Serialize>(left: &T, right: &T) -> bool {
     serde_json::to_value(left).ok() == serde_json::to_value(right).ok()
+}
+
+// ── Project-scoped apply ──────────────────────────────────────────────────────
+
+/// Apply a resource into a project scope instead of global config.
+/// Agent, Workflow, and Workspace resources are routed to `config.projects[project].<kind>`.
+/// Other resource types fall back to global apply.
+pub fn apply_to_project(
+    resource: &RegisteredResource,
+    config: &mut OrchestratorConfig,
+    project: &str,
+) -> ApplyResult {
+    use crate::config::ProjectConfig;
+
+    let project_entry = config
+        .projects
+        .entry(project.to_string())
+        .or_insert_with(|| ProjectConfig {
+            description: None,
+            workspaces: Default::default(),
+            agents: Default::default(),
+            workflows: Default::default(),
+        });
+
+    match resource {
+        RegisteredResource::Agent(agent) => {
+            let incoming = agent::agent_spec_to_config(&agent.spec);
+            apply_to_map(&mut project_entry.agents, agent.name(), incoming)
+        }
+        RegisteredResource::Workflow(workflow) => {
+            let incoming = workflow::workflow_spec_to_config(&workflow.spec)
+                .expect("validated workflow spec must be convertible");
+            apply_to_map(&mut project_entry.workflows, workflow.name(), incoming)
+        }
+        RegisteredResource::Workspace(ws) => {
+            let incoming = workspace::workspace_spec_to_config(&ws.spec);
+            apply_to_map(&mut project_entry.workspaces, ws.name(), incoming)
+        }
+        // Singletons and other types always go to global config
+        _ => resource.apply(config),
+    }
 }
 
 // ── RegisteredResource impl ───────────────────────────────────────────────────
@@ -907,5 +966,96 @@ pub(super) mod test_fixtures {
                 resume: ResumeSpec { auto: false },
             }),
         }
+    }
+}
+
+#[cfg(test)]
+mod apply_to_project_tests {
+    use super::test_fixtures::{
+        agent_manifest, make_config, workflow_manifest, workspace_manifest,
+    };
+    use super::*;
+
+    #[test]
+    fn apply_to_project_routes_agent_to_project_scope() {
+        let mut config = make_config();
+        let resource =
+            dispatch_resource(agent_manifest("proj-ag", "echo test")).expect("dispatch agent");
+        let result = apply_to_project(&resource, &mut config, "my-qa");
+
+        assert_eq!(result, ApplyResult::Created);
+        assert!(config.projects.contains_key("my-qa"));
+        assert!(config.projects["my-qa"].agents.contains_key("proj-ag"));
+        // Should NOT be in global agents
+        assert!(!config.agents.contains_key("proj-ag"));
+    }
+
+    #[test]
+    fn apply_to_project_routes_workspace_to_project_scope() {
+        let mut config = make_config();
+        let resource = dispatch_resource(workspace_manifest("proj-ws", "workspace/proj"))
+            .expect("dispatch ws");
+        let result = apply_to_project(&resource, &mut config, "my-qa");
+
+        assert_eq!(result, ApplyResult::Created);
+        assert!(config.projects["my-qa"].workspaces.contains_key("proj-ws"));
+        // Should NOT be in global workspaces
+        assert!(!config.workspaces.contains_key("proj-ws"));
+    }
+
+    #[test]
+    fn apply_to_project_routes_workflow_to_project_scope() {
+        let mut config = make_config();
+        let resource = dispatch_resource(workflow_manifest("proj-wf")).expect("dispatch wf");
+        let result = apply_to_project(&resource, &mut config, "my-qa");
+
+        assert_eq!(result, ApplyResult::Created);
+        assert!(config.projects["my-qa"].workflows.contains_key("proj-wf"));
+        // Should NOT be in global workflows
+        assert!(!config.workflows.contains_key("proj-wf"));
+    }
+
+    #[test]
+    fn apply_to_project_auto_creates_project_entry() {
+        let mut config = make_config();
+        assert!(!config.projects.contains_key("auto-proj"));
+
+        let resource =
+            dispatch_resource(agent_manifest("auto-ag", "echo auto")).expect("dispatch agent");
+        apply_to_project(&resource, &mut config, "auto-proj");
+
+        assert!(config.projects.contains_key("auto-proj"));
+    }
+
+    #[test]
+    fn apply_to_project_returns_unchanged_for_identical() {
+        let mut config = make_config();
+        let resource =
+            dispatch_resource(agent_manifest("dup-ag", "echo dup")).expect("dispatch agent");
+
+        assert_eq!(
+            apply_to_project(&resource, &mut config, "dup-proj"),
+            ApplyResult::Created
+        );
+        assert_eq!(
+            apply_to_project(&resource, &mut config, "dup-proj"),
+            ApplyResult::Unchanged
+        );
+    }
+
+    #[test]
+    fn apply_to_project_singleton_defaults_goes_to_global() {
+        use super::test_fixtures::defaults_manifest;
+        let mut config = make_config();
+        let resource =
+            dispatch_resource(defaults_manifest("p", "w", "f")).expect("dispatch defaults");
+        // Singletons fall through to global apply
+        let result = apply_to_project(&resource, &mut config, "proj-singleton");
+        assert!(matches!(
+            result,
+            ApplyResult::Created | ApplyResult::Configured | ApplyResult::Unchanged
+        ));
+        // Defaults were applied to global config (project field updated)
+        assert_eq!(config.defaults.project, "p");
     }
 }

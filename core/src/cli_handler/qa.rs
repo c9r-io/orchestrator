@@ -142,6 +142,32 @@ impl CliHandler {
 
                 let removed = crate::db::reset_project_data(&self.state, project_id)?;
 
+                // Clean auto-generated ticket files from project workspaces
+                let mut tickets_cleaned = 0u32;
+                {
+                    let active = read_active_config(&self.state)?;
+                    if let Some(project) = active.config.projects.get(project_id) {
+                        for ws in project.workspaces.values() {
+                            let ticket_path =
+                                std::path::Path::new(&ws.root_path).join(&ws.ticket_dir);
+                            if ticket_path.is_dir() {
+                                if let Ok(entries) = std::fs::read_dir(&ticket_path) {
+                                    for entry in entries.flatten() {
+                                        let fname = entry.file_name();
+                                        let name = fname.to_string_lossy();
+                                        if name.starts_with("auto_")
+                                            && name.ends_with(".md")
+                                            && std::fs::remove_file(entry.path()).is_ok()
+                                        {
+                                            tickets_cleaned += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if !keep_config {
                     let mut config = {
                         let active = read_active_config(&self.state)?;
@@ -155,12 +181,13 @@ impl CliHandler {
                 }
 
                 println!(
-                    "qa project reset completed: project={} tasks={} items={} runs={} events={} config_kept={}",
+                    "qa project reset completed: project={} tasks={} items={} runs={} events={} tickets_cleaned={} config_kept={}",
                     project_id,
                     removed.tasks,
                     removed.task_items,
                     removed.command_runs,
                     removed.events,
+                    tickets_cleaned,
                     keep_config
                 );
                 Ok(0)

@@ -147,6 +147,8 @@ pub struct TaskRuntimeContext {
     pub self_referential: bool,
     /// Consecutive failure counter for auto-rollback
     pub consecutive_failures: u32,
+    /// Project ID for project-scoped agent selection (empty = global)
+    pub project_id: String,
 }
 
 /// Step prehook context for evaluation

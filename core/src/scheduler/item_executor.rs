@@ -475,6 +475,7 @@ pub async fn execute_builtin_step(
                 step_timeout_secs: task_ctx.safety.step_timeout_secs,
                 step_scope: step.resolved_scope(),
                 step_template_prompt: resolved_prompt.as_deref(),
+                project_id: &task_ctx.project_id,
             },
         )
         .await?
@@ -574,16 +575,21 @@ pub async fn execute_guard_step(
         let active = crate::config_load::read_active_config(state)?;
         let health_map = read_agent_health(state);
         let metrics_map = read_agent_metrics(state);
+        let agents = crate::selection::resolve_effective_agents(
+            &task_ctx.project_id,
+            &active.config,
+            step.required_capability.as_deref(),
+        );
         if let Some(capability) = &step.required_capability {
             select_agent_advanced(
                 capability,
-                &active.config.agents,
+                agents,
                 &health_map,
                 &metrics_map,
                 &HashSet::new(),
             )?
         } else {
-            select_agent_by_preference(&active.config.agents)?
+            select_agent_by_preference(agents)?
         }
     };
 
@@ -1206,6 +1212,7 @@ pub async fn process_item_filtered(
                     step_timeout_secs: task_ctx.safety.step_timeout_secs,
                     step_scope: crate::config::StepScope::Item,
                     step_template_prompt: None,
+                    project_id: &task_ctx.project_id,
                 },
             )
             .await?;

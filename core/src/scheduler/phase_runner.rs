@@ -90,6 +90,8 @@ pub struct RotatingPhaseRunRequest<'a> {
     pub step_scope: StepScope,
     /// Prompt from a resolved StepTemplate, injected into the agent command's {prompt} placeholder
     pub step_template_prompt: Option<&'a str>,
+    /// Project ID for project-scoped agent selection (empty = global)
+    pub project_id: &'a str,
 }
 
 fn step_scope_label(scope: StepScope) -> &'static str {
@@ -777,6 +779,7 @@ pub async fn run_phase_with_rotation(
         step_timeout_secs,
         step_scope,
         step_template_prompt,
+        project_id,
     } = request;
     let effective_capability = capability.or(match phase {
         "qa" | "fix" | "retest" => Some(phase),
@@ -785,7 +788,12 @@ pub async fn run_phase_with_rotation(
 
     let (agent_id, template, prompt_delivery) = {
         let active = crate::config_load::read_active_config(state)?;
-        let agents = active.config.agents.clone();
+        let agents = crate::selection::resolve_effective_agents(
+            project_id,
+            &active.config,
+            effective_capability,
+        )
+        .clone();
 
         if let Some(cap) = effective_capability {
             let health_map = read_agent_health(state);

@@ -22,7 +22,10 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 ### Preconditions
 
-- Fresh sqlite state
+- Reset previous QA state — use `qa project reset` to clear task data and
+  project config (including auto-generated tickets) without destroying global state.
+- Apply fixture into project scope — use `--project` to isolate fixture agents
+  from global/bootstrap agents.
 
 ### Goal
 
@@ -42,28 +45,27 @@ to the fix-capable agent when capabilities are disjoint.
 
 ### Steps
 
-1. Initialize and apply:
+1. Reset and apply into project scope:
    ```bash
-   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/capability-test.yaml
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset qa-cap --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/capability-test.yaml --project qa-cap
    ```
 
 2. Create and run task:
    ```bash
-   ./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/orchestrator.sh task create \
+     --project qa-cap \
      --name "capability-test" \
      --goal "Test capability isolation" \
-     --project "${QA_PROJECT}" \
-     --workflow test_capability
-   ./scripts/orchestrator.sh task start --latest
+     --workspace default \
+     --workflow test_capability \
+     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ./scripts/orchestrator.sh task start "${TASK_ID}"
    ```
 
 3. Inspect logs:
    ```bash
-   ./scripts/orchestrator.sh task logs {task_id}
+   ./scripts/orchestrator.sh task logs "${TASK_ID}"
    ```
 
 ### Expected
@@ -83,7 +85,10 @@ to the fix-capable agent when capabilities are disjoint.
 
 ### Preconditions
 
-- Fresh sqlite state
+- Reset previous QA state — use `qa project reset` to clear task data, config,
+  and auto-generated tickets without destroying global state.
+- Apply fixture into project scope — use `--project` to ensure only fixture
+  agents participate in selection.
 
 ### Goal
 
@@ -100,35 +105,45 @@ distributes work across them and each agent uses its own correct template.
 
 ### Steps
 
-1. Initialize and apply:
+1. Reset and apply into project scope:
    ```bash
-   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/multi-echo.yaml
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset qa-multi --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-multi
    ```
 
 2. Create and run task:
    ```bash
-   ./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/orchestrator.sh task create \
+     --project qa-multi \
      --name "multi-agent-test" \
      --goal "Test multi-agent distribution" \
-     --project "${QA_PROJECT}" \
-     --workflow multi_agent_qa
-   ./scripts/orchestrator.sh task start --latest
+     --workspace default \
+     --workflow multi_agent_qa \
+     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ./scripts/orchestrator.sh task start "${TASK_ID}"
    ```
 
-3. Inspect logs:
+3. Inspect logs and agent distribution:
    ```bash
-   ./scripts/orchestrator.sh task logs {task_id}
+   ./scripts/orchestrator.sh task info "${TASK_ID}"
+   sqlite3 data/agent_orchestrator.db \
+     "SELECT cr.agent_id, COUNT(*) FROM command_runs cr
+      WHERE cr.task_item_id IN (SELECT id FROM task_items WHERE task_id = '${TASK_ID}')
+      GROUP BY cr.agent_id"
    ```
 
 ### Expected
 
 - Task status: `completed`, failed: 0
-- Logs / persisted `output_json` contain both `alpha-qa` and `beta-qa` markers (both agents were used)
+- Both `mock_echo_alpha` and `mock_echo_beta` appear in `command_runs`
 - Each agent produces its own identifiable output — no template mix-up
+
+### Troubleshooting
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| Other agents selected (e.g. `probe_fallback`, `env-agent`) | Fixture not applied with `--project`; global agents participate in selection | Use `apply -f ... --project <name>` to scope agents |
+| Items marked `unresolved` despite agents exiting 0 | Auto-ticket files in `fixtures/ticket/` from a prior run | Use `qa project reset <name> --force` to clean tickets |
 
 ---
 
@@ -136,7 +151,7 @@ distributes work across them and each agent uses its own correct template.
 
 ### Preconditions
 
-- Fresh sqlite state
+- Reset previous QA state — `qa project reset` clears task data, config, and auto-tickets.
 
 ### Goal
 
@@ -151,30 +166,29 @@ Validate that repeatable steps execute in every loop cycle.
 
 ### Steps
 
-1. Initialize and apply:
+1. Reset and apply into project scope:
    ```bash
-   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/repeatable-test.yaml
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset qa-repeat --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/repeatable-test.yaml --project qa-repeat
    ```
 
 2. Create and run task:
    ```bash
-   ./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/orchestrator.sh task create \
+     --project qa-repeat \
      --name "repeatable-test" \
      --goal "Loop workflow test" \
-     --project "${QA_PROJECT}" \
-     --workflow repeat_test
-   ./scripts/orchestrator.sh task start --latest
+     --workspace default \
+     --workflow repeat_test \
+     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ./scripts/orchestrator.sh task start "${TASK_ID}"
    ```
 
 3. Verify cycles:
    ```bash
-   ./scripts/orchestrator.sh task info {task_id}
+   ./scripts/orchestrator.sh task info "${TASK_ID}"
    sqlite3 data/agent_orchestrator.db \
-     "SELECT current_cycle FROM tasks WHERE id = '{task_id}'"
+     "SELECT current_cycle FROM tasks WHERE id = '${TASK_ID}'"
    ```
 
 ### Expected
@@ -190,7 +204,7 @@ Validate that repeatable steps execute in every loop cycle.
 
 ### Preconditions
 
-- Fresh sqlite state
+- Reset previous QA state — `qa project reset` clears task data, config, and auto-tickets.
 
 ### Goal
 
@@ -200,40 +214,45 @@ Validate that a guard step can terminate the workflow loop.
 
 `fixtures/manifests/bundles/guard-test.yaml`
 
-- `test_agent` — QA template emits structured analysis JSON; loop_guard emits structured stop JSON (`{\"should_stop\":true}`)
-- Workflow `guard_test` — steps: qa + loop_guard, loop mode: infinite, max_cycles: 3
+- `test_agent` — QA template emits structured analysis JSON; capabilities include `loop_guard`
+- Workflow `guard_test` — steps: qa + loop_guard (builtin), loop mode: infinite, max_cycles: 3
+
+> **Note**: The `loop_guard` step type uses the **builtin** guard implementation.
+> The builtin guard terminates based on `stop_when_no_unresolved` configuration
+> (default: false) and `max_cycles` limit — it does not parse agent JSON output.
+> When all items pass QA (no unresolved), the loop completes after cycle 1
+> because subsequent cycles find no work to do.
 
 ### Steps
 
-1. Initialize and apply:
+1. Reset and apply into project scope:
    ```bash
-   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/guard-test.yaml
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset qa-guard --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/guard-test.yaml --project qa-guard
    ```
 
 2. Create and run task:
    ```bash
-   ./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/orchestrator.sh task create \
+     --project qa-guard \
      --name "guard-test" \
      --goal "Guard step test" \
-     --project "${QA_PROJECT}" \
-     --workflow guard_test
-   ./scripts/orchestrator.sh task start --latest
+     --workspace default \
+     --workflow guard_test \
+     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ./scripts/orchestrator.sh task start "${TASK_ID}"
    ```
 
 3. Inspect result:
    ```bash
-   ./scripts/orchestrator.sh task info {task_id}
+   ./scripts/orchestrator.sh task info "${TASK_ID}"
    ```
 
 ### Expected
 
 - Workflow `guard_test` appears in config
-- Task creation and execution succeed
-- Guard agent's structured stop output (`should_stop=true`) terminates the loop
+- Task creation and execution succeed — status: `completed`, failed: 0
+- Loop terminates after cycle 1 (all items pass QA with no tickets)
 
 ---
 
@@ -241,7 +260,7 @@ Validate that a guard step can terminate the workflow loop.
 
 ### Preconditions
 
-- Fresh sqlite state
+- Reset previous QA state — `qa project reset` clears task data, config, and auto-tickets.
 
 ### Goal
 
@@ -258,29 +277,28 @@ both agents are used for execution.
 
 ### Steps
 
-1. Initialize and apply:
+1. Reset and apply into project scope:
    ```bash
-   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset qa-perf --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml --project qa-perf
    ```
 
 2. Create and run task:
    ```bash
-   ./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/orchestrator.sh task create \
+     --project qa-perf \
      --name "selection-perf" \
      --goal "Selection performance baseline" \
-     --project "${QA_PROJECT}" \
-     --workflow selection_test
-   ./scripts/orchestrator.sh task start --latest
+     --workspace default \
+     --workflow selection_test \
+     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ./scripts/orchestrator.sh task start "${TASK_ID}"
    ```
 
 3. Inspect result:
    ```bash
-   ./scripts/orchestrator.sh task info {task_id}
-   ./scripts/orchestrator.sh task logs {task_id}
+   ./scripts/orchestrator.sh task info "${TASK_ID}"
+   ./scripts/orchestrator.sh task logs "${TASK_ID}"
    ```
 
 ### Expected

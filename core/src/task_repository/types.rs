@@ -72,6 +72,7 @@ pub struct TaskRuntimeRow {
     pub current_cycle: i64,
     pub init_done: i64,
     pub goal: String,
+    pub project_id: String,
 }
 
 pub struct TaskLogRunRow {

@@ -180,6 +180,7 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
     let current_cycle = runtime_row.current_cycle;
     let init_done = runtime_row.init_done;
     let task_goal = runtime_row.goal;
+    let project_id = runtime_row.project_id;
 
     let active = read_active_config(state)?;
     let workflow = active
@@ -266,6 +267,7 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
         safety,
         self_referential,
         consecutive_failures: 0,
+        project_id,
     })
 }
 

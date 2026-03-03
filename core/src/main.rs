@@ -38,7 +38,8 @@ use crate::config_load::{
 };
 use crate::db::{init_schema, reset_db_by_path};
 use crate::resource::{
-    dispatch_resource, kind_as_str, parse_manifests_from_yaml, ApplyResult, Resource,
+    apply_to_project, dispatch_resource, kind_as_str, parse_manifests_from_yaml, ApplyResult,
+    Resource,
 };
 use crate::state::ManagedState;
 use anyhow::{Context, Result};
@@ -186,7 +187,12 @@ fn initialize_runtime(app_root: &Path) -> Result<(PathBuf, PathBuf)> {
     Ok((db_path, logs_dir))
 }
 
-fn run_apply_preflight(app_root: &Path, file: &str, dry_run: bool) -> Result<i32> {
+fn run_apply_preflight(
+    app_root: &Path,
+    file: &str,
+    dry_run: bool,
+    project: Option<&str>,
+) -> Result<i32> {
     use agent_orchestrator::crd::{self, ParsedManifest};
 
     let (db_path, _logs_dir) = initialize_runtime(app_root)?;
@@ -226,26 +232,38 @@ fn run_apply_preflight(app_root: &Path, file: &str, dry_run: bool) -> Result<i32
                     continue;
                 }
 
-                let result = registered.apply(&mut merged_config);
+                // Determine effective project: CLI --project overrides metadata.project
+                let effective_project = project.or_else(|| registered.metadata_project());
+
+                let result = if let Some(proj) = effective_project {
+                    apply_to_project(&registered, &mut merged_config, proj)
+                } else {
+                    registered.apply(&mut merged_config)
+                };
                 applied_results.push(result);
                 let action = match result {
                     ApplyResult::Created => "created",
                     ApplyResult::Configured => "updated",
                     ApplyResult::Unchanged => "unchanged",
                 };
+                let scope_suffix = effective_project
+                    .map(|p| format!(" (project: {})", p))
+                    .unwrap_or_default();
                 if dry_run {
                     out_line(format!(
-                        "{}/{} would be {} (dry run)",
+                        "{}/{} would be {} (dry run){}",
                         kind_as_str(registered.kind()),
                         registered.name(),
-                        action
+                        action,
+                        scope_suffix
                     ));
                 } else {
                     out_line(format!(
-                        "{}/{} {}",
+                        "{}/{} {}{}",
                         kind_as_str(registered.kind()),
                         registered.name(),
-                        action
+                        action,
+                        scope_suffix
                     ));
                 }
             }
@@ -457,9 +475,18 @@ fn try_handle_preflight_command(cli: &Cli) -> Result<Option<i32>> {
             ));
             Ok(Some(0))
         }
-        Commands::Apply { file, dry_run } => {
+        Commands::Apply {
+            file,
+            dry_run,
+            project,
+        } => {
             let app_root = detect_app_root();
-            Ok(Some(run_apply_preflight(&app_root, file, *dry_run)?))
+            Ok(Some(run_apply_preflight(
+                &app_root,
+                file,
+                *dry_run,
+                project.as_deref(),
+            )?))
         }
         Commands::Manifest(ManifestCommands::Validate { file }) => {
             let app_root = detect_app_root();

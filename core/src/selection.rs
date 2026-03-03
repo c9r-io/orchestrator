@@ -110,6 +110,36 @@ pub fn select_agent_by_preference(
     Ok((agent_id.clone(), command, config.prompt_delivery))
 }
 
+/// Resolve effective agents for a task: project-scoped agents take priority
+/// over global agents when the project has any agent with the required capability.
+/// If project_id is empty or the project has no matching agents, falls back to global.
+pub fn resolve_effective_agents<'a>(
+    project_id: &str,
+    config: &'a crate::config::OrchestratorConfig,
+    capability: Option<&str>,
+) -> &'a HashMap<String, AgentConfig> {
+    if !project_id.is_empty() {
+        if let Some(project) = config.projects.get(project_id) {
+            if !project.agents.is_empty() {
+                // If a capability is required, check if any project agent has it
+                if let Some(cap) = capability {
+                    let has_capable = project
+                        .agents
+                        .values()
+                        .any(|agent| agent.supports_capability(cap));
+                    if has_capable {
+                        return &project.agents;
+                    }
+                } else {
+                    // No capability required — project has agents, use them
+                    return &project.agents;
+                }
+            }
+        }
+    }
+    &config.agents
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -430,5 +460,88 @@ mod tests {
                 "diseased agent should be filtered out"
             );
         }
+    }
+
+    // ── resolve_effective_agents tests ─────────────────────────────────
+
+    fn make_config_with_project_agents() -> crate::config::OrchestratorConfig {
+        let mut config = crate::config::OrchestratorConfig::default();
+
+        // Global agents
+        let (id_global, cfg_global) = make_test_agent("global_qa", "qa", 30);
+        config.agents.insert(id_global, cfg_global);
+        let (id_fix, cfg_fix) = make_test_agent("global_fix", "fix", 40);
+        config.agents.insert(id_fix, cfg_fix);
+
+        // Project agents (only qa capability)
+        let mut project = crate::config::ProjectConfig {
+            description: None,
+            workspaces: HashMap::new(),
+            agents: HashMap::new(),
+            workflows: HashMap::new(),
+        };
+        let (id_proj, cfg_proj) = make_test_agent("proj_qa", "qa", 20);
+        project.agents.insert(id_proj, cfg_proj);
+        config.projects.insert("my-project".to_string(), project);
+
+        config
+    }
+
+    #[test]
+    fn resolve_effective_agents_returns_project_agents_when_capability_matches() {
+        let config = make_config_with_project_agents();
+        let agents = resolve_effective_agents("my-project", &config, Some("qa"));
+        assert!(agents.contains_key("proj_qa"));
+        assert!(!agents.contains_key("global_qa"));
+    }
+
+    #[test]
+    fn resolve_effective_agents_falls_back_to_global_when_project_lacks_capability() {
+        let config = make_config_with_project_agents();
+        // Project has no "fix" agent → fall back to global
+        let agents = resolve_effective_agents("my-project", &config, Some("fix"));
+        assert!(agents.contains_key("global_fix"));
+        assert!(!agents.contains_key("proj_qa"));
+    }
+
+    #[test]
+    fn resolve_effective_agents_returns_global_for_empty_project_id() {
+        let config = make_config_with_project_agents();
+        let agents = resolve_effective_agents("", &config, Some("qa"));
+        assert!(agents.contains_key("global_qa"));
+        assert!(!agents.contains_key("proj_qa"));
+    }
+
+    #[test]
+    fn resolve_effective_agents_returns_project_agents_when_no_capability_required() {
+        let config = make_config_with_project_agents();
+        // No capability filter — project has agents, use them
+        let agents = resolve_effective_agents("my-project", &config, None);
+        assert!(agents.contains_key("proj_qa"));
+        assert!(!agents.contains_key("global_qa"));
+    }
+
+    #[test]
+    fn resolve_effective_agents_returns_global_for_unknown_project() {
+        let config = make_config_with_project_agents();
+        let agents = resolve_effective_agents("no-such-project", &config, Some("qa"));
+        assert!(agents.contains_key("global_qa"));
+    }
+
+    #[test]
+    fn resolve_effective_agents_returns_global_for_empty_project_agents() {
+        let mut config = make_config_with_project_agents();
+        // Create project with no agents
+        config.projects.insert(
+            "empty-proj".to_string(),
+            crate::config::ProjectConfig {
+                description: None,
+                workspaces: HashMap::new(),
+                agents: HashMap::new(),
+                workflows: HashMap::new(),
+            },
+        );
+        let agents = resolve_effective_agents("empty-proj", &config, Some("qa"));
+        assert!(agents.contains_key("global_qa"));
     }
 }

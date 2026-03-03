@@ -6,8 +6,9 @@ use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 
 mod workflow_convert;
 
+use workflow_convert::parse_loop_mode;
 pub(super) use workflow_convert::workflow_config_to_spec;
-use workflow_convert::{parse_loop_mode, workflow_spec_to_config};
+pub(super) use workflow_convert::workflow_spec_to_config;
 
 #[derive(Debug, Clone)]
 pub struct WorkflowResource {

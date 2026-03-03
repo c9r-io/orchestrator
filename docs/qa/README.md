@@ -129,6 +129,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/38-agent-env-resolution.md` | 5 | Agent env resolution: direct value, fromRef, refValue, validation, and secret redaction |
 | orchestrator | `docs/qa/orchestrator/39-prompt-delivery.md` | 5 | PromptDelivery abstraction: default arg, stdin, file, env modes, preflight validation |
 | orchestrator | `docs/qa/orchestrator/40-custom-resource-definitions.md` | 5 | CRD extension system: registration, validation, get/describe/delete, cascade protection, export round-trip |
+| orchestrator | `docs/qa/orchestrator/41-project-scoped-agent-selection.md` | 5 | Project-scoped agent selection: apply --project, hierarchical resolution, ticket cleanup, global fallback |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
 | script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |

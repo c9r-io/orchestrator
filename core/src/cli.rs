@@ -50,6 +50,10 @@ pub enum Commands {
 
         #[arg(long)]
         dry_run: bool,
+
+        /// Deploy Agent/Workflow/Workspace resources into a project scope
+        #[arg(long)]
+        project: Option<String>,
     },
 
     #[command(alias = "g")]
@@ -705,7 +709,7 @@ mod tests {
         let cli = Cli::parse_from(["orchestrator", "apply", "-f", "resources.yaml", "--dry-run"]);
 
         match cli.command {
-            Commands::Apply { file, dry_run } => {
+            Commands::Apply { file, dry_run, .. } => {
                 assert_eq!(file, "resources.yaml");
                 assert!(dry_run);
             }
@@ -718,7 +722,7 @@ mod tests {
         let cli = Cli::parse_from(["orchestrator", "apply", "-f", "resources.yaml"]);
 
         match cli.command {
-            Commands::Apply { file, dry_run } => {
+            Commands::Apply { file, dry_run, .. } => {
                 assert_eq!(file, "resources.yaml");
                 assert!(!dry_run);
             }

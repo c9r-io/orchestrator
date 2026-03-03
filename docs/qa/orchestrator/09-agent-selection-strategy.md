@@ -24,8 +24,10 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 ### Preconditions
 
-- Fresh sqlite state (`apply` is additive; residual agents from other fixtures
-  participate in selection and skew results — always delete the DB first)
+- Reset previous QA state — use `qa project reset` to clear task data, config,
+  and auto-generated tickets without destroying global state.
+- Apply fixture into project scope — use `--project` to ensure only fixture
+  agents participate in selection.
 
 ### Goal
 
@@ -42,29 +44,27 @@ lower-cost agent is selected more frequently by the scoring algorithm.
 
 ### Steps
 
-1. Initialize and apply:
+1. Reset and apply into project scope:
    ```bash
-   ./scripts/orchestrator.sh init --force
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml
-   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset qa-cost --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml --project qa-cost
    ```
 
 2. Create and run task:
    ```bash
-   ./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/orchestrator.sh task create \
+     --project qa-cost \
      --name "cost-scoring-test" \
      --goal "Test cost-based scoring" \
-     --project "${QA_PROJECT}" \
-     --workflow selection_test
-   ./scripts/orchestrator.sh task start --latest
+     --workspace default \
+     --workflow selection_test \
+     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ./scripts/orchestrator.sh task start "${TASK_ID}"
    ```
 
 3. Inspect logs to count agent selection:
    ```bash
-   ./scripts/orchestrator.sh task logs {task_id}
+   ./scripts/orchestrator.sh task logs "${TASK_ID}"
    # Count occurrences of structured output markers "fast-qa" vs "quality-qa"
    ```
 
@@ -83,8 +83,7 @@ lower-cost agent is selected more frequently by the scoring algorithm.
 
 ### Preconditions
 
-- Fresh sqlite state (`apply` merges additively; pre-existing agents will
-  participate in selection — always delete the DB first)
+- Reset previous QA state — `qa project reset` clears task data, config, and auto-tickets.
 
 ### Goal
 
@@ -101,24 +100,22 @@ both used successfully.
 
 ### Steps
 
-1. Initialize and apply:
+1. Reset and apply into project scope:
    ```bash
-   ./scripts/orchestrator.sh init --force
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-quality-test.yaml
-   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset qa-quality --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-quality-test.yaml --project qa-quality
    ```
 
 2. Create and run task:
    ```bash
-   ./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/orchestrator.sh task create \
+     --project qa-quality \
      --name "quality-scoring-test" \
      --goal "Test quality-based scoring" \
-     --project "${QA_PROJECT}" \
-     --workflow quality_selection_test
-   ./scripts/orchestrator.sh task start --latest
+     --workspace default \
+     --workflow quality_selection_test \
+     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ./scripts/orchestrator.sh task start "${TASK_ID}"
    ```
 
 3. Inspect agent selection via DB (more reliable than logs for verifying
@@ -126,20 +123,19 @@ both used successfully.
    ```bash
    sqlite3 data/agent_orchestrator.db \
      "SELECT agent_id, COUNT(*) FROM command_runs
-      WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
+      WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '${TASK_ID}')
       GROUP BY agent_id;"
    ```
 
 4. Optionally inspect logs:
    ```bash
-   ./scripts/orchestrator.sh task logs {task_id}
+   ./scripts/orchestrator.sh task logs "${TASK_ID}"
    ```
 
 ### Expected
 
 - Both `proven_agent` and `new_agent` appear in the `command_runs` query
-- If other `qa`-capable agents exist in the global config, they may also
-  appear (this is correct behavior — selection considers all capable agents)
+- No other agents appear (DB isolation ensures only fixture-defined agents exist)
 - All items from agents that exit 0 produce analysis findings
 
 ---
@@ -148,8 +144,7 @@ both used successfully.
 
 ### Preconditions
 
-- Fresh sqlite state (other `qa`-capable agents in the global config will
-  participate in selection — always delete the DB first for isolation)
+- Reset previous QA state — `qa project reset` clears task data, config, and auto-tickets.
 
 ### Goal
 
@@ -166,24 +161,22 @@ and the healthy agent handles an increasing share of work across cycles.
 
 ### Steps
 
-1. Initialize and apply:
+1. Reset and apply into project scope:
    ```bash
-   ./scripts/orchestrator.sh init --force
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/mixed-health.yaml
-   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset qa-health --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/mixed-health.yaml --project qa-health
    ```
 
 2. Create and run task:
    ```bash
-   ./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/orchestrator.sh task create \
+     --project qa-health \
      --name "health-degradation-test" \
      --goal "Test health degradation" \
-     --project "${QA_PROJECT}" \
-     --workflow health_test
-   ./scripts/orchestrator.sh task start --latest
+     --workspace default \
+     --workflow health_test \
+     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ./scripts/orchestrator.sh task start "${TASK_ID}"
    ```
 
 3. Verify agent selection via DB (`task logs` does not show output from
@@ -192,13 +185,13 @@ and the healthy agent handles an increasing share of work across cycles.
    sqlite3 data/agent_orchestrator.db \
      "SELECT agent_id, COUNT(*), GROUP_CONCAT(DISTINCT exit_code)
       FROM command_runs
-      WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
+      WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '${TASK_ID}')
       GROUP BY agent_id;"
    ```
 
 4. Optionally check logs (only successful runs appear here):
    ```bash
-   ./scripts/orchestrator.sh task logs {task_id}
+   ./scripts/orchestrator.sh task logs "${TASK_ID}"
    ```
 
 ### Expected
@@ -208,6 +201,9 @@ and the healthy agent handles an increasing share of work across cycles.
 - After 2 consecutive failures `mock_fail` is marked diseased and excluded
   from subsequent selection
 - `mock_echo` handles the vast majority of runs across all cycles
+- Task status: `failed` with some `unresolved` items — this is **expected**
+  because `mock_fail`'s items generate tickets that trigger the
+  `fallback_unresolved_with_tickets` finalize rule
 - `task logs` will show only `echo-qa` markers because failed runs are not
   surfaced by the logs command; use the DB query to confirm `mock_fail` was
   selected
@@ -218,8 +214,8 @@ and the healthy agent handles an increasing share of work across cycles.
 
 ### Preconditions
 
-- Fresh sqlite state
-- Task from Scenario 3 (or any task with failed items)
+- Task from Scenario 3 (or any task with `unresolved`/`failed` items)
+- Do **not** delete the DB — this scenario depends on the state from Scenario 3
 
 ### Goal
 
@@ -267,7 +263,7 @@ Validate that `task retry` resets a failed item to pending and re-queues it.
 
 ### Preconditions
 
-- Fresh sqlite state (always delete the DB first)
+- Reset previous QA state — `qa project reset` clears task data, config, and auto-tickets.
 
 ### Goal
 
@@ -279,29 +275,27 @@ Validate that agent load tracking influences selection during execution.
 
 ### Steps
 
-1. Initialize and apply:
+1. Reset and apply into project scope:
    ```bash
-   ./scripts/orchestrator.sh init --force
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml
-   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset qa-load --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml --project qa-load
    ```
 
 2. Create and run task:
    ```bash
-   ./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/orchestrator.sh task create \
+     --project qa-load \
      --name "load-balance-test" \
      --goal "Test load balancing" \
-     --project "${QA_PROJECT}" \
-     --workflow selection_test
-   ./scripts/orchestrator.sh task start --latest
+     --workspace default \
+     --workflow selection_test \
+     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ./scripts/orchestrator.sh task start "${TASK_ID}"
    ```
 
 3. Inspect distribution:
    ```bash
-   ./scripts/orchestrator.sh task logs {task_id}
+   ./scripts/orchestrator.sh task logs "${TASK_ID}"
    ```
 
 ### Expected
@@ -320,10 +314,13 @@ Validate that agent load tracking influences selection during execution.
 - There is no dedicated CLI command to inspect raw agent metrics; verify
   indirectly via log distribution across agents
 - Health state is tracked per-capability via `AgentHealthState.capability_health`
-- **Project isolation is critical**: `apply` is additive and `qa project reset`
-  only clears project-local rows. Re-apply the expected fixture and recreate
-  the isolated QA project scaffold (`qa project reset` + `rm -rf workspace/<project>`
-  + `qa project create --force`) before each scenario to keep selection inputs deterministic
+- **Agent isolation via project scope**: Use `apply -f ... --project <name>` to
+  deploy fixture agents into a project scope. Agent selection for project tasks
+  uses project-scoped agents exclusively, so global/bootstrap agents never
+  interfere with test assertions.
+- **Clean state via `qa project reset`**: Use `qa project reset <name> --force`
+  before each scenario to clear task data, project config, and auto-generated
+  ticket files in one command — no need to delete the DB file.
 
 ---
 

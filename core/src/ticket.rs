@@ -660,6 +660,7 @@ mod tests {
             safety: crate::config::SafetyConfig::default(),
             self_referential: false,
             consecutive_failures: 0,
+            project_id: String::new(),
         };
 
         let result = read_ticket_preview(&task_ctx, "docs/ticket/t1.md");

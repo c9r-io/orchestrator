@@ -88,6 +88,7 @@ async fn run_task_loop_core(
                         step_timeout_secs: task_ctx.safety.step_timeout_secs,
                         step_scope: StepScope::Task,
                         step_template_prompt: None,
+                        project_id: &task_ctx.project_id,
                     },
                 )
                 .await?;
@@ -835,6 +836,7 @@ mod tests {
             safety: SafetyConfig::default(),
             self_referential: false,
             consecutive_failures: 0,
+            project_id: String::new(),
         };
 
         let segments = build_scope_segments(&task_ctx);
@@ -915,6 +917,7 @@ mod tests {
             safety: SafetyConfig::default(),
             self_referential: false,
             consecutive_failures: 0,
+            project_id: String::new(),
         };
 
         let segments = build_scope_segments(&task_ctx);
@@ -1094,6 +1097,7 @@ mod tests {
             safety: SafetyConfig::default(),
             self_referential: false,
             consecutive_failures: 0,
+            project_id: String::new(),
         };
         let segments = build_scope_segments(&task_ctx);
 
@@ -1145,6 +1149,7 @@ mod tests {
             safety: SafetyConfig::default(),
             self_referential: false,
             consecutive_failures: 0,
+            project_id: String::new(),
         };
         let segments = build_scope_segments(&task_ctx);
 
