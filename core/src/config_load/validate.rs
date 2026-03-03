@@ -365,7 +365,7 @@ pub fn ensure_within_root(root: &Path, target: &Path, field: &str) -> Result<()>
 mod tests {
     use super::*;
     use crate::config::{
-        LoopMode, OrchestratorConfig, StepBehavior, WorkflowConfig, WorkflowStepConfig,
+        LoopMode, OrchestratorConfig, StepBehavior, StepScope, WorkflowConfig, WorkflowStepConfig,
     };
     use crate::config_load::tests::{
         make_builtin_step, make_command_step, make_config_with_agent, make_step, make_workflow,
@@ -1078,5 +1078,329 @@ mod tests {
         let nonexistent = root.join("nonexistent-path-xyz-abc");
         let result = ensure_within_root(&root, &nonexistent, "test");
         assert!(result.is_err(), "should fail for nonexistent path");
+    }
+
+    // ============================================================================
+    // Group 1: ensure_within_root() additional tests
+    // ============================================================================
+
+    #[test]
+    fn ensure_within_root_rejects_path_outside_root() {
+        // Create a unique temp root directory
+        let root = std::env::temp_dir().join(format!("test-root-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create root directory");
+
+        // Use a sibling directory (outside root) as target
+        let outside = std::env::temp_dir().join(format!("test-outside-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&outside).expect("create outside directory");
+
+        let result = ensure_within_root(&root, &outside, "test_field");
+        assert!(result.is_err(), "should reject path outside root");
+        let err = result.expect_err("operation should fail").to_string();
+        assert!(
+            err.contains("resolves outside workspace root"),
+            "unexpected error: {}",
+            err
+        );
+
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::remove_dir_all(&outside).ok();
+    }
+
+    #[test]
+    fn ensure_within_root_accepts_root_equals_target() {
+        let root = std::env::temp_dir().join(format!("test-root-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create root directory");
+
+        let result = ensure_within_root(&root, &root, "test_field");
+        assert!(
+            result.is_ok(),
+            "root equals target should pass: {:?}",
+            result.err()
+        );
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn ensure_within_root_accepts_deeply_nested_child() {
+        let root = std::env::temp_dir().join(format!("test-root-{}", uuid::Uuid::new_v4()));
+        let deep_child = root.join("a").join("b").join("c").join("d").join("e");
+        std::fs::create_dir_all(&deep_child).expect("create deep child directory");
+
+        let result = ensure_within_root(&root, &deep_child, "test_field");
+        assert!(
+            result.is_ok(),
+            "deeply nested child should pass: {:?}",
+            result.err()
+        );
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn ensure_within_root_rejects_symlink_escaping_root() {
+        // Create root and outside directories
+        let root = std::env::temp_dir().join(format!("test-root-{}", uuid::Uuid::new_v4()));
+        let outside = std::env::temp_dir().join(format!("test-outside-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create root directory");
+        std::fs::create_dir_all(&outside).expect("create outside directory");
+
+        // Create symlink inside root pointing outside
+        let symlink = root.join("escape_link");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&outside, &symlink).expect("create symlink");
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_dir(&outside, &symlink).expect("create symlink");
+
+        let result = ensure_within_root(&root, &symlink, "test_field");
+        assert!(
+            result.is_err(),
+            "symlink escaping root should be rejected"
+        );
+        let err = result.expect_err("operation should fail").to_string();
+        assert!(
+            err.contains("resolves outside workspace root"),
+            "unexpected error: {}",
+            err
+        );
+
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::remove_dir_all(&outside).ok();
+    }
+
+    // ============================================================================
+    // Group 2: validate_probe_workflow_shape() direct tests
+    // ============================================================================
+
+    #[test]
+    fn validate_probe_workflow_shape_rejects_chain_steps_via_semantic_kind() {
+        // chain_steps causes resolve_step_semantic_kind to return Chain (not Command),
+        // which is rejected by the "only allows self-contained command steps" check.
+        // Note: the explicit chain_steps.is_empty() check (line 259) is unreachable
+        // because Chain semantic is caught first at line 252.
+        let mut step = make_command_step("implement", "echo probe");
+        step.chain_steps = vec![make_command_step("sub", "echo sub")];
+
+        let mut workflow = make_workflow(vec![step]);
+        workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
+        workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
+        workflow.safety.auto_rollback = true;
+        workflow.loop_policy.mode = LoopMode::Once;
+
+        let result = validate_probe_workflow_shape(&workflow, "probe");
+        assert!(result.is_err());
+        let err = result.expect_err("operation should fail").to_string();
+        assert!(
+            err.contains("only allows self-contained command steps"),
+            "unexpected error: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn validate_probe_workflow_shape_rejects_fixed_loop_mode() {
+        let mut workflow = make_workflow(vec![make_command_step("implement", "echo probe")]);
+        workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
+        workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
+        workflow.safety.auto_rollback = true;
+        workflow.loop_policy.mode = LoopMode::Fixed;
+
+        let result = validate_probe_workflow_shape(&workflow, "probe");
+        assert!(result.is_err());
+        let err = result.expect_err("operation should fail").to_string();
+        assert!(
+            err.contains("requires loop.mode=once"),
+            "unexpected error: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn validate_probe_workflow_shape_rejects_infinite_loop_mode() {
+        let mut workflow = make_workflow(vec![make_command_step("implement", "echo probe")]);
+        workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
+        workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
+        workflow.safety.auto_rollback = true;
+        workflow.loop_policy.mode = LoopMode::Infinite;
+
+        let result = validate_probe_workflow_shape(&workflow, "probe");
+        assert!(result.is_err());
+        let err = result.expect_err("operation should fail").to_string();
+        assert!(
+            err.contains("requires loop.mode=once"),
+            "unexpected error: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn validate_probe_workflow_shape_rejects_forbidden_phase_qa_testing() {
+        let mut step = make_command_step("qa_testing", "echo qa");
+        step.scope = Some(StepScope::Task); // Set to Task scope to pass scope check
+        let mut workflow = make_workflow(vec![step]);
+        workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
+        workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
+        workflow.safety.auto_rollback = true;
+
+        let result = validate_probe_workflow_shape(&workflow, "probe");
+        assert!(result.is_err());
+        let err = result.expect_err("operation should fail").to_string();
+        assert!(
+            err.contains("does not allow strict or builtin phases"),
+            "unexpected error: {}",
+            err
+        );
+        assert!(
+            err.contains("qa_testing"),
+            "error should mention phase name"
+        );
+    }
+
+    #[test]
+    fn validate_probe_workflow_shape_rejects_forbidden_phase_ticket_fix() {
+        let mut step = make_command_step("ticket_fix", "echo fix");
+        step.scope = Some(StepScope::Task); // Set to Task scope to pass scope check
+        let mut workflow = make_workflow(vec![step]);
+        workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
+        workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
+        workflow.safety.auto_rollback = true;
+
+        let result = validate_probe_workflow_shape(&workflow, "probe");
+        assert!(result.is_err());
+        let err = result.expect_err("operation should fail").to_string();
+        assert!(
+            err.contains("ticket_fix"),
+            "error should mention phase name"
+        );
+    }
+
+    #[test]
+    fn validate_probe_workflow_shape_rejects_forbidden_phase_loop_guard() {
+        let mut step = make_command_step("loop_guard", "echo guard");
+        step.scope = Some(StepScope::Task);
+        let mut workflow = make_workflow(vec![step]);
+        workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
+        workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
+        workflow.safety.auto_rollback = true;
+
+        let result = validate_probe_workflow_shape(&workflow, "probe");
+        assert!(result.is_err());
+        let err = result.expect_err("operation should fail").to_string();
+        assert!(
+            err.contains("loop_guard"),
+            "error should mention phase name"
+        );
+    }
+
+    #[test]
+    fn validate_probe_workflow_shape_accepts_custom_phase_name() {
+        let mut workflow =
+            make_workflow(vec![make_command_step("custom_probe_task", "echo custom")]);
+        workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
+        workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
+        workflow.safety.auto_rollback = true;
+        workflow.loop_policy.mode = LoopMode::Once;
+
+        let result = validate_probe_workflow_shape(&workflow, "probe");
+        assert!(
+            result.is_ok(),
+            "custom phase name should pass: {:?}",
+            result.err()
+        );
+    }
+
+    // ============================================================================
+    // Group 3: validate_self_referential_safety() edge case tests
+    // ============================================================================
+
+    #[test]
+    fn validate_self_referential_safety_standard_profile_checks_checkpoint_even_non_self_ref() {
+        // Even with workspace_is_self_referential=false, function still validates
+        // checkpoint_strategy != None for Standard profile workflows.
+        let mut workflow = make_workflow(vec![make_step("implement", true)]);
+        workflow.safety.profile = WorkflowSafetyProfile::Standard;
+        workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::None;
+
+        let result =
+            validate_self_referential_safety(&workflow, "standard-wf", "plain-ws", false);
+        assert!(result.is_err(), "should reject checkpoint_strategy=None");
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("checkpoint_strategy"));
+    }
+
+    #[test]
+    fn validate_self_referential_safety_standard_profile_accepts_valid_checkpoint() {
+        let mut workflow = make_workflow(vec![make_step("implement", true)]);
+        workflow.safety.profile = WorkflowSafetyProfile::Standard;
+        workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
+
+        let result =
+            validate_self_referential_safety(&workflow, "standard-wf", "plain-ws", false);
+        assert!(
+            result.is_ok(),
+            "standard profile with valid checkpoint should pass: {:?}",
+            result.err()
+        );
+    }
+
+    // ============================================================================
+    // Group 4: validate_probe_workflow_shape() — disabled steps and coverage gaps
+    // ============================================================================
+
+    #[test]
+    fn validate_probe_workflow_shape_skips_disabled_forbidden_phase() {
+        // Disabled steps should be skipped even if they have forbidden phase names.
+        let mut step = make_command_step("self_test", "echo forbidden");
+        step.enabled = false;
+        step.scope = Some(StepScope::Task);
+        let mut workflow = make_workflow(vec![
+            make_command_step("custom_task", "echo ok"),
+            step,
+        ]);
+        workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
+        workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
+        workflow.safety.auto_rollback = true;
+        workflow.loop_policy.mode = LoopMode::Once;
+
+        let result = validate_probe_workflow_shape(&workflow, "probe");
+        assert!(
+            result.is_ok(),
+            "disabled forbidden phase should be skipped: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn validate_probe_workflow_shape_rejects_forbidden_phase_self_test() {
+        let mut step = make_command_step("self_test", "echo test");
+        step.scope = Some(StepScope::Task);
+        let mut workflow = make_workflow(vec![step]);
+        workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
+        workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
+        workflow.safety.auto_rollback = true;
+
+        let result = validate_probe_workflow_shape(&workflow, "probe");
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("self_test"));
+    }
+
+    #[test]
+    fn validate_probe_workflow_shape_non_probe_profile_returns_ok() {
+        // Standard profile should pass through without probe-specific checks.
+        let mut workflow = make_workflow(vec![make_step("qa", true)]);
+        workflow.safety.profile = WorkflowSafetyProfile::Standard;
+
+        let result = validate_probe_workflow_shape(&workflow, "test-wf");
+        assert!(
+            result.is_ok(),
+            "non-probe profile should skip all probe checks: {:?}",
+            result.err()
+        );
     }
 }
