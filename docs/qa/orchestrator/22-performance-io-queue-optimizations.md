@@ -49,8 +49,9 @@ Entry point: `./scripts/orchestrator.sh`
    ```
 
 ### Expected
-- No executed run falls back to empty structured payload defaults (`{}` / `[]`) for strict phases (`qa/fix/retest/guard`).
+- No executed run falls back to empty `output_json = '{}'` for strict phases (`qa/fix/retest/guard`).
 - `validation_status` is populated (`passed` or `failed`), not `unknown`.
+- `artifacts_json = '[]'` is valid when an agent legitimately returns no artifacts; only `output_json = '{}'` indicates a missing structured payload.
 - Each persisted run has exactly one publish-path event (`phase_output_published` or `bus_publish_failed`) with matching `run_id`.
 
 ### Expected Data State
@@ -59,8 +60,9 @@ SELECT COUNT(*)
 FROM command_runs
 WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
   AND phase IN ('qa','fix','retest','guard')
-  AND (validation_status = 'unknown' OR output_json = '{}' OR artifacts_json = '[]');
+  AND (validation_status = 'unknown' OR output_json = '{}');
 -- Expected: 0
+-- Note: artifacts_json = '[]' is valid (agent may return no artifacts)
 ```
 
 ---

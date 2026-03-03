@@ -163,10 +163,11 @@ Verify that no references to `WorkflowStepType` enum or `step_type` field on `Wo
    cd core && grep -r "WorkflowStepType" src/ tests/ --include="*.rs"
    ```
 
-2. Search for `step_type` on config/execution step structs (excluding unrelated uses in cli_types, dynamic_orchestration, etc.):
+2. Search for `step_type` on config/execution step structs (excluding dynamic orchestration `DynamicStepConfig.step_type` which is a legitimate string field):
    ```bash
-   cd core && grep -rn "\.step_type" src/config.rs src/config_load.rs src/scheduler/item_executor.rs src/scheduler/loop_engine.rs
+   cd core && grep -rn "\.step_type" src/config.rs src/config_load.rs src/scheduler/loop_engine.rs
    ```
+   > **Note**: `src/scheduler/item_executor.rs` uses `ds.step_type` on `DynamicStepConfig` instances from the dynamic orchestration step pool — this is intentional and unrelated to the removed `WorkflowStepType` enum.
 
 3. Verify no `step()` method calls remain on `TaskExecutionPlan`:
    ```bash

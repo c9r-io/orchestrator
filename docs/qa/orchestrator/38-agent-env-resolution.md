@@ -143,38 +143,48 @@ Verify that `name` + `refValue` imports a single key from the referenced store, 
 Verify that config build-time validation catches agents referencing non-existent stores and produces a clear error message.
 
 ### Steps
-1. Apply an agent referencing a missing store via `fromRef`:
-   ```yaml
+1. Save a manifest referencing a missing store via `fromRef`:
+   ```bash
+   cat > /tmp/bad-fromref-agent.yaml << 'EOF'
    apiVersion: orchestrator.dev/v2
    kind: Agent
    metadata:
      name: bad-fromref-agent
    spec:
-     command: echo test
+     command: "echo test"
      env:
        - fromRef: nonexistent-store
+   EOF
    ```
-2. Trigger config validation (e.g., via `./scripts/orchestrator.sh check config` or by starting a task)
-3. Apply another agent referencing a missing store via `refValue`:
-   ```yaml
+2. Apply and observe validation error:
+   ```bash
+   ./scripts/orchestrator.sh apply -f /tmp/bad-fromref-agent.yaml
+   ```
+3. Save a manifest referencing a missing store via `refValue`:
+   ```bash
+   cat > /tmp/bad-refvalue-agent.yaml << 'EOF'
    apiVersion: orchestrator.dev/v2
    kind: Agent
    metadata:
      name: bad-refvalue-agent
    spec:
-     command: echo test
+     command: "echo test"
      env:
        - name: KEY
          refValue:
            name: nonexistent-store
            key: SOME_KEY
+   EOF
    ```
-4. Trigger config validation again
+4. Apply and observe validation error:
+   ```bash
+   ./scripts/orchestrator.sh apply -f /tmp/bad-refvalue-agent.yaml
+   ```
 
 ### Expected
-- Step 2: Validation error containing `"fromRef 'nonexistent-store' references unknown store"` or similar
-- Step 4: Validation error containing `"refValue.name 'nonexistent-store' references unknown store"` or similar
-- Neither agent should execute without valid store references
+- Step 2: `apply` fails with error containing `"fromRef 'nonexistent-store' references unknown store"`
+- Step 4: `apply` fails with error containing `"refValue.name 'nonexistent-store' references unknown store"`
+- Neither agent is persisted — validation runs before config is written to the database
 
 ---
 

@@ -39,9 +39,7 @@ kind: Agent
 metadata:
   name: exec-agent
 spec:
-  templates:
-    qa: "echo '{\"confidence\":1.0,\"quality_score\":1.0,\"artifacts\":[]}'"
-    plan: "echo 'plan step executed for {rel_path}'"
+  command: "echo '{\"confidence\":1.0,\"quality_score\":1.0,\"artifacts\":[]}'"
   capabilities:
     - qa
     - plan

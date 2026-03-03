@@ -9,6 +9,7 @@ use std::path::Path;
 
 use super::{
     build_active_config, enforce_deletion_guards, normalize_config, now_ts, read_active_config,
+    validate_agent_env_store_refs,
 };
 
 pub(crate) fn serialize_config_snapshot(config: &OrchestratorConfig) -> Result<(String, String)> {
@@ -192,6 +193,7 @@ pub fn persist_raw_config(
     author: &str,
 ) -> Result<ConfigOverview> {
     let normalized = normalize_config(config);
+    validate_agent_env_store_refs(&normalized)?;
     let (yaml, json_raw) = serialize_config_snapshot(&normalized)?;
     let conn = open_conn(db_path)?;
     let tx = conn.unchecked_transaction()?;

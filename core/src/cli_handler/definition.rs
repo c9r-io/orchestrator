@@ -31,10 +31,18 @@ impl CliHandler {
                 workspace_id,
                 output,
             } => {
+                // Check global workspaces first, then fall back to project-scoped workspaces
                 let ws = active
                     .config
                     .workspaces
                     .get(workspace_id)
+                    .or_else(|| {
+                        active
+                            .config
+                            .projects
+                            .values()
+                            .find_map(|p| p.workspaces.get(workspace_id))
+                    })
                     .context(format!("workspace not found: {}", workspace_id))?;
                 self.print_workspace_detail(workspace_id, ws, *output)
             }
