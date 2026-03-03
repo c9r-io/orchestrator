@@ -1,9 +1,9 @@
 use crate::collab::MessageBus;
 use crate::config::{
     AgentConfig, AgentMetadata, AgentSelectionConfig, ConfigDefaults, LoopMode, OrchestratorConfig,
-    ResourceMetadataStore, ResumeConfig, RunnerConfig, SafetyConfig, StepBehavior, WorkflowConfig,
-    WorkflowFinalizeConfig, WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
-    WorkspaceConfig,
+    PromptDelivery, ResourceMetadataStore, ResumeConfig, RunnerConfig, SafetyConfig, StepBehavior,
+    WorkflowConfig, WorkflowFinalizeConfig, WorkflowLoopConfig, WorkflowLoopGuardConfig,
+    WorkflowStepConfig, WorkspaceConfig,
 };
 use crate::config_load::{
     build_active_config, load_raw_config_from_db, persist_raw_config, read_active_config,
@@ -72,6 +72,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                     command: "echo 'qa: {rel_path}'".to_string(),
                     selection: AgentSelectionConfig::default(),
                     env: None,
+                    prompt_delivery: PromptDelivery::default(),
                 },
             );
             agents

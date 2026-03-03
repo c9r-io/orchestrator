@@ -442,6 +442,9 @@ pub async fn execute_builtin_step(
                 runtime,
                 step_timeout_secs: None,
                 step_scope: step.resolved_scope(),
+                prompt_delivery: crate::config::PromptDelivery::Arg,
+                prompt_payload: None,
+                pipe_stdin: false,
             },
         )
         .await?
@@ -567,7 +570,7 @@ pub async fn execute_guard_step(
         }
     }
 
-    let (agent_id, template) = {
+    let (agent_id, template, _prompt_delivery) = {
         let active = crate::config_load::read_active_config(state)?;
         let health_map = read_agent_health(state);
         let metrics_map = read_agent_metrics(state);
@@ -614,6 +617,9 @@ pub async fn execute_guard_step(
             runtime,
             step_timeout_secs: None,
             step_scope: crate::config::StepScope::Task,
+            prompt_delivery: crate::config::PromptDelivery::Arg,
+            prompt_payload: None,
+            pipe_stdin: false,
         },
     )
     .await?;

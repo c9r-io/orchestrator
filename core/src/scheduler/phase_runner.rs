@@ -1,4 +1,4 @@
-use crate::config::{PipelineVariables, StepScope};
+use crate::config::{PipelineVariables, PromptDelivery, StepScope};
 use crate::config_load::now_ts;
 use crate::events::insert_event;
 use crate::health::{
@@ -64,6 +64,12 @@ pub struct PhaseRunRequest<'a> {
     pub runtime: &'a RunningTask,
     pub step_timeout_secs: Option<u64>,
     pub step_scope: StepScope,
+    /// How the prompt payload is delivered to the agent process.
+    pub prompt_delivery: PromptDelivery,
+    /// Rendered prompt for non-arg delivery modes (stdin, file, env).
+    pub prompt_payload: Option<String>,
+    /// Whether to pipe stdin to the child process.
+    pub pipe_stdin: bool,
 }
 
 pub struct RotatingPhaseRunRequest<'a> {
@@ -195,6 +201,9 @@ async fn run_phase_with_timeout(
         runtime,
         step_timeout_secs,
         step_scope,
+        prompt_delivery,
+        prompt_payload,
+        pipe_stdin: req_pipe_stdin,
     } = request;
     let now = now_ts();
     let run_uuid = Uuid::new_v4();
@@ -203,7 +212,7 @@ async fn run_phase_with_timeout(
     let stdout_path = logs_dir.join(format!("{}_{}.stdout", phase, run_id));
     let stderr_path = logs_dir.join(format!("{}_{}.stderr", phase, run_id));
 
-    let (runner, resolved_extra_env) = {
+    let (runner, mut resolved_extra_env) = {
         let active = crate::config_load::read_active_config(state)?;
         let runner = active.config.runner.clone();
         let extra_env = if let Some(agent_cfg) = active.config.agents.get(agent_id) {
@@ -251,6 +260,47 @@ async fn run_phase_with_timeout(
     })
     .await
     .context("log file setup worker failed")??;
+
+    // Handle non-arg prompt delivery modes before spawn
+    let command = match prompt_delivery {
+        PromptDelivery::File => {
+            if let Some(ref payload) = prompt_payload {
+                let prompt_file_path = logs_dir.join(format!("prompt_{}.txt", run_id));
+                std::fs::write(&prompt_file_path, payload).with_context(|| {
+                    format!(
+                        "failed to write prompt file: {}",
+                        prompt_file_path.display()
+                    )
+                })?;
+                command.replace("{prompt_file}", &prompt_file_path.to_string_lossy())
+            } else {
+                command
+            }
+        }
+        PromptDelivery::Env => {
+            if let Some(ref payload) = prompt_payload {
+                const ENV_SIZE_LIMIT: usize = 128 * 1024;
+                if payload.len() > ENV_SIZE_LIMIT {
+                    tracing::warn!(
+                        agent_id = %agent_id,
+                        prompt_bytes = payload.len(),
+                        "prompt exceeds env var size limit (~128KB); consider using file delivery"
+                    );
+                }
+                resolved_extra_env.insert("ORCH_PROMPT".to_string(), payload.clone());
+            }
+            command
+        }
+        PromptDelivery::Stdin if tty => {
+            tracing::warn!(
+                agent_id = %agent_id,
+                "stdin delivery conflicts with TTY mode (stdin redirected from FIFO); falling back to arg"
+            );
+            // Fall back: no stdin piping, command already has {prompt} stripped
+            command
+        }
+        _ => command,
+    };
 
     // Insert a "running" command_run record immediately so `task logs` shows it during execution
     {
@@ -340,14 +390,29 @@ async fn run_phase_with_timeout(
     } else {
         command.clone()
     };
-    let child = spawn_with_runner(
+    // For stdin delivery in TTY mode, we already warned and fell back to arg
+    let effective_pipe_stdin = req_pipe_stdin && !tty;
+    let mut child = spawn_with_runner(
         &runner,
         &command_to_run,
         workspace_root,
         stdout_file,
         stderr_file,
         &resolved_extra_env,
+        effective_pipe_stdin,
     )?;
+
+    // Write prompt to child stdin for stdin delivery mode
+    if effective_pipe_stdin {
+        if let Some(ref payload) = prompt_payload {
+            if let Some(mut stdin_handle) = child.stdin.take() {
+                use tokio::io::AsyncWriteExt;
+                stdin_handle.write_all(payload.as_bytes()).await?;
+                drop(stdin_handle); // send EOF
+            }
+        }
+    }
+
     if let Some(sid) = session_id.as_deref() {
         if let Some(pid) = child.id() {
             let _ = session_store::update_session_pid(&state.db_path, sid, pid as i64);
@@ -718,7 +783,7 @@ pub async fn run_phase_with_rotation(
         _ => None,
     });
 
-    let (agent_id, template) = {
+    let (agent_id, template, prompt_delivery) = {
         let active = crate::config_load::read_active_config(state)?;
         let agents = active.config.agents.clone();
 
@@ -764,10 +829,26 @@ pub async fn run_phase_with_rotation(
         rendered
     });
 
-    let mut command = if let Some(ref prompt) = rendered_prompt {
-        template.replace("{prompt}", prompt)
-    } else {
-        template
+    // Dispatch prompt into command based on delivery mode
+    let (mut command, prompt_payload) = match prompt_delivery {
+        PromptDelivery::Arg => {
+            let cmd = if let Some(ref prompt) = rendered_prompt {
+                template.replace("{prompt}", prompt)
+            } else {
+                template
+            };
+            (cmd, None)
+        }
+        _ => {
+            if template.contains("{prompt}") {
+                tracing::warn!(
+                    agent_id = %agent_id,
+                    "command contains {{prompt}} but prompt_delivery={:?}; placeholder ignored",
+                    prompt_delivery
+                );
+            }
+            (template, rendered_prompt)
+        }
     };
 
     let escaped_paths: Vec<String> = ticket_paths.iter().map(|p| shell_escape(p)).collect();
@@ -807,6 +888,9 @@ pub async fn run_phase_with_rotation(
             runtime,
             step_timeout_secs,
             step_scope,
+            prompt_delivery,
+            prompt_payload,
+            pipe_stdin: prompt_delivery == PromptDelivery::Stdin,
         },
     )
     .await

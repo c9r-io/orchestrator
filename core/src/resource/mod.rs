@@ -364,6 +364,7 @@ mod tests {
                 metadata: None,
                 selection: None,
                 env: None,
+                prompt_delivery: None,
             })),
         };
 
@@ -772,6 +773,7 @@ pub(super) mod test_fixtures {
                 metadata: None,
                 selection: None,
                 env: None,
+                prompt_delivery: None,
             })),
         }
     }

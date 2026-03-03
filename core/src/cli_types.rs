@@ -1,5 +1,6 @@
 /// K8s-style YAML types for declarative resource management via `apply` command.
 /// Resources follow Kubernetes manifest conventions: apiVersion, kind, metadata, spec.
+use crate::config::PromptDelivery;
 use crate::metrics::{SelectionStrategy, SelectionWeights};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -283,6 +284,14 @@ pub struct AgentSpec {
     /// Environment variables to inject into the agent process.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub env: Option<Vec<AgentEnvEntry>>,
+
+    /// How the rendered prompt is delivered to the agent process.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "promptDelivery"
+    )]
+    pub prompt_delivery: Option<PromptDelivery>,
 }
 
 /// Agent metadata specification.

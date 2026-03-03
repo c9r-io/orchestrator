@@ -50,6 +50,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                     command: "echo test".to_string(),
                     selection: AgentSelectionConfig::default(),
                     env: None,
+                    prompt_delivery: PromptDelivery::default(),
                 },
             );
             agents
@@ -497,6 +498,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
             command: "echo test".to_string(),
             selection: AgentSelectionConfig::default(),
             env: None,
+            prompt_delivery: PromptDelivery::default(),
         }
     }
 

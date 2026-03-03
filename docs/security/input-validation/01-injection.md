@@ -79,6 +79,12 @@ Verify user input cannot reach a shell.
 - Injected commands do not execute
 - Input is strictly validated/escaped, or the implementation avoids shells entirely
 
+### Orchestrator Mitigation: PromptDelivery Modes
+- Agents support a `promptDelivery` field (`stdin`, `file`, `env`, `arg`) that controls how rendered prompts reach spawned processes
+- `stdin`/`file`/`env` modes keep prompt content entirely out of the shell command string, eliminating shell injection risk for prompt content
+- `arg` mode (legacy default) still uses `{prompt}` substitution with `shell_escape()` as a defense layer
+- See `docs/qa/orchestrator/39-prompt-delivery.md` and `docs/design_doc/orchestrator/18-prompt-delivery-abstraction.md`
+
 ---
 
 ## Scenario 4: Template / Expression Injection (If Applicable)

@@ -34,9 +34,9 @@ mod tests {
     use super::*;
     use crate::collab::MessageBus;
     use crate::config::{
-        AgentConfig, AgentMetadata, AgentSelectionConfig, LoopMode, OnFailureAction, StepBehavior,
-        StepScope, WorkflowConfig, WorkflowFinalizeConfig, WorkflowLoopConfig,
-        WorkflowLoopGuardConfig, WorkflowStepConfig, PIPELINE_VAR_INLINE_LIMIT,
+        AgentConfig, AgentMetadata, AgentSelectionConfig, LoopMode, OnFailureAction,
+        PromptDelivery, StepBehavior, StepScope, WorkflowConfig, WorkflowFinalizeConfig,
+        WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig, PIPELINE_VAR_INLINE_LIMIT,
     };
     use crate::db::open_conn;
     use crate::dto::CreateTaskPayload;
@@ -98,6 +98,7 @@ mod tests {
                     command: "echo {prompt}".to_string(),
                     selection: AgentSelectionConfig::default(),
                     env: None,
+                    prompt_delivery: PromptDelivery::default(),
                 },
             )
             .with_step_template(
@@ -336,6 +337,7 @@ mod tests {
                     command: "echo {prompt}".to_string(),
                     selection: AgentSelectionConfig::default(),
                     env: None,
+                    prompt_delivery: PromptDelivery::default(),
                 },
             )
             .with_step_template(

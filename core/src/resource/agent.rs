@@ -2,7 +2,9 @@ use crate::cli_types::{
     AgentMetadataSpec, AgentSelectionSpec, AgentSpec, OrchestratorResource, ResourceKind,
     ResourceSpec,
 };
-use crate::config::{AgentConfig, AgentMetadata, AgentSelectionConfig, OrchestratorConfig};
+use crate::config::{
+    AgentConfig, AgentMetadata, AgentSelectionConfig, OrchestratorConfig, PromptDelivery,
+};
 use anyhow::{anyhow, Result};
 
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
@@ -115,6 +117,7 @@ pub(super) fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
             })
             .unwrap_or_default(),
         env: spec.env.clone(),
+        prompt_delivery: spec.prompt_delivery.unwrap_or_default(),
     }
 }
 
@@ -139,6 +142,11 @@ pub(super) fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
             weights: config.selection.weights.clone(),
         }),
         env: config.env.clone(),
+        prompt_delivery: if config.prompt_delivery == PromptDelivery::Arg {
+            None
+        } else {
+            Some(config.prompt_delivery)
+        },
     }
 }
 
@@ -175,6 +183,7 @@ mod tests {
                 metadata: None,
                 selection: None,
                 env: None,
+                prompt_delivery: None,
             },
         };
         let err = agent.validate().expect_err("operation should fail");
@@ -191,6 +200,7 @@ mod tests {
                 metadata: None,
                 selection: None,
                 env: None,
+                prompt_delivery: None,
             },
         };
         assert!(agent.validate().is_ok());
@@ -207,6 +217,7 @@ mod tests {
                 command: "glmcode -p \"{prompt}\"".to_string(),
                 selection: AgentSelectionConfig::default(),
                 env: None,
+                prompt_delivery: PromptDelivery::default(),
             },
         );
         let loaded =
@@ -248,6 +259,7 @@ mod tests {
                 metadata: None,
                 selection: None,
                 env: None,
+                prompt_delivery: None,
             },
         };
         let yaml = agent.to_yaml().expect("should serialize");
@@ -270,6 +282,7 @@ mod tests {
                 weights: None,
             }),
             env: None,
+            prompt_delivery: None,
         };
 
         let config = agent_spec_to_config(&spec);
@@ -293,6 +306,7 @@ mod tests {
             command: "echo".to_string(),
             selection: AgentSelectionConfig::default(),
             env: None,
+            prompt_delivery: PromptDelivery::default(),
         };
         let spec = agent_config_to_spec(&config);
         assert!(spec.capabilities.is_none());
@@ -311,6 +325,7 @@ mod tests {
             command: "echo".to_string(),
             selection: AgentSelectionConfig::default(),
             env: None,
+            prompt_delivery: PromptDelivery::default(),
         };
         let spec = agent_config_to_spec(&config);
         assert!(spec.metadata.is_none());
@@ -334,6 +349,7 @@ mod tests {
                 metadata: None,
                 selection: None,
                 env: None,
+                prompt_delivery: None,
             })),
         };
         let rr = dispatch_resource(resource).expect("dispatch agent resource");

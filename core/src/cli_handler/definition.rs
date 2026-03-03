@@ -92,6 +92,7 @@ impl CliHandler {
                     metadata: None,
                     selection: None,
                     env: None,
+                    prompt_delivery: None,
                 };
                 let manifest = OrchestratorResource {
                     api_version: "orchestrator.dev/v2".to_string(),

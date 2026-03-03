@@ -6,7 +6,7 @@
 use crate::anomaly::Severity;
 use crate::config::{
     is_known_builtin_step_name, resolve_step_semantic_kind, ActiveConfig, ExecutionMode,
-    OrchestratorConfig, StepSemanticKind, WorkflowStepConfig,
+    OrchestratorConfig, PromptDelivery, StepSemanticKind, WorkflowStepConfig,
 };
 use crate::scheduler::trace::find_template_vars;
 use serde::Serialize;
@@ -71,6 +71,7 @@ pub fn run_checks(
     check_workspace_roots(oc, app_root, &mut checks);
     check_qa_targets(oc, app_root, &mut checks);
     check_capability_coverage(oc, workflow_filter, &mut checks);
+    check_prompt_delivery(oc, &mut checks);
     check_capability_templates(oc, &mut checks);
     check_builtin_names(oc, workflow_filter, &mut checks);
     check_pipe_to_refs(oc, workflow_filter, &mut checks);
@@ -198,6 +199,50 @@ fn check_steps_capability(
         // Recurse into chain_steps
         if !step.chain_steps.is_empty() {
             check_steps_capability(&step.chain_steps, wf_id, all_caps, out);
+        }
+    }
+}
+
+fn check_prompt_delivery(oc: &OrchestratorConfig, out: &mut Vec<CheckResult>) {
+    for (agent_id, agent) in &oc.agents {
+        let delivery = agent.prompt_delivery;
+        let cmd = &agent.command;
+
+        match delivery {
+            PromptDelivery::Stdin | PromptDelivery::Env if cmd.contains("{prompt}") => {
+                out.push(CheckResult {
+                    rule: "prompt_delivery_placeholder_ignored".into(),
+                    severity: Severity::Warning,
+                    passed: false,
+                    message: format!(
+                        "agent \"{agent_id}\": command contains {{prompt}} but prompt_delivery={delivery:?}; placeholder will be ignored"
+                    ),
+                    context: None,
+                });
+            }
+            PromptDelivery::File if cmd.contains("{prompt}") => {
+                out.push(CheckResult {
+                    rule: "prompt_delivery_placeholder_ignored".into(),
+                    severity: Severity::Warning,
+                    passed: false,
+                    message: format!(
+                        "agent \"{agent_id}\": command contains {{prompt}} but prompt_delivery=file; use {{prompt_file}} instead"
+                    ),
+                    context: None,
+                });
+            }
+            PromptDelivery::File if !cmd.contains("{prompt_file}") => {
+                out.push(CheckResult {
+                    rule: "prompt_delivery_missing_placeholder".into(),
+                    severity: Severity::Warning,
+                    passed: false,
+                    message: format!(
+                        "agent \"{agent_id}\": prompt_delivery=file but command is missing {{prompt_file}} placeholder"
+                    ),
+                    context: None,
+                });
+            }
+            _ => {}
         }
     }
 }
@@ -482,6 +527,7 @@ mod tests {
                 command: "echo test".to_string(),
                 selection: AgentSelectionConfig::default(),
                 env: None,
+                prompt_delivery: PromptDelivery::default(),
             },
         );
 
@@ -1031,5 +1077,60 @@ mod tests {
 
         let json = serde_json::to_string(&report).expect("serialize");
         let _: serde_json::Value = serde_json::from_str(&json).expect("deserialize");
+    }
+
+    #[test]
+    fn prompt_delivery_stdin_warns_on_prompt_placeholder() {
+        let mut cfg = base_config();
+        cfg.config
+            .agents
+            .get_mut("agent1")
+            .expect("agent1")
+            .prompt_delivery = PromptDelivery::Stdin;
+        cfg.config.agents.get_mut("agent1").expect("agent1").command =
+            "claude -p \"{prompt}\"".to_string();
+
+        let tmp = tempfile::tempdir().expect("create temp dir");
+        make_temp_ws(tmp.path());
+        let report = run_checks(&cfg, tmp.path(), None);
+        let found = report
+            .checks
+            .iter()
+            .any(|c| c.rule == "prompt_delivery_placeholder_ignored" && !c.passed);
+        assert!(found, "stdin delivery with {{prompt}} should warn");
+    }
+
+    #[test]
+    fn prompt_delivery_file_warns_missing_prompt_file_placeholder() {
+        let mut cfg = base_config();
+        cfg.config
+            .agents
+            .get_mut("agent1")
+            .expect("agent1")
+            .prompt_delivery = PromptDelivery::File;
+        cfg.config.agents.get_mut("agent1").expect("agent1").command =
+            "claude --file input.txt".to_string();
+
+        let tmp = tempfile::tempdir().expect("create temp dir");
+        make_temp_ws(tmp.path());
+        let report = run_checks(&cfg, tmp.path(), None);
+        let found = report
+            .checks
+            .iter()
+            .any(|c| c.rule == "prompt_delivery_missing_placeholder" && !c.passed);
+        assert!(found, "file delivery without {{prompt_file}} should warn");
+    }
+
+    #[test]
+    fn prompt_delivery_arg_no_warning() {
+        let cfg = base_config();
+        let tmp = tempfile::tempdir().expect("create temp dir");
+        make_temp_ws(tmp.path());
+        let report = run_checks(&cfg, tmp.path(), None);
+        let found = report
+            .checks
+            .iter()
+            .any(|c| c.rule.starts_with("prompt_delivery") && !c.passed);
+        assert!(!found, "default arg delivery should not trigger warnings");
     }
 }

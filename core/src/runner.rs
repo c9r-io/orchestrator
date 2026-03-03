@@ -147,6 +147,7 @@ mod tests {
             stdout,
             stderr,
             &std::collections::HashMap::new(),
+            false,
         )
         .expect("spawn with allowlist");
 
@@ -183,6 +184,7 @@ mod tests {
             stdout,
             stderr,
             &std::collections::HashMap::new(),
+            false,
         )
         .expect_err("missing shell should fail");
         assert!(err.to_string().contains("failed to spawn runner"));
@@ -207,6 +209,7 @@ mod tests {
             stdout,
             stderr,
             &extra_env,
+            false,
         )
         .expect("spawn with extra env");
 
@@ -219,31 +222,35 @@ mod tests {
     }
 }
 
+pub struct SpawnParams<'a> {
+    pub runner: &'a RunnerConfig,
+    pub command: &'a str,
+    pub cwd: &'a Path,
+    pub stdout: File,
+    pub stderr: File,
+    pub extra_env: &'a std::collections::HashMap<String, String>,
+    pub pipe_stdin: bool,
+}
+
 pub trait RunnerExecutor {
-    fn spawn(
-        &self,
-        runner: &RunnerConfig,
-        command: &str,
-        cwd: &Path,
-        stdout: File,
-        stderr: File,
-        extra_env: &std::collections::HashMap<String, String>,
-    ) -> Result<tokio::process::Child>;
+    fn spawn(&self, params: SpawnParams<'_>) -> Result<tokio::process::Child>;
 }
 
 #[derive(Debug, Default)]
 pub struct ShellRunnerExecutor;
 
 impl RunnerExecutor for ShellRunnerExecutor {
-    fn spawn(
-        &self,
-        runner: &RunnerConfig,
-        command: &str,
-        cwd: &Path,
-        stdout: File,
-        stderr: File,
-        extra_env: &std::collections::HashMap<String, String>,
-    ) -> Result<tokio::process::Child> {
+    fn spawn(&self, params: SpawnParams<'_>) -> Result<tokio::process::Child> {
+        let SpawnParams {
+            runner,
+            command,
+            cwd,
+            stdout,
+            stderr,
+            extra_env,
+            pipe_stdin,
+        } = params;
+
         enforce_runner_policy(runner, command)?;
 
         let mut cmd = tokio::process::Command::new(&runner.shell);
@@ -253,6 +260,10 @@ impl RunnerExecutor for ShellRunnerExecutor {
             .stdout(Stdio::from(stdout))
             .stderr(Stdio::from(stderr))
             .kill_on_drop(true);
+
+        if pipe_stdin {
+            cmd.stdin(Stdio::piped());
+        }
 
         #[cfg(unix)]
         {
@@ -293,11 +304,18 @@ pub fn spawn_with_runner(
     stdout: File,
     stderr: File,
     extra_env: &std::collections::HashMap<String, String>,
+    pipe_stdin: bool,
 ) -> Result<tokio::process::Child> {
     match runner.executor {
-        RunnerExecutorKind::Shell => {
-            ShellRunnerExecutor.spawn(runner, command, cwd, stdout, stderr, extra_env)
-        }
+        RunnerExecutorKind::Shell => ShellRunnerExecutor.spawn(SpawnParams {
+            runner,
+            command,
+            cwd,
+            stdout,
+            stderr,
+            extra_env,
+            pipe_stdin,
+        }),
     }
 }
 
