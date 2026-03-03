@@ -18,10 +18,7 @@ spec:
   capabilities:
     - qa
     - fix
-  templates:
-    qa: "echo '{\"confidence\":0.9,\"quality_score\":0.82,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"fast-qa\",\"description\":\"fast qa agent\",\"severity\":\"info\"}]}]}'"
-    fix: "echo '{\"confidence\":0.82,\"quality_score\":0.76,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fast-fix.out\"]}]}'"
-    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
+  command: "echo '{\"confidence\":0.9,\"quality_score\":0.82,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"fast-qa\",\"description\":\"fast qa agent\",\"severity\":\"info\"}]}]}'"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -33,9 +30,7 @@ spec:
   capabilities:
     - qa
     - fix
-  templates:
-    qa: "echo '{\"confidence\":0.95,\"quality_score\":0.94,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"quality-qa\",\"description\":\"quality qa agent\",\"severity\":\"info\"}]}]}'"
-    fix: "echo '{\"confidence\":0.91,\"quality_score\":0.89,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"quality-fix.out\"]}]}'"
+  command: "echo '{\"confidence\":0.95,\"quality_score\":0.94,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"quality-qa\",\"description\":\"quality qa agent\",\"severity\":\"info\"}]}]}'"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow

@@ -17,9 +17,8 @@ spec:
     cost: 50
   capabilities:
     - qa
-  templates:
-    qa: "echo '{\"confidence\":0.88,\"quality_score\":0.84,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"cycle\",\"description\":\"cycle {cycle}\",\"severity\":\"info\"}]}]}'"
-    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"guard-check\"}'"
+    - loop_guard
+  command: "echo '{\"confidence\":0.88,\"quality_score\":0.84,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"cycle\",\"description\":\"cycle {cycle}\",\"severity\":\"info\"}]}]}'"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow

@@ -31,12 +31,7 @@ spec:
     - qa
     - align_tests
     - doc_governance
-  templates:
-    plan: "echo 'plan fallback'"
-    implement: "echo 'implement fallback'"
-    qa: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"probe-qa\",\"description\":\"probe qa fallback\",\"severity\":\"info\"}]}]}'"
-    align_tests: "echo 'align fallback'"
-    doc_governance: "echo 'doc fallback'"
+  command: "echo 'plan fallback'"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow

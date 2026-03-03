@@ -1,6 +1,6 @@
 use crate::cli::{AgentCommands, WorkflowCommands, WorkspaceCommands};
 use crate::cli_types::{
-    AgentSpec, AgentTemplatesSpec, OrchestratorResource, ResourceKind, ResourceSpec, SafetySpec,
+    AgentSpec, OrchestratorResource, ResourceKind, ResourceSpec, SafetySpec,
     WorkflowFinalizeSpec, WorkflowLoopSpec, WorkflowSpec, WorkflowStepSpec, WorkspaceSpec,
 };
 use crate::config_load::read_active_config;
@@ -74,12 +74,7 @@ impl CliHandler {
         match cmd {
             AgentCommands::Create {
                 name,
-                template_init_once,
-                template_qa,
-                template_plan,
-                template_fix,
-                template_retest,
-                template_loop_guard,
+                command,
                 capability,
                 labels,
                 annotations,
@@ -88,22 +83,7 @@ impl CliHandler {
             } => {
                 let metadata = build_resource_metadata(name, labels, annotations)?;
                 let spec = AgentSpec {
-                    templates: AgentTemplatesSpec {
-                        init_once: template_init_once.clone(),
-                        qa: template_qa.clone(),
-                        plan: template_plan.clone(),
-                        fix: template_fix.clone(),
-                        retest: template_retest.clone(),
-                        loop_guard: template_loop_guard.clone(),
-                        ticket_scan: None,
-                        build: None,
-                        test: None,
-                        lint: None,
-                        implement: None,
-                        review: None,
-                        git_ops: None,
-                        extra: std::collections::HashMap::new(),
-                    },
+                    command: command.clone(),
                     capabilities: if capability.is_empty() {
                         None
                     } else {
@@ -152,6 +132,7 @@ impl CliHandler {
                         cost_preference: None,
                         prehook: None,
                         tty: false,
+                        template: None,
                         command: None,
                         scope: None,
                     })

@@ -204,22 +204,18 @@ fn check_steps_capability(
 
 fn check_capability_templates(oc: &OrchestratorConfig, out: &mut Vec<CheckResult>) {
     for (agent_id, agent) in &oc.agents {
-        for cap in &agent.capabilities {
-            let has_template = agent.templates.contains_key(cap);
-            out.push(CheckResult {
-                rule: "capability_no_template".into(),
-                severity: Severity::Error,
-                passed: has_template,
-                message: if has_template {
-                    format!("agent \"{agent_id}\": has template for capability \"{cap}\"")
-                } else {
-                    format!(
-                        "agent \"{agent_id}\": declares capability \"{cap}\" but has no \"{cap}\" template"
-                    )
-                },
-                context: None,
-            });
-        }
+        let has_command = !agent.command.is_empty();
+        out.push(CheckResult {
+            rule: "agent_has_command".into(),
+            severity: Severity::Error,
+            passed: has_command,
+            message: if has_command {
+                format!("agent \"{agent_id}\": has command configured")
+            } else {
+                format!("agent \"{agent_id}\": has no command configured")
+            },
+            context: None,
+        });
     }
 }
 
@@ -414,29 +410,27 @@ fn check_template_vars(
             }
         }
 
-        // Check each agent template for unknown vars
-        for (agent_id, agent) in &oc.agents {
-            for (tmpl_name, tmpl_body) in &agent.templates {
-                for var_with_braces in find_template_vars(tmpl_body) {
-                    // strip braces: {foo} -> foo
-                    let var = &var_with_braces[1..var_with_braces.len() - 1];
-                    if sys_vars.contains(var) {
-                        continue;
-                    }
-                    if pipeline_vars.contains(var) {
-                        continue;
-                    }
-                    out.push(CheckResult {
-                        rule: "template_unknown_var".into(),
-                        severity: Severity::Warning,
-                        passed: false,
-                        message: format!(
-                            "agent \"{agent_id}\": template \"{tmpl_name}\" references {var_with_braces} \
-                             — not a known system variable (may come from pipeline)"
-                        ),
-                        context: None,
-                    });
+        // Check each step template for unknown vars
+        for (tmpl_name, tmpl_config) in &oc.step_templates {
+            for var_with_braces in find_template_vars(&tmpl_config.prompt) {
+                // strip braces: {foo} -> foo
+                let var = &var_with_braces[1..var_with_braces.len() - 1];
+                if sys_vars.contains(var) {
+                    continue;
                 }
+                if pipeline_vars.contains(var) {
+                    continue;
+                }
+                out.push(CheckResult {
+                    rule: "template_unknown_var".into(),
+                    severity: Severity::Warning,
+                    passed: false,
+                    message: format!(
+                        "step_template \"{tmpl_name}\": prompt references {var_with_braces} \
+                         — not a known system variable (may come from pipeline)"
+                    ),
+                    context: None,
+                });
             }
         }
     }
@@ -485,12 +479,7 @@ mod tests {
             AgentConfig {
                 metadata: AgentMetadata::default(),
                 capabilities: vec!["plan".into(), "implement".into()],
-                templates: {
-                    let mut t = HashMap::new();
-                    t.insert("plan".into(), "echo plan {task_id}".into());
-                    t.insert("implement".into(), "echo impl {diff}".into());
-                    t
-                },
+                command: "echo test".to_string(),
                 selection: AgentSelectionConfig::default(),
             },
         );
@@ -523,6 +512,7 @@ mod tests {
                         cost_preference: None,
                         prehook: None,
                         tty: false,
+                        template: None,
                         outputs: vec![],
                         pipe_to: None,
                         command: None,
@@ -541,6 +531,7 @@ mod tests {
                         cost_preference: None,
                         prehook: None,
                         tty: false,
+                        template: None,
                         outputs: vec![],
                         pipe_to: None,
                         command: None,
@@ -559,6 +550,7 @@ mod tests {
                         cost_preference: None,
                         prehook: None,
                         tty: false,
+                        template: None,
                         outputs: vec![],
                         pipe_to: None,
                         command: None,
@@ -668,6 +660,7 @@ mod tests {
                 cost_preference: None,
                 prehook: None,
                 tty: false,
+                template: None,
                 outputs: vec![],
                 pipe_to: None,
                 command: None,
@@ -687,15 +680,14 @@ mod tests {
     }
 
     #[test]
-    fn capability_no_template() {
+    fn agent_missing_command() {
         let mut cfg = base_config();
-        // Add a capability without a template
+        // Set agent command to empty string
         cfg.config
             .agents
             .get_mut("agent1")
             .expect("agent1 should exist")
-            .capabilities
-            .push("qa".into());
+            .command = String::new();
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
@@ -703,8 +695,8 @@ mod tests {
         let found = report
             .checks
             .iter()
-            .any(|c| c.rule == "capability_no_template" && !c.passed);
-        assert!(found, "expected capability_no_template error");
+            .any(|c| c.rule == "agent_has_command" && !c.passed);
+        assert!(found, "expected agent_has_command error");
     }
 
     #[test]
@@ -726,6 +718,7 @@ mod tests {
                 cost_preference: None,
                 prehook: None,
                 tty: false,
+                template: None,
                 outputs: vec![],
                 pipe_to: None,
                 command: None,
@@ -763,6 +756,7 @@ mod tests {
                 cost_preference: None,
                 prehook: None,
                 tty: false,
+                template: None,
                 outputs: vec![],
                 pipe_to: None,
                 command: None,
@@ -822,6 +816,7 @@ mod tests {
             cost_preference: None,
             prehook: None,
             tty: false,
+            template: None,
             outputs: vec![],
             pipe_to: None,
             command: Some("echo ok".into()),
@@ -868,12 +863,13 @@ mod tests {
     #[test]
     fn template_unknown_var() {
         let mut cfg = base_config();
-        cfg.config
-            .agents
-            .get_mut("agent1")
-            .expect("agent1 should exist")
-            .templates
-            .insert("plan".into(), "echo {unknown_var}".into());
+        cfg.config.step_templates.insert(
+            "plan".into(),
+            StepTemplateConfig {
+                prompt: "echo {unknown_var}".into(),
+                description: None,
+            },
+        );
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
@@ -903,12 +899,13 @@ mod tests {
     fn template_pipeline_var_ok() {
         let mut cfg = base_config();
         // plan_output is derived from step "plan" → should not warn
-        cfg.config
-            .agents
-            .get_mut("agent1")
-            .expect("agent1 should exist")
-            .templates
-            .insert("implement".into(), "echo {plan_output}".into());
+        cfg.config.step_templates.insert(
+            "implement".into(),
+            StepTemplateConfig {
+                prompt: "echo {plan_output}".into(),
+                description: None,
+            },
+        );
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
@@ -939,6 +936,7 @@ mod tests {
                     cost_preference: None,
                     prehook: None,
                     tty: false,
+                    template: None,
                     outputs: vec![],
                     pipe_to: None,
                     command: None,
@@ -986,6 +984,7 @@ mod tests {
                 cost_preference: None,
                 prehook: None,
                 tty: false,
+                template: None,
                 outputs: vec![],
                 pipe_to: None,
                 command: None,
@@ -1000,6 +999,7 @@ mod tests {
                     cost_preference: None,
                     prehook: None,
                     tty: false,
+                    template: None,
                     outputs: vec![],
                     pipe_to: None,
                     command: None,

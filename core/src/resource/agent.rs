@@ -1,5 +1,5 @@
 use crate::cli_types::{
-    AgentMetadataSpec, AgentSelectionSpec, AgentSpec, AgentTemplatesSpec, OrchestratorResource,
+    AgentMetadataSpec, AgentSelectionSpec, AgentSpec, OrchestratorResource,
     ResourceKind, ResourceSpec,
 };
 use crate::config::{AgentConfig, AgentMetadata, AgentSelectionConfig, OrchestratorConfig};
@@ -24,43 +24,10 @@ impl Resource for AgentResource {
 
     fn validate(&self) -> Result<()> {
         super::validate_resource_name(self.name())?;
-        let templates = &self.spec.templates;
-        let all_templates: Vec<Option<&str>> = vec![
-            templates.init_once.as_deref(),
-            templates.qa.as_deref(),
-            templates.plan.as_deref(),
-            templates.fix.as_deref(),
-            templates.retest.as_deref(),
-            templates.loop_guard.as_deref(),
-            templates.ticket_scan.as_deref(),
-            templates.build.as_deref(),
-            templates.test.as_deref(),
-            templates.lint.as_deref(),
-            templates.implement.as_deref(),
-            templates.review.as_deref(),
-            templates.git_ops.as_deref(),
-        ];
-        let has_named_template = all_templates.iter().any(|t| t.is_some());
-        let has_extra_template = !templates.extra.is_empty();
-        if !has_named_template && !has_extra_template {
+        if self.spec.command.trim().is_empty() {
             return Err(anyhow!(
-                "agent.spec.templates must define at least one template"
+                "agent.spec.command cannot be empty"
             ));
-        }
-        for value in &all_templates {
-            if matches!(value, Some(raw) if raw.trim().is_empty()) {
-                return Err(anyhow!(
-                    "agent.spec.templates entries cannot be empty strings"
-                ));
-            }
-        }
-        for (name, value) in &templates.extra {
-            if value.trim().is_empty() {
-                return Err(anyhow!(
-                    "agent.spec.templates.{} cannot be an empty string",
-                    name
-                ));
-            }
         }
         Ok(())
     }
@@ -130,49 +97,7 @@ pub(super) fn build_agent(resource: OrchestratorResource) -> Result<RegisteredRe
 }
 
 pub(super) fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
-    let named_templates: Vec<(&str, &Option<String>)> = vec![
-        ("init_once", &spec.templates.init_once),
-        ("plan", &spec.templates.plan),
-        ("qa", &spec.templates.qa),
-        ("ticket_scan", &spec.templates.ticket_scan),
-        ("fix", &spec.templates.fix),
-        ("retest", &spec.templates.retest),
-        ("loop_guard", &spec.templates.loop_guard),
-        ("build", &spec.templates.build),
-        ("test", &spec.templates.test),
-        ("lint", &spec.templates.lint),
-        ("implement", &spec.templates.implement),
-        ("review", &spec.templates.review),
-        ("git_ops", &spec.templates.git_ops),
-    ];
-
-    let template_capabilities: Vec<String> = named_templates
-        .iter()
-        .filter_map(|(name, opt)| opt.as_ref().map(|_| name.to_string()))
-        .collect();
-
-    let mut capabilities = spec.capabilities.clone().unwrap_or_default();
-    for cap in template_capabilities {
-        if !capabilities.contains(&cap) {
-            capabilities.push(cap);
-        }
-    }
-
-    let mut templates = std::collections::HashMap::new();
-    for (name, opt) in &named_templates {
-        if let Some(t) = opt {
-            templates.insert(name.to_string(), t.clone());
-        }
-    }
-    // Include extra/custom templates (qa_doc_gen, qa_testing, ticket_fix, etc.)
-    for (name, t) in &spec.templates.extra {
-        if !templates.contains_key(name) {
-            templates.insert(name.clone(), t.clone());
-            if !capabilities.contains(name) {
-                capabilities.push(name.clone());
-            }
-        }
-    }
+    let capabilities = spec.capabilities.clone().unwrap_or_default();
 
     AgentConfig {
         metadata: AgentMetadata {
@@ -182,7 +107,7 @@ pub(super) fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
             cost: spec.metadata.as_ref().and_then(|m| m.cost),
         },
         capabilities,
-        templates,
+        command: spec.command.clone(),
         selection: spec
             .selection
             .as_ref()
@@ -196,46 +121,7 @@ pub(super) fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
 
 pub(super) fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
     AgentSpec {
-        templates: AgentTemplatesSpec {
-            init_once: config.templates.get("init_once").cloned(),
-            plan: config.templates.get("plan").cloned(),
-            qa: config.templates.get("qa").cloned(),
-            ticket_scan: config.templates.get("ticket_scan").cloned(),
-            fix: config.templates.get("fix").cloned(),
-            retest: config.templates.get("retest").cloned(),
-            loop_guard: config.templates.get("loop_guard").cloned(),
-            build: config.templates.get("build").cloned(),
-            test: config.templates.get("test").cloned(),
-            lint: config.templates.get("lint").cloned(),
-            implement: config.templates.get("implement").cloned(),
-            review: config.templates.get("review").cloned(),
-            git_ops: config.templates.get("git_ops").cloned(),
-            extra: {
-                let named_keys: std::collections::HashSet<&str> = [
-                    "init_once",
-                    "plan",
-                    "qa",
-                    "ticket_scan",
-                    "fix",
-                    "retest",
-                    "loop_guard",
-                    "build",
-                    "test",
-                    "lint",
-                    "implement",
-                    "review",
-                    "git_ops",
-                ]
-                .into_iter()
-                .collect();
-                config
-                    .templates
-                    .iter()
-                    .filter(|(k, _)| !named_keys.contains(k.as_str()))
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect()
-            },
-        },
+        command: config.command.clone(),
         capabilities: if config.capabilities.is_empty() {
             None
         } else {
@@ -260,161 +146,51 @@ pub(super) fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
 mod tests {
     use super::*;
     use crate::cli_types::{ResourceMetadata, ResourceSpec};
-    use crate::config_load::read_active_config;
     use crate::resource::{dispatch_resource, API_VERSION};
-    use crate::test_utils::TestState;
 
     use super::super::test_fixtures::{agent_manifest, make_config};
 
     #[test]
     fn agent_resource_apply() {
-        let mut fixture = TestState::new();
-        let state = fixture.build();
-        let mut config = {
-            let active = read_active_config(&state).expect("state should be readable");
-            active.config.clone()
-        };
+        let mut config = make_config();
 
-        let resource = dispatch_resource(agent_manifest("agent-roundtrip", "cargo test"))
+        let resource = dispatch_resource(agent_manifest("agent-roundtrip", "glmcode -p \"{prompt}\""))
             .expect("agent dispatch should succeed");
         assert_eq!(resource.apply(&mut config), ApplyResult::Created);
 
         let loaded = AgentResource::get_from(&config, "agent-roundtrip")
             .expect("agent should be present in config");
-        assert_eq!(loaded.spec.templates.qa.as_deref(), Some("cargo test"));
+        assert!(loaded.spec.command.contains("{prompt}"));
         assert_eq!(loaded.kind(), ResourceKind::Agent);
     }
 
     #[test]
-    fn agent_validate_rejects_empty_string_template() {
+    fn agent_validate_rejects_empty_command() {
         let agent = AgentResource {
-            metadata: super::super::metadata_with_name("ag-empty-tmpl"),
+            metadata: super::super::metadata_with_name("ag-empty-cmd"),
             spec: AgentSpec {
-                templates: AgentTemplatesSpec {
-                    init_once: None,
-                    plan: Some("  ".to_string()), // empty string
-                    qa: Some("valid".to_string()),
-                    fix: None,
-                    retest: None,
-                    loop_guard: None,
-                    ticket_scan: None,
-                    build: None,
-                    test: None,
-                    lint: None,
-                    implement: None,
-                    review: None,
-                    git_ops: None,
-                    extra: std::collections::HashMap::new(),
-                },
+                command: "  ".to_string(),
                 capabilities: None,
                 metadata: None,
                 selection: None,
             },
         };
         let err = agent.validate().expect_err("operation should fail");
-        assert!(err.to_string().contains("cannot be empty strings"));
+        assert!(err.to_string().contains("command cannot be empty"));
     }
 
     #[test]
-    fn agent_validate_rejects_empty_extra_template() {
-        let mut extra = std::collections::HashMap::new();
-        extra.insert("custom".to_string(), "  ".to_string());
+    fn agent_validate_accepts_valid_command() {
         let agent = AgentResource {
-            metadata: super::super::metadata_with_name("ag-empty-extra"),
+            metadata: super::super::metadata_with_name("ag-valid"),
             spec: AgentSpec {
-                templates: AgentTemplatesSpec {
-                    init_once: None,
-                    plan: None,
-                    qa: Some("valid".to_string()),
-                    fix: None,
-                    retest: None,
-                    loop_guard: None,
-                    ticket_scan: None,
-                    build: None,
-                    test: None,
-                    lint: None,
-                    implement: None,
-                    review: None,
-                    git_ops: None,
-                    extra,
-                },
-                capabilities: None,
-                metadata: None,
-                selection: None,
-            },
-        };
-        let err = agent.validate().expect_err("operation should fail");
-        assert!(err.to_string().contains("cannot be an empty string"));
-    }
-
-    #[test]
-    fn agent_validate_accepts_extra_only_templates() {
-        let mut extra = std::collections::HashMap::new();
-        extra.insert("qa_doc_gen".to_string(), "do qa doc gen".to_string());
-        let agent = AgentResource {
-            metadata: super::super::metadata_with_name("ag-extra-only"),
-            spec: AgentSpec {
-                templates: AgentTemplatesSpec {
-                    init_once: None,
-                    plan: None,
-                    qa: None,
-                    fix: None,
-                    retest: None,
-                    loop_guard: None,
-                    ticket_scan: None,
-                    build: None,
-                    test: None,
-                    lint: None,
-                    implement: None,
-                    review: None,
-                    git_ops: None,
-                    extra,
-                },
-                capabilities: None,
+                command: "glmcode -p \"{prompt}\"".to_string(),
+                capabilities: Some(vec!["plan".to_string()]),
                 metadata: None,
                 selection: None,
             },
         };
         assert!(agent.validate().is_ok());
-    }
-
-    #[test]
-    fn agent_validation_rejects_empty_templates() {
-        let agent = AgentResource {
-            metadata: ResourceMetadata {
-                name: "test-agent".to_string(),
-                project: None,
-                labels: None,
-                annotations: None,
-            },
-            spec: AgentSpec {
-                templates: AgentTemplatesSpec {
-                    init_once: None,
-                    plan: None,
-                    qa: None,
-                    fix: None,
-                    retest: None,
-                    loop_guard: None,
-                    ticket_scan: None,
-                    build: None,
-                    test: None,
-                    lint: None,
-                    implement: None,
-                    review: None,
-                    git_ops: None,
-                    extra: std::collections::HashMap::new(),
-                },
-                capabilities: None,
-                metadata: None,
-                selection: None,
-            },
-        };
-        let result = agent.validate();
-        assert!(result.is_err());
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("at least one template"));
     }
 
     #[test]
@@ -425,7 +201,7 @@ mod tests {
             AgentConfig {
                 metadata: AgentMetadata::default(),
                 capabilities: vec!["qa".to_string()],
-                templates: [("qa".to_string(), "run qa".to_string())].into(),
+                command: "glmcode -p \"{prompt}\"".to_string(),
                 selection: AgentSelectionConfig::default(),
             },
         );
@@ -445,7 +221,7 @@ mod tests {
     fn agent_delete_cleans_up_metadata() {
         let mut config = make_config();
         let ag =
-            dispatch_resource(agent_manifest("meta-ag", "cmd")).expect("dispatch agent resource");
+            dispatch_resource(agent_manifest("meta-ag", "glmcode -p \"{prompt}\"")).expect("dispatch agent resource");
         ag.apply(&mut config);
         assert!(config.resource_meta.agents.contains_key("meta-ag"));
 
@@ -454,7 +230,7 @@ mod tests {
     }
 
     #[test]
-    fn agent_to_yaml_includes_templates() {
+    fn agent_to_yaml_includes_command() {
         let agent = AgentResource {
             metadata: ResourceMetadata {
                 name: "full-agent".to_string(),
@@ -463,62 +239,23 @@ mod tests {
                 annotations: None,
             },
             spec: AgentSpec {
-                templates: AgentTemplatesSpec {
-                    init_once: Some("init".to_string()),
-                    plan: None,
-                    qa: Some("test".to_string()),
-                    fix: Some("fix".to_string()),
-                    retest: Some("retest".to_string()),
-                    loop_guard: Some("guard".to_string()),
-                    ticket_scan: None,
-                    build: None,
-                    test: None,
-                    lint: None,
-                    implement: None,
-                    review: None,
-                    git_ops: None,
-                    extra: std::collections::HashMap::new(),
-                },
-                capabilities: None,
+                command: "glmcode -p \"{prompt}\" --verbose".to_string(),
+                capabilities: Some(vec!["plan".to_string(), "implement".to_string()]),
                 metadata: None,
                 selection: None,
             },
         };
         let yaml = agent.to_yaml().expect("should serialize");
         assert!(yaml.contains("full-agent"));
-        assert!(yaml.contains("init"));
-        assert!(yaml.contains("test"));
-        assert!(yaml.contains("fix"));
-        assert!(yaml.contains("retest"));
-        assert!(yaml.contains("guard"));
+        assert!(yaml.contains("glmcode"));
+        assert!(yaml.contains("{prompt}"));
     }
 
-    // ── agent_spec_to_config / agent_config_to_spec roundtrip ───────
-
     #[test]
-    fn agent_spec_config_roundtrip_with_extra_templates() {
-        let mut extra = std::collections::HashMap::new();
-        extra.insert("qa_doc_gen".to_string(), "gen docs".to_string());
-        extra.insert("qa_testing".to_string(), "run qa testing".to_string());
-
+    fn agent_spec_config_roundtrip() {
         let spec = AgentSpec {
-            templates: AgentTemplatesSpec {
-                init_once: None,
-                plan: Some("plan template".to_string()),
-                qa: Some("qa template".to_string()),
-                fix: None,
-                retest: None,
-                loop_guard: None,
-                ticket_scan: None,
-                build: None,
-                test: None,
-                lint: None,
-                implement: Some("implement template".to_string()),
-                review: None,
-                git_ops: None,
-                extra,
-            },
-            capabilities: Some(vec!["plan".to_string(), "custom_cap".to_string()]),
+            command: "glmcode -p \"{prompt}\" --verbose".to_string(),
+            capabilities: Some(vec!["plan".to_string(), "implement".to_string()]),
             metadata: Some(AgentMetadataSpec {
                 cost: Some(2),
                 description: Some("A test agent".to_string()),
@@ -530,32 +267,13 @@ mod tests {
         };
 
         let config = agent_spec_to_config(&spec);
-        // Check extra templates are in config
-        assert!(config.templates.contains_key("qa_doc_gen"));
-        assert!(config.templates.contains_key("qa_testing"));
-        assert!(config.templates.contains_key("plan"));
-        assert!(config.templates.contains_key("implement"));
-        // Check capabilities include both explicit and template-derived
+        assert_eq!(config.command, "glmcode -p \"{prompt}\" --verbose");
         assert!(config.capabilities.contains(&"plan".to_string()));
-        assert!(config.capabilities.contains(&"custom_cap".to_string()));
-        assert!(config.capabilities.contains(&"qa".to_string()));
-        assert!(config.capabilities.contains(&"qa_doc_gen".to_string()));
+        assert!(config.capabilities.contains(&"implement".to_string()));
 
-        // Roundtrip back to spec
         let roundtripped = agent_config_to_spec(&config);
-        assert_eq!(
-            roundtripped.templates.plan,
-            Some("plan template".to_string())
-        );
-        assert_eq!(roundtripped.templates.qa, Some("qa template".to_string()));
-        assert_eq!(
-            roundtripped.templates.implement,
-            Some("implement template".to_string())
-        );
-        assert!(roundtripped.templates.extra.contains_key("qa_doc_gen"));
-        assert!(roundtripped.templates.extra.contains_key("qa_testing"));
+        assert_eq!(roundtripped.command, spec.command);
         assert!(roundtripped.capabilities.is_some());
-        // Metadata (cost, description) is now preserved through the roundtrip.
         let rt_meta = roundtripped.metadata.expect("metadata should be preserved");
         assert_eq!(rt_meta.cost, Some(2));
         assert_eq!(rt_meta.description, Some("A test agent".to_string()));
@@ -566,7 +284,7 @@ mod tests {
         let config = AgentConfig {
             metadata: AgentMetadata::default(),
             capabilities: vec![],
-            templates: std::collections::HashMap::new(),
+            command: "echo".to_string(),
             selection: AgentSelectionConfig::default(),
         };
         let spec = agent_config_to_spec(&config);
@@ -583,7 +301,7 @@ mod tests {
                 cost: None,
             },
             capabilities: vec![],
-            templates: std::collections::HashMap::new(),
+            command: "echo".to_string(),
             selection: AgentSelectionConfig::default(),
         };
         let spec = agent_config_to_spec(&config);
@@ -603,23 +321,8 @@ mod tests {
                 annotations: None,
             },
             spec: ResourceSpec::Agent(Box::new(AgentSpec {
-                templates: AgentTemplatesSpec {
-                    init_once: None,
-                    plan: None,
-                    qa: Some("run".to_string()),
-                    fix: None,
-                    retest: None,
-                    loop_guard: None,
-                    ticket_scan: None,
-                    build: None,
-                    test: None,
-                    lint: None,
-                    implement: None,
-                    review: None,
-                    git_ops: None,
-                    extra: std::collections::HashMap::new(),
-                },
-                capabilities: None,
+                command: "glmcode -p \"{prompt}\"".to_string(),
+                capabilities: Some(vec!["qa".to_string()]),
                 metadata: None,
                 selection: None,
             })),

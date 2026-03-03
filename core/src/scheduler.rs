@@ -95,20 +95,22 @@ mod tests {
                         cost: Some(1),
                     },
                     capabilities: vec!["plan".to_string(), "qa_doc_gen".to_string()],
-                    templates: {
-                        let mut t = HashMap::new();
-                        t.insert("plan".to_string(), "echo PLAN_MARKER_SB_SMOKE".to_string());
-                        t.insert(
-                            "qa_doc_gen".to_string(),
-                            "echo QA_DOC_FROM_PLAN:{plan_output}".to_string(),
-                        );
-                        t.insert(
-                            "loop_guard".to_string(),
-                            "echo '{\"continue\":false,\"should_stop\":true}'".to_string(),
-                        );
-                        t
-                    },
+                    command: "echo {prompt}".to_string(),
                     selection: AgentSelectionConfig::default(),
+                },
+            )
+            .with_step_template(
+                "plan",
+                crate::config::StepTemplateConfig {
+                    prompt: "PLAN_MARKER_SB_SMOKE".to_string(),
+                    description: None,
+                },
+            )
+            .with_step_template(
+                "qa_doc_gen",
+                crate::config::StepTemplateConfig {
+                    prompt: "QA_DOC_FROM_PLAN:{plan_output}".to_string(),
+                    description: None,
                 },
             )
             .with_workflow(
@@ -127,6 +129,7 @@ mod tests {
                             cost_preference: None,
                             prehook: None,
                             tty: false,
+                            template: Some("plan".to_string()),
                             outputs: Vec::new(),
                             pipe_to: None,
                             command: None,
@@ -146,6 +149,7 @@ mod tests {
                             cost_preference: None,
                             prehook: None,
                             tty: false,
+                            template: Some("qa_doc_gen".to_string()),
                             outputs: Vec::new(),
                             pipe_to: None,
                             command: None,
@@ -165,6 +169,7 @@ mod tests {
                             cost_preference: None,
                             prehook: None,
                             tty: false,
+                            template: None,
                             outputs: Vec::new(),
                             pipe_to: None,
                             command: None,
@@ -248,6 +253,7 @@ mod tests {
                 cost_preference: None,
                 prehook: None,
                 tty: false,
+                template: None,
                 outputs: vec![],
                 pipe_to: None,
                 command: None,
@@ -263,6 +269,7 @@ mod tests {
                     cost_preference: None,
                     prehook: None,
                     tty: false,
+                    template: None,
                     outputs: vec![],
                     pipe_to: None,
                     command: None,
@@ -312,7 +319,7 @@ mod tests {
     async fn large_plan_output_spills_to_file() {
         // Generate a plan output that exceeds the inline limit
         let large_plan = "X".repeat(PIPELINE_VAR_INLINE_LIMIT + 1024);
-        let plan_echo = format!("echo '{}'", large_plan);
+        let _plan_echo = format!("echo '{}'", large_plan);
 
         let mut fixture = TestState::new()
             .with_agent(
@@ -325,20 +332,15 @@ mod tests {
                         cost: Some(1),
                     },
                     capabilities: vec!["plan".to_string(), "qa_doc_gen".to_string()],
-                    templates: {
-                        let mut t = HashMap::new();
-                        t.insert("plan".to_string(), plan_echo);
-                        t.insert(
-                            "qa_doc_gen".to_string(),
-                            "echo PLAN:{plan_output} PATH:{plan_output_path}".to_string(),
-                        );
-                        t.insert(
-                            "loop_guard".to_string(),
-                            "echo '{\"continue\":false,\"should_stop\":true}'".to_string(),
-                        );
-                        t
-                    },
+                    command: "echo {prompt}".to_string(),
                     selection: AgentSelectionConfig::default(),
+                },
+            )
+            .with_step_template(
+                "qa_doc_gen",
+                crate::config::StepTemplateConfig {
+                    prompt: "QA {plan_output} {plan_output_path}".to_string(),
+                    description: None,
                 },
             )
             .with_workflow(
@@ -357,9 +359,10 @@ mod tests {
                             cost_preference: None,
                             prehook: None,
                             tty: false,
+                            template: None,
                             outputs: Vec::new(),
                             pipe_to: None,
-                            command: None,
+                            command: Some(format!("printf '{}'", "X".repeat(PIPELINE_VAR_INLINE_LIMIT + 1024))),
                             chain_steps: vec![],
                             scope: None,
                             behavior: StepBehavior::default(),
@@ -376,6 +379,7 @@ mod tests {
                             cost_preference: None,
                             prehook: None,
                             tty: false,
+                            template: Some("qa_doc_gen".to_string()),
                             outputs: Vec::new(),
                             pipe_to: None,
                             command: None,
@@ -395,6 +399,7 @@ mod tests {
                             cost_preference: None,
                             prehook: None,
                             tty: false,
+                            template: None,
                             outputs: Vec::new(),
                             pipe_to: None,
                             command: None,
@@ -637,6 +642,7 @@ mod tests {
                         cost_preference: None,
                         prehook: None,
                         tty: false,
+                        template: None,
                         outputs: Vec::new(),
                         pipe_to: None,
                         command: Some("printf 'gated' && exit 7".to_string()),
@@ -660,6 +666,7 @@ mod tests {
                         cost_preference: None,
                         prehook: None,
                         tty: false,
+                        template: None,
                         outputs: Vec::new(),
                         pipe_to: None,
                         command: Some("echo should-not-run".to_string()),
@@ -757,6 +764,7 @@ mod tests {
                         cost_preference: None,
                         prehook: None,
                         tty: false,
+                        template: None,
                         outputs: Vec::new(),
                         pipe_to: None,
                         command: Some("echo task-ready".to_string()),
@@ -775,6 +783,7 @@ mod tests {
                         cost_preference: None,
                         prehook: None,
                         tty: false,
+                        template: None,
                         outputs: Vec::new(),
                         pipe_to: None,
                         command: Some("echo item-ok".to_string()),
@@ -875,6 +884,7 @@ mod tests {
                     cost_preference: None,
                     prehook: None,
                     tty: false,
+                    template: None,
                     outputs: Vec::new(),
                     pipe_to: None,
                     command: Some("exit 9".to_string()),

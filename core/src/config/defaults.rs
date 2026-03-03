@@ -21,6 +21,7 @@ fn step_config(
         cost_preference: None,
         prehook: None,
         tty,
+        template: None,
         outputs: Vec::new(),
         pipe_to: None,
         command: None,

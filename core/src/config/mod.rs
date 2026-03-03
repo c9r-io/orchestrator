@@ -9,6 +9,7 @@ mod prehook;
 mod runner;
 mod safety;
 mod step;
+mod step_template;
 mod workflow;
 
 pub use agent::*;
@@ -20,6 +21,7 @@ pub use prehook::*;
 pub use runner::*;
 pub use safety::*;
 pub use step::*;
+pub use step_template::*;
 pub use workflow::*;
 
 use serde::{Deserialize, Serialize};
@@ -42,6 +44,8 @@ pub struct OrchestratorConfig {
     #[serde(default)]
     pub workflows: HashMap<String, WorkflowConfig>,
     #[serde(default)]
+    pub step_templates: HashMap<String, StepTemplateConfig>,
+    #[serde(default)]
     pub resource_meta: ResourceMetadataStore,
 }
 
@@ -60,6 +64,7 @@ impl Default for OrchestratorConfig {
             workspaces: HashMap::new(),
             agents: HashMap::new(),
             workflows: HashMap::new(),
+            step_templates: HashMap::new(),
             resource_meta: ResourceMetadataStore::default(),
         }
     }

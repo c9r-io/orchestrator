@@ -82,6 +82,8 @@ pub struct RotatingPhaseRunRequest<'a> {
     pub pipeline_vars: Option<&'a PipelineVariables>,
     pub step_timeout_secs: Option<u64>,
     pub step_scope: StepScope,
+    /// Prompt from a resolved StepTemplate, injected into the agent command's {prompt} placeholder
+    pub step_template_prompt: Option<&'a str>,
 }
 
 fn step_scope_label(scope: StepScope) -> &'static str {
@@ -698,6 +700,7 @@ pub async fn run_phase_with_rotation(
         pipeline_vars,
         step_timeout_secs,
         step_scope,
+        step_template_prompt,
     } = request;
     let effective_capability = capability.or(match phase {
         "qa" | "fix" | "retest" => Some(phase),
@@ -725,8 +728,39 @@ pub async fn run_phase_with_rotation(
         MetricsCollector::increment_load(metrics);
     }
 
+    // Render template variables into the step template prompt, then inject into agent command
+    let rendered_prompt = step_template_prompt.map(|prompt| {
+        let mut rendered = prompt
+            .replace("{rel_path}", &shell_escape(rel_path))
+            .replace("{phase}", phase)
+            .replace("{cycle}", &cycle.to_string());
+        let escaped_paths: Vec<String> = ticket_paths.iter().map(|p| shell_escape(p)).collect();
+        rendered = rendered.replace("{ticket_paths}", &escaped_paths.join(" "));
+        if pipeline_vars.is_some()
+            || rendered.contains("{source_tree}")
+            || rendered.contains("{workspace_root}")
+        {
+            let ctx = crate::collab::AgentContext::new(
+                task_id.to_string(),
+                item_id.to_string(),
+                cycle,
+                phase.to_string(),
+                workspace_root.to_path_buf(),
+                workspace_id.to_string(),
+            );
+            rendered = ctx.render_template_with_pipeline(&rendered, pipeline_vars);
+        }
+        rendered
+    });
+
+    let mut command = if let Some(ref prompt) = rendered_prompt {
+        template.replace("{prompt}", prompt)
+    } else {
+        template
+    };
+
     let escaped_paths: Vec<String> = ticket_paths.iter().map(|p| shell_escape(p)).collect();
-    let mut command = template
+    command = command
         .replace("{rel_path}", &shell_escape(rel_path))
         .replace("{ticket_paths}", &escaped_paths.join(" "))
         .replace("{phase}", phase)

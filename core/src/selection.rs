@@ -71,18 +71,7 @@ pub fn select_agent_advanced(
     let idx = rand::thread_rng().gen_range(0..top_slice.len());
     let (agent_id, config, _score) = top_slice[idx];
 
-    let template = config
-        .get_template(capability)
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Agent {} has capability {} but no template",
-                agent_id,
-                capability
-            )
-        })?
-        .clone();
-
-    Ok((agent_id.clone(), template))
+    Ok((agent_id.clone(), config.command.clone()))
 }
 
 pub fn select_agent_by_preference(
@@ -94,12 +83,12 @@ pub fn select_agent_by_preference(
 
     for (id, cfg) in agents {
         if cfg.capabilities.is_empty() || cfg.metadata.name == "default_agent" {
-            let template = cfg
-                .templates
-                .get("default")
-                .cloned()
-                .unwrap_or_else(|| "echo default".to_string());
-            return Ok((id.clone(), template));
+            let command = if cfg.command.is_empty() {
+                "echo default".to_string()
+            } else {
+                cfg.command.clone()
+            };
+            return Ok((id.clone(), command));
         }
     }
 
@@ -108,14 +97,13 @@ pub fn select_agent_by_preference(
         .iter()
         .nth(idx)
         .ok_or_else(|| anyhow!("failed to select agent at random index {}", idx))?;
-    let template = config
-        .templates
-        .values()
-        .next()
-        .cloned()
-        .unwrap_or_else(|| "echo default".to_string());
+    let command = if config.command.is_empty() {
+        "echo default".to_string()
+    } else {
+        config.command.clone()
+    };
 
-    Ok((agent_id.clone(), template))
+    Ok((agent_id.clone(), command))
 }
 
 #[cfg(test)]
@@ -127,8 +115,7 @@ mod tests {
         cfg.metadata.name = id.to_string();
         cfg.metadata.cost = Some(cost);
         cfg.capabilities = vec![capability.to_string()];
-        cfg.templates
-            .insert(capability.to_string(), format!("echo {}", id));
+        cfg.command = format!("echo {}", id);
         (id.to_string(), cfg)
     }
 
@@ -193,15 +180,14 @@ mod tests {
         let mut agents = HashMap::new();
         let mut cfg = AgentConfig::new();
         cfg.metadata.name = "default_agent".to_string();
-        cfg.templates
-            .insert("default".to_string(), "echo default template".to_string());
+        cfg.command = "echo default template".to_string();
         agents.insert("default_agent".to_string(), cfg);
 
         let result = select_agent_by_preference(&agents);
         assert!(result.is_ok());
-        let (agent_id, template) = result.expect("default agent should be returned");
+        let (agent_id, command) = result.expect("default agent should be returned");
         assert_eq!(agent_id, "default_agent");
-        assert_eq!(template, "echo default template");
+        assert_eq!(command, "echo default template");
     }
 
     #[test]
@@ -210,21 +196,19 @@ mod tests {
         let mut cfg1 = AgentConfig::new();
         cfg1.metadata.name = "agent1".to_string();
         cfg1.capabilities = vec!["qa".to_string()];
-        cfg1.templates
-            .insert("qa".to_string(), "echo qa1".to_string());
+        cfg1.command = "echo qa1".to_string();
 
         let mut cfg2 = AgentConfig::new();
         cfg2.metadata.name = "agent2".to_string();
         cfg2.capabilities = vec!["fix".to_string()];
-        cfg2.templates
-            .insert("fix".to_string(), "echo fix2".to_string());
+        cfg2.command = "echo fix2".to_string();
 
         agents.insert("agent1".to_string(), cfg1);
         agents.insert("agent2".to_string(), cfg2);
 
         let result = select_agent_by_preference(&agents);
         assert!(result.is_ok());
-        let (agent_id, _template) = result.expect("one agent should be selected");
+        let (agent_id, _command) = result.expect("one agent should be selected");
         assert!(agent_id == "agent1" || agent_id == "agent2");
     }
 

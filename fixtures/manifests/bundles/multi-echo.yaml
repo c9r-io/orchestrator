@@ -15,9 +15,7 @@ metadata:
 spec:
   capabilities:
     - qa
-  templates:
-    qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"alpha-qa\",\"description\":\"alpha qa for target-file\",\"severity\":\"info\"}]}]}'"
-    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
+  command: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"alpha-qa\",\"description\":\"alpha qa for target-file\",\"severity\":\"info\"}]}]}'"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -26,8 +24,7 @@ metadata:
 spec:
   capabilities:
     - qa
-  templates:
-    qa: "echo '{\"confidence\":0.89,\"quality_score\":0.85,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"beta-qa\",\"description\":\"beta qa for target-file\",\"severity\":\"info\"}]}]}'"
+  command: "echo '{\"confidence\":0.89,\"quality_score\":0.85,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"beta-qa\",\"description\":\"beta qa for target-file\",\"severity\":\"info\"}]}]}'"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow

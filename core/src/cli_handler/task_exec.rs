@@ -41,7 +41,7 @@ impl CliHandler {
             )
         };
 
-        let (agent_id, template) = {
+        let (agent_id, agent_command) = {
             let repo = SqliteTaskRepository::new(self.state.database.clone());
             let runtime_row = repo.load_task_runtime_row(&task_id)?;
             let plan = serde_json::from_str::<TaskExecutionPlan>(&runtime_row.execution_plan_json)
@@ -52,26 +52,21 @@ impl CliHandler {
                 .find(|s| s.id == step_id)
                 .with_context(|| format!("step '{}' not found in task '{}'", step_id, task_id))?;
             let active = read_active_config(&self.state)?;
-            if let Some(cap) = step.required_capability.as_deref() {
-                let found =
-                    active.config.agents.iter().find_map(|(id, cfg)| {
-                        cfg.get_template(cap).map(|t| (id.clone(), t.clone()))
-                    });
-                found
-                    .with_context(|| format!("no agent template found for capability '{}'", cap))?
-            } else {
-                let cap = step.id.clone();
-                let found =
-                    active.config.agents.iter().find_map(|(id, cfg)| {
-                        cfg.get_template(&cap).map(|t| (id.clone(), t.clone()))
-                    });
-                found.with_context(|| format!("no agent template found for '{}'", cap))?
-            }
+            let cap = step.required_capability.as_deref().unwrap_or(&step.id);
+            let found: Option<(String, String)> =
+                active.config.agents.iter().find_map(|(id, cfg)| {
+                    if cfg.supports_capability(cap) {
+                        Some((id.clone(), cfg.command.clone()))
+                    } else {
+                        None
+                    }
+                });
+            found.with_context(|| format!("no agent found with capability '{}'", cap))?
         };
 
         let runtime_row = SqliteTaskRepository::new(self.state.database.clone())
             .load_task_runtime_row(&task_id)?;
-        let rendered = template
+        let rendered = agent_command
             .replace("{rel_path}", &qa_file_path)
             .replace("{ticket_paths}", "")
             .replace("{phase}", &step_id)

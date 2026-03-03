@@ -47,11 +47,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                 AgentConfig {
                     metadata: AgentMetadata::default(),
                     capabilities: vec!["qa".to_string()],
-                    templates: {
-                        let mut t = HashMap::new();
-                        t.insert("qa".to_string(), "echo qa".to_string());
-                        t
-                    },
+                    command: "echo test".to_string(),
                     selection: AgentSelectionConfig::default(),
                 },
             );
@@ -65,8 +61,9 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                     steps: vec![WorkflowStepConfig {
                         id: "qa".to_string(),
                         description: None,
-                        builtin: None,
                         required_capability: None,
+                        template: None,
+                        builtin: None,
                         enabled: true,
                         repeatable: false,
                         is_guard: false,
@@ -94,6 +91,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
             );
             workflows
         },
+        step_templates: HashMap::new(),
         resource_meta: ResourceMetadataStore::default(),
     }
 }
@@ -113,15 +111,16 @@ spec:
     )
 }
 
-fn agent_yaml(name: &str, qa_template: &str) -> String {
+fn agent_yaml(name: &str, command: &str) -> String {
     format!(
         r#"apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: {name}
 spec:
-  templates:
-    qa: "{qa_template}"
+  command: "{command}"
+  capabilities:
+    - qa
 "#
     )
 }
@@ -248,13 +247,13 @@ spec:
 }
 
 #[test]
-fn validation_rejects_empty_agent_templates() {
+fn validation_rejects_empty_agent_command() {
     let yaml = r#"apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: empty-agent
 spec:
-  templates: {}
+  command: "  "
 "#;
     let resources = parse_resources_from_yaml(yaml).expect("parse invalid agent");
     let registered = dispatch_resource(only(resources)).expect("dispatch invalid agent");
@@ -263,7 +262,7 @@ spec:
     assert!(result
         .expect_err("operation should fail")
         .to_string()
-        .contains("at least one template"));
+        .contains("command cannot be empty"));
 }
 
 #[test]
@@ -489,14 +488,11 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
     use agent_orchestrator::config::*;
     use std::collections::HashMap;
 
-    fn make_agent(capabilities: &[&str], templates: &[(&str, &str)]) -> AgentConfig {
+    fn make_agent(capabilities: &[&str], _templates: &[(&str, &str)]) -> AgentConfig {
         AgentConfig {
             metadata: AgentMetadata::default(),
             capabilities: capabilities.iter().map(|s| s.to_string()).collect(),
-            templates: templates
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect(),
+            command: "echo test".to_string(),
             selection: AgentSelectionConfig::default(),
         }
     }
@@ -569,9 +565,9 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                         WorkflowStepConfig {
                             id: "plan".to_string(),
                             description: None,
-
-                            builtin: None,
                             required_capability: Some("plan".to_string()),
+                            template: None,
+                            builtin: None,
                             enabled: true,
                             repeatable: false,
                             is_guard: false,
@@ -588,9 +584,9 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
                             description: None,
-
-                            builtin: None,
                             required_capability: Some("qa_doc_gen".to_string()),
+                            template: None,
+                            builtin: None,
                             enabled: true,
                             repeatable: false,
                             is_guard: false,
@@ -607,9 +603,9 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                         WorkflowStepConfig {
                             id: "implement".to_string(),
                             description: None,
-
-                            builtin: None,
                             required_capability: Some("implement".to_string()),
+                            template: None,
+                            builtin: None,
                             enabled: true,
                             repeatable: true,
                             is_guard: false,
@@ -626,9 +622,9 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                         WorkflowStepConfig {
                             id: "qa_testing".to_string(),
                             description: None,
-
-                            builtin: None,
                             required_capability: Some("qa_testing".to_string()),
+                            template: None,
+                            builtin: None,
                             enabled: true,
                             repeatable: true,
                             is_guard: false,
@@ -645,9 +641,9 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                         WorkflowStepConfig {
                             id: "ticket_fix".to_string(),
                             description: None,
-
-                            builtin: None,
                             required_capability: Some("ticket_fix".to_string()),
+                            template: None,
+                            builtin: None,
                             enabled: true,
                             repeatable: true,
                             is_guard: false,
@@ -664,9 +660,9 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                         WorkflowStepConfig {
                             id: "align_tests".to_string(),
                             description: None,
-
-                            builtin: None,
                             required_capability: Some("align_tests".to_string()),
+                            template: None,
+                            builtin: None,
                             enabled: true,
                             repeatable: true,
                             is_guard: false,
@@ -683,9 +679,9 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                         WorkflowStepConfig {
                             id: "doc_governance".to_string(),
                             description: None,
-
-                            builtin: None,
                             required_capability: Some("doc_governance".to_string()),
+                            template: None,
+                            builtin: None,
                             enabled: true,
                             repeatable: false,
                             is_guard: false,
@@ -702,9 +698,9 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
                             description: None,
-
-                            builtin: Some("loop_guard".to_string()),
                             required_capability: None,
+                            template: None,
+                            builtin: Some("loop_guard".to_string()),
                             enabled: true,
                             repeatable: true,
                             is_guard: true,
@@ -733,6 +729,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
             );
             workflows
         },
+        step_templates: HashMap::new(),
         resource_meta: ResourceMetadataStore::default(),
     }
 }
@@ -816,8 +813,9 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
             WorkflowStepConfig {
                 id: "qa_doc_gen".to_string(),
                 description: None,
-                builtin: None,
                 required_capability: None, // not set — normalize should fill it in
+                template: None,
+                builtin: None,
                 enabled: true,
                 repeatable: false,
                 is_guard: false,
@@ -834,8 +832,9 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
             WorkflowStepConfig {
                 id: "align_tests".to_string(),
                 description: None,
-                builtin: None,
                 required_capability: None,
+                template: None,
+                builtin: None,
                 enabled: true,
                 repeatable: true,
                 is_guard: false,

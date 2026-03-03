@@ -17,11 +17,7 @@ spec:
     - qa
     - fix
     - retest
-  templates:
-    qa: "echo '{\"confidence\":0.33,\"quality_score\":0.2,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"regression\",\"content\":{\"title\":\"three-phase-qa-fail\",\"qa_file\":\"target-file\"}}]}' && exit 1"
-    fix: "echo '{\"confidence\":0.84,\"quality_score\":0.8,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"target-file\"]}]}' && exit 0"
-    retest: "echo '{\"confidence\":0.9,\"quality_score\":0.88,\"artifacts\":[{\"kind\":\"test_result\",\"passed\":1,\"failed\":0}]}' && exit 0"
-    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
+  command: "echo '{\"confidence\":0.33,\"quality_score\":0.2,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"regression\",\"content\":{\"title\":\"three-phase-qa-fail\",\"qa_file\":\"target-file\"}}]}' && exit 1"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow

@@ -446,6 +446,10 @@ pub async fn execute_builtin_step(
         )
         .await?
     } else {
+        let resolved_prompt = step.template.as_ref().and_then(|tmpl_name| {
+            let cfg = state.active_config.read().ok()?;
+            cfg.config.step_templates.get(tmpl_name).map(|t| t.prompt.clone())
+        });
         run_phase_with_rotation(
             state,
             RotatingPhaseRunRequest {
@@ -464,6 +468,7 @@ pub async fn execute_builtin_step(
                 pipeline_vars: Some(&task_ctx.pipeline_vars),
                 step_timeout_secs: task_ctx.safety.step_timeout_secs,
                 step_scope: step.resolved_scope(),
+                step_template_prompt: resolved_prompt.as_deref(),
             },
         )
         .await?
@@ -1191,6 +1196,7 @@ pub async fn process_item_filtered(
                     pipeline_vars: None,
                     step_timeout_secs: task_ctx.safety.step_timeout_secs,
                     step_scope: crate::config::StepScope::Item,
+                    step_template_prompt: None,
                 },
             )
             .await?;
@@ -1586,6 +1592,7 @@ mod tests {
             cost_preference: None,
             prehook: None,
             tty: false,
+            template: None,
             outputs: vec![],
             pipe_to: None,
             command: None,

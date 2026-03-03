@@ -3,7 +3,7 @@ use crate::config::OrchestratorConfig;
 
 use super::{
     AgentResource, DefaultsResource, ProjectResource, RegisteredResource, Resource,
-    RuntimePolicyResource, WorkflowResource, WorkspaceResource, API_VERSION,
+    RuntimePolicyResource, StepTemplateResource, WorkflowResource, WorkspaceResource, API_VERSION,
 };
 
 pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredResource> {
@@ -32,6 +32,11 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
     for name in config.workflows.keys() {
         if let Some(workflow) = WorkflowResource::get_from(config, name) {
             resources.push(RegisteredResource::Workflow(workflow));
+        }
+    }
+    for name in config.step_templates.keys() {
+        if let Some(step_template) = StepTemplateResource::get_from(config, name) {
+            resources.push(RegisteredResource::StepTemplate(step_template));
         }
     }
     resources
@@ -79,6 +84,12 @@ pub fn export_manifest_documents(config: &OrchestratorConfig) -> Vec<Orchestrato
                 kind: ResourceKind::RuntimePolicy,
                 metadata: item.metadata,
                 spec: ResourceSpec::RuntimePolicy(item.spec),
+            },
+            RegisteredResource::StepTemplate(item) => OrchestratorResource {
+                api_version: API_VERSION.to_string(),
+                kind: ResourceKind::StepTemplate,
+                metadata: item.metadata,
+                spec: ResourceSpec::StepTemplate(item.spec),
             },
         })
         .collect()

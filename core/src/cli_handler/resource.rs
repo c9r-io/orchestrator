@@ -66,17 +66,7 @@ impl CliHandler {
                             println!("{}", serde_yaml::to_string(agent)?);
                         }
                         OutputFormat::Table => {
-                            let templates: Vec<&str> = [
-                                agent.templates.get("init_once").map(|s| s.as_str()),
-                                agent.templates.get("qa").map(|s| s.as_str()),
-                                agent.templates.get("fix").map(|s| s.as_str()),
-                                agent.templates.get("retest").map(|s| s.as_str()),
-                                agent.templates.get("loop_guard").map(|s| s.as_str()),
-                            ]
-                            .into_iter()
-                            .flatten()
-                            .collect();
-                            println!("{:<20} {:?}", name, templates);
+                            println!("{:<20} {}", name, agent.command);
                         }
                     }
                     Ok(0)
@@ -345,10 +335,7 @@ impl CliHandler {
                             println!("  Cost: {:?}", agent.metadata.cost);
                             println!("  Capabilities: {:?}", agent.capabilities);
                             println!("  Strategy: {:?}", agent.selection.strategy);
-                            println!("  Templates:");
-                            for (phase, tmpl) in &agent.templates {
-                                println!("    {}: {}", phase, tmpl);
-                            }
+                            println!("  Command: {}", agent.command);
                             println!("  Output Schema: AgentOutput {{ exit_code, stdout, artifacts, confidence, quality_score }}");
                         }
                     }

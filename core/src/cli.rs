@@ -449,23 +449,8 @@ pub enum AgentCommands {
         #[arg(value_name = "NAME")]
         name: String,
 
-        #[arg(long = "template-init-once")]
-        template_init_once: Option<String>,
-
-        #[arg(long = "template-qa")]
-        template_qa: Option<String>,
-
-        #[arg(long = "template-plan")]
-        template_plan: Option<String>,
-
-        #[arg(long = "template-fix")]
-        template_fix: Option<String>,
-
-        #[arg(long = "template-retest")]
-        template_retest: Option<String>,
-
-        #[arg(long = "template-loop-guard")]
-        template_loop_guard: Option<String>,
+        #[arg(long = "command")]
+        command: String,
 
         #[arg(long = "capability")]
         capability: Vec<String>,
@@ -879,8 +864,8 @@ mod tests {
             "agent",
             "create",
             "qa-agent",
-            "--template-qa",
-            "echo qa",
+            "--command",
+            "glmcode -p \"{prompt}\"",
             "--capability",
             "qa",
         ]);
@@ -888,12 +873,12 @@ mod tests {
         match cli.command {
             Commands::Agent(AgentCommands::Create {
                 name,
-                template_qa,
+                command,
                 capability,
                 ..
             }) => {
                 assert_eq!(name, "qa-agent");
-                assert_eq!(template_qa, Some("echo qa".to_string()));
+                assert_eq!(command, "glmcode -p \"{prompt}\"");
                 assert_eq!(capability, vec!["qa"]);
             }
             other => assert_variant!(

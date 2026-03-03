@@ -13,6 +13,7 @@ mod export;
 mod parse;
 mod project;
 mod runtime_policy;
+mod step_template;
 mod workflow;
 mod workspace;
 
@@ -24,6 +25,7 @@ pub use export::{export_manifest_documents, export_manifest_resources};
 pub use parse::{delete_resource_by_kind, kind_as_str, parse_resources_from_yaml};
 pub use project::ProjectResource;
 pub use runtime_policy::RuntimePolicyResource;
+pub use step_template::StepTemplateResource;
 pub use workflow::WorkflowResource;
 pub use workspace::WorkspaceResource;
 
@@ -54,6 +56,7 @@ pub enum RegisteredResource {
     Project(ProjectResource),
     Defaults(DefaultsResource),
     RuntimePolicy(RuntimePolicyResource),
+    StepTemplate(StepTemplateResource),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -62,7 +65,7 @@ pub struct ResourceRegistration {
     pub build: fn(OrchestratorResource) -> Result<RegisteredResource>,
 }
 
-pub fn resource_registry() -> [ResourceRegistration; 6] {
+pub fn resource_registry() -> [ResourceRegistration; 7] {
     [
         ResourceRegistration {
             kind: ResourceKind::Workspace,
@@ -87,6 +90,10 @@ pub fn resource_registry() -> [ResourceRegistration; 6] {
         ResourceRegistration {
             kind: ResourceKind::RuntimePolicy,
             build: runtime_policy::build_runtime_policy,
+        },
+        ResourceRegistration {
+            kind: ResourceKind::StepTemplate,
+            build: step_template::build_step_template,
         },
     ]
 }
@@ -181,6 +188,7 @@ impl Resource for RegisteredResource {
             Self::Project(_) => ResourceKind::Project,
             Self::Defaults(_) => ResourceKind::Defaults,
             Self::RuntimePolicy(_) => ResourceKind::RuntimePolicy,
+            Self::StepTemplate(_) => ResourceKind::StepTemplate,
         }
     }
 
@@ -192,6 +200,7 @@ impl Resource for RegisteredResource {
             Self::Project(resource) => &resource.metadata.name,
             Self::Defaults(resource) => &resource.metadata.name,
             Self::RuntimePolicy(resource) => &resource.metadata.name,
+            Self::StepTemplate(resource) => &resource.metadata.name,
         }
     }
 
@@ -203,6 +212,7 @@ impl Resource for RegisteredResource {
             Self::Project(resource) => resource.validate(),
             Self::Defaults(resource) => resource.validate(),
             Self::RuntimePolicy(resource) => resource.validate(),
+            Self::StepTemplate(resource) => resource.validate(),
         }
     }
 
@@ -214,6 +224,7 @@ impl Resource for RegisteredResource {
             Self::Project(resource) => resource.apply(config),
             Self::Defaults(resource) => resource.apply(config),
             Self::RuntimePolicy(resource) => resource.apply(config),
+            Self::StepTemplate(resource) => resource.apply(config),
         }
     }
 
@@ -225,6 +236,7 @@ impl Resource for RegisteredResource {
             Self::Project(resource) => resource.to_yaml(),
             Self::Defaults(resource) => resource.to_yaml(),
             Self::RuntimePolicy(resource) => resource.to_yaml(),
+            Self::StepTemplate(resource) => resource.to_yaml(),
         }
     }
 
@@ -240,6 +252,9 @@ impl Resource for RegisteredResource {
         }
         if let Some(project) = ProjectResource::get_from(config, name) {
             return Some(Self::Project(project));
+        }
+        if let Some(step_template) = StepTemplateResource::get_from(config, name) {
+            return Some(Self::StepTemplate(step_template));
         }
         if name == "defaults" {
             if let Some(defaults) = DefaultsResource::get_from(config, name) {
@@ -270,6 +285,9 @@ impl Resource for RegisteredResource {
         if config.projects.remove(name).is_some() {
             return true;
         }
+        if config.step_templates.remove(name).is_some() {
+            return true;
+        }
         false
     }
 }
@@ -279,7 +297,7 @@ impl Resource for RegisteredResource {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli_types::{AgentSpec, AgentTemplatesSpec, ResourceSpec, WorkspaceSpec};
+    use crate::cli_types::{AgentSpec, ResourceSpec, WorkspaceSpec};
     use crate::config_load::read_active_config;
     use crate::test_utils::TestState;
 
@@ -308,22 +326,7 @@ mod tests {
                 annotations: None,
             },
             spec: ResourceSpec::Agent(Box::new(AgentSpec {
-                templates: AgentTemplatesSpec {
-                    init_once: None,
-                    plan: None,
-                    qa: Some("run".to_string()),
-                    fix: None,
-                    retest: None,
-                    loop_guard: None,
-                    ticket_scan: None,
-                    build: None,
-                    test: None,
-                    lint: None,
-                    implement: None,
-                    review: None,
-                    git_ops: None,
-                    extra: std::collections::HashMap::new(),
-                },
+                command: "echo {prompt}".to_string(),
                 capabilities: None,
                 metadata: None,
                 selection: None,
@@ -332,6 +335,20 @@ mod tests {
 
         let error = dispatch_resource(resource).expect_err("dispatch should fail");
         assert!(error.to_string().contains("mismatch"));
+    }
+
+    #[test]
+    fn resource_registry_has_seven_entries() {
+        let registry = resource_registry();
+        assert_eq!(registry.len(), 7);
+        let kinds: Vec<ResourceKind> = registry.iter().map(|r| r.kind).collect();
+        assert!(kinds.contains(&ResourceKind::Workspace));
+        assert!(kinds.contains(&ResourceKind::Agent));
+        assert!(kinds.contains(&ResourceKind::Workflow));
+        assert!(kinds.contains(&ResourceKind::Project));
+        assert!(kinds.contains(&ResourceKind::Defaults));
+        assert!(kinds.contains(&ResourceKind::RuntimePolicy));
+        assert!(kinds.contains(&ResourceKind::StepTemplate));
     }
 
     #[test]
@@ -584,18 +601,7 @@ mod tests {
 
     // ── resource_registry tests ─────────────────────────────────────
 
-    #[test]
-    fn resource_registry_has_six_entries() {
-        let registry = resource_registry();
-        assert_eq!(registry.len(), 6);
-        let kinds: Vec<ResourceKind> = registry.iter().map(|r| r.kind).collect();
-        assert!(kinds.contains(&ResourceKind::Workspace));
-        assert!(kinds.contains(&ResourceKind::Agent));
-        assert!(kinds.contains(&ResourceKind::Workflow));
-        assert!(kinds.contains(&ResourceKind::Project));
-        assert!(kinds.contains(&ResourceKind::Defaults));
-        assert!(kinds.contains(&ResourceKind::RuntimePolicy));
-    }
+    // Moved to resource_registry_has_seven_entries above
 
     // ── metadata helpers ────────────────────────────────────────────
 
@@ -677,9 +683,9 @@ mod tests {
 #[cfg(test)]
 pub(super) mod test_fixtures {
     use crate::cli_types::{
-        AgentSpec, AgentTemplatesSpec, DefaultsSpec, OrchestratorResource, ProjectSpec,
+        AgentSpec, DefaultsSpec, OrchestratorResource, ProjectSpec,
         ResourceKind, ResourceMetadata, ResourceSpec, ResumeSpec, RunnerSpec, RuntimePolicySpec,
-        SafetySpec, WorkflowFinalizeRuleSpec, WorkflowFinalizeSpec, WorkflowLoopSpec, WorkflowSpec,
+        SafetySpec, StepTemplateSpec, WorkflowFinalizeRuleSpec, WorkflowFinalizeSpec, WorkflowLoopSpec, WorkflowSpec,
         WorkflowStepSpec, WorkspaceSpec,
     };
     use crate::config::OrchestratorConfig;
@@ -714,7 +720,7 @@ pub(super) mod test_fixtures {
         }
     }
 
-    pub fn agent_manifest(name: &str, qa_command: &str) -> OrchestratorResource {
+    pub fn agent_manifest(name: &str, command: &str) -> OrchestratorResource {
         OrchestratorResource {
             api_version: API_VERSION.to_string(),
             kind: ResourceKind::Agent,
@@ -725,22 +731,7 @@ pub(super) mod test_fixtures {
                 annotations: None,
             },
             spec: ResourceSpec::Agent(Box::new(AgentSpec {
-                templates: AgentTemplatesSpec {
-                    init_once: None,
-                    plan: None,
-                    qa: Some(qa_command.to_string()),
-                    fix: None,
-                    retest: None,
-                    loop_guard: None,
-                    ticket_scan: None,
-                    build: None,
-                    test: None,
-                    lint: None,
-                    implement: None,
-                    review: None,
-                    git_ops: None,
-                    extra: std::collections::HashMap::new(),
-                },
+                command: command.to_string(),
                 capabilities: None,
                 metadata: None,
                 selection: None,
@@ -763,6 +754,7 @@ pub(super) mod test_fixtures {
                     id: "qa".to_string(),
                     step_type: "qa".to_string(),
                     required_capability: None,
+                    template: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,
@@ -829,6 +821,23 @@ pub(super) mod test_fixtures {
                 project: project.to_string(),
                 workspace: workspace.to_string(),
                 workflow: workflow.to_string(),
+            }),
+        }
+    }
+
+    pub fn step_template_manifest(name: &str, prompt: &str) -> OrchestratorResource {
+        OrchestratorResource {
+            api_version: API_VERSION.to_string(),
+            kind: ResourceKind::StepTemplate,
+            metadata: ResourceMetadata {
+                name: name.to_string(),
+                project: None,
+                labels: None,
+                annotations: None,
+            },
+            spec: ResourceSpec::StepTemplate(StepTemplateSpec {
+                prompt: prompt.to_string(),
+                description: None,
             }),
         }
     }

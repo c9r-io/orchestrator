@@ -17,6 +17,9 @@ pub struct TaskExecutionStep {
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required_capability: Option<String>,
+    /// Reference to a StepTemplate resource name
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub builtin: Option<String>,
     #[serde(default = "default_true")]
@@ -279,6 +282,7 @@ mod tests {
         TaskExecutionStep {
             id: id.to_string(),
             required_capability: capability.map(|s| s.to_string()),
+            template: None,
             builtin: builtin.map(|s| s.to_string()),
             enabled: true,
             repeatable: true,
@@ -300,6 +304,7 @@ mod tests {
         let step = TaskExecutionStep {
             id: "qa".to_string(), // default would be Item
             required_capability: None,
+            template: None,
             builtin: None,
             enabled: true,
             repeatable: true,
@@ -322,6 +327,7 @@ mod tests {
         let step = TaskExecutionStep {
             id: "plan".to_string(),
             required_capability: None,
+            template: None,
             builtin: None,
             enabled: true,
             repeatable: true,
@@ -344,6 +350,7 @@ mod tests {
         let step = TaskExecutionStep {
             id: "my_custom_step".to_string(),
             required_capability: None,
+            template: None,
             builtin: None,
             enabled: true,
             repeatable: true,
@@ -368,6 +375,7 @@ mod tests {
                 TaskExecutionStep {
                     id: "plan".to_string(),
                     required_capability: None,
+                    template: None,
                     builtin: None,
                     enabled: true,
                     repeatable: false,
@@ -385,6 +393,7 @@ mod tests {
                 TaskExecutionStep {
                     id: "qa".to_string(),
                     required_capability: None,
+                    template: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,

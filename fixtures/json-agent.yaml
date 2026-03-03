@@ -7,6 +7,4 @@ spec:
     cost: 10
   capabilities:
     - qa
-  templates:
-    qa: "echo '{\"confidence\":0.35,\"quality_score\":0.2,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"bug\",\"content\":{\"title\":\"test\"}}]}'"
-    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
+  command: "echo '{\"confidence\":0.35,\"quality_score\":0.2,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"bug\",\"content\":{\"title\":\"test\"}}]}'"

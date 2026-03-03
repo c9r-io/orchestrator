@@ -65,6 +65,7 @@ pub(crate) mod tests {
             cost_preference: None,
             prehook: None,
             tty: false,
+            template: None,
             outputs: vec![],
             pipe_to: None,
             command: None,
@@ -107,15 +108,14 @@ pub(crate) mod tests {
         }
     }
 
-    pub fn make_config_with_agent(capability: &str, template: &str) -> OrchestratorConfig {
+    pub fn make_config_with_agent(capability: &str, _template: &str) -> OrchestratorConfig {
         use crate::config::AgentConfig;
-        let mut templates = HashMap::new();
-        templates.insert(capability.to_string(), template.to_string());
         let mut agents = HashMap::new();
         agents.insert(
             "test-agent".to_string(),
             AgentConfig {
-                templates,
+                capabilities: vec![capability.to_string()],
+                command: "echo test".to_string(),
                 ..AgentConfig::default()
             },
         );

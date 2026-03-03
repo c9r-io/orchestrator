@@ -16,8 +16,7 @@ metadata:
 spec:
   capabilities:
     - plan
-  templates:
-    plan: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"plan-ok\",\"description\":\"implementation plan generated\",\"severity\":\"info\"}]}]}'"
+  command: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"plan-ok\",\"description\":\"implementation plan generated\",\"severity\":\"info\"}]}]}'"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -26,8 +25,7 @@ metadata:
 spec:
   capabilities:
     - implement
-  templates:
-    implement: "echo '{\"confidence\":0.88,\"quality_score\":0.85,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"src/main.rs\"]}]}'"
+  command: "echo '{\"confidence\":0.88,\"quality_score\":0.85,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"src/main.rs\"]}]}'"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -38,10 +36,7 @@ spec:
     - build
     - test
     - lint
-  templates:
-    build: "echo 'Compiling agent-orchestrator v0.1.0' && echo 'Finished dev [unoptimized] target(s)'"
-    test: "echo 'running 5 tests' && echo 'test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'"
-    lint: "echo 'Checking agent-orchestrator v0.1.0' && echo 'Finished dev [unoptimized] target(s)'"
+  command: "echo '{\"confidence\":1.0,\"quality_score\":1.0,\"artifacts\":[]}'"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -50,8 +45,7 @@ metadata:
 spec:
   capabilities:
     - fix
-  templates:
-    fix: "echo '{\"confidence\":0.85,\"quality_score\":0.8,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"src/main.rs\"]}]}'"
+  command: "echo '{\"confidence\":0.85,\"quality_score\":0.8,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"src/main.rs\"]}]}'"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -60,11 +54,9 @@ metadata:
 spec:
   capabilities:
     - git_ops
-  templates:
-    git_ops: "echo '{\"confidence\":1.0,\"quality_score\":1.0,\"artifacts\":[]}'"
+  command: "echo '{\"confidence\":1.0,\"quality_score\":1.0,\"artifacts\":[]}'"
 ---
 # Mock agent for SDLC extended capabilities (qa_doc_gen, qa_testing, ticket_fix, doc_governance, align_tests)
-# Agent templates used as fallback when workflow steps don't have a `command` override.
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
@@ -76,12 +68,7 @@ spec:
     - ticket_fix
     - doc_governance
     - align_tests
-  templates:
-    qa_doc_gen: "echo '{\"confidence\":0.9,\"quality_score\":0.88,\"artifacts\":[{\"kind\":\"qa_doc\",\"files\":[\"docs/qa/new-feature.md\"]}]}'"
-    qa_testing: "echo '{\"confidence\":0.95,\"quality_score\":0.92,\"artifacts\":[{\"kind\":\"qa_result\",\"findings\":[]}]}'"
-    ticket_fix: "echo '{\"confidence\":0.88,\"quality_score\":0.85,\"artifacts\":[{\"kind\":\"fix\",\"files\":[\"src/handler.rs\"]}]}'"
-    doc_governance: "echo '{\"confidence\":0.92,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"doc_audit\",\"findings\":[]}]}'"
-    align_tests: "echo '{\"confidence\":0.9,\"quality_score\":0.88,\"artifacts\":[{\"kind\":\"test_alignment\",\"findings\":[]}]}'"
+  command: "echo '{\"confidence\":0.9,\"quality_score\":0.88,\"artifacts\":[]}'"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow

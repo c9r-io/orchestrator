@@ -111,6 +111,7 @@ pub(crate) fn task_step_from_workflow_step(
         cost_preference: normalized.cost_preference.clone(),
         prehook: normalized.prehook.clone(),
         tty: normalized.tty,
+        template: normalized.template.clone(),
         outputs: normalized.outputs.clone(),
         pipe_to: normalized.pipe_to.clone(),
         command: normalized.command.clone(),

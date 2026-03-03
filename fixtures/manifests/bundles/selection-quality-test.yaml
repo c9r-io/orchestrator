@@ -17,9 +17,7 @@ spec:
     cost: 50
   capabilities:
     - qa
-  templates:
-    qa: "echo '{\"confidence\":0.96,\"quality_score\":0.95,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"proven-qa\",\"description\":\"proven qa agent\",\"severity\":\"info\"}]}]}'"
-    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
+  command: "echo '{\"confidence\":0.96,\"quality_score\":0.95,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"proven-qa\",\"description\":\"proven qa agent\",\"severity\":\"info\"}]}]}'"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -30,9 +28,7 @@ spec:
     cost: 20
   capabilities:
     - qa
-  templates:
-    qa: "echo '{\"confidence\":0.74,\"quality_score\":0.7,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"new-qa\",\"description\":\"new qa agent\",\"severity\":\"info\"}]}]}'"
-    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
+  command: "echo '{\"confidence\":0.74,\"quality_score\":0.7,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"new-qa\",\"description\":\"new qa agent\",\"severity\":\"info\"}]}]}'"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow

@@ -265,6 +265,7 @@ mod tests {
             description: None,
             builtin: builtin.map(str::to_string),
             required_capability: required_capability.map(str::to_string),
+            template: None,
             enabled: true,
             repeatable: false,
             is_guard: false,

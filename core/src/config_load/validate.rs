@@ -54,10 +54,10 @@ pub fn validate_workflow_config(
             let has_agent = config
                 .agents
                 .values()
-                .any(|a| a.get_template(key).is_some());
+                .any(|a| a.supports_capability(key));
             if !has_agent {
                 anyhow::bail!(
-                    "no agent has template for step '{}' used by workflow '{}'",
+                    "no agent supports capability for step '{}' used by workflow '{}'",
                     key,
                     workflow_id
                 );
@@ -95,10 +95,10 @@ pub fn validate_workflow_config(
         let has_loop_guard = config
             .agents
             .values()
-            .any(|a| a.get_template("loop_guard").is_some());
+            .any(|a| a.supports_capability("loop_guard"));
         if !has_loop_guard {
             anyhow::bail!(
-                "workflow '{}' loop.guard enabled but no agent has loop_guard template",
+                "workflow '{}' loop.guard enabled but no agent supports loop_guard capability",
                 workflow_id
             );
         }
@@ -150,10 +150,10 @@ pub(crate) fn validate_workflow_config_with_agents(
             StepSemanticKind::Builtin { .. } | StepSemanticKind::Command | StepSemanticKind::Chain
         );
         if !is_self_contained {
-            let has_agent = all_agents.values().any(|a| a.get_template(key).is_some());
+            let has_agent = all_agents.values().any(|a| a.supports_capability(key));
             if !has_agent {
                 anyhow::bail!(
-                    "no agent has template for step '{}' used by workflow '{}'",
+                    "no agent supports capability for step '{}' used by workflow '{}'",
                     key,
                     workflow_id
                 );
@@ -190,10 +190,10 @@ pub(crate) fn validate_workflow_config_with_agents(
     {
         let has_loop_guard = all_agents
             .values()
-            .any(|a| a.get_template("loop_guard").is_some());
+            .any(|a| a.supports_capability("loop_guard"));
         if !has_loop_guard {
             anyhow::bail!(
-                "workflow '{}' loop.guard enabled but no agent has loop_guard template",
+                "workflow '{}' loop.guard enabled but no agent supports loop_guard capability",
                 workflow_id
             );
         }
@@ -388,6 +388,7 @@ mod tests {
                     cost_preference: None,
                     prehook: None,
                     tty: false,
+                    template: None,
                     outputs: vec![],
                     pipe_to: None,
                     command: None,
@@ -406,6 +407,7 @@ mod tests {
                     cost_preference: None,
                     prehook: None,
                     tty: false,
+                    template: None,
                     outputs: vec![],
                     pipe_to: None,
                     command: None,
@@ -452,6 +454,7 @@ mod tests {
                     cost_preference: None,
                     prehook: None,
                     tty: false,
+                    template: None,
                     outputs: vec![],
                     pipe_to: None,
                     command: Some("echo phase-one".to_string()),
@@ -470,6 +473,7 @@ mod tests {
                     cost_preference: None,
                     prehook: None,
                     tty: false,
+                    template: None,
                     outputs: vec![],
                     pipe_to: None,
                     command: Some("echo phase-two".to_string()),
@@ -516,6 +520,7 @@ mod tests {
                     cost_preference: None,
                     prehook: None,
                     tty: false,
+                    template: None,
                     outputs: vec![],
                     pipe_to: None,
                     command: None,
@@ -534,6 +539,7 @@ mod tests {
                     cost_preference: None,
                     prehook: None,
                     tty: false,
+                    template: None,
                     outputs: vec![],
                     pipe_to: None,
                     command: Some("echo duplicate".to_string()),
@@ -585,6 +591,7 @@ mod tests {
                 cost_preference: None,
                 prehook: None,
                 tty: false,
+                template: None,
                 outputs: vec![],
                 pipe_to: None,
                 command: None,
@@ -633,6 +640,7 @@ mod tests {
                     cost_preference: None,
                     prehook: None,
                     tty: false,
+                    template: None,
                     outputs: vec![],
                     pipe_to: None,
                     command: None,
@@ -651,6 +659,7 @@ mod tests {
                     cost_preference: None,
                     prehook: None,
                     tty: false,
+                    template: None,
                     outputs: vec![],
                     pipe_to: None,
                     command: None,
@@ -747,7 +756,7 @@ mod tests {
         assert!(result
             .expect_err("operation should fail")
             .to_string()
-            .contains("no agent has template"));
+            .contains("no agent supports capability"));
     }
 
     #[test]
@@ -852,7 +861,7 @@ mod tests {
         assert!(result
             .expect_err("operation should fail")
             .to_string()
-            .contains("no agent has loop_guard template"));
+            .contains("no agent supports loop_guard capability"));
     }
 
     #[test]

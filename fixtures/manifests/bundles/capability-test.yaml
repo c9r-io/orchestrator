@@ -17,9 +17,7 @@ spec:
     cost: 30
   capabilities:
     - qa
-  templates:
-    qa: "echo '{\"confidence\":0.4,\"quality_score\":0.25,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"capability\",\"content\":{\"title\":\"qa-from-agent-qa-only\"}}]}' && exit 1"
-    loop_guard: "echo '{\"continue\":true,\"should_stop\":false,\"reason\":\"continue\"}'"
+  command: "echo '{\"confidence\":0.4,\"quality_score\":0.25,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"capability\",\"content\":{\"title\":\"qa-from-agent-qa-only\"}}]}' && exit 1"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -30,8 +28,7 @@ spec:
     cost: 50
   capabilities:
     - fix
-  templates:
-    fix: "echo '{\"confidence\":0.8,\"quality_score\":0.76,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fix-from-agent-fix-only.patch\"]}]}'"
+  command: "echo '{\"confidence\":0.8,\"quality_score\":0.76,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fix-from-agent-fix-only.patch\"]}]}'"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow

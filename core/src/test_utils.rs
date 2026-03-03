@@ -69,11 +69,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                         cost: Some(1),
                     },
                     capabilities: vec!["qa".to_string()],
-                    templates: {
-                        let mut t = HashMap::new();
-                        t.insert("qa".to_string(), "echo 'qa: {rel_path}'".to_string());
-                        t
-                    },
+                    command: "echo 'qa: {rel_path}'".to_string(),
                     selection: AgentSelectionConfig::default(),
                 },
             );
@@ -95,6 +91,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                         cost_preference: None,
                         prehook: None,
                         tty: false,
+                        template: None,
                         outputs: Vec::new(),
                         pipe_to: None,
                         command: None,
@@ -121,6 +118,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
             );
             workflows
         },
+        step_templates: HashMap::new(),
         resource_meta: ResourceMetadataStore::default(),
     }
 }
@@ -181,6 +179,16 @@ impl TestState {
     pub(crate) fn with_agent(mut self, name: impl Into<String>, config: AgentConfig) -> Self {
         let agent_id = name.into();
         self.config.agents.insert(agent_id, config);
+        self
+    }
+
+    #[allow(dead_code)] // test builder helper
+    pub(crate) fn with_step_template(
+        mut self,
+        name: impl Into<String>,
+        config: crate::config::StepTemplateConfig,
+    ) -> Self {
+        self.config.step_templates.insert(name.into(), config);
         self
     }
 

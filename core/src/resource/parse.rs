@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use super::{
     AgentResource, DefaultsResource, ProjectResource, Resource, RuntimePolicyResource,
-    WorkflowResource, WorkspaceResource,
+    StepTemplateResource, WorkflowResource, WorkspaceResource,
 };
 
 pub fn parse_resources_from_yaml(content: &str) -> Result<Vec<OrchestratorResource>> {
@@ -33,8 +33,9 @@ pub fn delete_resource_by_kind(
         "project" => Ok(ProjectResource::delete_from(config, name)),
         "defaults" => Ok(DefaultsResource::delete_from(config, name)),
         "runtimepolicy" | "runtime-policy" => Ok(RuntimePolicyResource::delete_from(config, name)),
+        "steptemplate" | "step_template" | "step-template" => Ok(StepTemplateResource::delete_from(config, name)),
         _ => Err(anyhow!(
-            "unknown resource type: {} (supported: workspace, agent, workflow, project, defaults, runtimepolicy)",
+            "unknown resource type: {} (supported: workspace, agent, workflow, project, defaults, runtimepolicy, steptemplate)",
             kind
         )),
     }
@@ -48,6 +49,7 @@ pub fn kind_as_str(kind: ResourceKind) -> &'static str {
         ResourceKind::Project => "project",
         ResourceKind::Defaults => "defaults",
         ResourceKind::RuntimePolicy => "runtimepolicy",
+        ResourceKind::StepTemplate => "steptemplate",
     }
 }
 

@@ -14,6 +14,9 @@ pub struct WorkflowStepConfig {
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required_capability: Option<String>,
+    /// Reference to a StepTemplate resource name
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub builtin: Option<String>,
     pub enabled: bool,

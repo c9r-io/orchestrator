@@ -3,10 +3,7 @@ kind: Agent
 metadata:
   name: plain_text_agent
 spec:
-  templates:
-    qa: echo "This is plain text output, not JSON"
-    fix: echo "Plain text fix output"
-    retest: echo "Plain text retest output"
+  command: echo "This is plain text output, not JSON"
   capabilities:
   - qa
   - fix

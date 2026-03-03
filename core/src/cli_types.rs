@@ -50,6 +50,7 @@ pub enum ResourceKind {
     Project,
     Defaults,
     RuntimePolicy,
+    StepTemplate,
 }
 
 /// Kubernetes-style resource metadata.
@@ -94,6 +95,9 @@ pub enum ResourceSpec {
 
     /// Runtime policy resource spec
     RuntimePolicy(RuntimePolicySpec),
+
+    /// Step template resource spec
+    StepTemplate(StepTemplateSpec),
 }
 
 /// Project resource specification.
@@ -206,14 +210,27 @@ pub struct WorkspaceSpec {
     pub self_referential: bool,
 }
 
+/// Step template resource specification.
+/// Defines a reusable prompt template for workflow steps.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct StepTemplateSpec {
+    /// The prompt template text (supports {variable} placeholders)
+    pub prompt: String,
+
+    /// Optional description of what this template does
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
 /// Agent resource specification.
-/// Defines an agent with command templates for workflow phases.
+/// Defines an agent with a command and capabilities.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AgentSpec {
-    /// Templates for each workflow phase
-    pub templates: AgentTemplatesSpec,
+    /// Command to execute (must contain {prompt} placeholder)
+    pub command: String,
 
-    /// Agent capabilities (e.g., qa, fix, retest)
+    /// Agent capabilities (e.g., plan, implement, qa_testing)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<Vec<String>>,
 
@@ -246,56 +263,6 @@ pub struct AgentSelectionSpec {
     pub weights: Option<SelectionWeights>,
 }
 
-/// Agent command templates for different workflow phases.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AgentTemplatesSpec {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub init_once: Option<String>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub qa: Option<String>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub plan: Option<String>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fix: Option<String>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub retest: Option<String>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub loop_guard: Option<String>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ticket_scan: Option<String>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub build: Option<String>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub test: Option<String>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub lint: Option<String>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub implement: Option<String>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub review: Option<String>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub git_ops: Option<String>,
-
-    /// Extra templates for custom/SDLC step types (qa_doc_gen, qa_testing, ticket_fix, etc.)
-    #[serde(
-        flatten,
-        default,
-        skip_serializing_if = "std::collections::HashMap::is_empty"
-    )]
-    pub extra: std::collections::HashMap<String, String>,
-}
 
 /// Workflow resource specification.
 /// Defines a workflow pipeline with steps, loop policy, and finalization rules.
@@ -356,6 +323,10 @@ pub struct WorkflowStepSpec {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required_capability: Option<String>,
+
+    /// Reference to a StepTemplate resource name
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub builtin: Option<String>,
