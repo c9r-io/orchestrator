@@ -320,6 +320,9 @@ impl StepExecutionAccumulator {
             fix_configured,
             fix_enabled,
             fix_ran,
+            fix_skipped: fix_step_ids
+                .iter()
+                .any(|id| self.step_skipped.get(id.as_str()).copied().unwrap_or(false)),
             fix_success,
             retest_enabled,
             retest_ran,
@@ -827,14 +830,7 @@ pub async fn process_item_filtered(
             }
 
             ExecutionMode::Builtin { name } if name == "ticket_scan" => {
-                // Ticket scan builtin
-                insert_event(
-                    state,
-                    task_id,
-                    Some(item_id),
-                    "step_started",
-                    json!({"step": "ticket_scan", "step_scope": step.resolved_scope()}),
-                )?;
+                // Ticket scan builtin (step_started already emitted above)
                 let tickets = scan_active_tickets_for_task_items(task_ctx, task_item_paths)?;
                 acc.active_tickets = tickets.get(&item.qa_file_path).cloned().unwrap_or_default();
                 acc.new_ticket_count = acc.active_tickets.len() as i64;

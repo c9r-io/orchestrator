@@ -223,6 +223,7 @@ pub struct ItemFinalizeContext {
     pub fix_configured: bool,
     pub fix_enabled: bool,
     pub fix_ran: bool,
+    pub fix_skipped: bool,
     pub fix_success: bool,
     pub retest_enabled: bool,
     pub retest_ran: bool,

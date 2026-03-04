@@ -120,12 +120,15 @@ impl CliHandler {
                 )
             })?;
 
-        let mut new_id = format!("{}-{}", step, plan.steps.len() + 1);
-        if !plan.steps.iter().any(|s| s.id == new_id) {
-            // keep generated id
+        let new_id = if !plan.steps.iter().any(|s| s.id == step) {
+            step.to_string()
         } else {
-            new_id = format!("{}-{}", step, uuid::Uuid::new_v4());
-        }
+            let mut candidate = format!("{}-{}", step, plan.steps.len() + 1);
+            if plan.steps.iter().any(|s| s.id == candidate) {
+                candidate = format!("{}-{}", step, uuid::Uuid::new_v4());
+            }
+            candidate
+        };
 
         let builtin = match step {
             "init_once" | "ticket_scan" | "loop_guard" => Some(step.to_string()),

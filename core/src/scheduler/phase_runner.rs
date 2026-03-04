@@ -214,21 +214,28 @@ async fn run_phase_with_timeout(
     let stdout_path = logs_dir.join(format!("{}_{}.stdout", phase, run_id));
     let stderr_path = logs_dir.join(format!("{}_{}.stderr", phase, run_id));
 
-    let (runner, mut resolved_extra_env) = {
+    let (runner, mut resolved_extra_env, sensitive_values) = {
         let active = crate::config_load::read_active_config(state)?;
         let runner = active.config.runner.clone();
-        let extra_env = if let Some(agent_cfg) = active.config.agents.get(agent_id) {
+        let (extra_env, sensitive) = if let Some(agent_cfg) = active.config.agents.get(agent_id) {
             if let Some(ref env_entries) = agent_cfg.env {
-                crate::env_resolve::resolve_agent_env(env_entries, &active.config.env_stores)?
+                let env =
+                    crate::env_resolve::resolve_agent_env(env_entries, &active.config.env_stores)?;
+                let sens = crate::env_resolve::collect_sensitive_values(
+                    env_entries,
+                    &active.config.env_stores,
+                );
+                (env, sens)
             } else {
-                std::collections::HashMap::new()
+                (std::collections::HashMap::new(), Vec::new())
             }
         } else {
-            std::collections::HashMap::new()
+            (std::collections::HashMap::new(), Vec::new())
         };
-        (runner, extra_env)
+        (runner, extra_env, sensitive)
     };
-    let redaction_patterns = runner.redaction_patterns.clone();
+    let mut redaction_patterns = runner.redaction_patterns.clone();
+    redaction_patterns.extend(sensitive_values);
     if !logs_dir.starts_with(&state.logs_dir) {
         return Err(anyhow::anyhow!(
             "logs dir escapes managed root: {}",

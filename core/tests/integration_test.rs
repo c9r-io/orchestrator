@@ -943,7 +943,7 @@ fn sdlc_full_pipeline_workflow_parses_from_fixture() {
 #[test]
 fn binary_snapshot_smoke_verify_integration() {
     use agent_orchestrator::scheduler::safety::{
-        restore_binary_snapshot, snapshot_binary, verify_binary_snapshot,
+        restore_binary_snapshot, snapshot_binary, verify_binary_snapshot, SnapshotManifest,
     };
     use std::io::Write;
     use tokio::runtime::Runtime;
@@ -970,9 +970,32 @@ fn binary_snapshot_smoke_verify_integration() {
     }
 
     let rt = Runtime::new().expect("create tokio runtime");
-    let result: std::path::PathBuf =
-        rt.block_on(async { snapshot_binary(&temp_dir).await.expect("snapshot binary") });
+    let result: std::path::PathBuf = rt.block_on(async {
+        snapshot_binary(&temp_dir, "integ-task", 1)
+            .await
+            .expect("snapshot binary")
+    });
     assert!(result.exists(), "stable snapshot should exist");
+
+    // Verify .stable.json exists and contains valid JSON
+    let manifest_path = temp_dir.join(".stable.json");
+    assert!(manifest_path.exists(), ".stable.json should exist after snapshot");
+    let manifest_str =
+        std::fs::read_to_string(&manifest_path).expect("read .stable.json");
+    let manifest: SnapshotManifest =
+        serde_json::from_str(&manifest_str).expect("parse .stable.json as valid SnapshotManifest");
+    assert_eq!(manifest.task_id, "integ-task");
+    assert_eq!(manifest.cycle, 1);
+    assert_eq!(manifest.version, 2);
+
+    // Verify SHA-256 checksum in manifest matches actual .stable content
+    let stable_content = std::fs::read(&result).expect("read .stable file");
+    use sha2::{Digest, Sha256};
+    let actual_sha = format!("{:x}", Sha256::digest(&stable_content));
+    assert_eq!(
+        actual_sha, manifest.sha256,
+        "manifest SHA-256 should match actual .stable content"
+    );
 
     {
         let mut file = std::fs::File::create(&binary_path).expect("reopen binary file");

@@ -26,15 +26,15 @@ impl Resource for RuntimePolicyResource {
     fn validate(&self) -> Result<()> {
         super::validate_resource_name(self.name())?;
         if self.spec.runner.policy == "allowlist" {
+            let mut errors = Vec::new();
             if self.spec.runner.allowed_shells.is_empty() {
-                return Err(anyhow!(
-                    "runner.allowed_shells cannot be empty when policy=allowlist"
-                ));
+                errors.push("runner.allowed_shells cannot be empty when policy=allowlist");
             }
             if self.spec.runner.allowed_shell_args.is_empty() {
-                return Err(anyhow!(
-                    "runner.allowed_shell_args cannot be empty when policy=allowlist"
-                ));
+                errors.push("runner.allowed_shell_args cannot be empty when policy=allowlist");
+            }
+            if !errors.is_empty() {
+                return Err(anyhow!(errors.join("; ")));
             }
         }
         Ok(())

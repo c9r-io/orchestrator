@@ -147,8 +147,8 @@ Verify that content integrity is maintained through a full snapshot/restore cycl
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | snapshot_binary Creates Stable Copy | ☐ | | | |
-| 2 | snapshot_binary Errors When Binary Missing | ☐ | | | |
-| 3 | restore_binary_snapshot Restores Binary | ☐ | | | |
-| 4 | restore_binary_snapshot Errors When Stable Missing | ☐ | | | |
-| 5 | Snapshot/Restore Cycle Preserves Content | ☐ | | | |
+| 1 | snapshot_binary Creates Stable Copy | ✅ | 2026-03-04 | claude-sonnet-4-6 | `test_snapshot_binary_success` passes |
+| 2 | snapshot_binary Errors When Binary Missing | ✅ | 2026-03-04 | claude-sonnet-4-6 | `test_snapshot_binary_missing_release` passes |
+| 3 | restore_binary_snapshot Restores Binary | ✅ | 2026-03-04 | claude-sonnet-4-6 | `test_restore_binary_snapshot_success` passes (v1 compat path) |
+| 4 | restore_binary_snapshot Errors When Stable Missing | ✅ | 2026-03-04 | claude-sonnet-4-6 | `test_restore_binary_snapshot_missing_stable` passes |
+| 5 | Snapshot/Restore Cycle Preserves Content | ✅ | 2026-03-04 | claude-sonnet-4-6 | `test_snapshot_restore_content_integrity` passes |

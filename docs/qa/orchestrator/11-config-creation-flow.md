@@ -134,8 +134,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
    spec:
      capabilities:
        - qa
-     templates:
-       qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"test-qa\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
+     command: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"test-qa\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
    EOF
    
    ./scripts/orchestrator.sh apply -f /tmp/test-agent.yaml
@@ -150,8 +149,8 @@ Entry point: `./scripts/orchestrator.sh <command>`
      name: test-workflow
    spec:
      steps:
-       - id: run_qa
-         required_capability: qa
+       - id: qa
+         type: qa
          enabled: true
      loop:
        mode: once

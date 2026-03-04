@@ -2,8 +2,9 @@ use crate::cli_types::{OrchestratorResource, ResourceKind, ResourceSpec};
 use crate::config::OrchestratorConfig;
 
 use super::{
-    AgentResource, DefaultsResource, ProjectResource, RegisteredResource, Resource,
-    RuntimePolicyResource, StepTemplateResource, WorkflowResource, WorkspaceResource, API_VERSION,
+    AgentResource, DefaultsResource, EnvStoreResource, ProjectResource, RegisteredResource,
+    Resource, RuntimePolicyResource, SecretStoreResource, StepTemplateResource, WorkflowResource,
+    WorkspaceResource, API_VERSION,
 };
 
 pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredResource> {
@@ -15,6 +16,9 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
         resources.push(RegisteredResource::Defaults(defaults));
     }
     for name in config.projects.keys() {
+        if name.is_empty() {
+            continue;
+        }
         if let Some(project) = ProjectResource::get_from(config, name) {
             resources.push(RegisteredResource::Project(project));
         }
@@ -37,6 +41,14 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
     for name in config.step_templates.keys() {
         if let Some(step_template) = StepTemplateResource::get_from(config, name) {
             resources.push(RegisteredResource::StepTemplate(step_template));
+        }
+    }
+    for name in config.env_stores.keys() {
+        if let Some(env_store) = EnvStoreResource::get_from(config, name) {
+            resources.push(RegisteredResource::EnvStore(env_store));
+        }
+        if let Some(secret_store) = SecretStoreResource::get_from(config, name) {
+            resources.push(RegisteredResource::SecretStore(secret_store));
         }
     }
     resources
@@ -190,6 +202,22 @@ mod tests {
             dispatch_resource(project_manifest("exp-pr", "d")).expect("dispatch export project");
         pr.apply(&mut config);
 
+        // Add EnvStore and SecretStore
+        config.env_stores.insert(
+            "shared-config".to_string(),
+            crate::config::EnvStoreConfig {
+                data: [("K".to_string(), "V".to_string())].into(),
+                sensitive: false,
+            },
+        );
+        config.env_stores.insert(
+            "api-keys".to_string(),
+            crate::config::EnvStoreConfig {
+                data: [("SECRET".to_string(), "val".to_string())].into(),
+                sensitive: true,
+            },
+        );
+
         let resources = export_manifest_resources(&config);
         let kinds: Vec<ResourceKind> = resources.iter().map(|r| r.kind()).collect();
         assert!(kinds.contains(&ResourceKind::RuntimePolicy));
@@ -198,6 +226,8 @@ mod tests {
         assert!(kinds.contains(&ResourceKind::Agent));
         assert!(kinds.contains(&ResourceKind::Workflow));
         assert!(kinds.contains(&ResourceKind::Project));
+        assert!(kinds.contains(&ResourceKind::EnvStore));
+        assert!(kinds.contains(&ResourceKind::SecretStore));
     }
 
     #[test]

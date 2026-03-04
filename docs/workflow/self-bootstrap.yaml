@@ -197,7 +197,7 @@ spec:
     - implement
     - ticket_fix
     - align_tests
-  command: claude -p "{prompt}" --model opus --dangerously-skip-permissions --verbose --output-format stream-json
+  command: claude -p "{prompt}" --model sonnet --dangerously-skip-permissions --verbose --output-format stream-json
 ---
 # Tester agent (MiniMax-M2.5-highspeed) — QA scenario execution
 apiVersion: orchestrator.dev/v2
@@ -221,7 +221,7 @@ spec:
     - doc_governance
     - review
     - loop_guard
-  command: claude -p "{prompt}" --model sonnet --dangerously-skip-permissions --verbose --output-format stream-json
+  command: claude -p "{prompt}" --model haiku --dangerously-skip-permissions --verbose --output-format stream-json
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow

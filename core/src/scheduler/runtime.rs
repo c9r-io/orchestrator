@@ -183,10 +183,13 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
     let project_id = runtime_row.project_id;
 
     let active = read_active_config(state)?;
+    // Look up workflow: try project-scoped first, then global
     let workflow = active
         .config
-        .workflows
-        .get(&workflow_id)
+        .projects
+        .get(&project_id)
+        .and_then(|p| p.workflows.get(&workflow_id))
+        .or_else(|| active.config.workflows.get(&workflow_id))
         .with_context(|| format!("workflow not found for task {}: {}", task_id, workflow_id))?;
 
     let mut execution_plan = serde_json::from_str::<TaskExecutionPlan>(&execution_plan_json)
@@ -233,8 +236,10 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
     let safety = workflow.safety.clone();
     let self_referential = active
         .config
-        .workspaces
-        .get(&workspace_id)
+        .projects
+        .get(&project_id)
+        .and_then(|p| p.workspaces.get(&workspace_id))
+        .or_else(|| active.config.workspaces.get(&workspace_id))
         .map(|ws| ws.self_referential)
         .unwrap_or(false);
 

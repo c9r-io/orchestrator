@@ -3,7 +3,7 @@
 **Module**: self-bootstrap
 **Status**: Approved
 **Related Plan**: Add binary snapshot verification function using MD5 checksum comparison for integrity verification
-**Related QA**: `docs/qa/self-bootstrap/03-survival-smoke-binary-snapshot-verification.md`
+**Related QA**: `docs/qa/self-bootstrap/06-survival-smoke-binary-snapshot-verification.md`
 **Created**: 2026-02-27
 **Last Updated**: 2026-02-27
 
@@ -84,7 +84,7 @@ pub async fn verify_binary_snapshot(workspace_root: &Path) -> Result<BinaryVerif
 
 ## QA Docs
 
-- `docs/qa/self-bootstrap/03-survival-smoke-binary-snapshot-verification.md`
+- `docs/qa/self-bootstrap/06-survival-smoke-binary-snapshot-verification.md`
 
 ## Acceptance Criteria
 

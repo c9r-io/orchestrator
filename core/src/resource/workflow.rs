@@ -57,8 +57,9 @@ impl Resource for WorkflowResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
-        let incoming = workflow_spec_to_config(&self.spec)
+        let mut incoming = workflow_spec_to_config(&self.spec)
             .expect("validated workflow spec must be convertible");
+        crate::config_load::normalize_workflow_config(&mut incoming);
         let result = super::apply_to_map(&mut config.workflows, self.name(), incoming);
         config.resource_meta.workflows.insert(
             self.name().to_string(),
@@ -148,8 +149,9 @@ mod tests {
 
         let loaded = WorkflowResource::get_from(&config, "wf-roundtrip")
             .expect("workflow should be present in config");
-        assert_eq!(loaded.spec.steps.len(), 1);
-        assert_eq!(loaded.spec.steps[0].step_type, "qa");
+        // After normalization, missing standard steps are added as disabled placeholders
+        assert!(loaded.spec.steps.len() >= 1);
+        assert!(loaded.spec.steps.iter().any(|s| s.step_type == "qa"));
         assert_eq!(loaded.spec.loop_policy.mode, "once");
         assert_eq!(loaded.spec.loop_policy.max_cycles, Some(3));
     }

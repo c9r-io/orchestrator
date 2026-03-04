@@ -106,9 +106,9 @@ pub fn default_workflow_finalize_config() -> WorkflowFinalizeConfig {
             WorkflowFinalizeRule {
                 id: "fix_skipped_and_retest_disabled".to_string(),
                 engine: StepHookEngine::Cel,
-                when: "fix_enabled == true && fix_ran == false && fix_success == false && retest_enabled == false && active_ticket_count > 0".to_string(),
+                when: "fix_enabled == true && fix_ran == false && fix_skipped == false && fix_success == false && retest_enabled == false && active_ticket_count > 0".to_string(),
                 status: "unresolved".to_string(),
-                reason: Some("fix skipped by prehook and retest disabled".to_string()),
+                reason: Some("fix did not run (not skipped by prehook) and retest disabled".to_string()),
             },
             WorkflowFinalizeRule {
                 id: "fixed_retest_skipped_after_fix_success".to_string(),

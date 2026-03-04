@@ -148,31 +148,36 @@ rm -rf "workspace/${QA_PROJECT}"
 1. 创建包含不存在目录的配置:
    ```bash
    cat > /tmp/missing-path.yaml << 'YAML'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   resume:
-     auto: false
-   defaults:
-     project: default
-     workspace: default
-     workflow: basic
-   workspaces:
-     default:
-       root_path: /nonexistent/path/xyz123
-       qa_targets: [docs]
-       ticket_dir: tickets
-   agents:
-     echo:
-       capabilities: [qa]
-       templates:
-         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
-   workflows:
-     basic:
-       steps:
-         - id: qa
-           type: qa
-           enabled: true
+   apiVersion: orchestrator.dev/v2
+   kind: Workspace
+   metadata:
+     name: default
+   spec:
+     root_path: /nonexistent/path/xyz123
+     qa_targets:
+       - docs
+     ticket_dir: tickets
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Agent
+   metadata:
+     name: echo
+   spec:
+     capabilities:
+       - qa
+     command: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Workflow
+   metadata:
+     name: basic
+   spec:
+     steps:
+       - id: qa
+         type: qa
+         enabled: true
+     loop:
+       mode: once
    YAML
    ```
 2. 执行:
@@ -198,31 +203,36 @@ rm -rf "workspace/${QA_PROJECT}"
 1. 创建含路径逃逸的配置:
    ```bash
    cat > /tmp/path-escape.yaml << 'YAML'
-   runner:
-     shell: /bin/bash
-     shell_arg: -lc
-   resume:
-     auto: false
-   defaults:
-     project: default
-     workspace: default
-     workflow: basic
-   workspaces:
-     default:
-       root_path: .
-       qa_targets: [../../../etc]
-       ticket_dir: tickets
-   agents:
-     echo:
-       capabilities: [qa]
-       templates:
-         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
-   workflows:
-     basic:
-       steps:
-         - id: qa
-           type: qa
-           enabled: true
+   apiVersion: orchestrator.dev/v2
+   kind: Workspace
+   metadata:
+     name: default
+   spec:
+     root_path: .
+     qa_targets:
+       - ../../../etc
+     ticket_dir: tickets
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Agent
+   metadata:
+     name: echo
+   spec:
+     capabilities:
+       - qa
+     command: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Workflow
+   metadata:
+     name: basic
+   spec:
+     steps:
+       - id: qa
+         type: qa
+         enabled: true
+     loop:
+       mode: once
    YAML
    ```
 2. 执行:

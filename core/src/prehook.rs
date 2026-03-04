@@ -955,6 +955,7 @@ mod tests {
             fix_configured: true,
             fix_enabled: true,
             fix_ran: false,
+            fix_skipped: false,
             fix_success: false,
             retest_enabled: true,
             retest_ran: false,

@@ -175,7 +175,7 @@ async fn run_task_loop_core(
                     )?;
 
                     if task_ctx.safety.binary_snapshot && task_ctx.self_referential {
-                        match snapshot_binary(&task_ctx.workspace_root).await {
+                        match snapshot_binary(&task_ctx.workspace_root, task_id, task_ctx.current_cycle).await {
                             Ok(path) => {
                                 insert_event(
                                     &state,

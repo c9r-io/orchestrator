@@ -47,8 +47,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
    spec:
      capabilities:
        - qa
-     templates:
-       qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
+     command: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
    ---
    apiVersion: orchestrator.dev/v2
    kind: Workflow
@@ -108,8 +107,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
    spec:
      capabilities:
        - qa
-     templates:
-       qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
+     command: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
    ---
    apiVersion: orchestrator.dev/v2
    kind: Workflow
@@ -171,8 +169,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
    spec:
      capabilities:
        - qa
-     templates:
-       qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
+     command: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
    ---
    apiVersion: orchestrator.dev/v2
    kind: Workflow
@@ -238,8 +235,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
    spec:
      capabilities:
        - fix
-     templates:
-       fix: "echo '{\"confidence\":0.82,\"quality_score\":0.78,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fix-sample.patch\"]}]}'"
+     command: "echo '{\"confidence\":0.82,\"quality_score\":0.78,\"artifacts\":[{\"kind\":\"code_change\",\"files\":[\"fix-sample.patch\"]}]}'"
    ---
    apiVersion: orchestrator.dev/v2
    kind: Workflow
@@ -262,13 +258,21 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 ### Expected
 
-- 错误信息包含: `no agent has template for step 'qa'` 或类似
+- `manifest validate` reports "Manifest is valid" — structural validation passes
+  because each individual resource is valid on its own.
+- **Note**: `manifest validate` performs **structural** validation only (YAML
+  syntax, required fields, type constraints). Cross-resource semantic validation
+  (e.g., "workflow requires `qa` capability but no agent provides it") happens
+  at **`apply` time** when the manifest is merged with the active config, and at
+  **task creation time** when capability-to-agent resolution is performed. This
+  is by design: a standalone manifest may be combined with other manifests at
+  apply time, so individual resource validity is all that can be checked.
 
 ### Troubleshooting
 
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
-| Validation passes ("Manifest is valid") when it should fail | `manifest validate` merges the manifest with existing active config; a residual agent already applied to the runtime has a matching `qa` template | Re-apply only the intended validation fixture set and run the check from a fresh isolated project/workspace root; do not clear global config |
+| Validation passes for a manifest with unresolved capability references | `manifest validate` only checks structural validity; capability-to-agent mapping is validated at `apply` and task creation time | Use `apply -f` followed by `task create` to trigger full semantic validation |
 
 ---
 

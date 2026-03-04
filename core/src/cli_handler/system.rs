@@ -107,17 +107,23 @@ impl CliHandler {
 
                 if result.verified {
                     println!("✓ Binary snapshot verified");
-                    println!("  Original (stable): {}", result.original_checksum);
-                    println!("  Current (release): {}", result.current_checksum);
-                    println!("  Stable path: {}", result.stable_path.display());
-                    println!("  Binary path: {}", result.binary_path.display());
-                    Ok(0)
                 } else {
                     println!("✗ Binary snapshot MISMATCH");
-                    println!("  Original (stable): {}", result.original_checksum);
-                    println!("  Current (release): {}", result.current_checksum);
-                    println!("  Stable path: {}", result.stable_path.display());
-                    println!("  Binary path: {}", result.binary_path.display());
+                }
+                println!("  Original (stable): {}", result.original_checksum);
+                println!("  Current (release): {}", result.current_checksum);
+                println!("  Stable path: {}", result.stable_path.display());
+                println!("  Binary path: {}", result.binary_path.display());
+                if let Some(ref manifest) = result.manifest {
+                    println!("  Manifest:");
+                    println!("    task_id:    {}", manifest.task_id);
+                    println!("    cycle:      {}", manifest.cycle);
+                    println!("    created_at: {}", manifest.created_at);
+                    println!("    size_bytes: {}", manifest.size_bytes);
+                }
+                if result.verified {
+                    Ok(0)
+                } else {
                     eprintln!("\nTo restore the stable binary, run:");
                     eprintln!(
                         "  cp {} {}",

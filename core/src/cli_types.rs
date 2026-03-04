@@ -10,7 +10,10 @@ const EXPECTED_API_VERSION: &str = "orchestrator.dev/v2";
 
 /// Kubernetes-style resource manifest for declarative configuration.
 /// Top-level structure for YAML deserialization in the `apply` command.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+///
+/// Uses custom `Deserialize` to route `spec` deserialization based on the
+/// `kind` field, avoiding ambiguity from `#[serde(untagged)]` on `ResourceSpec`.
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct OrchestratorResource {
     /// API version of this resource (e.g., "orchestrator.dev/v2")
     #[serde(rename = "apiVersion")]
@@ -24,6 +27,73 @@ pub struct OrchestratorResource {
 
     /// Resource-specific configuration based on kind
     pub spec: ResourceSpec,
+}
+
+impl<'de> Deserialize<'de> for OrchestratorResource {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        /// Helper struct that captures `spec` as raw Value for kind-aware dispatch.
+        #[derive(Deserialize)]
+        struct RawResource {
+            #[serde(rename = "apiVersion")]
+            api_version: String,
+            kind: ResourceKind,
+            metadata: ResourceMetadata,
+            spec: serde_yaml::Value,
+        }
+
+        let raw = RawResource::deserialize(deserializer)?;
+        let spec = match raw.kind {
+            ResourceKind::Workspace => {
+                let s: WorkspaceSpec =
+                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                ResourceSpec::Workspace(s)
+            }
+            ResourceKind::Agent => {
+                let s: AgentSpec =
+                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                ResourceSpec::Agent(Box::new(s))
+            }
+            ResourceKind::Workflow => {
+                let s: WorkflowSpec =
+                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                ResourceSpec::Workflow(s)
+            }
+            ResourceKind::Project => {
+                let s: ProjectSpec =
+                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                ResourceSpec::Project(s)
+            }
+            ResourceKind::Defaults => {
+                let s: DefaultsSpec =
+                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                ResourceSpec::Defaults(s)
+            }
+            ResourceKind::RuntimePolicy => {
+                let s: RuntimePolicySpec =
+                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                ResourceSpec::RuntimePolicy(s)
+            }
+            ResourceKind::StepTemplate => {
+                let s: StepTemplateSpec =
+                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                ResourceSpec::StepTemplate(s)
+            }
+            ResourceKind::EnvStore | ResourceKind::SecretStore => {
+                let s: EnvStoreSpec =
+                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                ResourceSpec::EnvStore(s)
+            }
+        };
+        Ok(OrchestratorResource {
+            api_version: raw.api_version,
+            kind: raw.kind,
+            metadata: raw.metadata,
+            spec,
+        })
+    }
 }
 
 impl OrchestratorResource {

@@ -77,6 +77,13 @@ lower-cost agent is selected more frequently by the scoring algorithm.
   score, but since both agents are within the top-3 candidate pool, actual
   selection is randomized — distribution may be roughly equal
 
+### Troubleshooting
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| Only one agent selected across all runs | Project-scoped `apply` may have failed to register one agent, or the agent lacks the required capability | Run `./scripts/orchestrator.sh describe agent/fast_agent --project qa-cost` and `describe agent/quality_agent --project qa-cost` to verify both agents exist with correct capabilities |
+| Selection distribution is heavily skewed | With only 2 agents in the top-3 pool, randomization should give ~50/50; extreme skew indicates only 1 agent was available | Check `resolve_effective_agents` returns both agents for the project |
+
 ---
 
 ## Scenario 2: Quality Scoring
