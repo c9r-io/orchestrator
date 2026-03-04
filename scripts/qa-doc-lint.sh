@@ -45,7 +45,7 @@ while IFS=: read -r file line _; do
   fi
 done < <(
   rg -n "task create" docs/qa -g '*.md' \
-    | rg -v "task create --help|task create --format|does not depend on" || true
+    | rg -v "task create --help|task create --format|does not depend on|^\S+:\d+:\s*\|" || true
 )
 
 echo "[qa-doc-lint] Checking scenario count (<=5) for orchestrator docs..."

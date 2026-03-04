@@ -272,7 +272,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
-| Validation passes for a manifest with unresolved capability references | `manifest validate` only checks structural validity; capability-to-agent mapping is validated at `apply` and task creation time | Use `apply -f` followed by `task create` to trigger full semantic validation |
+| Validation passes for a manifest with unresolved capability references | `manifest validate` only checks structural validity; capability-to-agent mapping is validated at `apply` and task creation time | Use `apply -f --project <name>` followed by `task create --project <name>` to trigger full semantic validation |
 
 ---
 

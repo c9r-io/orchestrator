@@ -1085,4 +1085,182 @@ mod tests {
 
         std::fs::remove_dir_all(&temp_dir).ok();
     }
+
+    #[tokio::test]
+    async fn test_execute_self_test_step_cargo_test_fails() {
+        let _env_guard = ENV_LOCK.lock().await;
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let workspace_root = state.app_root.clone();
+
+        let fake_bin = workspace_root.join("fake-bin");
+        let cargo_log = workspace_root.join("fake-cargo.log");
+        // check succeeds (exit 0), test fails (exit 7)
+        write_executable(
+            &fake_bin.join("cargo"),
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FAKE_CARGO_LOG\"\ncase \"$*\" in *check*) exit 0 ;; *) exit 7 ;; esac\n",
+        );
+        std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
+
+        let fake_cargo = fake_bin.join("cargo");
+        std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
+        std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
+
+        let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1")
+            .await
+            .expect("self test should return exit code");
+
+        std::env::remove_var("FAKE_CARGO_LOG");
+        std::env::remove_var("ORCH_SELF_TEST_CARGO");
+
+        assert_eq!(result, 7);
+        let log = std::fs::read_to_string(&cargo_log).expect("read cargo log");
+        assert!(log.contains("check --message-format=short"), "check should have been invoked");
+        assert!(
+            log.contains("test --lib"),
+            "test should have been invoked after check succeeded"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_execute_self_test_step_no_manifest_script() {
+        let _env_guard = ENV_LOCK.lock().await;
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let workspace_root = state.app_root.clone();
+
+        let fake_bin = workspace_root.join("fake-bin");
+        let cargo_log = workspace_root.join("fake-cargo.log");
+        write_executable(
+            &fake_bin.join("cargo"),
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FAKE_CARGO_LOG\"\nexit 0\n",
+        );
+        std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
+        // Deliberately do NOT create scripts/orchestrator.sh
+
+        let fake_cargo = fake_bin.join("cargo");
+        std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
+        std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
+
+        let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1")
+            .await
+            .expect("self test should return exit code");
+
+        std::env::remove_var("FAKE_CARGO_LOG");
+        std::env::remove_var("ORCH_SELF_TEST_CARGO");
+
+        assert_eq!(result, 0, "should succeed when manifest script is absent");
+    }
+
+    #[tokio::test]
+    async fn test_verify_with_corrupt_manifest_json() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "safety-test-corrupt-manifest-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+
+        let binary_path = temp_dir.join(RELEASE_BINARY_REL);
+        let test_content = b"corrupt manifest test content";
+        create_mock_binary(&binary_path, test_content).expect("create binary");
+        create_mock_binary(&temp_dir.join(STABLE_FILE), test_content).expect("create stable");
+
+        // Write garbage to .stable.json
+        std::fs::write(temp_dir.join(STABLE_MANIFEST), b"this is not valid json {{{")
+            .expect("write corrupt manifest");
+
+        let result = verify_binary_snapshot(&temp_dir)
+            .await
+            .expect("verify should succeed despite corrupt manifest");
+
+        assert!(result.verified, "checksums match so verified should be true");
+        assert!(
+            result.manifest.is_none(),
+            "corrupt manifest should degrade gracefully to None"
+        );
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[tokio::test]
+    async fn test_snapshot_overwrites_existing_stable() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "safety-test-overwrite-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+
+        let binary_path = temp_dir.join(RELEASE_BINARY_REL);
+        let content_a = b"binary version A";
+        create_mock_binary(&binary_path, content_a).expect("create binary A");
+
+        snapshot_binary(&temp_dir, "task-a", 1)
+            .await
+            .expect("first snapshot should succeed");
+
+        // Replace binary with version B and snapshot again
+        let content_b = b"binary version B - completely different";
+        std::fs::write(&binary_path, content_b).expect("write binary B");
+
+        snapshot_binary(&temp_dir, "task-b", 2)
+            .await
+            .expect("second snapshot should succeed");
+
+        let stable_content =
+            std::fs::read(temp_dir.join(STABLE_FILE)).expect("read .stable after overwrite");
+        assert_eq!(stable_content, content_b, ".stable should contain binary B");
+
+        let manifest_str =
+            std::fs::read_to_string(temp_dir.join(STABLE_MANIFEST)).expect("read manifest");
+        let manifest: SnapshotManifest =
+            serde_json::from_str(&manifest_str).expect("parse manifest");
+        let expected_sha = sha256_hex(content_b);
+        assert_eq!(manifest.sha256, expected_sha, "manifest SHA-256 should match binary B");
+        assert_eq!(manifest.task_id, "task-b");
+        assert_eq!(manifest.cycle, 2);
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[tokio::test]
+    async fn test_snapshot_empty_binary() {
+        // Well-known SHA-256 of zero bytes
+        const EMPTY_SHA256: &str =
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+        let temp_dir = std::env::temp_dir().join(format!(
+            "safety-test-empty-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+
+        let binary_path = temp_dir.join(RELEASE_BINARY_REL);
+        create_mock_binary(&binary_path, b"").expect("create zero-byte binary");
+
+        snapshot_binary(&temp_dir, "task-empty", 1)
+            .await
+            .expect("snapshot of empty binary should succeed");
+
+        let stable_content =
+            std::fs::read(temp_dir.join(STABLE_FILE)).expect("read .stable");
+        assert!(stable_content.is_empty(), ".stable should be zero bytes");
+
+        let manifest_str =
+            std::fs::read_to_string(temp_dir.join(STABLE_MANIFEST)).expect("read manifest");
+        let manifest: SnapshotManifest =
+            serde_json::from_str(&manifest_str).expect("parse manifest");
+        assert_eq!(manifest.size_bytes, 0);
+        assert_eq!(manifest.sha256, EMPTY_SHA256, "SHA-256 of empty binary should match well-known value");
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
 }

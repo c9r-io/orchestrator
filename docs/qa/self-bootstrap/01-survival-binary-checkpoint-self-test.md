@@ -21,15 +21,25 @@ Workflow: `docs/workflow/self-bootstrap.yaml`
 
 ### Common Preconditions
 
+> **Important**: Do NOT use `qa project create` for self-referential workflows.
+> `qa project create` always sets `self_referential: false` on the new workspace.
+> Instead, use `apply --project` to apply the self-bootstrap manifest directly
+> into the project scope, preserving `self_referential: true`.
+
 ```bash
 rm -f fixtures/ticket/auto_*.md
 
-QA_PROJECT="qa-survival-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh apply -f docs/workflow/self-bootstrap.yaml
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
-rm -rf "workspace/${QA_PROJECT}"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+QA_PROJECT="qa-survival"
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --force
+./scripts/orchestrator.sh apply -f docs/workflow/self-bootstrap.yaml --project "${QA_PROJECT}"
 ```
+
+### Troubleshooting
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| `binary_snapshot_created` event never emitted | `self_referential` resolved to `false` at runtime because `qa project create` was used instead of `apply --project` | Use `apply --project` to preserve workspace config including `self_referential: true` |
+| `snapshot_binary` logs warning "release binary not found" | Binary not built | Run `cd core && cargo build --release` before testing |
 
 ---
 

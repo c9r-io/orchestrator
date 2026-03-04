@@ -381,6 +381,9 @@ fn build_finalize_cel_context(context: &ItemFinalizeContext) -> Result<CelContex
         .add_variable("fix_ran", context.fix_ran)
         .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
     cel_context
+        .add_variable("fix_skipped", context.fix_skipped)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
         .add_variable("fix_success", context.fix_success)
         .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
     cel_context
@@ -1557,6 +1560,39 @@ mod tests {
             .expect("ctx4 finalize should resolve")
             .expect("ctx4 should match qa_failed_fixed");
         assert_eq!(outcome.rule_id, "qa_failed_fixed");
+    }
+
+    #[test]
+    fn test_fix_skipped_variable_available_in_cel_context() {
+        let finalize = WorkflowFinalizeConfig {
+            rules: vec![make_rule(
+                "fix_skipped_check",
+                "fix_enabled == true && fix_ran == false && fix_skipped == false && active_ticket_count > 0",
+                "unresolved",
+                Some("fix did not run"),
+            )],
+        };
+        let ctx = ItemFinalizeContext {
+            fix_enabled: true,
+            fix_ran: false,
+            fix_skipped: false,
+            fix_success: false,
+            active_ticket_count: 2,
+            ..default_item_finalize_context()
+        };
+        let outcome = resolve_workflow_finalize_outcome(&finalize, &ctx)
+            .expect("fix_skipped CEL evaluation should succeed")
+            .expect("should match fix_skipped_check");
+        assert_eq!(outcome.rule_id, "fix_skipped_check");
+
+        // When fix_skipped is true, the rule should NOT match
+        let ctx_skipped = ItemFinalizeContext {
+            fix_skipped: true,
+            ..ctx
+        };
+        let outcome = resolve_workflow_finalize_outcome(&finalize, &ctx_skipped)
+            .expect("fix_skipped=true CEL evaluation should succeed");
+        assert!(outcome.is_none(), "rule should not match when fix_skipped is true");
     }
 
     #[test]

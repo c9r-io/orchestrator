@@ -19,14 +19,23 @@ Watchdog script: `scripts/watchdog.sh`.
 
 ### Common Preconditions
 
+> **Important**: Do NOT use `qa project create` for self-referential test scenarios.
+> `qa project create` always sets `self_referential: false` on the new workspace,
+> which causes validation to never trigger. Instead, use `apply --project` to apply
+> manifests directly into the project scope, preserving `self_referential: true`.
+
 ```bash
 rm -f fixtures/ticket/auto_*.md
 
-QA_PROJECT="qa-survival-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
-rm -rf "workspace/${QA_PROJECT}"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+QA_PROJECT="qa-enforcement"
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --force
 ```
+
+### Troubleshooting
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| Task starts without `[SELF_REF_UNSAFE]` error despite `checkpoint_strategy: none` | `self_referential` resolved to `false` at runtime because `qa project create` was used or the manifest was applied globally without `--project` | Use `apply -f <manifest> --project <name>` to scope the workspace with `self_referential: true` into the project |
 
 ---
 
@@ -67,13 +76,11 @@ Verify that starting a task on a self-referential workspace with `checkpoint_str
        checkpoint_strategy: none
    ```
    ```bash
-   ./scripts/orchestrator.sh apply -f /tmp/unsafe-manifest.yaml
+   ./scripts/orchestrator.sh apply -f /tmp/unsafe-manifest.yaml --project "${QA_PROJECT}"
    ```
 2. Create a task and attempt to start it:
    ```bash
    ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workflow unsafe-workflow --goal "test unsafe"
-   TASK_ID=$(./scripts/orchestrator.sh task list "${QA_PROJECT}" --json | jq -r '.[0].id')
-   ./scripts/orchestrator.sh task start "${QA_PROJECT}" "${TASK_ID}" 2>&1
    ```
 
 ### Expected
@@ -126,13 +133,11 @@ Verify that a warning is emitted (not a hard error) when `auto_rollback: false` 
        checkpoint_strategy: git_tag
    ```
    ```bash
-   ./scripts/orchestrator.sh apply -f /tmp/warn-manifest.yaml
+   ./scripts/orchestrator.sh apply -f /tmp/warn-manifest.yaml --project "${QA_PROJECT}"
    ```
 2. Create a task and start it, capturing stderr:
    ```bash
-   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workflow warn-workflow --goal "test warn"
-   TASK_ID=$(./scripts/orchestrator.sh task list "${QA_PROJECT}" --json | jq -r '.[0].id')
-   ./scripts/orchestrator.sh task start "${QA_PROJECT}" "${TASK_ID}" 2>/tmp/warn-stderr.txt
+   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workflow warn-workflow --goal "test warn" 2>/tmp/warn-stderr.txt
    cat /tmp/warn-stderr.txt
    ```
 
@@ -184,13 +189,11 @@ Verify that a warning is emitted when a self-referential workspace workflow has 
        checkpoint_strategy: git_tag
    ```
    ```bash
-   ./scripts/orchestrator.sh apply -f /tmp/notest-manifest.yaml
+   ./scripts/orchestrator.sh apply -f /tmp/notest-manifest.yaml --project "${QA_PROJECT}"
    ```
 2. Create a task and start it, capturing stderr:
    ```bash
-   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workflow notest-workflow --goal "test no self_test"
-   TASK_ID=$(./scripts/orchestrator.sh task list "${QA_PROJECT}" --json | jq -r '.[0].id')
-   ./scripts/orchestrator.sh task start "${QA_PROJECT}" "${TASK_ID}" 2>/tmp/notest-stderr.txt
+   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workflow notest-workflow --goal "test no self_test" 2>/tmp/notest-stderr.txt
    cat /tmp/notest-stderr.txt
    ```
 
