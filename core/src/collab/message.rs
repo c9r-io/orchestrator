@@ -121,7 +121,6 @@ pub enum MessageType {
     Response,
     Ack,
     Publish,
-    Subscribe,
     Forward,
 }
 
@@ -204,7 +203,6 @@ pub enum Signal {
 
 pub struct MessageBus {
     tx: mpsc::Sender<AgentMessage>,
-    subscriptions: Arc<RwLock<HashMap<AgentEndpoint, Vec<MessagePattern>>>>,
     message_store: Arc<RwLock<HashMap<Uuid, AgentMessage>>>,
 }
 
@@ -213,7 +211,6 @@ impl MessageBus {
         let (tx, _rx) = mpsc::channel(1000);
         Self {
             tx,
-            subscriptions: Arc::new(RwLock::new(HashMap::new())),
             message_store: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -227,127 +224,17 @@ impl MessageBus {
             store.insert(msg_id, msg.clone());
         }
 
-        let receivers = match msg.delivery_mode {
-            DeliveryMode::Broadcast => self.find_subscribers(&msg).await,
-            _ => msg.receivers.clone(),
-        };
-
-        for _receiver in receivers {
+        for _receiver in &msg.receivers {
             let _ = self.tx.send(msg.clone()).await;
         }
 
         Ok(msg_id)
-    }
-
-    /// Subscribe to messages matching a pattern
-    pub async fn subscribe(&self, endpoint: AgentEndpoint, pattern: MessagePattern) {
-        let mut subs = self.subscriptions.write().await;
-        subs.entry(endpoint).or_default().push(pattern);
-    }
-
-    /// Get latest message for a specific phase
-    pub async fn get_latest_output(&self, phase: &str) -> Result<Option<AgentOutput>> {
-        let store = self.message_store.read().await;
-
-        let mut latest: Option<(DateTime<Utc>, &AgentMessage)> = None;
-
-        for msg in store.values() {
-            if let MessagePayload::ExecutionResult(ref result) = msg.payload {
-                if result.output.phase == phase {
-                    match latest {
-                        None => latest = Some((msg.timestamp, msg)),
-                        Some((ts, _)) if msg.timestamp > ts => latest = Some((msg.timestamp, msg)),
-                        _ => {}
-                    }
-                }
-            }
-        }
-
-        if let Some((_, msg)) = latest {
-            if let MessagePayload::ExecutionResult(ref result) = msg.payload {
-                return Ok(Some(result.output.clone()));
-            }
-        }
-
-        Ok(None)
-    }
-
-    async fn find_subscribers(&self, msg: &AgentMessage) -> Vec<AgentEndpoint> {
-        let subs = self.subscriptions.read().await;
-        let mut matches = Vec::new();
-
-        for (endpoint, patterns) in subs.iter() {
-            for pattern in patterns {
-                if pattern.matches(msg) {
-                    matches.push(endpoint.clone());
-                    break;
-                }
-            }
-        }
-
-        matches
     }
 }
 
 impl Default for MessageBus {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// Pattern for matching messages
-pub enum MessagePattern {
-    ByType(MessageType),
-    ByPhase(String),
-    ByAgent(String),
-    ByTaskItem(String, String),
-    Custom(Arc<dyn Fn(&AgentMessage) -> bool + Send + Sync>),
-}
-
-impl Clone for MessagePattern {
-    fn clone(&self) -> Self {
-        match self {
-            MessagePattern::ByType(t) => MessagePattern::ByType(t.clone()),
-            MessagePattern::ByPhase(p) => MessagePattern::ByPhase(p.clone()),
-            MessagePattern::ByAgent(a) => MessagePattern::ByAgent(a.clone()),
-            MessagePattern::ByTaskItem(t, i) => MessagePattern::ByTaskItem(t.clone(), i.clone()),
-            MessagePattern::Custom(f) => MessagePattern::Custom(Arc::clone(f)),
-        }
-    }
-}
-
-impl std::fmt::Debug for MessagePattern {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MessagePattern::ByType(t) => f.debug_tuple("ByType").field(t).finish(),
-            MessagePattern::ByPhase(p) => f.debug_tuple("ByPhase").field(p).finish(),
-            MessagePattern::ByAgent(a) => f.debug_tuple("ByAgent").field(a).finish(),
-            MessagePattern::ByTaskItem(t, i) => {
-                f.debug_tuple("ByTaskItem").field(t).field(i).finish()
-            }
-            MessagePattern::Custom(_) => f.debug_tuple("Custom").finish(),
-        }
-    }
-}
-
-impl MessagePattern {
-    fn matches(&self, msg: &AgentMessage) -> bool {
-        match self {
-            MessagePattern::ByType(t) => msg.msg_type == *t,
-            MessagePattern::ByPhase(p) => {
-                if let MessagePayload::ExecutionRequest(ref req) = msg.payload {
-                    req.context.phase.as_deref() == Some(p)
-                } else {
-                    false
-                }
-            }
-            MessagePattern::ByAgent(agent) => msg.sender.agent_id == *agent,
-            MessagePattern::ByTaskItem(task_id, item_id) => {
-                msg.sender.task_id.as_ref() == Some(task_id)
-                    && msg.sender.item_id.as_ref() == Some(item_id)
-            }
-            MessagePattern::Custom(f) => f(msg),
-        }
     }
 }
 
@@ -409,71 +296,40 @@ mod tests {
         assert!(msg.receivers.is_empty());
     }
 
-    #[test]
-    fn test_message_pattern_by_type() {
+    #[tokio::test]
+    async fn test_message_bus_publish_stores_message() {
+        let bus = MessageBus::new();
         let msg = AgentMessage::new(
-            AgentEndpoint::agent("a"),
-            vec![AgentEndpoint::agent("b")],
-            MessagePayload::Custom(serde_json::json!("test")),
+            AgentEndpoint::agent("sender"),
+            vec![AgentEndpoint::agent("receiver")],
+            MessagePayload::Custom(serde_json::json!({"data": "test"})),
         );
-        assert!(MessagePattern::ByType(MessageType::Request).matches(&msg));
-        assert!(!MessagePattern::ByType(MessageType::Response).matches(&msg));
+        let msg_id = msg.id;
+        let result = bus.publish(msg).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), msg_id);
+
+        // Verify the message is stored
+        let store = bus.message_store.read().await;
+        assert!(store.contains_key(&msg_id));
+        assert_eq!(store[&msg_id].sender.agent_id, "sender");
     }
 
-    #[test]
-    fn test_message_pattern_by_agent() {
-        let msg = AgentMessage::new(
-            AgentEndpoint::agent("qa_agent"),
-            vec![],
-            MessagePayload::Custom(serde_json::json!("x")),
+    #[tokio::test]
+    async fn test_message_bus_publish_broadcast_no_panic() {
+        let bus = MessageBus::new();
+        // Broadcast messages have empty receivers — publish should not panic or hang
+        let msg = AgentMessage::publish(
+            AgentEndpoint::agent("broadcaster"),
+            MessagePayload::Custom(serde_json::json!("event")),
         );
-        assert!(MessagePattern::ByAgent("qa_agent".to_string()).matches(&msg));
-        assert!(!MessagePattern::ByAgent("other".to_string()).matches(&msg));
-    }
+        let msg_id = msg.id;
+        let result = bus.publish(msg).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), msg_id);
 
-    #[test]
-    fn test_message_pattern_by_task_item() {
-        let msg = AgentMessage::new(
-            AgentEndpoint::for_task_item("agent", "t1", "i1"),
-            vec![],
-            MessagePayload::Custom(serde_json::json!("x")),
-        );
-        assert!(MessagePattern::ByTaskItem("t1".to_string(), "i1".to_string()).matches(&msg));
-        assert!(!MessagePattern::ByTaskItem("t1".to_string(), "i2".to_string()).matches(&msg));
-    }
-
-    #[test]
-    fn test_message_pattern_clone() {
-        let pattern = MessagePattern::ByPhase("qa".to_string());
-        let cloned = pattern.clone();
-        match cloned {
-            MessagePattern::ByPhase(p) => assert_eq!(p, "qa"),
-            other => assert!(
-                matches!(other, MessagePattern::ByPhase(_)),
-                "cloned variant should match original"
-            ),
-        }
-    }
-
-    #[test]
-    fn test_message_pattern_custom_clone() {
-        let pattern = MessagePattern::Custom(Arc::new(|msg: &AgentMessage| {
-            msg.sender.agent_id == "qa_agent"
-        }));
-        let cloned = pattern.clone();
-        let msg = AgentMessage::new(
-            AgentEndpoint::agent("qa_agent"),
-            vec![],
-            MessagePayload::Custom(serde_json::json!("x")),
-        );
-
-        assert!(cloned.matches(&msg));
-    }
-
-    #[test]
-    fn test_message_pattern_debug() {
-        let pattern = MessagePattern::ByType(MessageType::Request);
-        let debug = format!("{:?}", pattern);
-        assert!(debug.contains("ByType"));
+        // Message should still be stored even with no receivers
+        let store = bus.message_store.read().await;
+        assert!(store.contains_key(&msg_id));
     }
 }

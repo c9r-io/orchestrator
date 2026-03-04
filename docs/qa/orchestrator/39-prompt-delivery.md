@@ -218,7 +218,7 @@ Verify that `promptDelivery: env` is correctly serialized, deserialized, and rou
 
 ---
 
-## General Scenario: Unit Test Coverage Verification
+## Unit Test Verification
 
 ### Steps
 1. Run unit tests:

@@ -166,17 +166,63 @@ pub fn validate_phase_output(
     })
 }
 
-/// Parse build errors from compiler output (supports rustc/cargo format)
-fn parse_build_errors_from_text(stderr: &str, stdout: &str) -> Vec<BuildError> {
-    let mut errors = Vec::new();
-    let combined = format!("{}\n{}", stderr, stdout);
+/// Line-scanning parser for compiler/test diagnostic output.
+/// Implementors define per-line state transitions; the shared driver handles
+/// combining stderr+stdout and iterating lines.
+trait DiagnosticParser: Default {
+    type Item;
+    fn process_line(&mut self, line: &str);
+    fn finish(self) -> Vec<Self::Item>;
+}
 
+fn parse_diagnostic_output<P: DiagnosticParser>(stderr: &str, stdout: &str) -> Vec<P::Item> {
+    let combined = format!("{}\n{}", stderr, stdout);
+    let mut parser = P::default();
     for line in combined.lines() {
-        // Match rustc error format: "error[E0308]: mismatched types"
-        // or "error: cannot find ..."
-        // with location: " --> src/main.rs:10:5"
+        parser.process_line(line);
+    }
+    parser.finish()
+}
+
+/// Extract file, line, and column from a rustc location line like " --> src/main.rs:10:5"
+fn parse_location_line(line: &str) -> (Option<String>, Option<u32>, Option<u32>) {
+    let trimmed = line.trim_start();
+    if !trimmed.starts_with("--> ") {
+        return (None, None, None);
+    }
+    let location = trimmed.trim_start_matches("--> ");
+    if location.is_empty() {
+        return (None, None, None);
+    }
+    let parts: Vec<&str> = location.rsplitn(3, ':').collect();
+    if parts.len() >= 3 {
+        (
+            Some(parts[2].to_string()),
+            parts[1].parse().ok(),
+            parts[0].parse().ok(),
+        )
+    } else if parts.len() == 2 {
+        (Some(parts[1].to_string()), parts[0].parse().ok(), None)
+    } else {
+        (None, None, None)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// BuildErrorParser
+// ---------------------------------------------------------------------------
+
+#[derive(Default)]
+struct BuildErrorParser {
+    errors: Vec<BuildError>,
+}
+
+impl DiagnosticParser for BuildErrorParser {
+    type Item = BuildError;
+
+    fn process_line(&mut self, line: &str) {
         if line.starts_with("error") {
-            errors.push(BuildError {
+            self.errors.push(BuildError {
                 file: None,
                 line: None,
                 column: None,
@@ -184,7 +230,7 @@ fn parse_build_errors_from_text(stderr: &str, stdout: &str) -> Vec<BuildError> {
                 level: BuildErrorLevel::Error,
             });
         } else if line.starts_with("warning") {
-            errors.push(BuildError {
+            self.errors.push(BuildError {
                 file: None,
                 line: None,
                 column: None,
@@ -192,83 +238,79 @@ fn parse_build_errors_from_text(stderr: &str, stdout: &str) -> Vec<BuildError> {
                 level: BuildErrorLevel::Warning,
             });
         } else if line.trim_start().starts_with("--> ") {
-            // Parse location line: " --> src/main.rs:10:5"
-            if let Some(last_error) = errors.last_mut() {
-                let location = line.trim_start().trim_start_matches("--> ");
-                let parts: Vec<&str> = location.rsplitn(3, ':').collect();
-                if parts.len() >= 3 {
-                    last_error.column = parts[0].parse().ok();
-                    last_error.line = parts[1].parse().ok();
-                    last_error.file = Some(parts[2].to_string());
-                } else if parts.len() == 2 {
-                    last_error.line = parts[0].parse().ok();
-                    last_error.file = Some(parts[1].to_string());
-                }
+            if let Some(last_error) = self.errors.last_mut() {
+                let (file, line_num, col) = parse_location_line(line);
+                last_error.file = file;
+                last_error.line = line_num;
+                last_error.column = col;
             }
         }
     }
 
-    errors
+    fn finish(self) -> Vec<BuildError> {
+        self.errors
+    }
 }
 
-/// Parse test failures from test runner output (supports cargo test format)
-fn parse_test_failures_from_text(stderr: &str, stdout: &str) -> Vec<TestFailure> {
-    let mut failures = Vec::new();
-    let combined = format!("{}\n{}", stdout, stderr);
+fn parse_build_errors_from_text(stderr: &str, stdout: &str) -> Vec<BuildError> {
+    parse_diagnostic_output::<BuildErrorParser>(stderr, stdout)
+}
 
-    let mut in_failure_block = false;
-    let mut current_test: Option<String> = None;
-    let mut current_message = String::new();
+// ---------------------------------------------------------------------------
+// TestFailureParser
+// ---------------------------------------------------------------------------
 
-    for line in combined.lines() {
-        // Match "---- test_name stdout ----" (cargo test failure block)
+#[derive(Default)]
+struct TestFailureParser {
+    failures: Vec<TestFailure>,
+    in_failure_block: bool,
+    current_test: Option<String>,
+    current_message: String,
+}
+
+impl TestFailureParser {
+    fn flush_current(&mut self) {
+        if let Some(test_name) = self.current_test.take() {
+            self.failures.push(TestFailure {
+                test_name,
+                file: None,
+                line: None,
+                message: self.current_message.trim().to_string(),
+                stdout: None,
+            });
+        }
+        self.current_message.clear();
+    }
+}
+
+impl DiagnosticParser for TestFailureParser {
+    type Item = TestFailure;
+
+    fn process_line(&mut self, line: &str) {
         if line.starts_with("---- ") && line.ends_with(" stdout ----") {
-            // Save previous failure if any
-            if let Some(test_name) = current_test.take() {
-                failures.push(TestFailure {
-                    test_name,
-                    file: None,
-                    line: None,
-                    message: current_message.trim().to_string(),
-                    stdout: None,
-                });
-            }
+            self.flush_current();
             let name = line
                 .trim_start_matches("---- ")
                 .trim_end_matches(" stdout ----");
-            current_test = Some(name.to_string());
-            current_message.clear();
-            in_failure_block = true;
-        } else if in_failure_block {
+            self.current_test = Some(name.to_string());
+            self.in_failure_block = true;
+        } else if self.in_failure_block {
             if line.starts_with("---- ") || line.starts_with("failures:") {
-                // Save current and reset
-                if let Some(test_name) = current_test.take() {
-                    failures.push(TestFailure {
-                        test_name,
-                        file: None,
-                        line: None,
-                        message: current_message.trim().to_string(),
-                        stdout: None,
-                    });
-                }
-                current_message.clear();
-                in_failure_block = false;
+                self.flush_current();
+                self.in_failure_block = false;
             } else {
-                current_message.push_str(line);
-                current_message.push('\n');
+                self.current_message.push_str(line);
+                self.current_message.push('\n');
             }
-        }
-        // Also catch "test name ... FAILED" lines
-        else if line.contains("... FAILED") && line.starts_with("test ") {
+        } else if line.contains("... FAILED") && line.starts_with("test ") {
             let test_name = line
                 .trim_start_matches("test ")
                 .split(" ...")
                 .next()
                 .unwrap_or("unknown")
                 .to_string();
-            // Only add if not already captured in failure block
-            if !failures.iter().any(|f| f.test_name == test_name) {
-                failures.push(TestFailure {
+            if !self.failures.iter().any(|f| f.test_name == test_name) {
+                self.failures.push(TestFailure {
                     test_name,
                     file: None,
                     line: None,
@@ -279,18 +321,14 @@ fn parse_test_failures_from_text(stderr: &str, stdout: &str) -> Vec<TestFailure>
         }
     }
 
-    // Save last failure block
-    if let Some(test_name) = current_test.take() {
-        failures.push(TestFailure {
-            test_name,
-            file: None,
-            line: None,
-            message: current_message.trim().to_string(),
-            stdout: None,
-        });
+    fn finish(mut self) -> Vec<TestFailure> {
+        self.flush_current();
+        self.failures
     }
+}
 
-    failures
+fn parse_test_failures_from_text(stderr: &str, stdout: &str) -> Vec<TestFailure> {
+    parse_diagnostic_output::<TestFailureParser>(stderr, stdout)
 }
 
 #[cfg(test)]
@@ -484,5 +522,149 @@ warning: unused variable
             outcome.error.as_deref(),
             Some("provider authentication failed")
         );
+    }
+
+    #[test]
+    fn diagnostic_parser_trait_build_errors_direct() {
+        let errors = parse_diagnostic_output::<BuildErrorParser>(
+            "error[E0308]: mismatch\n --> src/main.rs:10:5",
+            "",
+        );
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].file.as_deref(), Some("src/main.rs"));
+        assert_eq!(errors[0].line, Some(10));
+    }
+
+    #[test]
+    fn diagnostic_parser_trait_test_failures_direct() {
+        let failures = parse_diagnostic_output::<TestFailureParser>(
+            "",
+            "---- foo stdout ----\npanicked\nfailures:\n",
+        );
+        assert_eq!(failures.len(), 1);
+        assert_eq!(failures[0].test_name, "foo");
+        assert_eq!(failures[0].message, "panicked");
+    }
+
+    #[test]
+    fn diagnostic_parser_combine_order_consistent() {
+        // Both parsers now use stderr\nstdout order via parse_diagnostic_output.
+        // Build errors in stderr should be found.
+        let errors = parse_build_errors_from_text("error: in stderr", "");
+        assert_eq!(errors.len(), 1);
+        // Test failures in stdout should be found.
+        let failures = parse_test_failures_from_text("", "test bar ... FAILED");
+        assert_eq!(failures.len(), 1);
+        assert_eq!(failures[0].test_name, "bar");
+    }
+
+    #[test]
+    fn parse_location_line_full() {
+        let (file, line, col) = parse_location_line(" --> src/main.rs:10:5");
+        assert_eq!(file.as_deref(), Some("src/main.rs"));
+        assert_eq!(line, Some(10));
+        assert_eq!(col, Some(5));
+    }
+
+    #[test]
+    fn parse_location_line_no_column() {
+        let (file, line, col) = parse_location_line(" --> src/lib.rs:3");
+        assert_eq!(file.as_deref(), Some("src/lib.rs"));
+        assert_eq!(line, Some(3));
+        assert_eq!(col, None);
+    }
+
+    #[test]
+    fn parse_location_line_not_a_location() {
+        let (file, line, col) = parse_location_line("not a location line");
+        assert!(file.is_none());
+        assert!(line.is_none());
+        assert!(col.is_none());
+    }
+
+    #[test]
+    fn parse_location_line_empty_after_arrow() {
+        let (file, line, col) = parse_location_line(" --> ");
+        assert!(file.is_none());
+        assert!(line.is_none());
+        assert!(col.is_none());
+    }
+
+    #[test]
+    fn test_failure_parser_combine_order() {
+        // The refactored code combines as stderr\nstdout (stderr first).
+        // Test failures typically appear in stdout. Verify they are still found
+        // when stderr has unrelated content prepended.
+        let stderr = "Compiling my_crate v0.1.0\nFinished test target";
+        let stdout = "\
+---- foo::bar stdout ----\n\
+thread 'foo::bar' panicked at 'assert_eq failed'\n\
+\n\
+failures:\n\
+    foo::bar\n";
+        let failures = parse_test_failures_from_text(stderr, stdout);
+        assert_eq!(failures.len(), 1, "should find exactly one failure");
+        assert_eq!(failures[0].test_name, "foo::bar");
+        assert!(
+            failures[0].message.contains("panicked"),
+            "message should contain panic text"
+        );
+    }
+
+    #[test]
+    fn build_errors_multiple_interleaved() {
+        // Multiple errors and warnings interleaved with location lines.
+        let stderr = "\
+error[E0308]: mismatched types\n\
+ --> src/main.rs:10:5\n\
+warning: unused variable `x`\n\
+ --> src/lib.rs:3:9\n\
+error[E0433]: unresolved import\n\
+ --> src/util.rs:1:5";
+        let errors = parse_build_errors_from_text(stderr, "");
+        assert_eq!(errors.len(), 3);
+        // First: error with location
+        assert_eq!(errors[0].level, BuildErrorLevel::Error);
+        assert_eq!(errors[0].file.as_deref(), Some("src/main.rs"));
+        assert_eq!(errors[0].line, Some(10));
+        assert_eq!(errors[0].column, Some(5));
+        // Second: warning with location
+        assert_eq!(errors[1].level, BuildErrorLevel::Warning);
+        assert_eq!(errors[1].file.as_deref(), Some("src/lib.rs"));
+        assert_eq!(errors[1].line, Some(3));
+        assert_eq!(errors[1].column, Some(9));
+        // Third: error with location
+        assert_eq!(errors[2].level, BuildErrorLevel::Error);
+        assert_eq!(errors[2].file.as_deref(), Some("src/util.rs"));
+        assert_eq!(errors[2].line, Some(1));
+        assert_eq!(errors[2].column, Some(5));
+    }
+
+    #[test]
+    fn test_failure_parser_last_block_no_delimiter() {
+        // A failure block at the end of output with no trailing "failures:" line.
+        // The finish() method should flush the in-progress block.
+        let stdout = "\
+---- my_mod::test_alpha stdout ----\n\
+thread 'my_mod::test_alpha' panicked at 'value was None'\n\
+note: run with `RUST_BACKTRACE=1`";
+        let failures = parse_test_failures_from_text("", stdout);
+        assert_eq!(failures.len(), 1);
+        assert_eq!(failures[0].test_name, "my_mod::test_alpha");
+        assert!(
+            failures[0].message.contains("panicked"),
+            "should capture the panic message"
+        );
+    }
+
+    #[test]
+    fn parse_location_line_windows_path() {
+        // Windows-style paths use backslashes. The rsplitn(':') approach splits
+        // from the right, so `C:\src\main.rs:10:5` should parse with the full
+        // path preserved (everything left of the last two colons).
+        let (file, line, col) = parse_location_line(r" --> C:\src\main.rs:10:5");
+        assert_eq!(file.as_deref(), Some(r"C:\src\main.rs"));
+        assert_eq!(line, Some(10));
+        assert_eq!(col, Some(5));
     }
 }
