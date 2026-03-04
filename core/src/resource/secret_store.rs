@@ -25,11 +25,14 @@ impl Resource for SecretStoreResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+        use crate::crd::projection::{CrdProjectable, SecretStoreProjection};
         let incoming = EnvStoreConfig {
             data: self.spec.data.clone(),
             sensitive: true,
         };
-        super::apply_to_map(&mut config.env_stores, self.name(), incoming)
+        let proj = SecretStoreProjection(incoming);
+        let spec_value = proj.to_cr_spec();
+        super::apply_to_store(config, "SecretStore", self.name(), &self.metadata, spec_value)
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -56,12 +59,11 @@ impl Resource for SecretStoreResource {
     }
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
-        config
-            .env_stores
-            .get(name)
-            .is_some_and(|s| s.sensitive)
-            .then(|| config.env_stores.remove(name))
-            .is_some()
+        // Only delete if it's a sensitive store
+        match config.resource_store.get("SecretStore", name) {
+            Some(_) => super::delete_from_store(config, "SecretStore", name),
+            None => false,
+        }
     }
 }
 

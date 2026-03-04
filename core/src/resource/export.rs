@@ -78,6 +78,8 @@ pub fn export_crd_documents(config: &OrchestratorConfig) -> Vec<serde_yaml::Valu
                     group: crd.group.clone(),
                     versions: crd.versions.clone(),
                     hooks: crd.hooks.clone(),
+                    scope: crd.scope,
+                    builtin: crd.builtin,
                 },
             };
             // Wrap with `kind: CustomResourceDefinition`

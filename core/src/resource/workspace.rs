@@ -31,16 +31,10 @@ impl Resource for WorkspaceResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+        use crate::crd::projection::CrdProjectable;
         let incoming = workspace_spec_to_config(&self.spec);
-        let result = super::apply_to_map(&mut config.workspaces, self.name(), incoming);
-        config.resource_meta.workspaces.insert(
-            self.name().to_string(),
-            crate::config::ResourceStoredMetadata {
-                labels: self.metadata.labels.clone(),
-                annotations: self.metadata.annotations.clone(),
-            },
-        );
-        result
+        let spec_value = incoming.to_cr_spec();
+        super::apply_to_store(config, "Workspace", self.name(), &self.metadata, spec_value)
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -53,25 +47,13 @@ impl Resource for WorkspaceResource {
 
     fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
         config.workspaces.get(name).map(|workspace| Self {
-            metadata: match config.resource_meta.workspaces.get(name) {
-                Some(stored) => super::metadata_from_parts(
-                    name,
-                    None,
-                    stored.labels.clone(),
-                    stored.annotations.clone(),
-                ),
-                None => super::metadata_with_name(name),
-            },
+            metadata: super::metadata_from_store(config, "Workspace", name),
             spec: workspace_config_to_spec(workspace),
         })
     }
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
-        let removed = config.workspaces.remove(name).is_some();
-        if removed {
-            config.resource_meta.workspaces.remove(name);
-        }
-        removed
+        super::delete_from_store(config, "Workspace", name)
     }
 }
 
@@ -94,7 +76,7 @@ pub(super) fn build_workspace(resource: OrchestratorResource) -> Result<Register
     }
 }
 
-pub(super) fn workspace_spec_to_config(spec: &WorkspaceSpec) -> WorkspaceConfig {
+pub(crate) fn workspace_spec_to_config(spec: &WorkspaceSpec) -> WorkspaceConfig {
     WorkspaceConfig {
         root_path: spec.root_path.clone(),
         qa_targets: spec.qa_targets.clone(),
@@ -103,7 +85,7 @@ pub(super) fn workspace_spec_to_config(spec: &WorkspaceSpec) -> WorkspaceConfig 
     }
 }
 
-pub(super) fn workspace_config_to_spec(config: &WorkspaceConfig) -> WorkspaceSpec {
+pub(crate) fn workspace_config_to_spec(config: &WorkspaceConfig) -> WorkspaceSpec {
     WorkspaceSpec {
         root_path: config.root_path.clone(),
         qa_targets: config.qa_targets.clone(),
@@ -218,10 +200,10 @@ mod tests {
         };
         let rr = dispatch_resource(resource).expect("dispatch workspace resource");
         rr.apply(&mut config);
-        assert!(config.resource_meta.workspaces.contains_key("meta-ws"));
+        assert!(config.resource_store.get("Workspace", "meta-ws").is_some());
 
         WorkspaceResource::delete_from(&mut config, "meta-ws");
-        assert!(!config.resource_meta.workspaces.contains_key("meta-ws"));
+        assert!(config.resource_store.get("Workspace", "meta-ws").is_none());
     }
 
     #[test]
@@ -289,13 +271,12 @@ mod tests {
         let rr = dispatch_resource(resource).expect("dispatch workspace resource");
         rr.apply(&mut config);
 
-        let stored = config
-            .resource_meta
-            .workspaces
-            .get("store-meta-ws")
-            .expect("stored workspace metadata should exist");
+        let cr = config
+            .resource_store
+            .get("Workspace", "store-meta-ws")
+            .expect("stored workspace CR should exist");
         assert_eq!(
-            stored
+            cr.metadata
                 .labels
                 .as_ref()
                 .expect("labels should exist")
@@ -304,7 +285,7 @@ mod tests {
             "staging"
         );
         assert_eq!(
-            stored
+            cr.metadata
                 .annotations
                 .as_ref()
                 .expect("annotations should exist")

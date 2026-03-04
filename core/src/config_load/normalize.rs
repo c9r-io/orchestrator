@@ -164,7 +164,27 @@ pub(crate) fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorCo
     for workflow in config.workflows.values_mut() {
         normalize_workflow_config(workflow);
     }
+
+    // Ensure builtin CRD definitions are registered
+    ensure_builtin_crds(&mut config);
+
+    // Always rebuild the resource store from the (now-normalized) legacy fields.
+    // Legacy fields are the source of truth during normalization; the store is
+    // a derived index that the CRD pipeline can query.
+    config.resource_store = Default::default();
+    crate::crd::writeback::sync_legacy_to_store(&mut config);
+
     config
+}
+
+/// Ensure all 9 builtin CRD definitions exist in the config.
+fn ensure_builtin_crds(config: &mut OrchestratorConfig) {
+    for crd in crate::crd::builtin_defs::builtin_crd_definitions() {
+        config
+            .custom_resource_definitions
+            .entry(crd.kind.clone())
+            .or_insert(crd);
+    }
 }
 
 #[cfg(test)]
@@ -849,5 +869,114 @@ mod tests {
             "required_capability must appear in JSON: {}",
             json
         );
+    }
+
+    // ── CRD pipeline tests in normalize_config ──────────────────────
+
+    #[test]
+    fn normalize_config_populates_builtin_crds() {
+        let config = OrchestratorConfig {
+            workflows: HashMap::new(),
+            ..OrchestratorConfig::default()
+        };
+        let normalized = normalize_config(config);
+        let crds = &normalized.custom_resource_definitions;
+        for kind in &[
+            "Agent", "Workflow", "Workspace", "Project", "Defaults",
+            "RuntimePolicy", "StepTemplate", "EnvStore", "SecretStore",
+        ] {
+            assert!(crds.contains_key(*kind), "missing builtin CRD: {}", kind);
+            assert!(crds[*kind].builtin, "{} should be marked builtin", kind);
+        }
+    }
+
+    #[test]
+    fn normalize_config_does_not_overwrite_user_crds() {
+        let mut config = OrchestratorConfig::default();
+        // Insert a user-defined CRD with a non-builtin kind
+        let user_crd = crate::crd::types::CustomResourceDefinition {
+            kind: "MyCrd".to_string(),
+            plural: "mycrds".to_string(),
+            short_names: vec![],
+            group: "test.dev".to_string(),
+            scope: crate::crd::scope::CrdScope::Cluster,
+            builtin: false,
+            versions: vec![],
+            hooks: Default::default(),
+        };
+        config.custom_resource_definitions.insert("MyCrd".to_string(), user_crd);
+
+        let normalized = normalize_config(config);
+        assert!(normalized.custom_resource_definitions.contains_key("MyCrd"));
+        assert!(!normalized.custom_resource_definitions["MyCrd"].builtin);
+    }
+
+    #[test]
+    fn normalize_config_rebuilds_resource_store_from_legacy() {
+        let mut config = OrchestratorConfig::default();
+        config.agents.insert(
+            "norm-ag".to_string(),
+            crate::config::AgentConfig {
+                command: "echo test".to_string(),
+                ..Default::default()
+            },
+        );
+        let normalized = normalize_config(config);
+
+        assert!(
+            normalized.resource_store.get("Agent", "norm-ag").is_some(),
+            "store should be populated from legacy agents"
+        );
+        assert!(
+            normalized.resource_store.get("Defaults", "defaults").is_some(),
+            "singletons should also be in the store"
+        );
+    }
+
+    #[test]
+    fn normalize_config_clears_stale_store() {
+        let mut config = OrchestratorConfig::default();
+        // Manually put a stale entry in the store
+        let stale_cr = crate::crd::types::CustomResource {
+            kind: "Agent".to_string(),
+            api_version: "orchestrator.dev/v2".to_string(),
+            metadata: crate::cli_types::ResourceMetadata {
+                name: "stale-agent".to_string(),
+                project: None,
+                labels: None,
+                annotations: None,
+            },
+            spec: serde_json::json!({"command": "echo stale"}),
+            generation: 1,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        config.resource_store.put(stale_cr);
+        assert!(config.resource_store.get("Agent", "stale-agent").is_some());
+
+        // Legacy does NOT have "stale-agent"
+        let normalized = normalize_config(config);
+        assert!(
+            normalized.resource_store.get("Agent", "stale-agent").is_none(),
+            "stale store entries should be cleared during normalize"
+        );
+    }
+
+    #[test]
+    fn normalize_config_idempotent_double_call() {
+        let mut config = OrchestratorConfig::default();
+        config.agents.insert(
+            "idem-ag".to_string(),
+            crate::config::AgentConfig {
+                command: "echo test".to_string(),
+                ..Default::default()
+            },
+        );
+        let first = normalize_config(config);
+        let second = normalize_config(first);
+
+        assert!(second.agents.contains_key("idem-ag"));
+        assert!(second.resource_store.get("Agent", "idem-ag").is_some());
+        assert_eq!(second.custom_resource_definitions.len(), 9);
     }
 }

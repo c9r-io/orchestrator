@@ -1,8 +1,13 @@
+pub mod builtin_defs;
 pub mod hooks;
+pub mod projection;
 pub mod resolve;
 pub mod schema;
+pub mod scope;
+pub mod store;
 pub mod types;
 pub mod validate;
+pub mod writeback;
 
 use crate::cli_types::OrchestratorResource;
 use crate::config::OrchestratorConfig;
@@ -189,6 +194,8 @@ mod tests {
                     cel_rules: vec![],
                 }],
                 hooks: CrdHooks::default(),
+                scope: crate::crd::scope::CrdScope::default(),
+                builtin: false,
             },
         }
     }

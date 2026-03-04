@@ -1,5 +1,4 @@
 use crate::cli::{OutputFormat, TaskCommands, WorkspaceCommands};
-use crate::cli_types::ResourceMetadata;
 use crate::config_load::{persist_config_and_reload, read_active_config};
 use anyhow::{Context, Result};
 use serde_json::json;
@@ -135,23 +134,8 @@ impl CliHandler {
                     .workspaces
                     .iter()
                     .filter_map(|(name, ws)| {
-                        let metadata = ResourceMetadata {
-                            name: name.clone(),
-                            project: None,
-                            labels: active
-                                .config
-                                .resource_meta
-                                .workspaces
-                                .get(name)
-                                .and_then(|m| m.labels.clone()),
-                            annotations: active
-                                .config
-                                .resource_meta
-                                .workspaces
-                                .get(name)
-                                .and_then(|m| m.annotations.clone()),
-                        };
-                        if !matches_selector(&metadata.labels, &selector_terms) {
+                        let meta = crate::resource::metadata_from_store(&active.config, "Workspace", name);
+                        if !matches_selector(&meta.labels, &selector_terms) {
                             return None;
                         }
                         Some(json!({
@@ -159,8 +143,8 @@ impl CliHandler {
                             "root_path": ws.root_path,
                             "qa_targets": ws.qa_targets,
                             "ticket_dir": ws.ticket_dir,
-                            "labels": metadata.labels,
-                            "annotations": metadata.annotations,
+                            "labels": meta.labels,
+                            "annotations": meta.annotations,
                         }))
                     })
                     .collect();
@@ -184,30 +168,15 @@ impl CliHandler {
                     .agents
                     .iter()
                     .filter_map(|(name, agent)| {
-                        let metadata = ResourceMetadata {
-                            name: name.clone(),
-                            project: None,
-                            labels: active
-                                .config
-                                .resource_meta
-                                .agents
-                                .get(name)
-                                .and_then(|m| m.labels.clone()),
-                            annotations: active
-                                .config
-                                .resource_meta
-                                .agents
-                                .get(name)
-                                .and_then(|m| m.annotations.clone()),
-                        };
-                        if !matches_selector(&metadata.labels, &selector_terms) {
+                        let meta = crate::resource::metadata_from_store(&active.config, "Agent", name);
+                        if !matches_selector(&meta.labels, &selector_terms) {
                             return None;
                         }
                         Some(json!({
                             "name": name,
                             "capabilities": agent.capabilities,
-                            "labels": metadata.labels,
-                            "annotations": metadata.annotations,
+                            "labels": meta.labels,
+                            "annotations": meta.annotations,
                         }))
                     })
                     .collect();
@@ -240,23 +209,8 @@ impl CliHandler {
                     .workflows
                     .iter()
                     .filter_map(|(name, workflow)| {
-                        let metadata = ResourceMetadata {
-                            name: name.clone(),
-                            project: None,
-                            labels: active
-                                .config
-                                .resource_meta
-                                .workflows
-                                .get(name)
-                                .and_then(|m| m.labels.clone()),
-                            annotations: active
-                                .config
-                                .resource_meta
-                                .workflows
-                                .get(name)
-                                .and_then(|m| m.annotations.clone()),
-                        };
-                        if !matches_selector(&metadata.labels, &selector_terms) {
+                        let meta = crate::resource::metadata_from_store(&active.config, "Workflow", name);
+                        if !matches_selector(&meta.labels, &selector_terms) {
                             return None;
                         }
                         let steps: Vec<String> =
@@ -264,8 +218,8 @@ impl CliHandler {
                         Some(json!({
                             "name": name,
                             "steps": steps,
-                            "labels": metadata.labels,
-                            "annotations": metadata.annotations,
+                            "labels": meta.labels,
+                            "annotations": meta.annotations,
                         }))
                     })
                     .collect();

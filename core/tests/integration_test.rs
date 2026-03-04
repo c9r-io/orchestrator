@@ -98,6 +98,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
         resource_meta: ResourceMetadataStore::default(),
         custom_resource_definitions: HashMap::new(),
         custom_resources: HashMap::new(),
+        resource_store: agent_orchestrator::crd::store::ResourceStore::default(),
     }
 }
 
@@ -389,17 +390,16 @@ spec:
     let registered = dispatch_resource(only(resources)).expect("dispatch labeled workspace");
     assert_eq!(registered.apply(&mut config), ApplyResult::Created);
 
-    let stored = config
-        .resource_meta
-        .workspaces
-        .get("labeled-ws")
+    let cr = config
+        .resource_store
+        .get("Workspace", "labeled-ws")
         .expect("metadata should be stored");
     assert_eq!(
-        stored.labels.as_ref().and_then(|m| m.get("env")),
+        cr.metadata.labels.as_ref().and_then(|m| m.get("env")),
         Some(&"test".to_string())
     );
     assert_eq!(
-        stored.annotations.as_ref().and_then(|m| m.get("owner")),
+        cr.metadata.annotations.as_ref().and_then(|m| m.get("owner")),
         Some(&"platform".to_string())
     );
 }
@@ -741,6 +741,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
         resource_meta: ResourceMetadataStore::default(),
         custom_resource_definitions: HashMap::new(),
         custom_resources: HashMap::new(),
+        resource_store: agent_orchestrator::crd::store::ResourceStore::default(),
     }
 }
 

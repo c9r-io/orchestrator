@@ -33,16 +33,10 @@ impl Resource for AgentResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+        use crate::crd::projection::CrdProjectable;
         let incoming = agent_spec_to_config(&self.spec);
-        let result = super::apply_to_map(&mut config.agents, self.name(), incoming);
-        config.resource_meta.agents.insert(
-            self.name().to_string(),
-            crate::config::ResourceStoredMetadata {
-                labels: self.metadata.labels.clone(),
-                annotations: self.metadata.annotations.clone(),
-            },
-        );
-        result
+        let spec_value = incoming.to_cr_spec();
+        super::apply_to_store(config, "Agent", self.name(), &self.metadata, spec_value)
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -55,25 +49,13 @@ impl Resource for AgentResource {
 
     fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
         config.agents.get(name).map(|agent| Self {
-            metadata: match config.resource_meta.agents.get(name) {
-                Some(stored) => super::metadata_from_parts(
-                    name,
-                    None,
-                    stored.labels.clone(),
-                    stored.annotations.clone(),
-                ),
-                None => super::metadata_with_name(name),
-            },
+            metadata: super::metadata_from_store(config, "Agent", name),
             spec: agent_config_to_spec(agent),
         })
     }
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
-        let removed = config.agents.remove(name).is_some();
-        if removed {
-            config.resource_meta.agents.remove(name);
-        }
-        removed
+        super::delete_from_store(config, "Agent", name)
     }
 }
 
@@ -96,7 +78,7 @@ pub(super) fn build_agent(resource: OrchestratorResource) -> Result<RegisteredRe
     }
 }
 
-pub(super) fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
+pub(crate) fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
     let capabilities = spec.capabilities.clone().unwrap_or_default();
 
     AgentConfig {
@@ -121,7 +103,7 @@ pub(super) fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
     }
 }
 
-pub(super) fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
+pub(crate) fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
     AgentSpec {
         command: config.command.clone(),
         capabilities: if config.capabilities.is_empty() {
@@ -238,10 +220,10 @@ mod tests {
         let ag = dispatch_resource(agent_manifest("meta-ag", "glmcode -p \"{prompt}\""))
             .expect("dispatch agent resource");
         ag.apply(&mut config);
-        assert!(config.resource_meta.agents.contains_key("meta-ag"));
+        assert!(config.resource_store.get("Agent", "meta-ag").is_some());
 
         AgentResource::delete_from(&mut config, "meta-ag");
-        assert!(!config.resource_meta.agents.contains_key("meta-ag"));
+        assert!(config.resource_store.get("Agent", "meta-ag").is_none());
     }
 
     #[test]
@@ -355,13 +337,12 @@ mod tests {
         let rr = dispatch_resource(resource).expect("dispatch agent resource");
         rr.apply(&mut config);
 
-        let stored = config
-            .resource_meta
-            .agents
-            .get("store-meta-ag")
-            .expect("stored agent metadata should exist");
+        let cr = config
+            .resource_store
+            .get("Agent", "store-meta-ag")
+            .expect("stored agent CR should exist");
         assert_eq!(
-            stored
+            cr.metadata
                 .labels
                 .as_ref()
                 .expect("labels should exist")

@@ -24,28 +24,15 @@ impl Resource for ProjectResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+        use crate::crd::projection::CrdProjectable;
         let incoming = ProjectConfig {
             description: self.spec.description.clone(),
             workspaces: std::collections::HashMap::new(),
             agents: std::collections::HashMap::new(),
             workflows: std::collections::HashMap::new(),
         };
-        match config.projects.get(self.name()) {
-            None => {
-                config.projects.insert(self.name().to_string(), incoming);
-                ApplyResult::Created
-            }
-            Some(existing) => {
-                if existing.description == incoming.description {
-                    ApplyResult::Unchanged
-                } else {
-                    let mut next = existing.clone();
-                    next.description = incoming.description;
-                    config.projects.insert(self.name().to_string(), next);
-                    ApplyResult::Configured
-                }
-            }
-        }
+        let spec_value = incoming.to_cr_spec();
+        super::apply_to_store(config, "Project", self.name(), &self.metadata, spec_value)
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -66,7 +53,7 @@ impl Resource for ProjectResource {
     }
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
-        config.projects.remove(name).is_some()
+        super::delete_from_store(config, "Project", name)
     }
 }
 

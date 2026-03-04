@@ -28,11 +28,13 @@ impl Resource for StepTemplateResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+        use crate::crd::projection::CrdProjectable;
         let incoming = StepTemplateConfig {
             prompt: self.spec.prompt.clone(),
             description: self.spec.description.clone(),
         };
-        super::apply_to_map(&mut config.step_templates, self.name(), incoming)
+        let spec_value = incoming.to_cr_spec();
+        super::apply_to_store(config, "StepTemplate", self.name(), &self.metadata, spec_value)
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -54,7 +56,7 @@ impl Resource for StepTemplateResource {
     }
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
-        config.step_templates.remove(name).is_some()
+        super::delete_from_store(config, "StepTemplate", name)
     }
 }
 

@@ -41,18 +41,17 @@ impl Resource for RuntimePolicyResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+        use crate::crd::projection::{CrdProjectable, RuntimePolicyProjection};
         let incoming_runner = runner_spec_to_config(&self.spec.runner);
         let incoming_resume = ResumeConfig {
             auto: self.spec.resume.auto,
         };
-        if super::serializes_equal(&config.runner, &incoming_runner)
-            && super::serializes_equal(&config.resume, &incoming_resume)
-        {
-            return ApplyResult::Unchanged;
-        }
-        config.runner = incoming_runner;
-        config.resume = incoming_resume;
-        ApplyResult::Configured
+        let rp = RuntimePolicyProjection {
+            runner: incoming_runner,
+            resume: incoming_resume,
+        };
+        let spec_value = rp.to_cr_spec();
+        super::apply_to_store(config, "RuntimePolicy", "runtime", &self.metadata, spec_value)
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -101,7 +100,7 @@ pub(super) fn build_runtime_policy(resource: OrchestratorResource) -> Result<Reg
     }
 }
 
-pub(super) fn runner_spec_to_config(spec: &RunnerSpec) -> RunnerConfig {
+pub(crate) fn runner_spec_to_config(spec: &RunnerSpec) -> RunnerConfig {
     RunnerConfig {
         shell: spec.shell.clone(),
         shell_arg: spec.shell_arg.clone(),
@@ -120,7 +119,7 @@ pub(super) fn runner_spec_to_config(spec: &RunnerSpec) -> RunnerConfig {
     }
 }
 
-pub(super) fn runner_config_to_spec(config: &RunnerConfig) -> RunnerSpec {
+pub(crate) fn runner_config_to_spec(config: &RunnerConfig) -> RunnerSpec {
     RunnerSpec {
         shell: config.shell.clone(),
         shell_arg: config.shell_arg.clone(),

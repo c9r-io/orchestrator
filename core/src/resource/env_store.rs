@@ -25,11 +25,13 @@ impl Resource for EnvStoreResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+        use crate::crd::projection::CrdProjectable;
         let incoming = EnvStoreConfig {
             data: self.spec.data.clone(),
             sensitive: false,
         };
-        super::apply_to_map(&mut config.env_stores, self.name(), incoming)
+        let spec_value = incoming.to_cr_spec();
+        super::apply_to_store(config, "EnvStore", self.name(), &self.metadata, spec_value)
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -56,12 +58,11 @@ impl Resource for EnvStoreResource {
     }
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
-        config
-            .env_stores
-            .get(name)
-            .is_some_and(|s| !s.sensitive)
-            .then(|| config.env_stores.remove(name))
-            .is_some()
+        // Only delete if it's a non-sensitive store
+        match config.resource_store.get("EnvStore", name) {
+            Some(_) => super::delete_from_store(config, "EnvStore", name),
+            None => false,
+        }
     }
 }
 

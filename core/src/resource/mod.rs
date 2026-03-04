@@ -7,17 +7,17 @@ pub(crate) const API_VERSION: &str = "orchestrator.dev/v2";
 
 // ── Submodules ────────────────────────────────────────────────────────────────
 
-mod agent;
+pub(crate) mod agent;
 mod defaults;
 mod env_store;
 mod export;
 mod parse;
 mod project;
-mod runtime_policy;
+pub(crate) mod runtime_policy;
 mod secret_store;
 mod step_template;
-mod workflow;
-mod workspace;
+pub(crate) mod workflow;
+pub(crate) mod workspace;
 
 // ── Re-exports ────────────────────────────────────────────────────────────────
 
@@ -158,6 +158,7 @@ pub(crate) fn metadata_with_name(name: &str) -> ResourceMetadata {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn metadata_from_parts(
     name: &str,
     project: Option<String>,
@@ -169,6 +170,18 @@ pub(crate) fn metadata_from_parts(
         project,
         labels,
         annotations,
+    }
+}
+
+/// Read resource metadata from the ResourceStore, falling back to name-only.
+pub fn metadata_from_store(
+    config: &OrchestratorConfig,
+    kind: &str,
+    name: &str,
+) -> ResourceMetadata {
+    match config.resource_store.get(kind, name) {
+        Some(cr) => cr.metadata.clone(),
+        None => metadata_with_name(name),
     }
 }
 
@@ -209,6 +222,68 @@ pub(crate) fn apply_to_map<T: Clone + Serialize>(
 
 pub(crate) fn serializes_equal<T: Serialize>(left: &T, right: &T) -> bool {
     serde_json::to_value(left).ok() == serde_json::to_value(right).ok()
+}
+
+/// Apply a builtin resource to the unified ResourceStore, then write back
+/// the single affected entry to the legacy config field.
+pub(crate) fn apply_to_store(
+    config: &mut OrchestratorConfig,
+    kind: &str,
+    name: &str,
+    metadata: &ResourceMetadata,
+    spec: serde_json::Value,
+) -> ApplyResult {
+    use crate::crd::types::CustomResource;
+
+    let now = chrono::Utc::now().to_rfc3339();
+
+    // If the store doesn't have this entry yet but the legacy field does,
+    // seed the store from the legacy field so that put() can correctly
+    // detect Unchanged vs Configured (instead of always returning Created).
+    if config.resource_store.get(kind, name).is_none() {
+        crate::crd::writeback::seed_store_from_legacy(config, kind, name, &now);
+    }
+
+    // Preserve generation and created_at from existing CR if updating
+    let (generation, created_at) = match config.resource_store.get(kind, name) {
+        Some(existing) => (existing.generation + 1, existing.created_at.clone()),
+        None => (1, now.clone()),
+    };
+
+    let cr = CustomResource {
+        kind: kind.to_string(),
+        api_version: "orchestrator.dev/v2".to_string(),
+        metadata: metadata.clone(),
+        spec,
+        generation,
+        created_at,
+        updated_at: now,
+    };
+    let result = config.resource_store.put(cr);
+    // Targeted writeback: only update the specific entry, not the whole map
+    crate::crd::writeback::write_back_single(config, kind, name);
+    result
+}
+
+/// Delete a builtin resource from the unified ResourceStore, then remove
+/// the single affected entry from the legacy config field.
+pub(crate) fn delete_from_store(
+    config: &mut OrchestratorConfig,
+    kind: &str,
+    name: &str,
+) -> bool {
+    // If the store doesn't have this entry yet but the legacy field does,
+    // seed it first so that remove() returns Some and we actually delete it.
+    if config.resource_store.get(kind, name).is_none() {
+        let now = chrono::Utc::now().to_rfc3339();
+        crate::crd::writeback::seed_store_from_legacy(config, kind, name, &now);
+    }
+
+    let removed = config.resource_store.remove(kind, name).is_some();
+    if removed {
+        crate::crd::writeback::remove_from_legacy(config, kind, name);
+    }
+    removed
 }
 
 // ── Project-scoped apply ──────────────────────────────────────────────────────
@@ -361,25 +436,26 @@ impl Resource for RegisteredResource {
     }
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
-        if config.workspaces.remove(name).is_some() {
-            config.resource_meta.workspaces.remove(name);
+        // Try each builtin kind in turn
+        if WorkspaceResource::delete_from(config, name) {
             return true;
         }
-        if config.agents.remove(name).is_some() {
-            config.resource_meta.agents.remove(name);
+        if AgentResource::delete_from(config, name) {
             return true;
         }
-        if config.workflows.remove(name).is_some() {
-            config.resource_meta.workflows.remove(name);
+        if WorkflowResource::delete_from(config, name) {
             return true;
         }
-        if config.projects.remove(name).is_some() {
+        if ProjectResource::delete_from(config, name) {
             return true;
         }
-        if config.step_templates.remove(name).is_some() {
+        if StepTemplateResource::delete_from(config, name) {
             return true;
         }
-        if config.env_stores.remove(name).is_some() {
+        if EnvStoreResource::delete_from(config, name) {
+            return true;
+        }
+        if SecretStoreResource::delete_from(config, name) {
             return true;
         }
         false
@@ -773,6 +849,199 @@ mod tests {
         assert!(yaml.contains("kind: Workspace"));
         assert!(yaml.contains("name: yaml-roundtrip"));
         assert!(yaml.contains("root_path: workspace/yaml-roundtrip"));
+    }
+
+    // ── apply_to_store ──────────────────────────────────────────────
+
+    #[test]
+    fn apply_to_store_returns_created_for_new_resource() {
+        use crate::crd::projection::CrdProjectable;
+        let mut config = OrchestratorConfig::default();
+        let ws = crate::config::WorkspaceConfig {
+            root_path: "/new".to_string(),
+            qa_targets: vec![],
+            ticket_dir: "t".to_string(),
+            self_referential: false,
+        };
+        let meta = metadata_with_name("ws-new");
+        let result = apply_to_store(&mut config, "Workspace", "ws-new", &meta, ws.to_cr_spec());
+        assert_eq!(result, ApplyResult::Created);
+        assert!(config.resource_store.get("Workspace", "ws-new").is_some());
+        assert!(config.workspaces.contains_key("ws-new"), "legacy field updated");
+    }
+
+    #[test]
+    fn apply_to_store_returns_unchanged_for_identical() {
+        use crate::crd::projection::CrdProjectable;
+        let mut config = OrchestratorConfig::default();
+        let ws = crate::config::WorkspaceConfig {
+            root_path: "/same".to_string(),
+            qa_targets: vec![],
+            ticket_dir: "t".to_string(),
+            self_referential: false,
+        };
+        let meta = metadata_with_name("ws-same");
+        let spec = ws.to_cr_spec();
+        apply_to_store(&mut config, "Workspace", "ws-same", &meta, spec.clone());
+        let result = apply_to_store(&mut config, "Workspace", "ws-same", &meta, spec);
+        assert_eq!(result, ApplyResult::Unchanged);
+    }
+
+    #[test]
+    fn apply_to_store_returns_configured_for_changed() {
+        use crate::crd::projection::CrdProjectable;
+        let mut config = OrchestratorConfig::default();
+        let ws1 = crate::config::WorkspaceConfig {
+            root_path: "/v1".to_string(),
+            qa_targets: vec![],
+            ticket_dir: "t".to_string(),
+            self_referential: false,
+        };
+        let ws2 = crate::config::WorkspaceConfig {
+            root_path: "/v2".to_string(),
+            qa_targets: vec![],
+            ticket_dir: "t".to_string(),
+            self_referential: false,
+        };
+        let meta = metadata_with_name("ws-chg");
+        apply_to_store(&mut config, "Workspace", "ws-chg", &meta, ws1.to_cr_spec());
+        let result = apply_to_store(&mut config, "Workspace", "ws-chg", &meta, ws2.to_cr_spec());
+        assert_eq!(result, ApplyResult::Configured);
+        assert_eq!(config.workspaces.get("ws-chg").unwrap().root_path, "/v2");
+    }
+
+    #[test]
+    fn apply_to_store_seeds_from_legacy_for_correct_change_detection() {
+        use crate::crd::projection::CrdProjectable;
+        let mut config = OrchestratorConfig::default();
+        // Pre-populate legacy field without going through store
+        config.workspaces.insert(
+            "legacy-ws".to_string(),
+            crate::config::WorkspaceConfig {
+                root_path: "/legacy".to_string(),
+                qa_targets: vec![],
+                ticket_dir: "t".to_string(),
+                self_referential: false,
+            },
+        );
+        assert!(config.resource_store.get("Workspace", "legacy-ws").is_none());
+
+        // Apply the identical resource — should return Unchanged because seed detects it
+        let ws = crate::config::WorkspaceConfig {
+            root_path: "/legacy".to_string(),
+            qa_targets: vec![],
+            ticket_dir: "t".to_string(),
+            self_referential: false,
+        };
+        let meta = metadata_with_name("legacy-ws");
+        let result = apply_to_store(&mut config, "Workspace", "legacy-ws", &meta, ws.to_cr_spec());
+        assert_eq!(result, ApplyResult::Unchanged, "should seed from legacy and detect no change");
+    }
+
+    #[test]
+    fn apply_to_store_increments_generation() {
+        use crate::crd::projection::CrdProjectable;
+        let mut config = OrchestratorConfig::default();
+        let ws = crate::config::WorkspaceConfig {
+            root_path: "/g".to_string(),
+            qa_targets: vec![],
+            ticket_dir: "t".to_string(),
+            self_referential: false,
+        };
+        let meta = metadata_with_name("ws-gen");
+        apply_to_store(&mut config, "Workspace", "ws-gen", &meta, ws.to_cr_spec());
+        let gen1 = config.resource_store.get("Workspace", "ws-gen").unwrap().generation;
+
+        let ws2 = crate::config::WorkspaceConfig {
+            root_path: "/g2".to_string(),
+            qa_targets: vec![],
+            ticket_dir: "t".to_string(),
+            self_referential: false,
+        };
+        apply_to_store(&mut config, "Workspace", "ws-gen", &meta, ws2.to_cr_spec());
+        let gen2 = config.resource_store.get("Workspace", "ws-gen").unwrap().generation;
+        assert!(gen2 > gen1, "generation should increment on update");
+    }
+
+    // ── delete_from_store ───────────────────────────────────────────
+
+    #[test]
+    fn delete_from_store_removes_from_both_store_and_legacy() {
+        use crate::crd::projection::CrdProjectable;
+        let mut config = OrchestratorConfig::default();
+        let ws = crate::config::WorkspaceConfig {
+            root_path: "/d".to_string(),
+            qa_targets: vec![],
+            ticket_dir: "t".to_string(),
+            self_referential: false,
+        };
+        let meta = metadata_with_name("ws-del");
+        apply_to_store(&mut config, "Workspace", "ws-del", &meta, ws.to_cr_spec());
+        assert!(config.workspaces.contains_key("ws-del"));
+
+        let removed = delete_from_store(&mut config, "Workspace", "ws-del");
+        assert!(removed);
+        assert!(config.resource_store.get("Workspace", "ws-del").is_none());
+        assert!(!config.workspaces.contains_key("ws-del"));
+    }
+
+    #[test]
+    fn delete_from_store_seeds_from_legacy_and_removes() {
+        let mut config = OrchestratorConfig::default();
+        // Only in legacy, not in store
+        config.workspaces.insert(
+            "legacy-del".to_string(),
+            crate::config::WorkspaceConfig {
+                root_path: "/ld".to_string(),
+                qa_targets: vec![],
+                ticket_dir: "t".to_string(),
+                self_referential: false,
+            },
+        );
+        let removed = delete_from_store(&mut config, "Workspace", "legacy-del");
+        assert!(removed, "should seed from legacy then remove");
+        assert!(!config.workspaces.contains_key("legacy-del"));
+    }
+
+    #[test]
+    fn delete_from_store_returns_false_for_missing() {
+        let mut config = OrchestratorConfig::default();
+        let removed = delete_from_store(&mut config, "Workspace", "no-such");
+        assert!(!removed);
+    }
+
+    // ── metadata_from_store ─────────────────────────────────────────
+
+    #[test]
+    fn metadata_from_store_returns_cr_metadata() {
+        use crate::crd::projection::CrdProjectable;
+        let mut config = OrchestratorConfig::default();
+        let ws = crate::config::WorkspaceConfig {
+            root_path: "/m".to_string(),
+            qa_targets: vec![],
+            ticket_dir: "t".to_string(),
+            self_referential: false,
+        };
+        let meta = metadata_from_parts(
+            "ws-meta",
+            None,
+            Some([("env".to_string(), "prod".to_string())].into()),
+            Some([("note".to_string(), "hi".to_string())].into()),
+        );
+        apply_to_store(&mut config, "Workspace", "ws-meta", &meta, ws.to_cr_spec());
+
+        let loaded = metadata_from_store(&config, "Workspace", "ws-meta");
+        assert_eq!(loaded.labels.as_ref().unwrap().get("env").unwrap(), "prod");
+        assert_eq!(loaded.annotations.as_ref().unwrap().get("note").unwrap(), "hi");
+    }
+
+    #[test]
+    fn metadata_from_store_falls_back_to_name_only() {
+        let config = OrchestratorConfig::default();
+        let meta = metadata_from_store(&config, "Workspace", "missing");
+        assert_eq!(meta.name, "missing");
+        assert!(meta.labels.is_none());
+        assert!(meta.annotations.is_none());
     }
 }
 

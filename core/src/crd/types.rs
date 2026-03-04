@@ -1,4 +1,5 @@
 use crate::cli_types::ResourceMetadata;
+use crate::crd::scope::CrdScope;
 use serde::{Deserialize, Serialize};
 
 /// A Custom Resource Definition — defines a new resource type.
@@ -18,6 +19,12 @@ pub struct CustomResourceDefinition {
     /// Lifecycle hooks
     #[serde(default)]
     pub hooks: CrdHooks,
+    /// Scope: Namespaced (project-scoped), Cluster (global), or Singleton
+    #[serde(default)]
+    pub scope: CrdScope,
+    /// If true, this CRD is a builtin type and cannot be deleted or overwritten by users
+    #[serde(default)]
+    pub builtin: bool,
 }
 
 /// A single version definition within a CRD.
@@ -106,6 +113,10 @@ pub struct CrdSpec {
     pub versions: Vec<CrdVersion>,
     #[serde(default)]
     pub hooks: CrdHooks,
+    #[serde(default)]
+    pub scope: CrdScope,
+    #[serde(default)]
+    pub builtin: bool,
 }
 
 impl CrdSpec {
@@ -118,6 +129,8 @@ impl CrdSpec {
             group: self.group,
             versions: self.versions,
             hooks: self.hooks,
+            scope: self.scope,
+            builtin: self.builtin,
         }
     }
 }
@@ -153,6 +166,8 @@ mod tests {
                 on_update: None,
                 on_delete: None,
             },
+            scope: CrdScope::default(),
+            builtin: false,
         };
 
         let json = serde_json::to_string(&crd).expect("serialize");
@@ -240,6 +255,8 @@ spec:
             group: "test.dev".to_string(),
             versions: vec![],
             hooks: CrdHooks::default(),
+            scope: CrdScope::default(),
+            builtin: false,
         };
         let crd = spec.into_crd();
         assert_eq!(crd.kind, "Foo");

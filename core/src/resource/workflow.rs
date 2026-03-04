@@ -7,8 +7,8 @@ use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 mod workflow_convert;
 
 use workflow_convert::parse_loop_mode;
-pub(super) use workflow_convert::workflow_config_to_spec;
-pub(super) use workflow_convert::workflow_spec_to_config;
+pub(crate) use workflow_convert::workflow_config_to_spec;
+pub(crate) use workflow_convert::workflow_spec_to_config;
 
 #[derive(Debug, Clone)]
 pub struct WorkflowResource {
@@ -57,18 +57,12 @@ impl Resource for WorkflowResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+        use crate::crd::projection::CrdProjectable;
         let mut incoming = workflow_spec_to_config(&self.spec)
             .expect("validated workflow spec must be convertible");
         crate::config_load::normalize_workflow_config(&mut incoming);
-        let result = super::apply_to_map(&mut config.workflows, self.name(), incoming);
-        config.resource_meta.workflows.insert(
-            self.name().to_string(),
-            crate::config::ResourceStoredMetadata {
-                labels: self.metadata.labels.clone(),
-                annotations: self.metadata.annotations.clone(),
-            },
-        );
-        result
+        let spec_value = incoming.to_cr_spec();
+        super::apply_to_store(config, "Workflow", self.name(), &self.metadata, spec_value)
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -81,25 +75,13 @@ impl Resource for WorkflowResource {
 
     fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
         config.workflows.get(name).map(|workflow| Self {
-            metadata: match config.resource_meta.workflows.get(name) {
-                Some(stored) => super::metadata_from_parts(
-                    name,
-                    None,
-                    stored.labels.clone(),
-                    stored.annotations.clone(),
-                ),
-                None => super::metadata_with_name(name),
-            },
+            metadata: super::metadata_from_store(config, "Workflow", name),
             spec: workflow_config_to_spec(workflow),
         })
     }
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
-        let removed = config.workflows.remove(name).is_some();
-        if removed {
-            config.resource_meta.workflows.remove(name);
-        }
-        removed
+        super::delete_from_store(config, "Workflow", name)
     }
 }
 
@@ -378,10 +360,10 @@ mod tests {
         let wf =
             dispatch_resource(workflow_manifest("meta-wf")).expect("dispatch workflow resource");
         wf.apply(&mut config);
-        assert!(config.resource_meta.workflows.contains_key("meta-wf"));
+        assert!(config.resource_store.get("Workflow", "meta-wf").is_some());
 
         WorkflowResource::delete_from(&mut config, "meta-wf");
-        assert!(!config.resource_meta.workflows.contains_key("meta-wf"));
+        assert!(config.resource_store.get("Workflow", "meta-wf").is_none());
     }
 
     #[test]
@@ -427,13 +409,12 @@ mod tests {
         let rr = dispatch_resource(resource).expect("dispatch workflow resource");
         rr.apply(&mut config);
 
-        let stored = config
-            .resource_meta
-            .workflows
-            .get("store-meta-wf")
-            .expect("stored workflow metadata should exist");
+        let cr = config
+            .resource_store
+            .get("Workflow", "store-meta-wf")
+            .expect("stored workflow CR should exist");
         assert_eq!(
-            stored
+            cr.metadata
                 .labels
                 .as_ref()
                 .expect("labels should exist")

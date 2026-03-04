@@ -10,7 +10,7 @@ use crate::config::{
 };
 use anyhow::{anyhow, Result};
 
-pub(in crate::resource) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
+pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
     let steps = spec
         .steps
         .iter()
@@ -148,7 +148,7 @@ pub(in crate::resource) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Resul
     })
 }
 
-pub(in crate::resource) fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
+pub(crate) fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
     let steps = config
         .steps
         .iter()

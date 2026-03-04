@@ -24,17 +24,14 @@ impl Resource for DefaultsResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+        use crate::crd::projection::CrdProjectable;
         let incoming = ConfigDefaults {
             project: self.spec.project.clone(),
             workspace: self.spec.workspace.clone(),
             workflow: self.spec.workflow.clone(),
         };
-        if super::serializes_equal(&config.defaults, &incoming) {
-            ApplyResult::Unchanged
-        } else {
-            config.defaults = incoming;
-            ApplyResult::Configured
-        }
+        let spec_value = incoming.to_cr_spec();
+        super::apply_to_store(config, "Defaults", "defaults", &self.metadata, spec_value)
     }
 
     fn to_yaml(&self) -> Result<String> {

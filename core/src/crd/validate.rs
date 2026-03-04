@@ -216,6 +216,8 @@ mod tests {
                     cel_rules: vec![],
                 }],
                 hooks: CrdHooks::default(),
+                scope: crate::crd::scope::CrdScope::default(),
+                builtin: false,
             },
         }
     }
@@ -305,6 +307,8 @@ mod tests {
                     cel_rules: vec![],
                 }],
                 hooks: CrdHooks::default(),
+                scope: crate::crd::scope::CrdScope::default(),
+                builtin: false,
             },
         );
         let manifest = CustomResourceManifest {
@@ -341,6 +345,8 @@ mod tests {
                     cel_rules: vec![],
                 }],
                 hooks: CrdHooks::default(),
+                scope: crate::crd::scope::CrdScope::default(),
+                builtin: false,
             },
         );
         let manifest = CustomResourceManifest {
@@ -377,6 +383,8 @@ mod tests {
                     }],
                 }],
                 hooks: CrdHooks::default(),
+                scope: crate::crd::scope::CrdScope::default(),
+                builtin: false,
             },
         );
         let manifest = CustomResourceManifest {
