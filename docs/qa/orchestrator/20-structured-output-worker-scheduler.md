@@ -50,27 +50,33 @@ Entry point: `./scripts/orchestrator.sh`
 Verify strict-mode validation fails phase output when `qa` stdout is not JSON.
 
 ### Steps
-1. Prepare an isolated project and apply config:
+1. Reset and apply the plain-text-agent fixture into project scope:
    ```bash
-   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh qa project reset qa-plain --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/plain-text-agent.yaml --project qa-plain
    ```
 2. Create and run a task that uses non-JSON `qa` output:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "strict-json-fail" --goal "strict validation" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh task start "${TASK_ID}" || true
+   ./scripts/orchestrator.sh task create --project qa-plain --workflow plain_text_test
    ```
 3. Check validation failure event:
    ```bash
-   sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id='${TASK_ID}' AND event_type='output_validation_failed' ORDER BY id DESC LIMIT 5;"
+   sqlite3 data/agent_orchestrator.db \
+     "SELECT event_type, payload_json FROM events
+      WHERE task_id='${TASK_ID}' AND event_type='output_validation_failed'
+      ORDER BY id DESC LIMIT 5;"
    ```
 
 ### Expected
 - At least one `output_validation_failed` event is present.
-- Corresponding phase run has `validation_status='failed'`.
+- Corresponding phase run has `validation_status='failed'` and `exit_code=-6`.
+
+### Troubleshooting
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| Global agents selected instead of `plain_text_agent` | Fixture not applied with `--project`; global agents participate in selection | Use `apply -f ... --project qa-plain` to scope agents |
+| Task fails with "No healthy agent found" after first few items | Agent marked diseased after consecutive validation failures | Expected behavior — strict validation correctly fails non-JSON output, and health system diseases the agent after 2 consecutive errors |
 
 ### Expected Data State
 ```sql

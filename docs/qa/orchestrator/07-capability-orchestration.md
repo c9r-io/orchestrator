@@ -313,8 +313,8 @@ both agents are used for execution.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Capability Isolation | ☐ | | | |
-| 2 | Multi-Agent Same Capability | ☐ | | | |
+| 1 | Capability Isolation | ✅ | 2026-03-05 | auto | agent_qa_only → qa, agent_fix_only → fix |
+| 2 | Multi-Agent Same Capability | ✅ | 2026-03-05 | auto | alpha/beta distributed, 0 failures |
 | 3 | Repeatable Step Execution | ☐ | | | |
-| 4 | Guard Step Termination | ☐ | | | |
-| 5 | Performance Selection Fixture | ☐ | | | |
+| 4 | Guard Step Termination | ✅ | 2026-03-05 | auto | Completed cycle 1, guard terminated correctly |
+| 5 | Performance Selection Fixture | ✅ | 2026-03-05 | auto | fast_agent 58%, quality_agent 42% |
