@@ -1,7 +1,7 @@
 use crate::config::{TaskExecutionPlan, TaskRuntimeContext};
 use crate::config_load::{build_execution_plan, build_execution_plan_for_project, read_active_config, resolve_workspace_path};
 use crate::events::insert_event;
-use crate::state::{InnerState, TASK_SEMAPHORE};
+use crate::state::{InnerState, task_semaphore};
 use crate::task_repository::{SqliteTaskRepository, TaskRepository};
 use anyhow::{Context, Result};
 use serde_json::json;
@@ -31,7 +31,7 @@ pub async fn spawn_task_runner(state: Arc<InnerState>, task_id: String) -> Resul
         running.insert(task_id.clone(), RunningTask::new());
     }
 
-    let permit = TASK_SEMAPHORE
+    let permit = task_semaphore()
         .clone()
         .acquire_owned()
         .await

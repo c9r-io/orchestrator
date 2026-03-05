@@ -4,7 +4,7 @@ use crate::scheduler_service::{
     claim_next_pending_task, clear_worker_stop_signal, pending_task_count, signal_worker_stop,
     worker_stop_signal_path, worker_wake_signal_path,
 };
-use crate::state::TASK_SEMAPHORE;
+use crate::state::task_semaphore;
 use anyhow::Result;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::{Arc, Condvar, Mutex as StdMutex};
@@ -67,7 +67,7 @@ impl CliHandler {
                                 break;
                             }
                             let permit = cli_runtime()
-                                .block_on(TASK_SEMAPHORE.clone().acquire_owned())
+                                .block_on(task_semaphore().clone().acquire_owned())
                                 .map_err(|e| {
                                     anyhow::anyhow!("Failed to acquire semaphore: {}", e)
                                 })?;

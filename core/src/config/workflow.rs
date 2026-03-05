@@ -51,6 +51,9 @@ pub struct WorkflowStepConfig {
     /// Maximum parallel items for item-scoped steps (per-step override)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_parallel: Option<usize>,
+    /// Per-step timeout in seconds (overrides global safety.step_timeout_secs)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_secs: Option<u64>,
 }
 
 fn default_true() -> bool {

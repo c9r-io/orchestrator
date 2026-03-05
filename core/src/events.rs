@@ -475,7 +475,7 @@ mod tests {
 
     #[test]
     fn tracing_event_sink_default_impl() {
-        let sink = TracingEventSink::default();
+        let sink = TracingEventSink;
         sink.emit("t1", None, "task_completed", serde_json::json!({}));
     }
 

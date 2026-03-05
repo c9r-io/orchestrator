@@ -423,6 +423,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 },
                 WorkflowStepConfig {
                     id: "self_test_recover".to_string(),
@@ -443,6 +444,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {
@@ -492,6 +494,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 },
                 WorkflowStepConfig {
                     id: "implement_phase_two".to_string(),
@@ -512,6 +515,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {
@@ -561,6 +565,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 },
                 WorkflowStepConfig {
                     id: "duplicate_step".to_string(),
@@ -581,6 +586,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {
@@ -635,6 +641,7 @@ mod tests {
                 scope: None,
                 behavior: StepBehavior::default(),
                 max_parallel: None,
+                timeout_secs: None,
             }],
             loop_policy: crate::config::WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -686,6 +693,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 },
                 WorkflowStepConfig {
                     id: "self_test".to_string(),
@@ -706,6 +714,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {

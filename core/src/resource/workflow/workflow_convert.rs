@@ -80,6 +80,7 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
                 scope,
                 behavior: StepBehavior::default(),
                 max_parallel: step.max_parallel,
+                timeout_secs: step.timeout_secs,
             };
             normalize_step_execution_mode(&mut config_step).map_err(|e| anyhow!(e))?;
             Ok(config_step)
@@ -197,6 +198,7 @@ pub(crate) fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
                 }
             }),
             max_parallel: step.max_parallel,
+            timeout_secs: step.timeout_secs,
         })
         .collect();
 
@@ -424,6 +426,7 @@ mod tests {
                 command: Some("cargo test".to_string()),
                 scope: Some("task".to_string()),
                 max_parallel: None,
+                timeout_secs: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "fixed".to_string(),
@@ -507,6 +510,7 @@ mod tests {
                 command: None,
                 scope: None,
                 max_parallel: None,
+                timeout_secs: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -548,6 +552,7 @@ mod tests {
                 command: None,
                 scope: None,
                 max_parallel: None,
+                timeout_secs: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -592,6 +597,7 @@ mod tests {
                 command: None,
                 scope: None,
                 max_parallel: None,
+                timeout_secs: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -628,6 +634,7 @@ mod tests {
                 command: None,
                 scope: Some("item".to_string()),
                 max_parallel: None,
+                timeout_secs: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -663,6 +670,7 @@ mod tests {
                 command: None,
                 scope: None,
                 max_parallel: None,
+                timeout_secs: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -716,6 +724,7 @@ mod tests {
                 command: None,
                 scope: None,
                 max_parallel: None,
+                timeout_secs: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -761,6 +770,7 @@ mod tests {
                 command: None,
                 scope: None,
                 max_parallel: None,
+                timeout_secs: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -813,6 +823,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 },
                 WorkflowStepConfig {
                     id: "qual".to_string(),
@@ -833,6 +844,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 },
                 WorkflowStepConfig {
                     id: "bal".to_string(),
@@ -853,6 +865,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -903,6 +916,7 @@ mod tests {
                 scope: None,
                 behavior: StepBehavior::default(),
                 max_parallel: None,
+                timeout_secs: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Infinite,
@@ -966,6 +980,7 @@ mod tests {
                 scope: None,
                 behavior: StepBehavior::default(),
                 max_parallel: None,
+                timeout_secs: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -1017,6 +1032,7 @@ mod tests {
                 scope: None,
                 behavior: StepBehavior::default(),
                 max_parallel: None,
+                timeout_secs: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -1127,6 +1143,7 @@ mod tests {
                 command: None,
                 scope: None,
                 max_parallel: None,
+                timeout_secs: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -1182,6 +1199,7 @@ mod tests {
                 scope: None,
                 behavior: StepBehavior::default(),
                 max_parallel: None,
+                timeout_secs: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,

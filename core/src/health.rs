@@ -74,6 +74,7 @@ pub fn increment_consecutive_errors(state: &InnerState, agent_id: &str) -> u32 {
             capability_health: std::collections::HashMap::new(),
         });
     entry.consecutive_errors += 1;
+    entry.total_lifetime_errors += 1;
     let consecutive_errors = entry.consecutive_errors;
     let diseased_until = entry.diseased_until;
     let healthy = match diseased_until {
@@ -360,6 +361,29 @@ mod tests {
         reset_consecutive_errors(&state, "nonexistent");
         let health = crate::state::read_agent_health(&state);
         assert!(health.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_total_lifetime_errors_incremented() {
+        let mut fixture = crate::test_utils::TestState::new();
+        let state = fixture.build();
+
+        increment_consecutive_errors(&state, "test_agent");
+        increment_consecutive_errors(&state, "test_agent");
+        increment_consecutive_errors(&state, "test_agent");
+
+        let health = crate::state::read_agent_health(&state);
+        let entry = health.get("test_agent").expect("agent should exist");
+        assert_eq!(entry.total_lifetime_errors, 3);
+        assert_eq!(entry.consecutive_errors, 3);
+
+        // Reset consecutive, but lifetime should persist
+        drop(health);
+        reset_consecutive_errors(&state, "test_agent");
+        let health = crate::state::read_agent_health(&state);
+        let entry = health.get("test_agent").expect("agent should exist");
+        assert_eq!(entry.consecutive_errors, 0);
+        assert_eq!(entry.total_lifetime_errors, 3);
     }
 
     #[test]

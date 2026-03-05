@@ -206,6 +206,15 @@ pub fn attach_reader(conn: &Connection, session_id: &str, client_id: &str) -> Re
     Ok(())
 }
 
+pub fn cleanup_stale_sessions(conn: &Connection, max_age_hours: u64) -> Result<usize> {
+    let cutoff = chrono::Utc::now() - chrono::Duration::hours(max_age_hours as i64);
+    let deleted = conn.execute(
+        "DELETE FROM agent_sessions WHERE state IN ('exited', 'failed') AND updated_at < ?1",
+        params![cutoff.to_rfc3339()],
+    )?;
+    Ok(deleted)
+}
+
 pub fn release_attachment(
     conn: &Connection,
     session_id: &str,
@@ -352,6 +361,43 @@ mod tests {
                 .expect("query missing step")
                 .is_none()
         );
+    }
+
+    #[test]
+    fn cleanup_stale_sessions_removes_old_exited_keeps_recent() {
+        let (_dir, db_path) = make_db();
+        let conn = open_conn(&db_path).expect("open conn");
+
+        // Insert an "exited" session and manually backdate updated_at
+        insert_session(&conn, &make_session("old-exited", "task-1", "qa", "exited"))
+            .expect("insert old exited");
+        let old_ts = (chrono::Utc::now() - chrono::Duration::hours(100)).to_rfc3339();
+        conn.execute(
+            "UPDATE agent_sessions SET updated_at = ?2 WHERE id = ?1",
+            params!["old-exited", old_ts],
+        )
+        .expect("backdate old session");
+
+        // Insert an "active" session that is also old — should NOT be deleted
+        insert_session(&conn, &make_session("old-active", "task-1", "qa", "active"))
+            .expect("insert old active");
+        conn.execute(
+            "UPDATE agent_sessions SET updated_at = ?2 WHERE id = ?1",
+            params!["old-active", old_ts],
+        )
+        .expect("backdate active session");
+
+        // Insert a recent "exited" session — should NOT be deleted
+        insert_session(&conn, &make_session("new-exited", "task-1", "qa", "exited"))
+            .expect("insert new exited");
+
+        let deleted = cleanup_stale_sessions(&conn, 72).expect("cleanup");
+        assert_eq!(deleted, 1);
+
+        // Verify correct session was deleted
+        assert!(load_session(&conn, "old-exited").expect("load").is_none());
+        assert!(load_session(&conn, "old-active").expect("load").is_some());
+        assert!(load_session(&conn, "new-exited").expect("load").is_some());
     }
 
     #[test]

@@ -7,14 +7,16 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use tokio::process::Child;
 use tokio::sync::Mutex;
 
 pub const MAX_CONCURRENT_TASKS: usize = 10;
 
-lazy_static::lazy_static! {
-    pub static ref TASK_SEMAPHORE: Arc<tokio::sync::Semaphore> = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_TASKS));
+static TASK_SEMAPHORE: OnceLock<Arc<tokio::sync::Semaphore>> = OnceLock::new();
+
+pub fn task_semaphore() -> &'static Arc<tokio::sync::Semaphore> {
+    TASK_SEMAPHORE.get_or_init(|| Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_TASKS)))
 }
 
 #[derive(Clone)]

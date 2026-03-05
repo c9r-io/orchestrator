@@ -929,6 +929,7 @@ mod tests {
                         scope: None,
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                     TaskExecutionStep {
                         id: "implement".into(),
@@ -949,6 +950,7 @@ mod tests {
                         scope: None,
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                     TaskExecutionStep {
                         id: "qa_testing".into(),
@@ -969,6 +971,7 @@ mod tests {
                         scope: None,
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                     TaskExecutionStep {
                         id: "ticket_fix".into(),
@@ -989,6 +992,7 @@ mod tests {
                         scope: None,
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                     TaskExecutionStep {
                         id: "doc_governance".into(),
@@ -1009,6 +1013,7 @@ mod tests {
                         scope: None,
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
@@ -1073,6 +1078,7 @@ mod tests {
                         scope: None,
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                     TaskExecutionStep {
                         id: "loop_guard".into(),
@@ -1093,6 +1099,7 @@ mod tests {
                         scope: None,
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
@@ -1139,6 +1146,7 @@ mod tests {
             scope: Some(StepScope::Task), // Override default Item scope
             behavior: StepBehavior::default(),
             max_parallel: None,
+            timeout_secs: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -1223,6 +1231,7 @@ mod tests {
                         scope: Some(StepScope::Task),
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                     TaskExecutionStep {
                         id: "qa_testing".into(),
@@ -1242,6 +1251,7 @@ mod tests {
                         scope: Some(StepScope::Item),
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                     TaskExecutionStep {
                         id: "ticket_fix".into(),
@@ -1261,6 +1271,7 @@ mod tests {
                         scope: Some(StepScope::Item),
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                     TaskExecutionStep {
                         id: "align_tests".into(),
@@ -1280,6 +1291,7 @@ mod tests {
                         scope: Some(StepScope::Task),
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
@@ -1335,6 +1347,7 @@ mod tests {
                     scope: Some(StepScope::Item),
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 }],
                 loop_policy: WorkflowLoopConfig::default(),
                 finalize: WorkflowFinalizeConfig::default(),
@@ -1432,6 +1445,7 @@ mod tests {
                         scope: Some(StepScope::Task),
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                     TaskExecutionStep {
                         id: "disabled_step".into(),
@@ -1451,6 +1465,7 @@ mod tests {
                         scope: Some(StepScope::Item),
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
@@ -1582,6 +1597,7 @@ mod tests {
                         scope: Some(StepScope::Task),
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                     TaskExecutionStep {
                         id: "qa".into(),
@@ -1601,6 +1617,7 @@ mod tests {
                         scope: Some(StepScope::Item),
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                     TaskExecutionStep {
                         id: "governance".into(),
@@ -1620,6 +1637,7 @@ mod tests {
                         scope: Some(StepScope::Task),
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),

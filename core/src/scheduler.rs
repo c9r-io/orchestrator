@@ -139,6 +139,7 @@ mod tests {
                             scope: None,
                             behavior: StepBehavior::default(),
                             max_parallel: None,
+                            timeout_secs: None,
                         },
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
@@ -160,6 +161,7 @@ mod tests {
                             scope: None,
                             behavior: StepBehavior::default(),
                             max_parallel: None,
+                            timeout_secs: None,
                         },
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
@@ -181,6 +183,7 @@ mod tests {
                             scope: None,
                             behavior: StepBehavior::default(),
                             max_parallel: None,
+                            timeout_secs: None,
                         },
                     ],
                     loop_policy: WorkflowLoopConfig {
@@ -283,10 +286,12 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 }],
                 scope: None,
                 behavior: StepBehavior::default(),
                 max_parallel: None,
+                timeout_secs: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -381,6 +386,7 @@ mod tests {
                             scope: None,
                             behavior: StepBehavior::default(),
                             max_parallel: None,
+                            timeout_secs: None,
                         },
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
@@ -402,6 +408,7 @@ mod tests {
                             scope: None,
                             behavior: StepBehavior::default(),
                             max_parallel: None,
+                            timeout_secs: None,
                         },
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
@@ -423,6 +430,7 @@ mod tests {
                             scope: None,
                             behavior: StepBehavior::default(),
                             max_parallel: None,
+                            timeout_secs: None,
                         },
                     ],
                     loop_policy: WorkflowLoopConfig {
@@ -673,6 +681,7 @@ mod tests {
                             ..StepBehavior::default()
                         },
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                     WorkflowStepConfig {
                         id: "item_verify".to_string(),
@@ -693,6 +702,7 @@ mod tests {
                         scope: Some(StepScope::Item),
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig {
@@ -793,6 +803,7 @@ mod tests {
                         scope: Some(StepScope::Task),
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                     WorkflowStepConfig {
                         id: "item_verify".to_string(),
@@ -813,6 +824,7 @@ mod tests {
                         scope: Some(StepScope::Item),
                         behavior: StepBehavior::default(),
                         max_parallel: None,
+                        timeout_secs: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig {
@@ -921,6 +933,7 @@ mod tests {
                         ..StepBehavior::default()
                     },
                     max_parallel: None,
+                    timeout_secs: None,
                 }],
                 loop_policy: WorkflowLoopConfig {
                     mode: LoopMode::Fixed,

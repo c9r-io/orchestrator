@@ -1,0 +1,289 @@
+use crate::config::{ItemFinalizeContext, StepPrehookContext};
+use anyhow::Result;
+use cel_interpreter::Context as CelContext;
+
+pub(super) fn build_step_prehook_cel_context(context: &StepPrehookContext) -> Result<CelContext<'_>> {
+    let mut cel_context = CelContext::default();
+    cel_context
+        .add_variable("context", context.clone())
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("task_id", context.task_id.clone())
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("task_item_id", context.task_item_id.clone())
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("cycle", context.cycle as i64)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("max_cycles", context.max_cycles as i64)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("is_last_cycle", context.is_last_cycle)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("step", context.step.clone())
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("qa_file_path", context.qa_file_path.clone())
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("item_status", context.item_status.clone())
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("task_status", context.task_status.clone())
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("qa_exit_code", context.qa_exit_code)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("fix_exit_code", context.fix_exit_code)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("retest_exit_code", context.retest_exit_code)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("active_ticket_count", context.active_ticket_count)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("new_ticket_count", context.new_ticket_count)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("qa_failed", context.qa_failed)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("fix_required", context.fix_required)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("build_errors", context.build_error_count)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("test_failures", context.test_failure_count)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("build_exit_code", context.build_exit_code)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("test_exit_code", context.test_exit_code)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    Ok(cel_context)
+}
+
+pub(super) fn build_finalize_cel_context(context: &ItemFinalizeContext) -> Result<CelContext<'_>> {
+    let mut cel_context = CelContext::default();
+    cel_context
+        .add_variable("context", context.clone())
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("task_id", context.task_id.clone())
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("task_item_id", context.task_item_id.clone())
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("cycle", context.cycle as i64)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("qa_file_path", context.qa_file_path.clone())
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("item_status", context.item_status.clone())
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("task_status", context.task_status.clone())
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("qa_exit_code", context.qa_exit_code)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("fix_exit_code", context.fix_exit_code)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("retest_exit_code", context.retest_exit_code)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("active_ticket_count", context.active_ticket_count)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("new_ticket_count", context.new_ticket_count)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("retest_new_ticket_count", context.retest_new_ticket_count)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("qa_failed", context.qa_failed)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("fix_required", context.fix_required)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("qa_configured", context.qa_configured)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("qa_observed", context.qa_observed)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("qa_enabled", context.qa_enabled)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("qa_ran", context.qa_ran)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("qa_skipped", context.qa_skipped)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("fix_configured", context.fix_configured)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("fix_enabled", context.fix_enabled)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("fix_ran", context.fix_ran)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("fix_skipped", context.fix_skipped)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("fix_success", context.fix_success)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("retest_enabled", context.retest_enabled)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("retest_ran", context.retest_ran)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("retest_success", context.retest_success)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("is_last_cycle", context.is_last_cycle)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    Ok(cel_context)
+}

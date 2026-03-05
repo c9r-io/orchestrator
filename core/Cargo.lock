@@ -12,7 +12,6 @@ dependencies = [
  "clap",
  "clap_complete",
  "glob",
- "lazy_static",
  "libc",
  "pathdiff",
  "r2d2",

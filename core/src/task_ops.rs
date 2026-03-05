@@ -302,6 +302,7 @@ mod tests {
             scope: None,
             behavior: StepBehavior::default(),
             max_parallel: None,
+            timeout_secs: None,
         }
     }
 

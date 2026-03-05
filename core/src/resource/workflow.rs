@@ -132,7 +132,7 @@ mod tests {
         let loaded = WorkflowResource::get_from(&config, "wf-roundtrip")
             .expect("workflow should be present in config");
         // After normalization, missing standard steps are added as disabled placeholders
-        assert!(loaded.spec.steps.len() >= 1);
+        assert!(!loaded.spec.steps.is_empty());
         assert!(loaded.spec.steps.iter().any(|s| s.step_type == "qa"));
         assert_eq!(loaded.spec.loop_policy.mode, "once");
         assert_eq!(loaded.spec.loop_policy.max_cycles, Some(3));
@@ -158,6 +158,7 @@ mod tests {
                     command: None,
                     scope: None,
                     max_parallel: None,
+                    timeout_secs: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "once".to_string(),
@@ -196,6 +197,7 @@ mod tests {
                     command: None,
                     scope: None,
                     max_parallel: None,
+                    timeout_secs: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "once".to_string(),
@@ -234,6 +236,7 @@ mod tests {
                     command: None,
                     scope: None,
                     max_parallel: None,
+                    timeout_secs: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "fixed".to_string(),
@@ -272,6 +275,7 @@ mod tests {
                     command: None,
                     scope: None,
                     max_parallel: None,
+                    timeout_secs: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "fixed".to_string(),
@@ -310,6 +314,7 @@ mod tests {
                     command: None,
                     scope: None,
                     max_parallel: None,
+                    timeout_secs: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "fixed".to_string(),
@@ -405,6 +410,7 @@ mod tests {
                     command: None,
                     scope: None,
                     max_parallel: None,
+                    timeout_secs: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "once".to_string(),

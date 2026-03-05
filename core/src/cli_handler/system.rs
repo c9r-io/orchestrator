@@ -7,43 +7,6 @@ use anyhow::Result;
 use clap_complete::Shell;
 use std::path::PathBuf;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn create_mock_file(path: &std::path::Path, content: &[u8]) {
-        let parent = path.parent().expect("mock file parent");
-        std::fs::create_dir_all(parent).expect("create parent dirs");
-        std::fs::write(path, content).expect("write mock file");
-    }
-
-    #[tokio::test]
-    async fn test_handle_verify_binary_snapshot() {
-        let temp_dir = std::env::temp_dir().join(format!(
-            "system-test-verify-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("system time should be after epoch")
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
-
-        let content = b"mock binary for handle_verify test";
-        let binary_path = temp_dir.join("core/target/release/agent-orchestrator");
-        let stable_path = temp_dir.join(".stable");
-        create_mock_file(&binary_path, content);
-        create_mock_file(&stable_path, content);
-
-        let result = verify_binary_snapshot(&temp_dir)
-            .await
-            .expect("verify_binary_snapshot should succeed");
-
-        assert!(result.verified, "matching files should be verified");
-
-        std::fs::remove_dir_all(&temp_dir).ok();
-    }
-}
-
 use super::CliHandler;
 
 impl CliHandler {
@@ -171,5 +134,42 @@ impl CliHandler {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_mock_file(path: &std::path::Path, content: &[u8]) {
+        let parent = path.parent().expect("mock file parent");
+        std::fs::create_dir_all(parent).expect("create parent dirs");
+        std::fs::write(path, content).expect("write mock file");
+    }
+
+    #[tokio::test]
+    async fn test_handle_verify_binary_snapshot() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "system-test-verify-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+
+        let content = b"mock binary for handle_verify test";
+        let binary_path = temp_dir.join("core/target/release/agent-orchestrator");
+        let stable_path = temp_dir.join(".stable");
+        create_mock_file(&binary_path, content);
+        create_mock_file(&stable_path, content);
+
+        let result = verify_binary_snapshot(&temp_dir)
+            .await
+            .expect("verify_binary_snapshot should succeed");
+
+        assert!(result.verified, "matching files should be verified");
+
+        std::fs::remove_dir_all(&temp_dir).ok();
     }
 }

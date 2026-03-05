@@ -160,6 +160,7 @@ impl CliHandler {
             scope: None,
             behavior: Default::default(),
             max_parallel: None,
+            timeout_secs: None,
         };
         plan.steps.insert(insert_idx, inserted_step);
 

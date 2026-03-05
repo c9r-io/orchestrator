@@ -29,6 +29,7 @@ fn step_config(
         scope: None,
         behavior: StepBehavior::default(),
         max_parallel: None,
+        timeout_secs: None,
     }
 }
 

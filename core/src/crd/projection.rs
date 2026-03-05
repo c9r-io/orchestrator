@@ -361,6 +361,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 },
                 WorkflowStepConfig {
                     id: "self_test".to_string(),
@@ -381,6 +382,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig {

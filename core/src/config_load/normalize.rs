@@ -69,6 +69,7 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                 scope: None,
                 behavior: StepBehavior::default(),
                 max_parallel: None,
+                timeout_secs: None,
             };
             apply_default_step_behavior(&mut placeholder);
             let _ = normalize_step_execution_mode_recursive(&mut placeholder);
@@ -225,6 +226,7 @@ mod tests {
                 scope: None,
                 behavior: StepBehavior::default(),
                 max_parallel: None,
+                timeout_secs: None,
             }],
             loop_policy: crate::config::WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -321,6 +323,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 },
                 WorkflowStepConfig {
                     id: "self_test_recover".to_string(),
@@ -341,6 +344,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {
@@ -860,6 +864,7 @@ mod tests {
             scope: None,
             behavior: StepBehavior::default(),
             max_parallel: None,
+            timeout_secs: None,
         }];
         let mut wf = make_workflow(steps);
         normalize_workflow_config(&mut wf);

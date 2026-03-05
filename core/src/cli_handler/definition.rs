@@ -146,6 +146,7 @@ impl CliHandler {
                         command: None,
                         scope: None,
                         max_parallel: None,
+                        timeout_secs: None,
                     })
                     .collect();
 

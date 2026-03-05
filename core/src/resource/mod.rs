@@ -1134,6 +1134,7 @@ pub(super) mod test_fixtures {
                     command: None,
                     scope: None,
                     max_parallel: None,
+            timeout_secs: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "once".to_string(),

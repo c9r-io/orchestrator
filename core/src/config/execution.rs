@@ -55,6 +55,9 @@ pub struct TaskExecutionStep {
     /// Maximum parallel items for item-scoped steps (per-step override)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_parallel: Option<usize>,
+    /// Per-step timeout in seconds (overrides global safety.step_timeout_secs)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_secs: Option<u64>,
 }
 
 impl TaskExecutionStep {
@@ -306,6 +309,7 @@ mod tests {
             scope: None,
             behavior: StepBehavior::default(),
             max_parallel: None,
+            timeout_secs: None,
         }
     }
 
@@ -329,6 +333,7 @@ mod tests {
             scope: Some(StepScope::Task), // explicit override
             behavior: StepBehavior::default(),
             max_parallel: None,
+            timeout_secs: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -353,6 +358,7 @@ mod tests {
             scope: None,
             behavior: StepBehavior::default(),
             max_parallel: None,
+            timeout_secs: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -377,6 +383,7 @@ mod tests {
             scope: None,
             behavior: StepBehavior::default(),
             max_parallel: None,
+            timeout_secs: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -403,6 +410,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 },
                 TaskExecutionStep {
                     id: "qa".to_string(),
@@ -422,6 +430,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    timeout_secs: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig::default(),

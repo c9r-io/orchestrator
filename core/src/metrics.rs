@@ -7,6 +7,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+const P95_SAMPLE_LIMIT: usize = 100;
+
 /// Runtime metrics collected during agent execution
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AgentMetrics {
@@ -28,6 +30,9 @@ pub struct AgentMetrics {
     pub current_load: u32,
     /// Last used timestamp
     pub last_used_at: Option<DateTime<Utc>>,
+    /// Circular buffer of recent duration samples for P95 calculation
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub duration_samples: Vec<u64>,
 }
 
 /// Health status for a specific capability
@@ -166,6 +171,7 @@ impl MetricsCollector {
             recent_avg_duration_ms: 0,
             current_load: 0,
             last_used_at: None,
+            duration_samples: Vec::new(),
         }
     }
 
@@ -187,6 +193,18 @@ impl MetricsCollector {
             metrics.recent_avg_duration_ms = ((1.0 - alpha) * metrics.recent_avg_duration_ms as f64
                 + alpha * duration_ms as f64) as u64;
         }
+
+        // Track duration samples for P95 (circular buffer)
+        if metrics.duration_samples.len() >= P95_SAMPLE_LIMIT {
+            metrics.duration_samples.remove(0);
+        }
+        metrics.duration_samples.push(duration_ms);
+
+        // Recalculate P95
+        let mut sorted = metrics.duration_samples.clone();
+        sorted.sort_unstable();
+        let idx = ((sorted.len() as f64) * 0.95).ceil() as usize;
+        metrics.p95_duration_ms = sorted[idx.min(sorted.len()) - 1];
 
         // Update success rate with EMA
         let alpha = 0.3;
@@ -286,7 +304,7 @@ pub fn calculate_agent_score(
                 + health_penalty
         }
         SelectionStrategy::LoadBalanced => {
-            cost_score * 0.2 + success_rate_score * 0.3 + load_penalty * 0.5
+            cost_score * 0.2 + success_rate_score * 0.3 + (100.0 + load_penalty).max(0.0) * 0.5
         }
         SelectionStrategy::CapabilityAware => {
             // Similar to adaptive but health is more important
@@ -367,6 +385,7 @@ mod tests {
             recent_avg_duration_ms: 5000,
             current_load: 1,
             last_used_at: None,
+            duration_samples: Vec::new(),
         });
         let health = Some(AgentHealthState::default());
 
@@ -470,10 +489,29 @@ mod tests {
         // cost_score = 100 - 30 = 70.0
         // success_rate_score = 8/10 * 100 = 80.0
         // load_penalty = -30.0
-        // total = cost*0.2 + success*0.3 + load*0.5 = 70*0.2 + 80*0.3 + (-30)*0.5
-        //       = 14 + 24 - 15 = 23.0
-        let expected = 70.0 * 0.2 + 80.0 * 0.3 + (-30.0) * 0.5;
+        // load_score = (100 + (-30)).max(0) = 70.0
+        // total = cost*0.2 + success*0.3 + load_score*0.5 = 70*0.2 + 80*0.3 + 70*0.5
+        //       = 14 + 24 + 35 = 73.0
+        let expected = 70.0 * 0.2 + 80.0 * 0.3 + (100.0 + (-30.0_f32)).max(0.0) * 0.5;
         assert!((score.total_score - expected).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_load_balanced_score_never_negative() {
+        // Extreme high load: load_penalty = -50 (capped)
+        let metrics = Some(create_test_metrics(10, 0, 5000, 10));
+        let health = Some(AgentHealthState::default());
+        let requirement = SelectionRequirement {
+            strategy: SelectionStrategy::LoadBalanced,
+            ..Default::default()
+        };
+        // cost=99 → cost_score=1, success=0/10=0%, load capped at -50
+        let score = calculate_agent_score("overloaded", Some(99), &metrics, &health, &requirement);
+        assert!(
+            score.total_score >= 0.0,
+            "LoadBalanced score should never be negative, got {}",
+            score.total_score
+        );
     }
 
     #[test]
@@ -780,5 +818,36 @@ mod tests {
         // Decrement from 0 should stay at 0
         MetricsCollector::decrement_load(&mut metrics);
         assert_eq!(metrics.current_load, 0);
+    }
+
+    #[test]
+    fn test_p95_calculated_after_multiple_runs() {
+        let mut metrics = AgentMetrics::default();
+        // Record 20 durations: 100, 200, 300, ..., 2000
+        for i in 1..=20 {
+            MetricsCollector::record_success(&mut metrics, i * 100);
+        }
+        // P95 of [100..2000]: 95th percentile index = ceil(20 * 0.95) = 19 → value 1900
+        assert_eq!(metrics.p95_duration_ms, 1900);
+        assert_eq!(metrics.duration_samples.len(), 20);
+    }
+
+    #[test]
+    fn test_p95_single_sample() {
+        let mut metrics = AgentMetrics::default();
+        MetricsCollector::record_success(&mut metrics, 500);
+        assert_eq!(metrics.p95_duration_ms, 500);
+    }
+
+    #[test]
+    fn test_p95_circular_buffer_evicts_oldest() {
+        let mut metrics = AgentMetrics::default();
+        // Fill past the limit
+        for i in 1..=110 {
+            MetricsCollector::record_success(&mut metrics, i * 10);
+        }
+        assert_eq!(metrics.duration_samples.len(), P95_SAMPLE_LIMIT);
+        // Oldest samples (10..100) should have been evicted
+        assert!(!metrics.duration_samples.contains(&10));
     }
 }
