@@ -143,4 +143,6 @@ This checks:
 | self-bootstrap | `docs/qa/self-bootstrap/07-self-restart-process-continuity.md` | 5 | Self-restart builtin step, restart_pending resumption, orchestrator.sh restart loop, priority claiming |
 | self-bootstrap | `docs/qa/self-bootstrap/08-build-version-hash.md` | 5 | Build version hash: compile-time git hash/timestamp, version subcommand, restart event enrichment |
 | self-bootstrap | `docs/qa/self-bootstrap/04-cycle2-validation-and-runtime-timestamps.md` | 2 | Regression: fixed two-cycle QA validation chain and task/item runtime timestamps |
-| convenience | `docs/qa/test-binary-snapshot.md` (symlink) | - | Shortcut to self-bootstrap survival binary checkpoint test |
+| self-bootstrap | `docs/qa/self-bootstrap/scenario2-binary-rollback.md` | 1 | Binary snapshot restoration on auto-rollback |
+| self-bootstrap | `docs/qa/self-bootstrap/scenario3-binary-skip-disabled.md` | 1 | Binary snapshot skip when disabled |
+| self-bootstrap | `docs/qa/self-bootstrap/scenario4-self-test-pass.md` | 1 | Self-test step passes all three phases |
