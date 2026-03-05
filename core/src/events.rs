@@ -203,7 +203,7 @@ pub fn query_step_events_db(database: &Database, task_id: &str) -> Result<Vec<St
 
 fn query_step_events_with_conn(conn: &Connection, task_id: &str) -> Result<Vec<StepEvent>> {
     let mut stmt = conn.prepare(
-        "SELECT event_type, payload_json, created_at, task_item_id FROM events
+        "SELECT event_type, payload_json, created_at, task_item_id, step, step_scope FROM events
          WHERE task_id = ?1
            AND event_type IN ('step_started', 'step_finished', 'step_skipped', 'step_heartbeat', 'step_spawned', 'step_timeout', 'cycle_started')
          ORDER BY id ASC",
@@ -213,20 +213,37 @@ fn query_step_events_with_conn(conn: &Connection, task_id: &str) -> Result<Vec<S
         let payload_json: String = row.get(1)?;
         let created_at: String = row.get(2)?;
         let task_item_id: Option<String> = row.get(3)?;
-        Ok((event_type, payload_json, created_at, task_item_id))
+        let col_step: Option<String> = row.get(4)?;
+        let col_step_scope: Option<String> = row.get(5)?;
+        Ok((event_type, payload_json, created_at, task_item_id, col_step, col_step_scope))
     })?;
 
     let mut events = Vec::new();
     for row in rows {
-        let (event_type, payload_json, created_at, task_item_id) = row?;
+        let (event_type, payload_json, created_at, task_item_id, col_step, col_step_scope) = row?;
         let v: Value = serde_json::from_str(&payload_json).unwrap_or_default();
-        events.push(StepEvent {
-            event_type,
-            step: v["step"]
+
+        // Use promoted column values first, fall back to JSON parsing
+        let step = col_step.or_else(|| {
+            v["step"]
                 .as_str()
                 .or_else(|| v["phase"].as_str())
-                .map(String::from),
-            step_scope: observed_step_scope_from_payload(&v),
+                .map(String::from)
+        });
+        let step_scope = if let Some(ref scope_str) = col_step_scope {
+            match scope_str.as_str() {
+                "task" => Some(ObservedStepScope::Task),
+                "item" => Some(ObservedStepScope::Item),
+                _ => None,
+            }
+        } else {
+            observed_step_scope_from_payload(&v)
+        };
+
+        events.push(StepEvent {
+            event_type,
+            step,
+            step_scope,
             task_item_id,
             agent_id: v["agent_id"].as_str().map(String::from),
             success: v["success"].as_bool(),

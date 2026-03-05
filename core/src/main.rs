@@ -49,7 +49,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tokio::sync::Mutex;
-use tracing::{info, warn};
+use tracing::info;
 
 fn init_state() -> Result<ManagedState> {
     let app_root = detect_app_root();
@@ -147,24 +147,9 @@ fn backfill_legacy_data(
         "UPDATE command_runs SET workspace_id = ?1 WHERE workspace_id = ''",
         rusqlite::params![default_workspace_id],
     )?;
-    conn.execute(
-        "UPDATE command_runs SET agent_id = 'legacy' WHERE agent_id = ''",
-        [],
-    )?;
+    // Note: agent_id='legacy' backfill and events step_scope backfill
+    // are now handled by schema migrations m0002 and m0004.
     drop(conn);
-
-    let stats = crate::events_backfill::backfill_event_step_scope(db_path)?;
-    if stats.updated > 0 {
-        warn!(
-            updated = stats.updated,
-            scanned = stats.scanned,
-            skipped = stats.skipped,
-            "[backfill] step_scope: {} legacy events updated ({} scanned, {} skipped)",
-            stats.updated,
-            stats.scanned,
-            stats.skipped
-        );
-    }
     Ok(())
 }
 

@@ -15,6 +15,7 @@ pub mod env_resolve;
 pub mod events;
 pub mod events_backfill;
 pub mod health;
+pub mod migration;
 pub mod metrics;
 pub mod observability;
 pub mod output_validation;

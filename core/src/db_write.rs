@@ -16,6 +16,21 @@ pub struct DbEventRecord<'a> {
     pub payload_json: &'a str,
 }
 
+/// Extract promoted fields (step, step_scope, cycle) from event payload JSON.
+fn extract_event_promoted_fields(payload_json: &str) -> (Option<String>, Option<String>, Option<i64>) {
+    let v: serde_json::Value = match serde_json::from_str(payload_json) {
+        Ok(v) => v,
+        Err(_) => return (None, None, None),
+    };
+    let step = v["step"]
+        .as_str()
+        .or_else(|| v["phase"].as_str())
+        .map(String::from);
+    let step_scope = v["step_scope"].as_str().map(String::from);
+    let cycle = v["cycle"].as_i64();
+    (step, step_scope, cycle)
+}
+
 impl DbWriteCoordinator {
     pub fn new(database: Arc<Database>) -> Self {
         Self { database }
@@ -29,9 +44,10 @@ impl DbWriteCoordinator {
         payload_json: &str,
     ) -> Result<()> {
         let conn = self.database.connection()?;
+        let (step, step_scope, cycle) = extract_event_promoted_fields(payload_json);
         conn.execute(
-            "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![task_id, task_item_id, event_type, payload_json, now_ts()],
+            "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at, step, step_scope, cycle) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![task_id, task_item_id, event_type, payload_json, now_ts(), step, step_scope, cycle],
         )?;
         Ok(())
     }
@@ -142,14 +158,18 @@ impl DbWriteCoordinator {
         )?;
 
         for event in events {
+            let (step, step_scope, cycle) = extract_event_promoted_fields(event.payload_json);
             tx.execute(
-                "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at, step, step_scope, cycle) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     event.task_id,
                     event.task_item_id,
                     event.event_type,
                     event.payload_json,
-                    now_ts()
+                    now_ts(),
+                    step,
+                    step_scope,
+                    cycle
                 ],
             )?;
         }
@@ -205,14 +225,18 @@ impl DbWriteCoordinator {
         )?;
 
         for event in events {
+            let (step, step_scope, cycle) = extract_event_promoted_fields(event.payload_json);
             tx.execute(
-                "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at, step, step_scope, cycle) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     event.task_id,
                     event.task_item_id,
                     event.event_type,
                     event.payload_json,
-                    now_ts()
+                    now_ts(),
+                    step,
+                    step_scope,
+                    cycle
                 ],
             )?;
         }
