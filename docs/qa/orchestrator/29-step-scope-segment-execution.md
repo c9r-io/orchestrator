@@ -217,7 +217,7 @@ Verify that `default_scope_for_step_id()` correctly classifies all self-bootstra
 
 1. Apply self-bootstrap manifest:
    ```bash
-   ./scripts/orchestrator.sh apply -f docs/workflow/self-bootstrap.yaml --dry-run
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --dry-run
    ```
 
 2. Run unit test to verify default_scope mapping:

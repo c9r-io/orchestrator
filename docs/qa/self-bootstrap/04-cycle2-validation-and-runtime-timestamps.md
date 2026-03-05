@@ -9,7 +9,7 @@
 
 ## Background
 
-The `self-bootstrap` workflow in `docs/workflow/self-bootstrap.yaml` runs in fixed two-cycle mode:
+The `self-bootstrap` workflow in `fixtures/manifests/bundles/self-bootstrap-mock.yaml` runs in fixed two-cycle mode:
 
 ```text
 Cycle 1: plan -> qa_doc_gen -> implement -> self_test -> self_restart (rebuild + exit 75 → relaunch)
@@ -35,7 +35,7 @@ cd ..
 test -f data/agent_orchestrator.db || ./scripts/orchestrator.sh init
 
 QA_PROJECT="qa-cycle2-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh apply -f docs/workflow/self-bootstrap.yaml
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml
 ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
 ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force

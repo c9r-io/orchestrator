@@ -108,7 +108,7 @@ rm -rf "workspace/${QA_PROJECT}"
 - Clean runtime state
 
 ### Steps
-1. Apply `docs/workflow/self-bootstrap.yaml` (dry-run + real)
+1. Apply `fixtures/manifests/bundles/self-bootstrap-mock.yaml` (dry-run + real)
 2. Verify resources
 
 ### Expected

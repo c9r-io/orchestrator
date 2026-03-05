@@ -18,7 +18,7 @@ Key functions:
 - `claim_next_pending_task()` priority SQL in `core/src/scheduler_service.rs`
 - Restart loop in `scripts/orchestrator.sh`
 
-Workflow: `docs/workflow/self-bootstrap.yaml`
+Workflow: `fixtures/manifests/bundles/self-bootstrap-mock.yaml`
 
 ### Database Schema Reference
 
@@ -180,15 +180,15 @@ Verify that (a) `orchestrator.sh` contains the restart-aware loop detecting exit
    ```
 3. Verify self_restart appears in the workflow YAML after self_test:
    ```bash
-   grep -A2 'id: self_restart' docs/workflow/self-bootstrap.yaml
+   grep -A2 'id: self_restart' fixtures/manifests/bundles/self-bootstrap-mock.yaml
    ```
 4. Verify self_restart has `repeatable: false` (only runs in Cycle 1):
    ```bash
-   grep -A8 'id: self_restart' docs/workflow/self-bootstrap.yaml | grep 'repeatable'
+   grep -A8 'id: self_restart' fixtures/manifests/bundles/self-bootstrap-mock.yaml | grep 'repeatable'
    ```
 5. Verify manifest validates with the new step:
    ```bash
-   ./scripts/orchestrator.sh manifest validate -f docs/workflow/self-bootstrap.yaml 2>&1
+   ./scripts/orchestrator.sh manifest validate -f fixtures/manifests/bundles/self-bootstrap-mock.yaml 2>&1
    ```
 
 ### Expected

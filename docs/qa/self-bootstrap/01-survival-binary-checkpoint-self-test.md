@@ -17,7 +17,7 @@ The self-bootstrap survival mechanism protects the orchestrator from bricking it
 Key functions: `snapshot_binary()`, `restore_binary_snapshot()`, `execute_self_test_step()` in `core/src/scheduler.rs`.
 
 Fixture: `fixtures/manifests/bundles/self-bootstrap-test.yaml`
-Workflow: `docs/workflow/self-bootstrap.yaml`
+Workflow: `fixtures/manifests/bundles/self-bootstrap-mock.yaml`
 
 ### Common Preconditions
 
@@ -34,7 +34,7 @@ rm -f fixtures/ticket/auto_*.md
 
 QA_PROJECT="qa-survival"
 ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --force
-./scripts/orchestrator.sh apply -f docs/workflow/self-bootstrap.yaml --project "${QA_PROJECT}"
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
 ```
 
 ### Troubleshooting

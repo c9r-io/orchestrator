@@ -221,8 +221,8 @@ echo ""
 bold "Scenario 5: Self-Bootstrap Manifest Applies Successfully"
 bold "--------------------------------------------------------------"
 
-S5_DRYRUN=$($ORCH apply -f docs/workflow/self-bootstrap.yaml --dry-run 2>&1) || true
-S5_APPLY=$($ORCH apply -f docs/workflow/self-bootstrap.yaml 2>&1) || true
+S5_DRYRUN=$($ORCH apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --dry-run 2>&1) || true
+S5_APPLY=$($ORCH apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml 2>&1) || true
 
 echo "  Dry-run output: $(echo "$S5_DRYRUN" | head -5)"
 

@@ -49,12 +49,12 @@ Verify `max_parallel` field is accepted in workflow YAML, propagated through the
 
 2. Verify the self-bootstrap YAML parses without errors:
    ```bash
-   ./scripts/orchestrator.sh apply -f docs/workflow/self-bootstrap.yaml --dry-run 2>&1
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --dry-run 2>&1
    ```
 
 3. Check that the workflow-level `max_parallel: 4` and step-level `max_parallel: 2` (ticket_fix) are present in the dry-run output:
    ```bash
-   ./scripts/orchestrator.sh apply -f docs/workflow/self-bootstrap.yaml --dry-run 2>&1 | grep -i "max_parallel" || echo "field not in dry-run text output"
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --dry-run 2>&1 | grep -i "max_parallel" || echo "field not in dry-run text output"
    ```
 
 ### Expected
