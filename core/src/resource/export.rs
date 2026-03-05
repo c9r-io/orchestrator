@@ -63,6 +63,10 @@ pub fn export_crd_documents(config: &OrchestratorConfig) -> Vec<serde_yaml::Valu
     crd_keys.sort();
     for key in crd_keys {
         if let Some(crd) = config.custom_resource_definitions.get(key) {
+            // Skip builtin CRDs — they are auto-registered at init and would conflict on re-import
+            if crd.builtin {
+                continue;
+            }
             let manifest = crate::crd::types::CrdManifest {
                 api_version: "orchestrator.dev/v2".to_string(),
                 metadata: crate::cli_types::ResourceMetadata {

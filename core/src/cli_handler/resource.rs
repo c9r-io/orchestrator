@@ -57,12 +57,14 @@ impl CliHandler {
             "agent" => {
                 let active = read_active_config(&self.state)?;
                 if let Some(agent) = active.config.agents.get(name) {
+                    let mut agent_out = agent.clone();
+                    agent_out.metadata.name = name.to_string();
                     match output {
                         OutputFormat::Json => {
-                            println!("{}", serde_json::to_string_pretty(agent)?);
+                            println!("{}", serde_json::to_string_pretty(&agent_out)?);
                         }
                         OutputFormat::Yaml => {
-                            println!("{}", serde_yaml::to_string(agent)?);
+                            println!("{}", serde_yaml::to_string(&agent_out)?);
                         }
                         OutputFormat::Table => {
                             println!("{:<20} {}", name, agent.command);
@@ -78,7 +80,7 @@ impl CliHandler {
                 output,
             }),
             _ => {
-                // Try CRD-defined custom resources
+                // Try CRD-defined custom resources (includes builtin CRD types)
                 let active = read_active_config(&self.state)?;
                 if let Some(crd) = agent_orchestrator::crd::resolve::find_crd_by_kind_or_alias(
                     &active.config,
@@ -86,7 +88,13 @@ impl CliHandler {
                 ) {
                     let crd_kind = crd.kind.clone();
                     let storage_key = format!("{}/{}", crd_kind, name);
-                    if let Some(cr) = active.config.custom_resources.get(&storage_key) {
+                    // Check custom_resources first, then fall back to resource_store (builtin types)
+                    let cr = active
+                        .config
+                        .custom_resources
+                        .get(&storage_key)
+                        .or_else(|| active.config.resource_store.get(&crd_kind, name));
+                    if let Some(cr) = cr {
                         match output {
                             OutputFormat::Json => {
                                 println!("{}", serde_json::to_string_pretty(cr)?);
@@ -248,19 +256,24 @@ impl CliHandler {
                 })
             }
             _ => {
-                // Try CRD-defined custom resource types
+                // Try CRD-defined custom resource types (includes builtin CRD types)
                 if let Some(crd) = agent_orchestrator::crd::resolve::find_crd_by_kind_or_alias(
                     &active.config,
                     resource_type,
                 ) {
                     let crd_kind = crd.kind.clone();
                     let prefix = format!("{}/", crd_kind);
-                    let rows: Vec<_> = active
+                    // Collect from both custom_resources and resource_store (builtin types)
+                    let custom_iter = active
                         .config
                         .custom_resources
                         .iter()
                         .filter(|(key, _)| key.starts_with(&prefix))
-                        .filter_map(|(_, cr)| {
+                        .map(|(_, cr)| cr);
+                    let store_iter = active.config.resource_store.list_by_kind(&crd_kind);
+                    let rows: Vec<_> = custom_iter
+                        .chain(store_iter.into_iter())
+                        .filter_map(|cr| {
                             let metadata = &cr.metadata;
                             if !super::parse::matches_selector(&metadata.labels, &selector_terms) {
                                 return None;
@@ -378,7 +391,7 @@ impl CliHandler {
                 output,
             }),
             _ => {
-                // Try CRD-defined custom resources
+                // Try CRD-defined custom resources (includes builtin CRD types)
                 let active = read_active_config(&self.state)?;
                 if let Some(crd) = agent_orchestrator::crd::resolve::find_crd_by_kind_or_alias(
                     &active.config,
@@ -386,7 +399,13 @@ impl CliHandler {
                 ) {
                     let crd_kind = crd.kind.clone();
                     let storage_key = format!("{}/{}", crd_kind, name);
-                    if let Some(cr) = active.config.custom_resources.get(&storage_key) {
+                    // Check custom_resources first, then fall back to resource_store (builtin types)
+                    let cr = active
+                        .config
+                        .custom_resources
+                        .get(&storage_key)
+                        .or_else(|| active.config.resource_store.get(&crd_kind, name));
+                    if let Some(cr) = cr {
                         match output {
                             OutputFormat::Json => {
                                 println!("{}", serde_json::to_string_pretty(cr)?);

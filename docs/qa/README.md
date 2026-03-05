@@ -140,3 +140,4 @@ This checks:
 | self-bootstrap | `docs/qa/self-bootstrap/05-survival-smoke-binary-snapshot.md` | 5 | Unit tests for snapshot_binary() and restore_binary_snapshot() |
 | self-bootstrap | `docs/qa/self-bootstrap/06-survival-smoke-binary-snapshot-verification.md` | 5 | Binary snapshot verification function and integration test |
 | self-bootstrap | `docs/qa/self-bootstrap/04-cycle2-validation-and-runtime-timestamps.md` | 2 | Regression: fixed two-cycle QA validation chain and task/item runtime timestamps |
+| convenience | `docs/qa/test-binary-snapshot.md` (symlink) | - | Shortcut to self-bootstrap survival binary checkpoint test |

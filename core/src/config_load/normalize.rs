@@ -171,8 +171,13 @@ pub(crate) fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorCo
     // Always rebuild the resource store from the (now-normalized) legacy fields.
     // Legacy fields are the source of truth during normalization; the store is
     // a derived index that the CRD pipeline can query.
-    config.resource_store = Default::default();
+    //
+    // Preserve resource metadata (labels, annotations) from the old store
+    // before wiping — sync_legacy_to_store only knows about spec data from
+    // legacy fields, not the metadata stored in the CRD resource store.
+    let old_store = std::mem::take(&mut config.resource_store);
     crate::crd::writeback::sync_legacy_to_store(&mut config);
+    crate::crd::writeback::restore_metadata_from_old_store(&mut config, &old_store);
 
     config
 }

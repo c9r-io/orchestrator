@@ -1,5 +1,5 @@
 use crate::config::{TaskExecutionPlan, TaskRuntimeContext};
-use crate::config_load::{build_execution_plan, read_active_config, resolve_workspace_path};
+use crate::config_load::{build_execution_plan, build_execution_plan_for_project, read_active_config, resolve_workspace_path};
 use crate::events::insert_event;
 use crate::state::{InnerState, TASK_SEMAPHORE};
 use crate::task_repository::{SqliteTaskRepository, TaskRepository};
@@ -196,7 +196,9 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
         .ok()
         .filter(|plan| !plan.steps.is_empty())
         .unwrap_or_else(|| {
-            build_execution_plan(&active.config, workflow, &workflow_id).unwrap_or(
+            build_execution_plan_for_project(&active.config, workflow, &workflow_id, &project_id)
+                .or_else(|_| build_execution_plan(&active.config, workflow, &workflow_id))
+                .unwrap_or(
                 TaskExecutionPlan {
                     steps: Vec::new(),
                     loop_policy: crate::config::WorkflowLoopConfig::default(),

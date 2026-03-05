@@ -29,6 +29,9 @@ Workflow: `docs/workflow/self-bootstrap.yaml`
 ```bash
 rm -f fixtures/ticket/auto_*.md
 
+# A global base config must exist first (provides defaults)
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
+
 QA_PROJECT="qa-survival"
 ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --force
 ./scripts/orchestrator.sh apply -f docs/workflow/self-bootstrap.yaml --project "${QA_PROJECT}"
@@ -40,6 +43,10 @@ QA_PROJECT="qa-survival"
 |---------|-----------|-----|
 | `binary_snapshot_created` event never emitted | `self_referential` resolved to `false` at runtime because `qa project create` was used instead of `apply --project` | Use `apply --project` to preserve workspace config including `self_referential: true` |
 | `snapshot_binary` logs warning "release binary not found" | Binary not built | Run `cd core && cargo build --release` before testing |
+| "no agent supports capability" on task create | Project-scoped agents not checked during validation | Fixed: `build_execution_plan_for_project` merges project + global agents |
+| Task uses global workspace instead of project workspace | No `--workspace` flag and global default doesn't match project | Fixed: auto-resolves to project's single workspace when not specified |
+| "EMPTY_WORKFLOWS" error with project-only config | Global workflow check didn't account for project-scoped workflows | Fixed: validation now checks `has_project_workflows` |
+| "defaults.workflow does not exist" with project-only config | A global base config with at least one workflow/workspace/agent must exist before applying project-scoped resources | Apply `echo-workflow.yaml` (or any base fixture) first |
 
 ---
 

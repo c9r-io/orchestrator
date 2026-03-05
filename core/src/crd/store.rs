@@ -23,6 +23,11 @@ impl ResourceStore {
         self.resources.get(&key)
     }
 
+    /// Get a mutable reference to a resource by its storage key.
+    pub fn get_mut_by_key(&mut self, key: &str) -> Option<&mut CustomResource> {
+        self.resources.get_mut(key)
+    }
+
     /// Get a namespaced resource by kind, project, and name.
     pub fn get_namespaced(
         &self,

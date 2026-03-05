@@ -276,6 +276,44 @@ pub fn project_all_builtins(config: &mut OrchestratorConfig) {
     }
 }
 
+/// Restore resource metadata (labels, annotations) from an old ResourceStore
+/// into the current one.
+///
+/// Called after `sync_legacy_to_store` rebuilds the store from spec-only legacy
+/// fields — this merges back any labels/annotations that were stored in the
+/// previous resource store so they survive normalization.
+pub fn restore_metadata_from_old_store(
+    config: &mut OrchestratorConfig,
+    old_store: &crate::crd::store::ResourceStore,
+) {
+    for (key, old_cr) in old_store.resources() {
+        // Only restore metadata when the old CR actually had labels or annotations
+        let has_labels = old_cr
+            .metadata
+            .labels
+            .as_ref()
+            .is_some_and(|m| !m.is_empty());
+        let has_annotations = old_cr
+            .metadata
+            .annotations
+            .as_ref()
+            .is_some_and(|m| !m.is_empty());
+        if !has_labels && !has_annotations {
+            continue;
+        }
+
+        // Look up the corresponding new CR and merge metadata
+        if let Some(new_cr) = config.resource_store.get_mut_by_key(key) {
+            if has_labels && new_cr.metadata.labels.is_none() {
+                new_cr.metadata.labels = old_cr.metadata.labels.clone();
+            }
+            if has_annotations && new_cr.metadata.annotations.is_none() {
+                new_cr.metadata.annotations = old_cr.metadata.annotations.clone();
+            }
+        }
+    }
+}
+
 /// Sync legacy config fields into the ResourceStore.
 ///
 /// Used during migration: when `resource_store` is empty but legacy fields have data,

@@ -1,5 +1,5 @@
 use crate::config::LoopMode;
-use crate::config_load::build_execution_plan;
+use crate::config_load::{build_execution_plan, build_execution_plan_for_project};
 use crate::config_load::{now_ts, read_active_config};
 use crate::db::open_conn;
 use crate::dto::{CreateTaskPayload, TaskSummary, UNASSIGNED_QA_FILE_PATH};
@@ -118,10 +118,26 @@ pub fn create_task_impl(
         .clone()
         .unwrap_or_else(|| active.default_project_id.clone());
 
-    let workspace_id = payload
-        .workspace_id
-        .clone()
-        .unwrap_or_else(|| active.default_workspace_id.clone());
+    let workspace_id = payload.workspace_id.clone().unwrap_or_else(|| {
+        // If project has workspaces and the global default isn't in the project,
+        // fall back to the project's first (or only) workspace.
+        if !project_id.is_empty() {
+            if let Some(project) = active.projects.get(&project_id) {
+                if !project.workspaces.is_empty()
+                    && !project.workspaces.contains_key(&active.default_workspace_id)
+                {
+                    if project.workspaces.len() == 1 {
+                        return project.workspaces.keys().next().unwrap().clone();
+                    }
+                    // If "default" exists in project, use that
+                    if project.workspaces.contains_key("default") {
+                        return "default".to_string();
+                    }
+                }
+            }
+        }
+        active.default_workspace_id.clone()
+    });
 
     let workspace = active
         .projects
@@ -152,7 +168,11 @@ pub fn create_task_impl(
             )
         })?;
 
-    let execution_plan = build_execution_plan(&active.config, &workflow, &workflow_id)?;
+    let execution_plan = if !project_id.is_empty() {
+        build_execution_plan_for_project(&active.config, &workflow, &workflow_id, &project_id)?
+    } else {
+        build_execution_plan(&active.config, &workflow, &workflow_id)?
+    };
     let execution_plan_json =
         serde_json::to_string(&execution_plan).context("serialize execution plan")?;
     let loop_mode = match execution_plan.loop_policy.mode {

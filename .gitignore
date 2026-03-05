@@ -9,3 +9,4 @@ fixtures/ticket/*.md
 workspace/*
 data/
 .playwright-cli
+.playwright-mcp

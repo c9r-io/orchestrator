@@ -152,6 +152,13 @@
 - `apply -f -` reads from stdin and applies successfully.
 - Applied resource can be queried by label selector.
 
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Label selector returns empty but `get agents` shows the resource | Labels lost during config normalization | Fixed in normalize.rs — `restore_metadata_from_old_store` preserves labels across normalization cycles |
+| `get steptemplates` or `get envstores` returns empty | Builtin CRD types not resolving through resource_store | Fixed in cli_handler/resource.rs — CRD fallback chains `resource_store.get()` |
+
 ---
 
 ## Checklist

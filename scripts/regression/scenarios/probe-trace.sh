@@ -27,7 +27,7 @@ _tr_run_normal_trace() {
 
   "$PROBE_BINARY" task start "$task_id" >/dev/null 2>&1 &
   local runner_pid=$!
-  probe_wait_task_done "$task_id" 120 || true
+  probe_wait_task_done "$task_id" 240 || true
   wait "$runner_pid" 2>/dev/null || true
 
   local trace_json

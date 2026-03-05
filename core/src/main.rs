@@ -197,7 +197,13 @@ fn run_apply_preflight(
 
     let (db_path, _logs_dir) = initialize_runtime(app_root)?;
     let content = read_manifest_input(file)?;
-    let manifests = parse_manifests_from_yaml(&content)?;
+    let manifests = match parse_manifests_from_yaml(&content) {
+        Ok(m) => m,
+        Err(e) => {
+            err_line(format!("Error: {}", e));
+            return Ok(1);
+        }
+    };
     let mut merged_config = load_raw_config_from_db(&db_path)?
         .map(|(cfg, _, _)| cfg)
         .unwrap_or_default();
@@ -340,8 +346,15 @@ fn run_apply_preflight(
 
     if !dry_run && !applied_results.is_empty() {
         autofill_defaults_for_manifest_mode(&mut merged_config);
-        let overview = persist_raw_config(&db_path, merged_config, "cli-apply")?;
-        out_line(format!("configuration version: {}", overview.version));
+        match persist_raw_config(&db_path, merged_config, "cli-apply") {
+            Ok(overview) => {
+                out_line(format!("configuration version: {}", overview.version));
+            }
+            Err(e) => {
+                err_line(format!("Error: {}", e));
+                return Ok(1);
+            }
+        }
     }
 
     Ok(0)
@@ -352,7 +365,13 @@ fn run_manifest_validate_preflight(app_root: &Path, file: &str) -> Result<i32> {
 
     let (db_path, _logs_dir) = initialize_runtime(app_root)?;
     let content = read_manifest_input(file)?;
-    let manifests = parse_manifests_from_yaml(&content)?;
+    let manifests = match parse_manifests_from_yaml(&content) {
+        Ok(m) => m,
+        Err(e) => {
+            err_line(format!("Error: {}", e));
+            return Ok(1);
+        }
+    };
     let mut merged_config = load_raw_config_from_db(&db_path)?
         .map(|(cfg, _, _)| cfg)
         .unwrap_or_default();

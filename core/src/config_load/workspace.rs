@@ -35,7 +35,8 @@ pub fn resolve_and_validate_workspaces(
     if config.agents.is_empty() && !has_project_agents {
         anyhow::bail!("[EMPTY_AGENTS] config.agents cannot be empty\n  category: validation\n  suggested_fix: add at least one agent with capabilities and templates");
     }
-    if config.workflows.is_empty() {
+    let has_project_workflows = config.projects.values().any(|p| !p.workflows.is_empty());
+    if config.workflows.is_empty() && !has_project_workflows {
         anyhow::bail!("[EMPTY_WORKFLOWS] config.workflows cannot be empty\n  category: validation\n  suggested_fix: add at least one workflow with steps");
     }
 
@@ -97,7 +98,11 @@ pub fn resolve_and_validate_workspaces(
     if !resolved.contains_key(default_ws) && !default_in_projects {
         anyhow::bail!("defaults.workspace '{}' does not exist", default_ws);
     }
-    if !config.workflows.contains_key(&config.defaults.workflow) {
+    let default_wf_in_projects = config
+        .projects
+        .values()
+        .any(|p| p.workflows.contains_key(&config.defaults.workflow));
+    if !config.workflows.contains_key(&config.defaults.workflow) && !default_wf_in_projects {
         anyhow::bail!(
             "defaults.workflow '{}' does not exist",
             config.defaults.workflow

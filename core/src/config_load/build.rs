@@ -7,7 +7,7 @@ use super::{
     apply_self_heal_pass, normalize_config, normalize_step_execution_mode_recursive,
     persist_config_versioned, persist_heal_log, resolve_and_validate_projects,
     resolve_and_validate_workspaces, serialize_config_snapshot, validate_agent_env_store_refs,
-    validate_workflow_config, ConfigSelfHealReport,
+    validate_workflow_config, validate_workflow_config_with_agents, ConfigSelfHealReport,
 };
 
 pub fn build_active_config(app_root: &Path, config: OrchestratorConfig) -> Result<ActiveConfig> {
@@ -80,6 +80,34 @@ pub fn build_execution_plan(
     workflow_id: &str,
 ) -> Result<TaskExecutionPlan> {
     validate_workflow_config(config, workflow, workflow_id)?;
+    build_execution_plan_inner(workflow)
+}
+
+/// Build an execution plan using project-scoped agents for validation.
+pub fn build_execution_plan_for_project(
+    config: &OrchestratorConfig,
+    workflow: &WorkflowConfig,
+    workflow_id: &str,
+    project_id: &str,
+) -> Result<TaskExecutionPlan> {
+    // Merge global + project-scoped agents for validation
+    let mut all_agents: std::collections::HashMap<String, &crate::config::AgentConfig> = config
+        .agents
+        .iter()
+        .map(|(k, v)| (k.clone(), v))
+        .collect();
+    if let Some(project) = config.projects.get(project_id) {
+        for (k, v) in &project.agents {
+            all_agents.insert(k.clone(), v);
+        }
+    }
+    validate_workflow_config_with_agents(&all_agents, workflow, workflow_id)?;
+    build_execution_plan_inner(workflow)
+}
+
+fn build_execution_plan_inner(
+    workflow: &WorkflowConfig,
+) -> Result<TaskExecutionPlan> {
     let mut steps = Vec::new();
     for step in &workflow.steps {
         if !step.enabled {
