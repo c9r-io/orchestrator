@@ -274,6 +274,7 @@ mod tests {
             retest: None,
             dynamic_steps: vec![],
             safety: SafetyConfig::default(),
+            max_parallel: None,
         }
     }
 
@@ -300,6 +301,7 @@ mod tests {
             chain_steps: vec![],
             scope: None,
             behavior: StepBehavior::default(),
+            max_parallel: None,
         }
     }
 

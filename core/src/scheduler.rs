@@ -138,6 +138,7 @@ mod tests {
                             chain_steps: vec![],
                             scope: None,
                             behavior: StepBehavior::default(),
+                            max_parallel: None,
                         },
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
@@ -158,6 +159,7 @@ mod tests {
                             chain_steps: vec![],
                             scope: None,
                             behavior: StepBehavior::default(),
+                            max_parallel: None,
                         },
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
@@ -178,6 +180,7 @@ mod tests {
                             chain_steps: vec![],
                             scope: None,
                             behavior: StepBehavior::default(),
+                            max_parallel: None,
                         },
                     ],
                     loop_policy: WorkflowLoopConfig {
@@ -195,6 +198,7 @@ mod tests {
                     retest: None,
                     dynamic_steps: vec![],
                     safety: crate::config::SafetyConfig::default(),
+                    max_parallel: None,
                 },
             );
         let state = fixture.build();
@@ -278,9 +282,11 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 }],
                 scope: None,
                 behavior: StepBehavior::default(),
+                max_parallel: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -295,6 +301,7 @@ mod tests {
             retest: None,
             dynamic_steps: vec![],
             safety: crate::config::SafetyConfig::default(),
+            max_parallel: None,
         };
 
         crate::config_load::normalize_workflow_config(&mut workflow);
@@ -373,6 +380,7 @@ mod tests {
                             chain_steps: vec![],
                             scope: None,
                             behavior: StepBehavior::default(),
+                            max_parallel: None,
                         },
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
@@ -393,6 +401,7 @@ mod tests {
                             chain_steps: vec![],
                             scope: None,
                             behavior: StepBehavior::default(),
+                            max_parallel: None,
                         },
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
@@ -413,6 +422,7 @@ mod tests {
                             chain_steps: vec![],
                             scope: None,
                             behavior: StepBehavior::default(),
+                            max_parallel: None,
                         },
                     ],
                     loop_policy: WorkflowLoopConfig {
@@ -430,6 +440,7 @@ mod tests {
                     retest: None,
                     dynamic_steps: vec![],
                     safety: crate::config::SafetyConfig::default(),
+                    max_parallel: None,
                 },
             );
         let state = fixture.build();
@@ -661,6 +672,7 @@ mod tests {
                             },
                             ..StepBehavior::default()
                         },
+                        max_parallel: None,
                     },
                     WorkflowStepConfig {
                         id: "item_verify".to_string(),
@@ -680,6 +692,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: Some(StepScope::Item),
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig {
@@ -697,6 +710,7 @@ mod tests {
                 retest: None,
                 dynamic_steps: vec![],
                 safety: crate::config::SafetyConfig::default(),
+                max_parallel: None,
             },
         );
         let state = fixture.build();
@@ -778,6 +792,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: Some(StepScope::Task),
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                     WorkflowStepConfig {
                         id: "item_verify".to_string(),
@@ -797,6 +812,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: Some(StepScope::Item),
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig {
@@ -814,6 +830,7 @@ mod tests {
                 retest: None,
                 dynamic_steps: vec![],
                 safety: crate::config::SafetyConfig::default(),
+                max_parallel: None,
             },
         );
         let state = fixture.build();
@@ -903,6 +920,7 @@ mod tests {
                         },
                         ..StepBehavior::default()
                     },
+                    max_parallel: None,
                 }],
                 loop_policy: WorkflowLoopConfig {
                     mode: LoopMode::Fixed,
@@ -924,6 +942,7 @@ mod tests {
                     checkpoint_strategy: crate::config::CheckpointStrategy::GitTag,
                     ..crate::config::SafetyConfig::default()
                 },
+                max_parallel: None,
             },
         );
         let state = fixture.build();

@@ -121,6 +121,7 @@ fn build_execution_plan_inner(
         steps,
         loop_policy,
         finalize: workflow.finalize.clone(),
+        max_parallel: workflow.max_parallel,
     })
 }
 
@@ -151,6 +152,7 @@ pub(crate) fn task_step_from_workflow_step(
             .collect::<Result<Vec<_>>>()?,
         scope: normalized.scope,
         behavior: normalized.behavior.clone(),
+        max_parallel: normalized.max_parallel,
     })
 }
 

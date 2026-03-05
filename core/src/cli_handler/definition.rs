@@ -145,6 +145,7 @@ impl CliHandler {
                         template: None,
                         command: None,
                         scope: None,
+                        max_parallel: None,
                     })
                     .collect();
 
@@ -161,6 +162,7 @@ impl CliHandler {
                     finalize: WorkflowFinalizeSpec { rules: vec![] },
                     dynamic_steps: vec![],
                     safety: SafetySpec::default(),
+                    max_parallel: None,
                 };
                 let manifest = OrchestratorResource {
                     api_version: "orchestrator.dev/v2".to_string(),

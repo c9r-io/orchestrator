@@ -52,6 +52,9 @@ pub struct TaskExecutionStep {
     /// Declarative step behavior (on_failure, captures, post_actions, etc.)
     #[serde(default)]
     pub behavior: StepBehavior,
+    /// Maximum parallel items for item-scoped steps (per-step override)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_parallel: Option<usize>,
 }
 
 impl TaskExecutionStep {
@@ -120,6 +123,9 @@ pub struct TaskExecutionPlan {
     pub loop_policy: WorkflowLoopConfig,
     #[serde(default)]
     pub finalize: WorkflowFinalizeConfig,
+    /// Default max parallelism for item-scoped segments (1 = sequential)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_parallel: Option<usize>,
 }
 
 impl TaskExecutionPlan {
@@ -299,6 +305,7 @@ mod tests {
             chain_steps: vec![],
             scope: None,
             behavior: StepBehavior::default(),
+            max_parallel: None,
         }
     }
 
@@ -321,6 +328,7 @@ mod tests {
             chain_steps: vec![],
             scope: Some(StepScope::Task), // explicit override
             behavior: StepBehavior::default(),
+            max_parallel: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -344,6 +352,7 @@ mod tests {
             chain_steps: vec![],
             scope: None,
             behavior: StepBehavior::default(),
+            max_parallel: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -367,6 +376,7 @@ mod tests {
             chain_steps: vec![],
             scope: None,
             behavior: StepBehavior::default(),
+            max_parallel: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -392,6 +402,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 },
                 TaskExecutionStep {
                     id: "qa".to_string(),
@@ -410,10 +421,12 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig::default(),
             finalize: WorkflowFinalizeConfig::default(),
+            max_parallel: None,
         };
 
         let found = plan.step_by_id("qa");
@@ -431,6 +444,7 @@ mod tests {
             steps: vec![],
             loop_policy: WorkflowLoopConfig::default(),
             finalize: WorkflowFinalizeConfig::default(),
+            max_parallel: None,
         };
         assert!(plan.step_by_id("fix").is_none());
     }

@@ -157,6 +157,7 @@ mod tests {
                     tty: false,
                     command: None,
                     scope: None,
+                    max_parallel: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "once".to_string(),
@@ -168,6 +169,7 @@ mod tests {
                 finalize: crate::cli_types::WorkflowFinalizeSpec { rules: vec![] },
                 dynamic_steps: vec![],
                 safety: SafetySpec::default(),
+                max_parallel: None,
             },
         };
         let err = wf.validate().expect_err("operation should fail");
@@ -193,6 +195,7 @@ mod tests {
                     tty: false,
                     command: None,
                     scope: None,
+                    max_parallel: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "once".to_string(),
@@ -204,6 +207,7 @@ mod tests {
                 finalize: crate::cli_types::WorkflowFinalizeSpec { rules: vec![] },
                 dynamic_steps: vec![],
                 safety: SafetySpec::default(),
+                max_parallel: None,
             },
         };
         let err = wf.validate().expect_err("operation should fail");
@@ -229,6 +233,7 @@ mod tests {
                     tty: false,
                     command: None,
                     scope: None,
+                    max_parallel: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "fixed".to_string(),
@@ -240,6 +245,7 @@ mod tests {
                 finalize: crate::cli_types::WorkflowFinalizeSpec { rules: vec![] },
                 dynamic_steps: vec![],
                 safety: SafetySpec::default(),
+                max_parallel: None,
             },
         };
         let err = wf.validate().expect_err("operation should fail");
@@ -265,6 +271,7 @@ mod tests {
                     tty: false,
                     command: None,
                     scope: None,
+                    max_parallel: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "fixed".to_string(),
@@ -276,6 +283,7 @@ mod tests {
                 finalize: crate::cli_types::WorkflowFinalizeSpec { rules: vec![] },
                 dynamic_steps: vec![],
                 safety: SafetySpec::default(),
+                max_parallel: None,
             },
         };
         let err = wf.validate().expect_err("operation should fail");
@@ -301,6 +309,7 @@ mod tests {
                     tty: false,
                     command: None,
                     scope: None,
+                    max_parallel: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "fixed".to_string(),
@@ -312,6 +321,7 @@ mod tests {
                 finalize: crate::cli_types::WorkflowFinalizeSpec { rules: vec![] },
                 dynamic_steps: vec![],
                 safety: SafetySpec::default(),
+                max_parallel: None,
             },
         };
         assert!(wf.validate().is_ok());
@@ -338,6 +348,7 @@ mod tests {
                 finalize: crate::cli_types::WorkflowFinalizeSpec { rules: vec![] },
                 dynamic_steps: vec![],
                 safety: SafetySpec::default(),
+                max_parallel: None,
             },
         };
         let result = workflow.validate();
@@ -393,6 +404,7 @@ mod tests {
                     tty: false,
                     command: None,
                     scope: None,
+                    max_parallel: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "once".to_string(),
@@ -404,6 +416,7 @@ mod tests {
                 finalize: crate::cli_types::WorkflowFinalizeSpec { rules: vec![] },
                 dynamic_steps: vec![],
                 safety: SafetySpec::default(),
+                max_parallel: None,
             }),
         };
         let rr = dispatch_resource(resource).expect("dispatch workflow resource");

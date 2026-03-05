@@ -6,7 +6,7 @@ use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-const DEFAULT_POOL_MAX_SIZE: u32 = 12;
+const DEFAULT_POOL_MAX_SIZE: u32 = 20;
 const DEFAULT_POOL_MIN_IDLE: u32 = 1;
 const DEFAULT_POOL_CONNECTION_TIMEOUT_MS: u64 = 2000;
 
@@ -102,7 +102,7 @@ mod tests {
 
         let db = Database::new(db_path).expect("create pool");
 
-        assert_eq!(db.pool_max_size(), 12);
+        assert_eq!(db.pool_max_size(), 20);
         assert_eq!(db.pool_min_idle(), 1);
         assert_eq!(db.pool_connection_timeout_ms(), 2000);
     }

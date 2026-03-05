@@ -156,6 +156,7 @@ impl CliHandler {
             chain_steps: vec![],
             scope: None,
             behavior: Default::default(),
+            max_parallel: None,
         };
         plan.steps.insert(insert_idx, inserted_step);
 

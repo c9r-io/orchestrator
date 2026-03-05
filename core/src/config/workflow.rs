@@ -48,6 +48,9 @@ pub struct WorkflowStepConfig {
     /// Declarative step behavior (on_failure, captures, post_actions, etc.)
     #[serde(default)]
     pub behavior: StepBehavior,
+    /// Maximum parallel items for item-scoped steps (per-step override)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_parallel: Option<usize>,
 }
 
 fn default_true() -> bool {
@@ -74,6 +77,9 @@ pub struct WorkflowConfig {
     /// Safety configuration for self-bootstrap scenarios
     #[serde(default)]
     pub safety: SafetyConfig,
+    /// Default max parallelism for item-scoped segments (1 = sequential)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_parallel: Option<usize>,
 }
 
 /// Loop mode enumeration

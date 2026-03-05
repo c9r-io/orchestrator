@@ -78,6 +78,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                         chain_steps: vec![],
                         scope: None,
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     }],
                     loop_policy: WorkflowLoopConfig {
                         mode: LoopMode::Once,
@@ -89,6 +90,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                     retest: None,
                     dynamic_steps: vec![],
                     safety: agent_orchestrator::config::SafetyConfig::default(),
+                    max_parallel: None,
                 },
             );
             workflows
@@ -587,6 +589,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             chain_steps: vec![],
                             scope: None,
                             behavior: StepBehavior::default(),
+                            max_parallel: None,
                         },
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
@@ -606,6 +609,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             chain_steps: vec![],
                             scope: None,
                             behavior: StepBehavior::default(),
+                            max_parallel: None,
                         },
                         WorkflowStepConfig {
                             id: "implement".to_string(),
@@ -625,6 +629,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             chain_steps: vec![],
                             scope: None,
                             behavior: StepBehavior::default(),
+                            max_parallel: None,
                         },
                         WorkflowStepConfig {
                             id: "qa_testing".to_string(),
@@ -644,6 +649,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             chain_steps: vec![],
                             scope: None,
                             behavior: StepBehavior::default(),
+                            max_parallel: None,
                         },
                         WorkflowStepConfig {
                             id: "ticket_fix".to_string(),
@@ -663,6 +669,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             chain_steps: vec![],
                             scope: None,
                             behavior: StepBehavior::default(),
+                            max_parallel: None,
                         },
                         WorkflowStepConfig {
                             id: "align_tests".to_string(),
@@ -682,6 +689,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             chain_steps: vec![],
                             scope: None,
                             behavior: StepBehavior::default(),
+                            max_parallel: None,
                         },
                         WorkflowStepConfig {
                             id: "doc_governance".to_string(),
@@ -701,6 +709,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             chain_steps: vec![],
                             scope: None,
                             behavior: StepBehavior::default(),
+                            max_parallel: None,
                         },
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
@@ -720,6 +729,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             chain_steps: vec![],
                             scope: None,
                             behavior: StepBehavior::default(),
+                            max_parallel: None,
                         },
                     ],
                     loop_policy: WorkflowLoopConfig {
@@ -732,6 +742,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                     retest: None,
                     dynamic_steps: vec![],
                     safety: SafetyConfig::default(),
+                    max_parallel: None,
                 },
             );
             workflows
@@ -839,6 +850,7 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
                 chain_steps: vec![],
                 scope: None,
                 behavior: StepBehavior::default(),
+                max_parallel: None,
             },
             WorkflowStepConfig {
                 id: "align_tests".to_string(),
@@ -858,6 +870,7 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
                 chain_steps: vec![],
                 scope: None,
                 behavior: StepBehavior::default(),
+                max_parallel: None,
             },
         ],
         loop_policy: WorkflowLoopConfig {
@@ -870,6 +883,7 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
         retest: None,
         dynamic_steps: vec![],
         safety: agent_orchestrator::config::SafetyConfig::default(),
+        max_parallel: None,
     };
 
     normalize_workflow_config(&mut workflow);

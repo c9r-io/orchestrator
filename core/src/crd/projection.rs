@@ -360,6 +360,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 },
                 WorkflowStepConfig {
                     id: "self_test".to_string(),
@@ -379,6 +380,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -394,6 +396,7 @@ mod tests {
             retest: None,
             dynamic_steps: vec![],
             safety: crate::config::SafetyConfig::default(),
+            max_parallel: None,
         };
         let spec = config.to_cr_spec();
         let back = WorkflowConfig::from_cr_spec(&spec).expect("should deserialize workflow");
@@ -424,6 +427,7 @@ mod tests {
             retest: None,
             dynamic_steps: vec![],
             safety: crate::config::SafetyConfig::default(),
+            max_parallel: None,
         };
         let spec = config.to_cr_spec();
         let back = WorkflowConfig::from_cr_spec(&spec).expect("should deserialize");

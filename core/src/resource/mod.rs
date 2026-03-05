@@ -1133,6 +1133,7 @@ pub(super) mod test_fixtures {
                     tty: false,
                     command: None,
                     scope: None,
+                    max_parallel: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "once".to_string(),
@@ -1152,6 +1153,7 @@ pub(super) mod test_fixtures {
                 },
                 dynamic_steps: vec![],
                 safety: SafetySpec::default(),
+                max_parallel: None,
             }),
         }
     }

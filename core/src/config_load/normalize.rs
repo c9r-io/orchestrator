@@ -68,6 +68,7 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                 chain_steps: vec![],
                 scope: None,
                 behavior: StepBehavior::default(),
+                max_parallel: None,
             };
             apply_default_step_behavior(&mut placeholder);
             let _ = normalize_step_execution_mode_recursive(&mut placeholder);
@@ -223,6 +224,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: None,
                 behavior: StepBehavior::default(),
+                max_parallel: None,
             }],
             loop_policy: crate::config::WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -237,6 +239,7 @@ mod tests {
             retest: None,
             dynamic_steps: vec![],
             safety: crate::config::SafetyConfig::default(),
+            max_parallel: None,
         };
 
         normalize_workflow_config(&mut workflow);
@@ -317,6 +320,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 },
                 WorkflowStepConfig {
                     id: "self_test_recover".to_string(),
@@ -336,6 +340,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {
@@ -351,6 +356,7 @@ mod tests {
             retest: None,
             dynamic_steps: vec![],
             safety: crate::config::SafetyConfig::default(),
+            max_parallel: None,
         };
 
         normalize_workflow_config(&mut workflow);
@@ -853,6 +859,7 @@ mod tests {
             chain_steps: vec![],
             scope: None,
             behavior: StepBehavior::default(),
+            max_parallel: None,
         }];
         let mut wf = make_workflow(steps);
         normalize_workflow_config(&mut wf);

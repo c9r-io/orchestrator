@@ -100,6 +100,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                         chain_steps: vec![],
                         scope: None,
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     }],
                     loop_policy: WorkflowLoopConfig {
                         mode: LoopMode::Once,
@@ -116,6 +117,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                     retest: None,
                     dynamic_steps: vec![],
                     safety: SafetyConfig::default(),
+                    max_parallel: None,
                 },
             );
             workflows

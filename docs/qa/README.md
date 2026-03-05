@@ -132,6 +132,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/41-project-scoped-agent-selection.md` | 5 | Project-scoped agent selection: apply --project, hierarchical resolution, ticket cleanup, global fallback |
 | orchestrator | `docs/qa/orchestrator/42-crd-unified-resource-store.md` | 5 | Unified CRD ResourceStore: builtin CRD bootstrap, CrdProjectable round-trip, targeted writeback, apply/delete integration, edge cases |
 | orchestrator | `docs/qa/orchestrator/43-cli-force-gate-audit.md` | 5 | CLI force gate audit: backfill-events, task retry, and existing force-gate regression checks |
+| orchestrator | `docs/qa/orchestrator/44-parallel-item-execution.md` | 5 | Parallel item execution: max_parallel config, semaphore-gated JoinSet, RunningTask::fork(), pool size 20 |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
 | script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |

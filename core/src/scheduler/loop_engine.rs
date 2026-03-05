@@ -11,8 +11,11 @@ use tracing::warn;
 
 use super::item_executor::{
     execute_guard_step, finalize_item_execution, process_item, process_item_filtered,
-    ProcessItemRequest, StepExecutionAccumulator,
+    process_item_filtered_owned, OwnedProcessItemRequest, ProcessItemRequest,
+    StepExecutionAccumulator,
 };
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 use super::phase_runner::{run_phase_with_rotation, RotatingPhaseRunRequest};
 use super::runtime::load_task_runtime_context;
 use super::safety::{
@@ -174,7 +177,7 @@ async fn run_task_loop_core(
                         json!({"cycle": task_ctx.current_cycle, "tag": tag}),
                     )?;
 
-                    if task_ctx.safety.binary_snapshot && task_ctx.self_referential {
+                    if should_snapshot_binary(task_ctx.safety.binary_snapshot, task_ctx.self_referential) {
                         match snapshot_binary(&task_ctx.workspace_root, task_id, task_ctx.current_cycle).await {
                             Ok(path) => {
                                 insert_event(
@@ -272,24 +275,102 @@ async fn run_task_loop_core(
                         }
                     }
                     StepScope::Item => {
-                        // Fan out item-scoped steps across all items
-                        for item in &items {
-                            let acc = item_state.entry(item.id.clone()).or_insert_with(|| {
-                                StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone())
-                            });
-                            process_item_filtered(
-                                &state,
-                                ProcessItemRequest {
-                                    task_id,
-                                    item,
-                                    task_item_paths: &task_item_paths,
-                                    task_ctx: &task_ctx,
-                                    runtime: &runtime,
-                                    step_filter: Some(&segment.step_ids),
-                                },
-                                acc,
-                            )
-                            .await?;
+                        let max_par = segment.max_parallel;
+                        if max_par <= 1 {
+                            // === Sequential path (unchanged) ===
+                            for item in &items {
+                                let acc =
+                                    item_state.entry(item.id.clone()).or_insert_with(|| {
+                                        StepExecutionAccumulator::new(
+                                            task_ctx.pipeline_vars.clone(),
+                                        )
+                                    });
+                                process_item_filtered(
+                                    &state,
+                                    ProcessItemRequest {
+                                        task_id,
+                                        item,
+                                        task_item_paths: &task_item_paths,
+                                        task_ctx: &task_ctx,
+                                        runtime: &runtime,
+                                        step_filter: Some(&segment.step_ids),
+                                    },
+                                    acc,
+                                )
+                                .await?;
+                            }
+                        } else {
+                            // === Parallel path ===
+                            let semaphore = Arc::new(Semaphore::new(max_par));
+                            let shared_paths = Arc::new(task_item_paths.clone());
+                            let shared_ctx = Arc::new(task_ctx.clone());
+                            let shared_filter = Arc::new(segment.step_ids.clone());
+                            let mut join_set = JoinSet::new();
+
+                            for item in &items {
+                                let permit = semaphore.clone().acquire_owned().await.map_err(
+                                    |e| anyhow::anyhow!("semaphore closed: {}", e),
+                                )?;
+                                let state = state.clone();
+                                let item = item.clone();
+                                let task_id = task_id.to_string();
+                                let paths = shared_paths.clone();
+                                let ctx = shared_ctx.clone();
+                                let filter = shared_filter.clone();
+                                let item_runtime = runtime.fork();
+                                let pipeline_vars = task_ctx.pipeline_vars.clone();
+
+                                join_set.spawn(async move {
+                                    let _permit = permit;
+                                    let mut acc =
+                                        StepExecutionAccumulator::new(pipeline_vars);
+                                    let result = process_item_filtered_owned(
+                                        &state,
+                                        OwnedProcessItemRequest {
+                                            task_id: task_id.clone(),
+                                            item: item.clone(),
+                                            task_item_paths: paths,
+                                            task_ctx: ctx,
+                                            runtime: item_runtime,
+                                            step_filter: Some(filter),
+                                        },
+                                        &mut acc,
+                                    )
+                                    .await;
+                                    (item.id.clone(), acc, result)
+                                });
+                            }
+
+                            // Collect all results (no fail-fast)
+                            let mut errors = Vec::new();
+                            while let Some(join_result) = join_set.join_next().await {
+                                match join_result {
+                                    Ok((id, acc, Ok(()))) => {
+                                        item_state.insert(id, acc);
+                                    }
+                                    Ok((id, acc, Err(e))) => {
+                                        item_state.insert(id, acc);
+                                        errors.push(e);
+                                    }
+                                    Err(e) => {
+                                        errors.push(anyhow::anyhow!(
+                                            "item task panicked: {}",
+                                            e
+                                        ));
+                                    }
+                                }
+                            }
+                            if !errors.is_empty() {
+                                let msg = errors
+                                    .iter()
+                                    .map(|e| e.to_string())
+                                    .collect::<Vec<_>>()
+                                    .join("; ");
+                                anyhow::bail!(
+                                    "parallel item execution failed: {}",
+                                    msg
+                                );
+                            }
                         }
                     }
                 }
@@ -350,7 +431,7 @@ async fn run_task_loop_core(
                         json!({"rollback_to": rollback_tag}),
                     );
 
-                    if task_ctx.safety.binary_snapshot && task_ctx.self_referential {
+                    if should_snapshot_binary(task_ctx.safety.binary_snapshot, task_ctx.self_referential) {
                         match restore_binary_snapshot(&task_ctx.workspace_root).await {
                             Ok(()) => {
                                 insert_event(
@@ -554,11 +635,14 @@ pub fn evaluate_loop_guard_rules(
 struct ScopeSegment {
     scope: StepScope,
     step_ids: HashSet<String>,
+    /// Resolved concurrency limit for item-scoped segments (1 = sequential).
+    max_parallel: usize,
 }
 
 /// Group execution plan steps into contiguous segments of the same scope.
 /// Guard steps are excluded; they run separately after items.
 fn build_scope_segments(task_ctx: &crate::config::TaskRuntimeContext) -> Vec<ScopeSegment> {
+    let plan_default = task_ctx.execution_plan.max_parallel;
     let mut segments: Vec<ScopeSegment> = Vec::new();
     for step in &task_ctx.execution_plan.steps {
         if step.is_guard || !step.enabled {
@@ -573,9 +657,18 @@ fn build_scope_segments(task_ctx: &crate::config::TaskRuntimeContext) -> Vec<Sco
         }
         let mut ids = HashSet::new();
         ids.insert(step.id.clone());
+        // Resolve max_parallel: step override > plan default > 1
+        let max_parallel = if scope == StepScope::Item {
+            step.max_parallel
+                .or(plan_default)
+                .unwrap_or(1)
+        } else {
+            1 // task-scoped segments are always sequential
+        };
         segments.push(ScopeSegment {
             scope,
             step_ids: ids,
+            max_parallel,
         });
     }
     segments
@@ -657,6 +750,10 @@ fn emit_skipped_item_step_events(
     }
 
     Ok(())
+}
+
+fn should_snapshot_binary(binary_snapshot: bool, self_referential: bool) -> bool {
+    binary_snapshot && self_referential
 }
 
 #[cfg(test)]
@@ -748,6 +845,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: None,
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                     TaskExecutionStep {
                         id: "implement".into(),
@@ -767,6 +865,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: None,
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                     TaskExecutionStep {
                         id: "qa_testing".into(),
@@ -786,6 +885,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: None,
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                     TaskExecutionStep {
                         id: "ticket_fix".into(),
@@ -805,6 +905,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: None,
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                     TaskExecutionStep {
                         id: "doc_governance".into(),
@@ -824,10 +925,12 @@ mod tests {
                         chain_steps: vec![],
                         scope: None,
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
                 finalize: WorkflowFinalizeConfig::default(),
+                max_parallel: None,
             },
             current_cycle: 1,
             init_done: true,
@@ -886,6 +989,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: None,
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                     TaskExecutionStep {
                         id: "loop_guard".into(),
@@ -905,10 +1009,12 @@ mod tests {
                         chain_steps: vec![],
                         scope: None,
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
                 finalize: WorkflowFinalizeConfig::default(),
+                max_parallel: None,
             },
             current_cycle: 1,
             init_done: true,
@@ -949,6 +1055,7 @@ mod tests {
             chain_steps: vec![],
             scope: Some(StepScope::Task), // Override default Item scope
             behavior: StepBehavior::default(),
+            max_parallel: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -1032,6 +1139,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: Some(StepScope::Task),
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                     TaskExecutionStep {
                         id: "qa_testing".into(),
@@ -1050,6 +1158,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: Some(StepScope::Item),
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                     TaskExecutionStep {
                         id: "ticket_fix".into(),
@@ -1068,6 +1177,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: Some(StepScope::Item),
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                     TaskExecutionStep {
                         id: "align_tests".into(),
@@ -1086,10 +1196,12 @@ mod tests {
                         chain_steps: vec![],
                         scope: Some(StepScope::Task),
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
                 finalize: WorkflowFinalizeConfig::default(),
+                max_parallel: None,
             },
             init_done: true,
             dynamic_steps: vec![],
@@ -1139,9 +1251,11 @@ mod tests {
                     chain_steps: vec![],
                     scope: Some(StepScope::Item),
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 }],
                 loop_policy: WorkflowLoopConfig::default(),
                 finalize: WorkflowFinalizeConfig::default(),
+                max_parallel: None,
             },
             init_done: true,
             dynamic_steps: vec![],
@@ -1234,6 +1348,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: Some(StepScope::Task),
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                     TaskExecutionStep {
                         id: "disabled_step".into(),
@@ -1252,10 +1367,12 @@ mod tests {
                         chain_steps: vec![],
                         scope: Some(StepScope::Item),
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
                 finalize: WorkflowFinalizeConfig::default(),
+                max_parallel: None,
             },
             current_cycle: 1,
             init_done: true,
@@ -1284,6 +1401,7 @@ mod tests {
                 steps: vec![],
                 loop_policy: WorkflowLoopConfig::default(),
                 finalize: WorkflowFinalizeConfig::default(),
+                max_parallel: None,
             },
             current_cycle: 1,
             init_done: true,
@@ -1380,6 +1498,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: Some(StepScope::Task),
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                     TaskExecutionStep {
                         id: "qa".into(),
@@ -1398,6 +1517,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: Some(StepScope::Item),
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                     TaskExecutionStep {
                         id: "governance".into(),
@@ -1416,10 +1536,12 @@ mod tests {
                         chain_steps: vec![],
                         scope: Some(StepScope::Task),
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
                 finalize: WorkflowFinalizeConfig::default(),
+                max_parallel: None,
             },
             init_done: true,
             dynamic_steps: vec![],
@@ -1457,6 +1579,26 @@ mod tests {
             )
             .expect("count");
         assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn should_snapshot_true_when_both_enabled() {
+        assert!(should_snapshot_binary(true, true));
+    }
+
+    #[test]
+    fn should_snapshot_false_when_not_self_referential() {
+        assert!(!should_snapshot_binary(true, false));
+    }
+
+    #[test]
+    fn should_snapshot_false_when_binary_snapshot_disabled() {
+        assert!(!should_snapshot_binary(false, true));
+    }
+
+    #[test]
+    fn should_snapshot_false_when_both_disabled() {
+        assert!(!should_snapshot_binary(false, false));
     }
 
     #[test]

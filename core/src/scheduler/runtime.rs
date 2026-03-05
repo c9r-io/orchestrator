@@ -203,6 +203,7 @@ pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<Ta
                     steps: Vec::new(),
                     loop_policy: crate::config::WorkflowLoopConfig::default(),
                     finalize: crate::config::default_workflow_finalize_config(),
+                    max_parallel: None,
                 },
             )
         });

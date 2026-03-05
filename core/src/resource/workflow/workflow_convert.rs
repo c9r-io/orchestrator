@@ -79,6 +79,7 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
                 chain_steps: vec![],
                 scope,
                 behavior: StepBehavior::default(),
+                max_parallel: step.max_parallel,
             };
             normalize_step_execution_mode(&mut config_step).map_err(|e| anyhow!(e))?;
             Ok(config_step)
@@ -145,6 +146,7 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
             binary_snapshot: spec.safety.binary_snapshot,
             profile: parse_safety_profile(spec.safety.profile.as_deref()),
         },
+        max_parallel: spec.max_parallel,
     })
 }
 
@@ -194,6 +196,7 @@ pub(crate) fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
                     None
                 }
             }),
+            max_parallel: step.max_parallel,
         })
         .collect();
 
@@ -239,6 +242,7 @@ pub(crate) fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
             })
             .collect(),
         safety: safety_config_to_spec(&config.safety),
+        max_parallel: config.max_parallel,
     }
 }
 
@@ -419,6 +423,7 @@ mod tests {
                 tty: true,
                 command: Some("cargo test".to_string()),
                 scope: Some("task".to_string()),
+                max_parallel: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "fixed".to_string(),
@@ -447,6 +452,7 @@ mod tests {
                 max_runs: Some(3),
             }],
             safety: SafetySpec::default(),
+            max_parallel: None,
         };
 
         let config = workflow_spec_to_config(&spec).expect("should convert");
@@ -500,6 +506,7 @@ mod tests {
                 tty: false,
                 command: None,
                 scope: None,
+                max_parallel: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -511,6 +518,7 @@ mod tests {
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
             safety: SafetySpec::default(),
+            max_parallel: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert_eq!(config.steps[0].builtin.as_deref(), Some("init_once"));
@@ -539,6 +547,7 @@ mod tests {
                 tty: false,
                 command: None,
                 scope: None,
+                max_parallel: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -550,6 +559,7 @@ mod tests {
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
             safety: SafetySpec::default(),
+            max_parallel: None,
         };
 
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
@@ -581,6 +591,7 @@ mod tests {
                 tty: false,
                 command: None,
                 scope: None,
+                max_parallel: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -592,6 +603,7 @@ mod tests {
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
             safety: SafetySpec::default(),
+            max_parallel: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert!(config.steps[0].is_guard);
@@ -615,6 +627,7 @@ mod tests {
                 tty: false,
                 command: None,
                 scope: Some("item".to_string()),
+                max_parallel: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -626,6 +639,7 @@ mod tests {
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
             safety: SafetySpec::default(),
+            max_parallel: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert_eq!(config.steps[0].scope, Some(StepScope::Item));
@@ -648,6 +662,7 @@ mod tests {
                 tty: false,
                 command: None,
                 scope: None,
+                max_parallel: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -666,6 +681,7 @@ mod tests {
                 binary_snapshot: true,
                 profile: Some("self_referential_probe".to_string()),
             },
+            max_parallel: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert_eq!(config.safety.max_consecutive_failures, 5);
@@ -699,6 +715,7 @@ mod tests {
                 tty: false,
                 command: None,
                 scope: None,
+                max_parallel: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -717,6 +734,7 @@ mod tests {
                 binary_snapshot: false,
                 profile: None,
             },
+            max_parallel: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert!(matches!(
@@ -742,6 +760,7 @@ mod tests {
                 tty: false,
                 command: None,
                 scope: None,
+                max_parallel: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -760,6 +779,7 @@ mod tests {
                 binary_snapshot: false,
                 profile: None,
             },
+            max_parallel: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert!(matches!(
@@ -792,6 +812,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 },
                 WorkflowStepConfig {
                     id: "qual".to_string(),
@@ -811,6 +832,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 },
                 WorkflowStepConfig {
                     id: "bal".to_string(),
@@ -830,6 +852,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -847,6 +870,7 @@ mod tests {
             retest: None,
             dynamic_steps: vec![],
             safety: crate::config::SafetyConfig::default(),
+            max_parallel: None,
         };
         let spec = workflow_config_to_spec(&config);
         assert_eq!(
@@ -878,6 +902,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: None,
                 behavior: StepBehavior::default(),
+                max_parallel: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Infinite,
@@ -903,6 +928,7 @@ mod tests {
                 max_runs: Some(2),
             }],
             safety: crate::config::SafetyConfig::default(),
+            max_parallel: None,
         };
         let spec = workflow_config_to_spec(&config);
         assert_eq!(spec.loop_policy.mode, "infinite");
@@ -939,6 +965,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: None,
                 behavior: StepBehavior::default(),
+                max_parallel: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -955,6 +982,7 @@ mod tests {
             retest: None,
             dynamic_steps: vec![],
             safety: crate::config::SafetyConfig::default(),
+            max_parallel: None,
         };
         let spec = workflow_config_to_spec(&config);
         let prehook = spec.steps[0]
@@ -988,6 +1016,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: None,
                 behavior: StepBehavior::default(),
+                max_parallel: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -1021,6 +1050,7 @@ mod tests {
             retest: None,
             dynamic_steps: vec![],
             safety: crate::config::SafetyConfig::default(),
+            max_parallel: None,
         };
         let spec = workflow_config_to_spec(&config);
         assert_eq!(spec.finalize.rules.len(), 2);
@@ -1096,6 +1126,7 @@ mod tests {
                 tty: false,
                 command: None,
                 scope: None,
+                max_parallel: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -1114,6 +1145,7 @@ mod tests {
                 binary_snapshot: true,
                 profile: Some("self_referential_probe".to_string()),
             },
+            max_parallel: None,
         };
         let config = workflow_spec_to_config(&spec).expect("spec->config should succeed");
         let roundtripped = workflow_config_to_spec(&config);
@@ -1149,6 +1181,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: None,
                 behavior: StepBehavior::default(),
+                max_parallel: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -1172,6 +1205,7 @@ mod tests {
                 binary_snapshot: true,
                 profile: WorkflowSafetyProfile::SelfReferentialProbe,
             },
+            max_parallel: None,
         };
         let spec = workflow_config_to_spec(&config);
         assert_eq!(spec.safety.max_consecutive_failures, 5);

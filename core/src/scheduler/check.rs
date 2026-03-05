@@ -566,6 +566,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: None,
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                     WorkflowStepConfig {
                         id: "implement".into(),
@@ -585,6 +586,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: None,
                         behavior: StepBehavior::default(),
+                        max_parallel: None,
                     },
                     WorkflowStepConfig {
                         id: "loop_guard".into(),
@@ -609,6 +611,7 @@ mod tests {
                             },
                             ..StepBehavior::default()
                         },
+                        max_parallel: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
@@ -618,6 +621,7 @@ mod tests {
                 retest: None,
                 dynamic_steps: vec![],
                 safety: SafetyConfig::default(),
+                max_parallel: None,
             },
         );
 
@@ -714,6 +718,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: None,
                 behavior: StepBehavior::default(),
+                max_parallel: None,
             });
 
         let tmp = tempfile::tempdir().expect("create temp dir");
@@ -772,6 +777,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: None,
                 behavior: StepBehavior::default(),
+                max_parallel: None,
             });
 
         let tmp = tempfile::tempdir().expect("create temp dir");
@@ -810,6 +816,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: None,
                 behavior: StepBehavior::default(),
+                max_parallel: None,
             });
 
         let tmp = tempfile::tempdir().expect("create temp dir");
@@ -875,6 +882,7 @@ mod tests {
                 },
                 ..StepBehavior::default()
             },
+            max_parallel: None,
         }];
 
         let tmp = tempfile::tempdir().expect("create temp dir");
@@ -990,6 +998,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 }],
                 loop_policy: WorkflowLoopConfig::default(),
                 finalize: WorkflowFinalizeConfig { rules: vec![] },
@@ -998,6 +1007,7 @@ mod tests {
                 retest: None,
                 dynamic_steps: vec![],
                 safety: SafetyConfig::default(),
+                max_parallel: None,
             },
         );
 
@@ -1053,9 +1063,11 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 }],
                 scope: None,
                 behavior: StepBehavior::default(),
+                max_parallel: None,
             });
 
         let tmp = tempfile::tempdir().expect("create temp dir");

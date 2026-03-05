@@ -236,6 +236,10 @@ spec:
   # Segments for this workflow:
   #   ┌─── Task ──────────────────────────────────────────────────────┐  ┌── Item ──────────┐  ┌── Task ──────────────────────┐
   #   plan + qa_doc_gen + implement + self_test + self_restart          qa_testing + ticket_fix  align_tests + doc_governance
+
+  # Default parallelism for item-scoped segments (qa_testing + ticket_fix)
+  max_parallel: 4
+
   steps:
     # ── Task segment: plan → qa_doc_gen → implement → self_test ──
     - id: plan
@@ -308,6 +312,7 @@ spec:
       enabled: true
       repeatable: true
       tty: false
+      max_parallel: 2  # ticket_fix is heavier — lower concurrency
       prehook:
         engine: cel
         when: "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && active_ticket_count > 0"

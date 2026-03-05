@@ -28,6 +28,7 @@ fn step_config(
         chain_steps: vec![],
         scope: None,
         behavior: StepBehavior::default(),
+        max_parallel: None,
     }
 }
 

@@ -219,13 +219,14 @@ When splitting QA into sequential batches (e.g., docs 00-04, 05-09, 10-14, 15-17
 
 **Root cause of past incident**: Batch 2 instructions included a blanket ticket cleanup that wiped Batch 1's 3 tickets. Batch 3 wiped Batch 2's 18 tickets. Batch 4 wiped Batch 3's 10 tickets. Only Batch 4's 5 tickets survived — 31 tickets had to be recreated from session transcripts.
 
-### 2. SQLite Contention — No Parallel Batches
+### 2. SQLite Concurrency — WAL Mode
 
-**NEVER run multiple QA batches in parallel** when they share a SQLite database (`data/agent_orchestrator.db`).
+The orchestrator uses WAL mode with connection pooling (r2d2, pool size 20, busy_timeout 5s).
+Item-scoped steps can run in parallel when `max_parallel > 1` is configured in the workflow.
 
-- SQLite does not support concurrent writers. Parallel agents will cause DB lock contention, corrupted state, and false failures.
-- Always run batches **sequentially**, with a full DB reset between each batch.
-- Each batch agent must have **exclusive DB access**.
+- Parallel items share the same DB safely — WAL allows concurrent readers, writes are serialized with retry.
+- Do NOT bypass the orchestrator to run raw parallel `task create` + `task start` against the same DB.
+- Use `max_parallel` in workflow config to control concurrency; the engine handles semaphore gating.
 
 ### 3. Environment Reset Between Batches
 

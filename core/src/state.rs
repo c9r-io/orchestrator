@@ -71,6 +71,16 @@ impl RunningTask {
             child: Arc::new(Mutex::new(None)),
         }
     }
+
+    /// Create a sibling that shares `stop_flag` but has its own `child` slot.
+    /// Used for parallel item execution — stopping the task sets the shared flag,
+    /// which all forked items observe.
+    pub fn fork(&self) -> Self {
+        Self {
+            stop_flag: Arc::clone(&self.stop_flag),
+            child: Arc::new(Mutex::new(None)),
+        }
+    }
 }
 
 pub fn write_active_config<'a>(

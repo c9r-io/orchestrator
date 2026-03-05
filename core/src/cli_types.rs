@@ -408,6 +408,10 @@ pub struct WorkflowSpec {
     /// Safety configuration for self-bootstrap scenarios
     #[serde(default)]
     pub safety: SafetySpec,
+
+    /// Default max parallelism for item-scoped segments (1 = sequential)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_parallel: Option<usize>,
 }
 
 /// Safety configuration specification for YAML
@@ -476,6 +480,10 @@ pub struct WorkflowStepSpec {
     /// Execution scope: "task" (once per cycle) or "item" (per QA file)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
+
+    /// Maximum parallel items for item-scoped steps (per-step override)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_parallel: Option<usize>,
 }
 
 fn default_true() -> bool {

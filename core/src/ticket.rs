@@ -652,6 +652,7 @@ mod tests {
                 steps: vec![],
                 loop_policy: crate::config::WorkflowLoopConfig::default(),
                 finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
+                max_parallel: None,
             },
             current_cycle: 0,
             init_done: false,

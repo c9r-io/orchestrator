@@ -422,6 +422,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 },
                 WorkflowStepConfig {
                     id: "self_test_recover".to_string(),
@@ -441,6 +442,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {
@@ -456,6 +458,7 @@ mod tests {
             retest: None,
             dynamic_steps: vec![],
             safety: crate::config::SafetyConfig::default(),
+            max_parallel: None,
         };
 
         let config = OrchestratorConfig::default();
@@ -488,6 +491,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 },
                 WorkflowStepConfig {
                     id: "implement_phase_two".to_string(),
@@ -507,6 +511,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {
@@ -522,6 +527,7 @@ mod tests {
             retest: None,
             dynamic_steps: vec![],
             safety: crate::config::SafetyConfig::default(),
+            max_parallel: None,
         };
 
         let config = OrchestratorConfig::default();
@@ -554,6 +560,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 },
                 WorkflowStepConfig {
                     id: "duplicate_step".to_string(),
@@ -573,6 +580,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {
@@ -588,6 +596,7 @@ mod tests {
             retest: None,
             dynamic_steps: vec![],
             safety: crate::config::SafetyConfig::default(),
+            max_parallel: None,
         };
 
         let config = OrchestratorConfig::default();
@@ -625,6 +634,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: None,
                 behavior: StepBehavior::default(),
+                max_parallel: None,
             }],
             loop_policy: crate::config::WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -643,6 +653,7 @@ mod tests {
                 binary_snapshot: false,
                 profile: WorkflowSafetyProfile::Standard,
             },
+            max_parallel: None,
         };
 
         let result = validate_self_referential_safety(&workflow, "test-workflow", "test-ws", true);
@@ -674,6 +685,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 },
                 WorkflowStepConfig {
                     id: "self_test".to_string(),
@@ -693,6 +705,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     behavior: StepBehavior::default(),
+                    max_parallel: None,
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {
@@ -712,6 +725,7 @@ mod tests {
                 binary_snapshot: false,
                 profile: WorkflowSafetyProfile::Standard,
             },
+            max_parallel: None,
         };
 
         let result = validate_self_referential_safety(&workflow, "test-workflow", "test-ws", true);
@@ -739,6 +753,7 @@ mod tests {
                 binary_snapshot: false,
                 profile: WorkflowSafetyProfile::Standard,
             },
+            max_parallel: None,
         };
 
         let result = validate_self_referential_safety(&workflow, "test-workflow", "test-ws", true);

@@ -666,6 +666,38 @@ pub struct ProcessItemRequest<'a> {
     pub step_filter: Option<&'a HashSet<String>>,
 }
 
+/// Owned variant of ProcessItemRequest for tokio::spawn (requires 'static).
+pub struct OwnedProcessItemRequest {
+    pub task_id: String,
+    pub item: crate::dto::TaskItemRow,
+    pub task_item_paths: Arc<Vec<String>>,
+    pub task_ctx: Arc<TaskRuntimeContext>,
+    pub runtime: RunningTask,
+    pub step_filter: Option<Arc<HashSet<String>>>,
+}
+
+/// Entry point for parallel item execution. Borrows from owned fields
+/// and delegates to the existing process_item_filtered.
+pub async fn process_item_filtered_owned(
+    state: &Arc<InnerState>,
+    request: OwnedProcessItemRequest,
+    acc: &mut StepExecutionAccumulator,
+) -> Result<()> {
+    process_item_filtered(
+        state,
+        ProcessItemRequest {
+            task_id: &request.task_id,
+            item: &request.item,
+            task_item_paths: &request.task_item_paths,
+            task_ctx: &request.task_ctx,
+            runtime: &request.runtime,
+            step_filter: request.step_filter.as_deref(),
+        },
+        acc,
+    )
+    .await
+}
+
 pub async fn process_item(
     state: &Arc<InnerState>,
     task_id: &str,
@@ -1659,6 +1691,7 @@ mod tests {
                 execution,
                 ..StepBehavior::default()
             },
+            max_parallel: None,
         }
     }
 
@@ -1722,6 +1755,7 @@ mod tests {
                     },
                 },
                 finalize: Default::default(),
+                max_parallel: None,
             },
             current_cycle,
             init_done: false,
