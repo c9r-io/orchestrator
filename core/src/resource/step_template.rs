@@ -179,7 +179,7 @@ spec:
   prompt: "You are a planner for {source_tree}."
   description: "Planning template"
 "#;
-        let resource: OrchestratorResource = serde_yaml::from_str(yaml).expect("should parse YAML");
+        let resource: OrchestratorResource = serde_yml::from_str(yaml).expect("should parse YAML");
         resource
             .validate_version()
             .expect("version should be valid");

@@ -41,7 +41,7 @@ impl CliHandler {
                             println!("{}", serde_json::to_string_pretty(wf)?);
                         }
                         OutputFormat::Yaml => {
-                            println!("{}", serde_yaml::to_string(wf)?);
+                            println!("{}", serde_yml::to_string(wf)?);
                         }
                         OutputFormat::Table => {
                             let step_types: Vec<String> =
@@ -64,7 +64,7 @@ impl CliHandler {
                             println!("{}", serde_json::to_string_pretty(&agent_out)?);
                         }
                         OutputFormat::Yaml => {
-                            println!("{}", serde_yaml::to_string(&agent_out)?);
+                            println!("{}", serde_yml::to_string(&agent_out)?);
                         }
                         OutputFormat::Table => {
                             println!("{:<20} {}", name, agent.command);
@@ -100,7 +100,7 @@ impl CliHandler {
                                 println!("{}", serde_json::to_string_pretty(cr)?);
                             }
                             OutputFormat::Yaml => {
-                                println!("{}", serde_yaml::to_string(cr)?);
+                                println!("{}", serde_yml::to_string(cr)?);
                             }
                             OutputFormat::Table => {
                                 println!(
@@ -272,7 +272,7 @@ impl CliHandler {
                         .map(|(_, cr)| cr);
                     let store_iter = active.config.resource_store.list_by_kind(&crd_kind);
                     let rows: Vec<_> = custom_iter
-                        .chain(store_iter.into_iter())
+                        .chain(store_iter)
                         .filter_map(|cr| {
                             let metadata = &cr.metadata;
                             if !super::parse::matches_selector(&metadata.labels, &selector_terms) {
@@ -334,7 +334,7 @@ impl CliHandler {
                             println!("{}", serde_json::to_string_pretty(wf)?);
                         }
                         OutputFormat::Yaml => {
-                            println!("{}", serde_yaml::to_string(wf)?);
+                            println!("{}", serde_yml::to_string(wf)?);
                         }
                         OutputFormat::Table => {
                             let step_types: Vec<String> =
@@ -370,7 +370,7 @@ impl CliHandler {
                             println!("{}", serde_json::to_string_pretty(&obj)?);
                         }
                         OutputFormat::Yaml => {
-                            println!("{}", serde_yaml::to_string(agent)?);
+                            println!("{}", serde_yml::to_string(agent)?);
                         }
                         OutputFormat::Table => {
                             println!("Agent: {}", name);
@@ -411,7 +411,7 @@ impl CliHandler {
                                 println!("{}", serde_json::to_string_pretty(cr)?);
                             }
                             OutputFormat::Yaml => {
-                                println!("{}", serde_yaml::to_string(cr)?);
+                                println!("{}", serde_yml::to_string(cr)?);
                             }
                             OutputFormat::Table => {
                                 println!("{}: {}", cr.kind, cr.metadata.name);
@@ -480,7 +480,7 @@ impl CliHandler {
             anyhow::bail!("{}/{} not found", kind, name);
         }
 
-        let yaml = serde_yaml::to_string(&config)
+        let yaml = serde_yml::to_string(&config)
             .context("failed to serialize configuration after delete")?;
         persist_config_and_reload(&self.state, config, yaml, "cli")?;
         println!("{}/{} deleted", kind, name);

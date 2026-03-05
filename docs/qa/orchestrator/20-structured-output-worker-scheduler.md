@@ -215,8 +215,10 @@ Verify worker loop consumes pending tasks and honors stop signal.
    ```bash
    ./scripts/orchestrator.sh task worker stop
    ```
-4. Confirm stop signal cleared after worker exits:
+4. Wait for worker process to fully exit, then confirm stop signal cleared:
    ```bash
+   # Wait for worker process to exit
+   while pgrep -f "agent-orchestrator task worker" > /dev/null 2>&1; do sleep 1; done
    ./scripts/orchestrator.sh task worker status
    ```
 
@@ -225,6 +227,12 @@ Verify worker loop consumes pending tasks and honors stop signal.
 - Pending queue claim is atomic under parallel consumers (no duplicate pending-task execution).
 - `task worker stop` triggers graceful loop termination.
 - `stop_signal` returns `false` after worker exits and clears marker file.
+
+### Troubleshooting
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| `stop_signal: true` after worker exits | Worker exited with error before cleanup ran | Fixed: cleanup now runs before error propagation. If still seen, check for process crash. |
 
 ### Expected Data State
 ```sql

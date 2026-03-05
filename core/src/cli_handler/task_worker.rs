@@ -147,11 +147,15 @@ impl CliHandler {
                     }));
                 }
 
+                let mut worker_errors = Vec::new();
                 for handle in handles {
-                    let join_result = handle
-                        .join()
-                        .map_err(|_| anyhow::anyhow!("worker thread panicked"))?;
-                    join_result?;
+                    match handle.join() {
+                        Ok(Ok(())) => {}
+                        Ok(Err(e)) => worker_errors.push(e),
+                        Err(_) => {
+                            worker_errors.push(anyhow::anyhow!("worker thread panicked"))
+                        }
+                    }
                 }
                 watching.store(false, AtomicOrdering::SeqCst);
                 {
@@ -162,8 +166,12 @@ impl CliHandler {
                     }
                 }
                 let _ = wake_monitor.join();
+                // Always clear stop signal, even if workers errored
                 clear_worker_stop_signal(&self.state)?;
                 println!("Worker stopped");
+                if let Some(first_err) = worker_errors.into_iter().next() {
+                    return Err(first_err);
+                }
                 Ok(0)
             }
             TaskWorkerCommands::Stop => {

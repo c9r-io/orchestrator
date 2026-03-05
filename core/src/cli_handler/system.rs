@@ -69,7 +69,7 @@ impl CliHandler {
                 println!("Active Configuration:");
                 println!(
                     "{}",
-                    serde_yaml::to_string(&config.config).unwrap_or_default()
+                    serde_yml::to_string(&config.config).unwrap_or_default()
                 );
                 Ok(0)
             }

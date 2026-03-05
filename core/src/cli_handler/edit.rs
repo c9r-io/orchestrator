@@ -29,7 +29,7 @@ impl CliHandler {
                             .collect::<Result<Vec<_>>>()?;
                         // Append CRD and CR documents
                         for doc in &crd_docs {
-                            parts.push(serde_yaml::to_string(doc)?);
+                            parts.push(serde_yml::to_string(doc)?);
                         }
                         parts.join("---\n")
                     }
@@ -116,7 +116,7 @@ impl CliHandler {
                 return Ok(1);
             }
 
-            let manifest: OrchestratorResource = match serde_yaml::from_str(&edited) {
+            let manifest: OrchestratorResource = match serde_yml::from_str(&edited) {
                 Ok(resource) => resource,
                 Err(error) => {
                     eprintln!("Edited manifest is invalid YAML: {}", error);
@@ -148,7 +148,7 @@ impl CliHandler {
             }
 
             let result = registered.apply(&mut merged_config);
-            let merged_yaml = serde_yaml::to_string(&merged_config)
+            let merged_yaml = serde_yml::to_string(&merged_config)
                 .context("failed to serialize edited configuration")?;
             persist_config_and_reload(&self.state, merged_config, merged_yaml, "cli")?;
 
@@ -193,7 +193,7 @@ impl CliHandler {
 
         if dry_run {
             match output {
-                OutputFormat::Yaml => println!("{}", serde_yaml::to_string(&manifest)?),
+                OutputFormat::Yaml => println!("{}", serde_yml::to_string(&manifest)?),
                 OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&manifest)?),
                 OutputFormat::Table => {
                     anyhow::bail!("dry-run output format does not support table; use yaml or json")
@@ -207,7 +207,7 @@ impl CliHandler {
             active.config.clone()
         };
         let result = registered.apply(&mut merged_config);
-        let merged_yaml = serde_yaml::to_string(&merged_config)
+        let merged_yaml = serde_yml::to_string(&merged_config)
             .context("failed to serialize updated configuration")?;
         persist_config_and_reload(&self.state, merged_config, merged_yaml, "cli")?;
 

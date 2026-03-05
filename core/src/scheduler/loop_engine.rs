@@ -55,6 +55,15 @@ pub async fn run_task_loop(
     result
 }
 
+/// Signal returned by `execute_cycle_segments` to indicate whether the caller
+/// should restart the cycle loop (equivalent to the old `continue 'cycle`).
+enum CycleSegmentOutcome {
+    /// All segments completed normally; proceed to post-cycle logic.
+    Completed,
+    /// A stop/pause condition was detected mid-segment; restart the cycle loop.
+    RestartCycle,
+}
+
 async fn run_task_loop_core(
     state: Arc<InnerState>,
     task_id: &str,
@@ -62,54 +71,7 @@ async fn run_task_loop_core(
 ) -> Result<()> {
     let mut task_ctx = load_task_runtime_context(&state, task_id)?;
 
-    if !task_ctx.init_done {
-        if let Some(step) = task_ctx.execution_plan.step_by_id("init_once") {
-            if let Some(anchor_item_id) = first_task_item_id(&state, task_id)? {
-                insert_event(
-                    &state,
-                    task_id,
-                    Some(&anchor_item_id),
-                    "step_started",
-                    json!({"step":"init_once", "step_scope": "task"}),
-                )?;
-                let init_result = run_phase_with_rotation(
-                    &state,
-                    RotatingPhaseRunRequest {
-                        task_id,
-                        item_id: &anchor_item_id,
-                        step_id: &step.id,
-                        phase: "init_once",
-                        tty: step.tty,
-                        capability: step.required_capability.as_deref(),
-                        rel_path: ".",
-                        ticket_paths: &[],
-                        workspace_root: &task_ctx.workspace_root,
-                        workspace_id: &task_ctx.workspace_id,
-                        cycle: task_ctx.current_cycle,
-                        runtime: &runtime,
-                        pipeline_vars: None,
-                        step_timeout_secs: task_ctx.safety.step_timeout_secs,
-                        step_scope: StepScope::Task,
-                        step_template_prompt: None,
-                        project_id: &task_ctx.project_id,
-                    },
-                )
-                .await?;
-                if !init_result.is_success() {
-                    anyhow::bail!("init_once failed: exit={}", init_result.exit_code);
-                }
-                insert_event(
-                    &state,
-                    task_id,
-                    Some(&anchor_item_id),
-                    "step_finished",
-                    json!({"step":"init_once","step_scope":"task","exit_code":init_result.exit_code}),
-                )?;
-            }
-        }
-        task_ctx.init_done = true;
-        update_task_cycle_state(&state, task_id, task_ctx.current_cycle, true)?;
-    }
+    run_init_once_if_needed(&state, task_id, &mut task_ctx, &runtime).await?;
 
     'cycle: loop {
         if is_task_paused_in_db(&state, task_id)? {
@@ -162,234 +124,10 @@ async fn run_task_loop_core(
             json!({"cycle": task_ctx.current_cycle, "max_cycles": max_cycles}),
         );
 
-        if matches!(
-            task_ctx.safety.checkpoint_strategy,
-            crate::config::CheckpointStrategy::GitTag
-        ) {
-            let ws_path = Path::new(&task_ctx.workspace_root);
-            match create_checkpoint(ws_path, task_id, task_ctx.current_cycle).await {
-                Ok(tag) => {
-                    insert_event(
-                        &state,
-                        task_id,
-                        None,
-                        "checkpoint_created",
-                        json!({"cycle": task_ctx.current_cycle, "tag": tag}),
-                    )?;
-
-                    if should_snapshot_binary(task_ctx.safety.binary_snapshot, task_ctx.self_referential) {
-                        match snapshot_binary(&task_ctx.workspace_root, task_id, task_ctx.current_cycle).await {
-                            Ok(path) => {
-                                insert_event(
-                                    &state,
-                                    task_id,
-                                    None,
-                                    "binary_snapshot_created",
-                                    json!({"cycle": task_ctx.current_cycle, "path": path.display().to_string()}),
-                                )?;
-                            }
-                            Err(e) => {
-                                warn!(
-                                    cycle = task_ctx.current_cycle,
-                                    error = %e,
-                                    "failed to create binary snapshot"
-                                );
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    warn!(
-                        cycle = task_ctx.current_cycle,
-                        error = %e,
-                        "failed to create checkpoint"
-                    );
-                }
-            }
-        }
-
-        let items = list_task_items_for_cycle(&state, task_id)?;
-        let task_item_paths: Vec<String> =
-            items.iter().map(|item| item.qa_file_path.clone()).collect();
-
-        // Segment-based execution: group steps by scope and dispatch accordingly.
-        // Task-scoped steps run once (using first item as context anchor).
-        // Item-scoped steps fan out across all items.
-        let segments = build_scope_segments(&task_ctx);
-        if segments.is_empty() {
-            // Fallback: no steps in execution plan, run legacy path
-            for item in &items {
-                process_item(&state, task_id, item, &task_item_paths, &task_ctx, &runtime).await?;
-                if runtime.stop_flag.load(Ordering::SeqCst)
-                    || is_task_paused_in_db(&state, task_id)?
-                {
-                    continue 'cycle;
-                }
-            }
-        } else {
-            let mut item_state: HashMap<String, StepExecutionAccumulator> = HashMap::new();
-            let mut halt_after_task_segment = false;
-            for (segment_idx, segment) in segments.iter().enumerate() {
-                match segment.scope {
-                    StepScope::Task => {
-                        // Run task-scoped steps once using first item as anchor
-                        if let Some(anchor_item) = items.first() {
-                            let mut task_acc =
-                                StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone());
-                            process_item_filtered(
-                                &state,
-                                ProcessItemRequest {
-                                    task_id,
-                                    item: anchor_item,
-                                    task_item_paths: &task_item_paths,
-                                    task_ctx: &task_ctx,
-                                    runtime: &runtime,
-                                    step_filter: Some(&segment.step_ids),
-                                },
-                                &mut task_acc,
-                            )
-                            .await?;
-                            // Propagate task-scoped pipeline vars to subsequent segments
-                            task_ctx.pipeline_vars = task_acc.pipeline_vars.clone();
-                            if task_acc.terminal {
-                                let skipped_item_steps = collect_remaining_item_step_steps(
-                                    &task_ctx,
-                                    &segments,
-                                    segment_idx + 1,
-                                );
-                                propagate_task_segment_terminal_state(
-                                    &items,
-                                    &mut item_state,
-                                    &task_acc,
-                                    &task_ctx.pipeline_vars,
-                                    &skipped_item_steps,
-                                );
-                                emit_skipped_item_step_events(
-                                    &state,
-                                    task_id,
-                                    &items,
-                                    &skipped_item_steps,
-                                )?;
-                                halt_after_task_segment = true;
-                            }
-                        }
-                    }
-                    StepScope::Item => {
-                        let max_par = segment.max_parallel;
-                        if max_par <= 1 {
-                            // === Sequential path (unchanged) ===
-                            for item in &items {
-                                let acc =
-                                    item_state.entry(item.id.clone()).or_insert_with(|| {
-                                        StepExecutionAccumulator::new(
-                                            task_ctx.pipeline_vars.clone(),
-                                        )
-                                    });
-                                process_item_filtered(
-                                    &state,
-                                    ProcessItemRequest {
-                                        task_id,
-                                        item,
-                                        task_item_paths: &task_item_paths,
-                                        task_ctx: &task_ctx,
-                                        runtime: &runtime,
-                                        step_filter: Some(&segment.step_ids),
-                                    },
-                                    acc,
-                                )
-                                .await?;
-                            }
-                        } else {
-                            // === Parallel path ===
-                            let semaphore = Arc::new(Semaphore::new(max_par));
-                            let shared_paths = Arc::new(task_item_paths.clone());
-                            let shared_ctx = Arc::new(task_ctx.clone());
-                            let shared_filter = Arc::new(segment.step_ids.clone());
-                            let mut join_set = JoinSet::new();
-
-                            for item in &items {
-                                let permit = semaphore.clone().acquire_owned().await.map_err(
-                                    |e| anyhow::anyhow!("semaphore closed: {}", e),
-                                )?;
-                                let state = state.clone();
-                                let item = item.clone();
-                                let task_id = task_id.to_string();
-                                let paths = shared_paths.clone();
-                                let ctx = shared_ctx.clone();
-                                let filter = shared_filter.clone();
-                                let item_runtime = runtime.fork();
-                                let pipeline_vars = task_ctx.pipeline_vars.clone();
-
-                                join_set.spawn(async move {
-                                    let _permit = permit;
-                                    let mut acc =
-                                        StepExecutionAccumulator::new(pipeline_vars);
-                                    let result = process_item_filtered_owned(
-                                        &state,
-                                        OwnedProcessItemRequest {
-                                            task_id: task_id.clone(),
-                                            item: item.clone(),
-                                            task_item_paths: paths,
-                                            task_ctx: ctx,
-                                            runtime: item_runtime,
-                                            step_filter: Some(filter),
-                                        },
-                                        &mut acc,
-                                    )
-                                    .await;
-                                    (item.id.clone(), acc, result)
-                                });
-                            }
-
-                            // Collect all results (no fail-fast)
-                            let mut errors = Vec::new();
-                            while let Some(join_result) = join_set.join_next().await {
-                                match join_result {
-                                    Ok((id, acc, Ok(()))) => {
-                                        item_state.insert(id, acc);
-                                    }
-                                    Ok((id, acc, Err(e))) => {
-                                        item_state.insert(id, acc);
-                                        errors.push(e);
-                                    }
-                                    Err(e) => {
-                                        errors.push(anyhow::anyhow!(
-                                            "item task panicked: {}",
-                                            e
-                                        ));
-                                    }
-                                }
-                            }
-                            if !errors.is_empty() {
-                                let msg = errors
-                                    .iter()
-                                    .map(|e| e.to_string())
-                                    .collect::<Vec<_>>()
-                                    .join("; ");
-                                anyhow::bail!(
-                                    "parallel item execution failed: {}",
-                                    msg
-                                );
-                            }
-                        }
-                    }
-                }
-                if halt_after_task_segment {
-                    break;
-                }
-                if runtime.stop_flag.load(Ordering::SeqCst)
-                    || is_task_paused_in_db(&state, task_id)?
-                {
-                    continue 'cycle;
-                }
-            }
-
-            for item in &items {
-                let acc = item_state.entry(item.id.clone()).or_insert_with(|| {
-                    StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone())
-                });
-                finalize_item_execution(&state, task_id, item, &task_ctx, acc)?;
-            }
+        let outcome =
+            execute_cycle_segments(&state, task_id, &mut task_ctx, &runtime).await?;
+        if matches!(outcome, CycleSegmentOutcome::RestartCycle) {
+            continue 'cycle;
         }
 
         let cycle_unresolved = count_unresolved_items(&state, task_id)?;
@@ -399,162 +137,13 @@ async fn run_task_loop_core(
             task_ctx.consecutive_failures = 0;
         }
 
-        if task_ctx.safety.auto_rollback
-            && task_ctx.consecutive_failures >= task_ctx.safety.max_consecutive_failures
-            && matches!(
-                task_ctx.safety.checkpoint_strategy,
-                crate::config::CheckpointStrategy::GitTag
-            )
-        {
-            let rollback_cycle = task_ctx
-                .current_cycle
-                .saturating_sub(task_ctx.consecutive_failures);
-            let rollback_tag = format!("checkpoint/{}/{}", task_id, rollback_cycle.max(1));
-            let ws_path = Path::new(&task_ctx.workspace_root);
-            match rollback_to_checkpoint(ws_path, &rollback_tag).await {
-                Ok(()) => {
-                    insert_event(
-                        &state,
-                        task_id,
-                        None,
-                        "auto_rollback",
-                        json!({
-                            "cycle": task_ctx.current_cycle,
-                            "rollback_to": rollback_tag,
-                            "consecutive_failures": task_ctx.consecutive_failures,
-                        }),
-                    )?;
-                    state.emit_event(
-                        task_id,
-                        None,
-                        "auto_rollback",
-                        json!({"rollback_to": rollback_tag}),
-                    );
+        apply_auto_rollback_if_needed(&state, task_id, &mut task_ctx).await?;
 
-                    if should_snapshot_binary(task_ctx.safety.binary_snapshot, task_ctx.self_referential) {
-                        match restore_binary_snapshot(&task_ctx.workspace_root).await {
-                            Ok(()) => {
-                                insert_event(
-                                    &state,
-                                    task_id,
-                                    None,
-                                    "binary_snapshot_restored",
-                                    json!({"cycle": task_ctx.current_cycle}),
-                                )?;
-                            }
-                            Err(e) => warn!(error = %e, "failed to restore binary snapshot"),
-                        }
-                    }
-
-                    task_ctx.consecutive_failures = 0;
-                }
-                Err(e) => {
-                    warn!(error = %e, "auto-rollback failed");
-                    insert_event(
-                        &state,
-                        task_id,
-                        None,
-                        "auto_rollback_failed",
-                        json!({"error": e.to_string()}),
-                    )?;
-                }
-            }
+        if execute_guard_steps(&state, task_id, &task_ctx, &runtime).await? {
+            return Ok(());
         }
 
-        for step in &task_ctx.execution_plan.steps {
-            if !step.is_guard {
-                continue;
-            }
-            if !step.repeatable && task_ctx.current_cycle > 1 {
-                continue;
-            }
-
-            let guard_result =
-                execute_guard_step(&state, task_id, step, &task_ctx, &runtime).await?;
-            if guard_result.should_stop {
-                insert_event(
-                    &state,
-                    task_id,
-                    None,
-                    "workflow_terminated",
-                    json!({
-                        "cycle": task_ctx.current_cycle,
-                        "guard_step": step.id,
-                        "reason": guard_result.reason
-                    }),
-                )?;
-                state.emit_event(
-                    task_id,
-                    None,
-                    "workflow_terminated",
-                    json!({"guard_step": step.id}),
-                );
-                set_task_status(&state, task_id, "completed", true)?;
-                insert_event(&state, task_id, None, "task_completed", json!({}))?;
-                state.emit_event(task_id, None, "task_completed", json!({}));
-                let unresolved = count_unresolved_items(&state, task_id)?;
-                record_task_execution_metric(
-                    &state,
-                    task_id,
-                    "completed",
-                    task_ctx.current_cycle,
-                    unresolved,
-                )?;
-                return Ok(());
-            }
-        }
-
-        let unresolved = count_unresolved_items(&state, task_id)?;
-        let loop_mode_check = evaluate_loop_guard_rules(
-            &task_ctx.execution_plan.loop_policy,
-            task_ctx.current_cycle,
-            unresolved,
-        );
-
-        let should_continue = if let Some((continue_loop, _)) = loop_mode_check {
-            continue_loop
-        } else if task_ctx
-            .execution_plan
-            .loop_policy
-            .guard
-            .stop_when_no_unresolved
-        {
-            unresolved > 0
-        } else {
-            true
-        };
-
-        let reason = if let Some((_, reason)) = loop_mode_check {
-            reason
-        } else if !should_continue {
-            "no_unresolved_items".to_string()
-        } else {
-            "continue".to_string()
-        };
-        insert_event(
-            &state,
-            task_id,
-            None,
-            "loop_guard_decision",
-            json!({
-                "cycle": task_ctx.current_cycle,
-                "continue": should_continue,
-                "reason": reason,
-                "unresolved_items": unresolved
-            }),
-        )?;
-        state.emit_event(
-            task_id,
-            None,
-            "loop_guard_decision",
-            json!({
-                "cycle": task_ctx.current_cycle,
-                "continue": should_continue,
-                "reason": reason,
-                "unresolved_items": unresolved
-            }),
-        );
-        if !should_continue {
+        if !evaluate_loop_continuation(&state, task_id, &task_ctx)? {
             break;
         }
     }
@@ -600,6 +189,500 @@ async fn run_task_loop_core(
     }
 
     Ok(())
+}
+
+/// Execute the init_once step if it has not been run yet.
+async fn run_init_once_if_needed(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    task_ctx: &mut crate::config::TaskRuntimeContext,
+    runtime: &RunningTask,
+) -> Result<()> {
+    if task_ctx.init_done {
+        return Ok(());
+    }
+
+    if let Some(step) = task_ctx.execution_plan.step_by_id("init_once") {
+        if let Some(anchor_item_id) = first_task_item_id(state, task_id)? {
+            insert_event(
+                state,
+                task_id,
+                Some(&anchor_item_id),
+                "step_started",
+                json!({"step":"init_once", "step_scope": "task"}),
+            )?;
+            let init_result = run_phase_with_rotation(
+                state,
+                RotatingPhaseRunRequest {
+                    task_id,
+                    item_id: &anchor_item_id,
+                    step_id: &step.id,
+                    phase: "init_once",
+                    tty: step.tty,
+                    capability: step.required_capability.as_deref(),
+                    rel_path: ".",
+                    ticket_paths: &[],
+                    workspace_root: &task_ctx.workspace_root,
+                    workspace_id: &task_ctx.workspace_id,
+                    cycle: task_ctx.current_cycle,
+                    runtime,
+                    pipeline_vars: None,
+                    step_timeout_secs: task_ctx.safety.step_timeout_secs,
+                    step_scope: StepScope::Task,
+                    step_template_prompt: None,
+                    project_id: &task_ctx.project_id,
+                },
+            )
+            .await?;
+            if !init_result.is_success() {
+                anyhow::bail!("init_once failed: exit={}", init_result.exit_code);
+            }
+            insert_event(
+                state,
+                task_id,
+                Some(&anchor_item_id),
+                "step_finished",
+                json!({"step":"init_once","step_scope":"task","exit_code":init_result.exit_code}),
+            )?;
+        }
+    }
+    task_ctx.init_done = true;
+    update_task_cycle_state(state, task_id, task_ctx.current_cycle, true)?;
+
+    Ok(())
+}
+
+/// Create checkpoint, dispatch segment-based execution (task-scoped and item-scoped steps),
+/// and finalize item execution. Returns `CycleSegmentOutcome::RestartCycle` when a
+/// stop/pause condition is detected mid-segment.
+async fn execute_cycle_segments(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    task_ctx: &mut crate::config::TaskRuntimeContext,
+    runtime: &RunningTask,
+) -> Result<CycleSegmentOutcome> {
+    if matches!(
+        task_ctx.safety.checkpoint_strategy,
+        crate::config::CheckpointStrategy::GitTag
+    ) {
+        let ws_path = Path::new(&task_ctx.workspace_root);
+        match create_checkpoint(ws_path, task_id, task_ctx.current_cycle).await {
+            Ok(tag) => {
+                insert_event(
+                    state,
+                    task_id,
+                    None,
+                    "checkpoint_created",
+                    json!({"cycle": task_ctx.current_cycle, "tag": tag}),
+                )?;
+
+                if should_snapshot_binary(task_ctx.safety.binary_snapshot, task_ctx.self_referential) {
+                    match snapshot_binary(&task_ctx.workspace_root, task_id, task_ctx.current_cycle).await {
+                        Ok(path) => {
+                            insert_event(
+                                state,
+                                task_id,
+                                None,
+                                "binary_snapshot_created",
+                                json!({"cycle": task_ctx.current_cycle, "path": path.display().to_string()}),
+                            )?;
+                        }
+                        Err(e) => {
+                            warn!(
+                                cycle = task_ctx.current_cycle,
+                                error = %e,
+                                "failed to create binary snapshot"
+                            );
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                warn!(
+                    cycle = task_ctx.current_cycle,
+                    error = %e,
+                    "failed to create checkpoint"
+                );
+            }
+        }
+    }
+
+    let items = list_task_items_for_cycle(state, task_id)?;
+    let task_item_paths: Vec<String> =
+        items.iter().map(|item| item.qa_file_path.clone()).collect();
+
+    // Segment-based execution: group steps by scope and dispatch accordingly.
+    // Task-scoped steps run once (using first item as context anchor).
+    // Item-scoped steps fan out across all items.
+    let segments = build_scope_segments(task_ctx);
+    if segments.is_empty() {
+        // Fallback: no steps in execution plan, run legacy path
+        for item in &items {
+            process_item(state, task_id, item, &task_item_paths, task_ctx, runtime).await?;
+            if runtime.stop_flag.load(Ordering::SeqCst)
+                || is_task_paused_in_db(state, task_id)?
+            {
+                return Ok(CycleSegmentOutcome::RestartCycle);
+            }
+        }
+    } else {
+        let mut item_state: HashMap<String, StepExecutionAccumulator> = HashMap::new();
+        let mut halt_after_task_segment = false;
+        for (segment_idx, segment) in segments.iter().enumerate() {
+            match segment.scope {
+                StepScope::Task => {
+                    // Run task-scoped steps once using first item as anchor
+                    if let Some(anchor_item) = items.first() {
+                        let mut task_acc =
+                            StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone());
+                        process_item_filtered(
+                            state,
+                            ProcessItemRequest {
+                                task_id,
+                                item: anchor_item,
+                                task_item_paths: &task_item_paths,
+                                task_ctx,
+                                runtime,
+                                step_filter: Some(&segment.step_ids),
+                            },
+                            &mut task_acc,
+                        )
+                        .await?;
+                        // Propagate task-scoped pipeline vars to subsequent segments
+                        task_ctx.pipeline_vars = task_acc.pipeline_vars.clone();
+                        if task_acc.terminal {
+                            let skipped_item_steps = collect_remaining_item_step_steps(
+                                task_ctx,
+                                &segments,
+                                segment_idx + 1,
+                            );
+                            propagate_task_segment_terminal_state(
+                                &items,
+                                &mut item_state,
+                                &task_acc,
+                                &task_ctx.pipeline_vars,
+                                &skipped_item_steps,
+                            );
+                            emit_skipped_item_step_events(
+                                state,
+                                task_id,
+                                &items,
+                                &skipped_item_steps,
+                            )?;
+                            halt_after_task_segment = true;
+                        }
+                    }
+                }
+                StepScope::Item => {
+                    let max_par = segment.max_parallel;
+                    if max_par <= 1 {
+                        // === Sequential path (unchanged) ===
+                        for item in &items {
+                            let acc =
+                                item_state.entry(item.id.clone()).or_insert_with(|| {
+                                    StepExecutionAccumulator::new(
+                                        task_ctx.pipeline_vars.clone(),
+                                    )
+                                });
+                            process_item_filtered(
+                                state,
+                                ProcessItemRequest {
+                                    task_id,
+                                    item,
+                                    task_item_paths: &task_item_paths,
+                                    task_ctx,
+                                    runtime,
+                                    step_filter: Some(&segment.step_ids),
+                                },
+                                acc,
+                            )
+                            .await?;
+                        }
+                    } else {
+                        // === Parallel path ===
+                        let semaphore = Arc::new(Semaphore::new(max_par));
+                        let shared_paths = Arc::new(task_item_paths.clone());
+                        let shared_ctx = Arc::new(task_ctx.clone());
+                        let shared_filter = Arc::new(segment.step_ids.clone());
+                        let mut join_set = JoinSet::new();
+
+                        for item in &items {
+                            let permit = semaphore.clone().acquire_owned().await.map_err(
+                                |e| anyhow::anyhow!("semaphore closed: {}", e),
+                            )?;
+                            let state = state.clone();
+                            let item = item.clone();
+                            let task_id = task_id.to_string();
+                            let paths = shared_paths.clone();
+                            let ctx = shared_ctx.clone();
+                            let filter = shared_filter.clone();
+                            let item_runtime = runtime.fork();
+                            // Reuse existing accumulator to preserve prior segment state
+                            let prior_acc = item_state.remove(&item.id);
+                            let pipeline_vars = task_ctx.pipeline_vars.clone();
+
+                            join_set.spawn(async move {
+                                let _permit = permit;
+                                let mut acc = prior_acc.unwrap_or_else(|| {
+                                    StepExecutionAccumulator::new(pipeline_vars)
+                                });
+                                let result = process_item_filtered_owned(
+                                    &state,
+                                    OwnedProcessItemRequest {
+                                        task_id: task_id.clone(),
+                                        item: item.clone(),
+                                        task_item_paths: paths,
+                                        task_ctx: ctx,
+                                        runtime: item_runtime,
+                                        step_filter: Some(filter),
+                                    },
+                                    &mut acc,
+                                )
+                                .await;
+                                (item.id.clone(), acc, result)
+                            });
+                        }
+
+                        // Collect all results (no fail-fast)
+                        let mut errors = Vec::new();
+                        while let Some(join_result) = join_set.join_next().await {
+                            match join_result {
+                                Ok((id, acc, Ok(()))) => {
+                                    item_state.insert(id, acc);
+                                }
+                                Ok((id, acc, Err(e))) => {
+                                    item_state.insert(id, acc);
+                                    errors.push(e);
+                                }
+                                Err(e) => {
+                                    errors.push(anyhow::anyhow!(
+                                        "item task panicked: {}",
+                                        e
+                                    ));
+                                }
+                            }
+                        }
+                        if !errors.is_empty() {
+                            let msg = errors
+                                .iter()
+                                .map(|e| e.to_string())
+                                .collect::<Vec<_>>()
+                                .join("; ");
+                            anyhow::bail!(
+                                "parallel item execution failed: {}",
+                                msg
+                            );
+                        }
+                    }
+                }
+            }
+            if halt_after_task_segment {
+                break;
+            }
+            if runtime.stop_flag.load(Ordering::SeqCst)
+                || is_task_paused_in_db(state, task_id)?
+            {
+                return Ok(CycleSegmentOutcome::RestartCycle);
+            }
+        }
+
+        for item in &items {
+            let acc = item_state.entry(item.id.clone()).or_insert_with(|| {
+                StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone())
+            });
+            finalize_item_execution(state, task_id, item, task_ctx, acc)?;
+        }
+    }
+
+    Ok(CycleSegmentOutcome::Completed)
+}
+
+/// Detect consecutive failures and perform git rollback with optional binary recovery.
+async fn apply_auto_rollback_if_needed(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    task_ctx: &mut crate::config::TaskRuntimeContext,
+) -> Result<()> {
+    if !(task_ctx.safety.auto_rollback
+        && task_ctx.consecutive_failures >= task_ctx.safety.max_consecutive_failures
+        && matches!(
+            task_ctx.safety.checkpoint_strategy,
+            crate::config::CheckpointStrategy::GitTag
+        ))
+    {
+        return Ok(());
+    }
+
+    let rollback_cycle = task_ctx
+        .current_cycle
+        .saturating_sub(task_ctx.consecutive_failures);
+    let rollback_tag = format!("checkpoint/{}/{}", task_id, rollback_cycle.max(1));
+    let ws_path = Path::new(&task_ctx.workspace_root);
+    match rollback_to_checkpoint(ws_path, &rollback_tag).await {
+        Ok(()) => {
+            insert_event(
+                state,
+                task_id,
+                None,
+                "auto_rollback",
+                json!({
+                    "cycle": task_ctx.current_cycle,
+                    "rollback_to": rollback_tag,
+                    "consecutive_failures": task_ctx.consecutive_failures,
+                }),
+            )?;
+            state.emit_event(
+                task_id,
+                None,
+                "auto_rollback",
+                json!({"rollback_to": rollback_tag}),
+            );
+
+            if should_snapshot_binary(task_ctx.safety.binary_snapshot, task_ctx.self_referential) {
+                match restore_binary_snapshot(&task_ctx.workspace_root).await {
+                    Ok(()) => {
+                        insert_event(
+                            state,
+                            task_id,
+                            None,
+                            "binary_snapshot_restored",
+                            json!({"cycle": task_ctx.current_cycle}),
+                        )?;
+                    }
+                    Err(e) => warn!(error = %e, "failed to restore binary snapshot"),
+                }
+            }
+
+            task_ctx.consecutive_failures = 0;
+        }
+        Err(e) => {
+            warn!(error = %e, "auto-rollback failed");
+            insert_event(
+                state,
+                task_id,
+                None,
+                "auto_rollback_failed",
+                json!({"error": e.to_string()}),
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Execute guard/gate steps and check termination conditions.
+/// Returns `true` if the task should terminate (guard triggered early completion).
+async fn execute_guard_steps(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    task_ctx: &crate::config::TaskRuntimeContext,
+    runtime: &RunningTask,
+) -> Result<bool> {
+    for step in &task_ctx.execution_plan.steps {
+        if !step.is_guard {
+            continue;
+        }
+        if !step.repeatable && task_ctx.current_cycle > 1 {
+            continue;
+        }
+
+        let guard_result =
+            execute_guard_step(state, task_id, step, task_ctx, runtime).await?;
+        if guard_result.should_stop {
+            insert_event(
+                state,
+                task_id,
+                None,
+                "workflow_terminated",
+                json!({
+                    "cycle": task_ctx.current_cycle,
+                    "guard_step": step.id,
+                    "reason": guard_result.reason
+                }),
+            )?;
+            state.emit_event(
+                task_id,
+                None,
+                "workflow_terminated",
+                json!({"guard_step": step.id}),
+            );
+            set_task_status(state, task_id, "completed", true)?;
+            insert_event(state, task_id, None, "task_completed", json!({}))?;
+            state.emit_event(task_id, None, "task_completed", json!({}));
+            let unresolved = count_unresolved_items(state, task_id)?;
+            record_task_execution_metric(
+                state,
+                task_id,
+                "completed",
+                task_ctx.current_cycle,
+                unresolved,
+            )?;
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+/// Evaluate the loop continuation strategy (Fixed/Infinite/Once), emit the
+/// loop_guard_decision event, and return whether the loop should continue.
+fn evaluate_loop_continuation(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    task_ctx: &crate::config::TaskRuntimeContext,
+) -> Result<bool> {
+    let unresolved = count_unresolved_items(state, task_id)?;
+    let loop_mode_check = evaluate_loop_guard_rules(
+        &task_ctx.execution_plan.loop_policy,
+        task_ctx.current_cycle,
+        unresolved,
+    );
+
+    let should_continue = if let Some((continue_loop, _)) = loop_mode_check {
+        continue_loop
+    } else if task_ctx
+        .execution_plan
+        .loop_policy
+        .guard
+        .stop_when_no_unresolved
+    {
+        unresolved > 0
+    } else {
+        true
+    };
+
+    let reason = if let Some((_, reason)) = loop_mode_check {
+        reason
+    } else if !should_continue {
+        "no_unresolved_items".to_string()
+    } else {
+        "continue".to_string()
+    };
+    insert_event(
+        state,
+        task_id,
+        None,
+        "loop_guard_decision",
+        json!({
+            "cycle": task_ctx.current_cycle,
+            "continue": should_continue,
+            "reason": reason,
+            "unresolved_items": unresolved
+        }),
+    )?;
+    state.emit_event(
+        task_id,
+        None,
+        "loop_guard_decision",
+        json!({
+            "cycle": task_ctx.current_cycle,
+            "continue": should_continue,
+            "reason": reason,
+            "unresolved_items": unresolved
+        }),
+    );
+
+    Ok(should_continue)
 }
 
 pub fn evaluate_loop_guard_rules(

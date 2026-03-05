@@ -41,49 +41,49 @@ impl<'de> Deserialize<'de> for OrchestratorResource {
             api_version: String,
             kind: ResourceKind,
             metadata: ResourceMetadata,
-            spec: serde_yaml::Value,
+            spec: serde_yml::Value,
         }
 
         let raw = RawResource::deserialize(deserializer)?;
         let spec = match raw.kind {
             ResourceKind::Workspace => {
                 let s: WorkspaceSpec =
-                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                    serde_yml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
                 ResourceSpec::Workspace(s)
             }
             ResourceKind::Agent => {
                 let s: AgentSpec =
-                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                    serde_yml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
                 ResourceSpec::Agent(Box::new(s))
             }
             ResourceKind::Workflow => {
                 let s: WorkflowSpec =
-                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                    serde_yml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
                 ResourceSpec::Workflow(s)
             }
             ResourceKind::Project => {
                 let s: ProjectSpec =
-                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                    serde_yml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
                 ResourceSpec::Project(s)
             }
             ResourceKind::Defaults => {
                 let s: DefaultsSpec =
-                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                    serde_yml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
                 ResourceSpec::Defaults(s)
             }
             ResourceKind::RuntimePolicy => {
                 let s: RuntimePolicySpec =
-                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                    serde_yml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
                 ResourceSpec::RuntimePolicy(s)
             }
             ResourceKind::StepTemplate => {
                 let s: StepTemplateSpec =
-                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                    serde_yml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
                 ResourceSpec::StepTemplate(s)
             }
             ResourceKind::EnvStore | ResourceKind::SecretStore => {
                 let s: EnvStoreSpec =
-                    serde_yaml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                    serde_yml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
                 ResourceSpec::EnvStore(s)
             }
         };
@@ -604,7 +604,7 @@ spec:
 "#;
 
         let resource: OrchestratorResource =
-            serde_yaml::from_str(yaml).expect("Failed to parse workspace YAML");
+            serde_yml::from_str(yaml).expect("Failed to parse workspace YAML");
 
         resource
             .validate_version()
@@ -628,7 +628,7 @@ spec:
 "#;
 
         let resource: OrchestratorResource =
-            serde_yaml::from_str(yaml).expect("Failed to parse YAML");
+            serde_yml::from_str(yaml).expect("Failed to parse YAML");
 
         let result = resource.validate_version();
         assert!(result.is_err());
@@ -669,7 +669,7 @@ spec:
 "#;
 
         let resource: OrchestratorResource =
-            serde_yaml::from_str(yaml).expect("Failed to parse workflow YAML");
+            serde_yml::from_str(yaml).expect("Failed to parse workflow YAML");
 
         resource
             .validate_version()
@@ -729,7 +729,7 @@ spec:
     LOG_LEVEL: "debug"
 "#;
         let resource: OrchestratorResource =
-            serde_yaml::from_str(yaml).expect("Failed to parse EnvStore YAML");
+            serde_yml::from_str(yaml).expect("Failed to parse EnvStore YAML");
         resource.validate_version().expect("version ok");
         assert_eq!(resource.kind, ResourceKind::EnvStore);
         assert_eq!(resource.metadata.name, "shared-config");
@@ -756,7 +756,7 @@ spec:
     OPENAI_API_KEY: "sk-test123"
 "#;
         let resource: OrchestratorResource =
-            serde_yaml::from_str(yaml).expect("Failed to parse SecretStore YAML");
+            serde_yml::from_str(yaml).expect("Failed to parse SecretStore YAML");
         resource.validate_version().expect("version ok");
         assert_eq!(resource.kind, ResourceKind::SecretStore);
         if let ResourceSpec::EnvStore(spec) = &resource.spec {
@@ -785,7 +785,7 @@ spec:
         key: OPENAI_API_KEY
 "#;
         let resource: OrchestratorResource =
-            serde_yaml::from_str(yaml).expect("Failed to parse Agent with env YAML");
+            serde_yml::from_str(yaml).expect("Failed to parse Agent with env YAML");
         resource.validate_version().expect("version ok");
         assert_eq!(resource.kind, ResourceKind::Agent);
         if let ResourceSpec::Agent(spec) = &resource.spec {
@@ -823,7 +823,7 @@ spec:
   command: echo "{prompt}"
 "#;
         let resource: OrchestratorResource =
-            serde_yaml::from_str(yaml).expect("Failed to parse Agent YAML");
+            serde_yml::from_str(yaml).expect("Failed to parse Agent YAML");
         if let ResourceSpec::Agent(spec) = &resource.spec {
             assert!(spec.env.is_none());
         } else {

@@ -117,7 +117,7 @@ impl CliHandler {
                     )?;
                 }
 
-                let yaml = serde_yaml::to_string(&config)
+                let yaml = serde_yml::to_string(&config)
                     .context("failed to serialize configuration after qa project create")?;
                 persist_config_and_reload(&self.state, config, yaml, "qa-project-create")?;
 
@@ -174,7 +174,7 @@ impl CliHandler {
                         active.config.clone()
                     };
                     config.projects.remove(project_id);
-                    let yaml = serde_yaml::to_string(&config).context(
+                    let yaml = serde_yml::to_string(&config).context(
                         "failed to serialize configuration after qa project config cleanup",
                     )?;
                     persist_config_and_reload(&self.state, config, yaml, "qa-project-reset")?;
@@ -249,7 +249,7 @@ impl CliHandler {
 
         match format {
             OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&checks)?),
-            OutputFormat::Yaml => println!("{}", serde_yaml::to_string(&checks)?),
+            OutputFormat::Yaml => println!("{}", serde_yml::to_string(&checks)?),
             OutputFormat::Table => {
                 println!("QA Doctor");
                 println!("---------");

@@ -73,30 +73,39 @@ WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
 - Runtime initialized.
 
 ### Steps
-1. Create a temporary manifest where `qa` prints a very large JSON string (> 300KB):
+1. Create CRD resources where `qa` agent prints a very large JSON string (> 300KB):
    ```bash
    cat > /tmp/large-output-manifest.yaml <<'YAML'
-   apiVersion: orchestrator/v1
-   kind: Bundle
+   apiVersion: orchestrator.dev/v2
+   kind: Workspace
    metadata:
-     name: large-output
+     name: default
    spec:
-     workspaces:
-       default:
-         root_path: workspace/default
-         qa_targets: ["docs/qa/**/*.md"]
-         ticket_dir: docs/ticket
-     agents:
-       giant:
-         metadata: { name: giant }
-         capabilities: [qa]
-         templates:
-           qa: "python3 -c \"import json; print(json.dumps({'confidence':0.9,'quality_score':0.9,'artifacts':[],'payload':'A'*400000}))\""
-     workflows:
-       default:
-         steps:
-         - id: qa
-           required_capability: qa
+     root_path: workspace/default
+     qa_targets: ["docs/qa/**/*.md"]
+     ticket_dir: docs/ticket
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Agent
+   metadata:
+     name: giant
+   spec:
+     capabilities: [qa]
+     command: "python3 -c \"import json; print(json.dumps({'confidence':0.9,'quality_score':0.9,'artifacts':[],'payload':'A'*400000}))\""
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Workflow
+   metadata:
+     name: default
+   spec:
+     steps:
+     - id: qa
+       required_capability: qa
+       enabled: true
+     loop:
+       mode: once
+     finalize:
+       rules: []
    YAML
    ./scripts/orchestrator.sh apply -f /tmp/large-output-manifest.yaml
    ```

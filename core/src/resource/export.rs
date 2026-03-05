@@ -55,7 +55,7 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
 }
 
 /// Export CRD definitions and custom resource instances as YAML-serializable values.
-pub fn export_crd_documents(config: &OrchestratorConfig) -> Vec<serde_yaml::Value> {
+pub fn export_crd_documents(config: &OrchestratorConfig) -> Vec<serde_yml::Value> {
     let mut docs = Vec::new();
 
     // Export CRD definitions first (sorted by kind for deterministic output)
@@ -87,11 +87,11 @@ pub fn export_crd_documents(config: &OrchestratorConfig) -> Vec<serde_yaml::Valu
                 },
             };
             // Wrap with `kind: CustomResourceDefinition`
-            let mut value = serde_yaml::to_value(&manifest).unwrap_or_default();
-            if let serde_yaml::Value::Mapping(ref mut map) = value {
+            let mut value = serde_yml::to_value(&manifest).unwrap_or_default();
+            if let serde_yml::Value::Mapping(ref mut map) = value {
                 map.insert(
-                    serde_yaml::Value::String("kind".to_string()),
-                    serde_yaml::Value::String("CustomResourceDefinition".to_string()),
+                    serde_yml::Value::String("kind".to_string()),
+                    serde_yml::Value::String("CustomResourceDefinition".to_string()),
                 );
             }
             docs.push(value);
@@ -109,7 +109,7 @@ pub fn export_crd_documents(config: &OrchestratorConfig) -> Vec<serde_yaml::Valu
                 metadata: cr.metadata.clone(),
                 spec: cr.spec.clone(),
             };
-            if let Ok(value) = serde_yaml::to_value(&manifest) {
+            if let Ok(value) = serde_yml::to_value(&manifest) {
                 docs.push(value);
             }
         }

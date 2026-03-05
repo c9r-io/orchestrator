@@ -119,9 +119,10 @@ impl CliHandler {
             );
         }
         let client_id = format!("cli-{}", std::process::id());
+        let conn = self.state.database.connection()?;
         if tty {
             if !command.is_empty() {
-                session_store::acquire_writer(&self.state.db_path, &sess.id, &client_id)?;
+                session_store::acquire_writer(&conn, &sess.id, &client_id)?;
                 let cmdline = command.join(" ");
                 let status = Command::new("/bin/bash")
                     .arg("-lc")
@@ -130,7 +131,7 @@ impl CliHandler {
                     .status()
                     .context("exec interactive command in session context")?;
                 session_store::release_attachment(
-                    &self.state.db_path,
+                    &conn,
                     &sess.id,
                     &client_id,
                     "detach",
@@ -139,9 +140,9 @@ impl CliHandler {
             }
 
             let writable =
-                session_store::acquire_writer(&self.state.db_path, &sess.id, &client_id)?;
+                session_store::acquire_writer(&conn, &sess.id, &client_id)?;
             if !writable {
-                session_store::attach_reader(&self.state.db_path, &sess.id, &client_id)?;
+                session_store::attach_reader(&conn, &sess.id, &client_id)?;
             }
             let status_res = if writable {
                 Command::new("/bin/bash")
@@ -162,7 +163,7 @@ impl CliHandler {
                     .status()
                     .context("attach read-only session")
             };
-            session_store::release_attachment(&self.state.db_path, &sess.id, &client_id, "detach")?;
+            session_store::release_attachment(&conn, &sess.id, &client_id, "detach")?;
             let status = status_res?;
             return Ok(status.code().unwrap_or(1));
         }

@@ -39,9 +39,13 @@ pub(crate) fn spill_large_var(
 ) {
     // Always write to file so downstream steps can reference {key}_path
     let dir = logs_dir.join(task_id);
-    std::fs::create_dir_all(&dir).ok();
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        warn!(task_id, key, error = %e, "pipeline var: failed to create spill directory");
+    }
     let path = dir.join(format!("{}.txt", key));
-    std::fs::write(&path, &value).ok();
+    if let Err(e) = std::fs::write(&path, &value) {
+        warn!(task_id, key, path = %path.display(), error = %e, "pipeline var: failed to write spill file");
+    }
     pipeline
         .vars
         .insert(format!("{}_path", key), path.to_string_lossy().to_string());
@@ -78,9 +82,13 @@ pub(crate) fn spill_to_file(
         return None;
     }
     let dir = logs_dir.join(task_id);
-    std::fs::create_dir_all(&dir).ok();
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        warn!(task_id, key, error = %e, "pipeline var: failed to create spill directory");
+    }
     let path = dir.join(format!("{}.txt", key));
-    std::fs::write(&path, value.as_bytes()).ok();
+    if let Err(e) = std::fs::write(&path, value.as_bytes()) {
+        warn!(task_id, key, path = %path.display(), error = %e, "pipeline var: failed to write spill file");
+    }
 
     let safe_end = {
         let limit = PIPELINE_VAR_INLINE_LIMIT.min(value.len());
@@ -805,498 +813,630 @@ pub async fn process_item_filtered(
         // of what `behavior.execution` says, making dispatch robust against stale JSON.
         let effective_execution = step.effective_execution_mode();
 
-        let result = match effective_execution.as_ref() {
-            ExecutionMode::Builtin { name } if name == "self_test" => {
-                // Self-test uses a specialized builtin
-                let exit_code =
-                    execute_self_test_step(&task_ctx.workspace_root, state, task_id, item_id)
-                        .await
-                        .unwrap_or(1);
-                let passed = exit_code == 0;
-                acc.pipeline_vars
-                    .vars
-                    .insert("self_test_exit_code".to_string(), exit_code.to_string());
-                acc.pipeline_vars
-                    .vars
-                    .insert("self_test_passed".to_string(), passed.to_string());
+        // Dispatch builtin steps (self_test, self_restart, ticket_scan) which handle
+        // their own result capture and use `continue` semantics.
+        let builtin_outcome = execute_builtin_step_dispatch(
+            state, task_id, item_id, phase, step, &effective_execution,
+            task_ctx, task_item_paths, &item.qa_file_path, acc,
+        ).await?;
 
+        match builtin_outcome {
+            BuiltinStepOutcome::Handled => continue,
+            BuiltinStepOutcome::EarlyReturn => return Ok(()),
+            BuiltinStepOutcome::NotBuiltin => {}
+        }
+
+        // Execute chain or agent/generic steps, producing a RunResult.
+        let agent_outcome = execute_agent_step(
+            state, task_id, item_id, phase, step, &effective_execution,
+            task_ctx, runtime, &item.qa_file_path, acc,
+        ).await?;
+
+        match agent_outcome {
+            AgentStepOutcome::Handled => continue,
+            AgentStepOutcome::Result(result) => {
+                // Apply step results: capture, status transitions, post-actions,
+                // artifact collection, events, and hard-failure check.
+                let should_return = apply_step_results(
+                    state, task_id, item_id, phase, step,
+                    task_ctx, task_item_paths, &item.qa_file_path, &result, acc,
+                )?;
+                if should_return {
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    // Dynamic steps (only in full/legacy mode, not in segment-filtered mode)
+    execute_dynamic_steps(
+        state, task_id, item, task_ctx, runtime,
+        step_filter, acc,
+    ).await?;
+
+    Ok(())
+}
+
+// ── Extracted sub-functions for process_item_filtered ──────────────
+
+/// Outcome of dispatching a builtin step (self_test, self_restart, ticket_scan).
+enum BuiltinStepOutcome {
+    /// The builtin was recognized and fully handled; caller should `continue`.
+    Handled,
+    /// The builtin triggered an early return from the outer function.
+    EarlyReturn,
+    /// Not a recognized builtin dispatch; fall through to agent/generic execution.
+    NotBuiltin,
+}
+
+/// Dispatch self_test, self_restart, and ticket_scan builtin steps.
+/// These builtins handle their own result capture and event emission.
+#[allow(clippy::too_many_arguments)]
+async fn execute_builtin_step_dispatch(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    item_id: &str,
+    phase: &str,
+    step: &TaskExecutionStep,
+    effective_execution: &ExecutionMode,
+    task_ctx: &TaskRuntimeContext,
+    task_item_paths: &[String],
+    qa_file_path: &str,
+    acc: &mut StepExecutionAccumulator,
+) -> Result<BuiltinStepOutcome> {
+    match effective_execution {
+        ExecutionMode::Builtin { name } if name == "self_test" => {
+            // Self-test uses a specialized builtin
+            let exit_code =
+                execute_self_test_step(&task_ctx.workspace_root, state, task_id, item_id)
+                    .await
+                    .unwrap_or(1);
+            let passed = exit_code == 0;
+            acc.pipeline_vars
+                .vars
+                .insert("self_test_exit_code".to_string(), exit_code.to_string());
+            acc.pipeline_vars
+                .vars
+                .insert("self_test_passed".to_string(), passed.to_string());
+
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "step_finished",
+                json!({"step": phase, "step_scope": step.resolved_scope(), "exit_code": exit_code, "success": passed}),
+            )?;
+
+            // Apply behavior-driven status transitions for self_test
+            if !passed {
+                match &step.behavior.on_failure {
+                    OnFailureAction::Continue => {}
+                    OnFailureAction::SetStatus { status } => {
+                        acc.item_status = status.clone();
+                    }
+                    OnFailureAction::EarlyReturn { status } => {
+                        acc.item_status = status.clone();
+                        acc.terminal = true;
+                        return Ok(BuiltinStepOutcome::EarlyReturn);
+                    }
+                }
+            }
+            acc.step_ran.insert(step.id.clone(), true);
+            acc.exit_codes.insert(step.id.clone(), exit_code as i64);
+            // Apply captures
+            let synth_result = crate::dto::RunResult {
+                success: passed,
+                exit_code: exit_code as i64,
+                stdout_path: String::new(),
+                stderr_path: String::new(),
+                timed_out: false,
+                duration_ms: None,
+                output: None,
+                validation_status: "passed".to_string(),
+                agent_id: "builtin".to_string(),
+                run_id: String::new(),
+            };
+            acc.apply_captures(&step.behavior.captures, &step.id, &synth_result);
+            Ok(BuiltinStepOutcome::Handled)
+        }
+
+        ExecutionMode::Builtin { name } if name == "self_restart" => {
+            // Self-restart builtin: rebuild, verify, snapshot, then exit for relaunch
+            let ws_root = std::path::Path::new(&task_ctx.workspace_root);
+            let exit_code =
+                execute_self_restart_step(ws_root, state, task_id, item_id)
+                    .await
+                    .unwrap_or(1);
+
+            acc.pipeline_vars
+                .vars
+                .insert("self_restart_exit_code".to_string(), exit_code.to_string());
+
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "step_finished",
+                json!({"step": phase, "step_scope": step.resolved_scope(), "exit_code": exit_code, "restart": exit_code == EXIT_RESTART}),
+            )?;
+
+            if exit_code == EXIT_RESTART {
+                // All state is persisted (restart_pending set by execute_self_restart_step).
+                // Exit process so the wrapper script (orchestrator.sh) relaunches the new binary.
+                std::process::exit(EXIT_RESTART as i32);
+            }
+
+            // Build or verification failed — apply on_failure behavior
+            if exit_code != 0 {
+                match &step.behavior.on_failure {
+                    OnFailureAction::Continue => {}
+                    OnFailureAction::SetStatus { status } => {
+                        acc.item_status = status.clone();
+                    }
+                    OnFailureAction::EarlyReturn { status } => {
+                        acc.item_status = status.clone();
+                        acc.terminal = true;
+                        return Ok(BuiltinStepOutcome::EarlyReturn);
+                    }
+                }
+            }
+            acc.step_ran.insert(step.id.clone(), true);
+            acc.exit_codes.insert(step.id.clone(), exit_code as i64);
+            Ok(BuiltinStepOutcome::Handled)
+        }
+
+        ExecutionMode::Builtin { name } if name == "ticket_scan" => {
+            // Ticket scan builtin (step_started already emitted above)
+            let tickets = scan_active_tickets_for_task_items(task_ctx, task_item_paths)?;
+            acc.active_tickets = tickets.get(qa_file_path).cloned().unwrap_or_default();
+            acc.new_ticket_count = acc.active_tickets.len() as i64;
+            acc.step_ran.insert(step.id.clone(), true);
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "step_finished",
+                json!({"step": "ticket_scan", "step_scope": step.resolved_scope(), "tickets": acc.active_tickets.len()}),
+            )?;
+            Ok(BuiltinStepOutcome::Handled)
+        }
+
+        _ => Ok(BuiltinStepOutcome::NotBuiltin),
+    }
+}
+
+/// Outcome of executing a chain or agent/generic step.
+#[allow(clippy::large_enum_variant)]
+enum AgentStepOutcome {
+    /// Chain step was fully handled (including event emission); caller should `continue`.
+    Handled,
+    /// A RunResult was produced and needs post-processing via `apply_step_results`.
+    Result(crate::dto::RunResult),
+}
+
+/// Execute chain steps or agent/generic steps, producing either a handled outcome
+/// (for chains) or a RunResult for further processing.
+#[allow(clippy::too_many_arguments)]
+async fn execute_agent_step(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    item_id: &str,
+    phase: &str,
+    step: &TaskExecutionStep,
+    effective_execution: &ExecutionMode,
+    task_ctx: &TaskRuntimeContext,
+    runtime: &RunningTask,
+    qa_file_path: &str,
+    acc: &mut StepExecutionAccumulator,
+) -> Result<AgentStepOutcome> {
+    match effective_execution {
+        ExecutionMode::Chain => {
+            // Chain execution: run sub-steps in sequence
+            let mut chain_passed = true;
+            for chain_step in &step.chain_steps {
                 insert_event(
                     state,
                     task_id,
                     Some(item_id),
-                    "step_finished",
-                    json!({"step": phase, "step_scope": step.resolved_scope(), "exit_code": exit_code, "success": passed}),
+                    "chain_step_started",
+                    json!({"step": phase, "step_scope": step.resolved_scope(), "chain_step": chain_step.id}),
                 )?;
 
-                // Apply behavior-driven status transitions for self_test
-                if !passed {
-                    match &step.behavior.on_failure {
-                        OnFailureAction::Continue => {}
-                        OnFailureAction::SetStatus { status } => {
-                            acc.item_status = status.clone();
-                        }
-                        OnFailureAction::EarlyReturn { status } => {
-                            acc.item_status = status.clone();
-                            acc.terminal = true;
-                            return Ok(());
-                        }
-                    }
-                }
-                acc.step_ran.insert(step.id.clone(), true);
-                acc.exit_codes.insert(step.id.clone(), exit_code as i64);
-                // Apply captures
-                let synth_result = crate::dto::RunResult {
-                    success: passed,
-                    exit_code: exit_code as i64,
-                    stdout_path: String::new(),
-                    stderr_path: String::new(),
-                    timed_out: false,
-                    duration_ms: None,
-                    output: None,
-                    validation_status: "passed".to_string(),
-                    agent_id: "builtin".to_string(),
-                    run_id: String::new(),
-                };
-                acc.apply_captures(&step.behavior.captures, &step.id, &synth_result);
-                continue;
-            }
-
-            ExecutionMode::Builtin { name } if name == "self_restart" => {
-                // Self-restart builtin: rebuild, verify, snapshot, then exit for relaunch
-                let ws_root = std::path::Path::new(&task_ctx.workspace_root);
-                let exit_code =
-                    execute_self_restart_step(ws_root, state, task_id, item_id)
-                        .await
-                        .unwrap_or(1);
-
-                acc.pipeline_vars
-                    .vars
-                    .insert("self_restart_exit_code".to_string(), exit_code.to_string());
-
-                insert_event(
-                    state,
-                    task_id,
-                    Some(item_id),
-                    "step_finished",
-                    json!({"step": phase, "step_scope": step.resolved_scope(), "exit_code": exit_code, "restart": exit_code == EXIT_RESTART}),
-                )?;
-
-                if exit_code == EXIT_RESTART {
-                    // All state is persisted (restart_pending set by execute_self_restart_step).
-                    // Exit process so the wrapper script (orchestrator.sh) relaunches the new binary.
-                    std::process::exit(EXIT_RESTART as i32);
-                }
-
-                // Build or verification failed — apply on_failure behavior
-                if exit_code != 0 {
-                    match &step.behavior.on_failure {
-                        OnFailureAction::Continue => {}
-                        OnFailureAction::SetStatus { status } => {
-                            acc.item_status = status.clone();
-                        }
-                        OnFailureAction::EarlyReturn { status } => {
-                            acc.item_status = status.clone();
-                            acc.terminal = true;
-                            return Ok(());
-                        }
-                    }
-                }
-                acc.step_ran.insert(step.id.clone(), true);
-                acc.exit_codes.insert(step.id.clone(), exit_code as i64);
-                continue;
-            }
-
-            ExecutionMode::Builtin { name } if name == "ticket_scan" => {
-                // Ticket scan builtin (step_started already emitted above)
-                let tickets = scan_active_tickets_for_task_items(task_ctx, task_item_paths)?;
-                acc.active_tickets = tickets.get(&item.qa_file_path).cloned().unwrap_or_default();
-                acc.new_ticket_count = acc.active_tickets.len() as i64;
-                acc.step_ran.insert(step.id.clone(), true);
-                insert_event(
-                    state,
-                    task_id,
-                    Some(item_id),
-                    "step_finished",
-                    json!({"step": "ticket_scan", "step_scope": step.resolved_scope(), "tickets": acc.active_tickets.len()}),
-                )?;
-                continue;
-            }
-
-            ExecutionMode::Chain => {
-                // Chain execution: run sub-steps in sequence
-                let mut chain_passed = true;
-                for chain_step in &step.chain_steps {
-                    insert_event(
-                        state,
-                        task_id,
-                        Some(item_id),
-                        "chain_step_started",
-                        json!({"step": phase, "step_scope": step.resolved_scope(), "chain_step": chain_step.id}),
-                    )?;
-
-                    let mut step_ctx = task_ctx.clone();
-                    step_ctx.pipeline_vars = acc.pipeline_vars.clone();
-
-                    let chain_exec = execute_builtin_step(
-                        state,
-                        task_id,
-                        item_id,
-                        chain_step,
-                        &step_ctx,
-                        runtime,
-                        &item.qa_file_path,
-                    )
-                    .await;
-
-                    let (chain_result, new_pipeline) = match chain_exec {
-                        Ok(val) => val,
-                        Err(e) => {
-                            let _ = insert_event(
-                                state,
-                                task_id,
-                                Some(item_id),
-                                "chain_step_finished",
-                                json!({"step": phase, "step_scope": step.resolved_scope(), "chain_step": chain_step.id, "error": e.to_string(), "success": false}),
-                            );
-                            let _ = insert_event(
-                                state,
-                                task_id,
-                                Some(item_id),
-                                "step_finished",
-                                json!({"step": phase, "step_scope": step.resolved_scope(), "error": e.to_string(), "success": false}),
-                            );
-                            return Err(e);
-                        }
-                    };
-                    acc.pipeline_vars = new_pipeline;
-
-                    if let Some(ref output) = chain_result.output {
-                        if !output.stdout.is_empty() {
-                            spill_large_var(
-                                &state.logs_dir,
-                                task_id,
-                                "plan_output",
-                                output.stdout.clone(),
-                                &mut acc.pipeline_vars,
-                            );
-                        }
-                    }
-
-                    insert_event(
-                        state,
-                        task_id,
-                        Some(item_id),
-                        "chain_step_finished",
-                        json!({
-                            "step": phase,
-                            "step_scope": step.resolved_scope(),
-                            "chain_step": chain_step.id,
-                            "exit_code": chain_result.exit_code,
-                            "success": chain_result.is_success()
-                        }),
-                    )?;
-
-                    if !chain_result.is_success() {
-                        chain_passed = false;
-                        acc.item_status = format!("{}_failed", chain_step.id);
-                        break;
-                    }
-                }
-                acc.step_ran.insert(step.id.clone(), true);
-                insert_event(
-                    state,
-                    task_id,
-                    Some(item_id),
-                    "step_finished",
-                    json!({"step": phase, "step_scope": step.resolved_scope(), "success": chain_passed}),
-                )?;
-                continue;
-            }
-
-            // ExecutionMode::Agent or ExecutionMode::Builtin for generic builtins
-            _ => {
                 let mut step_ctx = task_ctx.clone();
                 step_ctx.pipeline_vars = acc.pipeline_vars.clone();
 
-                let exec_result = execute_builtin_step(
+                let chain_exec = execute_builtin_step(
                     state,
                     task_id,
                     item_id,
-                    step,
+                    chain_step,
                     &step_ctx,
                     runtime,
-                    &item.qa_file_path,
+                    qa_file_path,
                 )
                 .await;
 
-                let (result, new_pipeline) = match exec_result {
+                let (chain_result, new_pipeline) = match chain_exec {
                     Ok(val) => val,
                     Err(e) => {
                         let _ = insert_event(
                             state,
                             task_id,
                             Some(item_id),
+                            "chain_step_finished",
+                            json!({"step": phase, "step_scope": step.resolved_scope(), "chain_step": chain_step.id, "error": e.to_string(), "success": false}),
+                        );
+                        let _ = insert_event(
+                            state,
+                            task_id,
+                            Some(item_id),
                             "step_finished",
-                            json!({"step": phase, "step_id": step.id, "step_scope": step.resolved_scope(), "error": e.to_string(), "success": false}),
+                            json!({"step": phase, "step_scope": step.resolved_scope(), "error": e.to_string(), "success": false}),
                         );
                         return Err(e);
                     }
                 };
                 acc.pipeline_vars = new_pipeline;
 
-                if let Some(ref output) = result.output {
+                if let Some(ref output) = chain_result.output {
                     if !output.stdout.is_empty() {
-                        let output_key = format!("{}_output", phase);
                         spill_large_var(
                             &state.logs_dir,
                             task_id,
-                            &output_key,
+                            "plan_output",
                             output.stdout.clone(),
                             &mut acc.pipeline_vars,
                         );
                     }
                 }
 
-                result
-            }
-        };
-
-        // 3. Capture outputs
-        acc.exit_codes.insert(step.id.clone(), result.exit_code);
-        acc.apply_captures(&step.behavior.captures, &step.id, &result);
-        acc.step_ran.insert(step.id.clone(), true);
-
-        // 4. Status transitions
-        if result.is_success() {
-            if let OnSuccessAction::SetStatus { status } = &step.behavior.on_success {
-                acc.item_status = status.clone();
-            }
-        } else {
-            match &step.behavior.on_failure {
-                OnFailureAction::Continue => {}
-                OnFailureAction::SetStatus { status } => {
-                    acc.item_status = status.clone();
-                }
-                OnFailureAction::EarlyReturn { status } => {
-                    acc.item_status = status.clone();
-                    acc.terminal = true;
-                    insert_event(
-                        state,
-                        task_id,
-                        Some(item_id),
-                        "step_finished",
-                        json!({"step": phase, "step_id": step.id, "step_scope": step.resolved_scope(), "early_return": true, "exit_code": result.exit_code, "success": false}),
-                    )?;
-                    return Ok(());
-                }
-            }
-        }
-
-        // 5. Post-actions
-        for action in &step.behavior.post_actions {
-            match action {
-                PostAction::CreateTicket if !result.is_success() => {
-                    if let Some(exit_code) = acc.exit_codes.get(&step.id) {
-                        let task_name = SqliteTaskRepository::new(state.database.clone())
-                            .load_task_name(task_id)?
-                            .unwrap_or_else(|| task_id.to_string());
-                        match create_ticket_for_qa_failure(
-                            &task_ctx.workspace_root,
-                            &task_ctx.ticket_dir,
-                            &task_name,
-                            &item.qa_file_path,
-                            *exit_code,
-                            &result.stdout_path,
-                            &result.stderr_path,
-                        ) {
-                            Ok(Some(ticket_path)) => {
-                                acc.created_ticket_files.push(ticket_path.clone());
-                                insert_event(
-                                    state,
-                                    task_id,
-                                    Some(item_id),
-                                    "ticket_created",
-                                    json!({"path": ticket_path, "qa_file": item.qa_file_path}),
-                                )?;
-                            }
-                            Ok(None) => {}
-                            Err(e) => warn!(error = %e, "failed to auto-create ticket"),
-                        }
-                    }
-                }
-                PostAction::ScanTickets => {
-                    let tickets = scan_active_tickets_for_task_items(task_ctx, task_item_paths)?;
-                    acc.active_tickets =
-                        tickets.get(&item.qa_file_path).cloned().unwrap_or_default();
-                    acc.new_ticket_count = acc.active_tickets.len() as i64;
-                }
-                _ => {}
-            }
-        }
-
-        // 6. Collect artifacts
-        if step.behavior.collect_artifacts {
-            let step_artifacts = result
-                .output
-                .as_ref()
-                .map(|o| o.artifacts.clone())
-                .unwrap_or_default();
-            if !step_artifacts.is_empty() {
                 insert_event(
                     state,
                     task_id,
                     Some(item_id),
-                    "artifacts_parsed",
-                    json!({"step": phase, "count": step_artifacts.len()}),
+                    "chain_step_finished",
+                    json!({
+                        "step": phase,
+                        "step_scope": step.resolved_scope(),
+                        "chain_step": chain_step.id,
+                        "exit_code": chain_result.exit_code,
+                        "success": chain_result.is_success()
+                    }),
                 )?;
-                acc.phase_artifacts.extend(step_artifacts);
+
+                if !chain_result.is_success() {
+                    chain_passed = false;
+                    acc.item_status = format!("{}_failed", chain_step.id);
+                    break;
+                }
             }
+            acc.step_ran.insert(step.id.clone(), true);
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "step_finished",
+                json!({"step": phase, "step_scope": step.resolved_scope(), "success": chain_passed}),
+            )?;
+            Ok(AgentStepOutcome::Handled)
         }
 
-        // Also check for ticket artifacts that may seed active_tickets
-        if acc.active_tickets.is_empty() {
-            let ticket_artifact_count = acc
-                .phase_artifacts
-                .iter()
-                .filter(|a| matches!(a.kind, crate::collab::ArtifactKind::Ticket { .. }))
-                .count();
-            if ticket_artifact_count > 0 {
-                acc.active_tickets = (0..ticket_artifact_count)
-                    .map(|idx| format!("artifact://ticket/{}", idx))
-                    .collect();
+        // ExecutionMode::Agent or ExecutionMode::Builtin for generic builtins
+        _ => {
+            let mut step_ctx = task_ctx.clone();
+            step_ctx.pipeline_vars = acc.pipeline_vars.clone();
+
+            let exec_result = execute_builtin_step(
+                state,
+                task_id,
+                item_id,
+                step,
+                &step_ctx,
+                runtime,
+                qa_file_path,
+            )
+            .await;
+
+            let (result, new_pipeline) = match exec_result {
+                Ok(val) => val,
+                Err(e) => {
+                    let _ = insert_event(
+                        state,
+                        task_id,
+                        Some(item_id),
+                        "step_finished",
+                        json!({"step": phase, "step_id": step.id, "step_scope": step.resolved_scope(), "error": e.to_string(), "success": false}),
+                    );
+                    return Err(e);
+                }
+            };
+            acc.pipeline_vars = new_pipeline;
+
+            if let Some(ref output) = result.output {
+                if !output.stdout.is_empty() {
+                    let output_key = format!("{}_output", phase);
+                    spill_large_var(
+                        &state.logs_dir,
+                        task_id,
+                        &output_key,
+                        output.stdout.clone(),
+                        &mut acc.pipeline_vars,
+                    );
+                }
+            }
+
+            Ok(AgentStepOutcome::Result(result))
+        }
+    }
+}
+
+/// Apply step results: capture outputs, status transitions, post-actions,
+/// artifact collection, confidence/quality scores, and event emission.
+/// Returns `true` if the caller should return early (terminal state).
+#[allow(clippy::too_many_arguments)]
+fn apply_step_results(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    item_id: &str,
+    phase: &str,
+    step: &TaskExecutionStep,
+    task_ctx: &TaskRuntimeContext,
+    task_item_paths: &[String],
+    qa_file_path: &str,
+    result: &crate::dto::RunResult,
+    acc: &mut StepExecutionAccumulator,
+) -> Result<bool> {
+    // 3. Capture outputs
+    acc.exit_codes.insert(step.id.clone(), result.exit_code);
+    acc.apply_captures(&step.behavior.captures, &step.id, result);
+    acc.step_ran.insert(step.id.clone(), true);
+
+    // 4. Status transitions
+    if result.is_success() {
+        if let OnSuccessAction::SetStatus { status } = &step.behavior.on_success {
+            acc.item_status = status.clone();
+        }
+    } else {
+        match &step.behavior.on_failure {
+            OnFailureAction::Continue => {}
+            OnFailureAction::SetStatus { status } => {
+                acc.item_status = status.clone();
+            }
+            OnFailureAction::EarlyReturn { status } => {
+                acc.item_status = status.clone();
+                acc.terminal = true;
+                insert_event(
+                    state,
+                    task_id,
+                    Some(item_id),
+                    "step_finished",
+                    json!({"step": phase, "step_id": step.id, "step_scope": step.resolved_scope(), "early_return": true, "exit_code": result.exit_code, "success": false}),
+                )?;
+                return Ok(true);
+            }
+        }
+    }
+
+    // 5. Post-actions
+    for action in &step.behavior.post_actions {
+        match action {
+            PostAction::CreateTicket if !result.is_success() => {
+                if let Some(exit_code) = acc.exit_codes.get(&step.id) {
+                    let task_name = SqliteTaskRepository::new(state.database.clone())
+                        .load_task_name(task_id)?
+                        .unwrap_or_else(|| task_id.to_string());
+                    match create_ticket_for_qa_failure(
+                        &task_ctx.workspace_root,
+                        &task_ctx.ticket_dir,
+                        &task_name,
+                        qa_file_path,
+                        *exit_code,
+                        &result.stdout_path,
+                        &result.stderr_path,
+                    ) {
+                        Ok(Some(ticket_path)) => {
+                            acc.created_ticket_files.push(ticket_path.clone());
+                            insert_event(
+                                state,
+                                task_id,
+                                Some(item_id),
+                                "ticket_created",
+                                json!({"path": ticket_path, "qa_file": qa_file_path}),
+                            )?;
+                        }
+                        Ok(None) => {}
+                        Err(e) => warn!(error = %e, "failed to auto-create ticket"),
+                    }
+                }
+            }
+            PostAction::ScanTickets => {
+                let tickets = scan_active_tickets_for_task_items(task_ctx, task_item_paths)?;
+                acc.active_tickets =
+                    tickets.get(qa_file_path).cloned().unwrap_or_default();
                 acc.new_ticket_count = acc.active_tickets.len() as i64;
-            }
-        }
-
-        let confidence = result.output.as_ref().map(|o| o.confidence).unwrap_or(0.0);
-        let quality = result
-            .output
-            .as_ref()
-            .map(|o| o.quality_score)
-            .unwrap_or(0.0);
-
-        match phase.as_str() {
-            "qa" | "qa_testing" => {
-                acc.qa_confidence = Some(confidence);
-                acc.qa_quality_score = Some(quality);
-            }
-            "fix" | "ticket_fix" => {
-                acc.fix_confidence = Some(confidence);
-                acc.fix_quality_score = Some(quality);
             }
             _ => {}
         }
+    }
 
+    // 6. Collect artifacts
+    if step.behavior.collect_artifacts {
+        let step_artifacts = result
+            .output
+            .as_ref()
+            .map(|o| o.artifacts.clone())
+            .unwrap_or_default();
+        if !step_artifacts.is_empty() {
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "artifacts_parsed",
+                json!({"step": phase, "count": step_artifacts.len()}),
+            )?;
+            acc.phase_artifacts.extend(step_artifacts);
+        }
+    }
+
+    // Also check for ticket artifacts that may seed active_tickets
+    if acc.active_tickets.is_empty() {
+        let ticket_artifact_count = acc
+            .phase_artifacts
+            .iter()
+            .filter(|a| matches!(a.kind, crate::collab::ArtifactKind::Ticket { .. }))
+            .count();
+        if ticket_artifact_count > 0 {
+            acc.active_tickets = (0..ticket_artifact_count)
+                .map(|idx| format!("artifact://ticket/{}", idx))
+                .collect();
+            acc.new_ticket_count = acc.active_tickets.len() as i64;
+        }
+    }
+
+    let confidence = result.output.as_ref().map(|o| o.confidence).unwrap_or(0.0);
+    let quality = result
+        .output
+        .as_ref()
+        .map(|o| o.quality_score)
+        .unwrap_or(0.0);
+
+    match phase {
+        "qa" | "qa_testing" => {
+            acc.qa_confidence = Some(confidence);
+            acc.qa_quality_score = Some(quality);
+        }
+        "fix" | "ticket_fix" => {
+            acc.fix_confidence = Some(confidence);
+            acc.fix_quality_score = Some(quality);
+        }
+        _ => {}
+    }
+
+    insert_event(
+        state,
+        task_id,
+        Some(item_id),
+        "step_finished",
+        json!({
+                "step": phase,
+                "step_id": step.id,
+                "step_scope": step.resolved_scope(),
+                "agent_id": result.agent_id,
+                "run_id": result.run_id,
+                "exit_code": result.exit_code,
+            "success": result.is_success(),
+            "timed_out": result.timed_out,
+            "duration_ms": result.duration_ms,
+            "build_errors": acc.pipeline_vars.build_errors.len(),
+            "test_failures": acc.pipeline_vars.test_failures.len(),
+            "confidence": confidence,
+            "quality_score": quality,
+            "validation_status": result.validation_status,
+        }),
+    )?;
+
+    if is_execution_hard_failure(result) {
+        acc.item_status = "unresolved".to_string();
+        acc.flags.insert("execution_failed".to_string(), true);
+        acc.terminal = true;
+        return Ok(true);
+    }
+
+    Ok(false)
+}
+
+/// Execute dynamic steps from the dynamic step pool.
+/// Only runs in full/legacy mode (not in segment-filtered mode).
+async fn execute_dynamic_steps(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    item: &crate::dto::TaskItemRow,
+    task_ctx: &TaskRuntimeContext,
+    runtime: &RunningTask,
+    step_filter: Option<&HashSet<String>>,
+    acc: &mut StepExecutionAccumulator,
+) -> Result<()> {
+    if task_ctx.dynamic_steps.is_empty() || step_filter.is_some() {
+        return Ok(());
+    }
+
+    let item_id = item.id.as_str();
+    let pool = {
+        let mut p = crate::dynamic_orchestration::DynamicStepPool::new();
+        for ds in &task_ctx.dynamic_steps {
+            p.add_step(ds.clone());
+        }
+        p
+    };
+    let prehook_ctx = acc.to_prehook_context(task_id, item, task_ctx, "dynamic");
+    let dyn_ctx = crate::dynamic_orchestration::StepPrehookContext {
+        task_id: prehook_ctx.task_id,
+        task_item_id: prehook_ctx.task_item_id,
+        cycle: prehook_ctx.cycle,
+        step: "dynamic".to_string(),
+        qa_file_path: prehook_ctx.qa_file_path,
+        item_status: prehook_ctx.item_status,
+        task_status: prehook_ctx.task_status,
+        qa_exit_code: prehook_ctx.qa_exit_code,
+        fix_exit_code: prehook_ctx.fix_exit_code,
+        retest_exit_code: prehook_ctx.retest_exit_code,
+        active_ticket_count: prehook_ctx.active_ticket_count,
+        new_ticket_count: prehook_ctx.new_ticket_count,
+        qa_failed: prehook_ctx.qa_failed,
+        fix_required: prehook_ctx.fix_required,
+        qa_confidence: prehook_ctx.qa_confidence,
+        qa_quality_score: prehook_ctx.qa_quality_score,
+        fix_has_changes: prehook_ctx.fix_has_changes,
+        upstream_artifacts: vec![],
+        build_error_count: prehook_ctx.build_error_count,
+        test_failure_count: prehook_ctx.test_failure_count,
+        build_exit_code: prehook_ctx.build_exit_code,
+        test_exit_code: prehook_ctx.test_exit_code,
+        self_test_exit_code: prehook_ctx.self_test_exit_code,
+        self_test_passed: prehook_ctx.self_test_passed,
+        max_cycles: prehook_ctx.max_cycles,
+        is_last_cycle: prehook_ctx.is_last_cycle,
+    };
+    let matched = pool.find_matching_steps(&dyn_ctx);
+    for ds in matched {
         insert_event(
             state,
             task_id,
             Some(item_id),
-            "step_finished",
-            json!({
-                    "step": phase,
-                    "step_id": step.id,
-                    "step_scope": step.resolved_scope(),
-                    "agent_id": result.agent_id,
-                    "run_id": result.run_id,
-                    "exit_code": result.exit_code,
-                "success": result.is_success(),
-                "timed_out": result.timed_out,
-                "duration_ms": result.duration_ms,
-                "build_errors": acc.pipeline_vars.build_errors.len(),
-                "test_failures": acc.pipeline_vars.test_failures.len(),
-                "confidence": confidence,
-                "quality_score": quality,
-                "validation_status": result.validation_status,
-            }),
+            "dynamic_step_started",
+            json!({"step_id": ds.id, "step_type": ds.step_type, "step_scope": "item", "priority": ds.priority}),
         )?;
-
-        if is_execution_hard_failure(&result) {
-            acc.item_status = "unresolved".to_string();
-            acc.flags.insert("execution_failed".to_string(), true);
-            acc.terminal = true;
-            return Ok(());
-        }
-    }
-
-    // Dynamic steps (only in full/legacy mode, not in segment-filtered mode)
-    if !task_ctx.dynamic_steps.is_empty() && step_filter.is_none() {
-        let pool = {
-            let mut p = crate::dynamic_orchestration::DynamicStepPool::new();
-            for ds in &task_ctx.dynamic_steps {
-                p.add_step(ds.clone());
-            }
-            p
-        };
-        let prehook_ctx = acc.to_prehook_context(task_id, item, task_ctx, "dynamic");
-        let dyn_ctx = crate::dynamic_orchestration::StepPrehookContext {
-            task_id: prehook_ctx.task_id,
-            task_item_id: prehook_ctx.task_item_id,
-            cycle: prehook_ctx.cycle,
-            step: "dynamic".to_string(),
-            qa_file_path: prehook_ctx.qa_file_path,
-            item_status: prehook_ctx.item_status,
-            task_status: prehook_ctx.task_status,
-            qa_exit_code: prehook_ctx.qa_exit_code,
-            fix_exit_code: prehook_ctx.fix_exit_code,
-            retest_exit_code: prehook_ctx.retest_exit_code,
-            active_ticket_count: prehook_ctx.active_ticket_count,
-            new_ticket_count: prehook_ctx.new_ticket_count,
-            qa_failed: prehook_ctx.qa_failed,
-            fix_required: prehook_ctx.fix_required,
-            qa_confidence: prehook_ctx.qa_confidence,
-            qa_quality_score: prehook_ctx.qa_quality_score,
-            fix_has_changes: prehook_ctx.fix_has_changes,
-            upstream_artifacts: vec![],
-            build_error_count: prehook_ctx.build_error_count,
-            test_failure_count: prehook_ctx.test_failure_count,
-            build_exit_code: prehook_ctx.build_exit_code,
-            test_exit_code: prehook_ctx.test_exit_code,
-            self_test_exit_code: prehook_ctx.self_test_exit_code,
-            self_test_passed: prehook_ctx.self_test_passed,
-            max_cycles: prehook_ctx.max_cycles,
-            is_last_cycle: prehook_ctx.is_last_cycle,
-        };
-        let matched = pool.find_matching_steps(&dyn_ctx);
-        for ds in matched {
-            insert_event(
-                state,
+        let cap = Some(ds.step_type.as_str());
+        let result = run_phase_with_rotation(
+            state,
+            RotatingPhaseRunRequest {
                 task_id,
-                Some(item_id),
-                "dynamic_step_started",
-                json!({"step_id": ds.id, "step_type": ds.step_type, "step_scope": "item", "priority": ds.priority}),
-            )?;
-            let cap = Some(ds.step_type.as_str());
-            let result = run_phase_with_rotation(
-                state,
-                RotatingPhaseRunRequest {
-                    task_id,
-                    item_id,
-                    step_id: &ds.id,
-                    phase: &ds.step_type,
-                    tty: false,
-                    capability: cap,
-                    rel_path: &item.qa_file_path,
-                    ticket_paths: &acc.active_tickets,
-                    workspace_root: &task_ctx.workspace_root,
-                    workspace_id: &task_ctx.workspace_id,
-                    cycle: task_ctx.current_cycle,
-                    runtime,
-                    pipeline_vars: None,
-                    step_timeout_secs: task_ctx.safety.step_timeout_secs,
-                    step_scope: crate::config::StepScope::Item,
-                    step_template_prompt: None,
-                    project_id: &task_ctx.project_id,
-                },
-            )
-            .await?;
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                "dynamic_step_finished",
-                json!({"step_id": ds.id, "step_scope": "item", "exit_code": result.exit_code, "success": result.is_success()}),
-            )?;
-        }
+                item_id,
+                step_id: &ds.id,
+                phase: &ds.step_type,
+                tty: false,
+                capability: cap,
+                rel_path: &item.qa_file_path,
+                ticket_paths: &acc.active_tickets,
+                workspace_root: &task_ctx.workspace_root,
+                workspace_id: &task_ctx.workspace_id,
+                cycle: task_ctx.current_cycle,
+                runtime,
+                pipeline_vars: None,
+                step_timeout_secs: task_ctx.safety.step_timeout_secs,
+                step_scope: crate::config::StepScope::Item,
+                step_template_prompt: None,
+                project_id: &task_ctx.project_id,
+            },
+        )
+        .await?;
+        insert_event(
+            state,
+            task_id,
+            Some(item_id),
+            "dynamic_step_finished",
+            json!({"step_id": ds.id, "step_scope": "item", "exit_code": result.exit_code, "success": result.is_success()}),
+        )?;
     }
 
     Ok(())

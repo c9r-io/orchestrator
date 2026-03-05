@@ -15,10 +15,11 @@ impl CliHandler {
         match cmd {
             TaskSessionCommands::List { task_id, output } => {
                 let task_id = resolve_task_id(&self.state, task_id)?;
-                let rows = session_store::list_task_sessions(&self.state.db_path, &task_id)?;
+                let conn = self.state.database.connection()?;
+                let rows = session_store::list_task_sessions(&conn, &task_id)?;
                 match output {
                     OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&rows)?),
-                    OutputFormat::Yaml => println!("{}", serde_yaml::to_string(&rows)?),
+                    OutputFormat::Yaml => println!("{}", serde_yml::to_string(&rows)?),
                     OutputFormat::Table => {
                         if rows.is_empty() {
                             println!("No sessions for task {}", task_id);
@@ -44,11 +45,12 @@ impl CliHandler {
                 Ok(0)
             }
             TaskSessionCommands::Info { session_id, output } => {
-                let row = session_store::load_session(&self.state.db_path, session_id)?
+                let conn = self.state.database.connection()?;
+                let row = session_store::load_session(&conn, session_id)?
                     .with_context(|| format!("session not found: {}", session_id))?;
                 match output {
                     OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&row)?),
-                    OutputFormat::Yaml => println!("{}", serde_yaml::to_string(&row)?),
+                    OutputFormat::Yaml => println!("{}", serde_yml::to_string(&row)?),
                     OutputFormat::Table => {
                         println!("id: {}", row.id);
                         println!("task_id: {}", row.task_id);
@@ -69,7 +71,8 @@ impl CliHandler {
                 Ok(0)
             }
             TaskSessionCommands::Close { session_id, force } => {
-                let row = session_store::load_session(&self.state.db_path, session_id)?
+                let conn = self.state.database.connection()?;
+                let row = session_store::load_session(&conn, session_id)?
                     .with_context(|| format!("session not found: {}", session_id))?;
                 if row.pid > 0 {
                     let sig = if *force { "-9" } else { "-15" };
@@ -79,7 +82,7 @@ impl CliHandler {
                         .status();
                 }
                 session_store::update_session_state(
-                    &self.state.db_path,
+                    &conn,
                     session_id,
                     "closed",
                     None,

@@ -81,6 +81,11 @@ pub fn all_migrations() -> Vec<Migration> {
             name: "m0004_events_backfill_promoted",
             up: m0004_events_backfill_promoted,
         },
+        Migration {
+            version: 5,
+            name: "m0005_add_task_lookup_indexes",
+            up: m0005_add_task_lookup_indexes,
+        },
     ]
 }
 
@@ -383,6 +388,18 @@ fn m0004_events_backfill_promoted(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+// ── Migration 5: Task Lookup Indexes ──
+
+fn m0005_add_task_lookup_indexes(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
+         CREATE INDEX IF NOT EXISTS idx_tasks_workspace_id ON tasks(workspace_id);
+         CREATE INDEX IF NOT EXISTS idx_tasks_workflow_id ON tasks(workflow_id);",
+    )
+    .context("m0005: create task lookup indexes")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -399,8 +416,8 @@ mod tests {
         let conn = mem_conn();
         let migrations = all_migrations();
         let applied = run_pending(&conn, &migrations).expect("run_pending");
-        assert_eq!(applied, 4);
-        assert_eq!(current_version(&conn).expect("version"), 4);
+        assert_eq!(applied, 5);
+        assert_eq!(current_version(&conn).expect("version"), 5);
     }
 
     #[test]
@@ -410,7 +427,7 @@ mod tests {
         run_pending(&conn, &migrations).expect("first run");
         let applied = run_pending(&conn, &migrations).expect("second run");
         assert_eq!(applied, 0);
-        assert_eq!(current_version(&conn).expect("version"), 4);
+        assert_eq!(current_version(&conn).expect("version"), 5);
     }
 
     #[test]
@@ -427,10 +444,10 @@ mod tests {
         assert_eq!(applied, 2);
         assert_eq!(current_version(&conn).expect("version"), 2);
 
-        // Apply all 4 — should only run 3 and 4
+        // Apply all 5 — should only run 3, 4, and 5
         let applied = run_pending(&conn, &all).expect("full run");
-        assert_eq!(applied, 2);
-        assert_eq!(current_version(&conn).expect("version"), 4);
+        assert_eq!(applied, 3);
+        assert_eq!(current_version(&conn).expect("version"), 5);
     }
 
     #[test]
@@ -553,6 +570,7 @@ mod tests {
         let conn = mem_conn();
         // Run migrations 1-3 first
         let mut migs = all_migrations();
+        let _m5 = migs.pop().expect("pop m5");
         let m4 = migs.pop().expect("pop m4");
         run_pending(&conn, &migs).expect("run m1-m3");
 

@@ -49,7 +49,7 @@ impl CliHandler {
             OutputFormat::Yaml => {
                 println!(
                     "{}",
-                    serde_yaml::to_string(&report).context("serialize check report as yaml")?
+                    serde_yml::to_string(&report).context("serialize check report as yaml")?
                 );
             }
             OutputFormat::Table => {

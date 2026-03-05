@@ -164,7 +164,8 @@ Ensure sensitive token is redacted in persisted structured output and in `task l
 
 1. Apply redaction-enabled config and run task:
    ```bash
-   cat > /tmp/runner-redaction.yaml << 'YAML'
+   # Apply runner config with redaction patterns
+   cat > /tmp/runner-redaction-config.yaml << 'YAML'
    runner:
      policy: unsafe
      executor: shell
@@ -173,36 +174,44 @@ Ensure sensitive token is redacted in persisted structured output and in `task l
      redaction_patterns: [SECRET_TOKEN_ABC]
    resume:
      auto: false
-   defaults:
-     workspace: default
-     workflow: qa_only
-   workspaces:
-     default:
-       root_path: .
-       qa_targets: [docs/qa]
-       ticket_dir: docs/ticket
-   agents:
-     mock:
-       metadata:
-         name: mock
-       capabilities: [qa]
-       templates:
-         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[],\"message\":\"SECRET_TOKEN_ABC\"}'"
-   workflows:
-     qa_only:
-       steps:
-         - id: qa
-           required_capability: qa
-           enabled: true
-       loop:
-         mode: once
-         guard:
-           enabled: false
-           stop_when_no_unresolved: true
-       finalize:
-         rules: []
    YAML
-   ./scripts/orchestrator.sh apply -f /tmp/runner-redaction.yaml
+   ./scripts/orchestrator.sh apply -f /tmp/runner-redaction-config.yaml
+
+   # Apply CRD resources
+   cat > /tmp/runner-redaction-resources.yaml << 'YAML'
+   apiVersion: orchestrator.dev/v2
+   kind: Workspace
+   metadata:
+     name: default
+   spec:
+     root_path: "."
+     qa_targets: [docs/qa]
+     ticket_dir: docs/ticket
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Agent
+   metadata:
+     name: mock
+   spec:
+     capabilities: [qa]
+     command: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[],\"message\":\"SECRET_TOKEN_ABC\"}'"
+   ---
+   apiVersion: orchestrator.dev/v2
+   kind: Workflow
+   metadata:
+     name: qa_only
+   spec:
+     steps:
+       - id: qa
+         required_capability: qa
+         enabled: true
+     loop:
+       mode: once
+     finalize:
+       rules: []
+   YAML
+   ./scripts/orchestrator.sh apply -f /tmp/runner-redaction-resources.yaml
+
    TASK_ID=$(./scripts/orchestrator.sh task create --project default --name "runner-redaction" --goal "redaction" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ./scripts/orchestrator.sh task start "${TASK_ID}" || true
    ```

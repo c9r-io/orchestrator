@@ -19,7 +19,7 @@ impl CliHandler {
     {
         match format {
             OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&rows)?),
-            OutputFormat::Yaml => println!("{}", serde_yaml::to_string(&rows)?),
+            OutputFormat::Yaml => println!("{}", serde_yml::to_string(&rows)?),
             OutputFormat::Table => {
                 println!("{kind} LIST");
                 println!("{}", "-".repeat(kind.len() + 5));
@@ -43,7 +43,7 @@ impl CliHandler {
                 println!("{}", json);
             }
             OutputFormat::Yaml => {
-                let yaml = serde_yaml::to_string(tasks)?;
+                let yaml = serde_yml::to_string(tasks)?;
                 println!("{}", yaml);
             }
             OutputFormat::Table => {
@@ -77,7 +77,7 @@ impl CliHandler {
                 println!("{}", serde_json::to_string_pretty(detail)?);
             }
             OutputFormat::Yaml => {
-                println!("{}", serde_yaml::to_string(detail)?);
+                println!("{}", serde_yml::to_string(detail)?);
             }
             OutputFormat::Table => {
                 let t = &detail.task;
@@ -111,7 +111,7 @@ impl CliHandler {
                 println!("{}", json);
             }
             OutputFormat::Yaml => {
-                println!("{}", serde_yaml::to_string(workspaces)?);
+                println!("{}", serde_yml::to_string(workspaces)?);
             }
             OutputFormat::Table => {
                 println!("{:<20} {:<40}", "ID", "ROOT PATH");
@@ -148,7 +148,7 @@ impl CliHandler {
                 println!("{}", json);
             }
             OutputFormat::Yaml => {
-                println!("{}", serde_yaml::to_string(ws)?);
+                println!("{}", serde_yml::to_string(ws)?);
             }
             OutputFormat::Table => {
                 println!("Workspace: {}", id);

@@ -80,7 +80,8 @@ pub(super) fn resolve_exec_target(
 ) -> Result<ResolvedExecTarget> {
     match parse_exec_target(target)? {
         ExecTargetRef::SessionId { session_id } => {
-            let sess = session_store::load_session(&state.db_path, session_id)?
+            let conn = state.database.connection()?;
+            let sess = session_store::load_session(&conn, session_id)?
                 .with_context(|| format!("session not found: {}", session_id))?;
             Ok(ResolvedExecTarget {
                 task_id: sess.task_id.clone(),
@@ -100,8 +101,9 @@ pub(super) fn resolve_exec_target(
                 .iter()
                 .find(|s| s.id == step_id)
                 .with_context(|| format!("step '{}' not found in task '{}'", step_id, task_id))?;
+            let conn = state.database.connection()?;
             let session = session_store::load_active_session_for_task_step(
-                &state.db_path,
+                &conn,
                 &task_id,
                 step_id,
             )?;

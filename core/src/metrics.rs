@@ -286,7 +286,7 @@ pub fn calculate_agent_score(
                 + health_penalty
         }
         SelectionStrategy::LoadBalanced => {
-            cost_score * 0.2 + success_rate_score * 0.3 + load_penalty.abs() * 0.5
+            cost_score * 0.2 + success_rate_score * 0.3 + load_penalty * 0.5
         }
         SelectionStrategy::CapabilityAware => {
             // Similar to adaptive but health is more important
@@ -470,10 +470,34 @@ mod tests {
         // cost_score = 100 - 30 = 70.0
         // success_rate_score = 8/10 * 100 = 80.0
         // load_penalty = -30.0
-        // total = cost*0.2 + success*0.3 + |load|*0.5 = 70*0.2 + 80*0.3 + 30*0.5
-        //       = 14 + 24 + 15 = 53.0
-        let expected = 70.0 * 0.2 + 80.0 * 0.3 + 30.0 * 0.5;
+        // total = cost*0.2 + success*0.3 + load*0.5 = 70*0.2 + 80*0.3 + (-30)*0.5
+        //       = 14 + 24 - 15 = 23.0
+        let expected = 70.0 * 0.2 + 80.0 * 0.3 + (-30.0) * 0.5;
         assert!((score.total_score - expected).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_load_balanced_low_load_scores_higher() {
+        let health = Some(AgentHealthState::default());
+        let requirement = SelectionRequirement {
+            strategy: SelectionStrategy::LoadBalanced,
+            ..Default::default()
+        };
+
+        // Agent A: low load (1)
+        let metrics_a = Some(create_test_metrics(10, 8, 5000, 1));
+        let score_a = calculate_agent_score("agent_a", Some(30), &metrics_a, &health, &requirement);
+
+        // Agent B: high load (4)
+        let metrics_b = Some(create_test_metrics(10, 8, 5000, 4));
+        let score_b = calculate_agent_score("agent_b", Some(30), &metrics_b, &health, &requirement);
+
+        assert!(
+            score_a.total_score > score_b.total_score,
+            "Low-load agent should score higher: a={}, b={}",
+            score_a.total_score,
+            score_b.total_score
+        );
     }
 
     #[test]

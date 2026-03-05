@@ -1,4 +1,4 @@
-use crate::config::{PipelineVariables, PromptDelivery, StepScope};
+use crate::config::{PipelineVariables, PromptDelivery, RunnerConfig, StepScope};
 use crate::config_load::now_ts;
 use crate::events::insert_event;
 use crate::health::{
@@ -14,8 +14,8 @@ use crate::state::{read_agent_health, read_agent_metrics, write_agent_metrics, I
 use crate::task_repository::NewCommandRun;
 use anyhow::{Context, Result};
 use serde_json::json;
-use std::collections::HashSet;
-use std::path::Path;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio::time::Instant;
@@ -49,6 +49,46 @@ struct HeartbeatSample {
     stderr_delta_bytes: u64,
     stagnant_heartbeats: u32,
     output_state: &'static str,
+}
+
+/// Intermediate data produced by `setup_phase_execution` and consumed by later stages.
+struct PhaseSetup {
+    run_uuid: Uuid,
+    run_id: String,
+    now: String,
+    runner: RunnerConfig,
+    resolved_extra_env: HashMap<String, String>,
+    redaction_patterns: Vec<String>,
+    stdout_path: PathBuf,
+    stderr_path: PathBuf,
+    stdout_file: std::fs::File,
+    stderr_file: std::fs::File,
+    command: String,
+}
+
+/// Intermediate data produced by `spawn_phase_process`.
+struct SpawnResult {
+    session_id: Option<String>,
+    child_pid: Option<u32>,
+    /// If `true`, the TTY early-return path was taken and the caller should return immediately.
+    tty_early_return: Option<crate::dto::RunResult>,
+}
+
+/// Intermediate data produced by `wait_for_process`.
+struct WaitResult {
+    exit_code: i32,
+    timed_out: bool,
+    duration: std::time::Duration,
+}
+
+/// Intermediate data produced by `validate_phase_output_stage`.
+struct ValidatedOutput {
+    final_exit_code: i64,
+    success: bool,
+    validation_status: &'static str,
+    validation_event_payload_json: Option<String>,
+    redacted_output: crate::collab::AgentOutput,
+    validation_error: Option<String>,
 }
 
 pub struct PhaseRunRequest<'a> {
@@ -186,27 +226,21 @@ async fn read_output_with_limit(path: &Path, max_bytes: u64) -> Result<LimitedOu
     })
 }
 
-async fn run_phase_with_timeout(
+/// Stage 1: Destructure request, load config, create log files, insert initial DB record.
+#[allow(clippy::too_many_arguments)]
+async fn setup_phase_execution(
     state: &Arc<InnerState>,
-    request: PhaseRunRequest<'_>,
-) -> Result<crate::dto::RunResult> {
-    let PhaseRunRequest {
-        task_id,
-        item_id,
-        step_id,
-        phase,
-        tty,
-        command,
-        workspace_root,
-        workspace_id,
-        agent_id,
-        runtime,
-        step_timeout_secs,
-        step_scope,
-        prompt_delivery,
-        prompt_payload,
-        pipe_stdin: req_pipe_stdin,
-    } = request;
+    task_id: &str,
+    item_id: &str,
+    phase: &str,
+    tty: bool,
+    command: String,
+    workspace_root: &Path,
+    workspace_id: &str,
+    agent_id: &str,
+    prompt_delivery: PromptDelivery,
+    prompt_payload: &Option<String>,
+) -> Result<PhaseSetup> {
     let now = now_ts();
     let run_uuid = Uuid::new_v4();
     let run_id = run_uuid.to_string();
@@ -227,10 +261,10 @@ async fn run_phase_with_timeout(
                 );
                 (env, sens)
             } else {
-                (std::collections::HashMap::new(), Vec::new())
+                (HashMap::new(), Vec::new())
             }
         } else {
-            (std::collections::HashMap::new(), Vec::new())
+            (HashMap::new(), Vec::new())
         };
         (runner, extra_env, sensitive)
     };
@@ -343,6 +377,39 @@ async fn run_phase_with_timeout(
         state.db_writer.insert_command_run(&initial_run)?;
     }
 
+    Ok(PhaseSetup {
+        run_uuid,
+        run_id,
+        now,
+        runner,
+        resolved_extra_env,
+        redaction_patterns,
+        stdout_path,
+        stderr_path,
+        stdout_file,
+        stderr_file,
+        command,
+    })
+}
+
+/// Stage 2: TTY allocation, session creation, process spawning, stdin write.
+/// Returns early for TTY sessions or hands back spawn metadata.
+#[allow(clippy::too_many_arguments)]
+async fn spawn_phase_process(
+    state: &Arc<InnerState>,
+    setup: &mut PhaseSetup,
+    task_id: &str,
+    item_id: &str,
+    step_id: &str,
+    phase: &str,
+    tty: bool,
+    workspace_root: &Path,
+    agent_id: &str,
+    runtime: &RunningTask,
+    step_scope: StepScope,
+    prompt_payload: &Option<String>,
+    req_pipe_stdin: bool,
+) -> Result<SpawnResult> {
     let mut session_id: Option<String> = None;
     let command_to_run = if tty {
         let sid = Uuid::new_v4().to_string();
@@ -366,7 +433,7 @@ async fn run_phase_with_timeout(
             shell_escape(&output_json_path.to_string_lossy()),
             shell_escape(&sid),
             shell_escape(step_id),
-            command
+            setup.command
         );
         let wrapped = format!(
             "{} < {}",
@@ -374,8 +441,9 @@ async fn run_phase_with_timeout(
             shell_escape(&input_fifo.to_string_lossy())
         );
         session_id = Some(sid.clone());
+        let sess_conn = state.database.connection()?;
         session_store::insert_session(
-            &state.db_path,
+            &sess_conn,
             &session_store::NewSession {
                 id: &sid,
                 task_id,
@@ -387,27 +455,28 @@ async fn run_phase_with_timeout(
                 pid: 0,
                 pty_backend: "script",
                 cwd: &workspace_root.to_string_lossy(),
-                command: &command,
+                command: &setup.command,
                 input_fifo_path: &input_fifo.to_string_lossy(),
-                stdout_path: &stdout_path.to_string_lossy(),
-                stderr_path: &stderr_path.to_string_lossy(),
+                stdout_path: &setup.stdout_path.to_string_lossy(),
+                stderr_path: &setup.stderr_path.to_string_lossy(),
                 transcript_path: &transcript_path.to_string_lossy(),
                 output_json_path: Some(&output_json_path.to_string_lossy()),
             },
         )?;
         wrapped
     } else {
-        command.clone()
+        setup.command.clone()
     };
     // For stdin delivery in TTY mode, we already warned and fell back to arg
     let effective_pipe_stdin = req_pipe_stdin && !tty;
     let mut child = spawn_with_runner(
-        &runner,
+        &setup.runner,
         &command_to_run,
         workspace_root,
-        stdout_file,
-        stderr_file,
-        &resolved_extra_env,
+        // Take files out of setup; they are consumed by spawn
+        std::mem::replace(&mut setup.stdout_file, tempfile_placeholder()?),
+        std::mem::replace(&mut setup.stderr_file, tempfile_placeholder()?),
+        &setup.resolved_extra_env,
         effective_pipe_stdin,
     )?;
 
@@ -424,32 +493,40 @@ async fn run_phase_with_timeout(
 
     if let Some(sid) = session_id.as_deref() {
         if let Some(pid) = child.id() {
-            let _ = session_store::update_session_pid(&state.db_path, sid, pid as i64);
+            if let Ok(sess_conn) = state.database.connection() {
+                let _ = session_store::update_session_pid(&sess_conn, sid, pid as i64);
+            }
         }
     }
 
     if tty && session_id.is_some() {
         std::mem::forget(child);
-        return Ok(crate::dto::RunResult {
-            success: true,
-            exit_code: 0,
-            stdout_path: stdout_path.to_string_lossy().to_string(),
-            stderr_path: stderr_path.to_string_lossy().to_string(),
-            timed_out: false,
-            duration_ms: Some(0),
-            output: None,
-            validation_status: "passed".to_string(),
-            agent_id: agent_id.to_string(),
-            run_id: run_id.clone(),
+        return Ok(SpawnResult {
+            session_id,
+            child_pid: None,
+            tty_early_return: Some(crate::dto::RunResult {
+                success: true,
+                exit_code: 0,
+                stdout_path: setup.stdout_path.to_string_lossy().to_string(),
+                stderr_path: setup.stderr_path.to_string_lossy().to_string(),
+                timed_out: false,
+                duration_ms: Some(0),
+                output: None,
+                validation_status: "passed".to_string(),
+                agent_id: agent_id.to_string(),
+                run_id: setup.run_id.clone(),
+            }),
         });
     }
 
     let child_pid = child.id();
     // Write PID to command_runs so cross-process pause can find and kill it
     if let Some(pid) = child_pid {
-        let _ = state.db_writer.update_command_run_pid(&run_id, pid as i64);
+        let _ = state
+            .db_writer
+            .update_command_run_pid(&setup.run_id, pid as i64);
     }
-    let preview: String = command.chars().take(120).collect();
+    let preview: String = setup.command.chars().take(120).collect();
     insert_event(
         state,
         task_id,
@@ -460,7 +537,7 @@ async fn run_phase_with_timeout(
             "step_id": step_id,
             "step_scope": step_scope_label(step_scope),
             "agent_id": agent_id,
-            "run_id": run_id,
+            "run_id": setup.run_id,
             "pid": child_pid,
             "command_preview": preview,
         }),
@@ -471,6 +548,34 @@ async fn run_phase_with_timeout(
         *child_lock = Some(child);
     }
 
+    Ok(SpawnResult {
+        session_id,
+        child_pid,
+        tty_early_return: None,
+    })
+}
+
+/// Create a throwaway file handle used as a placeholder after the real file is moved out.
+fn tempfile_placeholder() -> Result<std::fs::File> {
+    // Open /dev/null as a cheap placeholder; the value is never used.
+    std::fs::File::open("/dev/null").context("failed to open /dev/null placeholder")
+}
+
+/// Stage 3: Polling loop with heartbeat sampling, pause detection, timeout handling.
+#[allow(clippy::too_many_arguments)]
+async fn wait_for_process(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    item_id: &str,
+    step_id: &str,
+    phase: &str,
+    step_scope: StepScope,
+    step_timeout_secs: Option<u64>,
+    runtime: &RunningTask,
+    child_pid: Option<u32>,
+    stdout_path: &Path,
+    stderr_path: &Path,
+) -> Result<WaitResult> {
     let step_timeout_secs = resolved_step_timeout_secs(step_timeout_secs);
     let start = Instant::now();
     let deadline = start + std::time::Duration::from_secs(step_timeout_secs);
@@ -523,11 +628,11 @@ async fn run_phase_with_timeout(
             }
             Err(_) => {
                 let elapsed = start.elapsed();
-                let stdout_bytes = tokio::fs::metadata(&stdout_path)
+                let stdout_bytes = tokio::fs::metadata(stdout_path)
                     .await
                     .map(|m| m.len())
                     .unwrap_or(0);
-                let stderr_bytes = tokio::fs::metadata(&stderr_path)
+                let stderr_bytes = tokio::fs::metadata(stderr_path)
                     .await
                     .map(|m| m.len())
                     .unwrap_or(0);
@@ -590,11 +695,30 @@ async fn run_phase_with_timeout(
         *child_lock = None;
     }
 
+    Ok(WaitResult {
+        exit_code,
+        timed_out,
+        duration,
+    })
+}
+
+/// Stage 4: Read output files, validate structure, sanitize, classify.
+#[allow(clippy::too_many_arguments)]
+async fn validate_phase_output_stage(
+    phase: &str,
+    run_uuid: Uuid,
+    run_id: &str,
+    agent_id: &str,
+    exit_code: i32,
+    stdout_path: &Path,
+    stderr_path: &Path,
+    redaction_patterns: &[String],
+) -> Result<ValidatedOutput> {
     const MAX_PHASE_OUTPUT_BYTES: u64 = 256 * 1024;
-    let stdout_output = read_output_with_limit(&stdout_path, MAX_PHASE_OUTPUT_BYTES)
+    let stdout_output = read_output_with_limit(stdout_path, MAX_PHASE_OUTPUT_BYTES)
         .await
         .with_context(|| format!("failed to read stdout log: {}", stdout_path.display()))?;
-    let stderr_output = read_output_with_limit(&stderr_path, MAX_PHASE_OUTPUT_BYTES)
+    let stderr_output = read_output_with_limit(stderr_path, MAX_PHASE_OUTPUT_BYTES)
         .await
         .with_context(|| format!("failed to read stderr log: {}", stderr_path.display()))?;
     let stdout_content = stdout_output.text;
@@ -615,7 +739,7 @@ async fn run_phase_with_timeout(
         success = false;
         validation_event_payload_json = Some(serde_json::to_string(&json!({
             "phase": phase,
-            "run_id": run_id.clone(),
+            "run_id": run_id,
             "error": validation.error.clone(),
             "stdout_truncated_prefix_bytes": stdout_output.truncated_prefix_bytes,
             "stderr_truncated_prefix_bytes": stderr_output.truncated_prefix_bytes
@@ -623,31 +747,57 @@ async fn run_phase_with_timeout(
     }
 
     let mut redacted_output = validation.output.clone();
-    redacted_output.stdout = redact_text(&redacted_output.stdout, &redaction_patterns);
-    redacted_output.stderr = redact_text(&redacted_output.stderr, &redaction_patterns);
+    redacted_output.stdout = redact_text(&redacted_output.stdout, redaction_patterns);
+    redacted_output.stderr = redact_text(&redacted_output.stderr, redaction_patterns);
 
+    Ok(ValidatedOutput {
+        final_exit_code,
+        success,
+        validation_status: validation.status,
+        validation_event_payload_json,
+        redacted_output,
+        validation_error: validation.error,
+    })
+}
+
+/// Stage 5: Construct results, publish to message bus, insert events, update metrics.
+#[allow(clippy::too_many_arguments)]
+async fn record_phase_results(
+    state: &Arc<InnerState>,
+    setup: &PhaseSetup,
+    validated: &ValidatedOutput,
+    session_id: &Option<String>,
+    task_id: &str,
+    item_id: &str,
+    phase: &str,
+    tty: bool,
+    workspace_root: &Path,
+    workspace_id: &str,
+    agent_id: &str,
+    duration: std::time::Duration,
+) -> Result<()> {
     let writer = state.db_writer.clone();
     let task_id_owned = task_id.to_string();
     let item_id_owned = item_id.to_string();
     let insert_payload = NewCommandRun {
-        id: run_id.clone(),
+        id: setup.run_id.clone(),
         task_item_id: item_id.to_string(),
         phase: phase.to_string(),
-        command: command.clone(),
+        command: setup.command.clone(),
         cwd: workspace_root.to_string_lossy().to_string(),
         workspace_id: workspace_id.to_string(),
         agent_id: agent_id.to_string(),
-        exit_code: final_exit_code,
-        stdout_path: stdout_path.to_string_lossy().to_string(),
-        stderr_path: stderr_path.to_string_lossy().to_string(),
-        started_at: now,
+        exit_code: validated.final_exit_code,
+        stdout_path: setup.stdout_path.to_string_lossy().to_string(),
+        stderr_path: setup.stderr_path.to_string_lossy().to_string(),
+        started_at: setup.now.clone(),
         ended_at: now_ts(),
         interrupted: 0,
-        output_json: serde_json::to_string(&redacted_output)?,
-        artifacts_json: serde_json::to_string(&redacted_output.artifacts)?,
-        confidence: Some(redacted_output.confidence),
-        quality_score: Some(redacted_output.quality_score),
-        validation_status: validation.status.to_string(),
+        output_json: serde_json::to_string(&validated.redacted_output)?,
+        artifacts_json: serde_json::to_string(&validated.redacted_output.artifacts)?,
+        confidence: Some(validated.redacted_output.confidence),
+        quality_score: Some(validated.redacted_output.quality_score),
+        validation_status: validated.validation_status.to_string(),
         session_id: session_id.clone(),
         machine_output_source: if tty {
             "output_json_path".to_string()
@@ -669,10 +819,10 @@ async fn run_phase_with_timeout(
     let msg = crate::collab::AgentMessage::publish(
         sender,
         crate::collab::MessagePayload::ExecutionResult(crate::collab::ExecutionResult {
-            run_id: run_uuid,
-            output: redacted_output.clone(),
-            success,
-            error: validation.error.clone(),
+            run_id: setup.run_uuid,
+            output: validated.redacted_output.clone(),
+            success: validated.success,
+            error: validated.validation_error.clone(),
         }),
     );
     let (publish_event_type, publish_event_payload_json) = if let Err(err) =
@@ -680,15 +830,18 @@ async fn run_phase_with_timeout(
     {
         (
             "bus_publish_failed",
-            serde_json::to_string(&json!({"phase":phase,"run_id":run_id,"error":err.to_string()}))?,
+            serde_json::to_string(
+                &json!({"phase":phase,"run_id":setup.run_id,"error":err.to_string()}),
+            )?,
         )
     } else {
         (
             "phase_output_published",
-            serde_json::to_string(&json!({"phase":phase,"run_id":run_id}))?,
+            serde_json::to_string(&json!({"phase":phase,"run_id":setup.run_id}))?,
         )
     };
 
+    let validation_event_payload_json = validated.validation_event_payload_json.clone();
     tokio::task::spawn_blocking(move || {
         let mut events = Vec::with_capacity(2);
         if let Some(payload_json) = validation_event_payload_json.as_deref() {
@@ -710,7 +863,7 @@ async fn run_phase_with_timeout(
     .await
     .context("command run insert worker failed")??;
 
-    update_capability_health(state, agent_id, Some(phase), success);
+    update_capability_health(state, agent_id, Some(phase), validated.success);
 
     let duration_ms = duration.as_millis() as u64;
     {
@@ -718,7 +871,7 @@ async fn run_phase_with_timeout(
         let metrics = metrics_map
             .entry(agent_id.to_string())
             .or_insert_with(MetricsCollector::new_agent_metrics);
-        if success {
+        if validated.success {
             MetricsCollector::record_success(metrics, duration_ms);
         } else {
             MetricsCollector::record_failure(metrics);
@@ -726,7 +879,7 @@ async fn run_phase_with_timeout(
         MetricsCollector::decrement_load(metrics);
     }
 
-    if !success {
+    if !validated.success {
         let errors = increment_consecutive_errors(state, agent_id);
         if errors >= 2 {
             mark_agent_diseased(state, agent_id);
@@ -735,26 +888,140 @@ async fn run_phase_with_timeout(
         reset_consecutive_errors(state, agent_id);
     }
     if let Some(sid) = session_id.as_deref() {
-        let _ = session_store::update_session_state(
-            &state.db_path,
-            sid,
-            "closed",
-            Some(final_exit_code),
-            true,
-        );
+        if let Ok(sess_conn) = state.database.connection() {
+            let _ = session_store::update_session_state(
+                &sess_conn,
+                sid,
+                "closed",
+                Some(validated.final_exit_code),
+                true,
+            );
+        }
     }
 
+    Ok(())
+}
+
+/// Orchestrator: runs a single phase with timeout by calling the 5 extracted stages in sequence.
+async fn run_phase_with_timeout(
+    state: &Arc<InnerState>,
+    request: PhaseRunRequest<'_>,
+) -> Result<crate::dto::RunResult> {
+    let PhaseRunRequest {
+        task_id,
+        item_id,
+        step_id,
+        phase,
+        tty,
+        command,
+        workspace_root,
+        workspace_id,
+        agent_id,
+        runtime,
+        step_timeout_secs,
+        step_scope,
+        prompt_delivery,
+        prompt_payload,
+        pipe_stdin: req_pipe_stdin,
+    } = request;
+
+    // Stage 1: setup
+    let mut setup = setup_phase_execution(
+        state,
+        task_id,
+        item_id,
+        phase,
+        tty,
+        command,
+        workspace_root,
+        workspace_id,
+        agent_id,
+        prompt_delivery,
+        &prompt_payload,
+    )
+    .await?;
+
+    // Stage 2: spawn
+    let spawn_result = spawn_phase_process(
+        state,
+        &mut setup,
+        task_id,
+        item_id,
+        step_id,
+        phase,
+        tty,
+        workspace_root,
+        agent_id,
+        runtime,
+        step_scope,
+        &prompt_payload,
+        req_pipe_stdin,
+    )
+    .await?;
+
+    // TTY early return
+    if let Some(result) = spawn_result.tty_early_return {
+        return Ok(result);
+    }
+
+    // Stage 3: wait
+    let wait_result = wait_for_process(
+        state,
+        task_id,
+        item_id,
+        step_id,
+        phase,
+        step_scope,
+        step_timeout_secs,
+        runtime,
+        spawn_result.child_pid,
+        &setup.stdout_path,
+        &setup.stderr_path,
+    )
+    .await?;
+
+    // Stage 4: validate
+    let validated = validate_phase_output_stage(
+        phase,
+        setup.run_uuid,
+        &setup.run_id,
+        agent_id,
+        wait_result.exit_code,
+        &setup.stdout_path,
+        &setup.stderr_path,
+        &setup.redaction_patterns,
+    )
+    .await?;
+
+    // Stage 5: record results
+    record_phase_results(
+        state,
+        &setup,
+        &validated,
+        &spawn_result.session_id,
+        task_id,
+        item_id,
+        phase,
+        tty,
+        workspace_root,
+        workspace_id,
+        agent_id,
+        wait_result.duration,
+    )
+    .await?;
+
+    let duration_ms = wait_result.duration.as_millis() as u64;
     Ok(crate::dto::RunResult {
-        success,
-        exit_code: final_exit_code,
-        stdout_path: stdout_path.to_string_lossy().to_string(),
-        stderr_path: stderr_path.to_string_lossy().to_string(),
-        timed_out,
+        success: validated.success,
+        exit_code: validated.final_exit_code,
+        stdout_path: setup.stdout_path.to_string_lossy().to_string(),
+        stderr_path: setup.stderr_path.to_string_lossy().to_string(),
+        timed_out: wait_result.timed_out,
         duration_ms: Some(duration_ms),
-        output: Some(redacted_output),
-        validation_status: validation.status.to_string(),
+        output: Some(validated.redacted_output),
+        validation_status: validated.validation_status.to_string(),
         agent_id: agent_id.to_string(),
-        run_id,
+        run_id: setup.run_id,
     })
 }
 

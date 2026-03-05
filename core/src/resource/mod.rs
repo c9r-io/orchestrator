@@ -196,7 +196,7 @@ pub(crate) fn manifest_yaml(
         metadata: metadata.clone(),
         spec,
     };
-    Ok(serde_yaml::to_string(&manifest)?)
+    Ok(serde_yml::to_string(&manifest)?)
 }
 
 pub(crate) fn apply_to_map<T: Clone + Serialize>(

@@ -116,7 +116,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
      name: minimal-ws
    spec:
      root_path: /tmp/minimal
-     qa_targets: []
+     qa_targets: [docs/qa]
      ticket_dir: fixtures/ticket
    EOF
    
