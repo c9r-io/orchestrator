@@ -280,6 +280,170 @@ mod tests {
     }
 
     #[test]
+    fn export_crd_documents_empty_config() {
+        let config = make_config();
+        let docs = export_crd_documents(&config);
+        assert!(docs.is_empty(), "no CRDs or CRs should produce empty docs");
+    }
+
+    #[test]
+    fn export_crd_documents_skips_builtin_crds() {
+        let mut config = make_config();
+        config.custom_resource_definitions.insert(
+            "builtincrd".to_string(),
+            crate::crd::types::CustomResourceDefinition {
+                kind: "BuiltinCrd".to_string(),
+                plural: "builtincrds".to_string(),
+                short_names: vec![],
+                group: "core.orchestrator.dev".to_string(),
+                versions: vec![crate::crd::types::CrdVersion {
+                    name: "v1".to_string(),
+                    schema: serde_json::json!({"type": "object"}),
+                    served: true,
+                    cel_rules: vec![],
+                }],
+                hooks: Default::default(),
+                scope: Default::default(),
+                builtin: true,
+            },
+        );
+
+        let docs = export_crd_documents(&config);
+        assert!(
+            docs.is_empty(),
+            "builtin CRDs should be skipped in export"
+        );
+    }
+
+    #[test]
+    fn export_crd_documents_includes_non_builtin_crd() {
+        let mut config = make_config();
+        config.custom_resource_definitions.insert(
+            "promptlibraries.extensions.orchestrator.dev".to_string(),
+            crate::crd::types::CustomResourceDefinition {
+                kind: "PromptLibrary".to_string(),
+                plural: "promptlibraries".to_string(),
+                short_names: vec!["pl".to_string()],
+                group: "extensions.orchestrator.dev".to_string(),
+                versions: vec![crate::crd::types::CrdVersion {
+                    name: "v1".to_string(),
+                    schema: serde_json::json!({"type": "object"}),
+                    served: true,
+                    cel_rules: vec![],
+                }],
+                hooks: Default::default(),
+                scope: Default::default(),
+                builtin: false,
+            },
+        );
+
+        let docs = export_crd_documents(&config);
+        assert_eq!(docs.len(), 1);
+        let doc = &docs[0];
+        assert_eq!(
+            doc.get("kind")
+                .and_then(|v| v.as_str()),
+            Some("CustomResourceDefinition")
+        );
+    }
+
+    #[test]
+    fn export_crd_documents_includes_custom_resource_instances() {
+        let mut config = make_config();
+        config.custom_resources.insert(
+            "PromptLibrary/my-prompts".to_string(),
+            crate::crd::types::CustomResource {
+                api_version: "extensions.orchestrator.dev/v1".to_string(),
+                kind: "PromptLibrary".to_string(),
+                metadata: crate::cli_types::ResourceMetadata {
+                    name: "my-prompts".to_string(),
+                    project: None,
+                    labels: None,
+                    annotations: None,
+                },
+                spec: serde_json::json!({"templates": []}),
+                generation: 1,
+                created_at: "2025-01-01T00:00:00Z".to_string(),
+                updated_at: "2025-01-01T00:00:00Z".to_string(),
+            },
+        );
+
+        let docs = export_crd_documents(&config);
+        assert_eq!(docs.len(), 1);
+        let doc = &docs[0];
+        assert_eq!(
+            doc.get("kind")
+                .and_then(|v| v.as_str()),
+            Some("PromptLibrary")
+        );
+    }
+
+    #[test]
+    fn export_manifest_documents_maps_all_kind_variants() {
+        let mut config = make_config();
+        let ws = dispatch_resource(workspace_manifest("map-ws", "workspace/map"))
+            .expect("dispatch workspace");
+        ws.apply(&mut config);
+        let ag = dispatch_resource(agent_manifest("map-ag", "cmd")).expect("dispatch agent");
+        ag.apply(&mut config);
+        let wf = dispatch_resource(workflow_manifest("map-wf")).expect("dispatch workflow");
+        wf.apply(&mut config);
+        let pr = dispatch_resource(project_manifest("map-pr", "d")).expect("dispatch project");
+        pr.apply(&mut config);
+
+        config.env_stores.insert(
+            "test-config".to_string(),
+            crate::config::EnvStoreConfig {
+                data: [("K".to_string(), "V".to_string())].into(),
+                sensitive: false,
+            },
+        );
+        config.env_stores.insert(
+            "test-secrets".to_string(),
+            crate::config::EnvStoreConfig {
+                data: [("S".to_string(), "V".to_string())].into(),
+                sensitive: true,
+            },
+        );
+
+        let docs = export_manifest_documents(&config);
+        let kinds: Vec<ResourceKind> = docs.iter().map(|d| d.kind).collect();
+        assert!(kinds.contains(&ResourceKind::Workspace));
+        assert!(kinds.contains(&ResourceKind::Agent));
+        assert!(kinds.contains(&ResourceKind::Workflow));
+        assert!(kinds.contains(&ResourceKind::Project));
+        assert!(kinds.contains(&ResourceKind::Defaults));
+        assert!(kinds.contains(&ResourceKind::RuntimePolicy));
+        assert!(kinds.contains(&ResourceKind::EnvStore));
+        assert!(kinds.contains(&ResourceKind::SecretStore));
+    }
+
+    #[test]
+    fn export_manifest_resources_skips_empty_project_name() {
+        let mut config = make_config();
+        config.projects.insert(
+            String::new(),
+            crate::config::ProjectConfig {
+                description: Some("ghost".to_string()),
+                workspaces: Default::default(),
+                agents: Default::default(),
+                workflows: Default::default(),
+            },
+        );
+
+        let resources = export_manifest_resources(&config);
+        let project_names: Vec<&str> = resources
+            .iter()
+            .filter(|r| r.kind() == ResourceKind::Project)
+            .map(|r| r.name())
+            .collect();
+        assert!(
+            !project_names.contains(&""),
+            "empty project name should be skipped"
+        );
+    }
+
+    #[test]
     fn export_manifest_resources_preserves_labels_annotations() {
         let mut config = make_config();
         let resource = OrchestratorResource {

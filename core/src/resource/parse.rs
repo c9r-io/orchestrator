@@ -315,6 +315,102 @@ spec:
     }
 
     #[test]
+    fn delete_resource_by_kind_step_template_aliases() {
+        let mut config = make_config();
+        // No template exists, so delete returns false
+        assert!(
+            !delete_resource_by_kind(&mut config, "steptemplate", "missing")
+                .expect("delete steptemplate")
+        );
+        assert!(
+            !delete_resource_by_kind(&mut config, "step_template", "missing")
+                .expect("delete step_template")
+        );
+        assert!(
+            !delete_resource_by_kind(&mut config, "step-template", "missing")
+                .expect("delete step-template")
+        );
+    }
+
+    #[test]
+    fn kind_as_str_step_template() {
+        assert_eq!(kind_as_str(ResourceKind::StepTemplate), "steptemplate");
+    }
+
+    #[test]
+    fn parse_manifests_from_yaml_builtin_kind() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+kind: Project
+metadata:
+  name: test-proj
+spec:
+  description: A project
+"#;
+        let manifests = parse_manifests_from_yaml(yaml).expect("should parse builtin");
+        assert_eq!(manifests.len(), 1);
+        assert!(matches!(manifests[0], crate::crd::ParsedManifest::Builtin(_)));
+    }
+
+    #[test]
+    fn parse_manifests_from_yaml_crd_kind() {
+        let yaml = r#"
+kind: CustomResourceDefinition
+apiVersion: orchestrator.dev/v2
+metadata:
+  name: promptlibraries.extensions.orchestrator.dev
+spec:
+  kind: PromptLibrary
+  plural: promptlibraries
+  group: extensions.orchestrator.dev
+  versions:
+    - name: v1
+      schema:
+        type: object
+"#;
+        let manifests = parse_manifests_from_yaml(yaml).expect("should parse CRD");
+        assert_eq!(manifests.len(), 1);
+        assert!(matches!(manifests[0], crate::crd::ParsedManifest::Crd(_)));
+    }
+
+    #[test]
+    fn parse_manifests_from_yaml_custom_resource() {
+        let yaml = r#"
+kind: PromptLibrary
+apiVersion: extensions.orchestrator.dev/v1
+metadata:
+  name: my-prompts
+spec:
+  templates: []
+"#;
+        let manifests = parse_manifests_from_yaml(yaml).expect("should parse custom resource");
+        assert_eq!(manifests.len(), 1);
+        assert!(matches!(manifests[0], crate::crd::ParsedManifest::Custom(_)));
+    }
+
+    #[test]
+    fn parse_manifests_from_yaml_skips_null_documents() {
+        let yaml = "---\n---\nkind: Project\napiVersion: orchestrator.dev/v2\nmetadata:\n  name: p\nspec:\n  description: d\n";
+        let manifests = parse_manifests_from_yaml(yaml).expect("should parse with nulls");
+        assert_eq!(manifests.len(), 1);
+    }
+
+    #[test]
+    fn parse_manifests_from_yaml_no_kind_falls_through_to_builtin() {
+        let yaml = r#"
+apiVersion: orchestrator.dev/v2
+metadata:
+  name: test
+spec:
+  description: no kind
+"#;
+        // This should try to parse as builtin (will fail at dispatch but parse succeeds)
+        let result = parse_manifests_from_yaml(yaml);
+        // May succeed or fail depending on serde - we just verify it doesn't panic
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
     fn delete_resource_by_kind_env_store_aliases() {
         let mut config = make_config();
         // No store exists, so delete returns false

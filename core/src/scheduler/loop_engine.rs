@@ -1191,4 +1191,295 @@ mod tests {
 
         assert_eq!(skipped_count, 4);
     }
+
+    #[test]
+    fn infinite_mode_no_max_cycles_with_guard_enabled_returns_none() {
+        let policy = make_loop_policy(LoopMode::Infinite, None);
+        // guard is enabled by default, no max_cycles — defer to agent guard
+        let result = evaluate_loop_guard_rules(&policy, 1, 0);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn infinite_mode_with_max_cycles_before_limit_returns_none() {
+        let policy = make_loop_policy(LoopMode::Infinite, Some(5));
+        // cycle 2 < 5, guard enabled → defer to agent guard
+        let result = evaluate_loop_guard_rules(&policy, 2, 3);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn build_segments_skips_disabled_steps() {
+        use crate::config::*;
+        let task_ctx = TaskRuntimeContext {
+            workspace_id: "ws".into(),
+            workspace_root: "/tmp".into(),
+            ticket_dir: "tickets".into(),
+            execution_plan: TaskExecutionPlan {
+                steps: vec![
+                    TaskExecutionStep {
+                        id: "plan".into(),
+                        required_capability: None,
+                        builtin: None,
+                        enabled: true,
+                        repeatable: true,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        template: None,
+                        outputs: vec![],
+                        pipe_to: None,
+                        command: None,
+                        chain_steps: vec![],
+                        scope: Some(StepScope::Task),
+                        behavior: StepBehavior::default(),
+                    },
+                    TaskExecutionStep {
+                        id: "disabled_step".into(),
+                        required_capability: None,
+                        builtin: None,
+                        enabled: false,
+                        repeatable: true,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        template: None,
+                        outputs: vec![],
+                        pipe_to: None,
+                        command: None,
+                        chain_steps: vec![],
+                        scope: Some(StepScope::Item),
+                        behavior: StepBehavior::default(),
+                    },
+                ],
+                loop_policy: WorkflowLoopConfig::default(),
+                finalize: WorkflowFinalizeConfig::default(),
+            },
+            current_cycle: 1,
+            init_done: true,
+            dynamic_steps: vec![],
+            pipeline_vars: PipelineVariables::default(),
+            safety: SafetyConfig::default(),
+            self_referential: false,
+            consecutive_failures: 0,
+            project_id: String::new(),
+        };
+
+        let segments = build_scope_segments(&task_ctx);
+        assert_eq!(segments.len(), 1);
+        assert!(segments[0].step_ids.contains("plan"));
+        assert!(!segments[0].step_ids.contains("disabled_step"));
+    }
+
+    #[test]
+    fn build_segments_empty_when_no_steps() {
+        use crate::config::*;
+        let task_ctx = TaskRuntimeContext {
+            workspace_id: "ws".into(),
+            workspace_root: "/tmp".into(),
+            ticket_dir: "tickets".into(),
+            execution_plan: TaskExecutionPlan {
+                steps: vec![],
+                loop_policy: WorkflowLoopConfig::default(),
+                finalize: WorkflowFinalizeConfig::default(),
+            },
+            current_cycle: 1,
+            init_done: true,
+            dynamic_steps: vec![],
+            pipeline_vars: PipelineVariables::default(),
+            safety: SafetyConfig::default(),
+            self_referential: false,
+            consecutive_failures: 0,
+            project_id: String::new(),
+        };
+
+        let segments = build_scope_segments(&task_ctx);
+        assert!(segments.is_empty());
+    }
+
+    #[test]
+    fn propagate_task_segment_terminal_state_no_execution_failed_flag() {
+        let items = vec![crate::dto::TaskItemRow {
+            id: "item-1".to_string(),
+            qa_file_path: "a.md".to_string(),
+        }];
+        let mut item_state = HashMap::new();
+        let mut task_acc = StepExecutionAccumulator::new(PipelineVariables::default());
+        task_acc.item_status = "failed".to_string();
+        task_acc.terminal = true;
+        // No execution_failed flag set
+
+        propagate_task_segment_terminal_state(
+            &items,
+            &mut item_state,
+            &task_acc,
+            &PipelineVariables::default(),
+            &[],
+        );
+
+        let acc = item_state.get("item-1").expect("item state missing");
+        assert!(acc.terminal);
+        assert_eq!(acc.item_status, "failed");
+        assert!(!acc.flags.contains_key("execution_failed"));
+    }
+
+    #[test]
+    fn propagate_preserves_existing_item_state() {
+        let items = vec![crate::dto::TaskItemRow {
+            id: "item-1".to_string(),
+            qa_file_path: "a.md".to_string(),
+        }];
+        let mut item_state = HashMap::new();
+        let mut existing_acc = StepExecutionAccumulator::new(PipelineVariables::default());
+        existing_acc.pipeline_vars.vars.insert("existing_key".to_string(), "existing_val".to_string());
+        item_state.insert("item-1".to_string(), existing_acc);
+
+        let mut task_acc = StepExecutionAccumulator::new(PipelineVariables::default());
+        task_acc.item_status = "unresolved".to_string();
+        task_acc.pipeline_vars.vars.insert("new_key".to_string(), "new_val".to_string());
+
+        propagate_task_segment_terminal_state(
+            &items,
+            &mut item_state,
+            &task_acc,
+            &PipelineVariables::default(),
+            &[],
+        );
+
+        let acc = item_state.get("item-1").unwrap();
+        assert_eq!(acc.pipeline_vars.vars.get("existing_key").unwrap(), "existing_val");
+        assert_eq!(acc.pipeline_vars.vars.get("new_key").unwrap(), "new_val");
+    }
+
+    #[test]
+    fn collect_remaining_item_step_steps_from_start_index_2() {
+        use crate::config::*;
+        let task_ctx = TaskRuntimeContext {
+            workspace_id: "ws".into(),
+            workspace_root: "/tmp".into(),
+            ticket_dir: "tickets".into(),
+            current_cycle: 1,
+            execution_plan: TaskExecutionPlan {
+                steps: vec![
+                    TaskExecutionStep {
+                        id: "plan".into(),
+                        required_capability: None,
+                        builtin: None,
+                        enabled: true,
+                        repeatable: true,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        template: None,
+                        outputs: vec![],
+                        pipe_to: None,
+                        command: None,
+                        chain_steps: vec![],
+                        scope: Some(StepScope::Task),
+                        behavior: StepBehavior::default(),
+                    },
+                    TaskExecutionStep {
+                        id: "qa".into(),
+                        required_capability: None,
+                        builtin: None,
+                        enabled: true,
+                        repeatable: true,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        template: None,
+                        outputs: vec![],
+                        pipe_to: None,
+                        command: None,
+                        chain_steps: vec![],
+                        scope: Some(StepScope::Item),
+                        behavior: StepBehavior::default(),
+                    },
+                    TaskExecutionStep {
+                        id: "governance".into(),
+                        required_capability: None,
+                        builtin: None,
+                        enabled: true,
+                        repeatable: true,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        template: None,
+                        outputs: vec![],
+                        pipe_to: None,
+                        command: None,
+                        chain_steps: vec![],
+                        scope: Some(StepScope::Task),
+                        behavior: StepBehavior::default(),
+                    },
+                ],
+                loop_policy: WorkflowLoopConfig::default(),
+                finalize: WorkflowFinalizeConfig::default(),
+            },
+            init_done: true,
+            dynamic_steps: vec![],
+            pipeline_vars: PipelineVariables::default(),
+            safety: SafetyConfig::default(),
+            self_referential: false,
+            consecutive_failures: 0,
+            project_id: String::new(),
+        };
+        let segments = build_scope_segments(&task_ctx);
+        assert_eq!(segments.len(), 3);
+
+        // Skip from segment 2 onward (governance is Task scope, no Item steps)
+        let skipped = collect_remaining_item_step_steps(&task_ctx, &segments, 2);
+        assert!(skipped.is_empty());
+    }
+
+    #[test]
+    fn emit_skipped_item_step_events_empty_steps_emits_nothing() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let items = vec![crate::dto::TaskItemRow {
+            id: "item-1".to_string(),
+            qa_file_path: "a.md".to_string(),
+        }];
+
+        emit_skipped_item_step_events(&state, "task-1", &items, &[]).expect("should succeed");
+
+        let conn = crate::db::open_conn(&state.db_path).expect("open sqlite");
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM events WHERE task_id = 'task-1' AND event_type = 'step_skipped'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count");
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn emit_skipped_item_step_events_empty_items_emits_nothing() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        emit_skipped_item_step_events(
+            &state,
+            "task-1",
+            &[],
+            &["qa_testing".to_string()],
+        )
+        .expect("should succeed");
+
+        let conn = crate::db::open_conn(&state.db_path).expect("open sqlite");
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM events WHERE task_id = 'task-1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count");
+        assert_eq!(count, 0);
+    }
 }

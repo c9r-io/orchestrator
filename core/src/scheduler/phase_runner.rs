@@ -1040,4 +1040,123 @@ mod tests {
         assert_eq!(limited.text, "abcdef");
         assert_eq!(limited.truncated_prefix_bytes, 10);
     }
+
+    #[tokio::test]
+    async fn read_output_with_limit_no_truncation_when_file_smaller_than_limit() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("small.log");
+        std::fs::write(&path, "short").expect("write log file");
+
+        let limited = read_output_with_limit(&path, 1024)
+            .await
+            .expect("read limited output");
+
+        assert_eq!(limited.text, "short");
+        assert_eq!(limited.truncated_prefix_bytes, 0);
+    }
+
+    #[tokio::test]
+    async fn read_output_with_limit_empty_file() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("empty.log");
+        std::fs::write(&path, "").expect("write log file");
+
+        let limited = read_output_with_limit(&path, 1024)
+            .await
+            .expect("read limited output");
+
+        assert_eq!(limited.text, "");
+        assert_eq!(limited.truncated_prefix_bytes, 0);
+    }
+
+    #[tokio::test]
+    async fn read_output_with_limit_exact_size_match() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("exact.log");
+        std::fs::write(&path, "12345").expect("write log file");
+
+        let limited = read_output_with_limit(&path, 5)
+            .await
+            .expect("read limited output");
+
+        assert_eq!(limited.text, "12345");
+        assert_eq!(limited.truncated_prefix_bytes, 0);
+    }
+
+    #[tokio::test]
+    async fn read_output_with_limit_missing_file_returns_error() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("nonexistent.log");
+
+        let result = read_output_with_limit(&path, 1024).await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn heartbeat_sample_delta_exactly_at_threshold_counts_as_stagnant() {
+        let mut progress = HeartbeatProgress::default();
+        // First sample with exactly threshold bytes
+        let s1 = sample_heartbeat_progress(
+            &mut progress,
+            LOW_OUTPUT_DELTA_THRESHOLD_BYTES,
+            0,
+            30,
+            true,
+        );
+        assert_eq!(s1.stagnant_heartbeats, 1); // exactly at threshold counts as stagnant
+
+        // Second sample with no additional output (delta = 0)
+        let s2 = sample_heartbeat_progress(
+            &mut progress,
+            LOW_OUTPUT_DELTA_THRESHOLD_BYTES,
+            0,
+            60,
+            true,
+        );
+        assert_eq!(s2.stagnant_heartbeats, 2);
+        assert_eq!(s2.stdout_delta_bytes, 0);
+    }
+
+    #[test]
+    fn heartbeat_sample_not_alive_overrides_low_output_detection() {
+        let mut progress = HeartbeatProgress::default();
+        // Accumulate 3 stagnant heartbeats
+        let _ = sample_heartbeat_progress(&mut progress, 0, 0, 30, true);
+        let _ = sample_heartbeat_progress(&mut progress, 0, 0, 60, true);
+        let _ = sample_heartbeat_progress(&mut progress, 0, 0, 90, true);
+        // Now process is dead - should be "quiet" not "low_output"
+        let sample = sample_heartbeat_progress(&mut progress, 0, 0, 120, false);
+        assert_eq!(sample.output_state, "quiet");
+        assert_eq!(sample.stagnant_heartbeats, 4);
+    }
+
+    #[test]
+    fn heartbeat_sample_tracks_stderr_delta() {
+        let mut progress = HeartbeatProgress::default();
+        let _ = sample_heartbeat_progress(&mut progress, 0, 100, 30, true);
+        let sample = sample_heartbeat_progress(&mut progress, 0, 300, 60, true);
+        assert_eq!(sample.stderr_delta_bytes, 200);
+        assert_eq!(sample.stdout_delta_bytes, 0);
+        assert_eq!(sample.output_state, "active");
+    }
+
+    #[test]
+    fn effective_exit_code_with_various_validation_statuses() {
+        // Non-standard validation statuses
+        assert_eq!(effective_exit_code(0, "running"), 0);
+        assert_eq!(effective_exit_code(0, "skipped"), 0);
+        assert_eq!(effective_exit_code(0, ""), 0);
+        // Only "failed" triggers override
+        assert_eq!(effective_exit_code(0, "Failed"), 0); // case-sensitive
+    }
+
+    #[test]
+    fn shell_escape_multiple_single_quotes() {
+        assert_eq!(shell_escape("it's Bob's"), "'it'\\''s Bob'\\''s'");
+    }
+
+    #[test]
+    fn shell_escape_only_single_quote() {
+        assert_eq!(shell_escape("'"), "''\\'''");
+    }
 }

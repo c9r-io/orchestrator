@@ -1341,7 +1341,7 @@ pub fn finalize_item_execution(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ExecutionMode, PipelineVariables, StepBehavior};
+    use crate::config::{CaptureDecl, CaptureSource, ExecutionMode, PipelineVariables, StepBehavior};
     use std::collections::HashMap;
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
@@ -1701,5 +1701,724 @@ mod tests {
                 name: "self_test".to_string()
             }
         );
+    }
+
+    // ── StepExecutionAccumulator tests ──────────────────────────────
+
+    fn make_task_ctx(steps: Vec<crate::config::TaskExecutionStep>, max_cycles: Option<u32>, current_cycle: u32) -> crate::config::TaskRuntimeContext {
+        crate::config::TaskRuntimeContext {
+            workspace_id: "default".to_string(),
+            workspace_root: std::path::PathBuf::from("/tmp/test"),
+            ticket_dir: "/tmp/test/docs/ticket".to_string(),
+            execution_plan: crate::config::TaskExecutionPlan {
+                steps,
+                loop_policy: crate::config::WorkflowLoopConfig {
+                    mode: crate::config::LoopMode::Fixed,
+                    guard: crate::config::WorkflowLoopGuardConfig {
+                        enabled: true,
+                        stop_when_no_unresolved: true,
+                        max_cycles,
+                        agent_template: None,
+                    },
+                },
+                finalize: Default::default(),
+            },
+            current_cycle,
+            init_done: false,
+            dynamic_steps: vec![],
+            pipeline_vars: empty_pipeline(),
+            safety: Default::default(),
+            self_referential: false,
+            consecutive_failures: 0,
+            project_id: String::new(),
+        }
+    }
+
+    fn make_item(id: &str, qa_file: &str) -> crate::dto::TaskItemRow {
+        crate::dto::TaskItemRow {
+            id: id.to_string(),
+            qa_file_path: qa_file.to_string(),
+        }
+    }
+
+    fn make_run_result(exit_code: i64, success: bool, output: Option<crate::collab::AgentOutput>) -> crate::dto::RunResult {
+        crate::dto::RunResult {
+            success,
+            exit_code,
+            stdout_path: String::new(),
+            stderr_path: String::new(),
+            timed_out: false,
+            duration_ms: None,
+            output,
+            validation_status: if success { "passed" } else { "failed" }.to_string(),
+            agent_id: "test-agent".to_string(),
+            run_id: "run-1".to_string(),
+        }
+    }
+
+    // ── new() ────────────────────────────────
+
+    #[test]
+    fn accumulator_new_initializes_with_pending_status() {
+        let acc = StepExecutionAccumulator::new(empty_pipeline());
+        assert_eq!(acc.item_status, "pending");
+        assert!(acc.active_tickets.is_empty());
+        assert!(acc.flags.is_empty());
+        assert!(acc.exit_codes.is_empty());
+        assert!(!acc.terminal);
+        assert_eq!(acc.new_ticket_count, 0);
+        assert!(acc.qa_confidence.is_none());
+    }
+
+    // ── merge_task_pipeline_vars() ───────────
+
+    #[test]
+    fn merge_task_pipeline_vars_does_not_overwrite_existing() {
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        acc.pipeline_vars.vars.insert("key".to_string(), "item_value".to_string());
+
+        let mut task_vars = empty_pipeline();
+        task_vars.vars.insert("key".to_string(), "task_value".to_string());
+        task_vars.vars.insert("new_key".to_string(), "new_value".to_string());
+
+        acc.merge_task_pipeline_vars(&task_vars);
+
+        assert_eq!(acc.pipeline_vars.vars.get("key").unwrap(), "item_value");
+        assert_eq!(acc.pipeline_vars.vars.get("new_key").unwrap(), "new_value");
+    }
+
+    #[test]
+    fn merge_task_pipeline_vars_copies_build_errors_when_empty() {
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        let mut task_vars = empty_pipeline();
+        task_vars.build_errors = vec![crate::config::BuildError {
+            file: Some("main.rs".to_string()),
+            line: Some(10),
+            column: None,
+            message: "error".to_string(),
+            level: crate::config::BuildErrorLevel::Error,
+        }];
+        task_vars.test_failures = vec![crate::config::TestFailure {
+            test_name: "test1".to_string(),
+            message: "failed".to_string(),
+            file: None,
+            line: None,
+            stdout: None,
+        }];
+
+        acc.merge_task_pipeline_vars(&task_vars);
+
+        assert_eq!(acc.pipeline_vars.build_errors.len(), 1);
+        assert_eq!(acc.pipeline_vars.test_failures.len(), 1);
+    }
+
+    #[test]
+    fn merge_task_pipeline_vars_preserves_existing_build_errors() {
+        let mut pipeline = empty_pipeline();
+        pipeline.build_errors = vec![crate::config::BuildError {
+            file: Some("existing.rs".to_string()),
+            line: None,
+            column: None,
+            message: "existing error".to_string(),
+            level: crate::config::BuildErrorLevel::Error,
+        }];
+        let mut acc = StepExecutionAccumulator::new(pipeline);
+
+        let mut task_vars = empty_pipeline();
+        task_vars.build_errors = vec![crate::config::BuildError {
+            file: Some("new.rs".to_string()),
+            line: None,
+            column: None,
+            message: "new error".to_string(),
+            level: crate::config::BuildErrorLevel::Error,
+        }];
+
+        acc.merge_task_pipeline_vars(&task_vars);
+
+        assert_eq!(acc.pipeline_vars.build_errors.len(), 1);
+        assert_eq!(acc.pipeline_vars.build_errors[0].file, Some("existing.rs".to_string()));
+    }
+
+    // ── apply_captures() ─────────────────────
+
+    #[test]
+    fn apply_captures_exit_code() {
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        let captures = vec![CaptureDecl {
+            var: "qa_exit".to_string(),
+            source: CaptureSource::ExitCode,
+        }];
+        let result = make_run_result(42, false, None);
+
+        acc.apply_captures(&captures, "qa_testing", &result);
+
+        assert_eq!(*acc.exit_codes.get("qa_testing").unwrap(), 42);
+        assert_eq!(acc.pipeline_vars.vars.get("qa_exit").unwrap(), "42");
+    }
+
+    #[test]
+    fn apply_captures_failed_flag() {
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        let captures = vec![CaptureDecl {
+            var: "qa_failed".to_string(),
+            source: CaptureSource::FailedFlag,
+        }];
+        let result = make_run_result(1, false, None);
+
+        acc.apply_captures(&captures, "qa", &result);
+
+        assert_eq!(*acc.flags.get("qa_failed").unwrap(), true);
+        assert_eq!(acc.pipeline_vars.vars.get("qa_failed").unwrap(), "true");
+    }
+
+    #[test]
+    fn apply_captures_success_flag() {
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        let captures = vec![CaptureDecl {
+            var: "fix_success".to_string(),
+            source: CaptureSource::SuccessFlag,
+        }];
+        let result = make_run_result(0, true, None);
+
+        acc.apply_captures(&captures, "fix", &result);
+
+        assert_eq!(*acc.flags.get("fix_success").unwrap(), true);
+        assert_eq!(acc.pipeline_vars.vars.get("fix_success").unwrap(), "true");
+    }
+
+    #[test]
+    fn apply_captures_success_flag_on_failure() {
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        let captures = vec![CaptureDecl {
+            var: "fix_success".to_string(),
+            source: CaptureSource::SuccessFlag,
+        }];
+        let result = make_run_result(1, false, None);
+
+        acc.apply_captures(&captures, "fix", &result);
+
+        assert_eq!(*acc.flags.get("fix_success").unwrap(), false);
+    }
+
+    #[test]
+    fn apply_captures_stderr() {
+        let output = crate::collab::AgentOutput {
+            run_id: uuid::Uuid::new_v4(),
+            agent_id: "a".to_string(),
+            phase: "qa".to_string(),
+            exit_code: 0,
+            stdout: "out content".to_string(),
+            stderr: "err content".to_string(),
+            artifacts: vec![],
+            metrics: Default::default(),
+            confidence: 0.0,
+            quality_score: 0.0,
+            created_at: chrono::Utc::now(),
+            build_errors: vec![],
+            test_failures: vec![],
+        };
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        let captures = vec![CaptureDecl {
+            var: "qa_stderr".to_string(),
+            source: CaptureSource::Stderr,
+        }];
+        let result = make_run_result(0, true, Some(output));
+
+        acc.apply_captures(&captures, "qa", &result);
+
+        assert_eq!(acc.pipeline_vars.vars.get("qa_stderr").unwrap(), "err content");
+    }
+
+    #[test]
+    fn apply_captures_stdout_no_output_is_noop() {
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        let captures = vec![CaptureDecl {
+            var: "qa_stdout".to_string(),
+            source: CaptureSource::Stdout,
+        }];
+        let result = make_run_result(0, true, None);
+
+        acc.apply_captures(&captures, "qa", &result);
+
+        assert!(!acc.pipeline_vars.vars.contains_key("qa_stdout"));
+    }
+
+    #[test]
+    fn apply_captures_stderr_no_output_is_noop() {
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        let captures = vec![CaptureDecl {
+            var: "qa_stderr".to_string(),
+            source: CaptureSource::Stderr,
+        }];
+        let result = make_run_result(0, true, None);
+
+        acc.apply_captures(&captures, "qa", &result);
+
+        assert!(!acc.pipeline_vars.vars.contains_key("qa_stderr"));
+    }
+
+    #[test]
+    fn apply_captures_multiple() {
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        let captures = vec![
+            CaptureDecl { var: "exit".to_string(), source: CaptureSource::ExitCode },
+            CaptureDecl { var: "failed".to_string(), source: CaptureSource::FailedFlag },
+            CaptureDecl { var: "ok".to_string(), source: CaptureSource::SuccessFlag },
+        ];
+        let result = make_run_result(0, true, None);
+
+        acc.apply_captures(&captures, "step1", &result);
+
+        assert_eq!(acc.pipeline_vars.vars.get("exit").unwrap(), "0");
+        assert_eq!(*acc.flags.get("failed").unwrap(), false);
+        assert_eq!(*acc.flags.get("ok").unwrap(), true);
+    }
+
+    // ── to_prehook_context() ─────────────────
+
+    #[test]
+    fn to_prehook_context_basic_fields() {
+        let acc = StepExecutionAccumulator::new(empty_pipeline());
+        let item = make_item("item-1", "docs/qa/test.md");
+        let ctx = make_task_ctx(vec![], Some(2), 1);
+
+        let phc = acc.to_prehook_context("task-1", &item, &ctx, "qa_testing");
+
+        assert_eq!(phc.task_id, "task-1");
+        assert_eq!(phc.task_item_id, "item-1");
+        assert_eq!(phc.cycle, 1);
+        assert_eq!(phc.step, "qa_testing");
+        assert_eq!(phc.qa_file_path, "docs/qa/test.md");
+        assert_eq!(phc.item_status, "pending");
+        assert_eq!(phc.task_status, "running");
+        assert_eq!(phc.max_cycles, 2);
+        assert!(!phc.is_last_cycle);
+    }
+
+    #[test]
+    fn to_prehook_context_is_last_cycle_when_current_equals_max() {
+        let acc = StepExecutionAccumulator::new(empty_pipeline());
+        let item = make_item("item-1", "docs/qa/test.md");
+        let ctx = make_task_ctx(vec![], Some(2), 2);
+
+        let phc = acc.to_prehook_context("task-1", &item, &ctx, "step");
+
+        assert!(phc.is_last_cycle);
+    }
+
+    #[test]
+    fn to_prehook_context_exit_codes_from_canonical_step_ids() {
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        acc.exit_codes.insert("qa_testing".to_string(), 1);
+        acc.exit_codes.insert("ticket_fix".to_string(), 0);
+        acc.exit_codes.insert("retest".to_string(), 2);
+
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(vec![], Some(1), 1);
+
+        let phc = acc.to_prehook_context("task-1", &item, &ctx, "step");
+
+        assert_eq!(phc.qa_exit_code, Some(1));
+        assert_eq!(phc.fix_exit_code, Some(0));
+        assert_eq!(phc.retest_exit_code, Some(2));
+    }
+
+    #[test]
+    fn to_prehook_context_exit_codes_use_first_alias_match() {
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        // "qa" is the first canonical alias for qa capability
+        acc.exit_codes.insert("qa".to_string(), 5);
+        acc.exit_codes.insert("qa_testing".to_string(), 10);
+
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(vec![], Some(1), 1);
+
+        let phc = acc.to_prehook_context("task-1", &item, &ctx, "step");
+
+        assert_eq!(phc.qa_exit_code, Some(5));
+    }
+
+    #[test]
+    fn to_prehook_context_qa_failed_and_fix_required() {
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        acc.flags.insert("qa_failed".to_string(), true);
+        acc.active_tickets.push("ticket1.md".to_string());
+
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(vec![], Some(1), 1);
+
+        let phc = acc.to_prehook_context("task-1", &item, &ctx, "step");
+
+        assert!(phc.qa_failed);
+        assert!(phc.fix_required);
+        assert_eq!(phc.active_ticket_count, 1);
+    }
+
+    #[test]
+    fn to_prehook_context_fix_required_from_tickets_even_without_qa_failed() {
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        acc.active_tickets.push("ticket1.md".to_string());
+
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(vec![], Some(1), 1);
+
+        let phc = acc.to_prehook_context("task-1", &item, &ctx, "step");
+
+        assert!(!phc.qa_failed);
+        assert!(phc.fix_required); // fix_required = qa_failed || !active_tickets.is_empty()
+    }
+
+    #[test]
+    fn to_prehook_context_self_test_vars() {
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        acc.pipeline_vars.vars.insert("self_test_exit_code".to_string(), "0".to_string());
+        acc.pipeline_vars.vars.insert("self_test_passed".to_string(), "true".to_string());
+
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(vec![], Some(1), 1);
+
+        let phc = acc.to_prehook_context("task-1", &item, &ctx, "step");
+
+        assert_eq!(phc.self_test_exit_code, Some(0));
+        assert!(phc.self_test_passed);
+    }
+
+    #[test]
+    fn to_prehook_context_build_test_counts() {
+        let mut pipeline = empty_pipeline();
+        pipeline.build_errors = vec![crate::config::BuildError {
+            file: Some("f.rs".to_string()), line: None, column: None,
+            message: "err".to_string(), level: crate::config::BuildErrorLevel::Error,
+        }];
+        pipeline.test_failures = vec![
+            crate::config::TestFailure { test_name: "t1".to_string(), message: "fail".to_string(), file: None, line: None, stdout: None },
+            crate::config::TestFailure { test_name: "t2".to_string(), message: "fail".to_string(), file: None, line: None, stdout: None },
+        ];
+        let acc = StepExecutionAccumulator::new(pipeline);
+
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(vec![], Some(1), 1);
+
+        let phc = acc.to_prehook_context("task-1", &item, &ctx, "step");
+
+        assert_eq!(phc.build_error_count, 1);
+        assert_eq!(phc.test_failure_count, 2);
+    }
+
+    #[test]
+    fn to_prehook_context_capability_based_step_ids() {
+        let steps = vec![
+            make_step("custom_qa", None, ExecutionMode::Agent),
+        ];
+        // Give the step a qa capability
+        let mut steps = steps;
+        steps[0].required_capability = Some("qa".to_string());
+
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        acc.exit_codes.insert("custom_qa".to_string(), 3);
+
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(steps, Some(1), 1);
+
+        let phc = acc.to_prehook_context("task-1", &item, &ctx, "step");
+
+        // canonical aliases "qa", "qa_testing" come first, then capability match "custom_qa"
+        // Since neither "qa" nor "qa_testing" have exit codes, it falls through to "custom_qa"
+        assert_eq!(phc.qa_exit_code, Some(3));
+    }
+
+    #[test]
+    fn to_prehook_context_max_cycles_defaults_to_1() {
+        let acc = StepExecutionAccumulator::new(empty_pipeline());
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(vec![], None, 1);
+
+        let phc = acc.to_prehook_context("task-1", &item, &ctx, "step");
+
+        assert_eq!(phc.max_cycles, 1);
+        assert!(phc.is_last_cycle);
+    }
+
+    // ── to_finalize_context() ────────────────
+
+    #[test]
+    fn to_finalize_context_basic_fields() {
+        let acc = StepExecutionAccumulator::new(empty_pipeline());
+        let item = make_item("item-1", "docs/qa/test.md");
+        let ctx = make_task_ctx(vec![], Some(2), 1);
+
+        let fc = acc.to_finalize_context("task-1", &item, &ctx);
+
+        assert_eq!(fc.task_id, "task-1");
+        assert_eq!(fc.task_item_id, "item-1");
+        assert_eq!(fc.cycle, 1);
+        assert_eq!(fc.qa_file_path, "docs/qa/test.md");
+        assert_eq!(fc.item_status, "pending");
+        assert!(!fc.is_last_cycle);
+    }
+
+    #[test]
+    fn to_finalize_context_qa_ran_and_configured() {
+        let steps = vec![{
+            let mut s = make_step("qa_testing", None, ExecutionMode::Agent);
+            s.required_capability = Some("qa".to_string());
+            s
+        }];
+
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        acc.step_ran.insert("qa_testing".to_string(), true);
+        acc.exit_codes.insert("qa_testing".to_string(), 0);
+
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(steps, Some(1), 1);
+
+        let fc = acc.to_finalize_context("task-1", &item, &ctx);
+
+        assert!(fc.qa_ran);
+        assert!(fc.qa_configured);
+        assert!(fc.qa_observed);
+        assert!(fc.qa_enabled);
+        assert!(!fc.qa_skipped);
+    }
+
+    #[test]
+    fn to_finalize_context_qa_skipped() {
+        let steps = vec![{
+            let mut s = make_step("qa_testing", None, ExecutionMode::Agent);
+            s.required_capability = Some("qa".to_string());
+            s
+        }];
+
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        acc.step_skipped.insert("qa_testing".to_string(), true);
+
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(steps, Some(1), 1);
+
+        let fc = acc.to_finalize_context("task-1", &item, &ctx);
+
+        assert!(!fc.qa_ran);
+        assert!(fc.qa_configured);
+        assert!(fc.qa_observed);
+        assert!(fc.qa_skipped);
+    }
+
+    #[test]
+    fn to_finalize_context_fix_ran_and_success() {
+        let steps = vec![{
+            let mut s = make_step("ticket_fix", None, ExecutionMode::Agent);
+            s.required_capability = Some("fix".to_string());
+            s
+        }];
+
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        acc.step_ran.insert("ticket_fix".to_string(), true);
+        acc.flags.insert("fix_success".to_string(), true);
+
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(steps, Some(1), 1);
+
+        let fc = acc.to_finalize_context("task-1", &item, &ctx);
+
+        assert!(fc.fix_ran);
+        assert!(fc.fix_success);
+        assert!(fc.fix_configured);
+        assert!(fc.fix_enabled);
+    }
+
+    #[test]
+    fn to_finalize_context_fix_skipped() {
+        let steps = vec![{
+            let mut s = make_step("ticket_fix", None, ExecutionMode::Agent);
+            s.required_capability = Some("fix".to_string());
+            s
+        }];
+
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        acc.step_skipped.insert("ticket_fix".to_string(), true);
+
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(steps, Some(1), 1);
+
+        let fc = acc.to_finalize_context("task-1", &item, &ctx);
+
+        assert!(!fc.fix_ran);
+        assert!(fc.fix_skipped);
+        assert!(fc.fix_enabled);
+    }
+
+    #[test]
+    fn to_finalize_context_retest() {
+        let steps = vec![{
+            let mut s = make_step("retest", None, ExecutionMode::Agent);
+            s.required_capability = Some("retest".to_string());
+            s
+        }];
+
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        acc.step_ran.insert("retest".to_string(), true);
+        acc.flags.insert("retest_success".to_string(), true);
+
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(steps, Some(1), 1);
+
+        let fc = acc.to_finalize_context("task-1", &item, &ctx);
+
+        assert!(fc.retest_ran);
+        assert!(fc.retest_success);
+        assert!(fc.retest_enabled);
+    }
+
+    #[test]
+    fn to_finalize_context_not_repeatable_in_cycle_2() {
+        let steps = vec![{
+            let mut s = make_step("qa_testing", None, ExecutionMode::Agent);
+            s.required_capability = Some("qa".to_string());
+            s.repeatable = false;
+            s
+        }];
+
+        let acc = StepExecutionAccumulator::new(empty_pipeline());
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(steps, Some(2), 2);
+
+        let fc = acc.to_finalize_context("task-1", &item, &ctx);
+
+        // Non-repeatable step in cycle 2 is not qa_configured
+        assert!(!fc.qa_configured);
+    }
+
+    #[test]
+    fn to_finalize_context_disabled_step_not_configured() {
+        let steps = vec![{
+            let mut s = make_step("qa_testing", None, ExecutionMode::Agent);
+            s.required_capability = Some("qa".to_string());
+            s.enabled = false;
+            s
+        }];
+
+        let acc = StepExecutionAccumulator::new(empty_pipeline());
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(steps, Some(1), 1);
+
+        let fc = acc.to_finalize_context("task-1", &item, &ctx);
+
+        assert!(!fc.qa_configured);
+    }
+
+    #[test]
+    fn to_finalize_context_tickets_set_fix_required() {
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        acc.active_tickets = vec!["ticket1.md".to_string(), "ticket2.md".to_string()];
+        acc.new_ticket_count = 2;
+
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(vec![], Some(1), 1);
+
+        let fc = acc.to_finalize_context("task-1", &item, &ctx);
+
+        assert!(fc.fix_required);
+        assert_eq!(fc.active_ticket_count, 2);
+        assert_eq!(fc.new_ticket_count, 2);
+    }
+
+    #[test]
+    fn to_finalize_context_confidence_and_quality() {
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        acc.qa_confidence = Some(0.85);
+        acc.qa_quality_score = Some(0.9);
+        acc.fix_confidence = Some(0.7);
+        acc.fix_quality_score = Some(0.8);
+
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(vec![], Some(1), 1);
+
+        let fc = acc.to_finalize_context("task-1", &item, &ctx);
+
+        assert_eq!(fc.qa_confidence, Some(0.85));
+        assert_eq!(fc.qa_quality_score, Some(0.9));
+        assert_eq!(fc.fix_confidence, Some(0.7));
+        assert_eq!(fc.fix_quality_score, Some(0.8));
+    }
+
+    #[test]
+    fn to_finalize_context_artifacts() {
+        let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+        acc.phase_artifacts.push(crate::collab::Artifact::new(
+            crate::collab::ArtifactKind::Ticket {
+                severity: crate::collab::artifact::Severity::Medium,
+                category: "qa".to_string(),
+            },
+        ));
+        acc.phase_artifacts.push(crate::collab::Artifact::new(
+            crate::collab::ArtifactKind::CodeChange {
+                files: vec!["f.rs".to_string()],
+            },
+        ));
+
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(vec![], Some(1), 1);
+
+        let fc = acc.to_finalize_context("task-1", &item, &ctx);
+
+        assert_eq!(fc.total_artifacts, 2);
+        assert!(fc.has_ticket_artifacts);
+        assert!(fc.has_code_change_artifacts);
+    }
+
+    #[test]
+    fn to_finalize_context_is_last_cycle() {
+        let acc = StepExecutionAccumulator::new(empty_pipeline());
+        let item = make_item("item-1", "test.md");
+        let ctx = make_task_ctx(vec![], Some(2), 2);
+
+        let fc = acc.to_finalize_context("task-1", &item, &ctx);
+        assert!(fc.is_last_cycle);
+
+        let ctx2 = make_task_ctx(vec![], Some(2), 1);
+        let fc2 = acc.to_finalize_context("task-1", &item, &ctx2);
+        assert!(!fc2.is_last_cycle);
+    }
+
+    // ── step_ids_for_capability() ────────────
+
+    #[test]
+    fn step_ids_for_capability_includes_canonical_and_custom() {
+        let steps = vec![
+            {
+                let mut s = make_step("my_qa_step", None, ExecutionMode::Agent);
+                s.required_capability = Some("qa".to_string());
+                s
+            },
+            {
+                let mut s = make_step("unrelated", None, ExecutionMode::Agent);
+                s.required_capability = Some("fix".to_string());
+                s
+            },
+        ];
+        let ctx = make_task_ctx(steps, Some(1), 1);
+
+        let ids = StepExecutionAccumulator::step_ids_for_capability(
+            &ctx, "qa", &["qa", "qa_testing"],
+        );
+
+        assert_eq!(ids, vec!["qa", "qa_testing", "my_qa_step"]);
+    }
+
+    #[test]
+    fn step_ids_for_capability_no_duplicates_for_canonical_names() {
+        let steps = vec![{
+            let mut s = make_step("qa_testing", None, ExecutionMode::Agent);
+            s.required_capability = Some("qa".to_string());
+            s
+        }];
+        let ctx = make_task_ctx(steps, Some(1), 1);
+
+        let ids = StepExecutionAccumulator::step_ids_for_capability(
+            &ctx, "qa", &["qa", "qa_testing"],
+        );
+
+        // "qa_testing" is already in canonical list, should not be duplicated
+        assert_eq!(ids, vec!["qa", "qa_testing"]);
     }
 }

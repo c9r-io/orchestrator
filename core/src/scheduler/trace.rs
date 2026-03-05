@@ -1959,4 +1959,395 @@ mod tests {
         assert_eq!(step.item_id, None);
         assert_eq!(step.anchor_item_id.as_deref(), Some("item-1"));
     }
+
+    // ── Utility function tests ────────────────────────────
+
+    #[test]
+    fn format_duration_seconds_only() {
+        assert_eq!(format_duration(42.0), "42s");
+        assert_eq!(format_duration(0.0), "0s");
+        assert_eq!(format_duration(59.0), "59s");
+    }
+
+    #[test]
+    fn format_duration_minutes_and_seconds() {
+        assert_eq!(format_duration(60.0), "1m 00s");
+        assert_eq!(format_duration(125.0), "2m 05s");
+        assert_eq!(format_duration(3599.0), "59m 59s");
+    }
+
+    #[test]
+    fn format_duration_hours() {
+        assert_eq!(format_duration(3600.0), "1h 00m 00s");
+        assert_eq!(format_duration(3661.0), "1h 01m 01s");
+        assert_eq!(format_duration(7200.0), "2h 00m 00s");
+    }
+
+    #[test]
+    fn extract_time_from_rfc3339() {
+        assert_eq!(extract_time("2025-01-01T10:30:45+00:00"), "10:30:45");
+    }
+
+    #[test]
+    fn extract_time_from_space_separated() {
+        assert_eq!(extract_time("2025-01-01 10:30:45"), "10:30:45");
+    }
+
+    #[test]
+    fn extract_time_from_no_separator() {
+        assert_eq!(extract_time("10:30:45"), "10:30:45");
+    }
+
+    #[test]
+    fn colorize_status_known_values() {
+        assert!(colorize_status("completed").contains("32m")); // green
+        assert!(colorize_status("failed").contains("31m")); // red
+        assert!(colorize_status("running").contains("33m")); // yellow
+        assert!(colorize_status("paused").contains("90m")); // gray
+    }
+
+    #[test]
+    fn colorize_status_unknown_returns_plain() {
+        assert_eq!(colorize_status("pending"), "pending");
+    }
+
+    #[test]
+    fn find_template_vars_basic() {
+        let vars = find_template_vars("echo {rel_path} --out {output}");
+        assert_eq!(vars, vec!["{rel_path}", "{output}"]);
+    }
+
+    #[test]
+    fn find_template_vars_no_matches() {
+        let vars = find_template_vars("echo hello world");
+        assert!(vars.is_empty());
+    }
+
+    #[test]
+    fn find_template_vars_ignores_uppercase_and_numbers() {
+        let vars = find_template_vars("{OK} {test123} {valid_one}");
+        assert_eq!(vars, vec!["{valid_one}"]);
+    }
+
+    #[test]
+    fn find_template_vars_empty_braces_ignored() {
+        let vars = find_template_vars("echo {} test");
+        assert!(vars.is_empty());
+    }
+
+    #[test]
+    fn parse_trace_timestamp_naive_datetime_format() {
+        let parsed = parse_trace_timestamp("2025-01-01 10:00:00");
+        assert!(parsed.is_some(), "should parse space-separated datetime");
+    }
+
+    #[test]
+    fn parse_trace_timestamp_iso_without_offset() {
+        let parsed = parse_trace_timestamp("2025-01-01T10:00:00");
+        assert!(parsed.is_some(), "should parse ISO datetime without offset");
+    }
+
+    #[test]
+    fn parse_trace_timestamp_with_fractional_seconds() {
+        let parsed = parse_trace_timestamp("2025-01-01T10:00:00.123456");
+        assert!(
+            parsed.is_some(),
+            "should parse datetime with fractional seconds"
+        );
+    }
+
+    #[test]
+    fn parse_trace_timestamp_garbage_returns_none() {
+        let parsed = parse_trace_timestamp("not-a-timestamp");
+        assert!(parsed.is_none());
+    }
+
+    #[test]
+    fn split_observed_item_binding_all_variants() {
+        let item = Some("item-1".to_string());
+
+        let (scope, item_id, anchor) =
+            split_observed_item_binding(Some(ObservedStepScope::Item), &item);
+        assert_eq!(scope, "item");
+        assert_eq!(item_id.as_deref(), Some("item-1"));
+        assert!(anchor.is_none());
+
+        let (scope, item_id, anchor) =
+            split_observed_item_binding(Some(ObservedStepScope::Task), &item);
+        assert_eq!(scope, "task");
+        assert!(item_id.is_none());
+        assert_eq!(anchor.as_deref(), Some("item-1"));
+
+        let (scope, item_id, anchor) = split_observed_item_binding(None, &item);
+        assert_eq!(scope, "legacy");
+        assert!(item_id.is_none());
+        assert_eq!(anchor.as_deref(), Some("item-1"));
+    }
+
+    #[test]
+    fn step_started_before_cycle_started_auto_creates_cycle_zero() {
+        let events = vec![
+            make_item_event(
+                1,
+                "step_started",
+                json!({"step": "plan"}),
+                "2025-01-01 10:00:01",
+                "item-1",
+            ),
+            make_item_event(
+                2,
+                "step_finished",
+                json!({"step": "plan", "success": true, "duration_ms": 3000}),
+                "2025-01-01 10:00:04",
+                "item-1",
+            ),
+        ];
+
+        let trace = build_trace("test-task", "completed", &events, &[]);
+        assert_eq!(trace.cycles.len(), 1);
+        assert_eq!(trace.cycles[0].cycle, 0);
+        assert_eq!(trace.cycles[0].steps.len(), 1);
+    }
+
+    #[test]
+    fn detect_empty_cycle_between_two_cycles() {
+        let events = vec![
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
+            // No steps in cycle 1
+            make_event(
+                2,
+                "cycle_started",
+                json!({"cycle": 2}),
+                "2025-01-01 10:01:00",
+            ),
+            make_item_event(
+                3,
+                "step_started",
+                json!({"step": "plan"}),
+                "2025-01-01 10:01:01",
+                "item-1",
+            ),
+            make_item_event(
+                4,
+                "step_finished",
+                json!({"step": "plan", "success": true}),
+                "2025-01-01 10:01:05",
+                "item-1",
+            ),
+            make_event(5, "task_completed", json!({}), "2025-01-01 10:01:06"),
+        ];
+
+        let trace = build_trace("test-task", "completed", &events, &[]);
+        let empty = trace.anomalies.iter().find(|a| a.rule == "empty_cycle");
+        assert!(empty.is_some(), "should detect empty cycle 1");
+        assert!(empty
+            .expect("empty cycle anomaly")
+            .message
+            .contains("Cycle 1"));
+    }
+
+    #[test]
+    fn detect_missing_step_end_when_no_terminal_event() {
+        // Steps started but no task_completed/task_failed follows
+        let events = vec![
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
+            make_item_event(
+                2,
+                "step_started",
+                json!({"step": "implement"}),
+                "2025-01-01 10:00:01",
+                "item-1",
+            ),
+            // No step_finished, no task_completed
+        ];
+
+        let trace = build_trace("test-task", "running", &events, &[]);
+        let missing = trace
+            .anomalies
+            .iter()
+            .find(|a| a.rule == "missing_step_end");
+        assert!(
+            missing.is_some(),
+            "should detect missing step end without terminal event"
+        );
+    }
+
+    #[test]
+    fn low_output_heartbeat_with_dead_process_not_flagged() {
+        let events = vec![make_item_event(
+            1,
+            "step_heartbeat",
+            json!({
+                "step": "plan",
+                "output_state": "low_output",
+                "pid_alive": false,
+                "elapsed_secs": 120,
+                "stagnant_heartbeats": 4
+            }),
+            "2025-01-01 10:02:00",
+            "item-1",
+        )];
+
+        let trace = build_trace("test-task", "running", &events, &[]);
+        assert!(
+            trace.anomalies.iter().all(|a| a.rule != "low_output"),
+            "low_output should not be flagged when process is dead"
+        );
+    }
+
+    #[test]
+    fn chain_and_dynamic_step_events_handled() {
+        let events = vec![
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
+            make_item_event(
+                2,
+                "chain_step_started",
+                json!({"step": "qa_chain"}),
+                "2025-01-01 10:00:01",
+                "item-1",
+            ),
+            make_item_event(
+                3,
+                "chain_step_finished",
+                json!({"step": "qa_chain", "success": true, "duration_ms": 1000}),
+                "2025-01-01 10:00:02",
+                "item-1",
+            ),
+            make_item_event(
+                4,
+                "dynamic_step_started",
+                json!({"step": "dynamic_fix"}),
+                "2025-01-01 10:00:03",
+                "item-1",
+            ),
+            make_item_event(
+                5,
+                "dynamic_step_finished",
+                json!({"step": "dynamic_fix", "success": false, "duration_ms": 2000}),
+                "2025-01-01 10:00:05",
+                "item-1",
+            ),
+            make_event(6, "task_completed", json!({}), "2025-01-01 10:00:06"),
+        ];
+
+        let trace = build_trace("test-task", "completed", &events, &[]);
+        assert_eq!(trace.cycles[0].steps.len(), 2);
+        assert_eq!(trace.cycles[0].steps[0].step_id, "qa_chain");
+        assert_eq!(trace.cycles[0].steps[0].exit_code, Some(0));
+        assert_eq!(trace.cycles[0].steps[1].step_id, "dynamic_fix");
+        assert_eq!(trace.cycles[0].steps[1].exit_code, Some(1));
+    }
+
+    #[test]
+    fn nonzero_exit_code_minus_one_not_flagged() {
+        // exit_code -1 means "still running" and should not be flagged
+        let runs = vec![make_run("implement", "item-1", Some(-1), "agent-1")];
+        let trace = build_trace("test-task", "running", &[], &runs);
+        assert!(
+            trace.anomalies.iter().all(|a| a.rule != "nonzero_exit"),
+            "-1 exit code should not be flagged as nonzero_exit"
+        );
+    }
+
+    #[test]
+    fn summary_counts_failed_commands() {
+        let runs = vec![
+            make_run("plan", "item-1", Some(0), "agent-1"),
+            make_run("implement", "item-1", Some(1), "agent-2"),
+            make_run("qa", "item-1", Some(2), "agent-3"),
+        ];
+
+        let trace = build_trace("test-task", "failed", &[], &runs);
+        assert_eq!(trace.summary.total_commands, 3);
+        assert_eq!(trace.summary.failed_commands, 2);
+    }
+
+    #[test]
+    fn wall_time_uses_started_at_from_meta() {
+        let events = vec![
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01T10:00:05+00:00",
+            ),
+            make_event(
+                2,
+                "task_completed",
+                json!({}),
+                "2025-01-01T10:00:30+00:00",
+            ),
+        ];
+
+        let trace = build_trace_with_meta(
+            make_task_meta(
+                "completed",
+                Some("2025-01-01T10:00:00+00:00"),
+                Some("2025-01-01T10:00:30+00:00"),
+            ),
+            &events,
+            &[],
+        );
+        let wall = trace.summary.wall_time_secs.expect("should have wall time");
+        assert!(
+            (wall - 30.0).abs() < 0.01,
+            "wall time should use meta.started_at, got {}",
+            wall
+        );
+    }
+
+    #[test]
+    fn render_trace_terminal_does_not_panic() {
+        let events = vec![
+            make_event(
+                1,
+                "cycle_started",
+                json!({"cycle": 1}),
+                "2025-01-01 10:00:00",
+            ),
+            make_item_event(
+                2,
+                "step_started",
+                json!({"step": "plan"}),
+                "2025-01-01 10:00:01",
+                "item-1",
+            ),
+            make_item_event(
+                3,
+                "step_finished",
+                json!({"step": "plan", "success": false, "duration_ms": 5000, "agent_id": "a1"}),
+                "2025-01-01 10:00:06",
+                "item-1",
+            ),
+            make_item_event(
+                4,
+                "step_skipped",
+                json!({"step": "qa", "reason": "disabled"}),
+                "2025-01-01 10:00:07",
+                "item-1",
+            ),
+            make_event(5, "task_failed", json!({}), "2025-01-01 10:00:08"),
+        ];
+        let runs = vec![make_run("plan", "item-1", Some(1), "a1")];
+
+        let trace = build_trace("test-task", "failed", &events, &runs);
+        // Just ensure it doesn't panic - output goes to stdout
+        render_trace_terminal(&trace, false);
+        render_trace_terminal(&trace, true);
+    }
 }

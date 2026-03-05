@@ -127,7 +127,9 @@ pub fn create_task_impl(
                     && !project.workspaces.contains_key(&active.default_workspace_id)
                 {
                     if project.workspaces.len() == 1 {
-                        return project.workspaces.keys().next().unwrap().clone();
+                        if let Some(k) = project.workspaces.keys().next() {
+                            return k.clone();
+                        }
                     }
                     // If "default" exists in project, use that
                     if project.workspaces.contains_key("default") {

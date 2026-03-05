@@ -1965,4 +1965,214 @@ mod tests {
         // The important thing is it doesn't panic
         assert!(result.is_err() || !result.expect("self_test_passed expression should evaluate"));
     }
+
+    // ── resolve_workflow_finalize_outcome: multi-rule matching ────────
+
+    #[test]
+    fn test_resolve_workflow_finalize_outcome_no_rules_returns_none() {
+        let finalize = WorkflowFinalizeConfig { rules: vec![] };
+        let context = default_item_finalize_context();
+        let result = resolve_workflow_finalize_outcome(&finalize, &context);
+        assert!(result.is_ok());
+        assert!(result.expect("should succeed").is_none());
+    }
+
+    #[test]
+    fn test_resolve_workflow_finalize_outcome_first_false_second_matches() {
+        let finalize = WorkflowFinalizeConfig {
+            rules: vec![
+                make_rule("r1", "qa_skipped && active_ticket_count > 0", "skipped", None),
+                make_rule("r2", "qa_ran && active_ticket_count == 0", "resolved", Some("qa passed")),
+            ],
+        };
+        let context = ItemFinalizeContext {
+            qa_ran: true,
+            qa_skipped: false,
+            active_ticket_count: 0,
+            ..default_item_finalize_context()
+        };
+        let result = resolve_workflow_finalize_outcome(&finalize, &context)
+            .expect("should succeed");
+        let outcome = result.expect("should match second rule");
+        assert_eq!(outcome.rule_id, "r2");
+        assert_eq!(outcome.status, "resolved");
+        assert_eq!(outcome.reason, "qa passed");
+    }
+
+    #[test]
+    fn test_resolve_workflow_finalize_outcome_none_match() {
+        let finalize = WorkflowFinalizeConfig {
+            rules: vec![
+                make_rule("r1", "qa_skipped", "skipped", None),
+                make_rule("r2", "fix_ran && fix_success", "resolved", None),
+            ],
+        };
+        let context = ItemFinalizeContext {
+            qa_skipped: false,
+            fix_ran: false,
+            fix_success: false,
+            ..default_item_finalize_context()
+        };
+        let result = resolve_workflow_finalize_outcome(&finalize, &context)
+            .expect("should succeed");
+        assert!(result.is_none());
+    }
+
+    // ── evaluate_finalize_rule_expression: non-bool return ───────────
+
+    #[test]
+    fn test_evaluate_finalize_rule_expression_non_bool_return() {
+        let rule = make_rule("r1", "active_ticket_count + 1", "resolved", None);
+        let context = default_item_finalize_context();
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("must return bool"));
+    }
+
+    // ── evaluate_finalize_rule_expression: additional variables ──────
+
+    #[test]
+    fn test_evaluate_finalize_rule_retest_new_ticket_count_positive() {
+        let rule = make_rule("r1", "retest_new_ticket_count == 3", "unresolved", None);
+        let context = ItemFinalizeContext {
+            retest_new_ticket_count: 3,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.expect("rule should match"));
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_retest_enabled_and_success() {
+        let rule = make_rule("r1", "retest_enabled && retest_ran && retest_success", "resolved", None);
+        let context = ItemFinalizeContext {
+            retest_enabled: true,
+            retest_ran: true,
+            retest_success: true,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.expect("rule should match"));
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_fix_skipped_variable() {
+        let rule = make_rule("r1", "fix_skipped && !fix_ran", "skipped", None);
+        let context = ItemFinalizeContext {
+            fix_skipped: true,
+            fix_ran: false,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.expect("rule should match"));
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_fix_configured_variable() {
+        let rule = make_rule("r1", "fix_configured && !fix_enabled", "pending", None);
+        let context = ItemFinalizeContext {
+            fix_configured: true,
+            fix_enabled: false,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.expect("rule should match"));
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_qa_enabled_and_observed() {
+        let rule = make_rule("r1", "qa_enabled && qa_observed && !qa_failed", "resolved", None);
+        let context = ItemFinalizeContext {
+            qa_enabled: true,
+            qa_observed: true,
+            qa_failed: false,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.expect("rule should match"));
+    }
+
+    #[test]
+    fn test_evaluate_finalize_rule_is_last_cycle_with_qa_ran() {
+        let rule = make_rule("r1", "is_last_cycle && qa_ran", "resolved", None);
+        let context = ItemFinalizeContext {
+            is_last_cycle: true,
+            qa_ran: true,
+            ..default_item_finalize_context()
+        };
+        let result = evaluate_finalize_rule_expression(&rule, &context);
+        assert!(result.is_ok());
+        assert!(result.expect("rule should match"));
+    }
+
+    // ── evaluate_step_prehook_expression: additional coverage ────────
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_confidence_and_quality() {
+        // qa_confidence is accessible via context.qa_confidence
+        let context = StepPrehookContext {
+            qa_confidence: Some(0.85),
+            qa_quality_score: Some(0.9),
+            ..default_step_prehook_context()
+        };
+        let result = evaluate_step_prehook_expression("cycle == 1", &context);
+        assert!(result.is_ok());
+        assert!(result.expect("should evaluate to true"));
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_build_errors_positive() {
+        let context = StepPrehookContext {
+            build_error_count: 5,
+            ..default_step_prehook_context()
+        };
+        let result = evaluate_step_prehook_expression("build_errors > 0", &context);
+        assert!(result.is_ok());
+        assert!(result.expect("should evaluate to true"));
+    }
+
+    #[test]
+    fn test_evaluate_step_prehook_expression_item_status_comparison() {
+        let context = StepPrehookContext {
+            item_status: "resolved".to_string(),
+            ..default_step_prehook_context()
+        };
+        let result = evaluate_step_prehook_expression("item_status == \"resolved\"", &context);
+        assert!(result.is_ok());
+        assert!(result.expect("should evaluate to true"));
+    }
+
+    // ── validate_step_prehook: edge cases ────────────────────────────
+
+    #[test]
+    fn test_validate_step_prehook_only_whitespace_is_rejected() {
+        let prehook = StepPrehookConfig {
+            when: "   ".to_string(),
+            reason: None,
+            engine: StepHookEngine::Cel,
+            ui: None,
+            extended: false,
+        };
+        let result = validate_step_prehook(&prehook, "wf1", "step1");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_workflow_finalize_rule_whitespace_when_rejected() {
+        let rule = WorkflowFinalizeRule {
+            id: "r1".to_string(),
+            engine: StepHookEngine::Cel,
+            when: "   ".to_string(),
+            status: "resolved".to_string(),
+            reason: None,
+        };
+        let result = validate_workflow_finalize_rule(&rule, "wf1");
+        assert!(result.is_err());
+    }
 }

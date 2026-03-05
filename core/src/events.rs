@@ -451,6 +451,90 @@ mod tests {
     }
 
     #[test]
+    fn tracing_event_sink_does_not_panic_on_all_event_types() {
+        let sink = TracingEventSink::new();
+        // Error level
+        sink.emit("t1", None, "task_failed", serde_json::json!({"error": "boom"}));
+        // Warning level
+        sink.emit("t1", None, "step_timeout", serde_json::json!({"secs": 60}));
+        sink.emit(
+            "t1",
+            None,
+            "auto_rollback_failed",
+            serde_json::json!({}),
+        );
+        // Info level
+        sink.emit("t1", Some("i1"), "step_started", serde_json::json!({}));
+        sink.emit("t1", None, "step_finished", serde_json::json!({}));
+        sink.emit("t1", None, "task_completed", serde_json::json!({}));
+        sink.emit("t1", None, "task_paused", serde_json::json!({}));
+        // Debug level (fallthrough)
+        sink.emit("t1", None, "step_heartbeat", serde_json::json!({}));
+        sink.emit("t1", None, "custom_event", serde_json::json!({}));
+    }
+
+    #[test]
+    fn tracing_event_sink_default_impl() {
+        let sink = TracingEventSink::default();
+        sink.emit("t1", None, "task_completed", serde_json::json!({}));
+    }
+
+    #[test]
+    fn observed_step_scope_from_payload_unknown_value() {
+        assert_eq!(
+            observed_step_scope_from_payload(&serde_json::json!({"step_scope": "unknown"})),
+            None
+        );
+    }
+
+    #[test]
+    fn query_latest_step_log_paths_prefers_step_key_over_phase() {
+        let mut fixture = crate::test_utils::TestState::new();
+        let state = fixture.build();
+
+        insert_event(
+            &state,
+            "task1",
+            Some("item1"),
+            "step_started",
+            serde_json::json!({
+                "step": "implement",
+                "stdout_path": "/tmp/out.log",
+                "stderr_path": "/tmp/err.log"
+            }),
+        )
+        .expect("insert step_started event");
+
+        let result = query_latest_step_log_paths(&state.db_path, "task1")
+            .expect("query log paths with step key");
+        assert!(result.is_some());
+        let (phase, stdout, _) = result.expect("log paths should exist");
+        assert_eq!(phase, "implement");
+        assert_eq!(stdout, "/tmp/out.log");
+    }
+
+    #[test]
+    fn query_step_events_uses_promoted_column_scope() {
+        let mut fixture = crate::test_utils::TestState::new();
+        let state = fixture.build();
+
+        // Insert an event where the promoted step_scope column differs from JSON payload
+        insert_event(
+            &state,
+            "task1",
+            Some("item1"),
+            "step_started",
+            serde_json::json!({"step": "qa", "step_scope": "task"}),
+        )
+        .expect("insert step_started event");
+
+        let events = query_step_events(&state.db_path, "task1").expect("query events");
+        assert_eq!(events.len(), 1);
+        // The promoted column should take precedence
+        assert_eq!(events[0].step_scope, Some(ObservedStepScope::Task));
+    }
+
+    #[test]
     fn step_event_parses_all_optional_fields() {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
