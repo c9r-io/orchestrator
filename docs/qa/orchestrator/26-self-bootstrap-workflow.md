@@ -1,7 +1,7 @@
 # Orchestrator - Self-Bootstrap & AI Native SDLC Workflow
 
 **Module**: orchestrator
-**Scope**: Validate self-bootstrap workflow with AI native SDLC closed-loop: plan → qa_doc_gen → implement → qa_testing → ticket_fix → align_tests → doc_governance, pipeline variable propagation, prehook-gated steps, and checkpoint/rollback safety
+**Scope**: Validate self-bootstrap workflow with AI native SDLC closed-loop: plan → qa_doc_gen → implement → self_test → self_restart → qa_testing → ticket_fix → align_tests → doc_governance, pipeline variable propagation, prehook-gated steps, and checkpoint/rollback safety
 **Scenarios**: 5
 **Priority**: High
 **See also**: `docs/qa/self-bootstrap/01-survival-binary-checkpoint-self-test.md`, `docs/qa/self-bootstrap/02-survival-enforcement-watchdog.md` for the 4-layer survival mechanism (binary checkpoint, self-test gate, self-referential enforcement, watchdog)
@@ -14,7 +14,7 @@ Self-bootstrap workflows allow the orchestrator to orchestrate AI agents that
 develop its own codebase. The simplified AI native SDLC closed-loop:
 
 ```
-plan → qa_doc_gen → implement → qa_testing → ticket_fix → align_tests → doc_governance → loop_guard
+plan → qa_doc_gen → implement → self_test → self_restart → qa_testing → ticket_fix → align_tests → doc_governance → loop_guard
 ```
 
 Key design decisions:
@@ -118,7 +118,7 @@ rm -rf "workspace/${QA_PROJECT}"
   - `coder` (sonnet): implement, ticket_fix, align_tests — code generation, fixing, test alignment
   - `tester` (sonnet): qa_testing — QA scenario execution requiring reliable tool-use
   - `reviewer` (haiku): doc_governance, review, loop_guard — lightweight pattern matching
-- Workflow `self-bootstrap` with simplified SDLC steps: plan, qa_doc_gen, implement, qa_testing, ticket_fix, align_tests, doc_governance, loop_guard
+- Workflow `self-bootstrap` with simplified SDLC steps: plan, qa_doc_gen, implement, self_test, self_restart, qa_testing, ticket_fix, align_tests, doc_governance, loop_guard
 - Safety: `max_consecutive_failures: 3`, `checkpoint_strategy: git_tag`
 
 ---

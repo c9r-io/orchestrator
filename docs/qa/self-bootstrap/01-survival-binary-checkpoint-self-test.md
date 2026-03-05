@@ -12,7 +12,7 @@
 The self-bootstrap survival mechanism protects the orchestrator from bricking itself during self-referential development. This document covers:
 
 - **Layer 1 (Binary Checkpoint)**: At cycle start, the release binary is copied to `.stable`; on auto-rollback, it is restored. Controlled by `binary_snapshot: true` in safety config.
-- **Layer 2 (Self-Test Acceptance Gate)**: A builtin `self_test` step runs `cargo check` + `cargo test --lib` + `manifest validate` between `implement` and `qa_testing`.
+- **Layer 2 (Self-Test Acceptance Gate)**: A builtin `self_test` step runs `cargo check` + `cargo test --lib` + `manifest validate` after `implement`. After `self_test` passes, `self_restart` (Layer 5) rebuilds the binary and restarts the process.
 
 Key functions: `snapshot_binary()`, `restore_binary_snapshot()`, `execute_self_test_step()` in `core/src/scheduler.rs`.
 

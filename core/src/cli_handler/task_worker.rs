@@ -73,6 +73,26 @@ impl CliHandler {
                                 })?;
                             if let Some(task_id) = claim_next_pending_task(&state)? {
                                 println!("Worker-{} claimed task: {}", worker_idx + 1, task_id);
+
+                                // Post-restart binary verification: if this task was
+                                // restart_pending, confirm the running binary matches
+                                // the SHA256 recorded before the restart.
+                                match crate::scheduler::safety::verify_post_restart_binary(&state, &task_id) {
+                                    Ok(true) => {} // verified or no event to check
+                                    Ok(false) => {
+                                        eprintln!(
+                                            "Worker-{} WARNING: binary SHA256 mismatch for restart task {}",
+                                            worker_idx + 1, task_id
+                                        );
+                                    }
+                                    Err(e) => {
+                                        eprintln!(
+                                            "Worker-{} binary verification skipped: {}",
+                                            worker_idx + 1, e
+                                        );
+                                    }
+                                }
+
                                 let runtime = RunningTask::new();
                                 let run_res = cli_runtime().block_on(run_task_loop(
                                     state.clone(),

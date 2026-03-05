@@ -139,5 +139,7 @@ This checks:
 | self-bootstrap | `docs/qa/self-bootstrap/02-survival-enforcement-watchdog.md` | 5 | Survival Layer 3-4: self-referential enforcement and watchdog script |
 | self-bootstrap | `docs/qa/self-bootstrap/05-survival-smoke-binary-snapshot.md` | 5 | Unit tests for snapshot_binary() and restore_binary_snapshot() |
 | self-bootstrap | `docs/qa/self-bootstrap/06-survival-smoke-binary-snapshot-verification.md` | 5 | Binary snapshot verification function and integration test |
+| self-bootstrap | `docs/qa/self-bootstrap/07-self-restart-process-continuity.md` | 5 | Self-restart builtin step, restart_pending resumption, orchestrator.sh restart loop, priority claiming |
+| self-bootstrap | `docs/qa/self-bootstrap/08-build-version-hash.md` | 5 | Build version hash: compile-time git hash/timestamp, version subcommand, restart event enrichment |
 | self-bootstrap | `docs/qa/self-bootstrap/04-cycle2-validation-and-runtime-timestamps.md` | 2 | Regression: fixed two-cycle QA validation chain and task/item runtime timestamps |
 | convenience | `docs/qa/test-binary-snapshot.md` (symlink) | - | Shortcut to self-bootstrap survival binary checkpoint test |

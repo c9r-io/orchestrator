@@ -456,6 +456,24 @@ fn find_latest_resumable_task_id_returns_none_for_failed_task() {
     assert_eq!(found, None);
 }
 
+#[test]
+fn find_latest_resumable_task_id_includes_restart_pending() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    conn.execute(
+        "UPDATE tasks SET status='restart_pending' WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("set restart_pending");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let found = repo
+        .find_latest_resumable_task_id(false)
+        .expect("query should succeed");
+    assert_eq!(found, Some(task_id));
+}
+
 // ── load_task_runtime_row ──────────────────────────────────────────
 
 #[test]

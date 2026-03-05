@@ -71,6 +71,10 @@ impl CliHandler {
             Commands::Verify(cmd) => self.handle_verify(cmd),
             Commands::Config(cmd) => self.handle_config_lifecycle(cmd),
             Commands::Check { workflow, output } => self.handle_check(workflow.as_deref(), *output),
+            Commands::Version { .. } => {
+                // Handled as preflight in main.rs; should not reach here
+                Ok(0)
+            }
         }
     }
 }

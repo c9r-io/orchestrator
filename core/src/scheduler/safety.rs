@@ -1,3 +1,4 @@
+use crate::events::insert_event;
 use crate::state::InnerState;
 use anyhow::{Context, Result};
 use chrono::Utc;
@@ -258,6 +259,227 @@ pub async fn restore_binary_snapshot(workspace_root: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Exit code that signals the process wrapper to relaunch the binary.
+/// Uses sysexits.h EX_TEMPFAIL (75) — "temporary failure, try again."
+pub const EXIT_RESTART: i64 = 75;
+
+/// Self-restart builtin step: rebuild the binary, verify it, snapshot .stable,
+/// set task status to restart_pending, and return EXIT_RESTART so the process
+/// wrapper (orchestrator.sh) re-launches the new binary.
+pub async fn execute_self_restart_step(
+    workspace_root: &Path,
+    state: &InnerState,
+    task_id: &str,
+    item_id: &str,
+) -> Result<i64> {
+    let core_dir = workspace_root.join("core");
+    let cargo_bin = std::env::var("ORCH_SELF_TEST_CARGO").unwrap_or_else(|_| "cargo".to_string());
+    let binary_path = workspace_root.join(RELEASE_BINARY_REL);
+
+    // Phase 1: cargo build --release
+    state.emit_event(
+        task_id,
+        Some(item_id),
+        "self_restart_phase",
+        json!({"phase": "cargo_build_release"}),
+    );
+    let build_output = tokio::process::Command::new(&cargo_bin)
+        .args(["build", "--release"])
+        .current_dir(&core_dir)
+        .output()
+        .await
+        .context("failed to run cargo build --release")?;
+
+    if !build_output.status.success() {
+        let stderr = String::from_utf8_lossy(&build_output.stderr);
+        error!(phase = "cargo_build_release", stderr = %stderr.trim(), "self-restart build failed");
+        state.emit_event(
+            task_id,
+            Some(item_id),
+            "self_restart_phase",
+            json!({"phase": "cargo_build_release", "passed": false}),
+        );
+        return Ok(build_output.status.code().unwrap_or(1) as i64);
+    }
+    state.emit_event(
+        task_id,
+        Some(item_id),
+        "self_restart_phase",
+        json!({"phase": "cargo_build_release", "passed": true}),
+    );
+
+    // Phase 2: verify new binary responds to --help (timeout 10s)
+    state.emit_event(
+        task_id,
+        Some(item_id),
+        "self_restart_phase",
+        json!({"phase": "verify_binary"}),
+    );
+    let verify_result = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        tokio::process::Command::new(&binary_path)
+            .arg("--help")
+            .output(),
+    )
+    .await;
+
+    match verify_result {
+        Ok(Ok(output)) if output.status.success() => {
+            state.emit_event(
+                task_id,
+                Some(item_id),
+                "self_restart_phase",
+                json!({"phase": "verify_binary", "passed": true}),
+            );
+        }
+        Ok(Ok(output)) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            error!(phase = "verify_binary", stderr = %stderr.trim(), "new binary --help failed");
+            state.emit_event(
+                task_id,
+                Some(item_id),
+                "self_restart_phase",
+                json!({"phase": "verify_binary", "passed": false}),
+            );
+            return Ok(1);
+        }
+        Ok(Err(e)) => {
+            error!(phase = "verify_binary", error = %e, "failed to execute new binary");
+            state.emit_event(
+                task_id,
+                Some(item_id),
+                "self_restart_phase",
+                json!({"phase": "verify_binary", "passed": false, "error": e.to_string()}),
+            );
+            return Ok(1);
+        }
+        Err(_) => {
+            error!(phase = "verify_binary", "new binary --help timed out (10s)");
+            state.emit_event(
+                task_id,
+                Some(item_id),
+                "self_restart_phase",
+                json!({"phase": "verify_binary", "passed": false, "error": "timeout"}),
+            );
+            return Ok(1);
+        }
+    }
+
+    // Phase 3: snapshot the new binary as .stable
+    state.emit_event(
+        task_id,
+        Some(item_id),
+        "self_restart_phase",
+        json!({"phase": "snapshot_binary"}),
+    );
+    let current_cycle: u32 = state
+        .database
+        .connection()
+        .ok()
+        .and_then(|conn| {
+            conn.query_row(
+                "SELECT current_cycle FROM tasks WHERE id = ?1",
+                rusqlite::params![task_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .ok()
+        })
+        .unwrap_or(0) as u32;
+
+    if let Err(e) = snapshot_binary(workspace_root, task_id, current_cycle).await {
+        error!(phase = "snapshot_binary", error = %e, "snapshot failed");
+        state.emit_event(
+            task_id,
+            Some(item_id),
+            "self_restart_phase",
+            json!({"phase": "snapshot_binary", "passed": false, "error": e.to_string()}),
+        );
+        return Ok(1);
+    }
+    state.emit_event(
+        task_id,
+        Some(item_id),
+        "self_restart_phase",
+        json!({"phase": "snapshot_binary", "passed": true}),
+    );
+
+    // Compute SHA256 of the newly built binary for post-restart verification
+    let new_binary_sha256 = match tokio::fs::read(&binary_path).await {
+        Ok(content) => sha256_hex(&content),
+        Err(_) => "unknown".to_string(),
+    };
+
+    // Phase 4: set task status to restart_pending
+    state
+        .db_writer
+        .set_task_status(task_id, "restart_pending", false)?;
+
+    // Persist the event to SQLite (insert_event) so the new process can verify
+    // it is running the expected binary by comparing SHA256.
+    insert_event(
+        state,
+        task_id,
+        Some(item_id),
+        "self_restart_ready",
+        json!({
+            "exit_code": EXIT_RESTART,
+            "binary_sha256": new_binary_sha256,
+            "binary_path": binary_path.to_string_lossy(),
+            "build_git_hash": env!("BUILD_GIT_HASH"),
+            "build_timestamp": env!("BUILD_TIMESTAMP"),
+        }),
+    )?;
+
+    Ok(EXIT_RESTART)
+}
+
+/// Verify the running binary matches what was recorded before restart.
+/// Called after claiming a `restart_pending` task to confirm the new binary
+/// is actually running (not the old one).
+/// Returns Ok(true) if verified, Ok(false) if mismatch, Err on read failure.
+pub fn verify_post_restart_binary(state: &InnerState, task_id: &str) -> Result<bool> {
+    // Read the self_restart_ready event from the DB
+    let conn = state.database.connection()?;
+    let expected_sha256: Option<String> = conn.query_row(
+        "SELECT payload_json FROM events WHERE task_id = ?1 AND event_type = 'self_restart_ready' ORDER BY created_at DESC LIMIT 1",
+        rusqlite::params![task_id],
+        |row| row.get::<_, String>(0),
+    ).ok().and_then(|json_str| {
+        serde_json::from_str::<serde_json::Value>(&json_str).ok()
+            .and_then(|v| v.get("binary_sha256").and_then(|s| s.as_str()).map(|s| s.to_string()))
+    });
+
+    let expected = match expected_sha256 {
+        Some(s) if s != "unknown" => s,
+        _ => return Ok(true), // No recorded hash — skip verification
+    };
+
+    // Compute SHA256 of the currently running binary
+    let current_exe = std::env::current_exe().context("cannot resolve current executable")?;
+    let content = std::fs::read(&current_exe).context("cannot read current executable")?;
+    let actual = sha256_hex(&content);
+
+    if actual == expected {
+        insert_event(
+            state,
+            task_id,
+            None,
+            "binary_verification",
+            json!({"verified": true, "expected_sha256": expected, "actual_sha256": actual, "build_git_hash": env!("BUILD_GIT_HASH"), "build_timestamp": env!("BUILD_TIMESTAMP")}),
+        )?;
+        Ok(true)
+    } else {
+        insert_event(
+            state,
+            task_id,
+            None,
+            "binary_verification",
+            json!({"verified": false, "expected_sha256": expected, "actual_sha256": actual, "current_exe": current_exe.to_string_lossy(), "build_git_hash": env!("BUILD_GIT_HASH"), "build_timestamp": env!("BUILD_TIMESTAMP")}),
+        )?;
+        Ok(false)
+    }
+}
+
 pub async fn execute_self_test_step(
     workspace_root: &Path,
     state: &InnerState,
@@ -389,6 +611,7 @@ pub async fn execute_self_test_step(
 mod tests {
     use super::*;
     use crate::test_utils::TestState;
+    use rusqlite::OptionalExtension;
     use std::io::Write;
     use tempfile::TempDir;
 
@@ -1262,5 +1485,190 @@ mod tests {
         assert_eq!(manifest.sha256, EMPTY_SHA256, "SHA-256 of empty binary should match well-known value");
 
         std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[tokio::test]
+    async fn test_execute_self_restart_step_build_fails() {
+        let _env_guard = ENV_LOCK.lock().await;
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let workspace_root = state.app_root.clone();
+
+        let fake_bin = workspace_root.join("fake-bin");
+        write_executable(
+            &fake_bin.join("cargo"),
+            "#!/bin/sh\nexit 7\n",
+        );
+        std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
+
+        let fake_cargo = fake_bin.join("cargo");
+        unsafe {
+            std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
+        }
+
+        let result = execute_self_restart_step(&workspace_root, &state, "task-1", "item-1")
+            .await
+            .expect("self restart should return exit code");
+
+        unsafe {
+            std::env::remove_var("ORCH_SELF_TEST_CARGO");
+        }
+
+        // Build failure should return the cargo exit code, not EXIT_RESTART
+        assert_eq!(result, 7);
+        assert_ne!(result, EXIT_RESTART);
+
+        // Task status should NOT be restart_pending
+        let conn = state.database.connection().expect("open conn");
+        let status: Option<String> = conn
+            .query_row(
+                "SELECT status FROM tasks WHERE id = ?1",
+                rusqlite::params!["task-1"],
+                |row| row.get(0),
+            )
+            .optional()
+            .expect("query status");
+        // Task may not exist in this test fixture, but if it does, it shouldn't be restart_pending
+        if let Some(s) = status {
+            assert_ne!(s, "restart_pending");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_execute_self_restart_step_success_returns_exit_restart() {
+        let _env_guard = ENV_LOCK.lock().await;
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let workspace_root = state.app_root.clone();
+
+        // Create a fake cargo that succeeds on build
+        let fake_bin = workspace_root.join("fake-bin");
+        write_executable(
+            &fake_bin.join("cargo"),
+            "#!/bin/sh\nexit 0\n",
+        );
+        std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
+
+        // Create a fake binary that responds to --help
+        let binary_path = workspace_root.join(RELEASE_BINARY_REL);
+        write_executable(
+            &binary_path,
+            "#!/bin/sh\necho 'help output'\nexit 0\n",
+        );
+
+        // Create the task in DB so set_task_status can find it
+        let conn = state.database.connection().expect("open conn");
+        conn.execute(
+            "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('task-restart', 'test', 'running', 'ws', 'wf', ?1, '', '[]', '{}', 'test goal', 'auto', '[]', datetime('now'), datetime('now'))",
+            rusqlite::params![workspace_root.to_str().unwrap()],
+        ).expect("insert task");
+
+        let fake_cargo = fake_bin.join("cargo");
+        unsafe {
+            std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
+        }
+
+        let result = execute_self_restart_step(&workspace_root, &state, "task-restart", "item-1")
+            .await
+            .expect("self restart should return exit code");
+
+        unsafe {
+            std::env::remove_var("ORCH_SELF_TEST_CARGO");
+        }
+
+        assert_eq!(result, EXIT_RESTART);
+
+        // Task status should be restart_pending
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM tasks WHERE id = 'task-restart'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query status");
+        assert_eq!(status, "restart_pending");
+
+        // .stable file should exist
+        assert!(workspace_root.join(STABLE_FILE).exists(), ".stable should exist after successful self_restart");
+    }
+
+    #[test]
+    fn test_exit_restart_constant() {
+        assert_eq!(EXIT_RESTART, 75);
+    }
+
+    #[test]
+    fn test_verify_post_restart_binary_no_event_returns_true() {
+        // When there's no self_restart_ready event, verification should pass (no-op)
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let conn = state.database.connection().expect("open conn");
+        conn.execute(
+            "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('t-verify', 'test', 'running', 'ws', 'wf', '/tmp', '', '[]', '{}', 'g', 'agent', '[]', datetime('now'), datetime('now'))",
+            [],
+        )
+        .expect("insert task");
+
+        let result = verify_post_restart_binary(&state, "t-verify");
+        assert!(result.is_ok());
+        assert!(result.unwrap(), "should return true when no event exists");
+    }
+
+    #[test]
+    fn test_verify_post_restart_binary_with_matching_event() {
+        // Record a self_restart_ready event with the SHA256 of the current binary,
+        // then verify — should return true.
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let conn = state.database.connection().expect("open conn");
+        conn.execute(
+            "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('t-match', 'test', 'running', 'ws', 'wf', '/tmp', '', '[]', '{}', 'g', 'agent', '[]', datetime('now'), datetime('now'))",
+            [],
+        )
+        .expect("insert task");
+
+        // Compute SHA256 of the currently running test binary
+        let current_exe = std::env::current_exe().expect("current_exe");
+        let content = std::fs::read(&current_exe).expect("read binary");
+        let current_sha = sha256_hex(&content);
+
+        insert_event(
+            &state,
+            "t-match",
+            Some("item-1"),
+            "self_restart_ready",
+            json!({"exit_code": 75, "binary_sha256": current_sha, "binary_path": "/some/path"}),
+        )
+        .expect("insert event");
+
+        let result = verify_post_restart_binary(&state, "t-match");
+        assert!(result.is_ok());
+        assert!(result.unwrap(), "should return true when SHA256 matches");
+    }
+
+    #[test]
+    fn test_verify_post_restart_binary_with_mismatch() {
+        // Record a self_restart_ready event with a bogus SHA256 — should return false.
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let conn = state.database.connection().expect("open conn");
+        conn.execute(
+            "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('t-mismatch', 'test', 'running', 'ws', 'wf', '/tmp', '', '[]', '{}', 'g', 'agent', '[]', datetime('now'), datetime('now'))",
+            [],
+        )
+        .expect("insert task");
+
+        insert_event(
+            &state,
+            "t-mismatch",
+            Some("item-1"),
+            "self_restart_ready",
+            json!({"exit_code": 75, "binary_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "binary_path": "/some/path"}),
+        )
+        .expect("insert event");
+
+        let result = verify_post_restart_binary(&state, "t-mismatch");
+        assert!(result.is_ok());
+        assert!(!result.unwrap(), "should return false when SHA256 mismatches");
     }
 }

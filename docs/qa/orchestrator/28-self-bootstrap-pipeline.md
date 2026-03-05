@@ -15,7 +15,7 @@ Self-bootstrap workflows allow the orchestrator to orchestrate AI agents that
 develop its own codebase. The simplified AI native SDLC closed-loop:
 
 ```
-plan → qa_doc_gen → implement → qa_testing → ticket_fix → align_tests → doc_governance → loop_guard
+plan → qa_doc_gen → implement → self_test → self_restart → qa_testing → ticket_fix → align_tests → doc_governance → loop_guard
 ```
 
 Key design decisions:
@@ -55,7 +55,7 @@ rm -rf "workspace/${QA_PROJECT}"
 
 ### Expected
 - Task status: `completed`
-- 6 steps execute in order: plan → qa_doc_gen → implement → qa_testing → align_tests → doc_governance
+- 8 steps execute in order: plan → qa_doc_gen → implement → self_test → self_restart → qa_testing → align_tests → doc_governance
 - ticket_fix is skipped (no active tickets, prehook `active_ticket_count > 0` is false)
 
 ### Expected Data State
@@ -63,7 +63,7 @@ rm -rf "workspace/${QA_PROJECT}"
 SELECT json_extract(payload_json, '$.step') AS step
 FROM events WHERE task_id = '{task_id}' AND event_type = 'step_started'
 ORDER BY created_at;
--- Expected: plan, qa_doc_gen, implement, qa_testing, align_tests, doc_governance
+-- Expected: plan, qa_doc_gen, implement, self_test, self_restart, qa_testing, align_tests, doc_governance
 
 SELECT COUNT(*) FROM events WHERE task_id = '{task_id}'
   AND event_type = 'step_skipped'
@@ -128,7 +128,7 @@ SELECT COUNT(*) FROM events WHERE task_id = '{task_id}'
 
 ### Expected
 - Task status: `completed`
-- Steps execute: implement → qa_testing → align_tests → doc_governance
+- Steps execute: implement → self_test → [self_restart skipped] → qa_testing → align_tests → doc_governance
 - align_tests serves as the build+test+lint safety net (no separate builtin steps needed)
 
 ---

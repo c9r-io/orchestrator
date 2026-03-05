@@ -12,4 +12,23 @@ if [[ ! -x "$BINARY" ]]; then
   BINARY="$REPO_ROOT/core/target/release/agent-orchestrator"
 fi
 
-exec "$BINARY" "$@"
+RESTART_EXIT=75
+
+while true; do
+  set +e
+  "$BINARY" "$@"
+  exit_code=$?
+  set -e
+
+  if [[ $exit_code -eq $RESTART_EXIT ]]; then
+    echo "[orchestrator] restart requested (exit $RESTART_EXIT) — re-launching"
+    # Re-check binary exists (rebuild may have changed path)
+    if [[ ! -x "$BINARY" ]]; then
+      echo "[orchestrator] binary missing after restart request — rebuilding"
+      cd "$REPO_ROOT/core" && cargo build --release
+    fi
+    continue
+  fi
+
+  exit "$exit_code"
+done

@@ -12,8 +12,8 @@
 The `self-bootstrap` workflow in `docs/workflow/self-bootstrap.yaml` runs in fixed two-cycle mode:
 
 ```text
-Cycle 1: plan -> qa_doc_gen -> implement -> self_test
-Cycle 2: implement -> self_test -> qa_testing -> ticket_fix(if tickets) -> align_tests -> doc_governance
+Cycle 1: plan -> qa_doc_gen -> implement -> self_test -> self_restart (rebuild + exit 75 → relaunch)
+Cycle 2: implement -> self_test -> [self_restart skipped: repeatable=false] -> qa_testing -> ticket_fix(if tickets) -> align_tests -> doc_governance
 ```
 
 This document verifies two regressions:

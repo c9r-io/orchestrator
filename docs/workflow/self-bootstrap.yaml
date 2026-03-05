@@ -234,8 +234,8 @@ spec:
   # - Segment-based execution groups contiguous same-scope steps (design doc 12)
   #
   # Segments for this workflow:
-  #   ┌─── Task ───────────────────────────────────────────┐  ┌── Item ──────────┐  ┌── Task ──────────────────────┐
-  #   plan + qa_doc_gen + implement + self_test               qa_testing + ticket_fix  align_tests + doc_governance
+  #   ┌─── Task ──────────────────────────────────────────────────────┐  ┌── Item ──────────┐  ┌── Task ──────────────────────┐
+  #   plan + qa_doc_gen + implement + self_test + self_restart          qa_testing + ticket_fix  align_tests + doc_governance
   steps:
     # ── Task segment: plan → qa_doc_gen → implement → self_test ──
     - id: plan
@@ -273,6 +273,17 @@ spec:
       enabled: true
       repeatable: true
       tty: false
+
+    # Self-Restart — rebuild binary + restart process with new binary (builtin)
+    - id: self_restart
+      type: self_restart
+      scope: task
+      builtin: self_restart
+      enabled: true
+      repeatable: false       # only runs on cycle 1
+      tty: false
+      behavior:
+        on_failure: continue  # build failure is non-fatal, loop can still continue
 
     # ── Item segment: qa_testing + ticket_fix (fan out per QA file) ──
     # Deferred to Cycle 2 (last cycle) so Cycle 1 stays focused on production code
@@ -339,8 +350,8 @@ spec:
       builtin: loop_guard
 
   # 2-cycle strategy:
-  #   Cycle 1 — production:  plan → qa_doc_gen → implement → self_test
-  #   Cycle 2 — validation:  implement → self_test → qa_testing → ticket_fix → align_tests → doc_governance
+  #   Cycle 1 — production:  plan → qa_doc_gen → implement → self_test → self_restart (rebuild + exit 75 → relaunch)
+  #   Cycle 2 — validation:  implement → self_test → [self_restart skipped: repeatable=false] → qa_testing → ticket_fix → align_tests → doc_governance
   loop:
     mode: fixed
     max_cycles: 2

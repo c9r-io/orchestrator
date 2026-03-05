@@ -22,7 +22,7 @@ use tracing::warn;
 use super::phase_runner::{
     run_phase, run_phase_with_rotation, shell_escape, PhaseRunRequest, RotatingPhaseRunRequest,
 };
-use super::safety::execute_self_test_step;
+use super::safety::{execute_self_restart_step, execute_self_test_step, EXIT_RESTART};
 use super::task_state::count_unresolved_items;
 use super::RunningTask;
 
@@ -826,6 +826,51 @@ pub async fn process_item_filtered(
                     run_id: String::new(),
                 };
                 acc.apply_captures(&step.behavior.captures, &step.id, &synth_result);
+                continue;
+            }
+
+            ExecutionMode::Builtin { name } if name == "self_restart" => {
+                // Self-restart builtin: rebuild, verify, snapshot, then exit for relaunch
+                let ws_root = std::path::Path::new(&task_ctx.workspace_root);
+                let exit_code =
+                    execute_self_restart_step(ws_root, state, task_id, item_id)
+                        .await
+                        .unwrap_or(1);
+
+                acc.pipeline_vars
+                    .vars
+                    .insert("self_restart_exit_code".to_string(), exit_code.to_string());
+
+                insert_event(
+                    state,
+                    task_id,
+                    Some(item_id),
+                    "step_finished",
+                    json!({"step": phase, "step_scope": step.resolved_scope(), "exit_code": exit_code, "restart": exit_code == EXIT_RESTART}),
+                )?;
+
+                if exit_code == EXIT_RESTART {
+                    // All state is persisted (restart_pending set by execute_self_restart_step).
+                    // Exit process so the wrapper script (orchestrator.sh) relaunches the new binary.
+                    std::process::exit(EXIT_RESTART as i32);
+                }
+
+                // Build or verification failed — apply on_failure behavior
+                if exit_code != 0 {
+                    match &step.behavior.on_failure {
+                        OnFailureAction::Continue => {}
+                        OnFailureAction::SetStatus { status } => {
+                            acc.item_status = status.clone();
+                        }
+                        OnFailureAction::EarlyReturn { status } => {
+                            acc.item_status = status.clone();
+                            acc.terminal = true;
+                            return Ok(());
+                        }
+                    }
+                }
+                acc.step_ran.insert(step.id.clone(), true);
+                acc.exit_codes.insert(step.id.clone(), exit_code as i64);
                 continue;
             }
 

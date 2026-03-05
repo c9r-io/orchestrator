@@ -10,7 +10,7 @@ use std::sync::Arc;
 #[derive(Parser, Debug)]
 #[command(
     name = "orchestrator",
-    version = "0.1.0",
+    version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("BUILD_GIT_HASH"), ")"),
     about = "Agent Orchestrator - workflow automation CLI"
 )]
 pub struct Cli {
@@ -156,6 +156,13 @@ pub enum Commands {
         /// Output format
         #[arg(short, long, default_value = "table")]
         output: OutputFormat,
+    },
+
+    /// Show detailed build version information
+    Version {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
     },
 }
 

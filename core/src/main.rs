@@ -531,6 +531,23 @@ fn try_handle_preflight_command(cli: &Cli) -> Result<Option<i32>> {
             }
             Ok(Some(0))
         }
+        Commands::Version { json } => {
+            if *json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "version": env!("CARGO_PKG_VERSION"),
+                        "git_hash": env!("BUILD_GIT_HASH"),
+                        "build_time": env!("BUILD_TIMESTAMP"),
+                    })
+                );
+            } else {
+                println!("Version:    {}", env!("CARGO_PKG_VERSION"));
+                println!("Git Hash:   {}", env!("BUILD_GIT_HASH"));
+                println!("Build Time: {}", env!("BUILD_TIMESTAMP"));
+            }
+            Ok(Some(0))
+        }
         _ => Ok(None),
     }
 }

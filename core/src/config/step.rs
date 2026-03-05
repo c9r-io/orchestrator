@@ -135,10 +135,11 @@ const KNOWN_STEP_IDS: &[&str] = &[
     "doc_governance",
     "align_tests",
     "self_test",
+    "self_restart",
     "smoke_chain",
 ];
 
-const KNOWN_BUILTIN_STEP_NAMES: &[&str] = &["init_once", "loop_guard", "ticket_scan", "self_test"];
+const KNOWN_BUILTIN_STEP_NAMES: &[&str] = &["init_once", "loop_guard", "ticket_scan", "self_test", "self_restart"];
 
 /// Validate that a step type string is a known step ID.
 pub fn validate_step_type(value: &str) -> Result<String, String> {
@@ -159,6 +160,7 @@ pub fn default_builtin_for_step_id(step_id: &str) -> Option<&'static str> {
         "loop_guard" => Some("loop_guard"),
         "ticket_scan" => Some("ticket_scan"),
         "self_test" => Some("self_test"),
+        "self_restart" => Some("self_restart"),
         _ => None,
     }
 }
@@ -305,6 +307,7 @@ mod tests {
             "doc_governance",
             "align_tests",
             "self_test",
+            "self_restart",
             "smoke_chain",
         ] {
             assert!(validate_step_type(id).is_ok(), "expected valid for {}", id);

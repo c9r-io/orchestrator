@@ -184,7 +184,7 @@ pub fn find_latest_resumable_task_id(
 
     for row in rows {
         let (id, status) = row?;
-        let resumable = matches!(status.as_str(), "running" | "interrupted" | "paused")
+        let resumable = matches!(status.as_str(), "running" | "interrupted" | "paused" | "restart_pending")
             || (include_pending && status == "pending");
         if resumable {
             return Ok(Some(id));

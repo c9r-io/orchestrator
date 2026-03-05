@@ -47,8 +47,15 @@
 本轮按 `self-bootstrap` 的标准链路执行，不做人肉拆任务：
 
 ```text
-plan -> qa_doc_gen -> implement -> self_test -> qa_testing -> ticket_fix -> align_tests -> doc_governance -> loop_guard
+plan -> qa_doc_gen -> implement -> self_test -> self_restart -> qa_testing -> ticket_fix -> align_tests -> doc_governance -> loop_guard
 ```
+
+> **`self_restart` step**: After `self_test` passes, `self_restart` rebuilds the release binary
+> (`cargo build --release`), verifies it (`--help`), snapshots `.stable`, sets the task to
+> `restart_pending`, and exits with code 75. The wrapper script (`orchestrator.sh`) detects
+> exit 75 and relaunches the new binary. The new process auto-resumes the `restart_pending`
+> task and continues into Cycle 2. This step has `repeatable: false`, so it only runs in Cycle 1.
+> Build failure is non-fatal (`on_failure: continue`) — the loop continues with the old binary.
 
 人工职责只有两类：
 
@@ -212,7 +219,22 @@ sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events 
 
 如果改动只发生在外围文档或配置，且未触及根因，应判定为不满足目标。
 
-### 5.3 Self-Test 阶段检查点
+### 5.3 Self-Restart 阶段检查点
+
+确认执行证据表明：
+
+1. `self_restart` 在 Cycle 1 的 `self_test` 之后执行
+2. 进程以 exit code 75 退出，orchestrator.sh 自动重启
+3. 新进程成功接管 `restart_pending` 任务并进入 Cycle 2
+4. 如果 build 失败，任务正常继续（`on_failure: continue`），不影响后续步骤
+
+监控 exit 75 重启：
+```bash
+# 查看 self_restart 相关事件
+sqlite3 data/agent_orchestrator.db "SELECT payload_json FROM events WHERE task_id = '<task_id>' AND event_type LIKE 'self_restart%' ORDER BY id DESC LIMIT 10;"
+```
+
+### 5.4 Self-Test 阶段检查点
 
 确认执行证据表明：
 
@@ -220,7 +242,7 @@ sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events 
 2. 编译和测试闸门未被绕过
 3. 本轮改动未破坏基本自举安全性
 
-### 5.4 Validation 阶段检查点
+### 5.5 Validation 阶段检查点
 
 Cycle 2 中重点观察：
 

@@ -19,7 +19,7 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
             let is_guard = step.step_type == "loop_guard";
             let builtin = if matches!(
                 step.step_type.as_str(),
-                "init_once" | "loop_guard" | "self_test"
+                "init_once" | "loop_guard" | "self_test" | "self_restart"
             ) {
                 Some(step.step_type.clone())
             } else {
@@ -47,7 +47,7 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
             };
             let is_builtin_type = matches!(
                 step.step_type.as_str(),
-                "init_once" | "loop_guard" | "ticket_scan" | "self_test"
+                "init_once" | "loop_guard" | "ticket_scan" | "self_test" | "self_restart"
             );
             let required_capability = step.required_capability.clone().or_else(|| {
                 if is_builtin_type {

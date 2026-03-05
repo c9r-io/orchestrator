@@ -21,7 +21,7 @@ pub fn set_task_status(
             "UPDATE tasks SET status = ?2, started_at = COALESCE(started_at, ?3), completed_at = NULL, updated_at = ?4 WHERE id = ?1",
             params![task_id, status, now.clone(), now],
         )?;
-    } else if matches!(status, "pending" | "paused" | "interrupted") {
+    } else if matches!(status, "pending" | "paused" | "interrupted" | "restart_pending") {
         conn.execute(
             "UPDATE tasks SET status = ?2, completed_at = NULL, updated_at = ?3 WHERE id = ?1",
             params![task_id, status, now],
@@ -55,6 +55,16 @@ pub fn prepare_task_for_start_batch(conn: &TaskRepositoryConn, task_id: &str) ->
              Use 'task pause' first, or wait for it to finish.",
             task_id
         );
+    }
+
+    if matches!(status.as_deref(), Some("restart_pending")) {
+        // Resume without resetting items — preserve exact pre-restart state
+        tx.execute(
+            "UPDATE tasks SET status = 'running', completed_at = NULL, updated_at = ?2 WHERE id = ?1",
+            params![task_id, now_ts()],
+        )?;
+        tx.commit()?;
+        return Ok(());
     }
 
     if matches!(status.as_deref(), Some("failed")) {

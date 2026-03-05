@@ -349,3 +349,74 @@ fn update_task_cycle_state_can_clear_init_done() {
     assert_eq!(cycle, 2);
     assert_eq!(init_done, 0);
 }
+
+// ── restart_pending ────────────────────────────────────────
+
+#[test]
+fn prepare_task_restart_pending_preserves_items() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+
+    // Set task to restart_pending and items to various non-pending states
+    conn.execute(
+        "UPDATE tasks SET status='restart_pending' WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("set restart_pending");
+    conn.execute(
+        "UPDATE task_items SET status='qa_passed' WHERE task_id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("mark items as qa_passed");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    repo.prepare_task_for_start_batch(&task_id)
+        .expect("prepare should succeed");
+
+    // Task status should be running
+    let task_status: String = conn
+        .query_row(
+            "SELECT status FROM tasks WHERE id = ?1",
+            params![task_id.clone()],
+            |row| row.get(0),
+        )
+        .expect("query task status");
+    assert_eq!(task_status, "running");
+
+    // Items should NOT have been reset (still qa_passed, not pending)
+    let item_status: String = conn
+        .query_row(
+            "SELECT status FROM task_items WHERE task_id = ?1 LIMIT 1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .expect("query item status");
+    assert_eq!(item_status, "qa_passed", "restart_pending should preserve item statuses");
+}
+
+#[test]
+fn set_task_status_restart_pending_clears_completed_at() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    conn.execute(
+        "UPDATE tasks SET completed_at='2026-01-01T00:00:00Z' WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("set completed_at");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    repo.set_task_status(&task_id, "restart_pending", false)
+        .expect("set status should succeed");
+
+    let (status, completed_at): (String, Option<String>) = conn
+        .query_row(
+            "SELECT status, completed_at FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("query task");
+    assert_eq!(status, "restart_pending");
+    assert_eq!(completed_at, None, "restart_pending should clear completed_at");
+}

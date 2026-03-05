@@ -36,7 +36,7 @@ pub fn claim_next_pending_task(state: &InnerState) -> Result<Option<String>> {
 
     let task_id: Option<String> = tx
         .query_row(
-            "SELECT id FROM tasks WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1",
+            "SELECT id FROM tasks WHERE status IN ('restart_pending', 'pending') ORDER BY CASE status WHEN 'restart_pending' THEN 0 ELSE 1 END, created_at ASC LIMIT 1",
             [],
             |row| row.get(0),
         )
@@ -48,7 +48,7 @@ pub fn claim_next_pending_task(state: &InnerState) -> Result<Option<String>> {
     };
 
     let updated = tx.execute(
-        "UPDATE tasks SET status = 'running', started_at = COALESCE(started_at, ?2), completed_at = NULL, updated_at = ?3 WHERE id = ?1 AND status = 'pending'",
+        "UPDATE tasks SET status = 'running', started_at = COALESCE(started_at, ?2), completed_at = NULL, updated_at = ?3 WHERE id = ?1 AND status IN ('restart_pending', 'pending')",
         rusqlite::params![task_id, now_ts(), now_ts()],
     )?;
     tx.commit()?;
@@ -290,6 +290,44 @@ mod tests {
 
         // Should not error even if file doesn't exist
         clear_worker_stop_signal(&state).expect("clear nonexistent stop signal");
+    }
+
+    #[test]
+    fn claim_next_prioritizes_restart_pending() {
+        let mut fixture = TestState::new();
+        let (state, pending_task_id) = seed_task(&mut fixture);
+
+        // Create a second task and manually set it to restart_pending
+        let qa_file2 = state.app_root.join("workspace/default/docs/qa/svc_test2.md");
+        std::fs::write(&qa_file2, "# svc test 2\n").expect("seed qa file 2");
+        let created2 = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("restart-test".to_string()),
+                ..Default::default()
+            },
+        )
+        .expect("create second task");
+
+        // Set second task to restart_pending
+        let conn = crate::db::open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET status='restart_pending' WHERE id = ?1",
+            params![created2.id],
+        )
+        .expect("set restart_pending");
+
+        // Claim should pick up restart_pending before pending
+        let claimed = claim_next_pending_task(&state).expect("claim restart_pending task");
+        assert_eq!(
+            claimed.as_deref(),
+            Some(created2.id.as_str()),
+            "restart_pending should be claimed before pending"
+        );
+
+        // Now claiming again should pick up the remaining pending task
+        let claimed2 = claim_next_pending_task(&state).expect("claim pending task");
+        assert_eq!(claimed2.as_deref(), Some(pending_task_id.as_str()));
     }
 
     #[test]
