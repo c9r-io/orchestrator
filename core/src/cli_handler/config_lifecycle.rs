@@ -8,7 +8,7 @@ impl CliHandler {
     pub(super) fn handle_config_lifecycle(&self, cmd: &ConfigLifecycleCommands) -> Result<i32> {
         match cmd {
             ConfigLifecycleCommands::HealLog { limit, json } => self.handle_heal_log(*limit, *json),
-            ConfigLifecycleCommands::BackfillEvents => self.handle_backfill_events(),
+            ConfigLifecycleCommands::BackfillEvents { force } => self.handle_backfill_events(*force),
         }
     }
 
@@ -30,7 +30,12 @@ impl CliHandler {
         Ok(0)
     }
 
-    fn handle_backfill_events(&self) -> Result<i32> {
+    fn handle_backfill_events(&self, force: bool) -> Result<i32> {
+        if !force {
+            eprintln!("⚠ This will bulk-UPDATE all event rows in the database.");
+            eprintln!("  Use --force to confirm: orchestrator config backfill-events --force");
+            return Ok(1);
+        }
         let stats = crate::events_backfill::backfill_event_step_scope(&self.state.db_path)?;
         println!(
             "scanned {} events, updated {}, skipped {} (already had step_scope)",

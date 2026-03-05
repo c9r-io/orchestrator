@@ -58,7 +58,7 @@ fi
 
 BEFORE_ROW="$(sqlite3 "$REPO_ROOT/data/agent_orchestrator.db" "SELECT status || '|' || updated_at FROM task_items WHERE id='${FAILED_ITEM}' LIMIT 1;" 2>/dev/null || true)"
 qa_info "Retrying failed item: $FAILED_ITEM"
-"$BINARY" task retry "$FAILED_ITEM" >/dev/null 2>&1 || true
+"$BINARY" task retry "$FAILED_ITEM" --force >/dev/null 2>&1 || true
 sleep 2
 AFTER_ROW="$(sqlite3 "$REPO_ROOT/data/agent_orchestrator.db" "SELECT status || '|' || updated_at FROM task_items WHERE id='${FAILED_ITEM}' LIMIT 1;" 2>/dev/null || true)"
 STATUS_AFTER="$($BINARY task info "$TASK_ID" 2>/dev/null | grep -oE 'Status: [a-z]+' | awk '{print $2}')"

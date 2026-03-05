@@ -165,21 +165,27 @@ Verify `config backfill-events` provides a manual entry point for event backfill
 
 ### Steps
 
-1. Run backfill manually:
+1. Run backfill without `--force` (safety gate):
    ```bash
-   ./scripts/orchestrator.sh config backfill-events
+   ./scripts/orchestrator.sh config backfill-events 2>&1; echo "exit=$?"
    ```
 
-2. Run again to confirm idempotency:
+2. Run backfill with `--force`:
    ```bash
-   ./scripts/orchestrator.sh config backfill-events
+   ./scripts/orchestrator.sh config backfill-events --force
+   ```
+
+3. Run again to confirm idempotency:
+   ```bash
+   ./scripts/orchestrator.sh config backfill-events --force
    ```
 
 ### Expected
 
-- First run outputs: `scanned N events, updated M, skipped K (already had step_scope)` where M >= 0
-- Second run outputs: `scanned 0 events, updated 0, skipped 0 (already had step_scope)` (all events already backfilled)
-- Exit code 0 on both runs
+- Without `--force`: prints warning to stderr and exits with code 1; no database changes occur.
+- First `--force` run outputs: `scanned N events, updated M, skipped K (already had step_scope)` where M >= 0
+- Second `--force` run outputs: `scanned 0 events, updated 0, skipped 0 (already had step_scope)` (all events already backfilled)
+- Exit code 0 on both `--force` runs
 - Non-step events (cycle_started, task_completed, etc.) are never counted in scanned/updated
 
 ---

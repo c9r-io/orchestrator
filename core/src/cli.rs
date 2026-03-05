@@ -316,6 +316,10 @@ pub enum TaskCommands {
         /// Enqueue task for background worker instead of running inline
         #[arg(long)]
         detach: bool,
+
+        /// Force retry without confirmation (resets execution state)
+        #[arg(short, long)]
+        force: bool,
     },
 
     /// Edit a task execution plan by inserting a step before another step
@@ -636,7 +640,11 @@ pub enum ConfigLifecycleCommands {
     },
 
     /// Backfill missing step_scope in legacy event payloads
-    BackfillEvents,
+    BackfillEvents {
+        /// Force backfill without confirmation (bulk database UPDATE)
+        #[arg(short, long)]
+        force: bool,
+    },
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]

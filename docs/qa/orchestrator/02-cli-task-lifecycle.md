@@ -285,18 +285,23 @@ ORDER BY started_at DESC;
    ```bash
    ./scripts/orchestrator.sh task info {task_id} -o json
    ```
-2. Retry in foreground:
+2. Attempt retry without `--force` (safety gate):
    ```bash
-   ./scripts/orchestrator.sh task retry {task_item_id} || true
+   ./scripts/orchestrator.sh task retry {task_item_id} 2>&1; echo "exit=$?"
    ```
-3. Retry in detach mode:
+3. Retry in foreground with `--force`:
    ```bash
-   ./scripts/orchestrator.sh task retry {task_item_id} --detach
+   ./scripts/orchestrator.sh task retry {task_item_id} --force || true
+   ```
+4. Retry in detach mode with `--force`:
+   ```bash
+   ./scripts/orchestrator.sh task retry {task_item_id} --detach --force
    ```
 
 ### Expected
-- Foreground retry runs immediately and returns terminal result.
-- Detach retry enqueues associated task and returns without inline execution.
+- Without `--force`: prints warning to stderr and exits with code 1; no state change occurs.
+- Foreground retry with `--force` runs immediately and returns terminal result.
+- Detach retry with `--force` enqueues associated task and returns without inline execution.
 
 ### Expected Data State
 ```sql

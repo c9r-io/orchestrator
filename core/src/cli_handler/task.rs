@@ -164,7 +164,13 @@ impl CliHandler {
             TaskCommands::Retry {
                 task_item_id,
                 detach,
+                force,
             } => {
+                if !force {
+                    eprintln!("⚠ This will reset task item execution state for retry.");
+                    eprintln!("  Use --force to confirm: orchestrator task retry <ITEM_ID> --force");
+                    return Ok(1);
+                }
                 let task_id = reset_task_item_for_retry(&self.state, task_item_id)?;
                 if *detach {
                     enqueue_task(&self.state, &task_id)?;
