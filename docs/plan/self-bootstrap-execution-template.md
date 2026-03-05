@@ -87,14 +87,31 @@ cd core && cargo build --release && cd ..
 
 ### 3.3 创建任务（把目标交给 orchestrator）
 
+在创建任务前，先确认目标文件范围。请向用户确认以下选项：
+
+- **选项 A：指定文件**（推荐）——只处理与本次课题直接相关的文件，执行速度快、聚焦度高。
+- **选项 B：全量扫描**——省略 `-t`，系统自动扫描 `qa_targets` 配置的文件夹（默认 `docs/qa/`）下所有 `.md` 文件。适用于全面回归或文档治理场景，但 item 数量可能较多，执行时间相应增加。
+
+#### 选项 A：指定目标文件
+
 ```bash
 ./scripts/orchestrator.sh task create \
   -n "<任务名>" \
   -w self -W self-bootstrap \
   --no-start \
   -g "<将上方任务目标压缩成单行，直接作为 goal 传入>" \
-  -t <主目标文件1> \
-  -t <主目标文件2>
+  -t <目标文件1> \
+  -t <目标文件2>
+```
+
+#### 选项 B：全量扫描
+
+```bash
+./scripts/orchestrator.sh task create \
+  -n "<任务名>" \
+  -w self -W self-bootstrap \
+  --no-start \
+  -g "<将上方任务目标压缩成单行，直接作为 goal 传入>"
 ```
 
 记录返回的 `<task_id>`，然后启动：
