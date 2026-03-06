@@ -135,6 +135,9 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/44-parallel-item-execution.md` | 5 | Parallel item execution: max_parallel config, semaphore-gated JoinSet, RunningTask::fork(), pool size 20 |
 | orchestrator | `docs/qa/orchestrator/45-cli-unsafe-mode.md` | 5 | CLI --unsafe mode: force-gate bypass, runtime runner policy override, audit event, warning banner |
 | orchestrator | `docs/qa/orchestrator/46-persistent-store.md` | 5 | WP01 persistent store: CRD apply, local/command backends, schema validation, project isolation |
+| orchestrator | `docs/qa/orchestrator/47-task-spawning.md` | 5 | WP02 task spawning: SpawnTask/SpawnTasks post-actions, spawn depth safety, task lineage tracking |
+| orchestrator | `docs/qa/orchestrator/48-dynamic-items-selection.md` | 5 | WP03 dynamic items + selection: GenerateItems post-action, item_select builtin, min/max/threshold/weighted strategies |
+| orchestrator | `docs/qa/orchestrator/49-invariant-constraints.md` | 5 | WP04 invariant constraints: command checks, protected files, checkpoint filtering, on_violation actions |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
 | script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |
