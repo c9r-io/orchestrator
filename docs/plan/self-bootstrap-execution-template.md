@@ -75,6 +75,9 @@ cd core && cargo build --release && cd ..
 
 ./scripts/orchestrator.sh db reset -f --include-config --include-history
 ./scripts/orchestrator.sh init -f
+./scripts/orchestrator.sh apply -f docs/workflow/claude-secret.yaml
+./scripts/orchestrator.sh apply -f docs/workflow/minimax-secret.yaml
+# 如需使用 Claude 原生 API，注释上行即可（claude-* 的模型配置将生效）
 ./scripts/orchestrator.sh apply -f docs/workflow/self-bootstrap.yaml
 ```
 

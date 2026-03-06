@@ -174,7 +174,7 @@ spec:
 # Agents are now capability + command only. The {prompt} placeholder is
 # filled at runtime from the StepTemplate resolved by the workflow step.
 ---
-# Architect agent (MiniMax-M2.5-highspeed) — planning and QA doc design
+# Architect agent — planning and QA doc design (model via env: claude-opus or minimax)
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
@@ -184,9 +184,12 @@ spec:
   capabilities:
     - plan
     - qa_doc_gen
-  command: claude -p "{prompt}" --model opus --dangerously-skip-permissions --verbose --output-format stream-json
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-opus
+    - fromRef: minimax
 ---
-# Coder agent (MiniMax-M2.5-highspeed) — code generation, fixing, and test alignment
+# Coder agent — code generation, fixing, and test alignment (model via env: claude-sonnet or minimax)
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
@@ -197,31 +200,40 @@ spec:
     - implement
     - ticket_fix
     - align_tests
-  command: claude -p "{prompt}" --model sonnet --dangerously-skip-permissions --verbose --output-format stream-json
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-sonnet
+    - fromRef: minimax
 ---
-# Tester agent (MiniMax-M2.5-highspeed) — QA scenario execution
+# Tester agent — QA scenario execution (model via env: claude-sonnet or minimax)
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: tester
-  description: "MiniMax-M2.5-highspeed-powered tester agent — QA scenario execution and ticket creation"
+  description: "tester agent — QA scenario execution and ticket creation"
 spec:
   capabilities:
     - qa_testing
-  command: claude -p "{prompt}" --model sonnet --dangerously-skip-permissions --verbose --output-format stream-json
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-sonnet
+    - fromRef: minimax
 ---
-# Reviewer agent (MiniMax-M2.5-highspeed) — doc audit and code review
+# Reviewer agent — doc audit and code review (model via env: claude-haiku or minimax)
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: reviewer
-  description: "MiniMax-M2.5-highspeed-powered reviewer agent — doc governance and code review"
+  description: "reviewer agent — doc governance and code review"
 spec:
   capabilities:
     - doc_governance
     - review
     - loop_guard
-  command: claude -p "{prompt}" --model haiku --dangerously-skip-permissions --verbose --output-format stream-json
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-haiku
+    - fromRef: minimax
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow
