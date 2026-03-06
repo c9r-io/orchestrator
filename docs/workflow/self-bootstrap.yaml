@@ -250,7 +250,8 @@ spec:
   #   plan + qa_doc_gen + implement + self_test + self_restart          qa_testing + ticket_fix  align_tests + doc_governance
 
   # Default parallelism for item-scoped segments (qa_testing + ticket_fix)
-  max_parallel: 4
+  # Reduced from 4 to 2: each claude agent consumes significant CPU/memory
+  max_parallel: 2
 
   steps:
     # ── Task segment: plan → qa_doc_gen → implement → self_test ──

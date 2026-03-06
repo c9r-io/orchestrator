@@ -277,6 +277,28 @@ pub async fn load_task_runtime_context(
             if !task_goal.is_empty() {
                 pv.vars.insert("goal".to_string(), task_goal);
             }
+            // Recover spill file paths that were lost across process restart
+            // (e.g. self_restart exit 75 → relaunch). The spill files persist
+            // on disk at a deterministic path: {logs_dir}/{task_id}/{key}.txt
+            let spill_dir = state.logs_dir.join(task_id);
+            if spill_dir.is_dir() {
+                if let Ok(entries) = std::fs::read_dir(&spill_dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.extension().and_then(|e| e.to_str()) == Some("txt") {
+                            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                                let path_key = format!("{}_path", stem);
+                                if !pv.vars.contains_key(&path_key) {
+                                    pv.vars.insert(
+                                        path_key,
+                                        path.to_string_lossy().to_string(),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             pv
         },
         safety,
