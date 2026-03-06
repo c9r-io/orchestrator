@@ -520,7 +520,8 @@ async fn spawn_phase_process(
     if let Some(pid) = child_pid {
         let _ = state
             .db_writer
-            .update_command_run_pid(&setup.run_id, pid as i64);
+            .update_command_run_pid(&setup.run_id, pid as i64)
+            .await;
     }
     let preview: String = setup.command.chars().take(120).collect();
     insert_event(
