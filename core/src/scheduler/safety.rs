@@ -344,6 +344,15 @@ pub async fn execute_self_restart_step(
         }
     }
 
+    // Capture the SHA256 of the currently running binary before replacing it
+    let old_binary_sha256 = match std::env::current_exe()
+        .ok()
+        .and_then(|p| std::fs::read(p).ok())
+    {
+        Some(content) => sha256_hex(&content),
+        None => "unknown".to_string(),
+    };
+
     // Phase 3: snapshot the new binary as .stable
     state.emit_event(
         task_id,
@@ -401,7 +410,11 @@ pub async fn execute_self_restart_step(
         "self_restart_ready",
         json!({
             "exit_code": EXIT_RESTART,
-            "binary_sha256": new_binary_sha256,
+            "old_binary_sha256": old_binary_sha256,
+            "new_binary_sha256": new_binary_sha256,
+            "binary_changed": old_binary_sha256 != new_binary_sha256
+                && old_binary_sha256 != "unknown"
+                && new_binary_sha256 != "unknown",
             "binary_path": binary_path.to_string_lossy(),
             "build_git_hash": env!("BUILD_GIT_HASH"),
             "build_timestamp": env!("BUILD_TIMESTAMP"),
@@ -419,25 +432,36 @@ pub async fn execute_self_restart_step(
 pub async fn verify_post_restart_binary(state: &InnerState, task_id: &str) -> Result<bool> {
     // Read the self_restart_ready event from the DB
     let task_id_owned = task_id.to_owned();
-    let expected_sha256: Option<String> = state
+    let sha256_pair: Option<(String, String)> = state
         .async_database
         .reader()
         .call(move |conn| {
-            let result: Option<String> = conn.query_row(
+            let result: Option<(String, String)> = conn.query_row(
                 "SELECT payload_json FROM events WHERE task_id = ?1 AND event_type = 'self_restart_ready' ORDER BY created_at DESC LIMIT 1",
                 rusqlite::params![task_id_owned],
                 |row| row.get::<_, String>(0),
             ).ok().and_then(|json_str| {
                 serde_json::from_str::<serde_json::Value>(&json_str).ok()
-                    .and_then(|v| v.get("binary_sha256").and_then(|s| s.as_str()).map(|s| s.to_string()))
+                    .and_then(|v| {
+                        // Support both old field name (binary_sha256) and new (new_binary_sha256)
+                        let new_sha = v.get("new_binary_sha256")
+                            .or_else(|| v.get("binary_sha256"))
+                            .and_then(|s| s.as_str())
+                            .map(|s| s.to_string())?;
+                        let old_sha = v.get("old_binary_sha256")
+                            .and_then(|s| s.as_str())
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|| "unknown".to_string());
+                        Some((new_sha, old_sha))
+                    })
             });
             Ok(result)
         })
         .await
         .map_err(crate::async_database::flatten_err)?;
 
-    let expected = match expected_sha256 {
-        Some(s) if s != "unknown" => s,
+    let (expected, old_binary_sha256) = match sha256_pair {
+        Some((s, old)) if s != "unknown" => (s, old),
         _ => return Ok(true), // No recorded hash — skip verification
     };
 
@@ -452,7 +476,7 @@ pub async fn verify_post_restart_binary(state: &InnerState, task_id: &str) -> Re
             task_id,
             None,
             "binary_verification",
-            json!({"verified": true, "expected_sha256": expected, "actual_sha256": actual, "build_git_hash": env!("BUILD_GIT_HASH"), "build_timestamp": env!("BUILD_TIMESTAMP")}),
+            json!({"verified": true, "old_binary_sha256": old_binary_sha256, "expected_sha256": expected, "actual_sha256": actual, "build_git_hash": env!("BUILD_GIT_HASH"), "build_timestamp": env!("BUILD_TIMESTAMP")}),
         ).await?;
         Ok(true)
     } else {
@@ -461,7 +485,7 @@ pub async fn verify_post_restart_binary(state: &InnerState, task_id: &str) -> Re
             task_id,
             None,
             "binary_verification",
-            json!({"verified": false, "expected_sha256": expected, "actual_sha256": actual, "current_exe": current_exe.to_string_lossy(), "build_git_hash": env!("BUILD_GIT_HASH"), "build_timestamp": env!("BUILD_TIMESTAMP")}),
+            json!({"verified": false, "old_binary_sha256": old_binary_sha256, "expected_sha256": expected, "actual_sha256": actual, "current_exe": current_exe.to_string_lossy(), "build_git_hash": env!("BUILD_GIT_HASH"), "build_timestamp": env!("BUILD_TIMESTAMP")}),
         ).await?;
         Ok(false)
     }
@@ -1629,7 +1653,7 @@ mod tests {
             "t-match",
             Some("item-1"),
             "self_restart_ready",
-            json!({"exit_code": 75, "binary_sha256": current_sha, "binary_path": "/some/path"}),
+            json!({"exit_code": 75, "old_binary_sha256": "aabbcc", "new_binary_sha256": current_sha, "binary_path": "/some/path"}),
         )
         .await
         .expect("insert event");
@@ -1656,7 +1680,7 @@ mod tests {
             "t-mismatch",
             Some("item-1"),
             "self_restart_ready",
-            json!({"exit_code": 75, "binary_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "binary_path": "/some/path"}),
+            json!({"exit_code": 75, "old_binary_sha256": "aabbcc", "new_binary_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "binary_path": "/some/path"}),
         )
         .await
         .expect("insert event");
@@ -1813,7 +1837,7 @@ mod tests {
         // On success, EXIT_RESTART is returned
         assert_eq!(result, EXIT_RESTART);
 
-        // Check that self_restart_ready event was recorded with a binary_sha256 field
+        // Check that self_restart_ready event was recorded with a new_binary_sha256 field
         let event_payload: Option<String> = conn
             .query_row(
                 "SELECT payload_json FROM events WHERE task_id = 'task-sha-unknown' AND event_type = 'self_restart_ready' LIMIT 1",
@@ -1829,11 +1853,11 @@ mod tests {
         let payload_str = event_payload.unwrap();
         let payload: serde_json::Value = serde_json::from_str(&payload_str).expect("parse payload");
         let sha = payload
-            .get("binary_sha256")
+            .get("new_binary_sha256")
             .and_then(|v| v.as_str())
             .unwrap_or("");
         // Either a real sha256 or "unknown" — both are valid outcomes
-        assert!(!sha.is_empty(), "binary_sha256 should be present in event");
+        assert!(!sha.is_empty(), "new_binary_sha256 should be present in event");
     }
 
     #[tokio::test]
@@ -1884,13 +1908,13 @@ mod tests {
             [],
         ).expect("insert task");
 
-        // Record event with binary_sha256 = "unknown"
+        // Record event with new_binary_sha256 = "unknown"
         insert_event(
             &state,
             "t-unknown",
             Some("item-1"),
             "self_restart_ready",
-            json!({"exit_code": 75, "binary_sha256": "unknown", "binary_path": "/some/path"}),
+            json!({"exit_code": 75, "new_binary_sha256": "unknown", "binary_path": "/some/path"}),
         )
         .await
         .expect("insert event");
@@ -1961,5 +1985,122 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[tokio::test]
+    async fn test_execute_self_restart_step_records_old_binary_sha256() {
+        let _env_guard = ENV_LOCK.lock().await;
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let workspace_root = state.app_root.clone();
+
+        // Build succeeds
+        let fake_bin = workspace_root.join("fake-bin");
+        write_executable(&fake_bin.join("cargo"), "#!/bin/sh\nexit 0\n");
+        std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
+
+        // Binary responds to --help successfully
+        let binary_path = workspace_root.join(RELEASE_BINARY_REL);
+        write_executable(&binary_path, "#!/bin/sh\necho 'help'\nexit 0\n");
+
+        // Create task in DB so set_task_status succeeds
+        let conn = crate::db::open_conn(&state.db_path).expect("open conn");
+        conn.execute(
+            "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('task-old-sha', 'test', 'running', 'ws', 'wf', ?1, '', '[]', '{}', 'g', 'agent', '[]', datetime('now'), datetime('now'))",
+            rusqlite::params![workspace_root.to_str().unwrap()],
+        ).expect("insert task");
+
+        let fake_cargo = fake_bin.join("cargo");
+        unsafe {
+            std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
+        }
+
+        let result = execute_self_restart_step(&workspace_root, &state, "task-old-sha", "item-1")
+            .await
+            .expect("should return exit code");
+
+        unsafe {
+            std::env::remove_var("ORCH_SELF_TEST_CARGO");
+        }
+
+        assert_eq!(result, EXIT_RESTART);
+
+        // Verify the self_restart_ready event has old_binary_sha256, new_binary_sha256, and binary_changed
+        let event_payload: String = conn
+            .query_row(
+                "SELECT payload_json FROM events WHERE task_id = 'task-old-sha' AND event_type = 'self_restart_ready' LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query event");
+        let payload: serde_json::Value =
+            serde_json::from_str(&event_payload).expect("parse payload");
+
+        assert!(
+            payload.get("old_binary_sha256").and_then(|v| v.as_str()).is_some(),
+            "self_restart_ready event should contain old_binary_sha256"
+        );
+        assert!(
+            payload.get("new_binary_sha256").and_then(|v| v.as_str()).is_some(),
+            "self_restart_ready event should contain new_binary_sha256"
+        );
+        assert!(
+            payload.get("binary_changed").and_then(|v| v.as_bool()).is_some(),
+            "self_restart_ready event should contain binary_changed"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_verify_post_restart_binary_includes_old_sha256() {
+        // Record a self_restart_ready event with old and new SHA256 fields,
+        // then verify — binary_verification event should include old_binary_sha256.
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let conn = crate::db::open_conn(&state.db_path).expect("open conn");
+        conn.execute(
+            "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('t-old-chain', 'test', 'running', 'ws', 'wf', '/tmp', '', '[]', '{}', 'g', 'agent', '[]', datetime('now'), datetime('now'))",
+            [],
+        ).expect("insert task");
+
+        // Compute SHA256 of the currently running test binary
+        let current_exe = std::env::current_exe().expect("current_exe");
+        let content = std::fs::read(&current_exe).expect("read binary");
+        let current_sha = sha256_hex(&content);
+
+        let old_sha = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        insert_event(
+            &state,
+            "t-old-chain",
+            Some("item-1"),
+            "self_restart_ready",
+            json!({"exit_code": 75, "old_binary_sha256": old_sha, "new_binary_sha256": current_sha, "binary_path": "/some/path"}),
+        )
+        .await
+        .expect("insert event");
+
+        let result = verify_post_restart_binary(&state, "t-old-chain").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap(), "should return true when SHA256 matches");
+
+        // Check that binary_verification event includes old_binary_sha256
+        let verification_payload: String = conn
+            .query_row(
+                "SELECT payload_json FROM events WHERE task_id = 't-old-chain' AND event_type = 'binary_verification' LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query binary_verification event");
+        let vp: serde_json::Value =
+            serde_json::from_str(&verification_payload).expect("parse payload");
+
+        assert_eq!(
+            vp.get("old_binary_sha256").and_then(|v| v.as_str()),
+            Some(old_sha),
+            "binary_verification event should carry old_binary_sha256 from self_restart_ready"
+        );
+        assert!(
+            vp.get("verified").and_then(|v| v.as_bool()) == Some(true),
+            "verified should be true"
+        );
     }
 }
