@@ -329,6 +329,7 @@ mod tests {
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
 
         let code = handler.execute(&cli).expect("edit export should succeed");
@@ -348,6 +349,7 @@ mod tests {
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
 
         let result = handler.execute(&cli);
@@ -369,6 +371,7 @@ mod tests {
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
 
         let result = with_editor_env(None, || handler.execute(&cli));
@@ -411,6 +414,7 @@ YAML"#,
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
 
         let code = with_editor_env(Some(&editor_path.display().to_string()), || {
@@ -484,6 +488,7 @@ fi"#,
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
 
         let code = with_editor_env(Some(&editor_path.display().to_string()), || {
@@ -521,6 +526,7 @@ fi"#,
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
 
         let code = with_editor_env(Some(&editor_path.display().to_string()), || {

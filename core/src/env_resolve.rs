@@ -63,6 +63,18 @@ pub fn resolve_agent_env(
     Ok(resolved)
 }
 
+/// Collect all sensitive values from all SecretStore configs.
+/// Use this when per-agent context is unavailable (e.g., log streaming).
+pub fn collect_all_sensitive_store_values(
+    env_stores: &HashMap<String, EnvStoreConfig>,
+) -> Vec<String> {
+    env_stores
+        .values()
+        .filter(|s| s.sensitive)
+        .flat_map(|s| s.data.values().cloned())
+        .collect()
+}
+
 /// Collect env var values from sensitive stores for redaction.
 pub fn collect_sensitive_values(
     env_entries: &[AgentEnvEntry],
@@ -259,5 +271,22 @@ mod tests {
         }];
         let sensitive = collect_sensitive_values(&entries, &stores);
         assert!(sensitive.is_empty());
+    }
+
+    #[test]
+    fn test_collect_all_sensitive_store_values() {
+        let stores = make_stores();
+        let values = collect_all_sensitive_store_values(&stores);
+        assert!(values.contains(&"sk-test123".to_string()));
+        // non-sensitive store values should not be included
+        assert!(!values.contains(&"postgres://localhost".to_string()));
+        assert!(!values.contains(&"debug".to_string()));
+    }
+
+    #[test]
+    fn test_collect_all_sensitive_store_values_empty() {
+        let stores = HashMap::new();
+        let values = collect_all_sensitive_store_values(&stores);
+        assert!(values.is_empty());
     }
 }

@@ -132,7 +132,7 @@ impl CliHandler {
                 keep_config,
                 force,
             } => {
-                if !force {
+                if !force && !self.is_unsafe() {
                     println!(
                         "Use --force to confirm qa project reset for '{}' (sqlite DB file is preserved)",
                         project_id
@@ -320,6 +320,7 @@ mod tests {
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
         assert_eq!(
             handler
@@ -346,6 +347,7 @@ mod tests {
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
         assert_eq!(
             handler
@@ -373,6 +375,7 @@ mod tests {
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
         assert_eq!(handler.execute(&reset).expect("qa reset should succeed"), 0);
 
@@ -411,6 +414,7 @@ mod tests {
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
         handler
             .execute(&create)
@@ -425,6 +429,7 @@ mod tests {
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
         handler
             .execute(&reset)

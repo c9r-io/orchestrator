@@ -455,7 +455,7 @@ impl CliHandler {
         }
         let (kind, name) = (parts[0], parts[1]);
 
-        if !force {
+        if !force && !self.is_unsafe() {
             println!("Use --force to confirm deletion of {}/{}", kind, name);
             return Ok(0);
         }
@@ -512,6 +512,7 @@ mod tests {
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
 
         let code = handler
@@ -537,6 +538,7 @@ mod tests {
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
 
         let result = handler.execute(&cli);
@@ -559,6 +561,7 @@ mod tests {
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
 
         let result = handler.execute(&cli);
@@ -581,6 +584,7 @@ mod tests {
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
 
         let result = handler.execute(&cli);
@@ -603,6 +607,7 @@ mod tests {
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
 
         let err = handler

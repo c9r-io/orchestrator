@@ -3,6 +3,7 @@
 use crate::anomaly::AnomalyRule;
 use crate::config_load::read_loaded_config;
 use crate::dto::LogChunk;
+use crate::env_resolve::collect_all_sensitive_store_values;
 use crate::runner::redact_text;
 use crate::state::InnerState;
 use anyhow::{Context, Result};
@@ -29,7 +30,9 @@ pub async fn stream_task_logs_impl(
     let runs = state.task_repo.list_task_log_runs(&resolved_id, 14).await?;
     let redaction_patterns = {
         let active = read_loaded_config(state)?;
-        active.config.runner.redaction_patterns.clone()
+        let mut patterns = active.config.runner.redaction_patterns.clone();
+        patterns.extend(collect_all_sensitive_store_values(&active.config.env_stores));
+        patterns
     };
 
     let mut chunks = Vec::new();
@@ -93,6 +96,13 @@ pub async fn stream_task_logs_impl(
 
 /// Follow task logs in real-time.
 pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
+    let redaction_patterns = {
+        let active = read_loaded_config(state)?;
+        let mut patterns = active.config.runner.redaction_patterns.clone();
+        patterns.extend(collect_all_sensitive_store_values(&active.config.env_stores));
+        patterns
+    };
+
     let mut stdout_pos: u64 = 0;
     let mut stderr_pos: u64 = 0;
     let mut current_phase = String::new();
@@ -138,7 +148,9 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
         }
         waiting_notice_printed = false;
 
-        if let Err(err) = follow_one_stream(&stdout_path, &mut stdout_pos, false).await {
+        if let Err(err) =
+            follow_one_stream(&stdout_path, &mut stdout_pos, false, &redaction_patterns).await
+        {
             emit_anomaly_warning(
                 &AnomalyRule::TransientReadError,
                 &format!("{err}"),
@@ -146,7 +158,9 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
             );
         }
 
-        if let Err(err) = follow_one_stream(&stderr_path, &mut stderr_pos, true).await {
+        if let Err(err) =
+            follow_one_stream(&stderr_path, &mut stderr_pos, true, &redaction_patterns).await
+        {
             emit_anomaly_warning(
                 &AnomalyRule::TransientReadError,
                 &format!("{err}"),
@@ -217,7 +231,12 @@ pub(crate) fn tail_lines(path: &Path, limit: usize) -> Result<String> {
     Ok(String::from_utf8_lossy(&data).trim_end().to_string())
 }
 
-async fn follow_one_stream(path: &str, pos: &mut u64, stderr: bool) -> Result<()> {
+async fn follow_one_stream(
+    path: &str,
+    pos: &mut u64,
+    stderr: bool,
+    redaction_patterns: &[String],
+) -> Result<()> {
     use tokio::io::AsyncReadExt;
     use tokio::io::AsyncSeekExt;
 
@@ -244,10 +263,11 @@ async fn follow_one_stream(path: &str, pos: &mut u64, stderr: bool) -> Result<()
         return Ok(());
     }
 
+    let text = redact_text(&String::from_utf8_lossy(&buf[..read]), redaction_patterns);
     if stderr {
-        eprint!("{}", String::from_utf8_lossy(&buf[..read]));
+        eprint!("{text}");
     } else {
-        print!("{}", String::from_utf8_lossy(&buf[..read]));
+        print!("{text}");
     }
     *pos += read as u64;
     Ok(())
@@ -651,6 +671,77 @@ mod tests {
             .expect("stream task logs");
         assert_eq!(chunks.len(), 1);
         assert!(chunks[0].content.contains(LOG_UNAVAILABLE_MARKER));
+    }
+
+    #[tokio::test]
+    async fn stream_task_logs_impl_redacts_secret_store_values() {
+        use crate::config::EnvStoreConfig;
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let item_id = first_item_id(&state, &task_id);
+
+        // Inject a sensitive store into the active config
+        {
+            let mut active = state
+                .active_config
+                .write()
+                .expect("active_config write lock");
+            active.config.env_stores.insert(
+                "secrets".to_string(),
+                EnvStoreConfig {
+                    data: [("API_KEY".to_string(), "super-secret-value".to_string())].into(),
+                    sensitive: true,
+                },
+            );
+        }
+
+        let dir = test_dir("stream-secret-store");
+        let stdout_path = dir.join("secret_out.log");
+        let stderr_path = dir.join("secret_err.log");
+        std::fs::write(&stdout_path, "key=super-secret-value output\n").expect("write stdout");
+        std::fs::write(&stderr_path, "").expect("write stderr");
+
+        state
+            .task_repo
+            .insert_command_run(NewCommandRun {
+                id: "run-secret-store-1".to_string(),
+                task_item_id: item_id,
+                phase: "qa".to_string(),
+                command: "echo secret".to_string(),
+                cwd: "/tmp".to_string(),
+                workspace_id: "default".to_string(),
+                agent_id: "echo".to_string(),
+                exit_code: 0,
+                stdout_path: stdout_path.to_string_lossy().to_string(),
+                stderr_path: stderr_path.to_string_lossy().to_string(),
+                started_at: now_ts(),
+                ended_at: now_ts(),
+                interrupted: 0,
+                output_json: "{}".to_string(),
+                artifacts_json: "[]".to_string(),
+                confidence: None,
+                quality_score: None,
+                validation_status: "unknown".to_string(),
+                session_id: None,
+                machine_output_source: "stdout".to_string(),
+                output_json_path: None,
+            })
+            .await
+            .expect("insert command run");
+
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false)
+            .await
+            .expect("stream task logs");
+        assert_eq!(chunks.len(), 1);
+        assert!(
+            chunks[0].content.contains("[REDACTED]"),
+            "secret store value should be redacted"
+        );
+        assert!(
+            !chunks[0].content.contains("super-secret-value"),
+            "raw secret value must not appear in output"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]

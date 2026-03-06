@@ -156,7 +156,7 @@ impl CliHandler {
                 Ok(0)
             }
             TaskCommands::Delete { task_id, force } => {
-                if !force {
+                if !force && !self.is_unsafe() {
                     println!("Use --force to confirm deletion of task {}", task_id);
                     return Ok(0);
                 }
@@ -174,7 +174,7 @@ impl CliHandler {
                 detach,
                 force,
             } => {
-                if !force {
+                if !force && !self.is_unsafe() {
                     eprintln!("⚠ This will reset task item execution state for retry.");
                     eprintln!(
                         "  Use --force to confirm: orchestrator task retry <ITEM_ID> --force"

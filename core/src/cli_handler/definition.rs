@@ -202,6 +202,7 @@ mod tests {
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
 
         let code = handler.execute(&cli).expect("dry-run should pass");

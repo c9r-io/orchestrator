@@ -114,6 +114,39 @@ mod tests {
         let input = "PASSWORD is secret";
         let result = redact_text(input, &patterns);
         assert!(result.contains("[REDACTED]"));
+        assert!(!result.contains("PASSWORD"));
+    }
+
+    #[test]
+    fn test_redact_text_case_insensitive() {
+        let patterns = vec!["secret".to_string()];
+        let input = "My SeCrEt value";
+        let result = redact_text(input, &patterns);
+        assert!(result.contains("[REDACTED]"));
+        assert!(!result.contains("SeCrEt"));
+    }
+
+    #[test]
+    fn test_redact_text_multiple_case_variants() {
+        let patterns = vec!["token".to_string()];
+        let input = "token TOKEN Token all here";
+        let result = redact_text(input, &patterns);
+        assert!(!result.contains("token"));
+        assert!(!result.contains("TOKEN"));
+        assert!(!result.contains("Token"));
+        assert_eq!(
+            result,
+            "[REDACTED] [REDACTED] [REDACTED] all here"
+        );
+    }
+
+    #[test]
+    fn test_redact_text_secret_value_redaction() {
+        let patterns = vec!["sk-abc123".to_string()];
+        let input = "api key is sk-abc123 in output";
+        let result = redact_text(input, &patterns);
+        assert!(result.contains("[REDACTED]"));
+        assert!(!result.contains("sk-abc123"));
     }
 
     #[test]
@@ -389,8 +422,17 @@ pub fn redact_text(raw: &str, patterns: &[String]) -> String {
         if token.trim().is_empty() {
             continue;
         }
-        out = out.replace(token, "[REDACTED]");
-        out = out.replace(&token.to_uppercase(), "[REDACTED]");
+        let lower_token = token.to_lowercase();
+        let mut result = String::with_capacity(out.len());
+        let lower_out = out.to_lowercase();
+        let mut last = 0;
+        for (idx, _) in lower_out.match_indices(lower_token.as_str()) {
+            result.push_str(&out[last..idx]);
+            result.push_str("[REDACTED]");
+            last = idx + token.len();
+        }
+        result.push_str(&out[last..]);
+        out = result;
     }
     out
 }

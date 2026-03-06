@@ -158,6 +158,7 @@ mod tests {
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
 
         assert_eq!(handler.execute(&cli).expect("check should succeed"), 0);
@@ -177,6 +178,7 @@ mod tests {
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
 
         assert_eq!(handler.execute(&cli).expect("check json should succeed"), 0);
@@ -196,6 +198,7 @@ mod tests {
             verbose: false,
             log_level: None,
             log_format: None,
+            unsafe_mode: false,
         };
 
         // Should succeed even if workflow doesn't exist (just no checks for it)

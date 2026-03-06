@@ -33,8 +33,10 @@ Ensure that explicitly setting `policy: unsafe` is accepted, applied, and the ta
 
 1. Apply config with explicit unsafe policy:
    ```bash
-   ./scripts/orchestrator.sh db reset --force
-   ./scripts/orchestrator.sh init --force
+   QA_PROJECT="qa-unsafe-explicit"
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    cat > /tmp/runner-unsafe-explicit.yaml << 'YAML'
    runner:
      policy: unsafe
@@ -72,7 +74,7 @@ Ensure that explicitly setting `policy: unsafe` is accepted, applied, and the ta
        finalize:
          rules: []
    YAML
-   ./scripts/orchestrator.sh apply -f /tmp/runner-unsafe-explicit.yaml
+   ./scripts/orchestrator.sh apply --project "${QA_PROJECT}" -f /tmp/runner-unsafe-explicit.yaml
    ```
 2. Verify policy applied:
    ```bash
@@ -81,7 +83,7 @@ Ensure that explicitly setting `policy: unsafe` is accepted, applied, and the ta
    ```
 3. Create and run task:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create --project default --name "unsafe-mode-test" --goal "unsafe mode" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "unsafe-mode-test" --goal "unsafe mode" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ./scripts/orchestrator.sh task start "${TASK_ID}" || true
    ./scripts/orchestrator.sh task info "${TASK_ID}" -o json
    ```
@@ -108,8 +110,10 @@ Ensure that `policy: legacy` in YAML manifests is accepted as a backward-compati
 
 1. Apply config using the legacy alias:
    ```bash
-   ./scripts/orchestrator.sh db reset --force
-   ./scripts/orchestrator.sh init --force
+   QA_PROJECT="qa-legacy-alias"
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    cat > /tmp/runner-legacy-alias.yaml << 'YAML'
    runner:
      policy: legacy
@@ -147,7 +151,7 @@ Ensure that `policy: legacy` in YAML manifests is accepted as a backward-compati
        finalize:
          rules: []
    YAML
-   ./scripts/orchestrator.sh apply -f /tmp/runner-legacy-alias.yaml
+   ./scripts/orchestrator.sh apply --project "${QA_PROJECT}" -f /tmp/runner-legacy-alias.yaml
    ```
 2. Verify the policy is normalized to `unsafe` on re-export:
    ```bash

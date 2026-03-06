@@ -67,7 +67,7 @@ impl CliHandler {
                 include_history,
                 include_config,
             } => {
-                if !force {
+                if !force && !self.is_unsafe() {
                     eprintln!("Use --force to confirm database reset");
                     return Ok(1);
                 }
@@ -140,6 +140,73 @@ impl CliHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::TestState;
+    use crate::cli::{Cli, Commands, DbCommands};
+
+    #[test]
+    fn db_reset_force_gate_blocks_without_force_or_unsafe() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let handler = CliHandler::new(state);
+
+        let cli = Cli {
+            command: Commands::Db(DbCommands::Reset {
+                force: false,
+                include_history: false,
+                include_config: false,
+            }),
+            verbose: false,
+            log_level: None,
+            log_format: None,
+            unsafe_mode: false,
+        };
+
+        let result = handler.execute(&cli).expect("handle_db should return Ok");
+        assert_eq!(result, 1, "force gate should block with exit code 1");
+    }
+
+    #[test]
+    fn db_reset_force_gate_bypassed_when_unsafe_mode() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        // Override unsafe_mode on a new state instance via Arc reconstruction
+        let inner = std::sync::Arc::new(crate::state::InnerState {
+            app_root: state.app_root.clone(),
+            db_path: state.db_path.clone(),
+            unsafe_mode: true,
+            async_database: state.async_database.clone(),
+            logs_dir: state.logs_dir.clone(),
+            active_config: std::sync::RwLock::new(
+                state.active_config.read().unwrap().clone()
+            ),
+            active_config_error: std::sync::RwLock::new(None),
+            active_config_notice: std::sync::RwLock::new(None),
+            running: tokio::sync::Mutex::new(std::collections::HashMap::new()),
+            agent_health: std::sync::RwLock::new(std::collections::HashMap::new()),
+            agent_metrics: std::sync::RwLock::new(std::collections::HashMap::new()),
+            message_bus: state.message_bus.clone(),
+            event_sink: std::sync::RwLock::new(state.event_sink.read().unwrap().clone()),
+            db_writer: state.db_writer.clone(),
+            session_store: state.session_store.clone(),
+            task_repo: state.task_repo.clone(),
+        });
+        let handler = CliHandler::new(inner);
+
+        let cli = Cli {
+            command: Commands::Db(DbCommands::Reset {
+                force: false,
+                include_history: false,
+                include_config: false,
+            }),
+            verbose: false,
+            log_level: None,
+            log_format: None,
+            unsafe_mode: true,
+        };
+
+        let result = handler.execute(&cli).expect("handle_db should return Ok");
+        assert_eq!(result, 0, "force gate should be bypassed by unsafe_mode");
+    }
 
     fn create_mock_file(path: &std::path::Path, content: &[u8]) {
         let parent = path.parent().expect("mock file parent");

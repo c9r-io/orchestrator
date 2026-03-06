@@ -28,6 +28,10 @@ pub struct Cli {
     /// Override structured console log format
     #[arg(long, global = true)]
     pub log_format: Option<CliLogFormat>,
+
+    /// Bypass all --force gates and override runner policy to Unsafe (power-user escape hatch)
+    #[arg(long = "unsafe", global = true)]
+    pub unsafe_mode: bool,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -1849,5 +1853,26 @@ mod tests {
                 "expected check command via alias"
             ),
         }
+    }
+
+    #[test]
+    fn parse_unsafe_flag_sets_unsafe_mode_true() {
+        let cli = Cli::parse_from(["orchestrator", "--unsafe", "task", "list"]);
+        assert!(cli.unsafe_mode, "--unsafe flag should set unsafe_mode to true");
+    }
+
+    #[test]
+    fn parse_default_unsafe_mode_is_false() {
+        let cli = Cli::parse_from(["orchestrator", "task", "list"]);
+        assert!(!cli.unsafe_mode, "unsafe_mode should default to false");
+    }
+
+    #[test]
+    fn parse_unsafe_flag_works_after_subcommand() {
+        let cli = Cli::parse_from(["orchestrator", "task", "--unsafe", "list"]);
+        assert!(
+            cli.unsafe_mode,
+            "--unsafe global flag should be accepted after subcommand"
+        );
     }
 }

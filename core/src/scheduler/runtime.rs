@@ -251,8 +251,10 @@ pub async fn load_task_runtime_context(
         .map(|ws| ws.self_referential)
         .unwrap_or(false);
 
-    if self_referential
-        || workflow.safety.profile == crate::config::WorkflowSafetyProfile::SelfReferentialProbe
+    if !state.unsafe_mode
+        && (self_referential
+            || workflow.safety.profile
+                == crate::config::WorkflowSafetyProfile::SelfReferentialProbe)
     {
         crate::config_load::validate_self_referential_safety(
             workflow,
@@ -545,5 +547,60 @@ mod tests {
             },
             "the loaded step must dispatch as builtin through the real runtime path"
         );
+    }
+
+    /// Helper: rebuild a state arc with `unsafe_mode = true`, reusing the same DB/config.
+    fn state_with_unsafe_mode(base: &Arc<InnerState>) -> Arc<InnerState> {
+        Arc::new(InnerState {
+            app_root: base.app_root.clone(),
+            db_path: base.db_path.clone(),
+            unsafe_mode: true,
+            async_database: base.async_database.clone(),
+            logs_dir: base.logs_dir.clone(),
+            active_config: std::sync::RwLock::new(
+                base.active_config.read().expect("lock active config").clone(),
+            ),
+            active_config_error: std::sync::RwLock::new(None),
+            active_config_notice: std::sync::RwLock::new(None),
+            running: tokio::sync::Mutex::new(std::collections::HashMap::new()),
+            agent_health: std::sync::RwLock::new(std::collections::HashMap::new()),
+            agent_metrics: std::sync::RwLock::new(std::collections::HashMap::new()),
+            message_bus: base.message_bus.clone(),
+            event_sink: std::sync::RwLock::new(
+                base.event_sink.read().expect("lock event_sink").clone(),
+            ),
+            db_writer: base.db_writer.clone(),
+            session_store: base.session_store.clone(),
+            task_repo: base.task_repo.clone(),
+        })
+    }
+
+    #[tokio::test]
+    async fn load_task_runtime_context_skips_safety_check_when_unsafe_mode() {
+        let mut fixture = TestState::new();
+        let (base_state, task_id) = seed_task(&mut fixture);
+
+        // Set probe profile (which would normally fail for non-self-referential workspace)
+        {
+            let mut active = base_state
+                .active_config
+                .write()
+                .expect("lock active config");
+            let workflow_id = active.default_workflow_id.clone();
+            active
+                .config
+                .workflows
+                .get_mut(&workflow_id)
+                .expect("default workflow")
+                .safety
+                .profile = WorkflowSafetyProfile::SelfReferentialProbe;
+        }
+
+        let unsafe_state = state_with_unsafe_mode(&base_state);
+
+        // With unsafe_mode, the self-referential safety check is skipped — no error expected.
+        load_task_runtime_context(&unsafe_state, &task_id)
+            .await
+            .expect("unsafe_mode should skip self-referential safety validation");
     }
 }

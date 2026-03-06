@@ -25,6 +25,8 @@ High-risk CLI operations that perform irreversible state changes must require `-
 | `config backfill-events` | Bulk UPDATE all event rows | ✓ new |
 | `task retry <item>` | Resets item execution state | ✓ new |
 
+The `--unsafe` global CLI flag bypasses all force gates at once — see `docs/qa/orchestrator/45-cli-unsafe-mode.md`.
+
 Entry point: `./scripts/orchestrator.sh <command>`
 
 ---

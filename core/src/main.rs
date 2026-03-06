@@ -55,7 +55,7 @@ use std::sync::{Arc, RwLock};
 use tokio::sync::Mutex;
 use tracing::info;
 
-fn init_state() -> Result<ManagedState> {
+fn init_state(unsafe_mode: bool) -> Result<ManagedState> {
     let app_root = detect_app_root();
     let (db_path, logs_dir) = initialize_runtime(&app_root)?;
 
@@ -105,6 +105,7 @@ fn init_state() -> Result<ManagedState> {
         inner: Arc::new(crate::state::InnerState {
             app_root,
             db_path,
+            unsafe_mode,
             async_database,
             logs_dir,
             active_config: RwLock::new(active),
@@ -522,7 +523,7 @@ fn try_handle_preflight_command(cli: &Cli) -> Result<Option<i32>> {
             include_history,
             include_config,
         }) => {
-            if !force {
+            if !force && !cli.unsafe_mode {
                 err_line("Use --force to confirm database reset");
                 return Ok(Some(1));
             }
@@ -579,7 +580,15 @@ fn main() -> Result<()> {
     if let Some(exit_code) = try_handle_preflight_command(&cli)? {
         std::process::exit(exit_code);
     }
-    let state = init_state()?;
+    if cli.unsafe_mode {
+        eprintln!("WARNING: --unsafe mode active — all safety gates bypassed");
+    }
+    let state = init_state(cli.unsafe_mode)?;
+    if cli.unsafe_mode {
+        state
+            .inner
+            .emit_event("", None, "unsafe_mode_activated", serde_json::json!({"command": format!("{:?}", cli.command)}));
+    }
 
     cli::run_cli_mode(state.inner.clone(), cli)
 }

@@ -13,7 +13,7 @@ This document validates config lifecycle commands and database reset behavior.
 
 Entry points:
 - `./scripts/orchestrator.sh apply|manifest <command>`
-- `./scripts/orchestrator.sh db reset`
+- `./scripts/orchestrator.sh qa project reset`
 
 > **Note**: `apply` and `manifest validate` accept multi-document YAML with
 > `apiVersion`/`kind`/`metadata`/`spec` resources. The flat config format
@@ -162,33 +162,43 @@ Entry points:
 
 ---
 
-## Scenario 4: Database Reset
+## Scenario 4: Project Reset Clears Task State
 
 ### Preconditions
 
-- Tasks/config exist in database.
+- At least one task exists in the target project.
 
 ### Steps
 
-1. Check current tasks:
+1. Prepare a project with at least one task:
    ```bash
-   ./scripts/orchestrator.sh task list
+   QA_PROJECT="qa-db-reset-test"
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "reset-test" --goal "reset test"
    ```
 
-2. Reset database with force:
+2. Verify task exists in project:
    ```bash
-   ./scripts/orchestrator.sh db reset --force
+   ./scripts/orchestrator.sh task list --project "${QA_PROJECT}"
    ```
 
-3. Verify reset state:
+3. Reset the project:
    ```bash
-   ./scripts/orchestrator.sh task list
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --force
+   ```
+
+4. Verify task records within the project are cleared:
+   ```bash
+   ./scripts/orchestrator.sh task list --project "${QA_PROJECT}"
    ```
 
 ### Expected
 
-- Reset command succeeds with `--force`.
-- Existing task records are cleared.
+- Project reset succeeds with `--force`.
+- Task records within the target project are cleared.
+- Other project data is unaffected.
 
 ---
 
@@ -199,4 +209,4 @@ Entry points:
 | 1 | Manifest Apply - Update Configuration | ☐ | | | |
 | 2 | Manifest Apply - Invalid Configuration | ☐ | | | |
 | 3 | Manifest Apply - Add New Workspace | ☐ | | | |
-| 4 | Database Reset | ☐ | | | |
+| 4 | Project Reset Clears Task State | ☐ | | | |

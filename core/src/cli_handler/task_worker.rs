@@ -232,6 +232,7 @@ mod tests {
                 verbose: false,
                 log_level: None,
                 log_format: None,
+                unsafe_mode: false,
             })
         });
 
@@ -270,6 +271,7 @@ mod tests {
                 verbose: false,
                 log_level: None,
                 log_format: None,
+                unsafe_mode: false,
             })
             .expect("stop worker");
 

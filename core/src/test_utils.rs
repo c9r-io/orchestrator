@@ -276,6 +276,7 @@ impl TestState {
         let state = Arc::new(InnerState {
             app_root: self.temp_root.clone(),
             db_path,
+            unsafe_mode: false,
             async_database,
             logs_dir,
             active_config: RwLock::new(active),

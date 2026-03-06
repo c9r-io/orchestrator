@@ -1029,6 +1029,7 @@ mod tests {
         let state = Arc::new(crate::state::InnerState {
             app_root: project_root.to_path_buf(),
             db_path,
+            unsafe_mode: false,
             async_database: async_database.clone(),
             logs_dir: PathBuf::new(),
             active_config: RwLock::new(crate::config::ActiveConfig {

@@ -27,6 +27,7 @@ pub struct ManagedState {
 pub struct InnerState {
     pub app_root: PathBuf,
     pub db_path: PathBuf,
+    pub unsafe_mode: bool,
     pub async_database: Arc<crate::async_database::AsyncDatabase>,
     pub logs_dir: PathBuf,
     pub active_config: RwLock<ActiveConfig>,

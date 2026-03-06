@@ -42,7 +42,7 @@ Project isolation requirements for QA execution:
 - Before each isolated QA run, recreate the target project with the current CLI: run `orchestrator qa project reset <project> --keep-config --force`, remove `workspace/<project>`, then run `orchestrator qa project create <project> --force`.
 - All QA task creation, task execution, and follow-up inspection must explicitly bind to the intended project. Do not rely on ambient defaults when a project-scoped command is available.
 - Fixture manifests used by QA must be applied only to support that QA run's project/workflow setup. Do not use QA fixtures to overwrite or replace the active orchestrator control-plane state for unrelated tasks.
-- Do not run `orchestrator db reset --include-config`, `orchestrator db reset --force --include-config`, or any equivalent config-destructive reset as part of routine QA scenario execution.
+- Do not run `orchestrator db reset --force`, `orchestrator db reset --include-config`, `orchestrator db reset --force --include-config`, or any variant of `db reset` as a QA scenario setup/cleanup step. Use `qa project reset <project> --force` for project-scoped isolation instead.
 - Do not change `Defaults` to point the whole runtime at a QA-only workflow as part of scenario setup. QA fixtures must not hijack the default workspace/workflow used by unrelated runs such as `self-bootstrap`.
 
 ## Regression Runner
@@ -133,6 +133,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/42-crd-unified-resource-store.md` | 5 | Unified CRD ResourceStore: builtin CRD bootstrap, CrdProjectable round-trip, targeted writeback, apply/delete integration, edge cases |
 | orchestrator | `docs/qa/orchestrator/43-cli-force-gate-audit.md` | 5 | CLI force gate audit: backfill-events, task retry, and existing force-gate regression checks |
 | orchestrator | `docs/qa/orchestrator/44-parallel-item-execution.md` | 5 | Parallel item execution: max_parallel config, semaphore-gated JoinSet, RunningTask::fork(), pool size 20 |
+| orchestrator | `docs/qa/orchestrator/45-cli-unsafe-mode.md` | 5 | CLI --unsafe mode: force-gate bypass, runtime runner policy override, audit event, warning banner |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
 | script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |

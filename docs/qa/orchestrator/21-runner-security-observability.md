@@ -87,8 +87,10 @@ Ensure run-phase command execution is denied by runner policy before process spa
 
 1. Prepare isolated project and apply policy config:
    ```bash
-   ./scripts/orchestrator.sh db reset --force
-   ./scripts/orchestrator.sh init --force
+   QA_PROJECT="qa-runner-deny"
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    cat > /tmp/runner-policy-deny.yaml << 'YAML'
    runner:
      policy: allowlist
@@ -129,11 +131,11 @@ Ensure run-phase command execution is denied by runner policy before process spa
        finalize:
          rules: []
    YAML
-   ./scripts/orchestrator.sh apply -f /tmp/runner-policy-deny.yaml
+   ./scripts/orchestrator.sh apply --project "${QA_PROJECT}" -f /tmp/runner-policy-deny.yaml
    ```
 2. Create and start task:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create --project default --name "runner-policy-deny" --goal "policy deny" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "runner-policy-deny" --goal "policy deny" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ./scripts/orchestrator.sh task start "${TASK_ID}" || true
    ```
 3. Inspect result:

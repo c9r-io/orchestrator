@@ -37,6 +37,10 @@ impl CliHandler {
         Self { state }
     }
 
+    fn is_unsafe(&self) -> bool {
+        self.state.unsafe_mode
+    }
+
     pub fn execute(&self, cli: &Cli) -> Result<i32> {
         match &cli.command {
             Commands::Init { .. } => {

@@ -33,7 +33,7 @@ impl CliHandler {
     }
 
     fn handle_backfill_events(&self, force: bool) -> Result<i32> {
-        if !force {
+        if !force && !self.is_unsafe() {
             eprintln!("⚠ This will bulk-UPDATE all event rows in the database.");
             eprintln!("  Use --force to confirm: orchestrator config backfill-events --force");
             return Ok(1);

@@ -250,7 +250,10 @@ async fn setup_phase_execution(
 
     let (runner, mut resolved_extra_env, sensitive_values) = {
         let active = crate::config_load::read_active_config(state)?;
-        let runner = active.config.runner.clone();
+        let mut runner = active.config.runner.clone();
+        if state.unsafe_mode {
+            runner.policy = crate::config::RunnerPolicy::Unsafe;
+        }
         let (extra_env, sensitive) = if let Some(agent_cfg) = active.config.agents.get(agent_id) {
             if let Some(ref env_entries) = agent_cfg.env {
                 let env =
@@ -744,7 +747,7 @@ async fn validate_phase_output_stage(
         validation_event_payload_json = Some(serde_json::to_string(&json!({
             "phase": phase,
             "run_id": run_id,
-            "error": validation.error.clone(),
+            "error": validation.error.as_deref().map(|e| redact_text(e, redaction_patterns)),
             "stdout_truncated_prefix_bytes": stdout_output.truncated_prefix_bytes,
             "stderr_truncated_prefix_bytes": stderr_output.truncated_prefix_bytes
         }))?);
