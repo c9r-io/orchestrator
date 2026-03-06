@@ -18,6 +18,7 @@ pub mod env_resolve;
 pub mod events;
 pub mod events_backfill;
 pub mod health;
+pub mod json_extract;
 pub mod metrics;
 pub mod migration;
 pub mod observability;

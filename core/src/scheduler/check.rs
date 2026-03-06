@@ -568,6 +568,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                     WorkflowStepConfig {
                         id: "implement".into(),
@@ -589,6 +590,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                     WorkflowStepConfig {
                         id: "loop_guard".into(),
@@ -615,6 +617,7 @@ mod tests {
                         },
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
@@ -723,6 +726,7 @@ mod tests {
                 behavior: StepBehavior::default(),
                 max_parallel: None,
                 timeout_secs: None,
+                item_select_config: None,
             });
 
         let tmp = tempfile::tempdir().expect("create temp dir");
@@ -783,6 +787,7 @@ mod tests {
                 behavior: StepBehavior::default(),
                 max_parallel: None,
                 timeout_secs: None,
+                item_select_config: None,
             });
 
         let tmp = tempfile::tempdir().expect("create temp dir");
@@ -823,6 +828,7 @@ mod tests {
                 behavior: StepBehavior::default(),
                 max_parallel: None,
                 timeout_secs: None,
+                item_select_config: None,
             });
 
         let tmp = tempfile::tempdir().expect("create temp dir");
@@ -890,6 +896,7 @@ mod tests {
             },
             max_parallel: None,
             timeout_secs: None,
+            item_select_config: None,
         }];
 
         let tmp = tempfile::tempdir().expect("create temp dir");
@@ -1007,6 +1014,7 @@ mod tests {
                     behavior: StepBehavior::default(),
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 }],
                 loop_policy: WorkflowLoopConfig::default(),
                 finalize: WorkflowFinalizeConfig { rules: vec![] },
@@ -1073,11 +1081,13 @@ mod tests {
                     behavior: StepBehavior::default(),
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 }],
                 scope: None,
                 behavior: StepBehavior::default(),
                 max_parallel: None,
                 timeout_secs: None,
+                item_select_config: None,
             });
 
         let tmp = tempfile::tempdir().expect("create temp dir");

@@ -81,6 +81,7 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
                 behavior: StepBehavior::default(),
                 max_parallel: step.max_parallel,
                 timeout_secs: step.timeout_secs,
+                item_select_config: None,
             };
             normalize_step_execution_mode(&mut config_step).map_err(|e| anyhow!(e))?;
             Ok(config_step)
@@ -146,6 +147,7 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
             step_timeout_secs: spec.safety.step_timeout_secs,
             binary_snapshot: spec.safety.binary_snapshot,
             profile: parse_safety_profile(spec.safety.profile.as_deref()),
+            ..crate::config::SafetyConfig::default()
         },
         max_parallel: spec.max_parallel,
     })
@@ -824,6 +826,7 @@ mod tests {
                     behavior: StepBehavior::default(),
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 },
                 WorkflowStepConfig {
                     id: "qual".to_string(),
@@ -845,6 +848,7 @@ mod tests {
                     behavior: StepBehavior::default(),
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 },
                 WorkflowStepConfig {
                     id: "bal".to_string(),
@@ -866,6 +870,7 @@ mod tests {
                     behavior: StepBehavior::default(),
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -917,6 +922,7 @@ mod tests {
                 behavior: StepBehavior::default(),
                 max_parallel: None,
                 timeout_secs: None,
+                item_select_config: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Infinite,
@@ -981,6 +987,7 @@ mod tests {
                 behavior: StepBehavior::default(),
                 max_parallel: None,
                 timeout_secs: None,
+                item_select_config: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -1033,6 +1040,7 @@ mod tests {
                 behavior: StepBehavior::default(),
                 max_parallel: None,
                 timeout_secs: None,
+                item_select_config: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -1088,6 +1096,7 @@ mod tests {
             step_timeout_secs: Some(900),
             binary_snapshot: true,
             profile: WorkflowSafetyProfile::SelfReferentialProbe,
+            ..SafetyConfig::default()
         };
         let spec = safety_config_to_spec(&config);
         assert_eq!(spec.max_consecutive_failures, 7);
@@ -1200,6 +1209,7 @@ mod tests {
                 behavior: StepBehavior::default(),
                 max_parallel: None,
                 timeout_secs: None,
+                item_select_config: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -1222,6 +1232,7 @@ mod tests {
                 step_timeout_secs: Some(600),
                 binary_snapshot: true,
                 profile: WorkflowSafetyProfile::SelfReferentialProbe,
+                ..SafetyConfig::default()
             },
             max_parallel: None,
         };

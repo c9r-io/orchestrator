@@ -35,6 +35,7 @@ pub struct TaskRuntimeRow {
     pub goal: String,
     pub project_id: String,
     pub pipeline_vars_json: Option<String>,
+    pub spawn_depth: i64,
 }
 
 pub struct TaskLogRunRow {

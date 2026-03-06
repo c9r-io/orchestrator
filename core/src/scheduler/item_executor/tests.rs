@@ -322,6 +322,7 @@ fn make_step(
         },
         max_parallel: None,
         timeout_secs: None,
+        item_select_config: None,
     }
 }
 
@@ -399,6 +400,9 @@ fn make_task_ctx(
         self_referential: false,
         consecutive_failures: 0,
         project_id: String::new(),
+        pinned_invariants: std::sync::Arc::new(vec![]),
+        workflow_id: String::new(),
+        spawn_depth: 0,
     }
 }
 
@@ -406,6 +410,9 @@ fn make_item(id: &str, qa_file: &str) -> crate::dto::TaskItemRow {
     crate::dto::TaskItemRow {
         id: id.to_string(),
         qa_file_path: qa_file.to_string(),
+        dynamic_vars_json: None,
+        label: None,
+        source: "static".to_string(),
     }
 }
 

@@ -10,6 +10,8 @@ pub struct CreateTaskPayload {
     pub workspace_id: Option<String>,
     pub workflow_id: Option<String>,
     pub target_files: Option<Vec<String>>,
+    pub parent_task_id: Option<String>,
+    pub spawn_reason: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -37,6 +39,9 @@ pub struct TaskSummary {
     pub failed_items: i64,
     pub created_at: String,
     pub updated_at: String,
+    pub parent_task_id: Option<String>,
+    pub spawn_reason: Option<String>,
+    pub spawn_depth: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -105,6 +110,9 @@ pub struct LogChunk {
 pub struct TaskItemRow {
     pub id: String,
     pub qa_file_path: String,
+    pub dynamic_vars_json: Option<String>,
+    pub label: Option<String>,
+    pub source: String,
 }
 
 #[derive(Debug, Clone)]

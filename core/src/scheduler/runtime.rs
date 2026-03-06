@@ -290,10 +290,13 @@ pub async fn load_task_runtime_context(
             }
             pv
         },
+        pinned_invariants: std::sync::Arc::new(safety.invariants.clone()),
         safety,
         self_referential,
         consecutive_failures: 0,
         project_id,
+        workflow_id,
+        spawn_depth: runtime_row.spawn_depth,
     })
 }
 

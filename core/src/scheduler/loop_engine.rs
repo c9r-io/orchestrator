@@ -953,6 +953,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                     TaskExecutionStep {
                         id: "implement".into(),
@@ -974,6 +975,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                     TaskExecutionStep {
                         id: "qa_testing".into(),
@@ -995,6 +997,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                     TaskExecutionStep {
                         id: "ticket_fix".into(),
@@ -1016,6 +1019,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                     TaskExecutionStep {
                         id: "doc_governance".into(),
@@ -1037,6 +1041,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
@@ -1051,6 +1056,9 @@ mod tests {
             self_referential: false,
             consecutive_failures: 0,
             project_id: String::new(),
+            pinned_invariants: std::sync::Arc::new(vec![]),
+            workflow_id: String::new(),
+            spawn_depth: 0,
         };
 
         let segments = build_scope_segments(&task_ctx);
@@ -1102,6 +1110,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                     TaskExecutionStep {
                         id: "loop_guard".into(),
@@ -1123,6 +1132,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
@@ -1137,6 +1147,9 @@ mod tests {
             self_referential: false,
             consecutive_failures: 0,
             project_id: String::new(),
+            pinned_invariants: std::sync::Arc::new(vec![]),
+            workflow_id: String::new(),
+            spawn_depth: 0,
         };
 
         let segments = build_scope_segments(&task_ctx);
@@ -1170,6 +1183,7 @@ mod tests {
             behavior: StepBehavior::default(),
             max_parallel: None,
             timeout_secs: None,
+            item_select_config: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -1180,10 +1194,16 @@ mod tests {
             crate::dto::TaskItemRow {
                 id: "item-1".to_string(),
                 qa_file_path: "a.md".to_string(),
+                dynamic_vars_json: None,
+                label: None,
+                source: "static".to_string(),
             },
             crate::dto::TaskItemRow {
                 id: "item-2".to_string(),
                 qa_file_path: "b.md".to_string(),
+                dynamic_vars_json: None,
+                label: None,
+                source: "static".to_string(),
             },
         ];
         let mut item_state = HashMap::new();
@@ -1255,6 +1275,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                     TaskExecutionStep {
                         id: "qa_testing".into(),
@@ -1275,6 +1296,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                     TaskExecutionStep {
                         id: "ticket_fix".into(),
@@ -1295,6 +1317,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                     TaskExecutionStep {
                         id: "align_tests".into(),
@@ -1315,6 +1338,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
@@ -1328,6 +1352,9 @@ mod tests {
             self_referential: false,
             consecutive_failures: 0,
             project_id: String::new(),
+            pinned_invariants: std::sync::Arc::new(vec![]),
+            workflow_id: String::new(),
+            spawn_depth: 0,
         };
         let segments = build_scope_segments(&task_ctx);
 
@@ -1371,6 +1398,7 @@ mod tests {
                     behavior: StepBehavior::default(),
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 }],
                 loop_policy: WorkflowLoopConfig::default(),
                 finalize: WorkflowFinalizeConfig::default(),
@@ -1383,6 +1411,9 @@ mod tests {
             self_referential: false,
             consecutive_failures: 0,
             project_id: String::new(),
+            pinned_invariants: std::sync::Arc::new(vec![]),
+            workflow_id: String::new(),
+            spawn_depth: 0,
         };
         let segments = build_scope_segments(&task_ctx);
 
@@ -1397,10 +1428,16 @@ mod tests {
             crate::dto::TaskItemRow {
                 id: "item-1".to_string(),
                 qa_file_path: "a.md".to_string(),
+                dynamic_vars_json: None,
+                label: None,
+                source: "static".to_string(),
             },
             crate::dto::TaskItemRow {
                 id: "item-2".to_string(),
                 qa_file_path: "b.md".to_string(),
+                dynamic_vars_json: None,
+                label: None,
+                source: "static".to_string(),
             },
         ];
         let task_id = "task-skip-events";
@@ -1470,6 +1507,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                     TaskExecutionStep {
                         id: "disabled_step".into(),
@@ -1490,6 +1528,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
@@ -1504,6 +1543,9 @@ mod tests {
             self_referential: false,
             consecutive_failures: 0,
             project_id: String::new(),
+            pinned_invariants: std::sync::Arc::new(vec![]),
+            workflow_id: String::new(),
+            spawn_depth: 0,
         };
 
         let segments = build_scope_segments(&task_ctx);
@@ -1533,6 +1575,9 @@ mod tests {
             self_referential: false,
             consecutive_failures: 0,
             project_id: String::new(),
+            pinned_invariants: std::sync::Arc::new(vec![]),
+            workflow_id: String::new(),
+            spawn_depth: 0,
         };
 
         let segments = build_scope_segments(&task_ctx);
@@ -1544,6 +1589,9 @@ mod tests {
         let items = vec![crate::dto::TaskItemRow {
             id: "item-1".to_string(),
             qa_file_path: "a.md".to_string(),
+            dynamic_vars_json: None,
+            label: None,
+            source: "static".to_string(),
         }];
         let mut item_state = HashMap::new();
         let mut task_acc = StepExecutionAccumulator::new(PipelineVariables::default());
@@ -1570,6 +1618,9 @@ mod tests {
         let items = vec![crate::dto::TaskItemRow {
             id: "item-1".to_string(),
             qa_file_path: "a.md".to_string(),
+            dynamic_vars_json: None,
+            label: None,
+            source: "static".to_string(),
         }];
         let mut item_state = HashMap::new();
         let mut existing_acc = StepExecutionAccumulator::new(PipelineVariables::default());
@@ -1631,6 +1682,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                     TaskExecutionStep {
                         id: "qa".into(),
@@ -1651,6 +1703,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                     TaskExecutionStep {
                         id: "governance".into(),
@@ -1671,6 +1724,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig::default(),
@@ -1684,6 +1738,9 @@ mod tests {
             self_referential: false,
             consecutive_failures: 0,
             project_id: String::new(),
+            pinned_invariants: std::sync::Arc::new(vec![]),
+            workflow_id: String::new(),
+            spawn_depth: 0,
         };
         let segments = build_scope_segments(&task_ctx);
         assert_eq!(segments.len(), 3);
@@ -1700,6 +1757,9 @@ mod tests {
         let items = vec![crate::dto::TaskItemRow {
             id: "item-1".to_string(),
             qa_file_path: "a.md".to_string(),
+            dynamic_vars_json: None,
+            label: None,
+            source: "static".to_string(),
         }];
 
         emit_skipped_item_step_events(&state, "task-1", &items, &[])

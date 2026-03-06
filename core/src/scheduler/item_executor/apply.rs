@@ -2,12 +2,13 @@ use crate::config::{
     OnFailureAction, OnSuccessAction, PostAction, TaskExecutionStep, TaskRuntimeContext,
 };
 use crate::events::insert_event;
+use crate::scheduler::spawn::{execute_spawn_task, execute_spawn_tasks, validate_spawn_depth};
 use crate::state::InnerState;
 use crate::ticket::{create_ticket_for_qa_failure, scan_active_tickets_for_task_items};
 use anyhow::Result;
 use serde_json::json;
 use std::sync::Arc;
-use tracing::warn;
+use tracing::{info, warn};
 
 use super::accumulator::StepExecutionAccumulator;
 use super::dispatch::is_execution_hard_failure;
@@ -99,6 +100,73 @@ pub(super) async fn apply_step_results(
                 let tickets = scan_active_tickets_for_task_items(task_ctx, task_item_paths)?;
                 acc.active_tickets = tickets.get(qa_file_path).cloned().unwrap_or_default();
                 acc.new_ticket_count = acc.active_tickets.len() as i64;
+            }
+            PostAction::SpawnTask(spawn_action) if result.is_success() => {
+                if let Err(e) = validate_spawn_depth(
+                    task_ctx.spawn_depth,
+                    task_ctx.safety.max_spawn_depth,
+                ) {
+                    warn!(error = %e, "spawn_task skipped: depth limit");
+                } else {
+                    match execute_spawn_task(
+                        state,
+                        task_id,
+                        &task_ctx.project_id,
+                        &task_ctx.workspace_id,
+                        &task_ctx.workflow_id,
+                        task_ctx.spawn_depth,
+                        &acc.pipeline_vars.vars,
+                        spawn_action,
+                    ) {
+                        Ok(child_id) => {
+                            insert_event(
+                                state,
+                                task_id,
+                                Some(item_id),
+                                "task_spawned",
+                                json!({"child_task_id": child_id}),
+                            )
+                            .await?;
+                        }
+                        Err(e) => warn!(error = %e, "spawn_task failed"),
+                    }
+                }
+            }
+            PostAction::SpawnTasks(spawn_action) if result.is_success() => {
+                if let Err(e) = validate_spawn_depth(
+                    task_ctx.spawn_depth,
+                    task_ctx.safety.max_spawn_depth,
+                ) {
+                    warn!(error = %e, "spawn_tasks skipped: depth limit");
+                } else {
+                    match execute_spawn_tasks(
+                        state,
+                        task_id,
+                        &task_ctx.project_id,
+                        &task_ctx.workspace_id,
+                        &task_ctx.workflow_id,
+                        task_ctx.spawn_depth,
+                        &acc.pipeline_vars.vars,
+                        spawn_action,
+                    ) {
+                        Ok(child_ids) => {
+                            info!(count = child_ids.len(), "spawned batch tasks");
+                            insert_event(
+                                state,
+                                task_id,
+                                Some(item_id),
+                                "tasks_spawned",
+                                json!({"child_task_ids": child_ids}),
+                            )
+                            .await?;
+                        }
+                        Err(e) => warn!(error = %e, "spawn_tasks failed"),
+                    }
+                }
+            }
+            PostAction::GenerateItems(gen_action) => {
+                // Buffer for application after segment completes
+                acc.pending_generate_items = Some(gen_action.clone());
             }
             _ => {}
         }

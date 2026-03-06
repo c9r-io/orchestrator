@@ -1,10 +1,14 @@
 pub mod check;
+pub mod invariant;
+pub mod item_generate;
+pub mod item_select;
 mod item_executor;
 mod loop_engine;
 mod phase_runner;
 mod query;
 mod runtime;
 pub mod safety;
+pub mod spawn;
 mod task_state;
 pub mod trace;
 
@@ -142,6 +146,7 @@ mod tests {
                             behavior: StepBehavior::default(),
                             max_parallel: None,
                             timeout_secs: None,
+                            item_select_config: None,
                         },
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
@@ -164,6 +169,7 @@ mod tests {
                             behavior: StepBehavior::default(),
                             max_parallel: None,
                             timeout_secs: None,
+                            item_select_config: None,
                         },
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
@@ -186,6 +192,7 @@ mod tests {
                             behavior: StepBehavior::default(),
                             max_parallel: None,
                             timeout_secs: None,
+                            item_select_config: None,
                         },
                     ],
                     loop_policy: WorkflowLoopConfig {
@@ -291,11 +298,13 @@ mod tests {
                     behavior: StepBehavior::default(),
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 }],
                 scope: None,
                 behavior: StepBehavior::default(),
                 max_parallel: None,
                 timeout_secs: None,
+                item_select_config: None,
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -391,6 +400,7 @@ mod tests {
                             behavior: StepBehavior::default(),
                             max_parallel: None,
                             timeout_secs: None,
+                            item_select_config: None,
                         },
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
@@ -413,6 +423,7 @@ mod tests {
                             behavior: StepBehavior::default(),
                             max_parallel: None,
                             timeout_secs: None,
+                            item_select_config: None,
                         },
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
@@ -435,6 +446,7 @@ mod tests {
                             behavior: StepBehavior::default(),
                             max_parallel: None,
                             timeout_secs: None,
+                            item_select_config: None,
                         },
                     ],
                     loop_policy: WorkflowLoopConfig {
@@ -688,6 +700,7 @@ mod tests {
                         },
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                     WorkflowStepConfig {
                         id: "item_verify".to_string(),
@@ -709,6 +722,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig {
@@ -812,6 +826,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                     WorkflowStepConfig {
                         id: "item_verify".to_string(),
@@ -833,6 +848,7 @@ mod tests {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     },
                 ],
                 loop_policy: WorkflowLoopConfig {
@@ -944,6 +960,7 @@ mod tests {
                     },
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 }],
                 loop_policy: WorkflowLoopConfig {
                     mode: LoopMode::Fixed,

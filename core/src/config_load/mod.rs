@@ -74,6 +74,7 @@ pub(crate) mod tests {
             behavior: StepBehavior::default(),
             max_parallel: None,
             timeout_secs: None,
+            item_select_config: None,
         }
     }
 

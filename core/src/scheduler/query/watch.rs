@@ -335,6 +335,9 @@ mod tests {
             failed_items: 0,
             created_at: "2026-03-01T00:00:00Z".to_string(),
             updated_at: "2026-03-01T00:00:01Z".to_string(),
+            parent_task_id: None,
+            spawn_reason: None,
+            spawn_depth: 0,
         };
         let events = vec![
             StepEvent {
@@ -408,6 +411,9 @@ mod tests {
             failed_items: 0,
             created_at: "2026-03-01T00:00:00Z".to_string(),
             updated_at: "2026-03-01T00:01:31Z".to_string(),
+            parent_task_id: None,
+            spawn_reason: None,
+            spawn_depth: 0,
         };
         let events = vec![
             StepEvent {
@@ -490,6 +496,9 @@ mod tests {
             failed_items: 0,
             created_at: "2026-03-01T00:00:00Z".to_string(),
             updated_at: "2026-03-01T00:00:31Z".to_string(),
+            parent_task_id: None,
+            spawn_reason: None,
+            spawn_depth: 0,
         };
         let events = vec![
             StepEvent {
@@ -560,6 +569,9 @@ mod tests {
             failed_items: 0,
             created_at: "2026-03-01T00:00:00Z".to_string(),
             updated_at: "2026-03-01T00:00:01Z".to_string(),
+            parent_task_id: None,
+            spawn_reason: None,
+            spawn_depth: 0,
         };
         let events = vec![StepEvent {
             event_type: "step_started".to_string(),

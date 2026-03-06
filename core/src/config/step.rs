@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::WorkflowStepConfig;
+use super::{GenerateItemsAction, SpawnTaskAction, SpawnTasksAction, WorkflowStepConfig};
 
 /// Execution scope for a workflow step
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -81,6 +81,12 @@ pub enum CaptureSource {
 pub enum PostAction {
     CreateTicket,
     ScanTickets,
+    /// WP02: Spawn a single child task.
+    SpawnTask(SpawnTaskAction),
+    /// WP02: Spawn multiple child tasks from a JSON array.
+    SpawnTasks(SpawnTasksAction),
+    /// WP03: Generate dynamic task items from step output.
+    GenerateItems(GenerateItemsAction),
 }
 
 /// How a step is executed.
@@ -137,6 +143,7 @@ const KNOWN_STEP_IDS: &[&str] = &[
     "self_test",
     "self_restart",
     "smoke_chain",
+    "evaluate",
 ];
 
 const KNOWN_BUILTIN_STEP_NAMES: &[&str] = &[
@@ -145,6 +152,7 @@ const KNOWN_BUILTIN_STEP_NAMES: &[&str] = &[
     "ticket_scan",
     "self_test",
     "self_restart",
+    "item_select",
 ];
 
 /// Validate that a step type string is a known step ID.
@@ -167,6 +175,7 @@ pub fn default_builtin_for_step_id(step_id: &str) -> Option<&'static str> {
         "ticket_scan" => Some("ticket_scan"),
         "self_test" => Some("self_test"),
         "self_restart" => Some("self_restart"),
+        "item_select" => Some("item_select"),
         _ => None,
     }
 }
@@ -189,6 +198,7 @@ pub fn default_required_capability_for_step_id(step_id: &str) -> Option<&'static
         "doc_governance" => Some("doc_governance"),
         "align_tests" => Some("align_tests"),
         "smoke_chain" => Some("smoke_chain"),
+        "evaluate" => Some("evaluate"),
         _ => None,
     }
 }

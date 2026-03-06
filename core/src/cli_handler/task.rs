@@ -48,6 +48,8 @@ impl CliHandler {
                     } else {
                         Some(target_file.clone())
                     },
+                    parent_task_id: None,
+                    spawn_reason: None,
                 };
                 let created = create_task_impl(&self.state, payload)?;
                 println!("Task created: {}", created.id);

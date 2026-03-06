@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
 use super::{
-    CostPreference, SafetyConfig, StepBehavior, StepPrehookConfig, StepScope,
+    CostPreference, ItemSelectConfig, SafetyConfig, StepBehavior, StepPrehookConfig, StepScope,
     WorkflowFinalizeConfig,
 };
 
@@ -54,6 +54,9 @@ pub struct WorkflowStepConfig {
     /// Per-step timeout in seconds (overrides global safety.step_timeout_secs)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_secs: Option<u64>,
+    /// WP03: Configuration for item_select builtin step
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_select_config: Option<ItemSelectConfig>,
 }
 
 fn default_true() -> bool {

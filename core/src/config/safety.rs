@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use super::{AgentConfig, WorkflowConfig};
+use super::{AgentConfig, InvariantConfig, WorkflowConfig};
 
 /// Safety configuration for self-bootstrap and dangerous operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,6 +24,18 @@ pub struct SafetyConfig {
     /// Safety policy profile for self-referential workflows
     #[serde(default)]
     pub profile: WorkflowSafetyProfile,
+    /// WP04: Invariant constraints enforced by the engine
+    #[serde(default)]
+    pub invariants: Vec<InvariantConfig>,
+    /// WP02: Maximum total spawned tasks per parent
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_spawned_tasks: Option<usize>,
+    /// WP02: Maximum spawn depth (parent → child → grandchild)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_spawn_depth: Option<usize>,
+    /// WP02: Minimum seconds between spawn bursts
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spawn_cooldown_seconds: Option<u64>,
 }
 
 fn default_max_consecutive_failures() -> u32 {
@@ -39,6 +51,10 @@ impl Default for SafetyConfig {
             step_timeout_secs: None,
             binary_snapshot: false,
             profile: WorkflowSafetyProfile::default(),
+            invariants: Vec::new(),
+            max_spawned_tasks: None,
+            max_spawn_depth: None,
+            spawn_cooldown_seconds: None,
         }
     }
 }
@@ -109,6 +125,7 @@ mod tests {
             step_timeout_secs: Some(600),
             binary_snapshot: true,
             profile: WorkflowSafetyProfile::SelfReferentialProbe,
+            ..SafetyConfig::default()
         };
         let json = serde_json::to_string(&cfg).expect("serialize safety config");
         let cfg2: SafetyConfig = serde_json::from_str(&json).expect("deserialize safety config");

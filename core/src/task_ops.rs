@@ -199,7 +199,7 @@ pub fn create_task_impl(
     let conn = open_conn(&state.db_path)?;
     let tx = conn.unchecked_transaction()?;
     tx.execute(
-        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, project_id, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, execution_plan_json, loop_mode, current_cycle, init_done, resume_token, created_at, updated_at) VALUES (?1, ?2, 'pending', NULL, NULL, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 0, 0, NULL, ?13, ?13)",
+        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, project_id, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, execution_plan_json, loop_mode, current_cycle, init_done, resume_token, created_at, updated_at, parent_task_id, spawn_reason, spawn_depth) VALUES (?1, ?2, 'pending', NULL, NULL, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 0, 0, NULL, ?13, ?13, ?14, ?15, 0)",
         params![
             task_id,
             task_name,
@@ -213,7 +213,9 @@ pub fn create_task_impl(
             workspace.ticket_dir,
             execution_plan_json,
             loop_mode,
-            created_at
+            created_at,
+            payload.parent_task_id,
+            payload.spawn_reason,
         ],
     )?;
 
@@ -311,6 +313,7 @@ mod tests {
             behavior: StepBehavior::default(),
             max_parallel: None,
             timeout_secs: None,
+            item_select_config: None,
         }
     }
 
@@ -371,6 +374,8 @@ mod tests {
             workspace_id: None,
             workflow_id: None,
             target_files: None,
+            parent_task_id: None,
+            spawn_reason: None,
         };
         let result = create_task_impl(&state, payload);
         assert!(
@@ -412,6 +417,8 @@ mod tests {
             workspace_id: None,
             workflow_id: None,
             target_files: None,
+            parent_task_id: None,
+            spawn_reason: None,
         };
         let result = create_task_impl(&state, payload).expect("create custom task");
         assert_eq!(result.name, "My Custom Task");
@@ -430,6 +437,8 @@ mod tests {
             workspace_id: Some("nonexistent-ws".to_string()),
             workflow_id: None,
             target_files: None,
+            parent_task_id: None,
+            spawn_reason: None,
         };
         let result = create_task_impl(&state, payload);
         assert!(result.is_err());
@@ -453,6 +462,8 @@ mod tests {
             workspace_id: None,
             workflow_id: Some("nonexistent-wf".to_string()),
             target_files: None,
+            parent_task_id: None,
+            spawn_reason: None,
         };
         let result = create_task_impl(&state, payload);
         assert!(result.is_err());
@@ -477,6 +488,8 @@ mod tests {
             workspace_id: None,
             workflow_id: None,
             target_files: None,
+            parent_task_id: None,
+            spawn_reason: None,
         };
         let result = create_task_impl(&state, payload);
         assert!(result.is_err());
@@ -517,6 +530,8 @@ mod tests {
             workspace_id: None,
             workflow_id: None,
             target_files: Some(vec![rel1, rel2]),
+            parent_task_id: None,
+            spawn_reason: None,
         };
         let result = create_task_impl(&state, payload).expect("create targeted task");
         assert_eq!(result.total_items, 2, "should have 2 task items");
@@ -547,6 +562,8 @@ mod tests {
             workspace_id: None,
             workflow_id: None,
             target_files: Some(vec!["src/lib.rs".to_string()]),
+            parent_task_id: None,
+            spawn_reason: None,
         };
         let result = create_task_impl(&state, payload).expect("create source task");
         assert_eq!(result.total_items, 1);
@@ -567,6 +584,8 @@ mod tests {
             workspace_id: None,
             workflow_id: Some("task_only".to_string()),
             target_files: None,
+            parent_task_id: None,
+            spawn_reason: None,
         };
         let result = create_task_impl(&state, payload).expect("create task-scoped task");
         assert_eq!(result.total_items, 1);
@@ -597,6 +616,8 @@ mod tests {
             workspace_id: None,
             workflow_id: Some("task_only".to_string()),
             target_files: Some(vec!["src/lib.rs".to_string()]),
+            parent_task_id: None,
+            spawn_reason: None,
         };
         let result = create_task_impl(&state, payload).expect("create task-only targeted task");
         assert_eq!(result.total_items, 1);
@@ -638,6 +659,8 @@ mod tests {
             workspace_id: Some("default".to_string()),
             workflow_id: Some("task_only".to_string()),
             target_files: None,
+            parent_task_id: None,
+            spawn_reason: None,
         };
         let result = create_task_impl(&state, payload).expect("create project fallback task");
         assert_eq!(result.project_id, "proj-a");
@@ -672,6 +695,8 @@ mod tests {
             workspace_id: None,
             workflow_id: Some("task_only".to_string()),
             target_files: Some(vec!["src/a.rs".to_string(), "src/b.rs".to_string()]),
+            parent_task_id: None,
+            spawn_reason: None,
         };
         let result = create_task_impl(&state, payload);
         assert!(result.is_err());
@@ -693,6 +718,8 @@ mod tests {
             workspace_id: None,
             workflow_id: Some("ticket_only".to_string()),
             target_files: None,
+            parent_task_id: None,
+            spawn_reason: None,
         };
         let result = create_task_impl(&state, payload).expect("create ticket seed empty task");
         assert_eq!(result.total_items, 1);
@@ -730,6 +757,8 @@ mod tests {
             workspace_id: None,
             workflow_id: Some("ticket_only".to_string()),
             target_files: None,
+            parent_task_id: None,
+            spawn_reason: None,
         };
         let result = create_task_impl(&state, payload).expect("create ticket-seed task");
         assert_eq!(result.total_items, 1);
@@ -761,6 +790,8 @@ mod tests {
             workspace_id: None,
             workflow_id: None,
             target_files: None,
+            parent_task_id: None,
+            spawn_reason: None,
         };
         let payload2 = CreateTaskPayload {
             name: Some("Task 2".to_string()),
@@ -769,6 +800,8 @@ mod tests {
             workspace_id: None,
             workflow_id: None,
             target_files: None,
+            parent_task_id: None,
+            spawn_reason: None,
         };
         let t1 = create_task_impl(&state, payload1).expect("create first task");
         let t2 = create_task_impl(&state, payload2).expect("create second task");
@@ -799,6 +832,8 @@ mod tests {
             workspace_id: None,
             workflow_id: None,
             target_files: None,
+            parent_task_id: None,
+            spawn_reason: None,
         };
         let task = create_task_impl(&state, payload).expect("create retry task");
 

@@ -23,6 +23,8 @@ pub struct StepExecutionAccumulator {
     pub fix_confidence: Option<f32>,
     pub fix_quality_score: Option<f32>,
     pub terminal: bool,
+    /// Buffered GenerateItems action from a post-action, to be applied after segment completes.
+    pub pending_generate_items: Option<crate::config::GenerateItemsAction>,
 }
 
 impl StepExecutionAccumulator {
@@ -43,6 +45,7 @@ impl StepExecutionAccumulator {
             fix_confidence: None,
             fix_quality_score: None,
             terminal: false,
+            pending_generate_items: None,
         }
     }
 

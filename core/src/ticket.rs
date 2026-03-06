@@ -662,6 +662,9 @@ mod tests {
             self_referential: false,
             consecutive_failures: 0,
             project_id: String::new(),
+            pinned_invariants: std::sync::Arc::new(vec![]),
+            workflow_id: String::new(),
+            spawn_depth: 0,
         };
 
         let result = read_ticket_preview(&task_ctx, "docs/ticket/t1.md");

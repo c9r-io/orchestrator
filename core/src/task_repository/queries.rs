@@ -36,7 +36,7 @@ pub fn resolve_task_id(conn: &Connection, task_id_or_prefix: &str) -> Result<Str
 
 pub fn load_task_summary(conn: &Connection, task_id: &str) -> Result<TaskSummary> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, status, started_at, completed_at, goal, target_files_json, project_id, workspace_id, workflow_id, created_at, updated_at FROM tasks WHERE id = ?1",
+        "SELECT id, name, status, started_at, completed_at, goal, target_files_json, project_id, workspace_id, workflow_id, created_at, updated_at, parent_task_id, spawn_reason, spawn_depth FROM tasks WHERE id = ?1",
     )?;
     stmt.query_row(params![task_id], |row| {
         let target_raw: String = row.get("target_files_json")?;
@@ -63,6 +63,9 @@ pub fn load_task_summary(conn: &Connection, task_id: &str) -> Result<TaskSummary
             failed_items: 0,
             created_at: row.get("created_at")?,
             updated_at: row.get("updated_at")?,
+            parent_task_id: row.get("parent_task_id")?,
+            spawn_reason: row.get("spawn_reason")?,
+            spawn_depth: row.get::<_, Option<i64>>("spawn_depth")?.unwrap_or(0),
         })
     })
     .with_context(|| format!("load task summary for task_id={task_id}"))
@@ -198,7 +201,7 @@ pub fn find_latest_resumable_task_id(
 
 pub fn load_task_runtime_row(conn: &Connection, task_id: &str) -> Result<TaskRuntimeRow> {
     let row = conn.query_row(
-        "SELECT workspace_id, workflow_id, workspace_root, ticket_dir, execution_plan_json, current_cycle, init_done, COALESCE(goal,''), COALESCE(project_id,''), pipeline_vars_json FROM tasks WHERE id = ?1",
+        "SELECT workspace_id, workflow_id, workspace_root, ticket_dir, execution_plan_json, current_cycle, init_done, COALESCE(goal,''), COALESCE(project_id,''), pipeline_vars_json, COALESCE(spawn_depth,0) FROM tasks WHERE id = ?1",
         params![task_id],
         |row| {
             Ok(TaskRuntimeRow {
@@ -212,6 +215,7 @@ pub fn load_task_runtime_row(conn: &Connection, task_id: &str) -> Result<TaskRun
                 goal: row.get(7)?,
                 project_id: row.get(8)?,
                 pipeline_vars_json: row.get(9)?,
+                spawn_depth: row.get(10)?,
             })
         },
     )?;
@@ -239,7 +243,7 @@ pub fn count_unresolved_items(conn: &Connection, task_id: &str) -> Result<i64> {
 
 pub fn list_task_items_for_cycle(conn: &Connection, task_id: &str) -> Result<Vec<TaskItemRow>> {
     let mut stmt = conn.prepare(
-        "SELECT id, qa_file_path
+        "SELECT id, qa_file_path, dynamic_vars_json, label, source
          FROM task_items
          WHERE task_id = ?1
          ORDER BY order_no",
@@ -249,6 +253,9 @@ pub fn list_task_items_for_cycle(conn: &Connection, task_id: &str) -> Result<Vec
             Ok(TaskItemRow {
                 id: row.get(0)?,
                 qa_file_path: row.get(1)?,
+                dynamic_vars_json: row.get(2)?,
+                label: row.get(3)?,
+                source: row.get::<_, Option<String>>(4)?.unwrap_or_else(|| "static".to_string()),
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;

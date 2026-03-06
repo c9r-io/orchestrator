@@ -1,10 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use super::{
     default_scope_for_step_id, is_known_builtin_step_name, AgentConfig, CostPreference,
-    ExecutionMode, OrchestratorConfig, PipelineVariables, SafetyConfig, StepBehavior,
-    StepPrehookConfig, StepScope, WorkflowConfig, WorkflowFinalizeConfig, WorkflowLoopConfig,
+    ExecutionMode, InvariantConfig, ItemSelectConfig, OrchestratorConfig, PipelineVariables,
+    SafetyConfig, StepBehavior, StepPrehookConfig, StepScope, WorkflowConfig,
+    WorkflowFinalizeConfig, WorkflowLoopConfig,
 };
 
 fn default_true() -> bool {
@@ -58,6 +60,9 @@ pub struct TaskExecutionStep {
     /// Per-step timeout in seconds (overrides global safety.step_timeout_secs)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_secs: Option<u64>,
+    /// WP03: Configuration for item_select builtin step
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_select_config: Option<ItemSelectConfig>,
 }
 
 impl TaskExecutionStep {
@@ -158,6 +163,12 @@ pub struct TaskRuntimeContext {
     pub consecutive_failures: u32,
     /// Project ID for project-scoped agent selection (empty = global)
     pub project_id: String,
+    /// WP04: Immutable snapshot of invariants, pinned at task start
+    pub pinned_invariants: Arc<Vec<InvariantConfig>>,
+    /// WP02: Workflow ID for spawn inheritance
+    pub workflow_id: String,
+    /// WP02: Current spawn depth for depth limiting
+    pub spawn_depth: i64,
 }
 
 /// Step prehook context for evaluation
@@ -310,6 +321,7 @@ mod tests {
             behavior: StepBehavior::default(),
             max_parallel: None,
             timeout_secs: None,
+            item_select_config: None,
         }
     }
 
@@ -334,6 +346,7 @@ mod tests {
             behavior: StepBehavior::default(),
             max_parallel: None,
             timeout_secs: None,
+            item_select_config: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -359,6 +372,7 @@ mod tests {
             behavior: StepBehavior::default(),
             max_parallel: None,
             timeout_secs: None,
+            item_select_config: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -384,6 +398,7 @@ mod tests {
             behavior: StepBehavior::default(),
             max_parallel: None,
             timeout_secs: None,
+            item_select_config: None,
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -411,6 +426,7 @@ mod tests {
                     behavior: StepBehavior::default(),
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 },
                 TaskExecutionStep {
                     id: "qa".to_string(),
@@ -431,6 +447,7 @@ mod tests {
                     behavior: StepBehavior::default(),
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 },
             ],
             loop_policy: WorkflowLoopConfig::default(),

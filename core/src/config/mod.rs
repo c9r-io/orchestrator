@@ -2,13 +2,17 @@
 
 mod agent;
 mod defaults;
+mod dynamic_items;
 mod env_store;
 mod execution;
+mod invariant;
+mod item_select;
 mod observability;
 mod pipeline;
 mod prehook;
 mod runner;
 mod safety;
+mod spawn;
 mod step;
 mod step_template;
 mod store_backend_provider;
@@ -17,13 +21,17 @@ mod workflow_store;
 
 pub use agent::*;
 pub use defaults::*;
+pub use dynamic_items::*;
 pub use env_store::*;
 pub use execution::*;
+pub use invariant::*;
+pub use item_select::*;
 pub use observability::*;
 pub use pipeline::*;
 pub use prehook::*;
 pub use runner::*;
 pub use safety::*;
+pub use spawn::*;
 pub use step::*;
 pub use step_template::*;
 pub use store_backend_provider::*;

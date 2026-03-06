@@ -102,6 +102,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                         behavior: StepBehavior::default(),
                         max_parallel: None,
                         timeout_secs: None,
+                        item_select_config: None,
                     }],
                     loop_policy: WorkflowLoopConfig {
                         mode: LoopMode::Once,

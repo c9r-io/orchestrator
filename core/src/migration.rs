@@ -96,6 +96,11 @@ pub fn all_migrations() -> Vec<Migration> {
             name: "m0007_workflow_store_entries",
             up: m0007_workflow_store_entries,
         },
+        Migration {
+            version: 8,
+            name: "m0008_workflow_primitives",
+            up: m0008_workflow_primitives,
+        },
     ]
 }
 
@@ -575,6 +580,58 @@ fn m0007_workflow_store_entries(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+// ── Migration 8: Workflow Primitives (WP02 + WP03) ──
+
+fn m0008_workflow_primitives(conn: &Connection) -> Result<()> {
+    use crate::db::ensure_column;
+
+    // WP02: Task lineage
+    ensure_column(
+        conn,
+        "tasks",
+        "parent_task_id",
+        "ALTER TABLE tasks ADD COLUMN parent_task_id TEXT",
+    )?;
+    ensure_column(
+        conn,
+        "tasks",
+        "spawn_reason",
+        "ALTER TABLE tasks ADD COLUMN spawn_reason TEXT",
+    )?;
+    ensure_column(
+        conn,
+        "tasks",
+        "spawn_depth",
+        "ALTER TABLE tasks ADD COLUMN spawn_depth INTEGER NOT NULL DEFAULT 0",
+    )?;
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_tasks_parent_id ON tasks(parent_task_id);",
+    )
+    .context("m0008: create parent_task_id index")?;
+
+    // WP03: Dynamic item metadata
+    ensure_column(
+        conn,
+        "task_items",
+        "dynamic_vars_json",
+        "ALTER TABLE task_items ADD COLUMN dynamic_vars_json TEXT",
+    )?;
+    ensure_column(
+        conn,
+        "task_items",
+        "label",
+        "ALTER TABLE task_items ADD COLUMN label TEXT",
+    )?;
+    ensure_column(
+        conn,
+        "task_items",
+        "source",
+        "ALTER TABLE task_items ADD COLUMN source TEXT NOT NULL DEFAULT 'static'",
+    )?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -591,8 +648,8 @@ mod tests {
         let conn = mem_conn();
         let migrations = all_migrations();
         let applied = run_pending(&conn, &migrations).expect("run_pending");
-        assert_eq!(applied, 7);
-        assert_eq!(current_version(&conn).expect("version"), 7);
+        assert_eq!(applied, 8);
+        assert_eq!(current_version(&conn).expect("version"), 8);
     }
 
     #[test]
@@ -602,7 +659,7 @@ mod tests {
         run_pending(&conn, &migrations).expect("first run");
         let applied = run_pending(&conn, &migrations).expect("second run");
         assert_eq!(applied, 0);
-        assert_eq!(current_version(&conn).expect("version"), 7);
+        assert_eq!(current_version(&conn).expect("version"), 8);
     }
 
     #[test]
@@ -627,10 +684,10 @@ mod tests {
         assert_eq!(applied, 2);
         assert_eq!(current_version(&conn).expect("version"), 2);
 
-        // Apply all 7 — should only run 3, 4, 5, 6, and 7
+        // Apply all 8 — should only run 3, 4, 5, 6, 7, and 8
         let applied = run_pending(&conn, &all).expect("full run");
-        assert_eq!(applied, 5);
-        assert_eq!(current_version(&conn).expect("version"), 7);
+        assert_eq!(applied, 6);
+        assert_eq!(current_version(&conn).expect("version"), 8);
     }
 
     #[test]
@@ -761,6 +818,7 @@ mod tests {
         let conn = mem_conn();
         // Run migrations 1-3 first
         let mut migs = all_migrations();
+        let _m8 = migs.pop().expect("pop m8");
         let _m7 = migs.pop().expect("pop m7");
         let _m6 = migs.pop().expect("pop m6");
         let _m5 = migs.pop().expect("pop m5");

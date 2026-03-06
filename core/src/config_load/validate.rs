@@ -424,6 +424,7 @@ mod tests {
                     behavior: StepBehavior::default(),
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 },
                 WorkflowStepConfig {
                     id: "self_test_recover".to_string(),
@@ -445,6 +446,7 @@ mod tests {
                     behavior: StepBehavior::default(),
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {
@@ -495,6 +497,7 @@ mod tests {
                     behavior: StepBehavior::default(),
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 },
                 WorkflowStepConfig {
                     id: "implement_phase_two".to_string(),
@@ -516,6 +519,7 @@ mod tests {
                     behavior: StepBehavior::default(),
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {
@@ -566,6 +570,7 @@ mod tests {
                     behavior: StepBehavior::default(),
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 },
                 WorkflowStepConfig {
                     id: "duplicate_step".to_string(),
@@ -587,6 +592,7 @@ mod tests {
                     behavior: StepBehavior::default(),
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {
@@ -642,6 +648,7 @@ mod tests {
                 behavior: StepBehavior::default(),
                 max_parallel: None,
                 timeout_secs: None,
+                item_select_config: None,
             }],
             loop_policy: crate::config::WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -659,6 +666,7 @@ mod tests {
                 step_timeout_secs: None,
                 binary_snapshot: false,
                 profile: WorkflowSafetyProfile::Standard,
+                ..crate::config::SafetyConfig::default()
             },
             max_parallel: None,
         };
@@ -694,6 +702,7 @@ mod tests {
                     behavior: StepBehavior::default(),
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 },
                 WorkflowStepConfig {
                     id: "self_test".to_string(),
@@ -715,6 +724,7 @@ mod tests {
                     behavior: StepBehavior::default(),
                     max_parallel: None,
                     timeout_secs: None,
+                    item_select_config: None,
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {
@@ -733,6 +743,7 @@ mod tests {
                 step_timeout_secs: None,
                 binary_snapshot: false,
                 profile: WorkflowSafetyProfile::Standard,
+                ..crate::config::SafetyConfig::default()
             },
             max_parallel: None,
         };
@@ -761,6 +772,7 @@ mod tests {
                 step_timeout_secs: None,
                 binary_snapshot: false,
                 profile: WorkflowSafetyProfile::Standard,
+                ..crate::config::SafetyConfig::default()
             },
             max_parallel: None,
         };
@@ -1003,6 +1015,7 @@ mod tests {
                 step_timeout_secs: None,
                 binary_snapshot: false,
                 profile: WorkflowSafetyProfile::Standard,
+                ..crate::config::SafetyConfig::default()
             },
             ..make_workflow(vec![])
         };
@@ -1021,6 +1034,7 @@ mod tests {
                 step_timeout_secs: None,
                 binary_snapshot: false,
                 profile: WorkflowSafetyProfile::Standard,
+                ..crate::config::SafetyConfig::default()
             },
             ..make_workflow(vec![])
         };
