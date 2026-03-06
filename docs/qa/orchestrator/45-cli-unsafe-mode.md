@@ -31,28 +31,36 @@ Entry point: `./scripts/orchestrator.sh`
 ### Preconditions
 
 - Orchestrator binary built from latest source.
+- Runtime initialized.
 
 ### Goal
 
-Verify `--unsafe` bypasses the `--force` gate on a destructive command (`db reset`) without requiring `--force`.
+Verify `--unsafe` bypasses the `--force` gate on a project-scoped destructive command without requiring `--force`.
+
+> **Safety note**: Do not use `--unsafe db reset` in QA scenarios — it destroys
+> the runtime database and kills any running self-bootstrap task. Use a
+> project-scoped command to verify force-gate bypass instead.
 
 ### Steps
 
-1. Run `db reset` with `--unsafe` but without `--force`:
+1. Create an isolated QA project with a task to operate on:
    ```bash
-   ./scripts/orchestrator.sh --unsafe db reset 2>&1; echo "exit=$?"
+   QA_PROJECT="qa-unsafe-force-$(date +%s)"
+   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
    ```
 
-2. Verify the database was actually reset (tables recreated):
+2. Run a force-gated command (`qa project reset`) with `--unsafe` but without `--force`:
    ```bash
-   sqlite3 data/agent_orchestrator.db "SELECT count(*) FROM tasks;"
+   ./scripts/orchestrator.sh --unsafe qa project reset "${QA_PROJECT}" --keep-config 2>&1; echo "exit=$?"
    ```
 
 ### Expected
 
 - Command executes successfully (exit code 0).
 - No `Use --force to confirm` prompt appears.
-- Database is reset (tasks table exists but is empty or reflects fresh state).
+- The project was reset (force gate bypassed by `--unsafe`).
 
 ---
 
