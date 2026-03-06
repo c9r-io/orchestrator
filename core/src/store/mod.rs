@@ -18,9 +18,10 @@ pub use validate::validate_schema;
 use crate::async_database::AsyncDatabase;
 use crate::config::{StoreBackendProviderConfig, WorkflowStoreConfig};
 use crate::crd::projection::CrdProjectable;
-use crate::crd::store::ResourceStore;
+use crate::crd::types::CustomResource;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Operations that can be performed on a store.
@@ -96,9 +97,11 @@ impl StoreManager {
     }
 
     /// Execute a store operation, dispatching to the correct backend.
+    ///
+    /// `custom_resources` is the CRD instance map from `OrchestratorConfig.custom_resources`.
     pub async fn execute(
         &self,
-        resource_store: &ResourceStore,
+        custom_resources: &HashMap<String, CustomResource>,
         op: StoreOp,
     ) -> Result<StoreOpResult> {
         let store_name = match &op {
@@ -110,7 +113,7 @@ impl StoreManager {
         };
 
         // Resolve WorkflowStore config (auto-provision with defaults if not declared)
-        let store_config = self.resolve_store_config(resource_store, &store_name);
+        let store_config = self.resolve_store_config(custom_resources, &store_name);
 
         // Validate schema on put
         if let StoreOp::Put { ref value, .. } = op {
@@ -122,27 +125,28 @@ impl StoreManager {
         }
 
         let provider_name = &store_config.provider;
-        self.dispatch(resource_store, provider_name, op).await
+        self.dispatch(custom_resources, provider_name, op).await
     }
 
     fn resolve_store_config(
         &self,
-        resource_store: &ResourceStore,
+        custom_resources: &HashMap<String, CustomResource>,
         store_name: &str,
     ) -> WorkflowStoreConfig {
-        resource_store
-            .get("WorkflowStore", store_name)
+        let key = format!("WorkflowStore/{}", store_name);
+        custom_resources
+            .get(&key)
             .and_then(|cr| WorkflowStoreConfig::from_cr_spec(&cr.spec).ok())
             .unwrap_or_default()
     }
 
     async fn dispatch(
         &self,
-        resource_store: &ResourceStore,
+        custom_resources: &HashMap<String, CustomResource>,
         provider_name: &str,
         op: StoreOp,
     ) -> Result<StoreOpResult> {
-        let provider = self.resolve_provider(resource_store, provider_name)?;
+        let provider = self.resolve_provider(custom_resources, provider_name)?;
 
         if provider.builtin {
             match provider_name {
@@ -160,7 +164,7 @@ impl StoreManager {
 
     fn resolve_provider(
         &self,
-        resource_store: &ResourceStore,
+        custom_resources: &HashMap<String, CustomResource>,
         provider_name: &str,
     ) -> Result<StoreBackendProviderConfig> {
         // Built-in providers don't need a CRD instance
@@ -174,9 +178,10 @@ impl StoreManager {
             _ => {}
         }
 
-        // Look up user-defined provider from ResourceStore
-        resource_store
-            .get("StoreBackendProvider", provider_name)
+        // Look up user-defined provider from custom_resources
+        let key = format!("StoreBackendProvider/{}", provider_name);
+        custom_resources
+            .get(&key)
             .and_then(|cr| StoreBackendProviderConfig::from_cr_spec(&cr.spec).ok())
             .ok_or_else(|| anyhow!("store backend provider '{}' not found", provider_name))
     }

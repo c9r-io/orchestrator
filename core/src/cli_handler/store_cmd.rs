@@ -117,14 +117,17 @@ impl CliHandler {
                 let config = self.state.active_config.read().map_err(|_| {
                     anyhow::anyhow!("failed to read active config")
                 })?;
-                let resource_store = &config.config.resource_store;
+                let custom_resources = &config.config.custom_resources;
 
-                let store_config = resource_store
-                    .get("WorkflowStore", store)
-                    .and_then(|cr| {
-                        crate::config::WorkflowStoreConfig::from_cr_spec(&cr.spec).ok()
-                    })
-                    .unwrap_or_default();
+                let store_config = {
+                    let key = format!("WorkflowStore/{}", store);
+                    custom_resources
+                        .get(&key)
+                        .and_then(|cr| {
+                            crate::config::WorkflowStoreConfig::from_cr_spec(&cr.spec).ok()
+                        })
+                        .unwrap_or_default()
+                };
 
                 let op = StoreOp::Prune {
                     store_name: store.clone(),
@@ -141,12 +144,12 @@ impl CliHandler {
     }
 
     async fn execute_store_op(&self, op: StoreOp) -> Result<StoreOpResult> {
-        let resource_store = {
+        let custom_resources = {
             let config = self.state.active_config.read().map_err(|_| {
                 anyhow::anyhow!("failed to read active config")
             })?;
-            config.config.resource_store.clone()
+            config.config.custom_resources.clone()
         };
-        self.state.store_manager.execute(&resource_store, op).await
+        self.state.store_manager.execute(&custom_resources, op).await
     }
 }

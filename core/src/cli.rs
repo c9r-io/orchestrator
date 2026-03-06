@@ -631,7 +631,7 @@ pub enum StoreCommands {
         limit: u64,
 
         /// Offset for pagination
-        #[arg(short, long, default_value = "0")]
+        #[arg(long, default_value = "0")]
         offset: u64,
 
         /// Output format
