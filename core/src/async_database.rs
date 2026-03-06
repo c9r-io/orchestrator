@@ -24,11 +24,7 @@ impl AsyncDatabase {
             .await
             .map_err(flatten_err)?;
         writer
-            .call(|conn| {
-                configure_conn(conn).map_err(|e| {
-                    tokio_rusqlite::Error::Other(e.into())
-                })
-            })
+            .call(|conn| configure_conn(conn).map_err(|e| tokio_rusqlite::Error::Other(e.into())))
             .await
             .map_err(flatten_err)?;
 
@@ -40,11 +36,7 @@ impl AsyncDatabase {
         .await
         .map_err(flatten_err)?;
         reader
-            .call(|conn| {
-                configure_conn(conn).map_err(|e| {
-                    tokio_rusqlite::Error::Other(e.into())
-                })
-            })
+            .call(|conn| configure_conn(conn).map_err(|e| tokio_rusqlite::Error::Other(e.into())))
             .await
             .map_err(flatten_err)?;
 
@@ -139,9 +131,7 @@ mod tests {
         // Read via reader
         let count: i64 = db
             .reader()
-            .call(|conn| {
-                Ok(conn.query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))?)
-            })
+            .call(|conn| Ok(conn.query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))?))
             .await
             .expect("read count");
         assert_eq!(count, 1);
@@ -171,9 +161,7 @@ mod tests {
         // Read through original
         let count: i64 = db
             .reader()
-            .call(|conn| {
-                Ok(conn.query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))?)
-            })
+            .call(|conn| Ok(conn.query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))?))
             .await
             .expect("read via original");
         assert_eq!(count, 1);

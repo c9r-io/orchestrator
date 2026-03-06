@@ -66,8 +66,7 @@ pub fn init_schema(db_path: &Path) -> Result<()> {
         "#,
     )
     .context("failed to configure sqlite wal mode")?;
-    let applied =
-        crate::migration::run_pending(&conn, &crate::migration::all_migrations())?;
+    let applied = crate::migration::run_pending(&conn, &crate::migration::all_migrations())?;
     if applied > 0 {
         tracing::info!(applied, "schema migrations applied");
     }

@@ -142,7 +142,8 @@ impl CliHandler {
                     .workspaces
                     .iter()
                     .filter_map(|(name, ws)| {
-                        let meta = crate::resource::metadata_from_store(&active.config, "Workspace", name);
+                        let meta =
+                            crate::resource::metadata_from_store(&active.config, "Workspace", name);
                         if !matches_selector(&meta.labels, &selector_terms) {
                             return None;
                         }
@@ -176,7 +177,8 @@ impl CliHandler {
                     .agents
                     .iter()
                     .filter_map(|(name, agent)| {
-                        let meta = crate::resource::metadata_from_store(&active.config, "Agent", name);
+                        let meta =
+                            crate::resource::metadata_from_store(&active.config, "Agent", name);
                         if !matches_selector(&meta.labels, &selector_terms) {
                             return None;
                         }
@@ -217,7 +219,8 @@ impl CliHandler {
                     .workflows
                     .iter()
                     .filter_map(|(name, workflow)| {
-                        let meta = crate::resource::metadata_from_store(&active.config, "Workflow", name);
+                        let meta =
+                            crate::resource::metadata_from_store(&active.config, "Workflow", name);
                         if !matches_selector(&meta.labels, &selector_terms) {
                             return None;
                         }

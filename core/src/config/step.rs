@@ -139,7 +139,13 @@ const KNOWN_STEP_IDS: &[&str] = &[
     "smoke_chain",
 ];
 
-const KNOWN_BUILTIN_STEP_NAMES: &[&str] = &["init_once", "loop_guard", "ticket_scan", "self_test", "self_restart"];
+const KNOWN_BUILTIN_STEP_NAMES: &[&str] = &[
+    "init_once",
+    "loop_guard",
+    "ticket_scan",
+    "self_test",
+    "self_restart",
+];
 
 /// Validate that a step type string is a known step ID.
 pub fn validate_step_type(value: &str) -> Result<String, String> {

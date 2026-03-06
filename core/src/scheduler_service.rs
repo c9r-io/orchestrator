@@ -147,7 +147,9 @@ mod tests {
         std::fs::write(&qa_file, "# scheduler service test\n").expect("seed qa file");
         let created = create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
 
-        let claimed = claim_next_pending_task(&state).await.expect("claim pending task");
+        let claimed = claim_next_pending_task(&state)
+            .await
+            .expect("claim pending task");
         assert_eq!(claimed.as_deref(), Some(created.id.as_str()));
 
         let conn = crate::db::open_conn(&state.db_path).expect("open sqlite");
@@ -173,8 +175,10 @@ mod tests {
         let state_a = state.clone();
         let state_b = state.clone();
 
-        let t1 = tokio::spawn(async move { claim_next_pending_task(&state_a).await.expect("claim a") });
-        let t2 = tokio::spawn(async move { claim_next_pending_task(&state_b).await.expect("claim b") });
+        let t1 =
+            tokio::spawn(async move { claim_next_pending_task(&state_a).await.expect("claim a") });
+        let t2 =
+            tokio::spawn(async move { claim_next_pending_task(&state_b).await.expect("claim b") });
         let r1 = t1.await.expect("thread a");
         let r2 = t2.await.expect("thread b");
 
@@ -243,7 +247,9 @@ mod tests {
         // Claim the only task so none are pending
         let _ = claim_next_pending_task(&state).await.expect("claim");
 
-        let next = next_pending_task_id(&state).await.expect("next pending after claim");
+        let next = next_pending_task_id(&state)
+            .await
+            .expect("next pending after claim");
         assert!(next.is_none(), "should be no pending tasks");
     }
 
@@ -323,7 +329,9 @@ mod tests {
         let (state, pending_task_id) = seed_task(&mut fixture);
 
         // Create a second task and manually set it to restart_pending
-        let qa_file2 = state.app_root.join("workspace/default/docs/qa/svc_test2.md");
+        let qa_file2 = state
+            .app_root
+            .join("workspace/default/docs/qa/svc_test2.md");
         std::fs::write(&qa_file2, "# svc test 2\n").expect("seed qa file 2");
         let created2 = create_task_impl(
             &state,
@@ -343,7 +351,9 @@ mod tests {
         .expect("set restart_pending");
 
         // Claim should pick up restart_pending before pending
-        let claimed = claim_next_pending_task(&state).await.expect("claim restart_pending task");
+        let claimed = claim_next_pending_task(&state)
+            .await
+            .expect("claim restart_pending task");
         assert_eq!(
             claimed.as_deref(),
             Some(created2.id.as_str()),
@@ -351,7 +361,9 @@ mod tests {
         );
 
         // Now claiming again should pick up the remaining pending task
-        let claimed2 = claim_next_pending_task(&state).await.expect("claim pending task");
+        let claimed2 = claim_next_pending_task(&state)
+            .await
+            .expect("claim pending task");
         assert_eq!(claimed2.as_deref(), Some(pending_task_id.as_str()));
     }
 

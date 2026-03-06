@@ -205,7 +205,14 @@ fn query_step_events_with_conn(conn: &Connection, task_id: &str) -> Result<Vec<S
         let task_item_id: Option<String> = row.get(3)?;
         let col_step: Option<String> = row.get(4)?;
         let col_step_scope: Option<String> = row.get(5)?;
-        Ok((event_type, payload_json, created_at, task_item_id, col_step, col_step_scope))
+        Ok((
+            event_type,
+            payload_json,
+            created_at,
+            task_item_id,
+            col_step,
+            col_step_scope,
+        ))
     })?;
 
     let mut events = Vec::new();
@@ -271,10 +278,7 @@ pub async fn query_latest_step_log_paths_async(
         .map_err(flatten_err)
 }
 
-pub async fn query_step_events_async(
-    state: &InnerState,
-    task_id: &str,
-) -> Result<Vec<StepEvent>> {
+pub async fn query_step_events_async(state: &InnerState, task_id: &str) -> Result<Vec<StepEvent>> {
     let task_id = task_id.to_owned();
     state
         .async_database
@@ -482,15 +486,15 @@ mod tests {
     fn tracing_event_sink_does_not_panic_on_all_event_types() {
         let sink = TracingEventSink::new();
         // Error level
-        sink.emit("t1", None, "task_failed", serde_json::json!({"error": "boom"}));
-        // Warning level
-        sink.emit("t1", None, "step_timeout", serde_json::json!({"secs": 60}));
         sink.emit(
             "t1",
             None,
-            "auto_rollback_failed",
-            serde_json::json!({}),
+            "task_failed",
+            serde_json::json!({"error": "boom"}),
         );
+        // Warning level
+        sink.emit("t1", None, "step_timeout", serde_json::json!({"secs": 60}));
+        sink.emit("t1", None, "auto_rollback_failed", serde_json::json!({}));
         // Info level
         sink.emit("t1", Some("i1"), "step_started", serde_json::json!({}));
         sink.emit("t1", None, "step_finished", serde_json::json!({}));

@@ -185,8 +185,10 @@ pub fn find_latest_resumable_task_id(
 
     for row in rows {
         let (id, status) = row?;
-        let resumable = matches!(status.as_str(), "running" | "interrupted" | "paused" | "restart_pending")
-            || (include_pending && status == "pending");
+        let resumable = matches!(
+            status.as_str(),
+            "running" | "interrupted" | "paused" | "restart_pending"
+        ) || (include_pending && status == "pending");
         if resumable {
             return Ok(Some(id));
         }
@@ -234,10 +236,7 @@ pub fn count_unresolved_items(conn: &Connection, task_id: &str) -> Result<i64> {
     .context("count unresolved items")
 }
 
-pub fn list_task_items_for_cycle(
-    conn: &Connection,
-    task_id: &str,
-) -> Result<Vec<TaskItemRow>> {
+pub fn list_task_items_for_cycle(conn: &Connection, task_id: &str) -> Result<Vec<TaskItemRow>> {
     let mut stmt = conn.prepare(
         "SELECT id, qa_file_path
          FROM task_items

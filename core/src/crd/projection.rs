@@ -19,18 +19,18 @@ pub trait CrdProjectable: Sized + Serialize + DeserializeOwned {
 
 // ── Implementations for the 9 builtin config types ───────────────────────────
 
-use crate::config::{
-    AgentConfig, ConfigDefaults, EnvStoreConfig, ProjectConfig, ResumeConfig, RunnerConfig,
-    StepTemplateConfig, WorkflowConfig, WorkspaceConfig,
-};
 use crate::cli_types::{
     AgentSpec, DefaultsSpec, EnvStoreSpec, ProjectSpec, RuntimePolicySpec, StepTemplateSpec,
     WorkspaceSpec,
 };
+use crate::config::{
+    AgentConfig, ConfigDefaults, EnvStoreConfig, ProjectConfig, ResumeConfig, RunnerConfig,
+    StepTemplateConfig, WorkflowConfig, WorkspaceConfig,
+};
 use crate::resource::agent::{agent_config_to_spec, agent_spec_to_config};
+use crate::resource::runtime_policy::{runner_config_to_spec, runner_spec_to_config};
 use crate::resource::workflow::{workflow_config_to_spec, workflow_spec_to_config};
 use crate::resource::workspace::{workspace_config_to_spec, workspace_spec_to_config};
-use crate::resource::runtime_policy::{runner_config_to_spec, runner_spec_to_config};
 
 impl CrdProjectable for AgentConfig {
     fn crd_kind() -> &'static str {
@@ -404,11 +404,19 @@ mod tests {
         let back = WorkflowConfig::from_cr_spec(&spec).expect("should deserialize workflow");
         assert_eq!(back.steps.len(), 2);
 
-        let plan_step = back.steps.iter().find(|s| s.id == "plan").expect("plan step");
+        let plan_step = back
+            .steps
+            .iter()
+            .find(|s| s.id == "plan")
+            .expect("plan step");
         assert_eq!(plan_step.required_capability.as_deref(), Some("plan"));
         assert!(plan_step.enabled);
 
-        let builtin_step = back.steps.iter().find(|s| s.id == "self_test").expect("self_test step");
+        let builtin_step = back
+            .steps
+            .iter()
+            .find(|s| s.id == "self_test")
+            .expect("self_test step");
         assert_eq!(builtin_step.builtin.as_deref(), Some("self_test"));
     }
 
@@ -441,7 +449,10 @@ mod tests {
         let bad_spec = serde_json::json!({ "not_a_valid_field": 42 });
         // AgentSpec requires "command" field — absence should cause deserialization error
         let result = AgentConfig::from_cr_spec(&bad_spec);
-        assert!(result.is_err(), "should reject spec missing required 'command' field");
+        assert!(
+            result.is_err(),
+            "should reject spec missing required 'command' field"
+        );
     }
 
     #[test]

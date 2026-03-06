@@ -34,7 +34,13 @@ impl Resource for WorkspaceResource {
         use crate::crd::projection::CrdProjectable;
         let incoming = workspace_spec_to_config(&self.spec);
         let spec_value = incoming.to_cr_spec();
-        Ok(super::apply_to_store(config, "Workspace", self.name(), &self.metadata, spec_value))
+        Ok(super::apply_to_store(
+            config,
+            "Workspace",
+            self.name(),
+            &self.metadata,
+            spec_value,
+        ))
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -116,7 +122,10 @@ mod tests {
         let resource =
             dispatch_resource(workspace_manifest("ws-roundtrip", "workspace/ws-roundtrip"))
                 .expect("workspace dispatch should succeed");
-        assert_eq!(resource.apply(&mut config).expect("apply"), ApplyResult::Created);
+        assert_eq!(
+            resource.apply(&mut config).expect("apply"),
+            ApplyResult::Created
+        );
 
         let loaded = WorkspaceResource::get_from(&config, "ws-roundtrip")
             .expect("workspace should be present in config");

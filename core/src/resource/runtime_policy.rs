@@ -51,7 +51,13 @@ impl Resource for RuntimePolicyResource {
             resume: incoming_resume,
         };
         let spec_value = rp.to_cr_spec();
-        Ok(super::apply_to_store(config, "RuntimePolicy", "runtime", &self.metadata, spec_value))
+        Ok(super::apply_to_store(
+            config,
+            "RuntimePolicy",
+            "runtime",
+            &self.metadata,
+            spec_value,
+        ))
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -158,7 +164,10 @@ mod tests {
         let mut config = make_config();
         let r1 = dispatch_resource(runtime_policy_manifest()).expect("dispatch should succeed");
         r1.apply(&mut config).expect("apply");
-        assert_eq!(r1.apply(&mut config).expect("apply"), ApplyResult::Unchanged);
+        assert_eq!(
+            r1.apply(&mut config).expect("apply"),
+            ApplyResult::Unchanged
+        );
     }
 
     #[test]
@@ -173,7 +182,10 @@ mod tests {
             spec.runner.policy = "allowlist".to_string();
         }
         let r2 = dispatch_resource(manifest).expect("dispatch should succeed");
-        assert_eq!(r2.apply(&mut config).expect("apply"), ApplyResult::Configured);
+        assert_eq!(
+            r2.apply(&mut config).expect("apply"),
+            ApplyResult::Configured
+        );
     }
 
     #[test]

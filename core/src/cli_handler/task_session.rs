@@ -12,7 +12,8 @@ impl CliHandler {
         match cmd {
             TaskSessionCommands::List { task_id, output } => {
                 let rt = super::cli_runtime();
-                let task_id = rt.block_on(crate::scheduler::resolve_task_id(&self.state, task_id))?;
+                let task_id =
+                    rt.block_on(crate::scheduler::resolve_task_id(&self.state, task_id))?;
                 let rows = rt.block_on(self.state.session_store.list_task_sessions(&task_id))?;
                 match output {
                     OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&rows)?),
@@ -43,7 +44,8 @@ impl CliHandler {
             }
             TaskSessionCommands::Info { session_id, output } => {
                 let rt = super::cli_runtime();
-                let row = rt.block_on(self.state.session_store.load_session(session_id))?
+                let row = rt
+                    .block_on(self.state.session_store.load_session(session_id))?
                     .with_context(|| format!("session not found: {}", session_id))?;
                 match output {
                     OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&row)?),
@@ -69,7 +71,8 @@ impl CliHandler {
             }
             TaskSessionCommands::Close { session_id, force } => {
                 let rt = super::cli_runtime();
-                let row = rt.block_on(self.state.session_store.load_session(session_id))?
+                let row = rt
+                    .block_on(self.state.session_store.load_session(session_id))?
                     .with_context(|| format!("session not found: {}", session_id))?;
                 if row.pid > 0 {
                     let sig = if *force { "-9" } else { "-15" };
@@ -78,12 +81,11 @@ impl CliHandler {
                         .arg(row.pid.to_string())
                         .status();
                 }
-                rt.block_on(self.state.session_store.update_session_state(
-                    session_id,
-                    "closed",
-                    None,
-                    true,
-                ))?;
+                rt.block_on(
+                    self.state
+                        .session_store
+                        .update_session_state(session_id, "closed", None, true),
+                )?;
                 println!("Session closed: {}", session_id);
                 Ok(0)
             }

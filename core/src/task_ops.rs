@@ -124,7 +124,9 @@ pub fn create_task_impl(
         if !project_id.is_empty() {
             if let Some(project) = active.projects.get(&project_id) {
                 if !project.workspaces.is_empty()
-                    && !project.workspaces.contains_key(&active.default_workspace_id)
+                    && !project
+                        .workspaces
+                        .contains_key(&active.default_workspace_id)
                 {
                     if project.workspaces.len() == 1 {
                         if let Some(k) = project.workspaces.keys().next() {

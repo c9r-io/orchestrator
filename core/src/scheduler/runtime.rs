@@ -1,7 +1,10 @@
 use crate::config::{TaskExecutionPlan, TaskRuntimeContext};
-use crate::config_load::{build_execution_plan, build_execution_plan_for_project, read_active_config, resolve_workspace_path};
+use crate::config_load::{
+    build_execution_plan, build_execution_plan_for_project, read_active_config,
+    resolve_workspace_path,
+};
 use crate::events::insert_event;
-use crate::state::{InnerState, task_semaphore};
+use crate::state::{task_semaphore, InnerState};
 use anyhow::{Context, Result};
 use serde_json::json;
 use std::path::PathBuf;
@@ -171,7 +174,10 @@ async fn kill_active_children_from_db(state: &InnerState, task_id: &str) {
     }
 }
 
-pub async fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<TaskRuntimeContext> {
+pub async fn load_task_runtime_context(
+    state: &InnerState,
+    task_id: &str,
+) -> Result<TaskRuntimeContext> {
     let runtime_row = state.task_repo.load_task_runtime_row(task_id).await?;
     let workspace_id = runtime_row.workspace_id;
     let workflow_id = runtime_row.workflow_id;
@@ -199,14 +205,12 @@ pub async fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Res
         .unwrap_or_else(|| {
             build_execution_plan_for_project(&active.config, workflow, &workflow_id, &project_id)
                 .or_else(|_| build_execution_plan(&active.config, workflow, &workflow_id))
-                .unwrap_or(
-                TaskExecutionPlan {
+                .unwrap_or(TaskExecutionPlan {
                     steps: Vec::new(),
                     loop_policy: crate::config::WorkflowLoopConfig::default(),
                     finalize: crate::config::default_workflow_finalize_config(),
                     max_parallel: None,
-                },
-            )
+                })
         });
     // Layer 1 defense: re-normalize builtin steps whose `behavior.execution`
     // may have been stored as the serde default `Agent` in SQLite.
@@ -313,27 +317,33 @@ mod tests {
     async fn load_task_runtime_context_normalizes_fields() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
-        let active = read_active_config(&state).expect("read active config");
-        let workflow = active
-            .config
-            .workflows
-            .get(&active.default_workflow_id)
-            .expect("default workflow");
-        let mut plan = build_execution_plan(&active.config, workflow, &active.default_workflow_id)
-            .expect("build execution plan");
-        plan.finalize.rules.clear();
+        let plan_json = {
+            let active = read_active_config(&state).expect("read active config");
+            let workflow = active
+                .config
+                .workflows
+                .get(&active.default_workflow_id)
+                .expect("default workflow");
+            let mut plan =
+                build_execution_plan(&active.config, workflow, &active.default_workflow_id)
+                    .expect("build execution plan");
+            plan.finalize.rules.clear();
+            serde_json::to_string(&plan).expect("serialize plan")
+        };
 
         let conn = open_conn(&state.db_path).expect("open sqlite");
         conn.execute(
             "UPDATE tasks SET execution_plan_json = ?2, current_cycle = -4, init_done = 1 WHERE id = ?1",
             params![
                 task_id.clone(),
-                serde_json::to_string(&plan).expect("serialize plan")
+                plan_json
             ],
         )
         .expect("update task");
 
-        let ctx = load_task_runtime_context(&state, &task_id).await.expect("load runtime context");
+        let ctx = load_task_runtime_context(&state, &task_id)
+            .await
+            .expect("load runtime context");
         assert_eq!(ctx.current_cycle, 0);
         assert!(ctx.init_done);
         assert!(!ctx.execution_plan.finalize.rules.is_empty());
@@ -351,7 +361,9 @@ mod tests {
         std::fs::remove_dir_all(state.app_root.join("workspace/default"))
             .expect("remove workspace root");
 
-        let err = load_task_runtime_context(&state, &task_id).await.expect_err("missing root must fail");
+        let err = load_task_runtime_context(&state, &task_id)
+            .await
+            .expect_err("missing root must fail");
         assert!(err.to_string().contains("workspace root does not exist"));
     }
 
@@ -372,7 +384,8 @@ mod tests {
                 .profile = WorkflowSafetyProfile::SelfReferentialProbe;
         }
 
-        let err = load_task_runtime_context(&state, &task_id).await
+        let err = load_task_runtime_context(&state, &task_id)
+            .await
             .expect_err("probe profile should fail for non-self-referential workspace");
         assert!(err.to_string().contains("not self_referential"));
     }
@@ -413,7 +426,11 @@ mod tests {
 
         assert!(runtime.stop_flag.load(Ordering::SeqCst));
         assert_eq!(
-            state.task_repo.load_task_status(&task_id).await.expect("load task status"),
+            state
+                .task_repo
+                .load_task_status(&task_id)
+                .await
+                .expect("load task status"),
             Some("paused".to_string())
         );
     }
@@ -452,7 +469,11 @@ mod tests {
         assert!(running.is_empty());
 
         assert_eq!(
-            state.task_repo.load_task_status(&task_id).await.expect("load task status"),
+            state
+                .task_repo
+                .load_task_status(&task_id)
+                .await
+                .expect("load task status"),
             Some("paused".to_string())
         );
     }
@@ -472,32 +493,35 @@ mod tests {
 
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
-        let active = read_active_config(&state).expect("read active config");
-        let workflow = active
-            .config
-            .workflows
-            .get(&active.default_workflow_id)
-            .expect("default workflow");
-        let mut plan = build_execution_plan(&active.config, workflow, &active.default_workflow_id)
-            .expect("build execution plan");
+        let plan_json = {
+            let active = read_active_config(&state).expect("read active config");
+            let workflow = active
+                .config
+                .workflows
+                .get(&active.default_workflow_id)
+                .expect("default workflow");
+            let mut plan =
+                build_execution_plan(&active.config, workflow, &active.default_workflow_id)
+                    .expect("build execution plan");
 
-        let stale_step = plan.steps.first_mut().expect("plan has step");
-        stale_step.id = "self_test".to_string();
-        stale_step.builtin = Some("self_test".to_string());
-        stale_step.required_capability = Some("self_test".to_string());
-        stale_step.behavior.execution = ExecutionMode::Agent;
+            let stale_step = plan.steps.first_mut().expect("plan has step");
+            stale_step.id = "self_test".to_string();
+            stale_step.builtin = Some("self_test".to_string());
+            stale_step.required_capability = Some("self_test".to_string());
+            stale_step.behavior.execution = ExecutionMode::Agent;
+            serde_json::to_string(&plan).expect("serialize plan")
+        };
 
         let conn = open_conn(&state.db_path).expect("open sqlite");
         conn.execute(
             "UPDATE tasks SET execution_plan_json = ?2 WHERE id = ?1",
-            params![
-                task_id.clone(),
-                serde_json::to_string(&plan).expect("serialize plan")
-            ],
+            params![task_id.clone(), plan_json],
         )
         .expect("update task");
 
-        let ctx = load_task_runtime_context(&state, &task_id).await.expect("load runtime context");
+        let ctx = load_task_runtime_context(&state, &task_id)
+            .await
+            .expect("load runtime context");
         let loaded_step = ctx
             .execution_plan
             .step_by_id("self_test")

@@ -77,7 +77,8 @@ pub(super) fn resolve_exec_target(
 ) -> Result<ResolvedExecTarget> {
     match parse_exec_target(target)? {
         ExecTargetRef::SessionId { session_id } => {
-            let sess = super::cli_runtime().block_on(state.session_store.load_session(session_id))?
+            let sess = super::cli_runtime()
+                .block_on(state.session_store.load_session(session_id))?
                 .with_context(|| format!("session not found: {}", session_id))?;
             Ok(ResolvedExecTarget {
                 task_id: sess.task_id.clone(),
@@ -87,12 +88,10 @@ pub(super) fn resolve_exec_target(
             })
         }
         ExecTargetRef::TaskStep { task_id, step_id } => {
-            let task_id = super::cli_runtime().block_on(
-                crate::scheduler::resolve_task_id(state, task_id),
-            )?;
-            let runtime_row = super::cli_runtime().block_on(
-                state.task_repo.load_task_runtime_row(&task_id),
-            )?;
+            let task_id =
+                super::cli_runtime().block_on(crate::scheduler::resolve_task_id(state, task_id))?;
+            let runtime_row =
+                super::cli_runtime().block_on(state.task_repo.load_task_runtime_row(&task_id))?;
             let plan = serde_json::from_str::<TaskExecutionPlan>(&runtime_row.execution_plan_json)
                 .with_context(|| format!("failed to parse execution plan for task {}", task_id))?;
             let step = plan
@@ -101,7 +100,9 @@ pub(super) fn resolve_exec_target(
                 .find(|s| s.id == step_id)
                 .with_context(|| format!("step '{}' not found in task '{}'", step_id, task_id))?;
             let session = super::cli_runtime().block_on(
-                state.session_store.load_active_session_for_task_step(&task_id, step_id),
+                state
+                    .session_store
+                    .load_active_session_for_task_step(&task_id, step_id),
             )?;
             Ok(ResolvedExecTarget {
                 task_id,

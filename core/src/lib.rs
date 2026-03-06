@@ -1,4 +1,7 @@
-#![cfg_attr(not(test), deny(clippy::panic, clippy::unwrap_used, clippy::expect_used))]
+#![cfg_attr(
+    not(test),
+    deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)
+)]
 
 pub mod anomaly;
 pub mod async_database;
@@ -15,8 +18,8 @@ pub mod env_resolve;
 pub mod events;
 pub mod events_backfill;
 pub mod health;
-pub mod migration;
 pub mod metrics;
+pub mod migration;
 pub mod observability;
 pub mod output_validation;
 pub mod prehook;

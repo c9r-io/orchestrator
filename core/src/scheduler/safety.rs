@@ -115,11 +115,7 @@ pub async fn rollback_to_checkpoint(workspace_root: &Path, tag_name: &str) -> Re
     Ok(())
 }
 
-pub async fn snapshot_binary(
-    workspace_root: &Path,
-    task_id: &str,
-    cycle: u32,
-) -> Result<PathBuf> {
+pub async fn snapshot_binary(workspace_root: &Path, task_id: &str, cycle: u32) -> Result<PathBuf> {
     let binary_path = workspace_root.join(RELEASE_BINARY_REL);
     let stable_path = workspace_root.join(STABLE_FILE);
     let tmp_path = workspace_root.join(STABLE_TMP);
@@ -162,14 +158,12 @@ pub async fn snapshot_binary(
         })?;
 
     // Post-snapshot verification: re-read first 4096 bytes and confirm SHA-256 prefix
-    let verification_content = tokio::fs::read(&stable_path)
-        .await
-        .with_context(|| {
-            format!(
-                "failed to read stable file for verification at {}",
-                stable_path.display()
-            )
-        })?;
+    let verification_content = tokio::fs::read(&stable_path).await.with_context(|| {
+        format!(
+            "failed to read stable file for verification at {}",
+            stable_path.display()
+        )
+    })?;
     let prefix_len = std::cmp::min(4096, verification_content.len());
     let expected_prefix = &tmp_content[..prefix_len];
     let actual_prefix = &verification_content[..prefix_len];
@@ -187,16 +181,11 @@ pub async fn snapshot_binary(
         source_path: RELEASE_BINARY_REL.to_string(),
         size_bytes,
     };
-    let manifest_json = serde_json::to_string_pretty(&manifest)
-        .context("failed to serialize snapshot manifest")?;
+    let manifest_json =
+        serde_json::to_string_pretty(&manifest).context("failed to serialize snapshot manifest")?;
     tokio::fs::write(&manifest_path, manifest_json)
         .await
-        .with_context(|| {
-            format!(
-                "failed to write manifest at {}",
-                manifest_path.display()
-            )
-        })?;
+        .with_context(|| format!("failed to write manifest at {}", manifest_path.display()))?;
 
     Ok(stable_path)
 }
@@ -217,23 +206,13 @@ pub async fn restore_binary_snapshot(workspace_root: &Path) -> Result<()> {
     if manifest_path.exists() {
         let manifest_content = tokio::fs::read_to_string(&manifest_path)
             .await
-            .with_context(|| {
-                format!(
-                    "failed to read manifest at {}",
-                    manifest_path.display()
-                )
-            })?;
+            .with_context(|| format!("failed to read manifest at {}", manifest_path.display()))?;
         let manifest: SnapshotManifest = serde_json::from_str(&manifest_content)
             .with_context(|| "failed to parse snapshot manifest")?;
 
-        let stable_content = tokio::fs::read(&stable_path)
-            .await
-            .with_context(|| {
-                format!(
-                    "failed to read stable binary at {}",
-                    stable_path.display()
-                )
-            })?;
+        let stable_content = tokio::fs::read(&stable_path).await.with_context(|| {
+            format!("failed to read stable binary at {}", stable_path.display())
+        })?;
         let actual_checksum = sha256_hex(&stable_content);
 
         if actual_checksum != manifest.sha256 {
@@ -427,7 +406,8 @@ pub async fn execute_self_restart_step(
             "build_git_hash": env!("BUILD_GIT_HASH"),
             "build_timestamp": env!("BUILD_TIMESTAMP"),
         }),
-    ).await?;
+    )
+    .await?;
 
     Ok(EXIT_RESTART)
 }
@@ -1058,8 +1038,7 @@ mod tests {
         let manifest_path = temp_dir.join(STABLE_MANIFEST);
         assert!(manifest_path.exists(), ".stable.json should exist");
 
-        let manifest_str =
-            std::fs::read_to_string(&manifest_path).expect("read manifest");
+        let manifest_str = std::fs::read_to_string(&manifest_path).expect("read manifest");
         let manifest: SnapshotManifest =
             serde_json::from_str(&manifest_str).expect("parse manifest JSON");
 
@@ -1087,8 +1066,7 @@ mod tests {
             size_bytes: 999,
         };
         let json = serde_json::to_string_pretty(&manifest).expect("serialize");
-        let deserialized: SnapshotManifest =
-            serde_json::from_str(&json).expect("deserialize");
+        let deserialized: SnapshotManifest = serde_json::from_str(&json).expect("deserialize");
 
         assert_eq!(deserialized.version, manifest.version);
         assert_eq!(deserialized.sha256, manifest.sha256);
@@ -1143,8 +1121,7 @@ mod tests {
             .await
             .expect("snapshot should succeed");
 
-        let stable_content =
-            std::fs::read(temp_dir.join(STABLE_FILE)).expect("read .stable");
+        let stable_content = std::fs::read(temp_dir.join(STABLE_FILE)).expect("read .stable");
         let actual_sha = sha256_hex(&stable_content);
 
         let manifest_str =
@@ -1345,7 +1322,10 @@ mod tests {
 
         assert_eq!(result, 7);
         let log = std::fs::read_to_string(&cargo_log).expect("read cargo log");
-        assert!(log.contains("check --message-format=short"), "check should have been invoked");
+        assert!(
+            log.contains("check --message-format=short"),
+            "check should have been invoked"
+        );
         assert!(
             log.contains("test --lib"),
             "test should have been invoked after check succeeded"
@@ -1399,14 +1379,20 @@ mod tests {
         create_mock_binary(&temp_dir.join(STABLE_FILE), test_content).expect("create stable");
 
         // Write garbage to .stable.json
-        std::fs::write(temp_dir.join(STABLE_MANIFEST), b"this is not valid json {{{")
-            .expect("write corrupt manifest");
+        std::fs::write(
+            temp_dir.join(STABLE_MANIFEST),
+            b"this is not valid json {{{",
+        )
+        .expect("write corrupt manifest");
 
         let result = verify_binary_snapshot(&temp_dir)
             .await
             .expect("verify should succeed despite corrupt manifest");
 
-        assert!(result.verified, "checksums match so verified should be true");
+        assert!(
+            result.verified,
+            "checksums match so verified should be true"
+        );
         assert!(
             result.manifest.is_none(),
             "corrupt manifest should degrade gracefully to None"
@@ -1451,7 +1437,10 @@ mod tests {
         let manifest: SnapshotManifest =
             serde_json::from_str(&manifest_str).expect("parse manifest");
         let expected_sha = sha256_hex(content_b);
-        assert_eq!(manifest.sha256, expected_sha, "manifest SHA-256 should match binary B");
+        assert_eq!(
+            manifest.sha256, expected_sha,
+            "manifest SHA-256 should match binary B"
+        );
         assert_eq!(manifest.task_id, "task-b");
         assert_eq!(manifest.cycle, 2);
 
@@ -1480,8 +1469,7 @@ mod tests {
             .await
             .expect("snapshot of empty binary should succeed");
 
-        let stable_content =
-            std::fs::read(temp_dir.join(STABLE_FILE)).expect("read .stable");
+        let stable_content = std::fs::read(temp_dir.join(STABLE_FILE)).expect("read .stable");
         assert!(stable_content.is_empty(), ".stable should be zero bytes");
 
         let manifest_str =
@@ -1489,7 +1477,10 @@ mod tests {
         let manifest: SnapshotManifest =
             serde_json::from_str(&manifest_str).expect("parse manifest");
         assert_eq!(manifest.size_bytes, 0);
-        assert_eq!(manifest.sha256, EMPTY_SHA256, "SHA-256 of empty binary should match well-known value");
+        assert_eq!(
+            manifest.sha256, EMPTY_SHA256,
+            "SHA-256 of empty binary should match well-known value"
+        );
 
         std::fs::remove_dir_all(&temp_dir).ok();
     }
@@ -1502,10 +1493,7 @@ mod tests {
         let workspace_root = state.app_root.clone();
 
         let fake_bin = workspace_root.join("fake-bin");
-        write_executable(
-            &fake_bin.join("cargo"),
-            "#!/bin/sh\nexit 7\n",
-        );
+        write_executable(&fake_bin.join("cargo"), "#!/bin/sh\nexit 7\n");
         std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
 
         let fake_cargo = fake_bin.join("cargo");
@@ -1550,18 +1538,12 @@ mod tests {
 
         // Create a fake cargo that succeeds on build
         let fake_bin = workspace_root.join("fake-bin");
-        write_executable(
-            &fake_bin.join("cargo"),
-            "#!/bin/sh\nexit 0\n",
-        );
+        write_executable(&fake_bin.join("cargo"), "#!/bin/sh\nexit 0\n");
         std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
 
         // Create a fake binary that responds to --help
         let binary_path = workspace_root.join(RELEASE_BINARY_REL);
-        write_executable(
-            &binary_path,
-            "#!/bin/sh\necho 'help output'\nexit 0\n",
-        );
+        write_executable(&binary_path, "#!/bin/sh\necho 'help output'\nexit 0\n");
 
         // Create the task in DB so set_task_status can find it
         let conn = crate::db::open_conn(&state.db_path).expect("open conn");
@@ -1596,7 +1578,10 @@ mod tests {
         assert_eq!(status, "restart_pending");
 
         // .stable file should exist
-        assert!(workspace_root.join(STABLE_FILE).exists(), ".stable should exist after successful self_restart");
+        assert!(
+            workspace_root.join(STABLE_FILE).exists(),
+            ".stable should exist after successful self_restart"
+        );
     }
 
     #[test]
@@ -1678,7 +1663,10 @@ mod tests {
 
         let result = verify_post_restart_binary(&state, "t-mismatch").await;
         assert!(result.is_ok());
-        assert!(!result.unwrap(), "should return false when SHA256 mismatches");
+        assert!(
+            !result.unwrap(),
+            "should return false when SHA256 mismatches"
+        );
     }
 
     #[cfg(unix)]
@@ -1702,7 +1690,10 @@ mod tests {
         perms.set_mode(0o755);
         std::fs::set_permissions(root, perms).expect("restore root permissions");
 
-        assert!(result.is_err(), "snapshot should fail on read-only workspace");
+        assert!(
+            result.is_err(),
+            "snapshot should fail on read-only workspace"
+        );
     }
 
     #[tokio::test]
@@ -1810,9 +1801,10 @@ mod tests {
         // and document the fallback by deleting binary before the sha256 read.
         // Since snapshot happens before sha256 read, removing after verify but snapshot copies it:
         // We'll just verify success path produces EXIT_RESTART with some sha256 recorded.
-        let result = execute_self_restart_step(&workspace_root, &state, "task-sha-unknown", "item-1")
-            .await
-            .expect("should return exit code");
+        let result =
+            execute_self_restart_step(&workspace_root, &state, "task-sha-unknown", "item-1")
+                .await
+                .expect("should return exit code");
 
         unsafe {
             std::env::remove_var("ORCH_SELF_TEST_CARGO");
@@ -1830,10 +1822,16 @@ mod tests {
             )
             .optional()
             .expect("query event");
-        assert!(event_payload.is_some(), "self_restart_ready event should be recorded");
+        assert!(
+            event_payload.is_some(),
+            "self_restart_ready event should be recorded"
+        );
         let payload_str = event_payload.unwrap();
         let payload: serde_json::Value = serde_json::from_str(&payload_str).expect("parse payload");
-        let sha = payload.get("binary_sha256").and_then(|v| v.as_str()).unwrap_or("");
+        let sha = payload
+            .get("binary_sha256")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         // Either a real sha256 or "unknown" — both are valid outcomes
         assert!(!sha.is_empty(), "binary_sha256 should be present in event");
     }
@@ -1870,7 +1868,10 @@ mod tests {
         std::env::remove_var("FAKE_CARGO_LOG");
         std::env::remove_var("ORCH_SELF_TEST_CARGO");
 
-        assert_ne!(result, 0, "should return non-zero when manifest_validate fails");
+        assert_ne!(
+            result, 0,
+            "should return non-zero when manifest_validate fails"
+        );
     }
 
     #[tokio::test]

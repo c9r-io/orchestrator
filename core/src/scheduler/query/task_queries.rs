@@ -82,7 +82,9 @@ mod tests {
     async fn resolve_task_id_exact_match() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
-        let resolved = resolve_task_id(&state, &task_id).await.expect("resolve exact id");
+        let resolved = resolve_task_id(&state, &task_id)
+            .await
+            .expect("resolve exact id");
         assert_eq!(resolved, task_id);
     }
 
@@ -91,7 +93,9 @@ mod tests {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
         let prefix = &task_id[..8];
-        let resolved = resolve_task_id(&state, prefix).await.expect("resolve prefix id");
+        let resolved = resolve_task_id(&state, prefix)
+            .await
+            .expect("resolve prefix id");
         assert_eq!(resolved, task_id);
     }
 
@@ -107,7 +111,9 @@ mod tests {
     async fn load_task_summary_returns_counts() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
-        let summary = load_task_summary(&state, &task_id).await.expect("load task summary");
+        let summary = load_task_summary(&state, &task_id)
+            .await
+            .expect("load task summary");
         assert_eq!(summary.id, task_id);
         assert_eq!(summary.name, "query-test");
         assert_eq!(summary.goal, "query-test-goal");
@@ -123,7 +129,9 @@ mod tests {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
         let prefix = &task_id[..8];
-        let summary = load_task_summary(&state, prefix).await.expect("load summary by prefix");
+        let summary = load_task_summary(&state, prefix)
+            .await
+            .expect("load summary by prefix");
         assert_eq!(summary.id, task_id);
     }
 
@@ -183,7 +191,9 @@ mod tests {
     async fn get_task_details_impl_returns_items_and_empty_runs() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
-        let detail = get_task_details_impl(&state, &task_id).await.expect("get task details");
+        let detail = get_task_details_impl(&state, &task_id)
+            .await
+            .expect("get task details");
         assert_eq!(detail.task.id, task_id);
         assert!(!detail.items.is_empty(), "should have at least 1 item");
         // No command runs yet
@@ -230,7 +240,9 @@ mod tests {
             .await
             .expect("insert command run");
 
-        let detail = get_task_details_impl(&state, &task_id).await.expect("get task details");
+        let detail = get_task_details_impl(&state, &task_id)
+            .await
+            .expect("get task details");
         assert_eq!(detail.runs.len(), 1);
         assert_eq!(detail.runs[0].id, "run-detail-1");
         assert_eq!(detail.runs[0].phase, "qa");
@@ -281,7 +293,9 @@ mod tests {
         assert!(stdout_path.exists());
         assert!(stderr_path.exists());
 
-        delete_task_impl(&state, &task_id).await.expect("delete task");
+        delete_task_impl(&state, &task_id)
+            .await
+            .expect("delete task");
 
         // Log files should be cleaned up
         assert!(!stdout_path.exists(), "stdout log should be deleted");

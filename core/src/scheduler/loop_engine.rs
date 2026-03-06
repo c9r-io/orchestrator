@@ -14,8 +14,6 @@ use super::item_executor::{
     process_item_filtered_owned, OwnedProcessItemRequest, ProcessItemRequest,
     StepExecutionAccumulator,
 };
-use tokio::sync::Semaphore;
-use tokio::task::JoinSet;
 use super::phase_runner::{run_phase_with_rotation, RotatingPhaseRunRequest};
 use super::runtime::load_task_runtime_context;
 use super::safety::{
@@ -26,6 +24,8 @@ use super::task_state::{
     record_task_execution_metric, set_task_status, update_task_cycle_state,
 };
 use super::RunningTask;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 
 pub async fn run_task_loop(
     state: Arc<InnerState>,
@@ -42,7 +42,8 @@ pub async fn run_task_loop(
             None,
             "task_failed",
             json!({"error": e.to_string()}),
-        ).await;
+        )
+        .await;
         state.emit_event(
             task_id,
             None,
@@ -82,7 +83,8 @@ async fn run_task_loop_core(
                 "paused",
                 task_ctx.current_cycle,
                 unresolved,
-            ).await?;
+            )
+            .await?;
             return Ok(());
         }
 
@@ -94,7 +96,8 @@ async fn run_task_loop_core(
                 None,
                 "task_paused",
                 json!({"reason":"stop_flag"}),
-            ).await?;
+            )
+            .await?;
             state.emit_event(task_id, None, "task_paused", json!({}));
             let unresolved = count_unresolved_items(&state, task_id).await?;
             record_task_execution_metric(
@@ -103,12 +106,14 @@ async fn run_task_loop_core(
                 "paused",
                 task_ctx.current_cycle,
                 unresolved,
-            ).await?;
+            )
+            .await?;
             return Ok(());
         }
 
         task_ctx.current_cycle += 1;
-        update_task_cycle_state(&state, task_id, task_ctx.current_cycle, task_ctx.init_done).await?;
+        update_task_cycle_state(&state, task_id, task_ctx.current_cycle, task_ctx.init_done)
+            .await?;
         let max_cycles = task_ctx.execution_plan.loop_policy.guard.max_cycles;
         insert_event(
             &state,
@@ -116,7 +121,8 @@ async fn run_task_loop_core(
             None,
             "cycle_started",
             json!({"cycle": task_ctx.current_cycle, "max_cycles": max_cycles}),
-        ).await?;
+        )
+        .await?;
         state.emit_event(
             task_id,
             None,
@@ -124,8 +130,7 @@ async fn run_task_loop_core(
             json!({"cycle": task_ctx.current_cycle, "max_cycles": max_cycles}),
         );
 
-        let outcome =
-            execute_cycle_segments(&state, task_id, &mut task_ctx, &runtime).await?;
+        let outcome = execute_cycle_segments(&state, task_id, &mut task_ctx, &runtime).await?;
         if matches!(outcome, CycleSegmentOutcome::RestartCycle) {
             continue 'cycle;
         }
@@ -161,7 +166,8 @@ async fn run_task_loop_core(
             None,
             "task_failed",
             json!({"unresolved_items": unresolved}),
-        ).await?;
+        )
+        .await?;
         state.emit_event(
             task_id,
             None,
@@ -174,7 +180,8 @@ async fn run_task_loop_core(
             "failed",
             task_ctx.current_cycle,
             unresolved,
-        ).await?;
+        )
+        .await?;
     } else {
         set_task_status(&state, task_id, "completed", true).await?;
         insert_event(&state, task_id, None, "task_completed", json!({})).await?;
@@ -185,7 +192,8 @@ async fn run_task_loop_core(
             "completed",
             task_ctx.current_cycle,
             unresolved,
-        ).await?;
+        )
+        .await?;
     }
 
     Ok(())
@@ -210,7 +218,8 @@ async fn run_init_once_if_needed(
                 Some(&anchor_item_id),
                 "step_started",
                 json!({"step":"init_once", "step_scope": "task"}),
-            ).await?;
+            )
+            .await?;
             let init_result = run_phase_with_rotation(
                 state,
                 RotatingPhaseRunRequest {
@@ -243,7 +252,8 @@ async fn run_init_once_if_needed(
                 Some(&anchor_item_id),
                 "step_finished",
                 json!({"step":"init_once","step_scope":"task","exit_code":init_result.exit_code}),
-            ).await?;
+            )
+            .await?;
         }
     }
     task_ctx.init_done = true;
@@ -274,10 +284,16 @@ async fn execute_cycle_segments(
                     None,
                     "checkpoint_created",
                     json!({"cycle": task_ctx.current_cycle, "tag": tag}),
-                ).await?;
+                )
+                .await?;
 
-                if should_snapshot_binary(task_ctx.safety.binary_snapshot, task_ctx.self_referential) {
-                    match snapshot_binary(&task_ctx.workspace_root, task_id, task_ctx.current_cycle).await {
+                if should_snapshot_binary(
+                    task_ctx.safety.binary_snapshot,
+                    task_ctx.self_referential,
+                ) {
+                    match snapshot_binary(&task_ctx.workspace_root, task_id, task_ctx.current_cycle)
+                        .await
+                    {
                         Ok(path) => {
                             insert_event(
                                 state,
@@ -308,8 +324,7 @@ async fn execute_cycle_segments(
     }
 
     let items = list_task_items_for_cycle(state, task_id).await?;
-    let task_item_paths: Vec<String> =
-        items.iter().map(|item| item.qa_file_path.clone()).collect();
+    let task_item_paths: Vec<String> = items.iter().map(|item| item.qa_file_path.clone()).collect();
 
     // Segment-based execution: group steps by scope and dispatch accordingly.
     // Task-scoped steps run once (using first item as context anchor).
@@ -368,7 +383,8 @@ async fn execute_cycle_segments(
                                 task_id,
                                 &items,
                                 &skipped_item_steps,
-                            ).await?;
+                            )
+                            .await?;
                             halt_after_task_segment = true;
                         }
                     }
@@ -378,12 +394,9 @@ async fn execute_cycle_segments(
                     if max_par <= 1 {
                         // === Sequential path (unchanged) ===
                         for item in &items {
-                            let acc =
-                                item_state.entry(item.id.clone()).or_insert_with(|| {
-                                    StepExecutionAccumulator::new(
-                                        task_ctx.pipeline_vars.clone(),
-                                    )
-                                });
+                            let acc = item_state.entry(item.id.clone()).or_insert_with(|| {
+                                StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone())
+                            });
                             process_item_filtered(
                                 state,
                                 ProcessItemRequest {
@@ -407,9 +420,11 @@ async fn execute_cycle_segments(
                         let mut join_set = JoinSet::new();
 
                         for item in &items {
-                            let permit = semaphore.clone().acquire_owned().await.map_err(
-                                |e| anyhow::anyhow!("semaphore closed: {}", e),
-                            )?;
+                            let permit = semaphore
+                                .clone()
+                                .acquire_owned()
+                                .await
+                                .map_err(|e| anyhow::anyhow!("semaphore closed: {}", e))?;
                             let state = state.clone();
                             let item = item.clone();
                             let task_id = task_id.to_string();
@@ -455,10 +470,7 @@ async fn execute_cycle_segments(
                                     errors.push(e);
                                 }
                                 Err(e) => {
-                                    errors.push(anyhow::anyhow!(
-                                        "item task panicked: {}",
-                                        e
-                                    ));
+                                    errors.push(anyhow::anyhow!("item task panicked: {}", e));
                                 }
                             }
                         }
@@ -468,10 +480,7 @@ async fn execute_cycle_segments(
                                 .map(|e| e.to_string())
                                 .collect::<Vec<_>>()
                                 .join("; ");
-                            anyhow::bail!(
-                                "parallel item execution failed: {}",
-                                msg
-                            );
+                            anyhow::bail!("parallel item execution failed: {}", msg);
                         }
                     }
                 }
@@ -487,9 +496,9 @@ async fn execute_cycle_segments(
         }
 
         for item in &items {
-            let acc = item_state.entry(item.id.clone()).or_insert_with(|| {
-                StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone())
-            });
+            let acc = item_state
+                .entry(item.id.clone())
+                .or_insert_with(|| StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone()));
             finalize_item_execution(state, task_id, item, task_ctx, acc).await?;
         }
     }
@@ -530,7 +539,8 @@ async fn apply_auto_rollback_if_needed(
                     "rollback_to": rollback_tag,
                     "consecutive_failures": task_ctx.consecutive_failures,
                 }),
-            ).await?;
+            )
+            .await?;
             state.emit_event(
                 task_id,
                 None,
@@ -547,7 +557,8 @@ async fn apply_auto_rollback_if_needed(
                             None,
                             "binary_snapshot_restored",
                             json!({"cycle": task_ctx.current_cycle}),
-                        ).await?;
+                        )
+                        .await?;
                     }
                     Err(e) => warn!(error = %e, "failed to restore binary snapshot"),
                 }
@@ -563,7 +574,8 @@ async fn apply_auto_rollback_if_needed(
                 None,
                 "auto_rollback_failed",
                 json!({"error": e.to_string()}),
-            ).await?;
+            )
+            .await?;
         }
     }
 
@@ -586,8 +598,7 @@ async fn execute_guard_steps(
             continue;
         }
 
-        let guard_result =
-            execute_guard_step(state, task_id, step, task_ctx, runtime).await?;
+        let guard_result = execute_guard_step(state, task_id, step, task_ctx, runtime).await?;
         if guard_result.should_stop {
             insert_event(
                 state,
@@ -599,7 +610,8 @@ async fn execute_guard_steps(
                     "guard_step": step.id,
                     "reason": guard_result.reason
                 }),
-            ).await?;
+            )
+            .await?;
             state.emit_event(
                 task_id,
                 None,
@@ -616,7 +628,8 @@ async fn execute_guard_steps(
                 "completed",
                 task_ctx.current_cycle,
                 unresolved,
-            ).await?;
+            )
+            .await?;
             return Ok(true);
         }
     }
@@ -669,7 +682,8 @@ async fn evaluate_loop_continuation(
             "reason": reason,
             "unresolved_items": unresolved
         }),
-    ).await?;
+    )
+    .await?;
     state.emit_event(
         task_id,
         None,
@@ -742,9 +756,7 @@ fn build_scope_segments(task_ctx: &crate::config::TaskRuntimeContext) -> Vec<Sco
         ids.insert(step.id.clone());
         // Resolve max_parallel: step override > plan default > 1
         let max_parallel = if scope == StepScope::Item {
-            step.max_parallel
-                .or(plan_default)
-                .unwrap_or(1)
+            step.max_parallel.or(plan_default).unwrap_or(1)
         } else {
             1 // task-scoped segments are always sequential
         };
@@ -828,7 +840,8 @@ async fn emit_skipped_item_step_events(
                     "step_scope": StepScope::Item,
                     "reason": "upstream_task_segment_terminated"
                 }),
-            ).await?;
+            )
+            .await?;
         }
     }
 
@@ -1550,12 +1563,18 @@ mod tests {
         }];
         let mut item_state = HashMap::new();
         let mut existing_acc = StepExecutionAccumulator::new(PipelineVariables::default());
-        existing_acc.pipeline_vars.vars.insert("existing_key".to_string(), "existing_val".to_string());
+        existing_acc
+            .pipeline_vars
+            .vars
+            .insert("existing_key".to_string(), "existing_val".to_string());
         item_state.insert("item-1".to_string(), existing_acc);
 
         let mut task_acc = StepExecutionAccumulator::new(PipelineVariables::default());
         task_acc.item_status = "unresolved".to_string();
-        task_acc.pipeline_vars.vars.insert("new_key".to_string(), "new_val".to_string());
+        task_acc
+            .pipeline_vars
+            .vars
+            .insert("new_key".to_string(), "new_val".to_string());
 
         propagate_task_segment_terminal_state(
             &items,
@@ -1566,7 +1585,10 @@ mod tests {
         );
 
         let acc = item_state.get("item-1").unwrap();
-        assert_eq!(acc.pipeline_vars.vars.get("existing_key").unwrap(), "existing_val");
+        assert_eq!(
+            acc.pipeline_vars.vars.get("existing_key").unwrap(),
+            "existing_val"
+        );
         assert_eq!(acc.pipeline_vars.vars.get("new_key").unwrap(), "new_val");
     }
 
@@ -1670,7 +1692,9 @@ mod tests {
             qa_file_path: "a.md".to_string(),
         }];
 
-        emit_skipped_item_step_events(&state, "task-1", &items, &[]).await.expect("should succeed");
+        emit_skipped_item_step_events(&state, "task-1", &items, &[])
+            .await
+            .expect("should succeed");
 
         let conn = crate::db::open_conn(&state.db_path).expect("open sqlite");
         let count: i64 = conn
@@ -1708,14 +1732,9 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
-        emit_skipped_item_step_events(
-            &state,
-            "task-1",
-            &[],
-            &["qa_testing".to_string()],
-        )
-        .await
-        .expect("should succeed");
+        emit_skipped_item_step_events(&state, "task-1", &[], &["qa_testing".to_string()])
+            .await
+            .expect("should succeed");
 
         let conn = crate::db::open_conn(&state.db_path).expect("open sqlite");
         let count: i64 = conn

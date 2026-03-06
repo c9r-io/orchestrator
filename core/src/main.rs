@@ -1,5 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-#![cfg_attr(not(test), deny(clippy::panic, clippy::unwrap_used, clippy::expect_used))]
+#![cfg_attr(
+    not(test),
+    deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)
+)]
 
 // Binary-only modules (stay as mod)
 mod cli;
@@ -84,12 +87,20 @@ fn init_state() -> Result<ManagedState> {
     let async_database = Arc::new(
         tokio::runtime::Runtime::new()
             .context("failed to create tokio runtime for async db init")?
-            .block_on(agent_orchestrator::async_database::AsyncDatabase::open(&db_path))
+            .block_on(agent_orchestrator::async_database::AsyncDatabase::open(
+                &db_path,
+            ))
             .context("failed to open async database")?,
     );
-    let db_writer = Arc::new(crate::db_write::DbWriteCoordinator::new(async_database.clone()));
-    let session_store = Arc::new(agent_orchestrator::session_store::AsyncSessionStore::new(async_database.clone()));
-    let task_repo = Arc::new(agent_orchestrator::task_repository::AsyncSqliteTaskRepository::new(async_database.clone()));
+    let db_writer = Arc::new(crate::db_write::DbWriteCoordinator::new(
+        async_database.clone(),
+    ));
+    let session_store = Arc::new(agent_orchestrator::session_store::AsyncSessionStore::new(
+        async_database.clone(),
+    ));
+    let task_repo = Arc::new(
+        agent_orchestrator::task_repository::AsyncSqliteTaskRepository::new(async_database.clone()),
+    );
     Ok(ManagedState {
         inner: Arc::new(crate::state::InnerState {
             app_root,

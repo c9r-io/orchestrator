@@ -122,7 +122,11 @@ impl CliHandler {
         let rt = super::cli_runtime();
         if tty {
             if !command.is_empty() {
-                rt.block_on(self.state.session_store.acquire_writer(&sess.id, &client_id))?;
+                rt.block_on(
+                    self.state
+                        .session_store
+                        .acquire_writer(&sess.id, &client_id),
+                )?;
                 let cmdline = command.join(" ");
                 let status = Command::new("/bin/bash")
                     .arg("-lc")
@@ -130,16 +134,19 @@ impl CliHandler {
                     .current_dir(&sess.cwd)
                     .status()
                     .context("exec interactive command in session context")?;
-                rt.block_on(self.state.session_store.release_attachment(
-                    &sess.id,
-                    &client_id,
-                    "detach",
-                ))?;
+                rt.block_on(
+                    self.state
+                        .session_store
+                        .release_attachment(&sess.id, &client_id, "detach"),
+                )?;
                 return Ok(status.code().unwrap_or(1));
             }
 
-            let writable =
-                rt.block_on(self.state.session_store.acquire_writer(&sess.id, &client_id))?;
+            let writable = rt.block_on(
+                self.state
+                    .session_store
+                    .acquire_writer(&sess.id, &client_id),
+            )?;
             if !writable {
                 rt.block_on(self.state.session_store.attach_reader(&sess.id, &client_id))?;
             }
@@ -162,7 +169,11 @@ impl CliHandler {
                     .status()
                     .context("attach read-only session")
             };
-            rt.block_on(self.state.session_store.release_attachment(&sess.id, &client_id, "detach"))?;
+            rt.block_on(
+                self.state
+                    .session_store
+                    .release_attachment(&sess.id, &client_id, "detach"),
+            )?;
             let status = status_res?;
             return Ok(status.code().unwrap_or(1));
         }

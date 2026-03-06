@@ -111,11 +111,8 @@ pub fn resolve_and_validate_workspaces(
 
     // Validate global workflows against global agents only (not project-scoped agents
     // which may shadow global agents with different capabilities).
-    let global_agents: HashMap<String, &crate::config::AgentConfig> = config
-        .agents
-        .iter()
-        .map(|(k, v)| (k.clone(), v))
-        .collect();
+    let global_agents: HashMap<String, &crate::config::AgentConfig> =
+        config.agents.iter().map(|(k, v)| (k.clone(), v)).collect();
 
     for (workflow_id, workflow) in &config.workflows {
         validate_workflow_config_with_agents(&global_agents, workflow, workflow_id)?;

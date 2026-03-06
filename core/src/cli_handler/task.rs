@@ -63,7 +63,8 @@ impl CliHandler {
                             &created.id,
                             runtime,
                         ))?;
-                        let summary = cli_runtime().block_on(load_task_summary(&self.state, &created.id))?;
+                        let summary =
+                            cli_runtime().block_on(load_task_summary(&self.state, &created.id))?;
                         println!("Task finished: {} status={}", summary.id, summary.status);
                     }
                 }
@@ -81,7 +82,8 @@ impl CliHandler {
                 let id = if let Some(id) = task_id {
                     cli_runtime().block_on(resolve_task_id(&self.state, id))?
                 } else if *latest {
-                    cli_runtime().block_on(find_latest_resumable_task_id(&self.state, true))?
+                    cli_runtime()
+                        .block_on(find_latest_resumable_task_id(&self.state, true))?
                         .context("no resumable task found")?
                 } else {
                     anyhow::bail!("task_id or --latest required")
@@ -121,7 +123,8 @@ impl CliHandler {
                         &resolved_id,
                         runtime,
                     ))?;
-                    let summary = cli_runtime().block_on(load_task_summary(&self.state, &resolved_id))?;
+                    let summary =
+                        cli_runtime().block_on(load_task_summary(&self.state, &resolved_id))?;
                     println!("Task finished: {} status={}", summary.id, summary.status);
                 }
                 Ok(0)
@@ -133,7 +136,12 @@ impl CliHandler {
                 timestamps,
             } => {
                 let resolved_id = cli_runtime().block_on(resolve_task_id(&self.state, task_id))?;
-                let logs = cli_runtime().block_on(stream_task_logs_impl(&self.state, &resolved_id, *tail, *timestamps))?;
+                let logs = cli_runtime().block_on(stream_task_logs_impl(
+                    &self.state,
+                    &resolved_id,
+                    *tail,
+                    *timestamps,
+                ))?;
                 for chunk in logs {
                     println!("{}", chunk.content);
                 }
@@ -168,7 +176,9 @@ impl CliHandler {
             } => {
                 if !force {
                     eprintln!("⚠ This will reset task item execution state for retry.");
-                    eprintln!("  Use --force to confirm: orchestrator task retry <ITEM_ID> --force");
+                    eprintln!(
+                        "  Use --force to confirm: orchestrator task retry <ITEM_ID> --force"
+                    );
                     return Ok(1);
                 }
                 let task_id = reset_task_item_for_retry(&self.state, task_item_id)?;
@@ -179,7 +189,8 @@ impl CliHandler {
                     cli_runtime().block_on(prepare_task_for_start(&self.state, &task_id))?;
                     let runtime = RunningTask::new();
                     cli_runtime().block_on(run_task_loop(self.state.clone(), &task_id, runtime))?;
-                    let summary = cli_runtime().block_on(load_task_summary(&self.state, &task_id))?;
+                    let summary =
+                        cli_runtime().block_on(load_task_summary(&self.state, &task_id))?;
                     println!("Retry finished: {} status={}", summary.id, summary.status);
                 }
                 Ok(0)
@@ -190,7 +201,8 @@ impl CliHandler {
                 verbose,
             } => {
                 let resolved_id = cli_runtime().block_on(resolve_task_id(&self.state, task_id))?;
-                let detail = cli_runtime().block_on(get_task_details_impl(&self.state, &resolved_id))?;
+                let detail =
+                    cli_runtime().block_on(get_task_details_impl(&self.state, &resolved_id))?;
                 let trace = crate::scheduler::trace::build_trace_with_meta(
                     crate::scheduler::trace::TraceTaskMeta {
                         task_id: &detail.task.id,

@@ -91,11 +91,8 @@ pub fn build_execution_plan_for_project(
     project_id: &str,
 ) -> Result<TaskExecutionPlan> {
     // Merge global + project-scoped agents for validation
-    let mut all_agents: std::collections::HashMap<String, &crate::config::AgentConfig> = config
-        .agents
-        .iter()
-        .map(|(k, v)| (k.clone(), v))
-        .collect();
+    let mut all_agents: std::collections::HashMap<String, &crate::config::AgentConfig> =
+        config.agents.iter().map(|(k, v)| (k.clone(), v)).collect();
     if let Some(project) = config.projects.get(project_id) {
         for (k, v) in &project.agents {
             all_agents.insert(k.clone(), v);
@@ -105,9 +102,7 @@ pub fn build_execution_plan_for_project(
     build_execution_plan_inner(workflow)
 }
 
-fn build_execution_plan_inner(
-    workflow: &WorkflowConfig,
-) -> Result<TaskExecutionPlan> {
+fn build_execution_plan_inner(workflow: &WorkflowConfig) -> Result<TaskExecutionPlan> {
     let mut steps = Vec::new();
     for step in &workflow.steps {
         if !step.enabled {

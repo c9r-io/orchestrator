@@ -343,7 +343,10 @@ fn apply_then_delete_roundtrip() {
     let yaml = agent_yaml("temp-agent", "echo temp");
     let resources = parse_resources_from_yaml(&yaml).expect("parse temp agent");
     let registered = dispatch_resource(only(resources)).expect("dispatch temp agent");
-    assert_eq!(registered.apply(&mut config).expect("apply"), ApplyResult::Created);
+    assert_eq!(
+        registered.apply(&mut config).expect("apply"),
+        ApplyResult::Created
+    );
     assert!(config.agents.contains_key("temp-agent"));
 
     let deleted =
@@ -391,7 +394,10 @@ spec:
 
     let resources = parse_resources_from_yaml(yaml).expect("parse labeled workspace");
     let registered = dispatch_resource(only(resources)).expect("dispatch labeled workspace");
-    assert_eq!(registered.apply(&mut config).expect("apply"), ApplyResult::Created);
+    assert_eq!(
+        registered.apply(&mut config).expect("apply"),
+        ApplyResult::Created
+    );
 
     let cr = config
         .resource_store
@@ -402,7 +408,10 @@ spec:
         Some(&"test".to_string())
     );
     assert_eq!(
-        cr.metadata.annotations.as_ref().and_then(|m| m.get("owner")),
+        cr.metadata
+            .annotations
+            .as_ref()
+            .and_then(|m| m.get("owner")),
         Some(&"platform".to_string())
     );
 }
@@ -1005,9 +1014,11 @@ fn binary_snapshot_smoke_verify_integration() {
 
     // Verify .stable.json exists and contains valid JSON
     let manifest_path = temp_dir.join(".stable.json");
-    assert!(manifest_path.exists(), ".stable.json should exist after snapshot");
-    let manifest_str =
-        std::fs::read_to_string(&manifest_path).expect("read .stable.json");
+    assert!(
+        manifest_path.exists(),
+        ".stable.json should exist after snapshot"
+    );
+    let manifest_str = std::fs::read_to_string(&manifest_path).expect("read .stable.json");
     let manifest: SnapshotManifest =
         serde_json::from_str(&manifest_str).expect("parse .stable.json as valid SnapshotManifest");
     assert_eq!(manifest.task_id, "integ-task");

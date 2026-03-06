@@ -267,11 +267,7 @@ pub(crate) fn apply_to_store(
 
 /// Delete a builtin resource from the unified ResourceStore, then remove
 /// the single affected entry from the legacy config field.
-pub(crate) fn delete_from_store(
-    config: &mut OrchestratorConfig,
-    kind: &str,
-    name: &str,
-) -> bool {
+pub(crate) fn delete_from_store(config: &mut OrchestratorConfig, kind: &str, name: &str) -> bool {
     // If the store doesn't have this entry yet but the legacy field does,
     // seed it first so that remove() returns Some and we actually delete it.
     if config.resource_store.get(kind, name).is_none() {
@@ -311,15 +307,27 @@ pub fn apply_to_project(
     match resource {
         RegisteredResource::Agent(agent) => {
             let incoming = agent::agent_spec_to_config(&agent.spec);
-            Ok(apply_to_map(&mut project_entry.agents, agent.name(), incoming))
+            Ok(apply_to_map(
+                &mut project_entry.agents,
+                agent.name(),
+                incoming,
+            ))
         }
         RegisteredResource::Workflow(workflow) => {
             let incoming = workflow::workflow_spec_to_config(&workflow.spec)?;
-            Ok(apply_to_map(&mut project_entry.workflows, workflow.name(), incoming))
+            Ok(apply_to_map(
+                &mut project_entry.workflows,
+                workflow.name(),
+                incoming,
+            ))
         }
         RegisteredResource::Workspace(ws) => {
             let incoming = workspace::workspace_spec_to_config(&ws.spec);
-            Ok(apply_to_map(&mut project_entry.workspaces, ws.name(), incoming))
+            Ok(apply_to_map(
+                &mut project_entry.workspaces,
+                ws.name(),
+                incoming,
+            ))
         }
         // Singletons and other types always go to global config
         _ => resource.apply(config),
@@ -581,8 +589,14 @@ mod tests {
 
         let resource = dispatch_resource(workspace_manifest("same-ws", "workspace/same"))
             .expect("dispatch should succeed");
-        assert_eq!(resource.apply(&mut config).expect("apply"), ApplyResult::Created);
-        assert_eq!(resource.apply(&mut config).expect("apply"), ApplyResult::Unchanged);
+        assert_eq!(
+            resource.apply(&mut config).expect("apply"),
+            ApplyResult::Created
+        );
+        assert_eq!(
+            resource.apply(&mut config).expect("apply"),
+            ApplyResult::Unchanged
+        );
     }
 
     #[test]
@@ -596,11 +610,17 @@ mod tests {
 
         let initial = dispatch_resource(workspace_manifest("change-ws", "workspace/v1"))
             .expect("dispatch should succeed");
-        assert_eq!(initial.apply(&mut config).expect("apply"), ApplyResult::Created);
+        assert_eq!(
+            initial.apply(&mut config).expect("apply"),
+            ApplyResult::Created
+        );
 
         let updated = dispatch_resource(workspace_manifest("change-ws", "workspace/v2"))
             .expect("dispatch should succeed");
-        assert_eq!(updated.apply(&mut config).expect("apply"), ApplyResult::Configured);
+        assert_eq!(
+            updated.apply(&mut config).expect("apply"),
+            ApplyResult::Configured
+        );
     }
 
     // ── RegisteredResource dispatch delegation ─────────────────────────
@@ -866,7 +886,10 @@ mod tests {
         let result = apply_to_store(&mut config, "Workspace", "ws-new", &meta, ws.to_cr_spec());
         assert_eq!(result, ApplyResult::Created);
         assert!(config.resource_store.get("Workspace", "ws-new").is_some());
-        assert!(config.workspaces.contains_key("ws-new"), "legacy field updated");
+        assert!(
+            config.workspaces.contains_key("ws-new"),
+            "legacy field updated"
+        );
     }
 
     #[test]
@@ -923,7 +946,10 @@ mod tests {
                 self_referential: false,
             },
         );
-        assert!(config.resource_store.get("Workspace", "legacy-ws").is_none());
+        assert!(config
+            .resource_store
+            .get("Workspace", "legacy-ws")
+            .is_none());
 
         // Apply the identical resource — should return Unchanged because seed detects it
         let ws = crate::config::WorkspaceConfig {
@@ -933,8 +959,18 @@ mod tests {
             self_referential: false,
         };
         let meta = metadata_with_name("legacy-ws");
-        let result = apply_to_store(&mut config, "Workspace", "legacy-ws", &meta, ws.to_cr_spec());
-        assert_eq!(result, ApplyResult::Unchanged, "should seed from legacy and detect no change");
+        let result = apply_to_store(
+            &mut config,
+            "Workspace",
+            "legacy-ws",
+            &meta,
+            ws.to_cr_spec(),
+        );
+        assert_eq!(
+            result,
+            ApplyResult::Unchanged,
+            "should seed from legacy and detect no change"
+        );
     }
 
     #[test]
@@ -949,7 +985,11 @@ mod tests {
         };
         let meta = metadata_with_name("ws-gen");
         apply_to_store(&mut config, "Workspace", "ws-gen", &meta, ws.to_cr_spec());
-        let gen1 = config.resource_store.get("Workspace", "ws-gen").unwrap().generation;
+        let gen1 = config
+            .resource_store
+            .get("Workspace", "ws-gen")
+            .unwrap()
+            .generation;
 
         let ws2 = crate::config::WorkspaceConfig {
             root_path: "/g2".to_string(),
@@ -958,7 +998,11 @@ mod tests {
             self_referential: false,
         };
         apply_to_store(&mut config, "Workspace", "ws-gen", &meta, ws2.to_cr_spec());
-        let gen2 = config.resource_store.get("Workspace", "ws-gen").unwrap().generation;
+        let gen2 = config
+            .resource_store
+            .get("Workspace", "ws-gen")
+            .unwrap()
+            .generation;
         assert!(gen2 > gen1, "generation should increment on update");
     }
 
@@ -1031,7 +1075,10 @@ mod tests {
 
         let loaded = metadata_from_store(&config, "Workspace", "ws-meta");
         assert_eq!(loaded.labels.as_ref().unwrap().get("env").unwrap(), "prod");
-        assert_eq!(loaded.annotations.as_ref().unwrap().get("note").unwrap(), "hi");
+        assert_eq!(
+            loaded.annotations.as_ref().unwrap().get("note").unwrap(),
+            "hi"
+        );
     }
 
     #[test]
@@ -1133,7 +1180,7 @@ pub(super) mod test_fixtures {
                     command: None,
                     scope: None,
                     max_parallel: None,
-            timeout_secs: None,
+                    timeout_secs: None,
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "once".to_string(),

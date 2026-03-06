@@ -266,28 +266,138 @@ fn m0001_baseline_schema(conn: &Connection) -> Result<()> {
     // Safety net for partially-migrated databases: ensure all columns exist
     // (no-op if the CREATE TABLE above already created them inline)
     use crate::db::ensure_column;
-    ensure_column(conn, "tasks", "workspace_id", "ALTER TABLE tasks ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''")?;
-    ensure_column(conn, "tasks", "workflow_id", "ALTER TABLE tasks ADD COLUMN workflow_id TEXT NOT NULL DEFAULT ''")?;
-    ensure_column(conn, "tasks", "project_id", "ALTER TABLE tasks ADD COLUMN project_id TEXT NOT NULL DEFAULT ''")?;
-    ensure_column(conn, "tasks", "workspace_root", "ALTER TABLE tasks ADD COLUMN workspace_root TEXT NOT NULL DEFAULT ''")?;
-    ensure_column(conn, "tasks", "qa_targets_json", "ALTER TABLE tasks ADD COLUMN qa_targets_json TEXT NOT NULL DEFAULT '[]'")?;
-    ensure_column(conn, "tasks", "ticket_dir", "ALTER TABLE tasks ADD COLUMN ticket_dir TEXT NOT NULL DEFAULT ''")?;
-    ensure_column(conn, "tasks", "execution_plan_json", "ALTER TABLE tasks ADD COLUMN execution_plan_json TEXT NOT NULL DEFAULT '{}'")?;
-    ensure_column(conn, "tasks", "loop_mode", "ALTER TABLE tasks ADD COLUMN loop_mode TEXT NOT NULL DEFAULT 'once'")?;
-    ensure_column(conn, "tasks", "current_cycle", "ALTER TABLE tasks ADD COLUMN current_cycle INTEGER NOT NULL DEFAULT 0")?;
-    ensure_column(conn, "tasks", "init_done", "ALTER TABLE tasks ADD COLUMN init_done INTEGER NOT NULL DEFAULT 0")?;
-    ensure_column(conn, "command_runs", "workspace_id", "ALTER TABLE command_runs ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''")?;
-    ensure_column(conn, "command_runs", "agent_id", "ALTER TABLE command_runs ADD COLUMN agent_id TEXT NOT NULL DEFAULT ''")?;
-    ensure_column(conn, "command_runs", "project_id", "ALTER TABLE command_runs ADD COLUMN project_id TEXT NOT NULL DEFAULT ''")?;
-    ensure_column(conn, "command_runs", "output_json", "ALTER TABLE command_runs ADD COLUMN output_json TEXT NOT NULL DEFAULT '{}'")?;
-    ensure_column(conn, "command_runs", "artifacts_json", "ALTER TABLE command_runs ADD COLUMN artifacts_json TEXT NOT NULL DEFAULT '[]'")?;
-    ensure_column(conn, "command_runs", "confidence", "ALTER TABLE command_runs ADD COLUMN confidence REAL")?;
-    ensure_column(conn, "command_runs", "quality_score", "ALTER TABLE command_runs ADD COLUMN quality_score REAL")?;
-    ensure_column(conn, "command_runs", "validation_status", "ALTER TABLE command_runs ADD COLUMN validation_status TEXT NOT NULL DEFAULT 'unknown'")?;
-    ensure_column(conn, "command_runs", "session_id", "ALTER TABLE command_runs ADD COLUMN session_id TEXT")?;
-    ensure_column(conn, "command_runs", "machine_output_source", "ALTER TABLE command_runs ADD COLUMN machine_output_source TEXT NOT NULL DEFAULT 'stdout'")?;
-    ensure_column(conn, "command_runs", "output_json_path", "ALTER TABLE command_runs ADD COLUMN output_json_path TEXT")?;
-    ensure_column(conn, "command_runs", "pid", "ALTER TABLE command_runs ADD COLUMN pid INTEGER")?;
+    ensure_column(
+        conn,
+        "tasks",
+        "workspace_id",
+        "ALTER TABLE tasks ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        conn,
+        "tasks",
+        "workflow_id",
+        "ALTER TABLE tasks ADD COLUMN workflow_id TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        conn,
+        "tasks",
+        "project_id",
+        "ALTER TABLE tasks ADD COLUMN project_id TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        conn,
+        "tasks",
+        "workspace_root",
+        "ALTER TABLE tasks ADD COLUMN workspace_root TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        conn,
+        "tasks",
+        "qa_targets_json",
+        "ALTER TABLE tasks ADD COLUMN qa_targets_json TEXT NOT NULL DEFAULT '[]'",
+    )?;
+    ensure_column(
+        conn,
+        "tasks",
+        "ticket_dir",
+        "ALTER TABLE tasks ADD COLUMN ticket_dir TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        conn,
+        "tasks",
+        "execution_plan_json",
+        "ALTER TABLE tasks ADD COLUMN execution_plan_json TEXT NOT NULL DEFAULT '{}'",
+    )?;
+    ensure_column(
+        conn,
+        "tasks",
+        "loop_mode",
+        "ALTER TABLE tasks ADD COLUMN loop_mode TEXT NOT NULL DEFAULT 'once'",
+    )?;
+    ensure_column(
+        conn,
+        "tasks",
+        "current_cycle",
+        "ALTER TABLE tasks ADD COLUMN current_cycle INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        conn,
+        "tasks",
+        "init_done",
+        "ALTER TABLE tasks ADD COLUMN init_done INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        conn,
+        "command_runs",
+        "workspace_id",
+        "ALTER TABLE command_runs ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        conn,
+        "command_runs",
+        "agent_id",
+        "ALTER TABLE command_runs ADD COLUMN agent_id TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        conn,
+        "command_runs",
+        "project_id",
+        "ALTER TABLE command_runs ADD COLUMN project_id TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        conn,
+        "command_runs",
+        "output_json",
+        "ALTER TABLE command_runs ADD COLUMN output_json TEXT NOT NULL DEFAULT '{}'",
+    )?;
+    ensure_column(
+        conn,
+        "command_runs",
+        "artifacts_json",
+        "ALTER TABLE command_runs ADD COLUMN artifacts_json TEXT NOT NULL DEFAULT '[]'",
+    )?;
+    ensure_column(
+        conn,
+        "command_runs",
+        "confidence",
+        "ALTER TABLE command_runs ADD COLUMN confidence REAL",
+    )?;
+    ensure_column(
+        conn,
+        "command_runs",
+        "quality_score",
+        "ALTER TABLE command_runs ADD COLUMN quality_score REAL",
+    )?;
+    ensure_column(
+        conn,
+        "command_runs",
+        "validation_status",
+        "ALTER TABLE command_runs ADD COLUMN validation_status TEXT NOT NULL DEFAULT 'unknown'",
+    )?;
+    ensure_column(
+        conn,
+        "command_runs",
+        "session_id",
+        "ALTER TABLE command_runs ADD COLUMN session_id TEXT",
+    )?;
+    ensure_column(
+        conn,
+        "command_runs",
+        "machine_output_source",
+        "ALTER TABLE command_runs ADD COLUMN machine_output_source TEXT NOT NULL DEFAULT 'stdout'",
+    )?;
+    ensure_column(
+        conn,
+        "command_runs",
+        "output_json_path",
+        "ALTER TABLE command_runs ADD COLUMN output_json_path TEXT",
+    )?;
+    ensure_column(
+        conn,
+        "command_runs",
+        "pid",
+        "ALTER TABLE command_runs ADD COLUMN pid INTEGER",
+    )?;
 
     Ok(())
 }
@@ -351,9 +461,24 @@ fn m0002_backfill_legacy_defaults(conn: &Connection) -> Result<()> {
 
 fn m0003_events_promote_columns(conn: &Connection) -> Result<()> {
     use crate::db::ensure_column;
-    ensure_column(conn, "events", "step", "ALTER TABLE events ADD COLUMN step TEXT")?;
-    ensure_column(conn, "events", "step_scope", "ALTER TABLE events ADD COLUMN step_scope TEXT")?;
-    ensure_column(conn, "events", "cycle", "ALTER TABLE events ADD COLUMN cycle INTEGER")?;
+    ensure_column(
+        conn,
+        "events",
+        "step",
+        "ALTER TABLE events ADD COLUMN step TEXT",
+    )?;
+    ensure_column(
+        conn,
+        "events",
+        "step_scope",
+        "ALTER TABLE events ADD COLUMN step_scope TEXT",
+    )?;
+    ensure_column(
+        conn,
+        "events",
+        "cycle",
+        "ALTER TABLE events ADD COLUMN cycle INTEGER",
+    )?;
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_events_task_type_step ON events(task_id, event_type, step)",
@@ -437,8 +562,16 @@ mod tests {
 
         // Apply only first 2
         let partial: Vec<Migration> = vec![
-            Migration { version: 1, name: all[0].name, up: all[0].up },
-            Migration { version: 2, name: all[1].name, up: all[1].up },
+            Migration {
+                version: 1,
+                name: all[0].name,
+                up: all[0].up,
+            },
+            Migration {
+                version: 2,
+                name: all[1].name,
+                up: all[1].up,
+            },
         ];
         let applied = run_pending(&conn, &partial).expect("partial run");
         assert_eq!(applied, 2);
@@ -467,8 +600,16 @@ mod tests {
         run_pending(&conn, &first).expect("first migration");
 
         let bad = vec![
-            Migration { version: 1, name: "m0001_baseline_schema", up: m0001_baseline_schema },
-            Migration { version: 2, name: "m_fail", up: fail_migration },
+            Migration {
+                version: 1,
+                name: "m0001_baseline_schema",
+                up: m0001_baseline_schema,
+            },
+            Migration {
+                version: 2,
+                name: "m_fail",
+                up: fail_migration,
+            },
         ];
 
         let err = run_pending(&conn, &bad);
@@ -584,12 +725,14 @@ mod tests {
             "INSERT INTO events (task_id, event_type, payload_json, created_at)
              VALUES ('t1', 'cycle_started', '{\"cycle\":2}', '2026-01-01')",
             [],
-        ).expect("insert event 2");
+        )
+        .expect("insert event 2");
         conn.execute(
             "INSERT INTO events (task_id, event_type, payload_json, created_at)
              VALUES ('t1', 'step_spawned', '{\"phase\":\"implement\"}', '2026-01-01')",
             [],
-        ).expect("insert event 3");
+        )
+        .expect("insert event 3");
 
         // Run m4
         let m4_vec = vec![m4];

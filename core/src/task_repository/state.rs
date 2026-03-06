@@ -21,7 +21,10 @@ pub fn set_task_status(
             "UPDATE tasks SET status = ?2, started_at = COALESCE(started_at, ?3), completed_at = NULL, updated_at = ?4 WHERE id = ?1",
             params![task_id, status, now.clone(), now],
         )?;
-    } else if matches!(status, "pending" | "paused" | "interrupted" | "restart_pending") {
+    } else if matches!(
+        status,
+        "pending" | "paused" | "interrupted" | "restart_pending"
+    ) {
         conn.execute(
             "UPDATE tasks SET status = ?2, completed_at = NULL, updated_at = ?3 WHERE id = ?1",
             params![task_id, status, now],

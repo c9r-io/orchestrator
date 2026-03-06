@@ -392,7 +392,10 @@ fn prepare_task_restart_pending_preserves_items() {
             |row| row.get(0),
         )
         .expect("query item status");
-    assert_eq!(item_status, "qa_passed", "restart_pending should preserve item statuses");
+    assert_eq!(
+        item_status, "qa_passed",
+        "restart_pending should preserve item statuses"
+    );
 }
 
 #[test]
@@ -418,5 +421,8 @@ fn set_task_status_restart_pending_clears_completed_at() {
         )
         .expect("query task");
     assert_eq!(status, "restart_pending");
-    assert_eq!(completed_at, None, "restart_pending should clear completed_at");
+    assert_eq!(
+        completed_at, None,
+        "restart_pending should clear completed_at"
+    );
 }

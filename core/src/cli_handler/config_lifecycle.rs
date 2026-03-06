@@ -8,7 +8,9 @@ impl CliHandler {
     pub(super) fn handle_config_lifecycle(&self, cmd: &ConfigLifecycleCommands) -> Result<i32> {
         match cmd {
             ConfigLifecycleCommands::HealLog { limit, json } => self.handle_heal_log(*limit, *json),
-            ConfigLifecycleCommands::BackfillEvents { force } => self.handle_backfill_events(*force),
+            ConfigLifecycleCommands::BackfillEvents { force } => {
+                self.handle_backfill_events(*force)
+            }
         }
     }
 

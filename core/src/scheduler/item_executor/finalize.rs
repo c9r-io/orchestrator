@@ -43,10 +43,9 @@ pub async fn finalize_item_execution(
         .await?;
     } else if acc.flags.get("execution_failed").copied().unwrap_or(false) {
         acc.item_status = "unresolved".to_string();
-    } else if let Some(outcome) = resolve_workflow_finalize_outcome(
-        &task_ctx.execution_plan.finalize,
-        &finalize_context,
-    )? {
+    } else if let Some(outcome) =
+        resolve_workflow_finalize_outcome(&task_ctx.execution_plan.finalize, &finalize_context)?
+    {
         acc.item_status = outcome.status.clone();
         emit_item_finalize_event(state, &finalize_context, &outcome).await?;
     }

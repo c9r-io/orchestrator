@@ -10,8 +10,8 @@ use std::io::{Read, Seek};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use super::task_queries::resolve_task_id;
 use super::emit_anomaly_warning;
+use super::task_queries::resolve_task_id;
 
 const FOLLOW_POLL_MS: u64 = 500;
 const LOG_UNAVAILABLE_MARKER: &str = "[log unavailable]";
@@ -351,33 +351,37 @@ mod tests {
         std::fs::write(&stdout_path, "line 1\nline 2\nline 3\n").expect("write stdout");
         std::fs::write(&stderr_path, "").expect("write stderr");
 
-        state.task_repo.insert_command_run(NewCommandRun {
-            id: "run-stream-1".to_string(),
-            task_item_id: item_id,
-            phase: "qa".to_string(),
-            command: "echo stream".to_string(),
-            cwd: "/tmp".to_string(),
-            workspace_id: "default".to_string(),
-            agent_id: "echo".to_string(),
-            exit_code: 0,
-            stdout_path: stdout_path.to_string_lossy().to_string(),
-            stderr_path: stderr_path.to_string_lossy().to_string(),
-            started_at: now_ts(),
-            ended_at: now_ts(),
-            interrupted: 0,
-            output_json: "{}".to_string(),
-            artifacts_json: "[]".to_string(),
-            confidence: None,
-            quality_score: None,
-            validation_status: "unknown".to_string(),
-            session_id: None,
-            machine_output_source: "stdout".to_string(),
-            output_json_path: None,
-        })
-        .await
-        .expect("insert command run");
+        state
+            .task_repo
+            .insert_command_run(NewCommandRun {
+                id: "run-stream-1".to_string(),
+                task_item_id: item_id,
+                phase: "qa".to_string(),
+                command: "echo stream".to_string(),
+                cwd: "/tmp".to_string(),
+                workspace_id: "default".to_string(),
+                agent_id: "echo".to_string(),
+                exit_code: 0,
+                stdout_path: stdout_path.to_string_lossy().to_string(),
+                stderr_path: stderr_path.to_string_lossy().to_string(),
+                started_at: now_ts(),
+                ended_at: now_ts(),
+                interrupted: 0,
+                output_json: "{}".to_string(),
+                artifacts_json: "[]".to_string(),
+                confidence: None,
+                quality_score: None,
+                validation_status: "unknown".to_string(),
+                session_id: None,
+                machine_output_source: "stdout".to_string(),
+                output_json_path: None,
+            })
+            .await
+            .expect("insert command run");
 
-        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).await.expect("stream task logs");
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false)
+            .await
+            .expect("stream task logs");
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0].run_id, "run-stream-1");
         assert_eq!(chunks[0].phase, "qa");
@@ -400,31 +404,33 @@ mod tests {
         std::fs::write(&stdout_path, "token=redacted\nvisible line\n").expect("write stdout");
         std::fs::write(&stderr_path, "").expect("write stderr");
 
-        state.task_repo.insert_command_run(NewCommandRun {
-            id: "run-invalid-active-1".to_string(),
-            task_item_id: item_id,
-            phase: "qa".to_string(),
-            command: "echo stream".to_string(),
-            cwd: "/tmp".to_string(),
-            workspace_id: "default".to_string(),
-            agent_id: "echo".to_string(),
-            exit_code: 0,
-            stdout_path: stdout_path.to_string_lossy().to_string(),
-            stderr_path: stderr_path.to_string_lossy().to_string(),
-            started_at: now_ts(),
-            ended_at: now_ts(),
-            interrupted: 0,
-            output_json: "{}".to_string(),
-            artifacts_json: "[]".to_string(),
-            confidence: None,
-            quality_score: None,
-            validation_status: "unknown".to_string(),
-            session_id: None,
-            machine_output_source: "stdout".to_string(),
-            output_json_path: None,
-        })
-        .await
-        .expect("insert command run");
+        state
+            .task_repo
+            .insert_command_run(NewCommandRun {
+                id: "run-invalid-active-1".to_string(),
+                task_item_id: item_id,
+                phase: "qa".to_string(),
+                command: "echo stream".to_string(),
+                cwd: "/tmp".to_string(),
+                workspace_id: "default".to_string(),
+                agent_id: "echo".to_string(),
+                exit_code: 0,
+                stdout_path: stdout_path.to_string_lossy().to_string(),
+                stderr_path: stderr_path.to_string_lossy().to_string(),
+                started_at: now_ts(),
+                ended_at: now_ts(),
+                interrupted: 0,
+                output_json: "{}".to_string(),
+                artifacts_json: "[]".to_string(),
+                confidence: None,
+                quality_score: None,
+                validation_status: "unknown".to_string(),
+                session_id: None,
+                machine_output_source: "stdout".to_string(),
+                output_json_path: None,
+            })
+            .await
+            .expect("insert command run");
 
         *state
             .active_config_error
@@ -432,7 +438,9 @@ mod tests {
             .expect("active_config_error lock should be writable") =
             Some("active config is not runnable".to_string());
 
-        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).await.expect("stream task logs");
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false)
+            .await
+            .expect("stream task logs");
         assert_eq!(chunks.len(), 1);
         assert!(chunks[0].content.contains("[REDACTED]"));
         assert!(chunks[0].content.contains("visible line"));
@@ -451,33 +459,37 @@ mod tests {
         std::fs::write(&stdout_path, "stdout content\n").expect("write stdout");
         std::fs::write(&stderr_path, "warning: something\n").expect("write stderr");
 
-        state.task_repo.insert_command_run(NewCommandRun {
-            id: "run-stream-err".to_string(),
-            task_item_id: item_id,
-            phase: "implement".to_string(),
-            command: "echo err".to_string(),
-            cwd: "/tmp".to_string(),
-            workspace_id: "default".to_string(),
-            agent_id: "echo".to_string(),
-            exit_code: 1,
-            stdout_path: stdout_path.to_string_lossy().to_string(),
-            stderr_path: stderr_path.to_string_lossy().to_string(),
-            started_at: now_ts(),
-            ended_at: now_ts(),
-            interrupted: 0,
-            output_json: "{}".to_string(),
-            artifacts_json: "[]".to_string(),
-            confidence: None,
-            quality_score: None,
-            validation_status: "unknown".to_string(),
-            session_id: None,
-            machine_output_source: "stdout".to_string(),
-            output_json_path: None,
-        })
-        .await
-        .expect("insert command run");
+        state
+            .task_repo
+            .insert_command_run(NewCommandRun {
+                id: "run-stream-err".to_string(),
+                task_item_id: item_id,
+                phase: "implement".to_string(),
+                command: "echo err".to_string(),
+                cwd: "/tmp".to_string(),
+                workspace_id: "default".to_string(),
+                agent_id: "echo".to_string(),
+                exit_code: 1,
+                stdout_path: stdout_path.to_string_lossy().to_string(),
+                stderr_path: stderr_path.to_string_lossy().to_string(),
+                started_at: now_ts(),
+                ended_at: now_ts(),
+                interrupted: 0,
+                output_json: "{}".to_string(),
+                artifacts_json: "[]".to_string(),
+                confidence: None,
+                quality_score: None,
+                validation_status: "unknown".to_string(),
+                session_id: None,
+                machine_output_source: "stdout".to_string(),
+                output_json_path: None,
+            })
+            .await
+            .expect("insert command run");
 
-        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).await.expect("stream task logs");
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false)
+            .await
+            .expect("stream task logs");
         assert_eq!(chunks.len(), 1);
         assert!(chunks[0].content.contains("stdout content"));
         assert!(chunks[0].content.contains("[stderr]"));
@@ -498,34 +510,37 @@ mod tests {
         std::fs::write(&stderr_path, "").expect("write stderr");
 
         let ts = now_ts();
-        state.task_repo.insert_command_run(NewCommandRun {
-            id: "run-ts-1".to_string(),
-            task_item_id: item_id,
-            phase: "qa".to_string(),
-            command: "echo ts".to_string(),
-            cwd: "/tmp".to_string(),
-            workspace_id: "default".to_string(),
-            agent_id: "echo".to_string(),
-            exit_code: 0,
-            stdout_path: stdout_path.to_string_lossy().to_string(),
-            stderr_path: stderr_path.to_string_lossy().to_string(),
-            started_at: ts.clone(),
-            ended_at: now_ts(),
-            interrupted: 0,
-            output_json: "{}".to_string(),
-            artifacts_json: "[]".to_string(),
-            confidence: None,
-            quality_score: None,
-            validation_status: "unknown".to_string(),
-            session_id: None,
-            machine_output_source: "stdout".to_string(),
-            output_json_path: None,
-        })
-        .await
-        .expect("insert command run");
+        state
+            .task_repo
+            .insert_command_run(NewCommandRun {
+                id: "run-ts-1".to_string(),
+                task_item_id: item_id,
+                phase: "qa".to_string(),
+                command: "echo ts".to_string(),
+                cwd: "/tmp".to_string(),
+                workspace_id: "default".to_string(),
+                agent_id: "echo".to_string(),
+                exit_code: 0,
+                stdout_path: stdout_path.to_string_lossy().to_string(),
+                stderr_path: stderr_path.to_string_lossy().to_string(),
+                started_at: ts.clone(),
+                ended_at: now_ts(),
+                interrupted: 0,
+                output_json: "{}".to_string(),
+                artifacts_json: "[]".to_string(),
+                confidence: None,
+                quality_score: None,
+                validation_status: "unknown".to_string(),
+                session_id: None,
+                machine_output_source: "stdout".to_string(),
+                output_json_path: None,
+            })
+            .await
+            .expect("insert command run");
 
-        let chunks =
-            stream_task_logs_impl(&state, &task_id, 10, true).await.expect("stream with timestamps");
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, true)
+            .await
+            .expect("stream with timestamps");
         assert_eq!(chunks.len(), 1);
         // When show_timestamps is true, header includes the timestamp
         assert!(
@@ -550,18 +565,73 @@ mod tests {
             std::fs::write(&stdout_path, format!("run {} output\n", i)).expect("write tail stdout");
             std::fs::write(&stderr_path, "").expect("write tail stderr");
 
-            state.task_repo.insert_command_run(NewCommandRun {
-                id: format!("run-tail-{}", i),
-                task_item_id: item_id.clone(),
+            state
+                .task_repo
+                .insert_command_run(NewCommandRun {
+                    id: format!("run-tail-{}", i),
+                    task_item_id: item_id.clone(),
+                    phase: "qa".to_string(),
+                    command: format!("echo {}", i),
+                    cwd: "/tmp".to_string(),
+                    workspace_id: "default".to_string(),
+                    agent_id: "echo".to_string(),
+                    exit_code: 0,
+                    stdout_path: stdout_path.to_string_lossy().to_string(),
+                    stderr_path: stderr_path.to_string_lossy().to_string(),
+                    started_at: format!("2026-01-01T00:00:0{}Z", i),
+                    ended_at: now_ts(),
+                    interrupted: 0,
+                    output_json: "{}".to_string(),
+                    artifacts_json: "[]".to_string(),
+                    confidence: None,
+                    quality_score: None,
+                    validation_status: "unknown".to_string(),
+                    session_id: None,
+                    machine_output_source: "stdout".to_string(),
+                    output_json_path: None,
+                })
+                .await
+                .expect("insert command run");
+        }
+
+        // Request only 2 tail entries
+        let chunks = stream_task_logs_impl(&state, &task_id, 2, false)
+            .await
+            .expect("stream with tail limit");
+        assert_eq!(chunks.len(), 2, "should be limited to 2 chunks");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn stream_task_logs_impl_no_runs_returns_empty() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false)
+            .await
+            .expect("stream empty logs");
+        assert!(chunks.is_empty());
+    }
+
+    #[tokio::test]
+    async fn stream_task_logs_impl_returns_placeholder_when_logs_missing() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let item_id = first_item_id(&state, &task_id);
+
+        state
+            .task_repo
+            .insert_command_run(NewCommandRun {
+                id: "run-missing-logs".to_string(),
+                task_item_id: item_id,
                 phase: "qa".to_string(),
-                command: format!("echo {}", i),
+                command: "echo missing".to_string(),
                 cwd: "/tmp".to_string(),
                 workspace_id: "default".to_string(),
                 agent_id: "echo".to_string(),
                 exit_code: 0,
-                stdout_path: stdout_path.to_string_lossy().to_string(),
-                stderr_path: stderr_path.to_string_lossy().to_string(),
-                started_at: format!("2026-01-01T00:00:0{}Z", i),
+                stdout_path: "/nonexistent/stdout.log".to_string(),
+                stderr_path: "/nonexistent/stderr.log".to_string(),
+                started_at: now_ts(),
                 ended_at: now_ts(),
                 interrupted: 0,
                 output_json: "{}".to_string(),
@@ -575,56 +645,10 @@ mod tests {
             })
             .await
             .expect("insert command run");
-        }
 
-        // Request only 2 tail entries
-        let chunks =
-            stream_task_logs_impl(&state, &task_id, 2, false).await.expect("stream with tail limit");
-        assert_eq!(chunks.len(), 2, "should be limited to 2 chunks");
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[tokio::test]
-    async fn stream_task_logs_impl_no_runs_returns_empty() {
-        let mut fixture = TestState::new();
-        let (state, task_id) = seed_task(&mut fixture);
-        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).await.expect("stream empty logs");
-        assert!(chunks.is_empty());
-    }
-
-    #[tokio::test]
-    async fn stream_task_logs_impl_returns_placeholder_when_logs_missing() {
-        let mut fixture = TestState::new();
-        let (state, task_id) = seed_task(&mut fixture);
-        let item_id = first_item_id(&state, &task_id);
-
-        state.task_repo.insert_command_run(NewCommandRun {
-            id: "run-missing-logs".to_string(),
-            task_item_id: item_id,
-            phase: "qa".to_string(),
-            command: "echo missing".to_string(),
-            cwd: "/tmp".to_string(),
-            workspace_id: "default".to_string(),
-            agent_id: "echo".to_string(),
-            exit_code: 0,
-            stdout_path: "/nonexistent/stdout.log".to_string(),
-            stderr_path: "/nonexistent/stderr.log".to_string(),
-            started_at: now_ts(),
-            ended_at: now_ts(),
-            interrupted: 0,
-            output_json: "{}".to_string(),
-            artifacts_json: "[]".to_string(),
-            confidence: None,
-            quality_score: None,
-            validation_status: "unknown".to_string(),
-            session_id: None,
-            machine_output_source: "stdout".to_string(),
-            output_json_path: None,
-        })
-        .await
-        .expect("insert command run");
-
-        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).await.expect("stream task logs");
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false)
+            .await
+            .expect("stream task logs");
         assert_eq!(chunks.len(), 1);
         assert!(chunks[0].content.contains(LOG_UNAVAILABLE_MARKER));
     }
@@ -641,58 +665,64 @@ mod tests {
         std::fs::write(&stdout_path, "available output\n").expect("write available stdout");
         std::fs::write(&stderr_path, "").expect("write available stderr");
 
-        state.task_repo.insert_command_run(NewCommandRun {
-            id: "run-partial-good".to_string(),
-            task_item_id: item_id.clone(),
-            phase: "qa".to_string(),
-            command: "echo ok".to_string(),
-            cwd: "/tmp".to_string(),
-            workspace_id: "default".to_string(),
-            agent_id: "echo".to_string(),
-            exit_code: 0,
-            stdout_path: stdout_path.to_string_lossy().to_string(),
-            stderr_path: stderr_path.to_string_lossy().to_string(),
-            started_at: "2026-01-01T00:00:00Z".to_string(),
-            ended_at: now_ts(),
-            interrupted: 0,
-            output_json: "{}".to_string(),
-            artifacts_json: "[]".to_string(),
-            confidence: None,
-            quality_score: None,
-            validation_status: "unknown".to_string(),
-            session_id: None,
-            machine_output_source: "stdout".to_string(),
-            output_json_path: None,
-        })
-        .await
-        .expect("insert good run");
-        state.task_repo.insert_command_run(NewCommandRun {
-            id: "run-partial-missing".to_string(),
-            task_item_id: item_id,
-            phase: "implement".to_string(),
-            command: "echo missing".to_string(),
-            cwd: "/tmp".to_string(),
-            workspace_id: "default".to_string(),
-            agent_id: "echo".to_string(),
-            exit_code: 0,
-            stdout_path: "/nonexistent/stdout.log".to_string(),
-            stderr_path: "/nonexistent/stderr.log".to_string(),
-            started_at: "2026-01-01T00:00:01Z".to_string(),
-            ended_at: now_ts(),
-            interrupted: 0,
-            output_json: "{}".to_string(),
-            artifacts_json: "[]".to_string(),
-            confidence: None,
-            quality_score: None,
-            validation_status: "unknown".to_string(),
-            session_id: None,
-            machine_output_source: "stdout".to_string(),
-            output_json_path: None,
-        })
-        .await
-        .expect("insert missing run");
+        state
+            .task_repo
+            .insert_command_run(NewCommandRun {
+                id: "run-partial-good".to_string(),
+                task_item_id: item_id.clone(),
+                phase: "qa".to_string(),
+                command: "echo ok".to_string(),
+                cwd: "/tmp".to_string(),
+                workspace_id: "default".to_string(),
+                agent_id: "echo".to_string(),
+                exit_code: 0,
+                stdout_path: stdout_path.to_string_lossy().to_string(),
+                stderr_path: stderr_path.to_string_lossy().to_string(),
+                started_at: "2026-01-01T00:00:00Z".to_string(),
+                ended_at: now_ts(),
+                interrupted: 0,
+                output_json: "{}".to_string(),
+                artifacts_json: "[]".to_string(),
+                confidence: None,
+                quality_score: None,
+                validation_status: "unknown".to_string(),
+                session_id: None,
+                machine_output_source: "stdout".to_string(),
+                output_json_path: None,
+            })
+            .await
+            .expect("insert good run");
+        state
+            .task_repo
+            .insert_command_run(NewCommandRun {
+                id: "run-partial-missing".to_string(),
+                task_item_id: item_id,
+                phase: "implement".to_string(),
+                command: "echo missing".to_string(),
+                cwd: "/tmp".to_string(),
+                workspace_id: "default".to_string(),
+                agent_id: "echo".to_string(),
+                exit_code: 0,
+                stdout_path: "/nonexistent/stdout.log".to_string(),
+                stderr_path: "/nonexistent/stderr.log".to_string(),
+                started_at: "2026-01-01T00:00:01Z".to_string(),
+                ended_at: now_ts(),
+                interrupted: 0,
+                output_json: "{}".to_string(),
+                artifacts_json: "[]".to_string(),
+                confidence: None,
+                quality_score: None,
+                validation_status: "unknown".to_string(),
+                session_id: None,
+                machine_output_source: "stdout".to_string(),
+                output_json_path: None,
+            })
+            .await
+            .expect("insert missing run");
 
-        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).await.expect("stream task logs");
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false)
+            .await
+            .expect("stream task logs");
         assert_eq!(chunks.len(), 2);
         assert!(chunks
             .iter()

@@ -12,7 +12,8 @@ async fn persist_task_execution_metric(
     current_cycle: u32,
     unresolved_items: i64,
 ) -> Result<()> {
-    let (total_items, _finished_items, failed_items) = state.task_repo.load_task_item_counts(task_id).await?;
+    let (total_items, _finished_items, failed_items) =
+        state.task_repo.load_task_item_counts(task_id).await?;
     let task_id_owned = task_id.to_owned();
     let status_owned = status.to_owned();
     state
@@ -77,7 +78,10 @@ pub async fn set_task_status(
 }
 
 pub async fn prepare_task_for_start(state: &InnerState, task_id: &str) -> Result<()> {
-    state.task_repo.prepare_task_for_start_batch(task_id).await?;
+    state
+        .task_repo
+        .prepare_task_for_start_batch(task_id)
+        .await?;
     insert_event(
         state,
         task_id,
@@ -93,7 +97,10 @@ pub async fn find_latest_resumable_task_id(
     state: &InnerState,
     include_pending: bool,
 ) -> Result<Option<String>> {
-    state.task_repo.find_latest_resumable_task_id(include_pending).await
+    state
+        .task_repo
+        .find_latest_resumable_task_id(include_pending)
+        .await
 }
 
 pub async fn first_task_item_id(state: &InnerState, task_id: &str) -> Result<Option<String>> {
@@ -159,25 +166,41 @@ mod tests {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
 
-        prepare_task_for_start(&state, &task_id).await.expect("prepare task");
-        let resumable = find_latest_resumable_task_id(&state, true).await.expect("find resumable task");
-        let first_item = first_task_item_id(&state, &task_id).await.expect("load first item");
-        let items = list_task_items_for_cycle(&state, &task_id).await.expect("list task items");
+        prepare_task_for_start(&state, &task_id)
+            .await
+            .expect("prepare task");
+        let resumable = find_latest_resumable_task_id(&state, true)
+            .await
+            .expect("find resumable task");
+        let first_item = first_task_item_id(&state, &task_id)
+            .await
+            .expect("load first item");
+        let items = list_task_items_for_cycle(&state, &task_id)
+            .await
+            .expect("list task items");
 
         assert_eq!(resumable.as_deref(), Some(task_id.as_str()));
         assert_eq!(items.len(), 1);
         assert_eq!(first_item.as_deref(), Some(items[0].id.as_str()));
         assert_eq!(
-            count_unresolved_items(&state, &task_id).await.expect("count unresolved items"),
+            count_unresolved_items(&state, &task_id)
+                .await
+                .expect("count unresolved items"),
             0
         );
 
-        update_task_cycle_state(&state, &task_id, 2, true).await.expect("update cycle state");
+        update_task_cycle_state(&state, &task_id, 2, true)
+            .await
+            .expect("update cycle state");
         record_task_execution_metric(&state, &task_id, "running", 2, 0)
             .await
             .expect("record task metric");
-        set_task_status(&state, &task_id, "paused", false).await.expect("pause task");
-        assert!(is_task_paused_in_db(&state, &task_id).await.expect("check paused status"));
+        set_task_status(&state, &task_id, "paused", false)
+            .await
+            .expect("pause task");
+        assert!(is_task_paused_in_db(&state, &task_id)
+            .await
+            .expect("check paused status"));
 
         let conn = open_conn(&state.db_path).expect("open sqlite");
         let metric_rows: i64 = conn

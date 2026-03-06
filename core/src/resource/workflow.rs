@@ -61,7 +61,13 @@ impl Resource for WorkflowResource {
         let mut incoming = workflow_spec_to_config(&self.spec)?;
         crate::config_load::normalize_workflow_config(&mut incoming);
         let spec_value = incoming.to_cr_spec();
-        Ok(super::apply_to_store(config, "Workflow", self.name(), &self.metadata, spec_value))
+        Ok(super::apply_to_store(
+            config,
+            "Workflow",
+            self.name(),
+            &self.metadata,
+            spec_value,
+        ))
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -126,7 +132,10 @@ mod tests {
 
         let resource = dispatch_resource(workflow_manifest("wf-roundtrip"))
             .expect("workflow dispatch should succeed");
-        assert_eq!(resource.apply(&mut config).expect("apply"), ApplyResult::Created);
+        assert_eq!(
+            resource.apply(&mut config).expect("apply"),
+            ApplyResult::Created
+        );
 
         let loaded = WorkflowResource::get_from(&config, "wf-roundtrip")
             .expect("workflow should be present in config");

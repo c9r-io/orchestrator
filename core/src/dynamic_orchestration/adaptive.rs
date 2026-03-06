@@ -117,7 +117,9 @@ impl AdaptivePlanner {
             return Err(anyhow!("Adaptive planning is not enabled"));
         }
 
-        tracing::warn!("adaptive planner using hardcoded fallback; LLM integration not implemented");
+        tracing::warn!(
+            "adaptive planner using hardcoded fallback; LLM integration not implemented"
+        );
 
         let _prompt = self.build_prompt(context);
 

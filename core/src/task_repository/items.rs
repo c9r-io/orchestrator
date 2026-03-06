@@ -6,11 +6,7 @@ use std::collections::HashSet;
 use super::command_run::NewCommandRun;
 use rusqlite::Connection;
 
-pub fn update_task_item_status(
-    conn: &Connection,
-    task_item_id: &str,
-    status: &str,
-) -> Result<()> {
+pub fn update_task_item_status(conn: &Connection, task_item_id: &str, status: &str) -> Result<()> {
     conn.execute(
         "UPDATE task_items SET status = ?2, updated_at = ?3 WHERE id = ?1",
         params![task_item_id, status, now_ts()],
@@ -40,10 +36,7 @@ pub fn set_task_item_terminal_status(
     Ok(())
 }
 
-pub fn delete_task_and_collect_log_paths(
-    conn: &Connection,
-    task_id: &str,
-) -> Result<Vec<String>> {
+pub fn delete_task_and_collect_log_paths(conn: &Connection, task_id: &str) -> Result<Vec<String>> {
     let exists = conn
         .query_row(
             "SELECT 1 FROM tasks WHERE id = ?1",

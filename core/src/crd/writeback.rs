@@ -36,10 +36,7 @@ pub fn project_builtin_kind(config: &mut OrchestratorConfig, kind: &str) {
             config.projects.retain(|name, _| store_keys.contains(name));
         }
         "Defaults" => {
-            if let Some(d) = config
-                .resource_store
-                .project_singleton::<ConfigDefaults>()
-            {
+            if let Some(d) = config.resource_store.project_singleton::<ConfigDefaults>() {
                 config.defaults = d;
             }
         }
@@ -79,33 +76,27 @@ pub fn project_builtin_kind(config: &mut OrchestratorConfig, kind: &str) {
 ///
 /// Called by `apply_to_store` / `delete_from_store` when the store doesn't have
 /// the entry yet but the legacy field might. This ensures correct change detection.
-pub fn seed_store_from_legacy(
-    config: &mut OrchestratorConfig,
-    kind: &str,
-    name: &str,
-    now: &str,
-) {
+pub fn seed_store_from_legacy(config: &mut OrchestratorConfig, kind: &str, name: &str, now: &str) {
     use crate::cli_types::ResourceMetadata;
     use crate::crd::projection::CrdProjectable;
     use crate::crd::types::CustomResource;
 
-    let make_cr =
-        |spec: serde_json::Value| -> CustomResource {
-            CustomResource {
-                kind: kind.to_string(),
-                api_version: "orchestrator.dev/v2".to_string(),
-                metadata: ResourceMetadata {
-                    name: name.to_string(),
-                    project: None,
-                    labels: None,
-                    annotations: None,
-                },
-                spec,
-                generation: 1,
-                created_at: now.to_string(),
-                updated_at: now.to_string(),
-            }
-        };
+    let make_cr = |spec: serde_json::Value| -> CustomResource {
+        CustomResource {
+            kind: kind.to_string(),
+            api_version: "orchestrator.dev/v2".to_string(),
+            metadata: ResourceMetadata {
+                name: name.to_string(),
+                project: None,
+                labels: None,
+                annotations: None,
+            },
+            spec,
+            generation: 1,
+            created_at: now.to_string(),
+            updated_at: now.to_string(),
+        }
+    };
 
     match kind {
         "Agent" => {
@@ -325,12 +316,7 @@ pub fn sync_legacy_to_store(config: &mut OrchestratorConfig) {
     let now = chrono::Utc::now().to_rfc3339();
 
     // Helper to create a CR from a typed config
-    fn make_cr(
-        kind: &str,
-        name: &str,
-        spec: serde_json::Value,
-        now: &str,
-    ) -> CustomResource {
+    fn make_cr(kind: &str, name: &str, spec: serde_json::Value, now: &str) -> CustomResource {
         CustomResource {
             kind: kind.to_string(),
             api_version: "orchestrator.dev/v2".to_string(),
@@ -521,7 +507,11 @@ mod tests {
 
     // ── Helper ──────────────────────────────────────────────────────────
 
-    fn make_test_cr(kind: &str, name: &str, spec: serde_json::Value) -> crate::crd::types::CustomResource {
+    fn make_test_cr(
+        kind: &str,
+        name: &str,
+        spec: serde_json::Value,
+    ) -> crate::crd::types::CustomResource {
         crate::crd::types::CustomResource {
             kind: kind.to_string(),
             api_version: "orchestrator.dev/v2".to_string(),
@@ -549,7 +539,9 @@ mod tests {
             ticket_dir: "t".to_string(),
             self_referential: false,
         };
-        config.resource_store.put(make_test_cr("Workspace", "ws1", ws.to_cr_spec()));
+        config
+            .resource_store
+            .put(make_test_cr("Workspace", "ws1", ws.to_cr_spec()));
         write_back_single(&mut config, "Workspace", "ws1");
         assert_eq!(config.workspaces.get("ws1").unwrap().root_path, "/ws");
     }
@@ -557,10 +549,13 @@ mod tests {
     #[test]
     fn write_back_single_workflow() {
         let mut config = OrchestratorConfig::default();
-        let wf = crate::config_load::tests::make_workflow(vec![
-            crate::config_load::tests::make_step("plan", true),
-        ]);
-        config.resource_store.put(make_test_cr("Workflow", "wf1", wf.to_cr_spec()));
+        let wf =
+            crate::config_load::tests::make_workflow(vec![crate::config_load::tests::make_step(
+                "plan", true,
+            )]);
+        config
+            .resource_store
+            .put(make_test_cr("Workflow", "wf1", wf.to_cr_spec()));
         write_back_single(&mut config, "Workflow", "wf1");
         assert!(config.workflows.contains_key("wf1"));
     }
@@ -573,7 +568,9 @@ mod tests {
             workspace: "w".to_string(),
             workflow: "wf".to_string(),
         };
-        config.resource_store.put(make_test_cr("Defaults", "defaults", d.to_cr_spec()));
+        config
+            .resource_store
+            .put(make_test_cr("Defaults", "defaults", d.to_cr_spec()));
         write_back_single(&mut config, "Defaults", "defaults");
         assert_eq!(config.defaults.workspace, "w");
     }
@@ -590,7 +587,9 @@ mod tests {
             },
             resume: ResumeConfig { auto: true },
         };
-        config.resource_store.put(make_test_cr("RuntimePolicy", "runtime", rp.to_cr_spec()));
+        config
+            .resource_store
+            .put(make_test_cr("RuntimePolicy", "runtime", rp.to_cr_spec()));
         write_back_single(&mut config, "RuntimePolicy", "runtime");
         assert_eq!(config.runner.shell, "/bin/zsh");
         assert!(config.resume.auto);
@@ -603,7 +602,9 @@ mod tests {
             prompt: "do qa".to_string(),
             description: Some("desc".to_string()),
         };
-        config.resource_store.put(make_test_cr("StepTemplate", "tpl", st.to_cr_spec()));
+        config
+            .resource_store
+            .put(make_test_cr("StepTemplate", "tpl", st.to_cr_spec()));
         write_back_single(&mut config, "StepTemplate", "tpl");
         assert_eq!(config.step_templates.get("tpl").unwrap().prompt, "do qa");
     }
@@ -615,7 +616,9 @@ mod tests {
             data: [("K".to_string(), "V".to_string())].into(),
             sensitive: false,
         };
-        config.resource_store.put(make_test_cr("EnvStore", "env1", es.to_cr_spec()));
+        config
+            .resource_store
+            .put(make_test_cr("EnvStore", "env1", es.to_cr_spec()));
         write_back_single(&mut config, "EnvStore", "env1");
         let loaded = config.env_stores.get("env1").unwrap();
         assert_eq!(loaded.data.get("K").unwrap(), "V");
@@ -629,7 +632,9 @@ mod tests {
             data: [("SECRET".to_string(), "val".to_string())].into(),
             sensitive: true,
         });
-        config.resource_store.put(make_test_cr("SecretStore", "sec1", ss.to_cr_spec()));
+        config
+            .resource_store
+            .put(make_test_cr("SecretStore", "sec1", ss.to_cr_spec()));
         write_back_single(&mut config, "SecretStore", "sec1");
         let loaded = config.env_stores.get("sec1").unwrap();
         assert_eq!(loaded.data.get("SECRET").unwrap(), "val");
@@ -641,12 +646,15 @@ mod tests {
         let mut config = OrchestratorConfig::default();
         // Pre-existing project with sub-resources
         let mut proj_ws = std::collections::HashMap::new();
-        proj_ws.insert("ws1".to_string(), WorkspaceConfig {
-            root_path: "/p".to_string(),
-            qa_targets: vec![],
-            ticket_dir: "t".to_string(),
-            self_referential: false,
-        });
+        proj_ws.insert(
+            "ws1".to_string(),
+            WorkspaceConfig {
+                root_path: "/p".to_string(),
+                qa_targets: vec![],
+                ticket_dir: "t".to_string(),
+                self_referential: false,
+            },
+        );
         config.projects.insert(
             "proj1".to_string(),
             ProjectConfig {
@@ -663,12 +671,17 @@ mod tests {
             agents: Default::default(),
             workflows: Default::default(),
         };
-        config.resource_store.put(make_test_cr("Project", "proj1", proj.to_cr_spec()));
+        config
+            .resource_store
+            .put(make_test_cr("Project", "proj1", proj.to_cr_spec()));
         write_back_single(&mut config, "Project", "proj1");
 
         let loaded = config.projects.get("proj1").unwrap();
         assert_eq!(loaded.description.as_deref(), Some("new desc"));
-        assert!(loaded.workspaces.contains_key("ws1"), "sub-resources preserved");
+        assert!(
+            loaded.workspaces.contains_key("ws1"),
+            "sub-resources preserved"
+        );
     }
 
     // ── remove_from_legacy tests ────────────────────────────────────────
@@ -676,10 +689,13 @@ mod tests {
     #[test]
     fn remove_from_legacy_agent() {
         let mut config = OrchestratorConfig::default();
-        config.agents.insert("rm-ag".to_string(), AgentConfig {
-            command: "echo".to_string(),
-            ..Default::default()
-        });
+        config.agents.insert(
+            "rm-ag".to_string(),
+            AgentConfig {
+                command: "echo".to_string(),
+                ..Default::default()
+            },
+        );
         remove_from_legacy(&mut config, "Agent", "rm-ag");
         assert!(!config.agents.contains_key("rm-ag"));
     }
@@ -687,7 +703,10 @@ mod tests {
     #[test]
     fn remove_from_legacy_workflow() {
         let mut config = OrchestratorConfig::default();
-        config.workflows.insert("rm-wf".to_string(), crate::config_load::tests::make_workflow(vec![]));
+        config.workflows.insert(
+            "rm-wf".to_string(),
+            crate::config_load::tests::make_workflow(vec![]),
+        );
         remove_from_legacy(&mut config, "Workflow", "rm-wf");
         assert!(!config.workflows.contains_key("rm-wf"));
     }
@@ -695,12 +714,15 @@ mod tests {
     #[test]
     fn remove_from_legacy_workspace() {
         let mut config = OrchestratorConfig::default();
-        config.workspaces.insert("rm-ws".to_string(), WorkspaceConfig {
-            root_path: "/x".to_string(),
-            qa_targets: vec![],
-            ticket_dir: "t".to_string(),
-            self_referential: false,
-        });
+        config.workspaces.insert(
+            "rm-ws".to_string(),
+            WorkspaceConfig {
+                root_path: "/x".to_string(),
+                qa_targets: vec![],
+                ticket_dir: "t".to_string(),
+                self_referential: false,
+            },
+        );
         remove_from_legacy(&mut config, "Workspace", "rm-ws");
         assert!(!config.workspaces.contains_key("rm-ws"));
     }
@@ -708,10 +730,13 @@ mod tests {
     #[test]
     fn remove_from_legacy_step_template() {
         let mut config = OrchestratorConfig::default();
-        config.step_templates.insert("rm-st".to_string(), StepTemplateConfig {
-            prompt: "x".to_string(),
-            description: None,
-        });
+        config.step_templates.insert(
+            "rm-st".to_string(),
+            StepTemplateConfig {
+                prompt: "x".to_string(),
+                description: None,
+            },
+        );
         remove_from_legacy(&mut config, "StepTemplate", "rm-st");
         assert!(!config.step_templates.contains_key("rm-st"));
     }
@@ -719,10 +744,13 @@ mod tests {
     #[test]
     fn remove_from_legacy_env_store() {
         let mut config = OrchestratorConfig::default();
-        config.env_stores.insert("rm-env".to_string(), EnvStoreConfig {
-            data: Default::default(),
-            sensitive: false,
-        });
+        config.env_stores.insert(
+            "rm-env".to_string(),
+            EnvStoreConfig {
+                data: Default::default(),
+                sensitive: false,
+            },
+        );
         remove_from_legacy(&mut config, "EnvStore", "rm-env");
         assert!(!config.env_stores.contains_key("rm-env"));
     }
@@ -741,10 +769,13 @@ mod tests {
     #[test]
     fn seed_store_from_legacy_agent() {
         let mut config = OrchestratorConfig::default();
-        config.agents.insert("seed-ag".to_string(), AgentConfig {
-            command: "echo {prompt}".to_string(),
-            ..Default::default()
-        });
+        config.agents.insert(
+            "seed-ag".to_string(),
+            AgentConfig {
+                command: "echo {prompt}".to_string(),
+                ..Default::default()
+            },
+        );
         seed_store_from_legacy(&mut config, "Agent", "seed-ag", "2026-01-01T00:00:00Z");
         assert!(config.resource_store.get("Agent", "seed-ag").is_some());
     }
@@ -752,12 +783,15 @@ mod tests {
     #[test]
     fn seed_store_from_legacy_workspace() {
         let mut config = OrchestratorConfig::default();
-        config.workspaces.insert("seed-ws".to_string(), WorkspaceConfig {
-            root_path: "/x".to_string(),
-            qa_targets: vec![],
-            ticket_dir: "t".to_string(),
-            self_referential: false,
-        });
+        config.workspaces.insert(
+            "seed-ws".to_string(),
+            WorkspaceConfig {
+                root_path: "/x".to_string(),
+                qa_targets: vec![],
+                ticket_dir: "t".to_string(),
+                self_referential: false,
+            },
+        );
         seed_store_from_legacy(&mut config, "Workspace", "seed-ws", "2026-01-01T00:00:00Z");
         assert!(config.resource_store.get("Workspace", "seed-ws").is_some());
     }
@@ -765,10 +799,13 @@ mod tests {
     #[test]
     fn seed_store_from_legacy_env_store_non_sensitive() {
         let mut config = OrchestratorConfig::default();
-        config.env_stores.insert("seed-env".to_string(), EnvStoreConfig {
-            data: [("K".to_string(), "V".to_string())].into(),
-            sensitive: false,
-        });
+        config.env_stores.insert(
+            "seed-env".to_string(),
+            EnvStoreConfig {
+                data: [("K".to_string(), "V".to_string())].into(),
+                sensitive: false,
+            },
+        );
         seed_store_from_legacy(&mut config, "EnvStore", "seed-env", "2026-01-01T00:00:00Z");
         assert!(config.resource_store.get("EnvStore", "seed-env").is_some());
     }
@@ -776,21 +813,35 @@ mod tests {
     #[test]
     fn seed_store_from_legacy_secret_store_sensitive() {
         let mut config = OrchestratorConfig::default();
-        config.env_stores.insert("seed-sec".to_string(), EnvStoreConfig {
-            data: [("S".to_string(), "V".to_string())].into(),
-            sensitive: true,
-        });
-        seed_store_from_legacy(&mut config, "SecretStore", "seed-sec", "2026-01-01T00:00:00Z");
-        assert!(config.resource_store.get("SecretStore", "seed-sec").is_some());
+        config.env_stores.insert(
+            "seed-sec".to_string(),
+            EnvStoreConfig {
+                data: [("S".to_string(), "V".to_string())].into(),
+                sensitive: true,
+            },
+        );
+        seed_store_from_legacy(
+            &mut config,
+            "SecretStore",
+            "seed-sec",
+            "2026-01-01T00:00:00Z",
+        );
+        assert!(config
+            .resource_store
+            .get("SecretStore", "seed-sec")
+            .is_some());
     }
 
     #[test]
     fn seed_store_from_legacy_skips_non_sensitive_for_secret_store() {
         let mut config = OrchestratorConfig::default();
-        config.env_stores.insert("plain".to_string(), EnvStoreConfig {
-            data: Default::default(),
-            sensitive: false,
-        });
+        config.env_stores.insert(
+            "plain".to_string(),
+            EnvStoreConfig {
+                data: Default::default(),
+                sensitive: false,
+            },
+        );
         seed_store_from_legacy(&mut config, "SecretStore", "plain", "2026-01-01T00:00:00Z");
         assert!(config.resource_store.get("SecretStore", "plain").is_none());
     }
@@ -807,8 +858,16 @@ mod tests {
     fn seed_store_from_legacy_runtime_policy() {
         let mut config = OrchestratorConfig::default();
         config.runner.shell = "/bin/zsh".to_string();
-        seed_store_from_legacy(&mut config, "RuntimePolicy", "runtime", "2026-01-01T00:00:00Z");
-        assert!(config.resource_store.get("RuntimePolicy", "runtime").is_some());
+        seed_store_from_legacy(
+            &mut config,
+            "RuntimePolicy",
+            "runtime",
+            "2026-01-01T00:00:00Z",
+        );
+        assert!(config
+            .resource_store
+            .get("RuntimePolicy", "runtime")
+            .is_some());
     }
 
     // ── sync_legacy_to_store covers all 9 kinds ─────────────────────────
@@ -817,48 +876,96 @@ mod tests {
     fn sync_legacy_to_store_all_nine_kinds() {
         let mut config = OrchestratorConfig::default();
         // Seed each kind in legacy
-        config.agents.insert("ag".to_string(), AgentConfig {
-            command: "echo".to_string(),
-            ..Default::default()
-        });
-        config.workspaces.insert("ws".to_string(), WorkspaceConfig {
-            root_path: "/x".to_string(),
-            qa_targets: vec![],
-            ticket_dir: "t".to_string(),
-            self_referential: false,
-        });
-        config.workflows.insert("wf".to_string(), crate::config_load::tests::make_workflow(vec![]));
-        config.projects.insert("proj".to_string(), ProjectConfig {
-            description: Some("test".to_string()),
-            workspaces: Default::default(),
-            agents: Default::default(),
-            workflows: Default::default(),
-        });
-        config.step_templates.insert("st".to_string(), StepTemplateConfig {
-            prompt: "p".to_string(),
-            description: None,
-        });
-        config.env_stores.insert("env".to_string(), EnvStoreConfig {
-            data: Default::default(),
-            sensitive: false,
-        });
-        config.env_stores.insert("sec".to_string(), EnvStoreConfig {
-            data: Default::default(),
-            sensitive: true,
-        });
+        config.agents.insert(
+            "ag".to_string(),
+            AgentConfig {
+                command: "echo".to_string(),
+                ..Default::default()
+            },
+        );
+        config.workspaces.insert(
+            "ws".to_string(),
+            WorkspaceConfig {
+                root_path: "/x".to_string(),
+                qa_targets: vec![],
+                ticket_dir: "t".to_string(),
+                self_referential: false,
+            },
+        );
+        config.workflows.insert(
+            "wf".to_string(),
+            crate::config_load::tests::make_workflow(vec![]),
+        );
+        config.projects.insert(
+            "proj".to_string(),
+            ProjectConfig {
+                description: Some("test".to_string()),
+                workspaces: Default::default(),
+                agents: Default::default(),
+                workflows: Default::default(),
+            },
+        );
+        config.step_templates.insert(
+            "st".to_string(),
+            StepTemplateConfig {
+                prompt: "p".to_string(),
+                description: None,
+            },
+        );
+        config.env_stores.insert(
+            "env".to_string(),
+            EnvStoreConfig {
+                data: Default::default(),
+                sensitive: false,
+            },
+        );
+        config.env_stores.insert(
+            "sec".to_string(),
+            EnvStoreConfig {
+                data: Default::default(),
+                sensitive: true,
+            },
+        );
         // Defaults and RuntimePolicy are always present via OrchestratorConfig::default()
 
         sync_legacy_to_store(&mut config);
 
         assert!(config.resource_store.get("Agent", "ag").is_some(), "Agent");
-        assert!(config.resource_store.get("Workspace", "ws").is_some(), "Workspace");
-        assert!(config.resource_store.get("Workflow", "wf").is_some(), "Workflow");
-        assert!(config.resource_store.get("Project", "proj").is_some(), "Project");
-        assert!(config.resource_store.get("StepTemplate", "st").is_some(), "StepTemplate");
-        assert!(config.resource_store.get("EnvStore", "env").is_some(), "EnvStore");
-        assert!(config.resource_store.get("SecretStore", "sec").is_some(), "SecretStore");
-        assert!(config.resource_store.get("Defaults", "defaults").is_some(), "Defaults");
-        assert!(config.resource_store.get("RuntimePolicy", "runtime").is_some(), "RuntimePolicy");
+        assert!(
+            config.resource_store.get("Workspace", "ws").is_some(),
+            "Workspace"
+        );
+        assert!(
+            config.resource_store.get("Workflow", "wf").is_some(),
+            "Workflow"
+        );
+        assert!(
+            config.resource_store.get("Project", "proj").is_some(),
+            "Project"
+        );
+        assert!(
+            config.resource_store.get("StepTemplate", "st").is_some(),
+            "StepTemplate"
+        );
+        assert!(
+            config.resource_store.get("EnvStore", "env").is_some(),
+            "EnvStore"
+        );
+        assert!(
+            config.resource_store.get("SecretStore", "sec").is_some(),
+            "SecretStore"
+        );
+        assert!(
+            config.resource_store.get("Defaults", "defaults").is_some(),
+            "Defaults"
+        );
+        assert!(
+            config
+                .resource_store
+                .get("RuntimePolicy", "runtime")
+                .is_some(),
+            "RuntimePolicy"
+        );
     }
 
     // ── project_builtin_kind for EnvStore/SecretStore splitting ──────────
@@ -867,21 +974,32 @@ mod tests {
     fn project_env_store_preserves_sensitive_stores() {
         let mut config = OrchestratorConfig::default();
         // Pre-existing sensitive store in legacy
-        config.env_stores.insert("secret".to_string(), EnvStoreConfig {
-            data: [("S".to_string(), "V".to_string())].into(),
-            sensitive: true,
-        });
+        config.env_stores.insert(
+            "secret".to_string(),
+            EnvStoreConfig {
+                data: [("S".to_string(), "V".to_string())].into(),
+                sensitive: true,
+            },
+        );
         // Put a non-sensitive store in the resource store
         let es = EnvStoreConfig {
             data: [("K".to_string(), "V".to_string())].into(),
             sensitive: false,
         };
-        config.resource_store.put(make_test_cr("EnvStore", "plain", es.to_cr_spec()));
+        config
+            .resource_store
+            .put(make_test_cr("EnvStore", "plain", es.to_cr_spec()));
 
         project_builtin_kind(&mut config, "EnvStore");
 
-        assert!(config.env_stores.contains_key("plain"), "non-sensitive projected");
-        assert!(config.env_stores.contains_key("secret"), "sensitive preserved");
+        assert!(
+            config.env_stores.contains_key("plain"),
+            "non-sensitive projected"
+        );
+        assert!(
+            config.env_stores.contains_key("secret"),
+            "sensitive preserved"
+        );
         assert!(config.env_stores.get("secret").unwrap().sensitive);
     }
 
@@ -889,21 +1007,32 @@ mod tests {
     fn project_secret_store_preserves_non_sensitive_stores() {
         let mut config = OrchestratorConfig::default();
         // Pre-existing non-sensitive store in legacy
-        config.env_stores.insert("plain".to_string(), EnvStoreConfig {
-            data: [("K".to_string(), "V".to_string())].into(),
-            sensitive: false,
-        });
+        config.env_stores.insert(
+            "plain".to_string(),
+            EnvStoreConfig {
+                data: [("K".to_string(), "V".to_string())].into(),
+                sensitive: false,
+            },
+        );
         // Put a sensitive store in the resource store
         let ss = SecretStoreProjection(EnvStoreConfig {
             data: [("S".to_string(), "V".to_string())].into(),
             sensitive: true,
         });
-        config.resource_store.put(make_test_cr("SecretStore", "secret", ss.to_cr_spec()));
+        config
+            .resource_store
+            .put(make_test_cr("SecretStore", "secret", ss.to_cr_spec()));
 
         project_builtin_kind(&mut config, "SecretStore");
 
-        assert!(config.env_stores.contains_key("plain"), "non-sensitive preserved");
-        assert!(config.env_stores.contains_key("secret"), "sensitive projected");
+        assert!(
+            config.env_stores.contains_key("plain"),
+            "non-sensitive preserved"
+        );
+        assert!(
+            config.env_stores.contains_key("secret"),
+            "sensitive projected"
+        );
         assert!(config.env_stores.get("secret").unwrap().sensitive);
     }
 }

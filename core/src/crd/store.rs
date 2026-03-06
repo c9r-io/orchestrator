@@ -29,12 +29,7 @@ impl ResourceStore {
     }
 
     /// Get a namespaced resource by kind, project, and name.
-    pub fn get_namespaced(
-        &self,
-        kind: &str,
-        project: &str,
-        name: &str,
-    ) -> Option<&CustomResource> {
+    pub fn get_namespaced(&self, kind: &str, project: &str, name: &str) -> Option<&CustomResource> {
         let key = format!("{}/{}/{}", kind, project, name);
         self.resources.get(&key)
     }
@@ -322,7 +317,9 @@ mod tests {
             updated_at: "t".to_string(),
         };
         // Use the three-segment key directly.
-        store.resources.insert("Agent/proj1/my-agent".to_string(), cr);
+        store
+            .resources
+            .insert("Agent/proj1/my-agent".to_string(), cr);
         assert!(store.get_namespaced("Agent", "proj1", "my-agent").is_some());
         assert!(store.get_namespaced("Agent", "proj2", "my-agent").is_none());
         // Regular get won't find it (different key format).
@@ -375,7 +372,11 @@ mod tests {
         };
         store.put(make_cr("Agent", "good", good.to_cr_spec()));
         // Corrupted — missing required `command` field
-        store.put(make_cr("Agent", "bad", serde_json::json!({"not_command": 42})));
+        store.put(make_cr(
+            "Agent",
+            "bad",
+            serde_json::json!({"not_command": 42}),
+        ));
         let map: HashMap<String, AgentConfig> = store.project_map();
         assert_eq!(map.len(), 1);
         assert!(map.contains_key("good"));

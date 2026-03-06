@@ -36,7 +36,13 @@ impl Resource for AgentResource {
         use crate::crd::projection::CrdProjectable;
         let incoming = agent_spec_to_config(&self.spec);
         let spec_value = incoming.to_cr_spec();
-        Ok(super::apply_to_store(config, "Agent", self.name(), &self.metadata, spec_value))
+        Ok(super::apply_to_store(
+            config,
+            "Agent",
+            self.name(),
+            &self.metadata,
+            spec_value,
+        ))
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -147,7 +153,10 @@ mod tests {
         let resource =
             dispatch_resource(agent_manifest("agent-roundtrip", "glmcode -p \"{prompt}\""))
                 .expect("agent dispatch should succeed");
-        assert_eq!(resource.apply(&mut config).expect("apply"), ApplyResult::Created);
+        assert_eq!(
+            resource.apply(&mut config).expect("apply"),
+            ApplyResult::Created
+        );
 
         let loaded = AgentResource::get_from(&config, "agent-roundtrip")
             .expect("agent should be present in config");

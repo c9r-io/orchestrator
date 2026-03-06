@@ -76,7 +76,9 @@ mod tests {
             )
             .expect("task row should exist");
 
-        let summary = load_task_summary(&state, &created.id).await.expect("summary should load");
+        let summary = load_task_summary(&state, &created.id)
+            .await
+            .expect("summary should load");
         assert_eq!(summary.workflow_id, workflow_id);
         assert_eq!(summary.created_at, created_at);
         assert_eq!(summary.updated_at, updated_at);
@@ -223,7 +225,9 @@ mod tests {
         )
         .expect("task should be created");
 
-        prepare_task_for_start(&state, &created.id).await.expect("prepare task");
+        prepare_task_for_start(&state, &created.id)
+            .await
+            .expect("prepare task");
         run_task_loop(state.clone(), &created.id, RunningTask::new())
             .await
             .expect("task should run");
@@ -470,7 +474,9 @@ mod tests {
         )
         .expect("task should be created");
 
-        prepare_task_for_start(&state, &created.id).await.expect("prepare task");
+        prepare_task_for_start(&state, &created.id)
+            .await
+            .expect("prepare task");
         run_task_loop(state.clone(), &created.id, RunningTask::new())
             .await
             .expect("task should run");
@@ -749,7 +755,9 @@ mod tests {
         )
         .expect("task should be created");
 
-        prepare_task_for_start(&state, &created.id).await.expect("prepare task");
+        prepare_task_for_start(&state, &created.id)
+            .await
+            .expect("prepare task");
         run_task_loop(state.clone(), &created.id, RunningTask::new())
             .await
             .expect("task loop should complete");
@@ -867,7 +875,9 @@ mod tests {
         )
         .expect("task should be created");
 
-        prepare_task_for_start(&state, &created.id).await.expect("prepare task");
+        prepare_task_for_start(&state, &created.id)
+            .await
+            .expect("prepare task");
         run_task_loop(state.clone(), &created.id, RunningTask::new())
             .await
             .expect("task loop should complete");
@@ -977,7 +987,9 @@ mod tests {
         )
         .expect("task should be created");
 
-        prepare_task_for_start(&state, &created.id).await.expect("prepare task");
+        prepare_task_for_start(&state, &created.id)
+            .await
+            .expect("prepare task");
         run_task_loop(state.clone(), &created.id, RunningTask::new())
             .await
             .expect("task loop should complete");
@@ -1034,9 +1046,15 @@ mod tests {
             agent_metrics: RwLock::new(HashMap::new()),
             message_bus: Arc::new(MessageBus::new()),
             event_sink: RwLock::new(Arc::new(NoopSink)),
-            db_writer: Arc::new(crate::db_write::DbWriteCoordinator::new(async_database.clone())),
-            session_store: Arc::new(crate::session_store::AsyncSessionStore::new(async_database.clone())),
-            task_repo: Arc::new(crate::task_repository::AsyncSqliteTaskRepository::new(async_database)),
+            db_writer: Arc::new(crate::db_write::DbWriteCoordinator::new(
+                async_database.clone(),
+            )),
+            session_store: Arc::new(crate::session_store::AsyncSessionStore::new(
+                async_database.clone(),
+            )),
+            task_repo: Arc::new(crate::task_repository::AsyncSqliteTaskRepository::new(
+                async_database,
+            )),
         });
 
         state.emit_event(

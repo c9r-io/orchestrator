@@ -34,7 +34,13 @@ impl Resource for StepTemplateResource {
             description: self.spec.description.clone(),
         };
         let spec_value = incoming.to_cr_spec();
-        Ok(super::apply_to_store(config, "StepTemplate", self.name(), &self.metadata, spec_value))
+        Ok(super::apply_to_store(
+            config,
+            "StepTemplate",
+            self.name(),
+            &self.metadata,
+            spec_value,
+        ))
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -128,8 +134,14 @@ mod tests {
         let mut config = make_config();
         let resource = dispatch_resource(step_template_manifest("plan", "You are a planner."))
             .expect("dispatch should succeed");
-        assert_eq!(resource.apply(&mut config).expect("apply"), ApplyResult::Created);
-        assert_eq!(resource.apply(&mut config).expect("apply"), ApplyResult::Unchanged);
+        assert_eq!(
+            resource.apply(&mut config).expect("apply"),
+            ApplyResult::Created
+        );
+        assert_eq!(
+            resource.apply(&mut config).expect("apply"),
+            ApplyResult::Unchanged
+        );
     }
 
     #[test]
@@ -140,7 +152,10 @@ mod tests {
         assert_eq!(r1.apply(&mut config).expect("apply"), ApplyResult::Created);
         let r2 = dispatch_resource(step_template_manifest("plan", "v2"))
             .expect("dispatch should succeed");
-        assert_eq!(r2.apply(&mut config).expect("apply"), ApplyResult::Configured);
+        assert_eq!(
+            r2.apply(&mut config).expect("apply"),
+            ApplyResult::Configured
+        );
     }
 
     #[test]

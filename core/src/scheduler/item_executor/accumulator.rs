@@ -1,6 +1,5 @@
 use crate::config::{
-    CaptureSource, ItemFinalizeContext, PipelineVariables, StepPrehookContext,
-    TaskRuntimeContext,
+    CaptureSource, ItemFinalizeContext, PipelineVariables, StepPrehookContext, TaskRuntimeContext,
 };
 use std::collections::HashMap;
 use std::path::Path;

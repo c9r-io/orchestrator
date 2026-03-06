@@ -264,9 +264,15 @@ impl TestState {
             .expect("async_database init thread panicked");
             result.expect("failed to init async database")
         });
-        let writer = Arc::new(crate::db_write::DbWriteCoordinator::new(async_database.clone()));
-        let session_store = Arc::new(crate::session_store::AsyncSessionStore::new(async_database.clone()));
-        let task_repo = Arc::new(crate::task_repository::AsyncSqliteTaskRepository::new(async_database.clone()));
+        let writer = Arc::new(crate::db_write::DbWriteCoordinator::new(
+            async_database.clone(),
+        ));
+        let session_store = Arc::new(crate::session_store::AsyncSessionStore::new(
+            async_database.clone(),
+        ));
+        let task_repo = Arc::new(crate::task_repository::AsyncSqliteTaskRepository::new(
+            async_database.clone(),
+        ));
         let state = Arc::new(InnerState {
             app_root: self.temp_root.clone(),
             db_path,

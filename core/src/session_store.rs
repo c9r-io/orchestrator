@@ -130,7 +130,10 @@ const SESSION_COLUMNS: &str = "id, task_id, task_item_id, step_id, phase, agent_
 
 pub fn load_session(conn: &Connection, session_id: &str) -> Result<Option<SessionRow>> {
     conn.query_row(
-        &format!("SELECT {} FROM agent_sessions WHERE id = ?1", SESSION_COLUMNS),
+        &format!(
+            "SELECT {} FROM agent_sessions WHERE id = ?1",
+            SESSION_COLUMNS
+        ),
         params![session_id],
         row_to_session,
     )
@@ -160,15 +163,13 @@ pub fn load_active_session_for_task_step(
 }
 
 pub fn list_task_sessions(conn: &Connection, task_id: &str) -> Result<Vec<SessionRow>> {
-    let mut stmt = conn.prepare(
-        &format!(
-            "SELECT {}
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {}
              FROM agent_sessions
              WHERE task_id = ?1
              ORDER BY created_at DESC",
-            SESSION_COLUMNS
-        ),
-    )?;
+        SESSION_COLUMNS
+    ))?;
     let rows = stmt
         .query_map(params![task_id], row_to_session)?
         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -501,8 +502,7 @@ mod tests {
         assert_eq!(inserted.exit_code, None);
 
         update_session_pid(&conn, "sess-1", 4242).expect("update pid");
-        update_session_state(&conn, "sess-1", "detached", Some(7), false)
-            .expect("detach session");
+        update_session_state(&conn, "sess-1", "detached", Some(7), false).expect("detach session");
 
         let detached = load_session(&conn, "sess-1")
             .expect("reload session")
@@ -529,11 +529,8 @@ mod tests {
     fn active_session_lookup_and_listing_filter_by_task() {
         let (_dir, db_path) = make_db();
         let conn = open_conn(&db_path).expect("open conn");
-        insert_session(
-            &conn,
-            &make_session("sess-old", "task-1", "qa", "exited"),
-        )
-        .expect("insert exited session");
+        insert_session(&conn, &make_session("sess-old", "task-1", "qa", "exited"))
+            .expect("insert exited session");
         std::thread::sleep(std::time::Duration::from_millis(2));
         insert_session(
             &conn,
@@ -546,11 +543,8 @@ mod tests {
             &make_session("sess-detached", "task-1", "qa", "detached"),
         )
         .expect("insert detached session");
-        insert_session(
-            &conn,
-            &make_session("sess-other", "task-2", "qa", "active"),
-        )
-        .expect("insert other task session");
+        insert_session(&conn, &make_session("sess-other", "task-2", "qa", "active"))
+            .expect("insert other task session");
 
         let active = load_active_session_for_task_step(&conn, "task-1", "qa")
             .expect("query active session")

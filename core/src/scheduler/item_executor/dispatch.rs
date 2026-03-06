@@ -171,9 +171,18 @@ pub async fn process_item_filtered(
         // Dispatch builtin steps (self_test, self_restart, ticket_scan) which handle
         // their own result capture and use `continue` semantics.
         let builtin_outcome = execute_builtin_step_dispatch(
-            state, task_id, item_id, phase, step, &effective_execution,
-            task_ctx, task_item_paths, &item.qa_file_path, acc,
-        ).await?;
+            state,
+            task_id,
+            item_id,
+            phase,
+            step,
+            &effective_execution,
+            task_ctx,
+            task_item_paths,
+            &item.qa_file_path,
+            acc,
+        )
+        .await?;
 
         match builtin_outcome {
             BuiltinStepOutcome::Handled => continue,
@@ -183,9 +192,18 @@ pub async fn process_item_filtered(
 
         // Execute chain or agent/generic steps, producing a RunResult.
         let agent_outcome = execute_agent_step(
-            state, task_id, item_id, phase, step, &effective_execution,
-            task_ctx, runtime, &item.qa_file_path, acc,
-        ).await?;
+            state,
+            task_id,
+            item_id,
+            phase,
+            step,
+            &effective_execution,
+            task_ctx,
+            runtime,
+            &item.qa_file_path,
+            acc,
+        )
+        .await?;
 
         match agent_outcome {
             AgentStepOutcome::Handled => continue,
@@ -193,9 +211,18 @@ pub async fn process_item_filtered(
                 // Apply step results: capture, status transitions, post-actions,
                 // artifact collection, events, and hard-failure check.
                 let should_return = apply_step_results(
-                    state, task_id, item_id, phase, step,
-                    task_ctx, task_item_paths, &item.qa_file_path, &result, acc,
-                ).await?;
+                    state,
+                    task_id,
+                    item_id,
+                    phase,
+                    step,
+                    task_ctx,
+                    task_item_paths,
+                    &item.qa_file_path,
+                    &result,
+                    acc,
+                )
+                .await?;
                 if should_return {
                     return Ok(());
                 }
@@ -204,10 +231,7 @@ pub async fn process_item_filtered(
     }
 
     // Dynamic steps (only in full/legacy mode, not in segment-filtered mode)
-    execute_dynamic_steps(
-        state, task_id, item, task_ctx, runtime,
-        step_filter, acc,
-    ).await?;
+    execute_dynamic_steps(state, task_id, item, task_ctx, runtime, step_filter, acc).await?;
 
     Ok(())
 }
@@ -298,10 +322,9 @@ async fn execute_builtin_step_dispatch(
         ExecutionMode::Builtin { name } if name == "self_restart" => {
             // Self-restart builtin: rebuild, verify, snapshot, then exit for relaunch
             let ws_root = std::path::Path::new(&task_ctx.workspace_root);
-            let exit_code =
-                execute_self_restart_step(ws_root, state, task_id, item_id)
-                    .await
-                    .unwrap_or(1);
+            let exit_code = execute_self_restart_step(ws_root, state, task_id, item_id)
+                .await
+                .unwrap_or(1);
 
             acc.pipeline_vars
                 .vars
@@ -457,7 +480,8 @@ async fn execute_agent_step(
                         "exit_code": chain_result.exit_code,
                         "success": chain_result.is_success()
                     }),
-                ).await?;
+                )
+                .await?;
 
                 if !chain_result.is_success() {
                     chain_passed = false;
@@ -756,4 +780,3 @@ async fn execute_dynamic_steps(
 
     Ok(())
 }
-

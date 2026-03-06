@@ -441,8 +441,9 @@ async fn spawn_phase_process(
             shell_escape(&input_fifo.to_string_lossy())
         );
         session_id = Some(sid.clone());
-        state.session_store.insert_session(
-            session_store::OwnedNewSession {
+        state
+            .session_store
+            .insert_session(session_store::OwnedNewSession {
                 id: sid.clone(),
                 task_id: task_id.to_owned(),
                 task_item_id: Some(item_id.to_owned()),
@@ -459,8 +460,8 @@ async fn spawn_phase_process(
                 stderr_path: setup.stderr_path.to_string_lossy().into_owned(),
                 transcript_path: transcript_path.to_string_lossy().into_owned(),
                 output_json_path: Some(output_json_path.to_string_lossy().into_owned()),
-            },
-        ).await?;
+            })
+            .await?;
         wrapped
     } else {
         setup.command.clone()
@@ -491,7 +492,10 @@ async fn spawn_phase_process(
 
     if let Some(sid) = session_id.as_deref() {
         if let Some(pid) = child.id() {
-            let _ = state.session_store.update_session_pid(sid, pid as i64).await;
+            let _ = state
+                .session_store
+                .update_session_pid(sid, pid as i64)
+                .await;
         }
     }
 
@@ -538,7 +542,8 @@ async fn spawn_phase_process(
             "pid": child_pid,
             "command_preview": preview,
         }),
-    ).await?;
+    )
+    .await?;
 
     {
         let mut child_lock = runtime.child.lock().await;
@@ -600,7 +605,8 @@ async fn wait_for_process(
                     "timeout_secs": step_timeout_secs,
                     "pid": child_pid,
                 }),
-            ).await?;
+            )
+            .await?;
             break -4;
         }
 
@@ -671,7 +677,8 @@ async fn wait_for_process(
                         "pid": child_pid,
                         "pid_alive": pid_alive,
                     }),
-                ).await?;
+                )
+                .await?;
 
                 // Cross-process pause: check if another process (e.g. `task pause`)
                 // has marked this task as paused in the DB.
@@ -822,21 +829,20 @@ async fn record_phase_results(
             error: validated.validation_error.clone(),
         }),
     );
-    let (publish_event_type, publish_event_payload_json) = if let Err(err) =
-        state.message_bus.publish(msg).await
-    {
-        (
-            "bus_publish_failed",
-            serde_json::to_string(
-                &json!({"phase":phase,"run_id":setup.run_id,"error":err.to_string()}),
-            )?,
-        )
-    } else {
-        (
-            "phase_output_published",
-            serde_json::to_string(&json!({"phase":phase,"run_id":setup.run_id}))?,
-        )
-    };
+    let (publish_event_type, publish_event_payload_json) =
+        if let Err(err) = state.message_bus.publish(msg).await {
+            (
+                "bus_publish_failed",
+                serde_json::to_string(
+                    &json!({"phase":phase,"run_id":setup.run_id,"error":err.to_string()}),
+                )?,
+            )
+        } else {
+            (
+                "phase_output_published",
+                serde_json::to_string(&json!({"phase":phase,"run_id":setup.run_id}))?,
+            )
+        };
 
     let validation_event_payload_json = validated.validation_event_payload_json.clone();
     {
@@ -885,12 +891,10 @@ async fn record_phase_results(
         reset_consecutive_errors(state, agent_id);
     }
     if let Some(sid) = session_id.as_deref() {
-        let _ = state.session_store.update_session_state(
-            sid,
-            "closed",
-            Some(validated.final_exit_code),
-            true,
-        ).await;
+        let _ = state
+            .session_store
+            .update_session_state(sid, "closed", Some(validated.final_exit_code), true)
+            .await;
     }
 
     Ok(())
@@ -1357,23 +1361,13 @@ mod tests {
     fn heartbeat_sample_delta_exactly_at_threshold_counts_as_stagnant() {
         let mut progress = HeartbeatProgress::default();
         // First sample with exactly threshold bytes
-        let s1 = sample_heartbeat_progress(
-            &mut progress,
-            LOW_OUTPUT_DELTA_THRESHOLD_BYTES,
-            0,
-            30,
-            true,
-        );
+        let s1 =
+            sample_heartbeat_progress(&mut progress, LOW_OUTPUT_DELTA_THRESHOLD_BYTES, 0, 30, true);
         assert_eq!(s1.stagnant_heartbeats, 1); // exactly at threshold counts as stagnant
 
         // Second sample with no additional output (delta = 0)
-        let s2 = sample_heartbeat_progress(
-            &mut progress,
-            LOW_OUTPUT_DELTA_THRESHOLD_BYTES,
-            0,
-            60,
-            true,
-        );
+        let s2 =
+            sample_heartbeat_progress(&mut progress, LOW_OUTPUT_DELTA_THRESHOLD_BYTES, 0, 60, true);
         assert_eq!(s2.stagnant_heartbeats, 2);
         assert_eq!(s2.stdout_delta_bytes, 0);
     }

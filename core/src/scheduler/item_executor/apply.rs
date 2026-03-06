@@ -1,4 +1,6 @@
-use crate::config::{OnFailureAction, OnSuccessAction, PostAction, TaskExecutionStep, TaskRuntimeContext};
+use crate::config::{
+    OnFailureAction, OnSuccessAction, PostAction, TaskExecutionStep, TaskRuntimeContext,
+};
 use crate::events::insert_event;
 use crate::state::InnerState;
 use crate::ticket::{create_ticket_for_qa_failure, scan_active_tickets_for_task_items};
@@ -63,7 +65,10 @@ pub(super) async fn apply_step_results(
         match action {
             PostAction::CreateTicket if !result.is_success() => {
                 if let Some(exit_code) = acc.exit_codes.get(&step.id) {
-                    let task_name = state.task_repo.load_task_name(task_id).await?
+                    let task_name = state
+                        .task_repo
+                        .load_task_name(task_id)
+                        .await?
                         .unwrap_or_else(|| task_id.to_string());
                     match create_ticket_for_qa_failure(
                         &task_ctx.workspace_root,
@@ -92,8 +97,7 @@ pub(super) async fn apply_step_results(
             }
             PostAction::ScanTickets => {
                 let tickets = scan_active_tickets_for_task_items(task_ctx, task_item_paths)?;
-                acc.active_tickets =
-                    tickets.get(qa_file_path).cloned().unwrap_or_default();
+                acc.active_tickets = tickets.get(qa_file_path).cloned().unwrap_or_default();
                 acc.new_ticket_count = acc.active_tickets.len() as i64;
             }
             _ => {}

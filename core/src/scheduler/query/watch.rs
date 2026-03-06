@@ -8,8 +8,8 @@ use std::fmt::Write as _;
 use std::time::Duration;
 
 use super::format::{colorize_status, format_bytes, format_duration};
-use super::task_queries::load_task_summary;
 use super::is_transient_query_error;
+use super::task_queries::load_task_summary;
 use crate::events::{
     observed_step_scope_label, query_step_events_async, ObservedStepScope, StepEvent,
 };

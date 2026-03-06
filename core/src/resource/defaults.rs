@@ -31,7 +31,13 @@ impl Resource for DefaultsResource {
             workflow: self.spec.workflow.clone(),
         };
         let spec_value = incoming.to_cr_spec();
-        Ok(super::apply_to_store(config, "Defaults", "defaults", &self.metadata, spec_value))
+        Ok(super::apply_to_store(
+            config,
+            "Defaults",
+            "defaults",
+            &self.metadata,
+            spec_value,
+        ))
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -100,7 +106,10 @@ mod tests {
             dispatch_resource(defaults_manifest("p", "w", "f")).expect("dispatch should succeed");
         r1.apply(&mut config).expect("apply");
         // Apply same again -> unchanged
-        assert_eq!(r1.apply(&mut config).expect("apply"), ApplyResult::Unchanged);
+        assert_eq!(
+            r1.apply(&mut config).expect("apply"),
+            ApplyResult::Unchanged
+        );
     }
 
     #[test]
@@ -112,7 +121,10 @@ mod tests {
 
         let r2 = dispatch_resource(defaults_manifest("p2", "w2", "f2"))
             .expect("dispatch should succeed");
-        assert_eq!(r2.apply(&mut config).expect("apply"), ApplyResult::Configured);
+        assert_eq!(
+            r2.apply(&mut config).expect("apply"),
+            ApplyResult::Configured
+        );
     }
 
     #[test]

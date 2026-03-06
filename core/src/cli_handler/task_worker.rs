@@ -152,9 +152,7 @@ impl CliHandler {
                     match handle.join() {
                         Ok(Ok(())) => {}
                         Ok(Err(e)) => worker_errors.push(e),
-                        Err(_) => {
-                            worker_errors.push(anyhow::anyhow!("worker thread panicked"))
-                        }
+                        Err(_) => worker_errors.push(anyhow::anyhow!("worker thread panicked")),
                     }
                 }
                 watching.store(false, AtomicOrdering::SeqCst);

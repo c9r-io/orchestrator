@@ -309,10 +309,7 @@ mod tests {
         );
 
         let docs = export_crd_documents(&config);
-        assert!(
-            docs.is_empty(),
-            "builtin CRDs should be skipped in export"
-        );
+        assert!(docs.is_empty(), "builtin CRDs should be skipped in export");
     }
 
     #[test]
@@ -341,8 +338,7 @@ mod tests {
         assert_eq!(docs.len(), 1);
         let doc = &docs[0];
         assert_eq!(
-            doc.get("kind")
-                .and_then(|v| v.as_str()),
+            doc.get("kind").and_then(|v| v.as_str()),
             Some("CustomResourceDefinition")
         );
     }
@@ -372,8 +368,7 @@ mod tests {
         assert_eq!(docs.len(), 1);
         let doc = &docs[0];
         assert_eq!(
-            doc.get("kind")
-                .and_then(|v| v.as_str()),
+            doc.get("kind").and_then(|v| v.as_str()),
             Some("PromptLibrary")
         );
     }

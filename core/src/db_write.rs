@@ -18,7 +18,9 @@ pub struct DbEventRecord {
 }
 
 /// Extract promoted fields (step, step_scope, cycle) from event payload JSON.
-fn extract_event_promoted_fields(payload_json: &str) -> (Option<String>, Option<String>, Option<i64>) {
+fn extract_event_promoted_fields(
+    payload_json: &str,
+) -> (Option<String>, Option<String>, Option<i64>) {
     let v: serde_json::Value = match serde_json::from_str(payload_json) {
         Ok(v) => v,
         Err(_) => return (None, None, None),
@@ -62,7 +64,12 @@ impl DbWriteCoordinator {
             .map_err(flatten_err)
     }
 
-    pub async fn set_task_status(&self, task_id: &str, status: &str, set_completed: bool) -> Result<()> {
+    pub async fn set_task_status(
+        &self,
+        task_id: &str,
+        status: &str,
+        set_completed: bool,
+    ) -> Result<()> {
         let task_id = task_id.to_owned();
         let status = status.to_owned();
         self.async_db
@@ -391,7 +398,11 @@ impl DbWriteCoordinator {
             .map_err(flatten_err)
     }
 
-    pub async fn set_task_item_terminal_status(&self, task_item_id: &str, status: &str) -> Result<()> {
+    pub async fn set_task_item_terminal_status(
+        &self,
+        task_item_id: &str,
+        status: &str,
+    ) -> Result<()> {
         let task_item_id = task_item_id.to_owned();
         let status = status.to_owned();
         self.async_db
@@ -565,7 +576,10 @@ mod tests {
             .expect("query task");
 
         assert_eq!(status, "running");
-        assert!(completed_at.is_none(), "completed_at should be cleared for running");
+        assert!(
+            completed_at.is_none(),
+            "completed_at should be cleared for running"
+        );
     }
 
     #[tokio::test]
@@ -593,7 +607,10 @@ mod tests {
             )
             .expect("query task");
 
-        assert!(completed_at.is_none(), "completed_at should be cleared for pending");
+        assert!(
+            completed_at.is_none(),
+            "completed_at should be cleared for pending"
+        );
     }
 
     #[tokio::test]
@@ -622,7 +639,10 @@ mod tests {
             .expect("query task");
 
         assert_eq!(status, "failed");
-        assert!(completed_at.is_some(), "completed_at should be preserved for non-clearing status");
+        assert!(
+            completed_at.is_some(),
+            "completed_at should be preserved for non-clearing status"
+        );
     }
 
     // ── update_task_cycle_state ──

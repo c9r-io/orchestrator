@@ -2,7 +2,9 @@ use crate::config::{ItemFinalizeContext, StepPrehookContext};
 use anyhow::Result;
 use cel_interpreter::Context as CelContext;
 
-pub(super) fn build_step_prehook_cel_context(context: &StepPrehookContext) -> Result<CelContext<'_>> {
+pub(super) fn build_step_prehook_cel_context(
+    context: &StepPrehookContext,
+) -> Result<CelContext<'_>> {
     let mut cel_context = CelContext::default();
     cel_context
         .add_variable("context", context.clone())

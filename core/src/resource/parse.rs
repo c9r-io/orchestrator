@@ -349,7 +349,10 @@ spec:
 "#;
         let manifests = parse_manifests_from_yaml(yaml).expect("should parse builtin");
         assert_eq!(manifests.len(), 1);
-        assert!(matches!(manifests[0], crate::crd::ParsedManifest::Builtin(_)));
+        assert!(matches!(
+            manifests[0],
+            crate::crd::ParsedManifest::Builtin(_)
+        ));
     }
 
     #[test]
@@ -385,7 +388,10 @@ spec:
 "#;
         let manifests = parse_manifests_from_yaml(yaml).expect("should parse custom resource");
         assert_eq!(manifests.len(), 1);
-        assert!(matches!(manifests[0], crate::crd::ParsedManifest::Custom(_)));
+        assert!(matches!(
+            manifests[0],
+            crate::crd::ParsedManifest::Custom(_)
+        ));
     }
 
     #[test]

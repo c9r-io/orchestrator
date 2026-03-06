@@ -899,8 +899,15 @@ mod tests {
         let normalized = normalize_config(config);
         let crds = &normalized.custom_resource_definitions;
         for kind in &[
-            "Agent", "Workflow", "Workspace", "Project", "Defaults",
-            "RuntimePolicy", "StepTemplate", "EnvStore", "SecretStore",
+            "Agent",
+            "Workflow",
+            "Workspace",
+            "Project",
+            "Defaults",
+            "RuntimePolicy",
+            "StepTemplate",
+            "EnvStore",
+            "SecretStore",
         ] {
             assert!(crds.contains_key(*kind), "missing builtin CRD: {}", kind);
             assert!(crds[*kind].builtin, "{} should be marked builtin", kind);
@@ -921,7 +928,9 @@ mod tests {
             versions: vec![],
             hooks: Default::default(),
         };
-        config.custom_resource_definitions.insert("MyCrd".to_string(), user_crd);
+        config
+            .custom_resource_definitions
+            .insert("MyCrd".to_string(), user_crd);
 
         let normalized = normalize_config(config);
         assert!(normalized.custom_resource_definitions.contains_key("MyCrd"));
@@ -945,7 +954,10 @@ mod tests {
             "store should be populated from legacy agents"
         );
         assert!(
-            normalized.resource_store.get("Defaults", "defaults").is_some(),
+            normalized
+                .resource_store
+                .get("Defaults", "defaults")
+                .is_some(),
             "singletons should also be in the store"
         );
     }
@@ -974,7 +986,10 @@ mod tests {
         // Legacy does NOT have "stale-agent"
         let normalized = normalize_config(config);
         assert!(
-            normalized.resource_store.get("Agent", "stale-agent").is_none(),
+            normalized
+                .resource_store
+                .get("Agent", "stale-agent")
+                .is_none(),
             "stale store entries should be cleared during normalize"
         );
     }

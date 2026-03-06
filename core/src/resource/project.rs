@@ -32,7 +32,13 @@ impl Resource for ProjectResource {
             workflows: std::collections::HashMap::new(),
         };
         let spec_value = incoming.to_cr_spec();
-        Ok(super::apply_to_store(config, "Project", self.name(), &self.metadata, spec_value))
+        Ok(super::apply_to_store(
+            config,
+            "Project",
+            self.name(),
+            &self.metadata,
+            spec_value,
+        ))
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -111,8 +117,14 @@ mod tests {
         let mut config = make_config();
         let resource =
             dispatch_resource(project_manifest("proj-a", "desc")).expect("dispatch should succeed");
-        assert_eq!(resource.apply(&mut config).expect("apply"), ApplyResult::Created);
-        assert_eq!(resource.apply(&mut config).expect("apply"), ApplyResult::Unchanged);
+        assert_eq!(
+            resource.apply(&mut config).expect("apply"),
+            ApplyResult::Created
+        );
+        assert_eq!(
+            resource.apply(&mut config).expect("apply"),
+            ApplyResult::Unchanged
+        );
     }
 
     #[test]
@@ -124,7 +136,10 @@ mod tests {
 
         let r2 =
             dispatch_resource(project_manifest("proj-b", "v2")).expect("dispatch should succeed");
-        assert_eq!(r2.apply(&mut config).expect("apply"), ApplyResult::Configured);
+        assert_eq!(
+            r2.apply(&mut config).expect("apply"),
+            ApplyResult::Configured
+        );
     }
 
     #[test]
