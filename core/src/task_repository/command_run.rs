@@ -1,3 +1,4 @@
+#[derive(Clone)]
 pub struct NewCommandRun {
     pub id: String,
     pub task_item_id: String,

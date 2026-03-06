@@ -1,7 +1,6 @@
 use crate::config::{OnFailureAction, OnSuccessAction, PostAction, TaskExecutionStep, TaskRuntimeContext};
 use crate::events::insert_event;
 use crate::state::InnerState;
-use crate::task_repository::{SqliteTaskRepository, TaskRepository};
 use crate::ticket::{create_ticket_for_qa_failure, scan_active_tickets_for_task_items};
 use anyhow::Result;
 use serde_json::json;
@@ -15,7 +14,7 @@ use super::dispatch::is_execution_hard_failure;
 /// artifact collection, confidence/quality scores, and event emission.
 /// Returns `true` if the caller should return early (terminal state).
 #[allow(clippy::too_many_arguments)]
-pub(super) fn apply_step_results(
+pub(super) async fn apply_step_results(
     state: &Arc<InnerState>,
     task_id: &str,
     item_id: &str,
@@ -52,7 +51,8 @@ pub(super) fn apply_step_results(
                     Some(item_id),
                     "step_finished",
                     json!({"step": phase, "step_id": step.id, "step_scope": step.resolved_scope(), "early_return": true, "exit_code": result.exit_code, "success": false}),
-                )?;
+                )
+                .await?;
                 return Ok(true);
             }
         }
@@ -63,8 +63,7 @@ pub(super) fn apply_step_results(
         match action {
             PostAction::CreateTicket if !result.is_success() => {
                 if let Some(exit_code) = acc.exit_codes.get(&step.id) {
-                    let task_name = SqliteTaskRepository::new(state.database.clone())
-                        .load_task_name(task_id)?
+                    let task_name = state.task_repo.load_task_name(task_id).await?
                         .unwrap_or_else(|| task_id.to_string());
                     match create_ticket_for_qa_failure(
                         &task_ctx.workspace_root,
@@ -83,7 +82,8 @@ pub(super) fn apply_step_results(
                                 Some(item_id),
                                 "ticket_created",
                                 json!({"path": ticket_path, "qa_file": qa_file_path}),
-                            )?;
+                            )
+                            .await?;
                         }
                         Ok(None) => {}
                         Err(e) => warn!(error = %e, "failed to auto-create ticket"),
@@ -114,7 +114,8 @@ pub(super) fn apply_step_results(
                 Some(item_id),
                 "artifacts_parsed",
                 json!({"step": phase, "count": step_artifacts.len()}),
-            )?;
+            )
+            .await?;
             acc.phase_artifacts.extend(step_artifacts);
         }
     }
@@ -174,7 +175,8 @@ pub(super) fn apply_step_results(
             "quality_score": quality,
             "validation_status": result.validation_status,
         }),
-    )?;
+    )
+    .await?;
 
     if is_execution_hard_failure(result) {
         acc.item_status = "unresolved".to_string();

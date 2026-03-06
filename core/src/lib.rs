@@ -1,12 +1,12 @@
 #![cfg_attr(not(test), deny(clippy::panic, clippy::unwrap_used))]
 
 pub mod anomaly;
+pub mod async_database;
 pub mod cli_types;
 pub mod collab;
 pub mod config;
 pub mod config_load;
 pub mod crd;
-pub mod database;
 pub mod db;
 pub mod db_write;
 pub mod dto;

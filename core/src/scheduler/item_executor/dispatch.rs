@@ -83,7 +83,7 @@ pub async fn process_item(
         &mut acc,
     )
     .await?;
-    finalize_item_execution(state, task_id, item, task_ctx, &mut acc)?;
+    finalize_item_execution(state, task_id, item, task_ctx, &mut acc).await?;
     Ok(())
 }
 
@@ -118,7 +118,7 @@ pub async fn process_item_filtered(
         if runtime.stop_flag.load(std::sync::atomic::Ordering::SeqCst) {
             return Ok(());
         }
-        if super::super::task_state::is_task_paused_in_db(state, task_id)? {
+        if super::super::task_state::is_task_paused_in_db(state, task_id).await? {
             return Ok(());
         }
         if acc.terminal {
@@ -137,7 +137,7 @@ pub async fn process_item_filtered(
 
         // 1. Evaluate prehook
         let prehook_ctx = acc.to_prehook_context(task_id, item, task_ctx, &step.id);
-        let should_run = evaluate_step_prehook(state, step.prehook.as_ref(), &prehook_ctx)?;
+        let should_run = evaluate_step_prehook(state, step.prehook.as_ref(), &prehook_ctx).await?;
         if !should_run {
             acc.step_skipped.insert(step.id.clone(), true);
             insert_event(
@@ -146,13 +146,13 @@ pub async fn process_item_filtered(
                 Some(item_id),
                 "step_skipped",
                 json!({"step": phase, "step_id": &step.id, "step_scope": step.resolved_scope(), "reason": "prehook_false"}),
-            )?;
+            ).await?;
             continue;
         }
 
         // 2. Execute
         if acc.step_ran.is_empty() {
-            state.db_writer.mark_task_item_running(item_id)?;
+            state.db_writer.mark_task_item_running(item_id).await?;
         }
         let pipeline_var_keys: Vec<&String> = acc.pipeline_vars.vars.keys().collect();
         insert_event(
@@ -161,7 +161,7 @@ pub async fn process_item_filtered(
             Some(item_id),
             "step_started",
             json!({"step": phase, "step_id": &step.id, "step_scope": step.resolved_scope(), "cycle": task_ctx.current_cycle, "pipeline_var_keys": pipeline_var_keys}),
-        )?;
+        ).await?;
 
         // Layer 2 defense: delegate to the consolidated method on TaskExecutionStep.
         // If `step.builtin` names a known builtin, the method returns Builtin regardless
@@ -195,7 +195,7 @@ pub async fn process_item_filtered(
                 let should_return = apply_step_results(
                     state, task_id, item_id, phase, step,
                     task_ctx, task_item_paths, &item.qa_file_path, &result, acc,
-                )?;
+                ).await?;
                 if should_return {
                     return Ok(());
                 }
@@ -260,7 +260,7 @@ async fn execute_builtin_step_dispatch(
                 Some(item_id),
                 "step_finished",
                 json!({"step": phase, "step_scope": step.resolved_scope(), "exit_code": exit_code, "success": passed}),
-            )?;
+            ).await?;
 
             // Apply behavior-driven status transitions for self_test
             if !passed {
@@ -313,7 +313,7 @@ async fn execute_builtin_step_dispatch(
                 Some(item_id),
                 "step_finished",
                 json!({"step": phase, "step_scope": step.resolved_scope(), "exit_code": exit_code, "restart": exit_code == EXIT_RESTART}),
-            )?;
+            ).await?;
 
             if exit_code == EXIT_RESTART {
                 // All state is persisted (restart_pending set by execute_self_restart_step).
@@ -352,7 +352,7 @@ async fn execute_builtin_step_dispatch(
                 Some(item_id),
                 "step_finished",
                 json!({"step": "ticket_scan", "step_scope": step.resolved_scope(), "tickets": acc.active_tickets.len()}),
-            )?;
+            ).await?;
             Ok(BuiltinStepOutcome::Handled)
         }
 
@@ -395,7 +395,7 @@ async fn execute_agent_step(
                     Some(item_id),
                     "chain_step_started",
                     json!({"step": phase, "step_scope": step.resolved_scope(), "chain_step": chain_step.id}),
-                )?;
+                ).await?;
 
                 let mut step_ctx = task_ctx.clone();
                 step_ctx.pipeline_vars = acc.pipeline_vars.clone();
@@ -420,14 +420,14 @@ async fn execute_agent_step(
                             Some(item_id),
                             "chain_step_finished",
                             json!({"step": phase, "step_scope": step.resolved_scope(), "chain_step": chain_step.id, "error": e.to_string(), "success": false}),
-                        );
+                        ).await;
                         let _ = insert_event(
                             state,
                             task_id,
                             Some(item_id),
                             "step_finished",
                             json!({"step": phase, "step_scope": step.resolved_scope(), "error": e.to_string(), "success": false}),
-                        );
+                        ).await;
                         return Err(e);
                     }
                 };
@@ -457,7 +457,7 @@ async fn execute_agent_step(
                         "exit_code": chain_result.exit_code,
                         "success": chain_result.is_success()
                     }),
-                )?;
+                ).await?;
 
                 if !chain_result.is_success() {
                     chain_passed = false;
@@ -472,7 +472,7 @@ async fn execute_agent_step(
                 Some(item_id),
                 "step_finished",
                 json!({"step": phase, "step_scope": step.resolved_scope(), "success": chain_passed}),
-            )?;
+            ).await?;
             Ok(AgentStepOutcome::Handled)
         }
 
@@ -501,7 +501,7 @@ async fn execute_agent_step(
                         Some(item_id),
                         "step_finished",
                         json!({"step": phase, "step_id": step.id, "step_scope": step.resolved_scope(), "error": e.to_string(), "success": false}),
-                    );
+                    ).await;
                     return Err(e);
                 }
             };
@@ -720,7 +720,7 @@ async fn execute_dynamic_steps(
             Some(item_id),
             "dynamic_step_started",
             json!({"step_id": ds.id, "step_type": ds.step_type, "step_scope": "item", "priority": ds.priority}),
-        )?;
+        ).await?;
         let cap = Some(ds.step_type.as_str());
         let result = run_phase_with_rotation(
             state,
@@ -751,7 +751,7 @@ async fn execute_dynamic_steps(
             Some(item_id),
             "dynamic_step_finished",
             json!({"step_id": ds.id, "step_scope": "item", "exit_code": result.exit_code, "success": result.is_success()}),
-        )?;
+        ).await?;
     }
 
     Ok(())

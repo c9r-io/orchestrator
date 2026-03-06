@@ -2,10 +2,10 @@ use crate::config_load::now_ts;
 use anyhow::Result;
 use rusqlite::{params, OptionalExtension};
 
-use super::types::TaskRepositoryConn;
+use rusqlite::Connection;
 
 pub fn set_task_status(
-    conn: &TaskRepositoryConn,
+    conn: &Connection,
     task_id: &str,
     status: &str,
     set_completed: bool,
@@ -35,7 +35,7 @@ pub fn set_task_status(
     Ok(())
 }
 
-pub fn prepare_task_for_start_batch(conn: &TaskRepositoryConn, task_id: &str) -> Result<()> {
+pub fn prepare_task_for_start_batch(conn: &Connection, task_id: &str) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
     let status: Option<String> = tx
         .query_row(
@@ -83,7 +83,7 @@ pub fn prepare_task_for_start_batch(conn: &TaskRepositoryConn, task_id: &str) ->
 }
 
 pub fn update_task_cycle_state(
-    conn: &TaskRepositoryConn,
+    conn: &Connection,
     task_id: &str,
     current_cycle: u32,
     init_done: bool,

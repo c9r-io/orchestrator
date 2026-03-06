@@ -4,10 +4,10 @@ use rusqlite::{params, OptionalExtension};
 use std::collections::HashSet;
 
 use super::command_run::NewCommandRun;
-use super::types::TaskRepositoryConn;
+use rusqlite::Connection;
 
 pub fn update_task_item_status(
-    conn: &TaskRepositoryConn,
+    conn: &Connection,
     task_item_id: &str,
     status: &str,
 ) -> Result<()> {
@@ -18,7 +18,7 @@ pub fn update_task_item_status(
     Ok(())
 }
 
-pub fn mark_task_item_running(conn: &TaskRepositoryConn, task_item_id: &str) -> Result<()> {
+pub fn mark_task_item_running(conn: &Connection, task_item_id: &str) -> Result<()> {
     let now = now_ts();
     conn.execute(
         "UPDATE task_items SET status = 'running', started_at = COALESCE(started_at, ?2), completed_at = NULL, updated_at = ?3 WHERE id = ?1",
@@ -28,7 +28,7 @@ pub fn mark_task_item_running(conn: &TaskRepositoryConn, task_item_id: &str) -> 
 }
 
 pub fn set_task_item_terminal_status(
-    conn: &TaskRepositoryConn,
+    conn: &Connection,
     task_item_id: &str,
     status: &str,
 ) -> Result<()> {
@@ -41,7 +41,7 @@ pub fn set_task_item_terminal_status(
 }
 
 pub fn delete_task_and_collect_log_paths(
-    conn: &TaskRepositoryConn,
+    conn: &Connection,
     task_id: &str,
 ) -> Result<Vec<String>> {
     let exists = conn
@@ -89,7 +89,7 @@ pub fn delete_task_and_collect_log_paths(
     Ok(log_paths.into_iter().collect())
 }
 
-pub fn insert_command_run(conn: &TaskRepositoryConn, run: &NewCommandRun) -> Result<()> {
+pub fn insert_command_run(conn: &Connection, run: &NewCommandRun) -> Result<()> {
     conn.execute(
         "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, workspace_id, agent_id, exit_code, stdout_path, stderr_path, output_json, artifacts_json, confidence, quality_score, validation_status, started_at, ended_at, interrupted, session_id, machine_output_source, output_json_path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
         params![

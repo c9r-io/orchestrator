@@ -8,11 +8,12 @@ mod cli_output;
 
 // Re-export library modules — makes `crate::X` paths work in cli/cli_handler
 use agent_orchestrator::anomaly;
+#[allow(unused_imports)]
+use agent_orchestrator::async_database;
 use agent_orchestrator::cli_types;
 use agent_orchestrator::collab;
 use agent_orchestrator::config;
 use agent_orchestrator::config_load;
-use agent_orchestrator::database;
 use agent_orchestrator::db;
 use agent_orchestrator::db_write;
 use agent_orchestrator::dto;
@@ -80,13 +81,20 @@ fn init_state() -> Result<ManagedState> {
             ),
         };
 
-    let database = Arc::new(crate::database::Database::new(db_path.clone())?);
-    let db_writer = Arc::new(crate::db_write::DbWriteCoordinator::new(database.clone()));
+    let async_database = Arc::new(
+        tokio::runtime::Runtime::new()
+            .context("failed to create tokio runtime for async db init")?
+            .block_on(agent_orchestrator::async_database::AsyncDatabase::open(&db_path))
+            .context("failed to open async database")?,
+    );
+    let db_writer = Arc::new(crate::db_write::DbWriteCoordinator::new(async_database.clone()));
+    let session_store = Arc::new(agent_orchestrator::session_store::AsyncSessionStore::new(async_database.clone()));
+    let task_repo = Arc::new(agent_orchestrator::task_repository::AsyncSqliteTaskRepository::new(async_database.clone()));
     Ok(ManagedState {
         inner: Arc::new(crate::state::InnerState {
             app_root,
             db_path,
-            database,
+            async_database,
             logs_dir,
             active_config: RwLock::new(active),
             active_config_error: RwLock::new(active_config_error),
@@ -97,6 +105,8 @@ fn init_state() -> Result<ManagedState> {
             message_bus: Arc::new(MessageBus::new()),
             event_sink: std::sync::RwLock::new(Arc::new(crate::events::TracingEventSink::new())),
             db_writer,
+            session_store,
+            task_repo,
         }),
     })
 }

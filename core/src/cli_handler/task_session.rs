@@ -2,9 +2,6 @@ use crate::cli::{OutputFormat, TaskSessionCommands};
 use crate::config::{TaskExecutionPlan, TaskExecutionStep};
 use crate::config_load::now_ts;
 use crate::db::open_conn;
-use crate::scheduler::resolve_task_id;
-use crate::session_store;
-use crate::task_repository::{SqliteTaskRepository, TaskRepository};
 use anyhow::{Context, Result};
 use std::process::Command;
 
@@ -14,9 +11,9 @@ impl CliHandler {
     pub(super) fn handle_task_session(&self, cmd: &TaskSessionCommands) -> Result<i32> {
         match cmd {
             TaskSessionCommands::List { task_id, output } => {
-                let task_id = resolve_task_id(&self.state, task_id)?;
-                let conn = self.state.database.connection()?;
-                let rows = session_store::list_task_sessions(&conn, &task_id)?;
+                let rt = super::cli_runtime();
+                let task_id = rt.block_on(crate::scheduler::resolve_task_id(&self.state, task_id))?;
+                let rows = rt.block_on(self.state.session_store.list_task_sessions(&task_id))?;
                 match output {
                     OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&rows)?),
                     OutputFormat::Yaml => println!("{}", serde_yml::to_string(&rows)?),
@@ -45,8 +42,8 @@ impl CliHandler {
                 Ok(0)
             }
             TaskSessionCommands::Info { session_id, output } => {
-                let conn = self.state.database.connection()?;
-                let row = session_store::load_session(&conn, session_id)?
+                let rt = super::cli_runtime();
+                let row = rt.block_on(self.state.session_store.load_session(session_id))?
                     .with_context(|| format!("session not found: {}", session_id))?;
                 match output {
                     OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&row)?),
@@ -71,8 +68,8 @@ impl CliHandler {
                 Ok(0)
             }
             TaskSessionCommands::Close { session_id, force } => {
-                let conn = self.state.database.connection()?;
-                let row = session_store::load_session(&conn, session_id)?
+                let rt = super::cli_runtime();
+                let row = rt.block_on(self.state.session_store.load_session(session_id))?
                     .with_context(|| format!("session not found: {}", session_id))?;
                 if row.pid > 0 {
                     let sig = if *force { "-9" } else { "-15" };
@@ -81,13 +78,12 @@ impl CliHandler {
                         .arg(row.pid.to_string())
                         .status();
                 }
-                session_store::update_session_state(
-                    &conn,
+                rt.block_on(self.state.session_store.update_session_state(
                     session_id,
                     "closed",
                     None,
                     true,
-                )?;
+                ))?;
                 println!("Session closed: {}", session_id);
                 Ok(0)
             }
@@ -103,12 +99,12 @@ impl CliHandler {
         tty: bool,
         repeatable: bool,
     ) -> Result<i32> {
-        let resolved_id = resolve_task_id(&self.state, task_id)?;
+        let rt = super::cli_runtime();
+        let resolved_id = rt.block_on(crate::scheduler::resolve_task_id(&self.state, task_id))?;
         crate::config::validate_step_type(step)
             .map_err(|e| anyhow::anyhow!("invalid --step '{}': {}", step, e))?;
 
-        let repo = SqliteTaskRepository::new(self.state.database.clone());
-        let runtime_row = repo.load_task_runtime_row(&resolved_id)?;
+        let runtime_row = rt.block_on(self.state.task_repo.load_task_runtime_row(&resolved_id))?;
         let mut plan = serde_json::from_str::<TaskExecutionPlan>(&runtime_row.execution_plan_json)
             .with_context(|| format!("failed to parse execution plan for task {}", resolved_id))?;
 

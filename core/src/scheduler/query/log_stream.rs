@@ -5,20 +5,19 @@ use crate::config_load::read_loaded_config;
 use crate::dto::LogChunk;
 use crate::runner::redact_text;
 use crate::state::InnerState;
-use crate::task_repository::{SqliteTaskRepository, TaskRepository};
 use anyhow::{Context, Result};
 use std::io::{Read, Seek};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
 use super::task_queries::resolve_task_id;
-use super::{emit_anomaly_warning, retry_query};
+use super::emit_anomaly_warning;
 
 const FOLLOW_POLL_MS: u64 = 500;
 const LOG_UNAVAILABLE_MARKER: &str = "[log unavailable]";
 
 /// Stream task logs with optional tail count and timestamps.
-pub fn stream_task_logs_impl(
+pub async fn stream_task_logs_impl(
     state: &InnerState,
     task_id: &str,
     tail_count: usize,
@@ -26,11 +25,8 @@ pub fn stream_task_logs_impl(
 ) -> Result<Vec<LogChunk>> {
     const PER_FILE_LINE_LIMIT: usize = 150;
 
-    let resolved_id = resolve_task_id(state, task_id)?;
-    let repo = SqliteTaskRepository::new(state.database.clone());
-    let runs = retry_query("list task log runs", || {
-        repo.list_task_log_runs(&resolved_id, 14)
-    })?;
+    let resolved_id = resolve_task_id(state, task_id).await?;
+    let runs = state.task_repo.list_task_log_runs(&resolved_id, 14).await?;
     let redaction_patterns = {
         let active = read_loaded_config(state)?;
         active.config.runner.redaction_patterns.clone()
@@ -104,7 +100,7 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
     let mut last_warning_at: Option<Instant> = None;
 
     loop {
-        let latest = crate::events::query_latest_step_log_paths_db(&state.database, task_id);
+        let latest = crate::events::query_latest_step_log_paths_async(state, task_id).await;
         let (phase, stdout_path, stderr_path) = match latest {
             Ok(Some(info)) => info,
             Ok(None) => {
@@ -112,8 +108,7 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
                     eprintln!("[waiting for first log stream]");
                     waiting_notice_printed = true;
                 }
-                let repo = SqliteTaskRepository::new(state.database.clone());
-                if let Ok(Some(status)) = repo.load_task_status(task_id) {
+                if let Ok(Some(status)) = state.task_repo.load_task_status(task_id).await {
                     if status == "completed" || status == "failed" {
                         eprintln!("\n--- task {} ---", status);
                         return Ok(());
@@ -159,8 +154,7 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
             );
         }
 
-        let repo = SqliteTaskRepository::new(state.database.clone());
-        if let Ok(Some(status)) = repo.load_task_status(task_id) {
+        if let Ok(Some(status)) = state.task_repo.load_task_status(task_id).await {
             if status == "completed" || status == "failed" {
                 tokio::time::sleep(Duration::from_millis(200)).await;
                 eprintln!("\n--- task {} ---", status);
@@ -264,7 +258,7 @@ mod tests {
     use super::super::test_fixtures::{first_item_id, seed_task, test_dir};
     use super::*;
     use crate::config_load::now_ts;
-    use crate::task_repository::{NewCommandRun, SqliteTaskRepository, TaskRepository};
+    use crate::task_repository::NewCommandRun;
     use crate::test_utils::TestState;
     use std::io::Write;
 
@@ -344,8 +338,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[test]
-    fn stream_task_logs_impl_returns_log_chunks() {
+    #[tokio::test]
+    async fn stream_task_logs_impl_returns_log_chunks() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
         let item_id = first_item_id(&state, &task_id);
@@ -357,8 +351,7 @@ mod tests {
         std::fs::write(&stdout_path, "line 1\nline 2\nline 3\n").expect("write stdout");
         std::fs::write(&stderr_path, "").expect("write stderr");
 
-        let repo = SqliteTaskRepository::new(state.database.clone());
-        repo.insert_command_run(&NewCommandRun {
+        state.task_repo.insert_command_run(NewCommandRun {
             id: "run-stream-1".to_string(),
             task_item_id: item_id,
             phase: "qa".to_string(),
@@ -381,9 +374,10 @@ mod tests {
             machine_output_source: "stdout".to_string(),
             output_json_path: None,
         })
+        .await
         .expect("insert command run");
 
-        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).expect("stream task logs");
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).await.expect("stream task logs");
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0].run_id, "run-stream-1");
         assert_eq!(chunks[0].phase, "qa");
@@ -394,8 +388,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[test]
-    fn stream_task_logs_impl_works_when_active_config_is_not_runnable() {
+    #[tokio::test]
+    async fn stream_task_logs_impl_works_when_active_config_is_not_runnable() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
         let item_id = first_item_id(&state, &task_id);
@@ -406,8 +400,7 @@ mod tests {
         std::fs::write(&stdout_path, "token=redacted\nvisible line\n").expect("write stdout");
         std::fs::write(&stderr_path, "").expect("write stderr");
 
-        let repo = SqliteTaskRepository::new(state.database.clone());
-        repo.insert_command_run(&NewCommandRun {
+        state.task_repo.insert_command_run(NewCommandRun {
             id: "run-invalid-active-1".to_string(),
             task_item_id: item_id,
             phase: "qa".to_string(),
@@ -430,6 +423,7 @@ mod tests {
             machine_output_source: "stdout".to_string(),
             output_json_path: None,
         })
+        .await
         .expect("insert command run");
 
         *state
@@ -438,15 +432,15 @@ mod tests {
             .expect("active_config_error lock should be writable") =
             Some("active config is not runnable".to_string());
 
-        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).expect("stream task logs");
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).await.expect("stream task logs");
         assert_eq!(chunks.len(), 1);
         assert!(chunks[0].content.contains("[REDACTED]"));
         assert!(chunks[0].content.contains("visible line"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[test]
-    fn stream_task_logs_impl_with_stderr() {
+    #[tokio::test]
+    async fn stream_task_logs_impl_with_stderr() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
         let item_id = first_item_id(&state, &task_id);
@@ -457,8 +451,7 @@ mod tests {
         std::fs::write(&stdout_path, "stdout content\n").expect("write stdout");
         std::fs::write(&stderr_path, "warning: something\n").expect("write stderr");
 
-        let repo = SqliteTaskRepository::new(state.database.clone());
-        repo.insert_command_run(&NewCommandRun {
+        state.task_repo.insert_command_run(NewCommandRun {
             id: "run-stream-err".to_string(),
             task_item_id: item_id,
             phase: "implement".to_string(),
@@ -481,9 +474,10 @@ mod tests {
             machine_output_source: "stdout".to_string(),
             output_json_path: None,
         })
+        .await
         .expect("insert command run");
 
-        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).expect("stream task logs");
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).await.expect("stream task logs");
         assert_eq!(chunks.len(), 1);
         assert!(chunks[0].content.contains("stdout content"));
         assert!(chunks[0].content.contains("[stderr]"));
@@ -491,8 +485,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[test]
-    fn stream_task_logs_impl_with_timestamps() {
+    #[tokio::test]
+    async fn stream_task_logs_impl_with_timestamps() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
         let item_id = first_item_id(&state, &task_id);
@@ -504,8 +498,7 @@ mod tests {
         std::fs::write(&stderr_path, "").expect("write stderr");
 
         let ts = now_ts();
-        let repo = SqliteTaskRepository::new(state.database.clone());
-        repo.insert_command_run(&NewCommandRun {
+        state.task_repo.insert_command_run(NewCommandRun {
             id: "run-ts-1".to_string(),
             task_item_id: item_id,
             phase: "qa".to_string(),
@@ -528,10 +521,11 @@ mod tests {
             machine_output_source: "stdout".to_string(),
             output_json_path: None,
         })
+        .await
         .expect("insert command run");
 
         let chunks =
-            stream_task_logs_impl(&state, &task_id, 10, true).expect("stream with timestamps");
+            stream_task_logs_impl(&state, &task_id, 10, true).await.expect("stream with timestamps");
         assert_eq!(chunks.len(), 1);
         // When show_timestamps is true, header includes the timestamp
         assert!(
@@ -541,14 +535,13 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[test]
-    fn stream_task_logs_impl_tail_count_limits_output() {
+    #[tokio::test]
+    async fn stream_task_logs_impl_tail_count_limits_output() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
         let item_id = first_item_id(&state, &task_id);
 
         let dir = test_dir("stream-tail");
-        let repo = SqliteTaskRepository::new(state.database.clone());
 
         // Insert 3 command runs with distinct log files
         for i in 0..3 {
@@ -557,7 +550,7 @@ mod tests {
             std::fs::write(&stdout_path, format!("run {} output\n", i)).expect("write tail stdout");
             std::fs::write(&stderr_path, "").expect("write tail stderr");
 
-            repo.insert_command_run(&NewCommandRun {
+            state.task_repo.insert_command_run(NewCommandRun {
                 id: format!("run-tail-{}", i),
                 task_item_id: item_id.clone(),
                 phase: "qa".to_string(),
@@ -580,32 +573,32 @@ mod tests {
                 machine_output_source: "stdout".to_string(),
                 output_json_path: None,
             })
+            .await
             .expect("insert command run");
         }
 
         // Request only 2 tail entries
         let chunks =
-            stream_task_logs_impl(&state, &task_id, 2, false).expect("stream with tail limit");
+            stream_task_logs_impl(&state, &task_id, 2, false).await.expect("stream with tail limit");
         assert_eq!(chunks.len(), 2, "should be limited to 2 chunks");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[test]
-    fn stream_task_logs_impl_no_runs_returns_empty() {
+    #[tokio::test]
+    async fn stream_task_logs_impl_no_runs_returns_empty() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
-        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).expect("stream empty logs");
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).await.expect("stream empty logs");
         assert!(chunks.is_empty());
     }
 
-    #[test]
-    fn stream_task_logs_impl_returns_placeholder_when_logs_missing() {
+    #[tokio::test]
+    async fn stream_task_logs_impl_returns_placeholder_when_logs_missing() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
         let item_id = first_item_id(&state, &task_id);
 
-        let repo = SqliteTaskRepository::new(state.database.clone());
-        repo.insert_command_run(&NewCommandRun {
+        state.task_repo.insert_command_run(NewCommandRun {
             id: "run-missing-logs".to_string(),
             task_item_id: item_id,
             phase: "qa".to_string(),
@@ -628,15 +621,16 @@ mod tests {
             machine_output_source: "stdout".to_string(),
             output_json_path: None,
         })
+        .await
         .expect("insert command run");
 
-        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).expect("stream task logs");
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).await.expect("stream task logs");
         assert_eq!(chunks.len(), 1);
         assert!(chunks[0].content.contains(LOG_UNAVAILABLE_MARKER));
     }
 
-    #[test]
-    fn stream_task_logs_impl_returns_partial_results_when_one_run_is_unavailable() {
+    #[tokio::test]
+    async fn stream_task_logs_impl_returns_partial_results_when_one_run_is_unavailable() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
         let item_id = first_item_id(&state, &task_id);
@@ -647,8 +641,7 @@ mod tests {
         std::fs::write(&stdout_path, "available output\n").expect("write available stdout");
         std::fs::write(&stderr_path, "").expect("write available stderr");
 
-        let repo = SqliteTaskRepository::new(state.database.clone());
-        repo.insert_command_run(&NewCommandRun {
+        state.task_repo.insert_command_run(NewCommandRun {
             id: "run-partial-good".to_string(),
             task_item_id: item_id.clone(),
             phase: "qa".to_string(),
@@ -671,8 +664,9 @@ mod tests {
             machine_output_source: "stdout".to_string(),
             output_json_path: None,
         })
+        .await
         .expect("insert good run");
-        repo.insert_command_run(&NewCommandRun {
+        state.task_repo.insert_command_run(NewCommandRun {
             id: "run-partial-missing".to_string(),
             task_item_id: item_id,
             phase: "implement".to_string(),
@@ -695,9 +689,10 @@ mod tests {
             machine_output_source: "stdout".to_string(),
             output_json_path: None,
         })
+        .await
         .expect("insert missing run");
 
-        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).expect("stream task logs");
+        let chunks = stream_task_logs_impl(&state, &task_id, 10, false).await.expect("stream task logs");
         assert_eq!(chunks.len(), 2);
         assert!(chunks
             .iter()

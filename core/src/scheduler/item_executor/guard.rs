@@ -23,7 +23,7 @@ pub async fn execute_guard_step(
 ) -> Result<GuardResult> {
     if let ExecutionMode::Builtin { name } = step.effective_execution_mode().as_ref() {
         if name == "loop_guard" {
-            let unresolved = count_unresolved_items(state, task_id)?;
+            let unresolved = count_unresolved_items(state, task_id).await?;
             // Respect stop_when_no_unresolved config: only stop on zero unresolved
             // when the guard is configured to do so. In Fixed mode with max_cycles,
             // the loop_engine's evaluate_loop_guard_rules handles cycle counting

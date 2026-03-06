@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use super::accumulator::StepExecutionAccumulator;
 
-pub fn finalize_item_execution(
+pub async fn finalize_item_execution(
     state: &Arc<InnerState>,
     task_id: &str,
     item: &crate::dto::TaskItemRow,
@@ -39,7 +39,8 @@ pub fn finalize_item_execution(
                 "step": "qa_testing",
                 "reason": "configured qa step was neither run nor skipped in final cycle"
             }),
-        )?;
+        )
+        .await?;
     } else if acc.flags.get("execution_failed").copied().unwrap_or(false) {
         acc.item_status = "unresolved".to_string();
     } else if let Some(outcome) = resolve_workflow_finalize_outcome(
@@ -47,7 +48,7 @@ pub fn finalize_item_execution(
         &finalize_context,
     )? {
         acc.item_status = outcome.status.clone();
-        emit_item_finalize_event(state, &finalize_context, &outcome)?;
+        emit_item_finalize_event(state, &finalize_context, &outcome).await?;
     }
 
     let has_ticket_artifacts = !acc.created_ticket_files.is_empty()
@@ -68,11 +69,13 @@ pub fn finalize_item_execution(
             serde_json::to_string(&ticket_content).unwrap_or_else(|_| "[]".to_string());
         state
             .db_writer
-            .update_task_item_tickets(item_id, &files_json, &content_json)?;
+            .update_task_item_tickets(item_id, &files_json, &content_json)
+            .await?;
     }
 
     state
         .db_writer
-        .set_task_item_terminal_status(item_id, &acc.item_status)?;
+        .set_task_item_terminal_status(item_id, &acc.item_status)
+        .await?;
     Ok(())
 }

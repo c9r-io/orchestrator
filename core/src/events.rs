@@ -1,4 +1,4 @@
-use crate::database::Database;
+use crate::async_database::flatten_err;
 use crate::db::open_conn;
 use crate::state::InnerState;
 use anyhow::Result;
@@ -99,19 +99,22 @@ impl EventSink for TracingEventSink {
     }
 }
 
-pub fn insert_event(
+pub async fn insert_event(
     state: &InnerState,
     task_id: &str,
     task_item_id: Option<&str>,
     event_type: &str,
     payload: Value,
 ) -> Result<()> {
-    state.db_writer.insert_event(
-        task_id,
-        task_item_id,
-        event_type,
-        &serde_json::to_string(&payload)?,
-    )
+    state
+        .db_writer
+        .insert_event(
+            task_id,
+            task_item_id,
+            event_type,
+            &serde_json::to_string(&payload)?,
+        )
+        .await
 }
 
 /// Parsed step event from the events table for display in watch/follow.
@@ -145,14 +148,6 @@ pub fn query_latest_step_log_paths(
     task_id: &str,
 ) -> Result<Option<(String, String, String)>> {
     let conn = open_conn(db_path)?;
-    query_latest_step_log_paths_with_conn(&conn, task_id)
-}
-
-pub fn query_latest_step_log_paths_db(
-    database: &Database,
-    task_id: &str,
-) -> Result<Option<(String, String, String)>> {
-    let conn = database.connection()?;
     query_latest_step_log_paths_with_conn(&conn, task_id)
 }
 
@@ -193,11 +188,6 @@ fn query_latest_step_log_paths_with_conn(
 /// Query all step-related events for a task, parsed into StepEvent structs.
 pub fn query_step_events(db_path: &Path, task_id: &str) -> Result<Vec<StepEvent>> {
     let conn = open_conn(db_path)?;
-    query_step_events_with_conn(&conn, task_id)
-}
-
-pub fn query_step_events_db(database: &Database, task_id: &str) -> Result<Vec<StepEvent>> {
-    let conn = database.connection()?;
     query_step_events_with_conn(&conn, task_id)
 }
 
@@ -265,6 +255,38 @@ fn query_step_events_with_conn(conn: &Connection, task_id: &str) -> Result<Vec<S
     Ok(events)
 }
 
+pub async fn query_latest_step_log_paths_async(
+    state: &InnerState,
+    task_id: &str,
+) -> Result<Option<(String, String, String)>> {
+    let task_id = task_id.to_owned();
+    state
+        .async_database
+        .reader()
+        .call(move |conn| {
+            query_latest_step_log_paths_with_conn(conn, &task_id)
+                .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+        })
+        .await
+        .map_err(flatten_err)
+}
+
+pub async fn query_step_events_async(
+    state: &InnerState,
+    task_id: &str,
+) -> Result<Vec<StepEvent>> {
+    let task_id = task_id.to_owned();
+    state
+        .async_database
+        .reader()
+        .call(move |conn| {
+            query_step_events_with_conn(conn, &task_id)
+                .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+        })
+        .await
+        .map_err(flatten_err)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,8 +308,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn insert_event_and_query_roundtrip() {
+    #[tokio::test]
+    async fn insert_event_and_query_roundtrip() {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
 
@@ -299,6 +321,7 @@ mod tests {
             "step_started",
             serde_json::json!({"step": "qa", "agent_id": "qa_agent"}),
         )
+        .await
         .expect("insert step_started event");
 
         insert_event(
@@ -308,6 +331,7 @@ mod tests {
             "step_finished",
             serde_json::json!({"step": "qa", "success": true, "duration_ms": 1500}),
         )
+        .await
         .expect("insert step_finished event");
 
         insert_event(
@@ -317,6 +341,7 @@ mod tests {
             "cycle_started",
             serde_json::json!({"cycle": 1}),
         )
+        .await
         .expect("insert cycle_started event");
 
         // Query events back
@@ -384,8 +409,8 @@ mod tests {
         assert!(result.is_none());
     }
 
-    #[test]
-    fn query_latest_step_log_paths_returns_paths() {
+    #[tokio::test]
+    async fn query_latest_step_log_paths_returns_paths() {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
 
@@ -400,6 +425,7 @@ mod tests {
                 "stderr_path": "/tmp/stderr.log"
             }),
         )
+        .await
         .expect("insert step_spawned event");
 
         let result = query_latest_step_log_paths(&state.db_path, "task1")
@@ -411,8 +437,8 @@ mod tests {
         assert_eq!(stderr, "/tmp/stderr.log");
     }
 
-    #[test]
-    fn query_latest_step_log_paths_empty_phase_returns_none() {
+    #[tokio::test]
+    async fn query_latest_step_log_paths_empty_phase_returns_none() {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
 
@@ -423,6 +449,7 @@ mod tests {
             "step_started",
             serde_json::json!({"stdout_path": "/tmp/out.log"}),
         )
+        .await
         .expect("insert step_started log event");
 
         let result = query_latest_step_log_paths(&state.db_path, "task1")
@@ -430,8 +457,8 @@ mod tests {
         assert!(result.is_none());
     }
 
-    #[test]
-    fn query_step_events_parses_step_scope_and_task_item_id() {
+    #[tokio::test]
+    async fn query_step_events_parses_step_scope_and_task_item_id() {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
 
@@ -442,6 +469,7 @@ mod tests {
             "step_started",
             serde_json::json!({"step": "qa", "step_scope": "item"}),
         )
+        .await
         .expect("insert scoped step_started event");
 
         let events = query_step_events(&state.db_path, "task1").expect("query scoped events");
@@ -487,8 +515,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn query_latest_step_log_paths_prefers_step_key_over_phase() {
+    #[tokio::test]
+    async fn query_latest_step_log_paths_prefers_step_key_over_phase() {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
 
@@ -503,6 +531,7 @@ mod tests {
                 "stderr_path": "/tmp/err.log"
             }),
         )
+        .await
         .expect("insert step_started event");
 
         let result = query_latest_step_log_paths(&state.db_path, "task1")
@@ -513,8 +542,8 @@ mod tests {
         assert_eq!(stdout, "/tmp/out.log");
     }
 
-    #[test]
-    fn query_step_events_uses_promoted_column_scope() {
+    #[tokio::test]
+    async fn query_step_events_uses_promoted_column_scope() {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
 
@@ -526,6 +555,7 @@ mod tests {
             "step_started",
             serde_json::json!({"step": "qa", "step_scope": "task"}),
         )
+        .await
         .expect("insert step_started event");
 
         let events = query_step_events(&state.db_path, "task1").expect("query events");
@@ -534,8 +564,8 @@ mod tests {
         assert_eq!(events[0].step_scope, Some(ObservedStepScope::Task));
     }
 
-    #[test]
-    fn step_event_parses_all_optional_fields() {
+    #[tokio::test]
+    async fn step_event_parses_all_optional_fields() {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
 
@@ -558,6 +588,7 @@ mod tests {
                 "output_state": "low_output"
             }),
         )
+        .await
         .expect("insert step_heartbeat event");
 
         let events = query_step_events(&state.db_path, "task1").expect("query heartbeat events");

@@ -372,9 +372,7 @@ pub async fn execute_self_restart_step(
         "self_restart_phase",
         json!({"phase": "snapshot_binary"}),
     );
-    let current_cycle: u32 = state
-        .database
-        .connection()
+    let current_cycle: u32 = crate::db::open_conn(&state.db_path)
         .ok()
         .and_then(|conn| {
             conn.query_row(
@@ -412,7 +410,8 @@ pub async fn execute_self_restart_step(
     // Phase 4: set task status to restart_pending
     state
         .db_writer
-        .set_task_status(task_id, "restart_pending", false)?;
+        .set_task_status(task_id, "restart_pending", false)
+        .await?;
 
     // Persist the event to SQLite (insert_event) so the new process can verify
     // it is running the expected binary by comparing SHA256.
@@ -428,7 +427,7 @@ pub async fn execute_self_restart_step(
             "build_git_hash": env!("BUILD_GIT_HASH"),
             "build_timestamp": env!("BUILD_TIMESTAMP"),
         }),
-    )?;
+    ).await?;
 
     Ok(EXIT_RESTART)
 }
@@ -437,17 +436,25 @@ pub async fn execute_self_restart_step(
 /// Called after claiming a `restart_pending` task to confirm the new binary
 /// is actually running (not the old one).
 /// Returns Ok(true) if verified, Ok(false) if mismatch, Err on read failure.
-pub fn verify_post_restart_binary(state: &InnerState, task_id: &str) -> Result<bool> {
+pub async fn verify_post_restart_binary(state: &InnerState, task_id: &str) -> Result<bool> {
     // Read the self_restart_ready event from the DB
-    let conn = state.database.connection()?;
-    let expected_sha256: Option<String> = conn.query_row(
-        "SELECT payload_json FROM events WHERE task_id = ?1 AND event_type = 'self_restart_ready' ORDER BY created_at DESC LIMIT 1",
-        rusqlite::params![task_id],
-        |row| row.get::<_, String>(0),
-    ).ok().and_then(|json_str| {
-        serde_json::from_str::<serde_json::Value>(&json_str).ok()
-            .and_then(|v| v.get("binary_sha256").and_then(|s| s.as_str()).map(|s| s.to_string()))
-    });
+    let task_id_owned = task_id.to_owned();
+    let expected_sha256: Option<String> = state
+        .async_database
+        .reader()
+        .call(move |conn| {
+            let result: Option<String> = conn.query_row(
+                "SELECT payload_json FROM events WHERE task_id = ?1 AND event_type = 'self_restart_ready' ORDER BY created_at DESC LIMIT 1",
+                rusqlite::params![task_id_owned],
+                |row| row.get::<_, String>(0),
+            ).ok().and_then(|json_str| {
+                serde_json::from_str::<serde_json::Value>(&json_str).ok()
+                    .and_then(|v| v.get("binary_sha256").and_then(|s| s.as_str()).map(|s| s.to_string()))
+            });
+            Ok(result)
+        })
+        .await
+        .map_err(crate::async_database::flatten_err)?;
 
     let expected = match expected_sha256 {
         Some(s) if s != "unknown" => s,
@@ -466,7 +473,7 @@ pub fn verify_post_restart_binary(state: &InnerState, task_id: &str) -> Result<b
             None,
             "binary_verification",
             json!({"verified": true, "expected_sha256": expected, "actual_sha256": actual, "build_git_hash": env!("BUILD_GIT_HASH"), "build_timestamp": env!("BUILD_TIMESTAMP")}),
-        )?;
+        ).await?;
         Ok(true)
     } else {
         insert_event(
@@ -475,7 +482,7 @@ pub fn verify_post_restart_binary(state: &InnerState, task_id: &str) -> Result<b
             None,
             "binary_verification",
             json!({"verified": false, "expected_sha256": expected, "actual_sha256": actual, "current_exe": current_exe.to_string_lossy(), "build_git_hash": env!("BUILD_GIT_HASH"), "build_timestamp": env!("BUILD_TIMESTAMP")}),
-        )?;
+        ).await?;
         Ok(false)
     }
 }
@@ -1519,7 +1526,7 @@ mod tests {
         assert_ne!(result, EXIT_RESTART);
 
         // Task status should NOT be restart_pending
-        let conn = state.database.connection().expect("open conn");
+        let conn = crate::db::open_conn(&state.db_path).expect("open conn");
         let status: Option<String> = conn
             .query_row(
                 "SELECT status FROM tasks WHERE id = ?1",
@@ -1557,7 +1564,7 @@ mod tests {
         );
 
         // Create the task in DB so set_task_status can find it
-        let conn = state.database.connection().expect("open conn");
+        let conn = crate::db::open_conn(&state.db_path).expect("open conn");
         conn.execute(
             "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('task-restart', 'test', 'running', 'ws', 'wf', ?1, '', '[]', '{}', 'test goal', 'auto', '[]', datetime('now'), datetime('now'))",
             rusqlite::params![workspace_root.to_str().unwrap()],
@@ -1597,30 +1604,30 @@ mod tests {
         assert_eq!(EXIT_RESTART, 75);
     }
 
-    #[test]
-    fn test_verify_post_restart_binary_no_event_returns_true() {
+    #[tokio::test]
+    async fn test_verify_post_restart_binary_no_event_returns_true() {
         // When there's no self_restart_ready event, verification should pass (no-op)
         let mut fixture = TestState::new();
         let state = fixture.build();
-        let conn = state.database.connection().expect("open conn");
+        let conn = crate::db::open_conn(&state.db_path).expect("open conn");
         conn.execute(
             "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('t-verify', 'test', 'running', 'ws', 'wf', '/tmp', '', '[]', '{}', 'g', 'agent', '[]', datetime('now'), datetime('now'))",
             [],
         )
         .expect("insert task");
 
-        let result = verify_post_restart_binary(&state, "t-verify");
+        let result = verify_post_restart_binary(&state, "t-verify").await;
         assert!(result.is_ok());
         assert!(result.unwrap(), "should return true when no event exists");
     }
 
-    #[test]
-    fn test_verify_post_restart_binary_with_matching_event() {
+    #[tokio::test]
+    async fn test_verify_post_restart_binary_with_matching_event() {
         // Record a self_restart_ready event with the SHA256 of the current binary,
         // then verify — should return true.
         let mut fixture = TestState::new();
         let state = fixture.build();
-        let conn = state.database.connection().expect("open conn");
+        let conn = crate::db::open_conn(&state.db_path).expect("open conn");
         conn.execute(
             "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('t-match', 'test', 'running', 'ws', 'wf', '/tmp', '', '[]', '{}', 'g', 'agent', '[]', datetime('now'), datetime('now'))",
             [],
@@ -1639,19 +1646,20 @@ mod tests {
             "self_restart_ready",
             json!({"exit_code": 75, "binary_sha256": current_sha, "binary_path": "/some/path"}),
         )
+        .await
         .expect("insert event");
 
-        let result = verify_post_restart_binary(&state, "t-match");
+        let result = verify_post_restart_binary(&state, "t-match").await;
         assert!(result.is_ok());
         assert!(result.unwrap(), "should return true when SHA256 matches");
     }
 
-    #[test]
-    fn test_verify_post_restart_binary_with_mismatch() {
+    #[tokio::test]
+    async fn test_verify_post_restart_binary_with_mismatch() {
         // Record a self_restart_ready event with a bogus SHA256 — should return false.
         let mut fixture = TestState::new();
         let state = fixture.build();
-        let conn = state.database.connection().expect("open conn");
+        let conn = crate::db::open_conn(&state.db_path).expect("open conn");
         conn.execute(
             "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('t-mismatch', 'test', 'running', 'ws', 'wf', '/tmp', '', '[]', '{}', 'g', 'agent', '[]', datetime('now'), datetime('now'))",
             [],
@@ -1665,9 +1673,10 @@ mod tests {
             "self_restart_ready",
             json!({"exit_code": 75, "binary_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "binary_path": "/some/path"}),
         )
+        .await
         .expect("insert event");
 
-        let result = verify_post_restart_binary(&state, "t-mismatch");
+        let result = verify_post_restart_binary(&state, "t-mismatch").await;
         assert!(result.is_ok());
         assert!(!result.unwrap(), "should return false when SHA256 mismatches");
     }
@@ -1783,7 +1792,7 @@ mod tests {
         write_executable(&binary_path, "#!/bin/sh\necho 'help'\nexit 0\n");
 
         // Create task in DB so set_task_status succeeds
-        let conn = state.database.connection().expect("open conn");
+        let conn = crate::db::open_conn(&state.db_path).expect("open conn");
         conn.execute(
             "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('task-sha-unknown', 'test', 'running', 'ws', 'wf', ?1, '', '[]', '{}', 'g', 'agent', '[]', datetime('now'), datetime('now'))",
             rusqlite::params![workspace_root.to_str().unwrap()],
@@ -1864,11 +1873,11 @@ mod tests {
         assert_ne!(result, 0, "should return non-zero when manifest_validate fails");
     }
 
-    #[test]
-    fn test_verify_post_restart_binary_unknown_hash_skips() {
+    #[tokio::test]
+    async fn test_verify_post_restart_binary_unknown_hash_skips() {
         let mut fixture = TestState::new();
         let state = fixture.build();
-        let conn = state.database.connection().expect("open conn");
+        let conn = crate::db::open_conn(&state.db_path).expect("open conn");
         conn.execute(
             "INSERT INTO tasks (id, name, status, workspace_id, workflow_id, workspace_root, ticket_dir, target_files_json, execution_plan_json, goal, mode, qa_targets_json, created_at, updated_at) VALUES ('t-unknown', 'test', 'running', 'ws', 'wf', '/tmp', '', '[]', '{}', 'g', 'agent', '[]', datetime('now'), datetime('now'))",
             [],
@@ -1882,9 +1891,10 @@ mod tests {
             "self_restart_ready",
             json!({"exit_code": 75, "binary_sha256": "unknown", "binary_path": "/some/path"}),
         )
+        .await
         .expect("insert event");
 
-        let result = verify_post_restart_binary(&state, "t-unknown");
+        let result = verify_post_restart_binary(&state, "t-unknown").await;
         assert!(result.is_ok());
         assert!(
             result.unwrap(),

@@ -49,8 +49,8 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::{Arc, RwLock};
 
-    #[test]
-    fn load_task_summary_maps_created_and_updated_at_correctly() {
+    #[tokio::test]
+    async fn load_task_summary_maps_created_and_updated_at_correctly() {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let qa_file = state
@@ -76,7 +76,7 @@ mod tests {
             )
             .expect("task row should exist");
 
-        let summary = load_task_summary(&state, &created.id).expect("summary should load");
+        let summary = load_task_summary(&state, &created.id).await.expect("summary should load");
         assert_eq!(summary.workflow_id, workflow_id);
         assert_eq!(summary.created_at, created_at);
         assert_eq!(summary.updated_at, updated_at);
@@ -223,7 +223,7 @@ mod tests {
         )
         .expect("task should be created");
 
-        prepare_task_for_start(&state, &created.id).expect("prepare task");
+        prepare_task_for_start(&state, &created.id).await.expect("prepare task");
         run_task_loop(state.clone(), &created.id, RunningTask::new())
             .await
             .expect("task should run");
@@ -470,7 +470,7 @@ mod tests {
         )
         .expect("task should be created");
 
-        prepare_task_for_start(&state, &created.id).expect("prepare task");
+        prepare_task_for_start(&state, &created.id).await.expect("prepare task");
         run_task_loop(state.clone(), &created.id, RunningTask::new())
             .await
             .expect("task should run");
@@ -749,7 +749,7 @@ mod tests {
         )
         .expect("task should be created");
 
-        prepare_task_for_start(&state, &created.id).expect("prepare task");
+        prepare_task_for_start(&state, &created.id).await.expect("prepare task");
         run_task_loop(state.clone(), &created.id, RunningTask::new())
             .await
             .expect("task loop should complete");
@@ -867,7 +867,7 @@ mod tests {
         )
         .expect("task should be created");
 
-        prepare_task_for_start(&state, &created.id).expect("prepare task");
+        prepare_task_for_start(&state, &created.id).await.expect("prepare task");
         run_task_loop(state.clone(), &created.id, RunningTask::new())
             .await
             .expect("task loop should complete");
@@ -977,7 +977,7 @@ mod tests {
         )
         .expect("task should be created");
 
-        prepare_task_for_start(&state, &created.id).expect("prepare task");
+        prepare_task_for_start(&state, &created.id).await.expect("prepare task");
         run_task_loop(state.clone(), &created.id, RunningTask::new())
             .await
             .expect("task loop should complete");
@@ -1009,12 +1009,15 @@ mod tests {
         std::fs::create_dir_all(&target_dir).expect("create target dir");
         let db_path = target_dir.join("scheduler_self_test.db");
         crate::db::init_schema(&db_path).expect("init self test db");
-        let database =
-            Arc::new(crate::database::Database::new(db_path.clone()).expect("create db pool"));
+        let async_database = Arc::new(
+            crate::async_database::AsyncDatabase::open(&db_path)
+                .await
+                .expect("create async db"),
+        );
         let state = Arc::new(crate::state::InnerState {
             app_root: project_root.to_path_buf(),
             db_path,
-            database: database.clone(),
+            async_database: async_database.clone(),
             logs_dir: PathBuf::new(),
             active_config: RwLock::new(crate::config::ActiveConfig {
                 config: crate::config::OrchestratorConfig::default(),
@@ -1031,7 +1034,9 @@ mod tests {
             agent_metrics: RwLock::new(HashMap::new()),
             message_bus: Arc::new(MessageBus::new()),
             event_sink: RwLock::new(Arc::new(NoopSink)),
-            db_writer: Arc::new(crate::db_write::DbWriteCoordinator::new(database)),
+            db_writer: Arc::new(crate::db_write::DbWriteCoordinator::new(async_database.clone())),
+            session_store: Arc::new(crate::session_store::AsyncSessionStore::new(async_database.clone())),
+            task_repo: Arc::new(crate::task_repository::AsyncSqliteTaskRepository::new(async_database)),
         });
 
         state.emit_event(

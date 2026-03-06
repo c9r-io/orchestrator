@@ -2,7 +2,6 @@ use crate::config::{TaskExecutionPlan, TaskRuntimeContext};
 use crate::config_load::{build_execution_plan, build_execution_plan_for_project, read_active_config, resolve_workspace_path};
 use crate::events::insert_event;
 use crate::state::{InnerState, task_semaphore};
-use crate::task_repository::{SqliteTaskRepository, TaskRepository};
 use anyhow::{Context, Result};
 use serde_json::json;
 use std::path::PathBuf;
@@ -49,14 +48,15 @@ pub async fn spawn_task_runner(state: Arc<InnerState>, task_id: String) -> Resul
                 let run_result = run_task_loop(state.clone(), &task_id, runtime.clone()).await;
                 if let Err(err) = run_result {
                     error!(task_id = %task_id, error = %err, "task runner failed");
-                    let _ = set_task_status(&state, &task_id, "failed", false);
+                    let _ = set_task_status(&state, &task_id, "failed", false).await;
                     let _ = insert_event(
                         &state,
                         &task_id,
                         None,
                         "task_failed",
                         json!({"error": err.to_string()}),
-                    );
+                    )
+                    .await;
                     state.emit_event(
                         &task_id,
                         None,
@@ -89,17 +89,18 @@ pub async fn stop_task_runtime(state: Arc<InnerState>, task_id: &str, status: &s
         kill_current_child(&runtime).await;
     } else {
         // Cross-process path: find and kill active children from DB
-        kill_active_children_from_db(&state, task_id);
+        kill_active_children_from_db(&state, task_id).await;
     }
 
-    set_task_status(&state, task_id, status, false)?;
+    set_task_status(&state, task_id, status, false).await?;
     insert_event(
         &state,
         task_id,
         None,
         "task_control",
         json!({"status": status}),
-    )?;
+    )
+    .await?;
     Ok(())
 }
 
@@ -134,14 +135,15 @@ pub async fn shutdown_running_tasks(state: Arc<InnerState>) {
     }
 
     for (task_id, _) in &runtimes {
-        let _ = set_task_status(&state, task_id, "paused", false);
+        let _ = set_task_status(&state, task_id, "paused", false).await;
         let _ = insert_event(
             &state,
             task_id,
             None,
             "task_paused",
             json!({"reason":"app_shutdown"}),
-        );
+        )
+        .await;
     }
 
     let mut running = state.running.lock().await;
@@ -152,8 +154,8 @@ pub async fn shutdown_running_tasks(state: Arc<InnerState>) {
 
 /// Kill active child processes found via DB when we don't have an in-process handle.
 /// Used by cross-process `task pause` where `state.running` is empty.
-fn kill_active_children_from_db(state: &InnerState, task_id: &str) {
-    let pids = match state.db_writer.find_active_child_pids(task_id) {
+async fn kill_active_children_from_db(state: &InnerState, task_id: &str) {
+    let pids = match state.db_writer.find_active_child_pids(task_id).await {
         Ok(pids) => pids,
         Err(_) => return,
     };
@@ -169,9 +171,8 @@ fn kill_active_children_from_db(state: &InnerState, task_id: &str) {
     }
 }
 
-pub fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<TaskRuntimeContext> {
-    let repo = SqliteTaskRepository::new(state.database.clone());
-    let runtime_row = repo.load_task_runtime_row(task_id)?;
+pub async fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<TaskRuntimeContext> {
+    let runtime_row = state.task_repo.load_task_runtime_row(task_id).await?;
     let workspace_id = runtime_row.workspace_id;
     let workflow_id = runtime_row.workflow_id;
     let workspace_root_raw = runtime_row.workspace_root_raw;
@@ -287,7 +288,6 @@ mod tests {
     use crate::db::open_conn;
     use crate::dto::CreateTaskPayload;
     use crate::task_ops::create_task_impl;
-    use crate::task_repository::{SqliteTaskRepository, TaskRepository};
     use crate::test_utils::TestState;
     use rusqlite::params;
 
@@ -309,8 +309,8 @@ mod tests {
         (state, created.id)
     }
 
-    #[test]
-    fn load_task_runtime_context_normalizes_fields() {
+    #[tokio::test]
+    async fn load_task_runtime_context_normalizes_fields() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
         let active = read_active_config(&state).expect("read active config");
@@ -333,7 +333,7 @@ mod tests {
         )
         .expect("update task");
 
-        let ctx = load_task_runtime_context(&state, &task_id).expect("load runtime context");
+        let ctx = load_task_runtime_context(&state, &task_id).await.expect("load runtime context");
         assert_eq!(ctx.current_cycle, 0);
         assert!(ctx.init_done);
         assert!(!ctx.execution_plan.finalize.rules.is_empty());
@@ -344,19 +344,19 @@ mod tests {
         assert!(!ctx.execution_plan.steps.is_empty());
     }
 
-    #[test]
-    fn load_task_runtime_context_errors_when_workspace_root_is_missing() {
+    #[tokio::test]
+    async fn load_task_runtime_context_errors_when_workspace_root_is_missing() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
         std::fs::remove_dir_all(state.app_root.join("workspace/default"))
             .expect("remove workspace root");
 
-        let err = load_task_runtime_context(&state, &task_id).expect_err("missing root must fail");
+        let err = load_task_runtime_context(&state, &task_id).await.expect_err("missing root must fail");
         assert!(err.to_string().contains("workspace root does not exist"));
     }
 
-    #[test]
-    fn load_task_runtime_context_validates_probe_profile() {
+    #[tokio::test]
+    async fn load_task_runtime_context_validates_probe_profile() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
 
@@ -372,7 +372,7 @@ mod tests {
                 .profile = WorkflowSafetyProfile::SelfReferentialProbe;
         }
 
-        let err = load_task_runtime_context(&state, &task_id)
+        let err = load_task_runtime_context(&state, &task_id).await
             .expect_err("probe profile should fail for non-self-referential workspace");
         assert!(err.to_string().contains("not self_referential"));
     }
@@ -412,9 +412,8 @@ mod tests {
             .expect("stop runtime");
 
         assert!(runtime.stop_flag.load(Ordering::SeqCst));
-        let repo = SqliteTaskRepository::new(state.database.clone());
         assert_eq!(
-            repo.load_task_status(&task_id).expect("load task status"),
+            state.task_repo.load_task_status(&task_id).await.expect("load task status"),
             Some("paused".to_string())
         );
     }
@@ -452,9 +451,8 @@ mod tests {
         let running = state.running.lock().await;
         assert!(running.is_empty());
 
-        let repo = SqliteTaskRepository::new(state.database.clone());
         assert_eq!(
-            repo.load_task_status(&task_id).expect("load task status"),
+            state.task_repo.load_task_status(&task_id).await.expect("load task status"),
             Some("paused".to_string())
         );
     }
@@ -468,8 +466,8 @@ mod tests {
         assert!(running.is_empty());
     }
 
-    #[test]
-    fn load_task_runtime_context_renormalizes_stale_self_test_steps() {
+    #[tokio::test]
+    async fn load_task_runtime_context_renormalizes_stale_self_test_steps() {
         use crate::config::ExecutionMode;
 
         let mut fixture = TestState::new();
@@ -499,7 +497,7 @@ mod tests {
         )
         .expect("update task");
 
-        let ctx = load_task_runtime_context(&state, &task_id).expect("load runtime context");
+        let ctx = load_task_runtime_context(&state, &task_id).await.expect("load runtime context");
         let loaded_step = ctx
             .execution_plan
             .step_by_id("self_test")

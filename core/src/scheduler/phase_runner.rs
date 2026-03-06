@@ -374,7 +374,7 @@ async fn setup_phase_execution(
             },
             output_json_path: None,
         };
-        state.db_writer.insert_command_run(&initial_run)?;
+        state.db_writer.insert_command_run(&initial_run).await?;
     }
 
     Ok(PhaseSetup {
@@ -441,28 +441,26 @@ async fn spawn_phase_process(
             shell_escape(&input_fifo.to_string_lossy())
         );
         session_id = Some(sid.clone());
-        let sess_conn = state.database.connection()?;
-        session_store::insert_session(
-            &sess_conn,
-            &session_store::NewSession {
-                id: &sid,
-                task_id,
-                task_item_id: Some(item_id),
-                step_id,
-                phase,
-                agent_id,
-                state: "active",
+        state.session_store.insert_session(
+            session_store::OwnedNewSession {
+                id: sid.clone(),
+                task_id: task_id.to_owned(),
+                task_item_id: Some(item_id.to_owned()),
+                step_id: step_id.to_owned(),
+                phase: phase.to_owned(),
+                agent_id: agent_id.to_owned(),
+                state: "active".to_owned(),
                 pid: 0,
-                pty_backend: "script",
-                cwd: &workspace_root.to_string_lossy(),
-                command: &setup.command,
-                input_fifo_path: &input_fifo.to_string_lossy(),
-                stdout_path: &setup.stdout_path.to_string_lossy(),
-                stderr_path: &setup.stderr_path.to_string_lossy(),
-                transcript_path: &transcript_path.to_string_lossy(),
-                output_json_path: Some(&output_json_path.to_string_lossy()),
+                pty_backend: "script".to_owned(),
+                cwd: workspace_root.to_string_lossy().into_owned(),
+                command: setup.command.clone(),
+                input_fifo_path: input_fifo.to_string_lossy().into_owned(),
+                stdout_path: setup.stdout_path.to_string_lossy().into_owned(),
+                stderr_path: setup.stderr_path.to_string_lossy().into_owned(),
+                transcript_path: transcript_path.to_string_lossy().into_owned(),
+                output_json_path: Some(output_json_path.to_string_lossy().into_owned()),
             },
-        )?;
+        ).await?;
         wrapped
     } else {
         setup.command.clone()
@@ -493,9 +491,7 @@ async fn spawn_phase_process(
 
     if let Some(sid) = session_id.as_deref() {
         if let Some(pid) = child.id() {
-            if let Ok(sess_conn) = state.database.connection() {
-                let _ = session_store::update_session_pid(&sess_conn, sid, pid as i64);
-            }
+            let _ = state.session_store.update_session_pid(sid, pid as i64).await;
         }
     }
 
@@ -541,7 +537,7 @@ async fn spawn_phase_process(
             "pid": child_pid,
             "command_preview": preview,
         }),
-    )?;
+    ).await?;
 
     {
         let mut child_lock = runtime.child.lock().await;
@@ -603,7 +599,7 @@ async fn wait_for_process(
                     "timeout_secs": step_timeout_secs,
                     "pid": child_pid,
                 }),
-            )?;
+            ).await?;
             break -4;
         }
 
@@ -674,11 +670,11 @@ async fn wait_for_process(
                         "pid": child_pid,
                         "pid_alive": pid_alive,
                     }),
-                )?;
+                ).await?;
 
                 // Cross-process pause: check if another process (e.g. `task pause`)
                 // has marked this task as paused in the DB.
-                if super::task_state::is_task_paused_in_db(state, task_id)? {
+                if super::task_state::is_task_paused_in_db(state, task_id).await? {
                     let mut child_lock = runtime.child.lock().await;
                     if let Some(ref mut child) = *child_lock {
                         kill_child_process_group(child).await;
@@ -842,26 +838,26 @@ async fn record_phase_results(
     };
 
     let validation_event_payload_json = validated.validation_event_payload_json.clone();
-    tokio::task::spawn_blocking(move || {
+    {
         let mut events = Vec::with_capacity(2);
-        if let Some(payload_json) = validation_event_payload_json.as_deref() {
+        if let Some(payload_json) = validation_event_payload_json {
             events.push(crate::db_write::DbEventRecord {
-                task_id: task_id_owned.as_str(),
-                task_item_id: Some(item_id_owned.as_str()),
-                event_type: "output_validation_failed",
+                task_id: task_id_owned.clone(),
+                task_item_id: Some(item_id_owned.clone()),
+                event_type: "output_validation_failed".to_string(),
                 payload_json,
             });
         }
         events.push(crate::db_write::DbEventRecord {
-            task_id: task_id_owned.as_str(),
-            task_item_id: Some(item_id_owned.as_str()),
-            event_type: publish_event_type,
-            payload_json: publish_event_payload_json.as_str(),
+            task_id: task_id_owned,
+            task_item_id: Some(item_id_owned),
+            event_type: publish_event_type.to_string(),
+            payload_json: publish_event_payload_json,
         });
-        writer.update_command_run_with_events(&insert_payload, &events)
-    })
-    .await
-    .context("command run insert worker failed")??;
+        writer
+            .update_command_run_with_events(&insert_payload, &events)
+            .await?;
+    }
 
     update_capability_health(state, agent_id, Some(phase), validated.success);
 
@@ -888,15 +884,12 @@ async fn record_phase_results(
         reset_consecutive_errors(state, agent_id);
     }
     if let Some(sid) = session_id.as_deref() {
-        if let Ok(sess_conn) = state.database.connection() {
-            let _ = session_store::update_session_state(
-                &sess_conn,
-                sid,
-                "closed",
-                Some(validated.final_exit_code),
-                true,
-            );
-        }
+        let _ = state.session_store.update_session_state(
+            sid,
+            "closed",
+            Some(validated.final_exit_code),
+            true,
+        ).await;
     }
 
     Ok(())

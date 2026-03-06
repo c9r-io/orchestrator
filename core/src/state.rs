@@ -27,7 +27,7 @@ pub struct ManagedState {
 pub struct InnerState {
     pub app_root: PathBuf,
     pub db_path: PathBuf,
-    pub database: Arc<crate::database::Database>,
+    pub async_database: Arc<crate::async_database::AsyncDatabase>,
     pub logs_dir: PathBuf,
     pub active_config: RwLock<ActiveConfig>,
     pub active_config_error: RwLock<Option<String>>,
@@ -38,6 +38,8 @@ pub struct InnerState {
     pub message_bus: Arc<MessageBus>,
     pub event_sink: std::sync::RwLock<Arc<dyn EventSink>>,
     pub db_writer: Arc<crate::db_write::DbWriteCoordinator>,
+    pub session_store: Arc<crate::session_store::AsyncSessionStore>,
+    pub task_repo: Arc<crate::task_repository::AsyncSqliteTaskRepository>,
 }
 
 impl InnerState {

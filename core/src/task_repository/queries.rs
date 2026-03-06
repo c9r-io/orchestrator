@@ -3,9 +3,10 @@ use anyhow::{Context, Result};
 use rusqlite::{params, OptionalExtension};
 use serde_json::Value;
 
-use super::types::{TaskLogRunRow, TaskRepositoryConn, TaskRuntimeRow};
+use super::types::{TaskLogRunRow, TaskRuntimeRow};
+use rusqlite::Connection;
 
-pub fn resolve_task_id(conn: &TaskRepositoryConn, task_id_or_prefix: &str) -> Result<String> {
+pub fn resolve_task_id(conn: &Connection, task_id_or_prefix: &str) -> Result<String> {
     let mut stmt = conn.prepare("SELECT id FROM tasks WHERE id = ?1")?;
     let exact_match: Option<String> = stmt
         .query_row(params![task_id_or_prefix], |row| row.get(0))
@@ -33,7 +34,7 @@ pub fn resolve_task_id(conn: &TaskRepositoryConn, task_id_or_prefix: &str) -> Re
     }
 }
 
-pub fn load_task_summary(conn: &TaskRepositoryConn, task_id: &str) -> Result<TaskSummary> {
+pub fn load_task_summary(conn: &Connection, task_id: &str) -> Result<TaskSummary> {
     let mut stmt = conn.prepare(
         "SELECT id, name, status, started_at, completed_at, goal, target_files_json, project_id, workspace_id, workflow_id, created_at, updated_at FROM tasks WHERE id = ?1",
     )?;
@@ -68,7 +69,7 @@ pub fn load_task_summary(conn: &TaskRepositoryConn, task_id: &str) -> Result<Tas
 }
 
 pub fn load_task_detail_rows(
-    conn: &TaskRepositoryConn,
+    conn: &Connection,
     task_id: &str,
 ) -> Result<(Vec<TaskItemDto>, Vec<CommandRunDto>, Vec<EventDto>)> {
     let mut items_stmt = conn.prepare(
@@ -150,7 +151,7 @@ pub fn load_task_detail_rows(
     Ok((items, runs, events))
 }
 
-pub fn load_task_item_counts(conn: &TaskRepositoryConn, task_id: &str) -> Result<(i64, i64, i64)> {
+pub fn load_task_item_counts(conn: &Connection, task_id: &str) -> Result<(i64, i64, i64)> {
     conn.query_row(
         "SELECT COUNT(*), SUM(CASE WHEN status IN ('qa_passed','fixed','verified','skipped','unresolved') THEN 1 ELSE 0 END), SUM(CASE WHEN status IN ('qa_failed','unresolved') THEN 1 ELSE 0 END) FROM task_items WHERE task_id = ?1",
         params![task_id],
@@ -165,7 +166,7 @@ pub fn load_task_item_counts(conn: &TaskRepositoryConn, task_id: &str) -> Result
     .with_context(|| format!("load task item counts for task_id={task_id}"))
 }
 
-pub fn list_task_ids_ordered_by_created_desc(conn: &TaskRepositoryConn) -> Result<Vec<String>> {
+pub fn list_task_ids_ordered_by_created_desc(conn: &Connection) -> Result<Vec<String>> {
     let mut stmt = conn.prepare("SELECT id FROM tasks ORDER BY created_at DESC")?;
     let ids = stmt
         .query_map([], |row| row.get::<_, String>(0))?
@@ -174,7 +175,7 @@ pub fn list_task_ids_ordered_by_created_desc(conn: &TaskRepositoryConn) -> Resul
 }
 
 pub fn find_latest_resumable_task_id(
-    conn: &TaskRepositoryConn,
+    conn: &Connection,
     include_pending: bool,
 ) -> Result<Option<String>> {
     let mut stmt = conn.prepare("SELECT id, status FROM tasks ORDER BY updated_at DESC")?;
@@ -193,7 +194,7 @@ pub fn find_latest_resumable_task_id(
     Ok(None)
 }
 
-pub fn load_task_runtime_row(conn: &TaskRepositoryConn, task_id: &str) -> Result<TaskRuntimeRow> {
+pub fn load_task_runtime_row(conn: &Connection, task_id: &str) -> Result<TaskRuntimeRow> {
     let row = conn.query_row(
         "SELECT workspace_id, workflow_id, workspace_root, ticket_dir, execution_plan_json, current_cycle, init_done, COALESCE(goal,''), COALESCE(project_id,'') FROM tasks WHERE id = ?1",
         params![task_id],
@@ -214,7 +215,7 @@ pub fn load_task_runtime_row(conn: &TaskRepositoryConn, task_id: &str) -> Result
     Ok(row)
 }
 
-pub fn first_task_item_id(conn: &TaskRepositoryConn, task_id: &str) -> Result<Option<String>> {
+pub fn first_task_item_id(conn: &Connection, task_id: &str) -> Result<Option<String>> {
     conn.query_row(
         "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
         params![task_id],
@@ -224,7 +225,7 @@ pub fn first_task_item_id(conn: &TaskRepositoryConn, task_id: &str) -> Result<Op
     .context("query first task item")
 }
 
-pub fn count_unresolved_items(conn: &TaskRepositoryConn, task_id: &str) -> Result<i64> {
+pub fn count_unresolved_items(conn: &Connection, task_id: &str) -> Result<i64> {
     conn.query_row(
         "SELECT COUNT(*) FROM task_items WHERE task_id = ?1 AND status IN ('unresolved','qa_failed')",
         params![task_id],
@@ -234,7 +235,7 @@ pub fn count_unresolved_items(conn: &TaskRepositoryConn, task_id: &str) -> Resul
 }
 
 pub fn list_task_items_for_cycle(
-    conn: &TaskRepositoryConn,
+    conn: &Connection,
     task_id: &str,
 ) -> Result<Vec<TaskItemRow>> {
     let mut stmt = conn.prepare(
@@ -254,7 +255,7 @@ pub fn list_task_items_for_cycle(
     Ok(rows)
 }
 
-pub fn load_task_status(conn: &TaskRepositoryConn, task_id: &str) -> Result<Option<String>> {
+pub fn load_task_status(conn: &Connection, task_id: &str) -> Result<Option<String>> {
     conn.query_row(
         "SELECT status FROM tasks WHERE id = ?1",
         params![task_id],
@@ -264,7 +265,7 @@ pub fn load_task_status(conn: &TaskRepositoryConn, task_id: &str) -> Result<Opti
     .with_context(|| format!("load task status for task_id={task_id}"))
 }
 
-pub fn load_task_name(conn: &TaskRepositoryConn, task_id: &str) -> Result<Option<String>> {
+pub fn load_task_name(conn: &Connection, task_id: &str) -> Result<Option<String>> {
     conn.query_row(
         "SELECT name FROM tasks WHERE id = ?1",
         params![task_id],
@@ -275,7 +276,7 @@ pub fn load_task_name(conn: &TaskRepositoryConn, task_id: &str) -> Result<Option
 }
 
 pub fn list_task_log_runs(
-    conn: &TaskRepositoryConn,
+    conn: &Connection,
     task_id: &str,
     limit: usize,
 ) -> Result<Vec<TaskLogRunRow>> {

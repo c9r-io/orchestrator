@@ -20,7 +20,7 @@ impl CliHandler {
                 output,
                 verbose,
             } => {
-                let tasks = list_tasks_impl(&self.state)?;
+                let tasks = cli_runtime().block_on(list_tasks_impl(&self.state))?;
                 let filtered: Vec<_> = match status {
                     Some(s) => tasks.into_iter().filter(|t| t.status == *s).collect(),
                     None => tasks,
@@ -53,24 +53,24 @@ impl CliHandler {
                 println!("Task created: {}", created.id);
                 if !no_start {
                     if *detach {
-                        enqueue_task(&self.state, &created.id)?;
+                        cli_runtime().block_on(enqueue_task(&self.state, &created.id))?;
                         println!("Task enqueued: {}", created.id);
                     } else {
-                        prepare_task_for_start(&self.state, &created.id)?;
+                        cli_runtime().block_on(prepare_task_for_start(&self.state, &created.id))?;
                         let runtime = RunningTask::new();
                         cli_runtime().block_on(run_task_loop(
                             self.state.clone(),
                             &created.id,
                             runtime,
                         ))?;
-                        let summary = load_task_summary(&self.state, &created.id)?;
+                        let summary = cli_runtime().block_on(load_task_summary(&self.state, &created.id))?;
                         println!("Task finished: {} status={}", summary.id, summary.status);
                     }
                 }
                 Ok(0)
             }
             TaskCommands::Info { task_id, output } => {
-                let detail = get_task_details_impl(&self.state, task_id)?;
+                let detail = cli_runtime().block_on(get_task_details_impl(&self.state, task_id))?;
                 self.print_task_detail(&detail, *output)
             }
             TaskCommands::Start {
@@ -79,27 +79,27 @@ impl CliHandler {
                 detach,
             } => {
                 let id = if let Some(id) = task_id {
-                    resolve_task_id(&self.state, id)?
+                    cli_runtime().block_on(resolve_task_id(&self.state, id))?
                 } else if *latest {
-                    find_latest_resumable_task_id(&self.state, true)?
+                    cli_runtime().block_on(find_latest_resumable_task_id(&self.state, true))?
                         .context("no resumable task found")?
                 } else {
                     anyhow::bail!("task_id or --latest required")
                 };
                 if *detach {
-                    enqueue_task(&self.state, &id)?;
+                    cli_runtime().block_on(enqueue_task(&self.state, &id))?;
                     println!("Task enqueued: {}", id);
                 } else {
-                    prepare_task_for_start(&self.state, &id)?;
+                    cli_runtime().block_on(prepare_task_for_start(&self.state, &id))?;
                     let runtime = RunningTask::new();
                     cli_runtime().block_on(run_task_loop(self.state.clone(), &id, runtime))?;
-                    let summary = load_task_summary(&self.state, &id)?;
+                    let summary = cli_runtime().block_on(load_task_summary(&self.state, &id))?;
                     println!("Task finished: {} status={}", summary.id, summary.status);
                 }
                 Ok(0)
             }
             TaskCommands::Pause { task_id } => {
-                let resolved_id = resolve_task_id(&self.state, task_id)?;
+                let resolved_id = cli_runtime().block_on(resolve_task_id(&self.state, task_id))?;
                 cli_runtime().block_on(stop_task_runtime(
                     self.state.clone(),
                     &resolved_id,
@@ -109,19 +109,19 @@ impl CliHandler {
                 Ok(0)
             }
             TaskCommands::Resume { task_id, detach } => {
-                let resolved_id = resolve_task_id(&self.state, task_id)?;
+                let resolved_id = cli_runtime().block_on(resolve_task_id(&self.state, task_id))?;
                 if *detach {
-                    enqueue_task(&self.state, &resolved_id)?;
+                    cli_runtime().block_on(enqueue_task(&self.state, &resolved_id))?;
                     println!("Task enqueued: {}", resolved_id);
                 } else {
-                    prepare_task_for_start(&self.state, &resolved_id)?;
+                    cli_runtime().block_on(prepare_task_for_start(&self.state, &resolved_id))?;
                     let runtime = RunningTask::new();
                     cli_runtime().block_on(run_task_loop(
                         self.state.clone(),
                         &resolved_id,
                         runtime,
                     ))?;
-                    let summary = load_task_summary(&self.state, &resolved_id)?;
+                    let summary = cli_runtime().block_on(load_task_summary(&self.state, &resolved_id))?;
                     println!("Task finished: {} status={}", summary.id, summary.status);
                 }
                 Ok(0)
@@ -132,8 +132,8 @@ impl CliHandler {
                 tail,
                 timestamps,
             } => {
-                let resolved_id = resolve_task_id(&self.state, task_id)?;
-                let logs = stream_task_logs_impl(&self.state, &resolved_id, *tail, *timestamps)?;
+                let resolved_id = cli_runtime().block_on(resolve_task_id(&self.state, task_id))?;
+                let logs = cli_runtime().block_on(stream_task_logs_impl(&self.state, &resolved_id, *tail, *timestamps))?;
                 for chunk in logs {
                     println!("{}", chunk.content);
                 }
@@ -143,7 +143,7 @@ impl CliHandler {
                 Ok(0)
             }
             TaskCommands::Watch { task_id, interval } => {
-                let resolved_id = resolve_task_id(&self.state, task_id)?;
+                let resolved_id = cli_runtime().block_on(resolve_task_id(&self.state, task_id))?;
                 cli_runtime().block_on(watch_task(&self.state, &resolved_id, *interval))?;
                 Ok(0)
             }
@@ -152,12 +152,12 @@ impl CliHandler {
                     println!("Use --force to confirm deletion of task {}", task_id);
                     return Ok(0);
                 }
-                let resolved_id = resolve_task_id(&self.state, task_id)?;
+                let resolved_id = cli_runtime().block_on(resolve_task_id(&self.state, task_id))?;
                 cli_runtime().block_on(stop_task_runtime_for_delete(
                     self.state.clone(),
                     &resolved_id,
                 ))?;
-                delete_task_impl(&self.state, &resolved_id)?;
+                cli_runtime().block_on(delete_task_impl(&self.state, &resolved_id))?;
                 println!("Task deleted: {}", resolved_id);
                 Ok(0)
             }
@@ -173,13 +173,13 @@ impl CliHandler {
                 }
                 let task_id = reset_task_item_for_retry(&self.state, task_item_id)?;
                 if *detach {
-                    enqueue_task(&self.state, &task_id)?;
+                    cli_runtime().block_on(enqueue_task(&self.state, &task_id))?;
                     println!("Task enqueued: {}", task_id);
                 } else {
-                    prepare_task_for_start(&self.state, &task_id)?;
+                    cli_runtime().block_on(prepare_task_for_start(&self.state, &task_id))?;
                     let runtime = RunningTask::new();
                     cli_runtime().block_on(run_task_loop(self.state.clone(), &task_id, runtime))?;
-                    let summary = load_task_summary(&self.state, &task_id)?;
+                    let summary = cli_runtime().block_on(load_task_summary(&self.state, &task_id))?;
                     println!("Retry finished: {} status={}", summary.id, summary.status);
                 }
                 Ok(0)
@@ -189,8 +189,8 @@ impl CliHandler {
                 json,
                 verbose,
             } => {
-                let resolved_id = resolve_task_id(&self.state, task_id)?;
-                let detail = get_task_details_impl(&self.state, &resolved_id)?;
+                let resolved_id = cli_runtime().block_on(resolve_task_id(&self.state, task_id))?;
+                let detail = cli_runtime().block_on(get_task_details_impl(&self.state, &resolved_id))?;
                 let trace = crate::scheduler::trace::build_trace_with_meta(
                     crate::scheduler::trace::TraceTaskMeta {
                         task_id: &detail.task.id,

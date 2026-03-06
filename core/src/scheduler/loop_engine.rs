@@ -32,25 +32,25 @@ pub async fn run_task_loop(
     task_id: &str,
     runtime: RunningTask,
 ) -> Result<()> {
-    set_task_status(&state, task_id, "running", false)?;
+    set_task_status(&state, task_id, "running", false).await?;
     let result = run_task_loop_core(state.clone(), task_id, runtime).await;
     if let Err(ref e) = result {
-        let _ = set_task_status(&state, task_id, "failed", false);
+        let _ = set_task_status(&state, task_id, "failed", false).await;
         let _ = insert_event(
             &state,
             task_id,
             None,
             "task_failed",
             json!({"error": e.to_string()}),
-        );
+        ).await;
         state.emit_event(
             task_id,
             None,
             "task_failed",
             json!({"error": e.to_string()}),
         );
-        let unresolved = count_unresolved_items(&state, task_id).unwrap_or(0);
-        let _ = record_task_execution_metric(&state, task_id, "failed", 0, unresolved);
+        let unresolved = count_unresolved_items(&state, task_id).await.unwrap_or(0);
+        let _ = record_task_execution_metric(&state, task_id, "failed", 0, unresolved).await;
     }
     result
 }
@@ -69,46 +69,46 @@ async fn run_task_loop_core(
     task_id: &str,
     runtime: RunningTask,
 ) -> Result<()> {
-    let mut task_ctx = load_task_runtime_context(&state, task_id)?;
+    let mut task_ctx = load_task_runtime_context(&state, task_id).await?;
 
     run_init_once_if_needed(&state, task_id, &mut task_ctx, &runtime).await?;
 
     'cycle: loop {
-        if is_task_paused_in_db(&state, task_id)? {
-            let unresolved = count_unresolved_items(&state, task_id)?;
+        if is_task_paused_in_db(&state, task_id).await? {
+            let unresolved = count_unresolved_items(&state, task_id).await?;
             record_task_execution_metric(
                 &state,
                 task_id,
                 "paused",
                 task_ctx.current_cycle,
                 unresolved,
-            )?;
+            ).await?;
             return Ok(());
         }
 
         if runtime.stop_flag.load(Ordering::SeqCst) {
-            set_task_status(&state, task_id, "paused", false)?;
+            set_task_status(&state, task_id, "paused", false).await?;
             insert_event(
                 &state,
                 task_id,
                 None,
                 "task_paused",
                 json!({"reason":"stop_flag"}),
-            )?;
+            ).await?;
             state.emit_event(task_id, None, "task_paused", json!({}));
-            let unresolved = count_unresolved_items(&state, task_id)?;
+            let unresolved = count_unresolved_items(&state, task_id).await?;
             record_task_execution_metric(
                 &state,
                 task_id,
                 "paused",
                 task_ctx.current_cycle,
                 unresolved,
-            )?;
+            ).await?;
             return Ok(());
         }
 
         task_ctx.current_cycle += 1;
-        update_task_cycle_state(&state, task_id, task_ctx.current_cycle, task_ctx.init_done)?;
+        update_task_cycle_state(&state, task_id, task_ctx.current_cycle, task_ctx.init_done).await?;
         let max_cycles = task_ctx.execution_plan.loop_policy.guard.max_cycles;
         insert_event(
             &state,
@@ -116,7 +116,7 @@ async fn run_task_loop_core(
             None,
             "cycle_started",
             json!({"cycle": task_ctx.current_cycle, "max_cycles": max_cycles}),
-        )?;
+        ).await?;
         state.emit_event(
             task_id,
             None,
@@ -130,7 +130,7 @@ async fn run_task_loop_core(
             continue 'cycle;
         }
 
-        let cycle_unresolved = count_unresolved_items(&state, task_id)?;
+        let cycle_unresolved = count_unresolved_items(&state, task_id).await?;
         if cycle_unresolved > 0 {
             task_ctx.consecutive_failures += 1;
         } else {
@@ -143,25 +143,25 @@ async fn run_task_loop_core(
             return Ok(());
         }
 
-        if !evaluate_loop_continuation(&state, task_id, &task_ctx)? {
+        if !evaluate_loop_continuation(&state, task_id, &task_ctx).await? {
             break;
         }
     }
 
-    let unresolved = count_unresolved_items(&state, task_id)?;
-    if is_task_paused_in_db(&state, task_id)? {
+    let unresolved = count_unresolved_items(&state, task_id).await?;
+    if is_task_paused_in_db(&state, task_id).await? {
         return Ok(());
     }
 
     if unresolved > 0 {
-        set_task_status(&state, task_id, "failed", true)?;
+        set_task_status(&state, task_id, "failed", true).await?;
         insert_event(
             &state,
             task_id,
             None,
             "task_failed",
             json!({"unresolved_items": unresolved}),
-        )?;
+        ).await?;
         state.emit_event(
             task_id,
             None,
@@ -174,10 +174,10 @@ async fn run_task_loop_core(
             "failed",
             task_ctx.current_cycle,
             unresolved,
-        )?;
+        ).await?;
     } else {
-        set_task_status(&state, task_id, "completed", true)?;
-        insert_event(&state, task_id, None, "task_completed", json!({}))?;
+        set_task_status(&state, task_id, "completed", true).await?;
+        insert_event(&state, task_id, None, "task_completed", json!({})).await?;
         state.emit_event(task_id, None, "task_completed", json!({}));
         record_task_execution_metric(
             &state,
@@ -185,7 +185,7 @@ async fn run_task_loop_core(
             "completed",
             task_ctx.current_cycle,
             unresolved,
-        )?;
+        ).await?;
     }
 
     Ok(())
@@ -203,14 +203,14 @@ async fn run_init_once_if_needed(
     }
 
     if let Some(step) = task_ctx.execution_plan.step_by_id("init_once") {
-        if let Some(anchor_item_id) = first_task_item_id(state, task_id)? {
+        if let Some(anchor_item_id) = first_task_item_id(state, task_id).await? {
             insert_event(
                 state,
                 task_id,
                 Some(&anchor_item_id),
                 "step_started",
                 json!({"step":"init_once", "step_scope": "task"}),
-            )?;
+            ).await?;
             let init_result = run_phase_with_rotation(
                 state,
                 RotatingPhaseRunRequest {
@@ -243,11 +243,11 @@ async fn run_init_once_if_needed(
                 Some(&anchor_item_id),
                 "step_finished",
                 json!({"step":"init_once","step_scope":"task","exit_code":init_result.exit_code}),
-            )?;
+            ).await?;
         }
     }
     task_ctx.init_done = true;
-    update_task_cycle_state(state, task_id, task_ctx.current_cycle, true)?;
+    update_task_cycle_state(state, task_id, task_ctx.current_cycle, true).await?;
 
     Ok(())
 }
@@ -274,7 +274,7 @@ async fn execute_cycle_segments(
                     None,
                     "checkpoint_created",
                     json!({"cycle": task_ctx.current_cycle, "tag": tag}),
-                )?;
+                ).await?;
 
                 if should_snapshot_binary(task_ctx.safety.binary_snapshot, task_ctx.self_referential) {
                     match snapshot_binary(&task_ctx.workspace_root, task_id, task_ctx.current_cycle).await {
@@ -285,7 +285,7 @@ async fn execute_cycle_segments(
                                 None,
                                 "binary_snapshot_created",
                                 json!({"cycle": task_ctx.current_cycle, "path": path.display().to_string()}),
-                            )?;
+                            ).await?;
                         }
                         Err(e) => {
                             warn!(
@@ -307,7 +307,7 @@ async fn execute_cycle_segments(
         }
     }
 
-    let items = list_task_items_for_cycle(state, task_id)?;
+    let items = list_task_items_for_cycle(state, task_id).await?;
     let task_item_paths: Vec<String> =
         items.iter().map(|item| item.qa_file_path.clone()).collect();
 
@@ -320,7 +320,7 @@ async fn execute_cycle_segments(
         for item in &items {
             process_item(state, task_id, item, &task_item_paths, task_ctx, runtime).await?;
             if runtime.stop_flag.load(Ordering::SeqCst)
-                || is_task_paused_in_db(state, task_id)?
+                || is_task_paused_in_db(state, task_id).await?
             {
                 return Ok(CycleSegmentOutcome::RestartCycle);
             }
@@ -368,7 +368,7 @@ async fn execute_cycle_segments(
                                 task_id,
                                 &items,
                                 &skipped_item_steps,
-                            )?;
+                            ).await?;
                             halt_after_task_segment = true;
                         }
                     }
@@ -480,7 +480,7 @@ async fn execute_cycle_segments(
                 break;
             }
             if runtime.stop_flag.load(Ordering::SeqCst)
-                || is_task_paused_in_db(state, task_id)?
+                || is_task_paused_in_db(state, task_id).await?
             {
                 return Ok(CycleSegmentOutcome::RestartCycle);
             }
@@ -490,7 +490,7 @@ async fn execute_cycle_segments(
             let acc = item_state.entry(item.id.clone()).or_insert_with(|| {
                 StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone())
             });
-            finalize_item_execution(state, task_id, item, task_ctx, acc)?;
+            finalize_item_execution(state, task_id, item, task_ctx, acc).await?;
         }
     }
 
@@ -530,7 +530,7 @@ async fn apply_auto_rollback_if_needed(
                     "rollback_to": rollback_tag,
                     "consecutive_failures": task_ctx.consecutive_failures,
                 }),
-            )?;
+            ).await?;
             state.emit_event(
                 task_id,
                 None,
@@ -547,7 +547,7 @@ async fn apply_auto_rollback_if_needed(
                             None,
                             "binary_snapshot_restored",
                             json!({"cycle": task_ctx.current_cycle}),
-                        )?;
+                        ).await?;
                     }
                     Err(e) => warn!(error = %e, "failed to restore binary snapshot"),
                 }
@@ -563,7 +563,7 @@ async fn apply_auto_rollback_if_needed(
                 None,
                 "auto_rollback_failed",
                 json!({"error": e.to_string()}),
-            )?;
+            ).await?;
         }
     }
 
@@ -599,24 +599,24 @@ async fn execute_guard_steps(
                     "guard_step": step.id,
                     "reason": guard_result.reason
                 }),
-            )?;
+            ).await?;
             state.emit_event(
                 task_id,
                 None,
                 "workflow_terminated",
                 json!({"guard_step": step.id}),
             );
-            set_task_status(state, task_id, "completed", true)?;
-            insert_event(state, task_id, None, "task_completed", json!({}))?;
+            set_task_status(state, task_id, "completed", true).await?;
+            insert_event(state, task_id, None, "task_completed", json!({})).await?;
             state.emit_event(task_id, None, "task_completed", json!({}));
-            let unresolved = count_unresolved_items(state, task_id)?;
+            let unresolved = count_unresolved_items(state, task_id).await?;
             record_task_execution_metric(
                 state,
                 task_id,
                 "completed",
                 task_ctx.current_cycle,
                 unresolved,
-            )?;
+            ).await?;
             return Ok(true);
         }
     }
@@ -626,12 +626,12 @@ async fn execute_guard_steps(
 
 /// Evaluate the loop continuation strategy (Fixed/Infinite/Once), emit the
 /// loop_guard_decision event, and return whether the loop should continue.
-fn evaluate_loop_continuation(
+async fn evaluate_loop_continuation(
     state: &Arc<InnerState>,
     task_id: &str,
     task_ctx: &crate::config::TaskRuntimeContext,
 ) -> Result<bool> {
-    let unresolved = count_unresolved_items(state, task_id)?;
+    let unresolved = count_unresolved_items(state, task_id).await?;
     let loop_mode_check = evaluate_loop_guard_rules(
         &task_ctx.execution_plan.loop_policy,
         task_ctx.current_cycle,
@@ -669,7 +669,7 @@ fn evaluate_loop_continuation(
             "reason": reason,
             "unresolved_items": unresolved
         }),
-    )?;
+    ).await?;
     state.emit_event(
         task_id,
         None,
@@ -809,7 +809,7 @@ fn collect_remaining_item_step_steps(
     step_ids
 }
 
-fn emit_skipped_item_step_events(
+async fn emit_skipped_item_step_events(
     state: &Arc<InnerState>,
     task_id: &str,
     items: &[crate::dto::TaskItemRow],
@@ -828,7 +828,7 @@ fn emit_skipped_item_step_events(
                     "step_scope": StepScope::Item,
                     "reason": "upstream_task_segment_terminated"
                 }),
-            )?;
+            ).await?;
         }
     }
 
@@ -1366,8 +1366,8 @@ mod tests {
         assert!(collect_remaining_item_step_steps(&task_ctx, &segments, 0).is_empty());
     }
 
-    #[test]
-    fn emit_skipped_item_step_events_writes_event_rows() {
+    #[tokio::test]
+    async fn emit_skipped_item_step_events_writes_event_rows() {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let items = vec![
@@ -1388,6 +1388,7 @@ mod tests {
             &items,
             &["qa_testing".to_string(), "ticket_fix".to_string()],
         )
+        .await
         .expect("emit skipped events");
 
         let conn = crate::db::open_conn(&state.db_path).expect("open sqlite");
@@ -1660,8 +1661,8 @@ mod tests {
         assert!(skipped.is_empty());
     }
 
-    #[test]
-    fn emit_skipped_item_step_events_empty_steps_emits_nothing() {
+    #[tokio::test]
+    async fn emit_skipped_item_step_events_empty_steps_emits_nothing() {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let items = vec![crate::dto::TaskItemRow {
@@ -1669,7 +1670,7 @@ mod tests {
             qa_file_path: "a.md".to_string(),
         }];
 
-        emit_skipped_item_step_events(&state, "task-1", &items, &[]).expect("should succeed");
+        emit_skipped_item_step_events(&state, "task-1", &items, &[]).await.expect("should succeed");
 
         let conn = crate::db::open_conn(&state.db_path).expect("open sqlite");
         let count: i64 = conn
@@ -1702,8 +1703,8 @@ mod tests {
         assert!(!should_snapshot_binary(false, false));
     }
 
-    #[test]
-    fn emit_skipped_item_step_events_empty_items_emits_nothing() {
+    #[tokio::test]
+    async fn emit_skipped_item_step_events_empty_items_emits_nothing() {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
@@ -1713,6 +1714,7 @@ mod tests {
             &[],
             &["qa_testing".to_string()],
         )
+        .await
         .expect("should succeed");
 
         let conn = crate::db::open_conn(&state.db_path).expect("open sqlite");

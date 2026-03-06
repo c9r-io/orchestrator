@@ -9,9 +9,9 @@ use std::time::Duration;
 
 use super::format::{colorize_status, format_bytes, format_duration};
 use super::task_queries::load_task_summary;
-use super::{is_transient_query_error, retry_query};
+use super::is_transient_query_error;
 use crate::events::{
-    observed_step_scope_label, query_step_events_db, ObservedStepScope, StepEvent,
+    observed_step_scope_label, query_step_events_async, ObservedStepScope, StepEvent,
 };
 
 /// Watch a task in real-time, updating the display at the specified interval.
@@ -20,7 +20,7 @@ pub async fn watch_task(state: &InnerState, task_id: &str, interval_secs: u64) -
     let mut last_warning: Option<String> = None;
 
     loop {
-        let task = match load_task_summary(state, task_id) {
+        let task = match load_task_summary(state, task_id).await {
             Ok(task) => task,
             Err(err) if is_transient_query_error(&err) => {
                 let rule = AnomalyRule::TransientReadError;
@@ -38,9 +38,7 @@ pub async fn watch_task(state: &InnerState, task_id: &str, interval_secs: u64) -
             }
             Err(err) => return Err(err),
         };
-        let events = match retry_query("query step events", || {
-            query_step_events_db(&state.database, task_id)
-        }) {
+        let events = match query_step_events_async(state, task_id).await {
             Ok(events) => events,
             Err(err) if is_transient_query_error(&err) => {
                 let rule = AnomalyRule::TransientReadError;

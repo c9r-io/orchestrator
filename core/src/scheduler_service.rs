@@ -1,3 +1,4 @@
+use crate::async_database::flatten_err;
 use crate::config_load::now_ts;
 use crate::events::insert_event;
 use crate::state::InnerState;
@@ -6,8 +7,11 @@ use rusqlite::OptionalExtension;
 use serde_json::json;
 use std::path::PathBuf;
 
-pub fn enqueue_task(state: &InnerState, task_id: &str) -> Result<()> {
-    state.db_writer.set_task_status(task_id, "pending", false)?;
+pub async fn enqueue_task(state: &InnerState, task_id: &str) -> Result<()> {
+    state
+        .db_writer
+        .set_task_status(task_id, "pending", false)
+        .await?;
     touch_worker_wake_signal(state)?;
     insert_event(
         state,
@@ -15,58 +19,79 @@ pub fn enqueue_task(state: &InnerState, task_id: &str) -> Result<()> {
         None,
         "scheduler_enqueued",
         json!({"task_id":task_id}),
-    )?;
+    )
+    .await?;
     Ok(())
 }
 
-pub fn next_pending_task_id(state: &InnerState) -> Result<Option<String>> {
-    let conn = state.database.connection()?;
-    let mut stmt = conn
-        .prepare("SELECT id FROM tasks WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1")?;
-    let mut rows = stmt.query([])?;
-    if let Some(row) = rows.next()? {
-        return Ok(Some(row.get(0)?));
-    }
-    Ok(None)
+pub async fn next_pending_task_id(state: &InnerState) -> Result<Option<String>> {
+    state
+        .async_database
+        .reader()
+        .call(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id FROM tasks WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1",
+            )?;
+            let mut rows = stmt.query([])?;
+            if let Some(row) = rows.next()? {
+                return Ok(Some(row.get(0)?));
+            }
+            Ok(None)
+        })
+        .await
+        .map_err(flatten_err)
 }
 
-pub fn claim_next_pending_task(state: &InnerState) -> Result<Option<String>> {
-    let mut conn = state.database.connection()?;
-    let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+pub async fn claim_next_pending_task(state: &InnerState) -> Result<Option<String>> {
+    state
+        .async_database
+        .writer()
+        .call(|conn| {
+            let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
 
-    let task_id: Option<String> = tx
-        .query_row(
-            "SELECT id FROM tasks WHERE status IN ('restart_pending', 'pending') ORDER BY CASE status WHEN 'restart_pending' THEN 0 ELSE 1 END, created_at ASC LIMIT 1",
-            [],
-            |row| row.get(0),
-        )
-        .optional()?;
+            let task_id: Option<String> = tx
+                .query_row(
+                    "SELECT id FROM tasks WHERE status IN ('restart_pending', 'pending') ORDER BY CASE status WHEN 'restart_pending' THEN 0 ELSE 1 END, created_at ASC LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()?;
 
-    let Some(task_id) = task_id else {
-        tx.commit()?;
-        return Ok(None);
-    };
+            let Some(task_id) = task_id else {
+                tx.commit()?;
+                return Ok(None);
+            };
 
-    let updated = tx.execute(
-        "UPDATE tasks SET status = 'running', started_at = COALESCE(started_at, ?2), completed_at = NULL, updated_at = ?3 WHERE id = ?1 AND status IN ('restart_pending', 'pending')",
-        rusqlite::params![task_id, now_ts(), now_ts()],
-    )?;
-    tx.commit()?;
-    if updated == 1 {
-        Ok(Some(task_id))
-    } else {
-        Ok(None)
-    }
+            let now = now_ts();
+            let updated = tx.execute(
+                "UPDATE tasks SET status = 'running', started_at = COALESCE(started_at, ?2), completed_at = NULL, updated_at = ?3 WHERE id = ?1 AND status IN ('restart_pending', 'pending')",
+                rusqlite::params![task_id, now, now_ts()],
+            )?;
+            tx.commit()?;
+            if updated == 1 {
+                Ok(Some(task_id))
+            } else {
+                Ok(None)
+            }
+        })
+        .await
+        .map_err(flatten_err)
 }
 
-pub fn pending_task_count(state: &InnerState) -> Result<i64> {
-    let conn = state.database.connection()?;
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM tasks WHERE status = 'pending'",
-        [],
-        |row| row.get(0),
-    )?;
-    Ok(count)
+pub async fn pending_task_count(state: &InnerState) -> Result<i64> {
+    state
+        .async_database
+        .reader()
+        .call(|conn| {
+            let count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM tasks WHERE status = 'pending'",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok(count)
+        })
+        .await
+        .map_err(flatten_err)
 }
 
 pub fn worker_stop_signal_path(state: &InnerState) -> PathBuf {
@@ -112,8 +137,8 @@ mod tests {
     use crate::test_utils::TestState;
     use rusqlite::params;
 
-    #[test]
-    fn claim_next_pending_task_sets_running() {
+    #[tokio::test]
+    async fn claim_next_pending_task_sets_running() {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let qa_file = state
@@ -122,7 +147,7 @@ mod tests {
         std::fs::write(&qa_file, "# scheduler service test\n").expect("seed qa file");
         let created = create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
 
-        let claimed = claim_next_pending_task(&state).expect("claim pending task");
+        let claimed = claim_next_pending_task(&state).await.expect("claim pending task");
         assert_eq!(claimed.as_deref(), Some(created.id.as_str()));
 
         let conn = crate::db::open_conn(&state.db_path).expect("open sqlite");
@@ -136,8 +161,8 @@ mod tests {
         assert_eq!(status, "running");
     }
 
-    #[test]
-    fn claim_next_pending_task_is_single_winner() {
+    #[tokio::test]
+    async fn claim_next_pending_task_is_single_winner() {
         let mut fixture = TestState::new();
         let state = fixture.build();
         let qa_file = state
@@ -148,10 +173,10 @@ mod tests {
         let state_a = state.clone();
         let state_b = state.clone();
 
-        let t1 = std::thread::spawn(move || claim_next_pending_task(&state_a).expect("claim a"));
-        let t2 = std::thread::spawn(move || claim_next_pending_task(&state_b).expect("claim b"));
-        let r1 = t1.join().expect("thread a");
-        let r2 = t2.join().expect("thread b");
+        let t1 = tokio::spawn(async move { claim_next_pending_task(&state_a).await.expect("claim a") });
+        let t2 = tokio::spawn(async move { claim_next_pending_task(&state_b).await.expect("claim b") });
+        let r1 = t1.await.expect("thread a");
+        let r2 = t2.await.expect("thread b");
 
         let winners = [r1, r2].into_iter().filter(|v| v.is_some()).count();
         assert_eq!(winners, 1);
@@ -173,17 +198,17 @@ mod tests {
         (state, created.id)
     }
 
-    #[test]
-    fn enqueue_task_sets_pending_and_creates_wake_signal() {
+    #[tokio::test]
+    async fn enqueue_task_sets_pending_and_creates_wake_signal() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
 
         // First claim the task so it becomes "running"
-        let claimed = claim_next_pending_task(&state).expect("claim");
+        let claimed = claim_next_pending_task(&state).await.expect("claim");
         assert_eq!(claimed.as_deref(), Some(task_id.as_str()));
 
         // Now enqueue it again
-        enqueue_task(&state, &task_id).expect("enqueue task");
+        enqueue_task(&state, &task_id).await.expect("enqueue task");
 
         // Verify it is pending again
         let conn = crate::db::open_conn(&state.db_path).expect("open db");
@@ -201,34 +226,34 @@ mod tests {
         assert!(wake_path.exists(), "wake signal file should exist");
     }
 
-    #[test]
-    fn next_pending_task_id_returns_pending() {
+    #[tokio::test]
+    async fn next_pending_task_id_returns_pending() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
 
-        let next = next_pending_task_id(&state).expect("next pending");
+        let next = next_pending_task_id(&state).await.expect("next pending");
         assert_eq!(next.as_deref(), Some(task_id.as_str()));
     }
 
-    #[test]
-    fn next_pending_task_id_returns_none_when_no_pending() {
+    #[tokio::test]
+    async fn next_pending_task_id_returns_none_when_no_pending() {
         let mut fixture = TestState::new();
         let (state, _task_id) = seed_task(&mut fixture);
 
         // Claim the only task so none are pending
-        let _ = claim_next_pending_task(&state).expect("claim");
+        let _ = claim_next_pending_task(&state).await.expect("claim");
 
-        let next = next_pending_task_id(&state).expect("next pending after claim");
+        let next = next_pending_task_id(&state).await.expect("next pending after claim");
         assert!(next.is_none(), "should be no pending tasks");
     }
 
-    #[test]
-    fn pending_task_count_returns_correct_count() {
+    #[tokio::test]
+    async fn pending_task_count_returns_correct_count() {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
         // No tasks yet
-        let count = pending_task_count(&state).expect("count 0");
+        let count = pending_task_count(&state).await.expect("count 0");
         assert_eq!(count, 0);
 
         // Seed a qa file and create 2 tasks
@@ -240,12 +265,12 @@ mod tests {
         create_task_impl(&state, CreateTaskPayload::default()).expect("create task 1");
         create_task_impl(&state, CreateTaskPayload::default()).expect("create task 2");
 
-        let count = pending_task_count(&state).expect("count 2");
+        let count = pending_task_count(&state).await.expect("count 2");
         assert_eq!(count, 2);
 
         // Claim one
-        let _ = claim_next_pending_task(&state).expect("claim one");
-        let count = pending_task_count(&state).expect("count after claim");
+        let _ = claim_next_pending_task(&state).await.expect("claim one");
+        let count = pending_task_count(&state).await.expect("count after claim");
         assert_eq!(count, 1);
     }
 
@@ -292,8 +317,8 @@ mod tests {
         clear_worker_stop_signal(&state).expect("clear nonexistent stop signal");
     }
 
-    #[test]
-    fn claim_next_prioritizes_restart_pending() {
+    #[tokio::test]
+    async fn claim_next_prioritizes_restart_pending() {
         let mut fixture = TestState::new();
         let (state, pending_task_id) = seed_task(&mut fixture);
 
@@ -318,7 +343,7 @@ mod tests {
         .expect("set restart_pending");
 
         // Claim should pick up restart_pending before pending
-        let claimed = claim_next_pending_task(&state).expect("claim restart_pending task");
+        let claimed = claim_next_pending_task(&state).await.expect("claim restart_pending task");
         assert_eq!(
             claimed.as_deref(),
             Some(created2.id.as_str()),
@@ -326,7 +351,7 @@ mod tests {
         );
 
         // Now claiming again should pick up the remaining pending task
-        let claimed2 = claim_next_pending_task(&state).expect("claim pending task");
+        let claimed2 = claim_next_pending_task(&state).await.expect("claim pending task");
         assert_eq!(claimed2.as_deref(), Some(pending_task_id.as_str()));
     }
 

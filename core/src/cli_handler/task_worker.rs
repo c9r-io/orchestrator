@@ -71,13 +71,13 @@ impl CliHandler {
                                 .map_err(|e| {
                                     anyhow::anyhow!("Failed to acquire semaphore: {}", e)
                                 })?;
-                            if let Some(task_id) = claim_next_pending_task(&state)? {
+                            if let Some(task_id) = cli_runtime().block_on(claim_next_pending_task(&state))? {
                                 println!("Worker-{} claimed task: {}", worker_idx + 1, task_id);
 
                                 // Post-restart binary verification: if this task was
                                 // restart_pending, confirm the running binary matches
                                 // the SHA256 recorded before the restart.
-                                match crate::scheduler::safety::verify_post_restart_binary(&state, &task_id) {
+                                match cli_runtime().block_on(crate::scheduler::safety::verify_post_restart_binary(&state, &task_id)) {
                                     Ok(true) => {} // verified or no event to check
                                     Ok(false) => {
                                         eprintln!(
@@ -103,7 +103,7 @@ impl CliHandler {
 
                                 match run_res {
                                     Ok(()) => {
-                                        let summary = load_task_summary(&state, &task_id)?;
+                                        let summary = cli_runtime().block_on(load_task_summary(&state, &task_id))?;
                                         println!(
                                             "Worker-{} finished task: {} status={}",
                                             worker_idx + 1,
@@ -180,7 +180,7 @@ impl CliHandler {
                 Ok(0)
             }
             TaskWorkerCommands::Status => {
-                let pending = pending_task_count(&self.state)?;
+                let pending = cli_runtime().block_on(pending_task_count(&self.state))?;
                 let stop_signal = worker_stop_signal_path(&self.state).exists();
                 println!("pending_tasks: {}", pending);
                 println!("stop_signal: {}", stop_signal);

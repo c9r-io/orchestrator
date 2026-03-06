@@ -26,7 +26,7 @@ pub fn resolve_workflow_finalize_outcome(
     Ok(None)
 }
 
-pub fn evaluate_step_prehook(
+pub async fn evaluate_step_prehook(
     state: &crate::state::InnerState,
     prehook: Option<&StepPrehookConfig>,
     context: &StepPrehookContext,
@@ -48,7 +48,8 @@ pub fn evaluate_step_prehook(
                 .as_deref()
                 .unwrap_or("prehook evaluated to true"),
             "run",
-        )?;
+        )
+        .await?;
     } else {
         emit_step_prehook_event(
             state,
@@ -59,13 +60,14 @@ pub fn evaluate_step_prehook(
                 .as_deref()
                 .unwrap_or("prehook evaluated to false"),
             "skip",
-        )?;
+        )
+        .await?;
     }
 
     Ok(should_run)
 }
 
-pub fn emit_step_prehook_event(
+pub async fn emit_step_prehook_event(
     state: &crate::state::InnerState,
     context: &StepPrehookContext,
     expression: &str,
@@ -96,7 +98,8 @@ pub fn emit_step_prehook_event(
         Some(&context.task_item_id),
         "step_prehook_evaluated",
         payload.clone(),
-    )?;
+    )
+    .await?;
     state.emit_event(
         &context.task_id,
         Some(&context.task_item_id),
@@ -106,7 +109,7 @@ pub fn emit_step_prehook_event(
     Ok(())
 }
 
-pub fn emit_item_finalize_event(
+pub async fn emit_item_finalize_event(
     state: &crate::state::InnerState,
     context: &ItemFinalizeContext,
     outcome: &crate::config::WorkflowFinalizeOutcome,
@@ -123,7 +126,8 @@ pub fn emit_item_finalize_event(
         Some(&context.task_item_id),
         "item_finalize_evaluated",
         payload.clone(),
-    )?;
+    )
+    .await?;
     state.emit_event(
         &context.task_id,
         Some(&context.task_item_id),

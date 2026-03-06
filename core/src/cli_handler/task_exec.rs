@@ -29,7 +29,7 @@ impl CliHandler {
             );
         }
         let (workspace_root, qa_file_path) = {
-            let repo = SqliteTaskRepository::new(self.state.database.clone());
+            let repo = SqliteTaskRepository::new(self.state.db_path.clone());
             let runtime_row = repo.load_task_runtime_row(&task_id)?;
             let items = repo.list_task_items_for_cycle(&task_id)?;
             let first = items
@@ -42,7 +42,7 @@ impl CliHandler {
         };
 
         let (agent_id, agent_command) = {
-            let repo = SqliteTaskRepository::new(self.state.database.clone());
+            let repo = SqliteTaskRepository::new(self.state.db_path.clone());
             let runtime_row = repo.load_task_runtime_row(&task_id)?;
             let plan = serde_json::from_str::<TaskExecutionPlan>(&runtime_row.execution_plan_json)
                 .with_context(|| format!("failed to parse execution plan for task {}", task_id))?;
@@ -64,7 +64,7 @@ impl CliHandler {
             found.with_context(|| format!("no agent found with capability '{}'", cap))?
         };
 
-        let runtime_row = SqliteTaskRepository::new(self.state.database.clone())
+        let runtime_row = SqliteTaskRepository::new(self.state.db_path.clone())
             .load_task_runtime_row(&task_id)?;
         let rendered = agent_command
             .replace("{rel_path}", &qa_file_path)
@@ -119,10 +119,10 @@ impl CliHandler {
             );
         }
         let client_id = format!("cli-{}", std::process::id());
-        let conn = self.state.database.connection()?;
+        let rt = super::cli_runtime();
         if tty {
             if !command.is_empty() {
-                session_store::acquire_writer(&conn, &sess.id, &client_id)?;
+                rt.block_on(self.state.session_store.acquire_writer(&sess.id, &client_id))?;
                 let cmdline = command.join(" ");
                 let status = Command::new("/bin/bash")
                     .arg("-lc")
@@ -130,19 +130,18 @@ impl CliHandler {
                     .current_dir(&sess.cwd)
                     .status()
                     .context("exec interactive command in session context")?;
-                session_store::release_attachment(
-                    &conn,
+                rt.block_on(self.state.session_store.release_attachment(
                     &sess.id,
                     &client_id,
                     "detach",
-                )?;
+                ))?;
                 return Ok(status.code().unwrap_or(1));
             }
 
             let writable =
-                session_store::acquire_writer(&conn, &sess.id, &client_id)?;
+                rt.block_on(self.state.session_store.acquire_writer(&sess.id, &client_id))?;
             if !writable {
-                session_store::attach_reader(&conn, &sess.id, &client_id)?;
+                rt.block_on(self.state.session_store.attach_reader(&sess.id, &client_id))?;
             }
             let status_res = if writable {
                 Command::new("/bin/bash")
@@ -163,7 +162,7 @@ impl CliHandler {
                     .status()
                     .context("attach read-only session")
             };
-            session_store::release_attachment(&conn, &sess.id, &client_id, "detach")?;
+            rt.block_on(self.state.session_store.release_attachment(&sess.id, &client_id, "detach"))?;
             let status = status_res?;
             return Ok(status.code().unwrap_or(1));
         }

@@ -250,14 +250,27 @@ impl TestState {
         )
         .expect("failed to backfill test data");
 
-        let database = Arc::new(
-            crate::database::Database::new(db_path.clone()).expect("failed to init db pool"),
-        );
-        let writer = Arc::new(crate::db_write::DbWriteCoordinator::new(database.clone()));
+        let async_database = Arc::new({
+            let db_p = db_path.clone();
+            // Always create a fresh runtime on a separate thread to avoid
+            // "cannot start a runtime from within a runtime" when called from
+            // #[tokio::test] (which uses current_thread runtime).
+            let result = std::thread::spawn(move || {
+                tokio::runtime::Runtime::new()
+                    .expect("failed to create tokio runtime for async_database init")
+                    .block_on(crate::async_database::AsyncDatabase::open(&db_p))
+            })
+            .join()
+            .expect("async_database init thread panicked");
+            result.expect("failed to init async database")
+        });
+        let writer = Arc::new(crate::db_write::DbWriteCoordinator::new(async_database.clone()));
+        let session_store = Arc::new(crate::session_store::AsyncSessionStore::new(async_database.clone()));
+        let task_repo = Arc::new(crate::task_repository::AsyncSqliteTaskRepository::new(async_database.clone()));
         let state = Arc::new(InnerState {
             app_root: self.temp_root.clone(),
             db_path,
-            database,
+            async_database,
             logs_dir,
             active_config: RwLock::new(active),
             active_config_error: RwLock::new(None),
@@ -268,6 +281,8 @@ impl TestState {
             message_bus: Arc::new(MessageBus::new()),
             event_sink: std::sync::RwLock::new(Arc::new(NoopSink)),
             db_writer: writer,
+            session_store,
+            task_repo,
         });
         self.state = Some(state.clone());
         state
