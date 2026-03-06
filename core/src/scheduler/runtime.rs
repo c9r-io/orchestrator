@@ -583,6 +583,10 @@ mod tests {
             db_writer: base.db_writer.clone(),
             session_store: base.session_store.clone(),
             task_repo: base.task_repo.clone(),
+            store_manager: crate::store::StoreManager::new(
+                base.async_database.clone(),
+                base.app_root.clone(),
+            ),
         })
     }
 

@@ -1054,8 +1054,12 @@ mod tests {
                 async_database.clone(),
             )),
             task_repo: Arc::new(crate::task_repository::AsyncSqliteTaskRepository::new(
-                async_database,
+                async_database.clone(),
             )),
+            store_manager: crate::store::StoreManager::new(
+                async_database,
+                project_root.to_path_buf(),
+            ),
         });
 
         state.emit_event(

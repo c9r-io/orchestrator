@@ -3,7 +3,7 @@ use crate::crd::types::{CrdHooks, CrdVersion, CustomResourceDefinition};
 
 const BUILTIN_GROUP: &str = "orchestrator.dev";
 
-/// Returns the 9 builtin CRD definitions for the orchestrator's core resource types.
+/// Returns the 11 builtin CRD definitions for the orchestrator's core resource types.
 pub fn builtin_crd_definitions() -> Vec<CustomResourceDefinition> {
     vec![
         agent_crd(),
@@ -15,6 +15,8 @@ pub fn builtin_crd_definitions() -> Vec<CustomResourceDefinition> {
         step_template_crd(),
         env_store_crd(),
         secret_store_crd(),
+        workflow_store_crd(),
+        store_backend_provider_crd(),
     ]
 }
 
@@ -203,6 +205,46 @@ fn secret_store_crd() -> CustomResourceDefinition {
     }
 }
 
+fn workflow_store_crd() -> CustomResourceDefinition {
+    CustomResourceDefinition {
+        kind: "WorkflowStore".to_string(),
+        plural: "workflowstores".to_string(),
+        short_names: vec!["wfs".to_string(), "workflow-store".to_string()],
+        group: BUILTIN_GROUP.to_string(),
+        versions: vec![builtin_version(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "provider": { "type": "string" },
+                "base_path": { "type": "string" },
+                "schema": { "type": "object" },
+                "retention": { "type": "object" }
+            }
+        }))],
+        hooks: CrdHooks::default(),
+        scope: CrdScope::Namespaced,
+        builtin: true,
+    }
+}
+
+fn store_backend_provider_crd() -> CustomResourceDefinition {
+    CustomResourceDefinition {
+        kind: "StoreBackendProvider".to_string(),
+        plural: "storebackendproviders".to_string(),
+        short_names: vec!["sbp".to_string(), "store-backend-provider".to_string()],
+        group: BUILTIN_GROUP.to_string(),
+        versions: vec![builtin_version(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "builtin": { "type": "boolean" },
+                "commands": { "type": "object" }
+            }
+        }))],
+        hooks: CrdHooks::default(),
+        scope: CrdScope::Cluster,
+        builtin: true,
+    }
+}
+
 fn builtin_version(schema: serde_json::Value) -> CrdVersion {
     CrdVersion {
         name: "v2".to_string(),
@@ -218,23 +260,23 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn returns_nine_definitions() {
+    fn returns_eleven_definitions() {
         let defs = builtin_crd_definitions();
-        assert_eq!(defs.len(), 9);
+        assert_eq!(defs.len(), 11);
     }
 
     #[test]
     fn all_kinds_unique() {
         let defs = builtin_crd_definitions();
         let kinds: HashSet<&str> = defs.iter().map(|d| d.kind.as_str()).collect();
-        assert_eq!(kinds.len(), 9);
+        assert_eq!(kinds.len(), 11);
     }
 
     #[test]
     fn all_plurals_unique() {
         let defs = builtin_crd_definitions();
         let plurals: HashSet<&str> = defs.iter().map(|d| d.plural.as_str()).collect();
-        assert_eq!(plurals.len(), 9);
+        assert_eq!(plurals.len(), 11);
     }
 
     #[test]
@@ -268,6 +310,8 @@ mod tests {
         assert_eq!(map["StepTemplate"], CrdScope::Cluster);
         assert_eq!(map["EnvStore"], CrdScope::Cluster);
         assert_eq!(map["SecretStore"], CrdScope::Cluster);
+        assert_eq!(map["WorkflowStore"], CrdScope::Namespaced);
+        assert_eq!(map["StoreBackendProvider"], CrdScope::Cluster);
     }
 
     #[test]

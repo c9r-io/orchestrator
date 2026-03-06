@@ -6,6 +6,7 @@ mod output;
 mod parse;
 mod qa;
 mod resource;
+mod store_cmd;
 mod system;
 mod task;
 mod task_exec;
@@ -75,6 +76,7 @@ impl CliHandler {
             } => self.handle_exec(*stdin, *tty, target, command),
             Commands::Verify(cmd) => self.handle_verify(cmd),
             Commands::Config(cmd) => self.handle_config_lifecycle(cmd),
+            Commands::Store(cmd) => self.handle_store(cmd),
             Commands::Check { workflow, output } => self.handle_check(workflow.as_deref(), *output),
             Commands::Version { .. } => {
                 // Handled as preflight in main.rs; should not reach here

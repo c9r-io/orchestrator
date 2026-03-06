@@ -41,6 +41,7 @@ pub struct InnerState {
     pub db_writer: Arc<crate::db_write::DbWriteCoordinator>,
     pub session_store: Arc<crate::session_store::AsyncSessionStore>,
     pub task_repo: Arc<crate::task_repository::AsyncSqliteTaskRepository>,
+    pub store_manager: crate::store::StoreManager,
 }
 
 impl InnerState {

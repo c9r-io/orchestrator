@@ -1009,6 +1009,6 @@ mod tests {
 
         assert!(second.agents.contains_key("idem-ag"));
         assert!(second.resource_store.get("Agent", "idem-ag").is_some());
-        assert_eq!(second.custom_resource_definitions.len(), 9);
+        assert_eq!(second.custom_resource_definitions.len(), 11);
     }
 }

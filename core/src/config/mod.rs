@@ -11,7 +11,9 @@ mod runner;
 mod safety;
 mod step;
 mod step_template;
+mod store_backend_provider;
 mod workflow;
+mod workflow_store;
 
 pub use agent::*;
 pub use defaults::*;
@@ -24,7 +26,9 @@ pub use runner::*;
 pub use safety::*;
 pub use step::*;
 pub use step_template::*;
+pub use store_backend_provider::*;
 pub use workflow::*;
+pub use workflow_store::*;
 
 use crate::crd::store::ResourceStore;
 use crate::crd::types::{CustomResource, CustomResourceDefinition};

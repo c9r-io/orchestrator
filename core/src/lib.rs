@@ -31,6 +31,7 @@ pub mod scheduler_service;
 pub mod selection;
 pub mod session_store;
 pub mod state;
+pub mod store;
 pub mod task_ops;
 pub mod task_repository;
 pub mod ticket;

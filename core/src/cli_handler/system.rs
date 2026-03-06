@@ -189,6 +189,10 @@ mod tests {
             db_writer: state.db_writer.clone(),
             session_store: state.session_store.clone(),
             task_repo: state.task_repo.clone(),
+            store_manager: crate::store::StoreManager::new(
+                state.async_database.clone(),
+                state.app_root.clone(),
+            ),
         });
         let handler = CliHandler::new(inner);
 

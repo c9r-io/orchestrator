@@ -28,7 +28,7 @@ The workflow engine provides:
 ## Four New Primitives
 
 ### 1. Persistent Store (docs/plan/wp01-persistent-store.md)
-Declarative cross-task read/write interface for workflow steps. Enables long-term memory, metric tracking, and knowledge accumulation across task runs.
+Cross-task read/write via `WorkflowStore` CRD (10th builtin kind). Two-layer design: CRD defines the store (backend, schema, retention); dedicated DB table/filesystem holds the data. Supports `local` (SQLite) and `file` (filesystem) backends — extensible to external backends like StorageClass.
 
 **Priority**: Highest — foundational for the other three primitives.
 

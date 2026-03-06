@@ -28,6 +28,7 @@ use agent_orchestrator::scheduler;
 use agent_orchestrator::scheduler_service;
 use agent_orchestrator::session_store;
 use agent_orchestrator::state;
+use agent_orchestrator::store;
 use agent_orchestrator::task_ops;
 use agent_orchestrator::task_repository;
 
@@ -101,6 +102,10 @@ fn init_state(unsafe_mode: bool) -> Result<ManagedState> {
     let task_repo = Arc::new(
         agent_orchestrator::task_repository::AsyncSqliteTaskRepository::new(async_database.clone()),
     );
+    let store_manager = agent_orchestrator::store::StoreManager::new(
+        async_database.clone(),
+        app_root.clone(),
+    );
     Ok(ManagedState {
         inner: Arc::new(crate::state::InnerState {
             app_root,
@@ -119,6 +124,7 @@ fn init_state(unsafe_mode: bool) -> Result<ManagedState> {
             db_writer,
             session_store,
             task_repo,
+            store_manager,
         }),
     })
 }

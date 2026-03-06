@@ -68,6 +68,9 @@ pub fn project_builtin_kind(config: &mut OrchestratorConfig, kind: &str) {
                 config.env_stores.insert(name, proj.0);
             }
         }
+        // WorkflowStore and StoreBackendProvider have no legacy config fields;
+        // they live exclusively in the ResourceStore and are accessed via StoreManager.
+        "WorkflowStore" | "StoreBackendProvider" => {}
         _ => {} // User CRD, no projection needed
     }
 }
@@ -262,6 +265,8 @@ pub fn project_all_builtins(config: &mut OrchestratorConfig) {
         "StepTemplate",
         "EnvStore",
         "SecretStore",
+        "WorkflowStore",
+        "StoreBackendProvider",
     ] {
         project_builtin_kind(config, kind);
     }

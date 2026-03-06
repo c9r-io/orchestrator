@@ -25,7 +25,8 @@ use crate::cli_types::{
 };
 use crate::config::{
     AgentConfig, ConfigDefaults, EnvStoreConfig, ProjectConfig, ResumeConfig, RunnerConfig,
-    StepTemplateConfig, WorkflowConfig, WorkspaceConfig,
+    StepTemplateConfig, StoreBackendProviderConfig, WorkflowConfig, WorkflowStoreConfig,
+    WorkspaceConfig,
 };
 use crate::resource::agent::{agent_config_to_spec, agent_spec_to_config};
 use crate::resource::runtime_policy::{runner_config_to_spec, runner_spec_to_config};
@@ -225,6 +226,34 @@ impl CrdProjectable for SecretStoreProjection {
             data: self.0.data.clone(),
         };
         serde_json::to_value(&spec).unwrap_or_default()
+    }
+}
+
+impl CrdProjectable for WorkflowStoreConfig {
+    fn crd_kind() -> &'static str {
+        "WorkflowStore"
+    }
+
+    fn from_cr_spec(spec: &serde_json::Value) -> Result<Self> {
+        Ok(serde_json::from_value(spec.clone())?)
+    }
+
+    fn to_cr_spec(&self) -> serde_json::Value {
+        serde_json::to_value(self).unwrap_or_default()
+    }
+}
+
+impl CrdProjectable for StoreBackendProviderConfig {
+    fn crd_kind() -> &'static str {
+        "StoreBackendProvider"
+    }
+
+    fn from_cr_spec(spec: &serde_json::Value) -> Result<Self> {
+        Ok(serde_json::from_value(spec.clone())?)
+    }
+
+    fn to_cr_spec(&self) -> serde_json::Value {
+        serde_json::to_value(self).unwrap_or_default()
     }
 }
 
@@ -456,7 +485,7 @@ mod tests {
     }
 
     #[test]
-    fn all_nine_kinds_are_unique() {
+    fn all_eleven_kinds_are_unique() {
         let kinds = [
             AgentConfig::crd_kind(),
             WorkflowConfig::crd_kind(),
@@ -467,11 +496,48 @@ mod tests {
             StepTemplateConfig::crd_kind(),
             EnvStoreConfig::crd_kind(),
             SecretStoreProjection::crd_kind(),
+            WorkflowStoreConfig::crd_kind(),
+            StoreBackendProviderConfig::crd_kind(),
         ];
         let mut set = std::collections::HashSet::new();
         for kind in &kinds {
             assert!(set.insert(*kind), "duplicate kind: {}", kind);
         }
-        assert_eq!(set.len(), 9);
+        assert_eq!(set.len(), 11);
+    }
+
+    #[test]
+    fn workflow_store_config_round_trip() {
+        let config = WorkflowStoreConfig {
+            provider: "redis".to_string(),
+            base_path: None,
+            schema: Some(serde_json::json!({"type": "object"})),
+            retention: crate::config::StoreRetention {
+                max_entries: Some(200),
+                ttl_days: Some(90),
+            },
+        };
+        let spec = config.to_cr_spec();
+        let back = WorkflowStoreConfig::from_cr_spec(&spec).expect("should deserialize");
+        assert_eq!(back.provider, "redis");
+        assert_eq!(back.retention.max_entries, Some(200));
+    }
+
+    #[test]
+    fn store_backend_provider_config_round_trip() {
+        let config = StoreBackendProviderConfig {
+            builtin: false,
+            commands: Some(crate::config::StoreBackendCommands {
+                get: "redis-cli GET $KEY".to_string(),
+                put: "redis-cli SET $KEY $VALUE".to_string(),
+                delete: "redis-cli DEL $KEY".to_string(),
+                list: "redis-cli KEYS *".to_string(),
+                prune: None,
+            }),
+        };
+        let spec = config.to_cr_spec();
+        let back = StoreBackendProviderConfig::from_cr_spec(&spec).expect("should deserialize");
+        assert!(!back.builtin);
+        assert_eq!(back.commands.as_ref().map(|c| c.get.as_str()), Some("redis-cli GET $KEY"));
     }
 }
