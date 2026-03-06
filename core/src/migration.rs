@@ -86,6 +86,11 @@ pub fn all_migrations() -> Vec<Migration> {
             name: "m0005_add_task_lookup_indexes",
             up: m0005_add_task_lookup_indexes,
         },
+        Migration {
+            version: 6,
+            name: "m0006_add_pipeline_vars_json",
+            up: m0006_add_pipeline_vars_json,
+        },
     ]
 }
 
@@ -525,6 +530,19 @@ fn m0005_add_task_lookup_indexes(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+// ── Migration 6: Pipeline Variables JSON Column ──
+
+fn m0006_add_pipeline_vars_json(conn: &Connection) -> Result<()> {
+    use crate::db::ensure_column;
+    ensure_column(
+        conn,
+        "tasks",
+        "pipeline_vars_json",
+        "ALTER TABLE tasks ADD COLUMN pipeline_vars_json TEXT",
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -541,8 +559,8 @@ mod tests {
         let conn = mem_conn();
         let migrations = all_migrations();
         let applied = run_pending(&conn, &migrations).expect("run_pending");
-        assert_eq!(applied, 5);
-        assert_eq!(current_version(&conn).expect("version"), 5);
+        assert_eq!(applied, 6);
+        assert_eq!(current_version(&conn).expect("version"), 6);
     }
 
     #[test]
@@ -552,7 +570,7 @@ mod tests {
         run_pending(&conn, &migrations).expect("first run");
         let applied = run_pending(&conn, &migrations).expect("second run");
         assert_eq!(applied, 0);
-        assert_eq!(current_version(&conn).expect("version"), 5);
+        assert_eq!(current_version(&conn).expect("version"), 6);
     }
 
     #[test]
@@ -577,10 +595,10 @@ mod tests {
         assert_eq!(applied, 2);
         assert_eq!(current_version(&conn).expect("version"), 2);
 
-        // Apply all 5 — should only run 3, 4, and 5
+        // Apply all 6 — should only run 3, 4, 5, and 6
         let applied = run_pending(&conn, &all).expect("full run");
-        assert_eq!(applied, 3);
-        assert_eq!(current_version(&conn).expect("version"), 5);
+        assert_eq!(applied, 4);
+        assert_eq!(current_version(&conn).expect("version"), 6);
     }
 
     #[test]
@@ -711,6 +729,7 @@ mod tests {
         let conn = mem_conn();
         // Run migrations 1-3 first
         let mut migs = all_migrations();
+        let _m6 = migs.pop().expect("pop m6");
         let _m5 = migs.pop().expect("pop m5");
         let m4 = migs.pop().expect("pop m4");
         run_pending(&conn, &migs).expect("run m1-m3");

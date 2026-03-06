@@ -273,31 +273,20 @@ pub async fn load_task_runtime_context(
         init_done: init_done == 1,
         dynamic_steps,
         pipeline_vars: {
-            let mut pv = crate::config::PipelineVariables::default();
-            if !task_goal.is_empty() {
-                pv.vars.insert("goal".to_string(), task_goal);
-            }
-            // Recover spill file paths that were lost across process restart
-            // (e.g. self_restart exit 75 → relaunch). The spill files persist
-            // on disk at a deterministic path: {logs_dir}/{task_id}/{key}.txt
-            let spill_dir = state.logs_dir.join(task_id);
-            if spill_dir.is_dir() {
-                if let Ok(entries) = std::fs::read_dir(&spill_dir) {
-                    for entry in entries.flatten() {
-                        let path = entry.path();
-                        if path.extension().and_then(|e| e.to_str()) == Some("txt") {
-                            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                                let path_key = format!("{}_path", stem);
-                                if !pv.vars.contains_key(&path_key) {
-                                    pv.vars.insert(
-                                        path_key,
-                                        path.to_string_lossy().to_string(),
-                                    );
-                                }
-                            }
+            let mut pv = match runtime_row.pipeline_vars_json.as_deref() {
+                Some(json) if !json.is_empty() => {
+                    match serde_json::from_str::<crate::config::PipelineVariables>(json) {
+                        Ok(vars) => vars,
+                        Err(e) => {
+                            tracing::warn!("failed to parse pipeline_vars_json, starting fresh: {e}");
+                            crate::config::PipelineVariables::default()
                         }
                     }
                 }
+                _ => crate::config::PipelineVariables::default(),
+            };
+            if !task_goal.is_empty() {
+                pv.vars.entry("goal".to_string()).or_insert(task_goal);
             }
             pv
         },

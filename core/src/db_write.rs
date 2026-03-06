@@ -419,6 +419,35 @@ impl DbWriteCoordinator {
             .map_err(flatten_err)
     }
 
+    pub async fn update_task_pipeline_vars(
+        &self,
+        task_id: &str,
+        pipeline_vars_json: &str,
+    ) -> Result<()> {
+        let task_id = task_id.to_owned();
+        let pipeline_vars_json = pipeline_vars_json.to_owned();
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                conn.execute(
+                    "UPDATE tasks SET pipeline_vars_json = ?2, updated_at = ?3 WHERE id = ?1",
+                    params![task_id, pipeline_vars_json, now_ts()],
+                )?;
+                Ok(())
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    pub async fn update_task_pipeline_vars_sync(
+        &self,
+        task_id: &str,
+        pipeline_vars_json: &str,
+    ) -> Result<()> {
+        self.update_task_pipeline_vars(task_id, pipeline_vars_json)
+            .await
+    }
+
     pub async fn update_task_item_tickets(
         &self,
         task_item_id: &str,

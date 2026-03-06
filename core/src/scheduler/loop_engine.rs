@@ -365,6 +365,16 @@ async fn execute_cycle_segments(
                         .await?;
                         // Propagate task-scoped pipeline vars to subsequent segments
                         task_ctx.pipeline_vars = task_acc.pipeline_vars.clone();
+                        // Persist pipeline vars to DB for recovery across process restarts
+                        if let Ok(json) = serde_json::to_string(&task_ctx.pipeline_vars) {
+                            if let Err(e) = state
+                                .db_writer
+                                .update_task_pipeline_vars(task_id, &json)
+                                .await
+                            {
+                                tracing::warn!("failed to persist pipeline_vars after task segment: {e}");
+                            }
+                        }
                         if task_acc.terminal {
                             let skipped_item_steps = collect_remaining_item_step_steps(
                                 task_ctx,

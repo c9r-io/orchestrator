@@ -34,6 +34,7 @@ pub struct TaskRuntimeRow {
     pub init_done: i64,
     pub goal: String,
     pub project_id: String,
+    pub pipeline_vars_json: Option<String>,
 }
 
 pub struct TaskLogRunRow {

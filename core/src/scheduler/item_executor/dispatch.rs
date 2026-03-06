@@ -339,6 +339,16 @@ async fn execute_builtin_step_dispatch(
             ).await?;
 
             if exit_code == EXIT_RESTART {
+                // Persist pipeline vars to DB before exit so the relaunched process recovers them.
+                if let Ok(json) = serde_json::to_string(&acc.pipeline_vars) {
+                    if let Err(e) = state
+                        .db_writer
+                        .update_task_pipeline_vars(task_id, &json)
+                        .await
+                    {
+                        tracing::warn!("failed to persist pipeline_vars before restart: {e}");
+                    }
+                }
                 // All state is persisted (restart_pending set by execute_self_restart_step).
                 // Exit process so the wrapper script (orchestrator.sh) relaunches the new binary.
                 std::process::exit(EXIT_RESTART as i32);
