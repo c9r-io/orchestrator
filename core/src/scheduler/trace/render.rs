@@ -10,6 +10,14 @@ pub fn render_trace_terminal(trace: &TaskTrace, verbose: bool) {
         colorize_status(&trace.status),
     );
 
+    // Build version
+    if let Some(ref bv) = trace.build_version {
+        println!(
+            "Build: {} ({}) {}",
+            bv.version, bv.git_hash, bv.build_timestamp,
+        );
+    }
+
     let wall = trace
         .summary
         .wall_time_secs

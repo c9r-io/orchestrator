@@ -4,12 +4,20 @@ use std::collections::HashMap;
 use crate::anomaly::Anomaly;
 
 #[derive(Debug, Serialize)]
+pub struct BuildVersion {
+    pub version: String,
+    pub git_hash: String,
+    pub build_timestamp: String,
+}
+
+#[derive(Debug, Serialize)]
 pub struct TaskTrace {
     pub task_id: String,
     pub status: String,
     pub cycles: Vec<CycleTrace>,
     pub anomalies: Vec<Anomaly>,
     pub summary: TraceSummary,
+    pub build_version: Option<BuildVersion>,
 }
 
 #[derive(Debug, Serialize)]

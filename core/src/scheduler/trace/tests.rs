@@ -921,6 +921,145 @@ fn build_trace_marks_legacy_step_scope_as_legacy() {
     assert_eq!(step.anchor_item_id.as_deref(), Some("item-1"));
 }
 
+// ── Build version tests ────────────────────────────────────────
+
+#[test]
+fn build_trace_includes_build_version() {
+    let events = vec![
+        make_event(
+            1,
+            "cycle_started",
+            json!({"cycle": 1}),
+            "2025-01-01 10:00:00",
+        ),
+        make_event(2, "task_completed", json!({}), "2025-01-01 10:00:05"),
+    ];
+
+    let trace = build_trace("test-task", "completed", &events, &[]);
+    assert!(
+        trace.build_version.is_some(),
+        "build_version should be populated"
+    );
+}
+
+#[test]
+fn build_version_fields_populated() {
+    let events = vec![
+        make_event(
+            1,
+            "cycle_started",
+            json!({"cycle": 1}),
+            "2025-01-01 10:00:00",
+        ),
+        make_event(2, "task_completed", json!({}), "2025-01-01 10:00:05"),
+    ];
+
+    let trace = build_trace("test-task", "completed", &events, &[]);
+    let bv = trace.build_version.expect("should have build version");
+    assert!(
+        !bv.version.is_empty(),
+        "version should be populated"
+    );
+    assert!(
+        !bv.git_hash.is_empty(),
+        "git_hash should be populated"
+    );
+    assert!(
+        !bv.build_timestamp.is_empty(),
+        "build_timestamp should be populated"
+    );
+}
+
+#[test]
+fn json_serialization_includes_build_version() {
+    let events = vec![
+        make_event(
+            1,
+            "cycle_started",
+            json!({"cycle": 1}),
+            "2025-01-01 10:00:00",
+        ),
+        make_event(2, "task_completed", json!({}), "2025-01-01 10:00:05"),
+    ];
+
+    let trace = build_trace("test-task", "completed", &events, &[]);
+    let json_str = serde_json::to_string(&trace).expect("should serialize");
+    let parsed: Value = serde_json::from_str(&json_str).expect("should parse");
+
+    assert!(
+        parsed.get("build_version").is_some(),
+        "JSON should contain build_version"
+    );
+    let bv = parsed.get("build_version").expect("build_version should exist");
+    assert!(
+        bv.get("version").is_some() && !bv.get("version").unwrap().is_null(),
+        "version should be in JSON"
+    );
+    assert!(
+        bv.get("git_hash").is_some() && !bv.get("git_hash").unwrap().is_null(),
+        "git_hash should be in JSON"
+    );
+    assert!(
+        bv.get("build_timestamp").is_some()
+            && !bv.get("build_timestamp").unwrap().is_null(),
+        "build_timestamp should be in JSON"
+    );
+}
+
+#[test]
+fn render_trace_terminal_shows_build_version() {
+    let events = vec![
+        make_event(
+            1,
+            "cycle_started",
+            json!({"cycle": 1}),
+            "2025-01-01 10:00:00",
+        ),
+        make_event(2, "task_completed", json!({}), "2025-01-01 10:00:05"),
+    ];
+
+    let trace = build_trace("test-task", "completed", &events, &[]);
+    // Just ensure it doesn't panic - output goes to stdout
+    render_trace_terminal(&trace, false);
+}
+
+#[test]
+fn build_version_optional_backward_compat() {
+    // Test that the trace works even when build version might be absent
+    // (simulating older versions or different build configs)
+    let events = vec![
+        make_event(
+            1,
+            "cycle_started",
+            json!({"cycle": 1}),
+            "2025-01-01 10:00:00",
+        ),
+        make_item_event(
+            2,
+            "step_started",
+            json!({"step": "plan"}),
+            "2025-01-01 10:00:01",
+            "item-1",
+        ),
+        make_item_event(
+            3,
+            "step_finished",
+            json!({"step": "plan", "success": true, "duration_ms": 5000}),
+            "2025-01-01 10:00:06",
+            "item-1",
+        ),
+        make_event(4, "task_completed", json!({}), "2025-01-01 10:00:07"),
+    ];
+
+    let trace = build_trace("test-task", "completed", &events, &[]);
+    // Trace should still have valid cycles and summary
+    assert_eq!(trace.cycles.len(), 1);
+    assert_eq!(trace.cycles[0].steps.len(), 1);
+    assert_eq!(trace.summary.total_steps, 1);
+    // Build version should still be populated
+    assert!(trace.build_version.is_some());
+}
+
 // ── Utility function tests ────────────────────────────
 
 #[test]

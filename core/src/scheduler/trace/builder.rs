@@ -9,6 +9,14 @@ use super::anomaly::*;
 use super::model::*;
 use super::time::compute_wall_time;
 
+fn get_build_version() -> Option<BuildVersion> {
+    Some(BuildVersion {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        git_hash: env!("BUILD_GIT_HASH").to_string(),
+        build_timestamp: env!("BUILD_TIMESTAMP").to_string(),
+    })
+}
+
 pub(super) fn split_observed_item_binding(
     scope: Option<ObservedStepScope>,
     task_item_id: &Option<String>,
@@ -121,6 +129,7 @@ pub fn build_trace_with_meta(
         cycles,
         anomalies,
         summary,
+        build_version: get_build_version(),
     }
 }
 
