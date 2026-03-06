@@ -47,6 +47,7 @@ Entry point: `./scripts/orchestrator.sh <command>` (recommended) or `./core/targ
    - `completion`
    - `debug`
    - `exec`
+   - `store`
 
 ### Expected Result
 
