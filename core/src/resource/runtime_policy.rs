@@ -40,7 +40,7 @@ impl Resource for RuntimePolicyResource {
         Ok(())
     }
 
-    fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+    fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
         use crate::crd::projection::{CrdProjectable, RuntimePolicyProjection};
         let incoming_runner = runner_spec_to_config(&self.spec.runner);
         let incoming_resume = ResumeConfig {
@@ -51,7 +51,7 @@ impl Resource for RuntimePolicyResource {
             resume: incoming_resume,
         };
         let spec_value = rp.to_cr_spec();
-        super::apply_to_store(config, "RuntimePolicy", "runtime", &self.metadata, spec_value)
+        Ok(super::apply_to_store(config, "RuntimePolicy", "runtime", &self.metadata, spec_value))
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -157,15 +157,15 @@ mod tests {
     fn runtime_policy_apply_unchanged_when_same() {
         let mut config = make_config();
         let r1 = dispatch_resource(runtime_policy_manifest()).expect("dispatch should succeed");
-        r1.apply(&mut config);
-        assert_eq!(r1.apply(&mut config), ApplyResult::Unchanged);
+        r1.apply(&mut config).expect("apply");
+        assert_eq!(r1.apply(&mut config).expect("apply"), ApplyResult::Unchanged);
     }
 
     #[test]
     fn runtime_policy_apply_configured_on_change() {
         let mut config = make_config();
         let r1 = dispatch_resource(runtime_policy_manifest()).expect("dispatch should succeed");
-        r1.apply(&mut config);
+        r1.apply(&mut config).expect("apply");
 
         // Change the runner policy
         let mut manifest = runtime_policy_manifest();
@@ -173,7 +173,7 @@ mod tests {
             spec.runner.policy = "allowlist".to_string();
         }
         let r2 = dispatch_resource(manifest).expect("dispatch should succeed");
-        assert_eq!(r2.apply(&mut config), ApplyResult::Configured);
+        assert_eq!(r2.apply(&mut config).expect("apply"), ApplyResult::Configured);
     }
 
     #[test]

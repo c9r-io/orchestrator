@@ -193,7 +193,7 @@ spec:
         let mut config = make_config();
         let ws = dispatch_resource(workspace_manifest("del-ws", "workspace/del"))
             .expect("dispatch should succeed");
-        ws.apply(&mut config);
+        ws.apply(&mut config).expect("apply");
         assert!(delete_resource_by_kind(&mut config, "workspace", "del-ws")
             .expect("delete workspace resource"));
         assert!(!config.workspaces.contains_key("del-ws"));
@@ -204,7 +204,7 @@ spec:
         let mut config = make_config();
         let ws = dispatch_resource(workspace_manifest("del-ws2", "workspace/del2"))
             .expect("dispatch should succeed");
-        ws.apply(&mut config);
+        ws.apply(&mut config).expect("apply");
         assert!(delete_resource_by_kind(&mut config, "ws", "del-ws2").expect("delete ws alias"));
     }
 
@@ -213,7 +213,7 @@ spec:
         let mut config = make_config();
         let agent = dispatch_resource(agent_manifest("del-agent", "cargo test"))
             .expect("dispatch should succeed");
-        agent.apply(&mut config);
+        agent.apply(&mut config).expect("apply");
         assert!(delete_resource_by_kind(&mut config, "agent", "del-agent")
             .expect("delete agent resource"));
         assert!(!config.agents.contains_key("del-agent"));
@@ -223,7 +223,7 @@ spec:
     fn delete_resource_by_kind_workflow() {
         let mut config = make_config();
         let wf = dispatch_resource(workflow_manifest("del-wf")).expect("dispatch should succeed");
-        wf.apply(&mut config);
+        wf.apply(&mut config).expect("apply");
         assert!(delete_resource_by_kind(&mut config, "workflow", "del-wf")
             .expect("delete workflow resource"));
     }
@@ -232,7 +232,7 @@ spec:
     fn delete_resource_by_kind_wf_alias() {
         let mut config = make_config();
         let wf = dispatch_resource(workflow_manifest("del-wf2")).expect("dispatch should succeed");
-        wf.apply(&mut config);
+        wf.apply(&mut config).expect("apply");
         assert!(
             delete_resource_by_kind(&mut config, "wf", "del-wf2").expect("delete workflow alias")
         );
@@ -243,7 +243,7 @@ spec:
         let mut config = make_config();
         let proj = dispatch_resource(project_manifest("del-proj", "desc"))
             .expect("dispatch should succeed");
-        proj.apply(&mut config);
+        proj.apply(&mut config).expect("apply");
         assert!(delete_resource_by_kind(&mut config, "project", "del-proj")
             .expect("delete project resource"));
     }

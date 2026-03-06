@@ -23,7 +23,7 @@ impl Resource for DefaultsResource {
         super::validate_resource_name(self.name())
     }
 
-    fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+    fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
         use crate::crd::projection::CrdProjectable;
         let incoming = ConfigDefaults {
             project: self.spec.project.clone(),
@@ -31,7 +31,7 @@ impl Resource for DefaultsResource {
             workflow: self.spec.workflow.clone(),
         };
         let spec_value = incoming.to_cr_spec();
-        super::apply_to_store(config, "Defaults", "defaults", &self.metadata, spec_value)
+        Ok(super::apply_to_store(config, "Defaults", "defaults", &self.metadata, spec_value))
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -98,9 +98,9 @@ mod tests {
         let mut config = make_config();
         let r1 =
             dispatch_resource(defaults_manifest("p", "w", "f")).expect("dispatch should succeed");
-        r1.apply(&mut config);
+        r1.apply(&mut config).expect("apply");
         // Apply same again -> unchanged
-        assert_eq!(r1.apply(&mut config), ApplyResult::Unchanged);
+        assert_eq!(r1.apply(&mut config).expect("apply"), ApplyResult::Unchanged);
     }
 
     #[test]
@@ -108,11 +108,11 @@ mod tests {
         let mut config = make_config();
         let r1 = dispatch_resource(defaults_manifest("p1", "w1", "f1"))
             .expect("dispatch should succeed");
-        r1.apply(&mut config);
+        r1.apply(&mut config).expect("apply");
 
         let r2 = dispatch_resource(defaults_manifest("p2", "w2", "f2"))
             .expect("dispatch should succeed");
-        assert_eq!(r2.apply(&mut config), ApplyResult::Configured);
+        assert_eq!(r2.apply(&mut config).expect("apply"), ApplyResult::Configured);
     }
 
     #[test]

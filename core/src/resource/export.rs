@@ -199,14 +199,14 @@ mod tests {
         // Add one of each
         let ws = dispatch_resource(workspace_manifest("exp-ws", "workspace/exp"))
             .expect("dispatch export workspace");
-        ws.apply(&mut config);
+        ws.apply(&mut config).expect("apply");
         let ag = dispatch_resource(agent_manifest("exp-ag", "cmd")).expect("dispatch export agent");
-        ag.apply(&mut config);
+        ag.apply(&mut config).expect("apply");
         let wf = dispatch_resource(workflow_manifest("exp-wf")).expect("dispatch export workflow");
-        wf.apply(&mut config);
+        wf.apply(&mut config).expect("apply");
         let pr =
             dispatch_resource(project_manifest("exp-pr", "d")).expect("dispatch export project");
-        pr.apply(&mut config);
+        pr.apply(&mut config).expect("apply");
 
         // Add EnvStore and SecretStore
         config.env_stores.insert(
@@ -241,7 +241,7 @@ mod tests {
         let mut config = make_config();
         let ws = dispatch_resource(workspace_manifest("doc-ws", "workspace/doc"))
             .expect("dispatch doc workspace");
-        ws.apply(&mut config);
+        ws.apply(&mut config).expect("apply");
 
         let docs = export_manifest_documents(&config);
         assert!(!docs.is_empty());
@@ -383,13 +383,13 @@ mod tests {
         let mut config = make_config();
         let ws = dispatch_resource(workspace_manifest("map-ws", "workspace/map"))
             .expect("dispatch workspace");
-        ws.apply(&mut config);
+        ws.apply(&mut config).expect("apply");
         let ag = dispatch_resource(agent_manifest("map-ag", "cmd")).expect("dispatch agent");
-        ag.apply(&mut config);
+        ag.apply(&mut config).expect("apply");
         let wf = dispatch_resource(workflow_manifest("map-wf")).expect("dispatch workflow");
-        wf.apply(&mut config);
+        wf.apply(&mut config).expect("apply");
         let pr = dispatch_resource(project_manifest("map-pr", "d")).expect("dispatch project");
-        pr.apply(&mut config);
+        pr.apply(&mut config).expect("apply");
 
         config.env_stores.insert(
             "test-config".to_string(),
@@ -463,7 +463,7 @@ mod tests {
             }),
         };
         let rr = dispatch_resource(resource).expect("dispatch labeled workspace");
-        rr.apply(&mut config);
+        rr.apply(&mut config).expect("apply");
 
         let exported = export_manifest_resources(&config);
         let ws = exported.iter().find(|r| r.name() == "labeled-ws");

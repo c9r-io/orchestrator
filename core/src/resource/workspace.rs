@@ -30,11 +30,11 @@ impl Resource for WorkspaceResource {
         Ok(())
     }
 
-    fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+    fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
         use crate::crd::projection::CrdProjectable;
         let incoming = workspace_spec_to_config(&self.spec);
         let spec_value = incoming.to_cr_spec();
-        super::apply_to_store(config, "Workspace", self.name(), &self.metadata, spec_value)
+        Ok(super::apply_to_store(config, "Workspace", self.name(), &self.metadata, spec_value))
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -116,7 +116,7 @@ mod tests {
         let resource =
             dispatch_resource(workspace_manifest("ws-roundtrip", "workspace/ws-roundtrip"))
                 .expect("workspace dispatch should succeed");
-        assert_eq!(resource.apply(&mut config), ApplyResult::Created);
+        assert_eq!(resource.apply(&mut config).expect("apply"), ApplyResult::Created);
 
         let loaded = WorkspaceResource::get_from(&config, "ws-roundtrip")
             .expect("workspace should be present in config");
@@ -199,7 +199,7 @@ mod tests {
             }),
         };
         let rr = dispatch_resource(resource).expect("dispatch workspace resource");
-        rr.apply(&mut config);
+        rr.apply(&mut config).expect("apply");
         assert!(config.resource_store.get("Workspace", "meta-ws").is_some());
 
         WorkspaceResource::delete_from(&mut config, "meta-ws");
@@ -269,7 +269,7 @@ mod tests {
             }),
         };
         let rr = dispatch_resource(resource).expect("dispatch workspace resource");
-        rr.apply(&mut config);
+        rr.apply(&mut config).expect("apply");
 
         let cr = config
             .resource_store

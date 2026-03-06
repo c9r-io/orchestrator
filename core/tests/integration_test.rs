@@ -146,7 +146,7 @@ fn apply_creates_new_workspace_in_config() {
     assert_eq!(registered.name(), "new-ws");
     registered.validate().expect("should be valid");
 
-    let result = registered.apply(&mut config);
+    let result = registered.apply(&mut config).expect("apply");
     assert_eq!(result, ApplyResult::Created);
     assert!(config.workspaces.contains_key("new-ws"));
     assert_eq!(config.workspaces["new-ws"].root_path, "workspace/new-ws");
@@ -159,14 +159,14 @@ fn apply_updates_existing_workspace() {
     let v1 =
         parse_resources_from_yaml(&workspace_yaml("default", "workspace/v1")).expect("parse v1");
     let r1 = dispatch_resource(only(v1)).expect("dispatch v1");
-    let result = r1.apply(&mut config);
+    let result = r1.apply(&mut config).expect("apply");
     assert_eq!(result, ApplyResult::Configured);
     assert_eq!(config.workspaces["default"].root_path, "workspace/v1");
 
     let v2 =
         parse_resources_from_yaml(&workspace_yaml("default", "workspace/v2")).expect("parse v2");
     let r2 = dispatch_resource(only(v2)).expect("dispatch v2");
-    let result = r2.apply(&mut config);
+    let result = r2.apply(&mut config).expect("apply");
     assert_eq!(result, ApplyResult::Configured);
     assert_eq!(config.workspaces["default"].root_path, "workspace/v2");
 }
@@ -178,7 +178,7 @@ fn apply_returns_unchanged_for_identical_resource() {
 
     let resources = parse_resources_from_yaml(&yaml).expect("parse identical resource");
     let registered = dispatch_resource(only(resources)).expect("dispatch identical resource");
-    let result = registered.apply(&mut config);
+    let result = registered.apply(&mut config).expect("apply");
     assert_eq!(result, ApplyResult::Unchanged);
 }
 
@@ -189,7 +189,7 @@ fn apply_preserves_unmentioned_resources() {
     let yaml = workspace_yaml("new-ws", "workspace/new-ws");
     let resources = parse_resources_from_yaml(&yaml).expect("parse new workspace resource");
     let registered = dispatch_resource(only(resources)).expect("dispatch new workspace");
-    registered.apply(&mut config);
+    registered.apply(&mut config).expect("apply");
 
     assert!(config.workspaces.contains_key("default"));
     assert!(config.workspaces.contains_key("new-ws"));
@@ -227,7 +227,7 @@ fn multi_document_apply_all_to_config() {
     for resource in resources {
         let registered = dispatch_resource(resource).expect("dispatch multi resource");
         registered.validate().expect("validate multi resource");
-        registered.apply(&mut config);
+        registered.apply(&mut config).expect("apply");
     }
 
     assert!(config.workspaces.contains_key("ws-extra"));
@@ -343,7 +343,7 @@ fn apply_then_delete_roundtrip() {
     let yaml = agent_yaml("temp-agent", "echo temp");
     let resources = parse_resources_from_yaml(&yaml).expect("parse temp agent");
     let registered = dispatch_resource(only(resources)).expect("dispatch temp agent");
-    assert_eq!(registered.apply(&mut config), ApplyResult::Created);
+    assert_eq!(registered.apply(&mut config).expect("apply"), ApplyResult::Created);
     assert!(config.agents.contains_key("temp-agent"));
 
     let deleted =
@@ -358,7 +358,7 @@ fn resource_to_yaml_roundtrip() {
     let yaml = workspace_yaml("roundtrip-ws", "workspace/roundtrip");
     let resources = parse_resources_from_yaml(&yaml).expect("parse roundtrip workspace");
     let registered = dispatch_resource(only(resources)).expect("dispatch roundtrip workspace");
-    registered.apply(&mut config);
+    registered.apply(&mut config).expect("apply");
 
     let exported = registered.to_yaml().expect("should serialize to yaml");
     assert!(exported.contains("apiVersion: orchestrator.dev/v2"));
@@ -391,7 +391,7 @@ spec:
 
     let resources = parse_resources_from_yaml(yaml).expect("parse labeled workspace");
     let registered = dispatch_resource(only(resources)).expect("dispatch labeled workspace");
-    assert_eq!(registered.apply(&mut config), ApplyResult::Created);
+    assert_eq!(registered.apply(&mut config).expect("apply"), ApplyResult::Created);
 
     let cr = config
         .resource_store
@@ -486,7 +486,7 @@ spec:
     let resources = parse_resources_from_yaml(yaml).expect("should parse");
     let registered = dispatch_resource(only(resources)).expect("dispatch self workspace");
     let mut config = minimal_config();
-    registered.apply(&mut config);
+    registered.apply(&mut config).expect("apply");
 
     let ws = config.workspaces.get("self-ws").expect("workspace missing");
     assert!(ws.self_referential, "self_referential should be true");
@@ -930,7 +930,7 @@ fn sdlc_full_pipeline_workflow_parses_from_fixture() {
     let mut config = minimal_config();
     for resource in resources {
         let registered = dispatch_resource(resource).expect("dispatch fixture resource");
-        registered.apply(&mut config);
+        registered.apply(&mut config).expect("apply");
     }
 
     let workflow = config

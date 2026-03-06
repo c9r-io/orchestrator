@@ -48,7 +48,7 @@ pub trait Resource: Sized {
     fn kind(&self) -> ResourceKind;
     fn name(&self) -> &str;
     fn validate(&self) -> Result<()>;
-    fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult;
+    fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult>;
     fn to_yaml(&self) -> Result<String>;
     fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self>;
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool;
@@ -295,7 +295,7 @@ pub fn apply_to_project(
     resource: &RegisteredResource,
     config: &mut OrchestratorConfig,
     project: &str,
-) -> ApplyResult {
+) -> Result<ApplyResult> {
     use crate::config::ProjectConfig;
 
     let project_entry = config
@@ -311,16 +311,15 @@ pub fn apply_to_project(
     match resource {
         RegisteredResource::Agent(agent) => {
             let incoming = agent::agent_spec_to_config(&agent.spec);
-            apply_to_map(&mut project_entry.agents, agent.name(), incoming)
+            Ok(apply_to_map(&mut project_entry.agents, agent.name(), incoming))
         }
         RegisteredResource::Workflow(workflow) => {
-            let incoming = workflow::workflow_spec_to_config(&workflow.spec)
-                .expect("validated workflow spec must be convertible");
-            apply_to_map(&mut project_entry.workflows, workflow.name(), incoming)
+            let incoming = workflow::workflow_spec_to_config(&workflow.spec)?;
+            Ok(apply_to_map(&mut project_entry.workflows, workflow.name(), incoming))
         }
         RegisteredResource::Workspace(ws) => {
             let incoming = workspace::workspace_spec_to_config(&ws.spec);
-            apply_to_map(&mut project_entry.workspaces, ws.name(), incoming)
+            Ok(apply_to_map(&mut project_entry.workspaces, ws.name(), incoming))
         }
         // Singletons and other types always go to global config
         _ => resource.apply(config),
@@ -372,7 +371,7 @@ impl Resource for RegisteredResource {
         }
     }
 
-    fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+    fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
         match self {
             Self::Workspace(resource) => resource.apply(config),
             Self::Agent(resource) => resource.apply(config),
@@ -565,7 +564,7 @@ mod tests {
 
         let resource = dispatch_resource(workspace_manifest("fresh-ws", "workspace/fresh"))
             .expect("dispatch should succeed");
-        let result = resource.apply(&mut config);
+        let result = resource.apply(&mut config).expect("apply");
 
         assert_eq!(result, ApplyResult::Created);
         assert!(config.workspaces.contains_key("fresh-ws"));
@@ -582,8 +581,8 @@ mod tests {
 
         let resource = dispatch_resource(workspace_manifest("same-ws", "workspace/same"))
             .expect("dispatch should succeed");
-        assert_eq!(resource.apply(&mut config), ApplyResult::Created);
-        assert_eq!(resource.apply(&mut config), ApplyResult::Unchanged);
+        assert_eq!(resource.apply(&mut config).expect("apply"), ApplyResult::Created);
+        assert_eq!(resource.apply(&mut config).expect("apply"), ApplyResult::Unchanged);
     }
 
     #[test]
@@ -597,11 +596,11 @@ mod tests {
 
         let initial = dispatch_resource(workspace_manifest("change-ws", "workspace/v1"))
             .expect("dispatch should succeed");
-        assert_eq!(initial.apply(&mut config), ApplyResult::Created);
+        assert_eq!(initial.apply(&mut config).expect("apply"), ApplyResult::Created);
 
         let updated = dispatch_resource(workspace_manifest("change-ws", "workspace/v2"))
             .expect("dispatch should succeed");
-        assert_eq!(updated.apply(&mut config), ApplyResult::Configured);
+        assert_eq!(updated.apply(&mut config).expect("apply"), ApplyResult::Configured);
     }
 
     // ── RegisteredResource dispatch delegation ─────────────────────────
@@ -731,7 +730,7 @@ mod tests {
         let mut config = make_config();
         let ws = dispatch_resource(workspace_manifest("rd-ws", "workspace/rd"))
             .expect("dispatch delete ws");
-        ws.apply(&mut config);
+        ws.apply(&mut config).expect("apply");
         assert!(RegisteredResource::delete_from(&mut config, "rd-ws"));
         assert!(!config.workspaces.contains_key("rd-ws"));
     }
@@ -740,7 +739,7 @@ mod tests {
     fn registered_resource_delete_from_removes_agent() {
         let mut config = make_config();
         let ag = dispatch_resource(agent_manifest("rd-ag", "cmd")).expect("dispatch delete agent");
-        ag.apply(&mut config);
+        ag.apply(&mut config).expect("apply");
         assert!(RegisteredResource::delete_from(&mut config, "rd-ag"));
         assert!(!config.agents.contains_key("rd-ag"));
     }
@@ -749,7 +748,7 @@ mod tests {
     fn registered_resource_delete_from_removes_workflow() {
         let mut config = make_config();
         let wf = dispatch_resource(workflow_manifest("rd-wf")).expect("dispatch delete workflow");
-        wf.apply(&mut config);
+        wf.apply(&mut config).expect("apply");
         assert!(RegisteredResource::delete_from(&mut config, "rd-wf"));
         assert!(!config.workflows.contains_key("rd-wf"));
     }
@@ -759,7 +758,7 @@ mod tests {
         let mut config = make_config();
         let pr =
             dispatch_resource(project_manifest("rd-pr", "d")).expect("dispatch delete project");
-        pr.apply(&mut config);
+        pr.apply(&mut config).expect("apply");
         assert!(RegisteredResource::delete_from(&mut config, "rd-pr"));
         assert!(!config.projects.contains_key("rd-pr"));
     }
@@ -1253,7 +1252,7 @@ mod apply_to_project_tests {
         let mut config = make_config();
         let resource =
             dispatch_resource(agent_manifest("proj-ag", "echo test")).expect("dispatch agent");
-        let result = apply_to_project(&resource, &mut config, "my-qa");
+        let result = apply_to_project(&resource, &mut config, "my-qa").expect("apply");
 
         assert_eq!(result, ApplyResult::Created);
         assert!(config.projects.contains_key("my-qa"));
@@ -1267,7 +1266,7 @@ mod apply_to_project_tests {
         let mut config = make_config();
         let resource = dispatch_resource(workspace_manifest("proj-ws", "workspace/proj"))
             .expect("dispatch ws");
-        let result = apply_to_project(&resource, &mut config, "my-qa");
+        let result = apply_to_project(&resource, &mut config, "my-qa").expect("apply");
 
         assert_eq!(result, ApplyResult::Created);
         assert!(config.projects["my-qa"].workspaces.contains_key("proj-ws"));
@@ -1279,7 +1278,7 @@ mod apply_to_project_tests {
     fn apply_to_project_routes_workflow_to_project_scope() {
         let mut config = make_config();
         let resource = dispatch_resource(workflow_manifest("proj-wf")).expect("dispatch wf");
-        let result = apply_to_project(&resource, &mut config, "my-qa");
+        let result = apply_to_project(&resource, &mut config, "my-qa").expect("apply");
 
         assert_eq!(result, ApplyResult::Created);
         assert!(config.projects["my-qa"].workflows.contains_key("proj-wf"));
@@ -1294,7 +1293,7 @@ mod apply_to_project_tests {
 
         let resource =
             dispatch_resource(agent_manifest("auto-ag", "echo auto")).expect("dispatch agent");
-        apply_to_project(&resource, &mut config, "auto-proj");
+        apply_to_project(&resource, &mut config, "auto-proj").expect("apply");
 
         assert!(config.projects.contains_key("auto-proj"));
     }
@@ -1306,11 +1305,11 @@ mod apply_to_project_tests {
             dispatch_resource(agent_manifest("dup-ag", "echo dup")).expect("dispatch agent");
 
         assert_eq!(
-            apply_to_project(&resource, &mut config, "dup-proj"),
+            apply_to_project(&resource, &mut config, "dup-proj").expect("apply"),
             ApplyResult::Created
         );
         assert_eq!(
-            apply_to_project(&resource, &mut config, "dup-proj"),
+            apply_to_project(&resource, &mut config, "dup-proj").expect("apply"),
             ApplyResult::Unchanged
         );
     }
@@ -1322,7 +1321,7 @@ mod apply_to_project_tests {
         let resource =
             dispatch_resource(defaults_manifest("p", "w", "f")).expect("dispatch defaults");
         // Singletons fall through to global apply
-        let result = apply_to_project(&resource, &mut config, "proj-singleton");
+        let result = apply_to_project(&resource, &mut config, "proj-singleton").expect("apply");
         assert!(matches!(
             result,
             ApplyResult::Created | ApplyResult::Configured | ApplyResult::Unchanged

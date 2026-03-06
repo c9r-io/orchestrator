@@ -23,7 +23,7 @@ impl Resource for ProjectResource {
         super::validate_resource_name(self.name())
     }
 
-    fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+    fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
         use crate::crd::projection::CrdProjectable;
         let incoming = ProjectConfig {
             description: self.spec.description.clone(),
@@ -32,7 +32,7 @@ impl Resource for ProjectResource {
             workflows: std::collections::HashMap::new(),
         };
         let spec_value = incoming.to_cr_spec();
-        super::apply_to_store(config, "Project", self.name(), &self.metadata, spec_value)
+        Ok(super::apply_to_store(config, "Project", self.name(), &self.metadata, spec_value))
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -111,8 +111,8 @@ mod tests {
         let mut config = make_config();
         let resource =
             dispatch_resource(project_manifest("proj-a", "desc")).expect("dispatch should succeed");
-        assert_eq!(resource.apply(&mut config), ApplyResult::Created);
-        assert_eq!(resource.apply(&mut config), ApplyResult::Unchanged);
+        assert_eq!(resource.apply(&mut config).expect("apply"), ApplyResult::Created);
+        assert_eq!(resource.apply(&mut config).expect("apply"), ApplyResult::Unchanged);
     }
 
     #[test]
@@ -120,11 +120,11 @@ mod tests {
         let mut config = make_config();
         let r1 =
             dispatch_resource(project_manifest("proj-b", "v1")).expect("dispatch should succeed");
-        assert_eq!(r1.apply(&mut config), ApplyResult::Created);
+        assert_eq!(r1.apply(&mut config).expect("apply"), ApplyResult::Created);
 
         let r2 =
             dispatch_resource(project_manifest("proj-b", "v2")).expect("dispatch should succeed");
-        assert_eq!(r2.apply(&mut config), ApplyResult::Configured);
+        assert_eq!(r2.apply(&mut config).expect("apply"), ApplyResult::Configured);
     }
 
     #[test]
@@ -132,7 +132,7 @@ mod tests {
         let mut config = make_config();
         let resource = dispatch_resource(project_manifest("proj-del", "desc"))
             .expect("dispatch should succeed");
-        resource.apply(&mut config);
+        resource.apply(&mut config).expect("apply");
 
         let loaded = ProjectResource::get_from(&config, "proj-del");
         let loaded = loaded.expect("project resource should load after apply");

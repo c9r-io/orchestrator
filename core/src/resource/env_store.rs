@@ -24,14 +24,14 @@ impl Resource for EnvStoreResource {
         Ok(())
     }
 
-    fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+    fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
         use crate::crd::projection::CrdProjectable;
         let incoming = EnvStoreConfig {
             data: self.spec.data.clone(),
             sensitive: false,
         };
         let spec_value = incoming.to_cr_spec();
-        super::apply_to_store(config, "EnvStore", self.name(), &self.metadata, spec_value)
+        Ok(super::apply_to_store(config, "EnvStore", self.name(), &self.metadata, spec_value))
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -103,7 +103,7 @@ mod tests {
     fn env_store_apply_and_get() {
         let mut config = make_config();
         let store = make_env_store("my-env");
-        assert_eq!(store.apply(&mut config), ApplyResult::Created);
+        assert_eq!(store.apply(&mut config).expect("apply"), ApplyResult::Created);
 
         let loaded =
             EnvStoreResource::get_from(&config, "my-env").expect("env store should be present");
@@ -115,15 +115,15 @@ mod tests {
     fn env_store_apply_unchanged() {
         let mut config = make_config();
         let store = make_env_store("es-unchanged");
-        assert_eq!(store.apply(&mut config), ApplyResult::Created);
-        assert_eq!(store.apply(&mut config), ApplyResult::Unchanged);
+        assert_eq!(store.apply(&mut config).expect("apply"), ApplyResult::Created);
+        assert_eq!(store.apply(&mut config).expect("apply"), ApplyResult::Unchanged);
     }
 
     #[test]
     fn env_store_delete() {
         let mut config = make_config();
         let store = make_env_store("es-del");
-        store.apply(&mut config);
+        store.apply(&mut config).expect("apply");
         assert!(EnvStoreResource::delete_from(&mut config, "es-del"));
         assert!(EnvStoreResource::get_from(&config, "es-del").is_none());
     }

@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-#![cfg_attr(not(test), deny(clippy::panic, clippy::unwrap_used))]
+#![cfg_attr(not(test), deny(clippy::panic, clippy::unwrap_used, clippy::expect_used))]
 
 // Binary-only modules (stay as mod)
 mod cli;
@@ -237,9 +237,9 @@ fn run_apply_preflight(
                 let effective_project = project.or_else(|| registered.metadata_project());
 
                 let result = if let Some(proj) = effective_project {
-                    apply_to_project(&registered, &mut merged_config, proj)
+                    apply_to_project(&registered, &mut merged_config, proj)?
                 } else {
-                    registered.apply(&mut merged_config)
+                    registered.apply(&mut merged_config)?
                 };
                 applied_results.push(result);
                 let action = match result {
@@ -398,7 +398,7 @@ fn run_manifest_validate_preflight(app_root: &Path, file: &str) -> Result<i32> {
                     has_errors = true;
                     continue;
                 }
-                registered.apply(&mut merged_config);
+                registered.apply(&mut merged_config)?;
             }
             ParsedManifest::Crd(crd_manifest) => {
                 if let Err(error) = crd::apply_crd(&mut merged_config, crd_manifest) {

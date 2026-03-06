@@ -27,14 +27,14 @@ impl Resource for StepTemplateResource {
         Ok(())
     }
 
-    fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+    fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
         use crate::crd::projection::CrdProjectable;
         let incoming = StepTemplateConfig {
             prompt: self.spec.prompt.clone(),
             description: self.spec.description.clone(),
         };
         let spec_value = incoming.to_cr_spec();
-        super::apply_to_store(config, "StepTemplate", self.name(), &self.metadata, spec_value)
+        Ok(super::apply_to_store(config, "StepTemplate", self.name(), &self.metadata, spec_value))
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -128,8 +128,8 @@ mod tests {
         let mut config = make_config();
         let resource = dispatch_resource(step_template_manifest("plan", "You are a planner."))
             .expect("dispatch should succeed");
-        assert_eq!(resource.apply(&mut config), ApplyResult::Created);
-        assert_eq!(resource.apply(&mut config), ApplyResult::Unchanged);
+        assert_eq!(resource.apply(&mut config).expect("apply"), ApplyResult::Created);
+        assert_eq!(resource.apply(&mut config).expect("apply"), ApplyResult::Unchanged);
     }
 
     #[test]
@@ -137,10 +137,10 @@ mod tests {
         let mut config = make_config();
         let r1 = dispatch_resource(step_template_manifest("plan", "v1"))
             .expect("dispatch should succeed");
-        assert_eq!(r1.apply(&mut config), ApplyResult::Created);
+        assert_eq!(r1.apply(&mut config).expect("apply"), ApplyResult::Created);
         let r2 = dispatch_resource(step_template_manifest("plan", "v2"))
             .expect("dispatch should succeed");
-        assert_eq!(r2.apply(&mut config), ApplyResult::Configured);
+        assert_eq!(r2.apply(&mut config).expect("apply"), ApplyResult::Configured);
     }
 
     #[test]
@@ -148,7 +148,7 @@ mod tests {
         let mut config = make_config();
         let resource = dispatch_resource(step_template_manifest("plan", "prompt text"))
             .expect("dispatch should succeed");
-        resource.apply(&mut config);
+        resource.apply(&mut config).expect("apply");
 
         let loaded = StepTemplateResource::get_from(&config, "plan");
         let loaded = loaded.expect("should be found after apply");

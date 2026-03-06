@@ -17,6 +17,7 @@ use crate::state::InnerState;
 use anyhow::{anyhow, Result};
 use std::sync::{Arc, OnceLock};
 
+#[allow(clippy::expect_used)] // tokio runtime creation failure is unrecoverable; no meaningful fallback
 pub(super) fn cli_runtime() -> &'static tokio::runtime::Runtime {
     static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
     RUNTIME.get_or_init(|| {

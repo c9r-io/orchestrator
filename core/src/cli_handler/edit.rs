@@ -147,7 +147,7 @@ impl CliHandler {
                 continue;
             }
 
-            let result = registered.apply(&mut merged_config);
+            let result = registered.apply(&mut merged_config)?;
             let merged_yaml = serde_yml::to_string(&merged_config)
                 .context("failed to serialize edited configuration")?;
             persist_config_and_reload(&self.state, merged_config, merged_yaml, "cli")?;
@@ -206,7 +206,7 @@ impl CliHandler {
             let active = read_active_config(&self.state)?;
             active.config.clone()
         };
-        let result = registered.apply(&mut merged_config);
+        let result = registered.apply(&mut merged_config)?;
         let merged_yaml = serde_yml::to_string(&merged_config)
             .context("failed to serialize updated configuration")?;
         persist_config_and_reload(&self.state, merged_config, merged_yaml, "cli")?;

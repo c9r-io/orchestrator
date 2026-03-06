@@ -24,7 +24,7 @@ impl Resource for SecretStoreResource {
         Ok(())
     }
 
-    fn apply(&self, config: &mut OrchestratorConfig) -> ApplyResult {
+    fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
         use crate::crd::projection::{CrdProjectable, SecretStoreProjection};
         let incoming = EnvStoreConfig {
             data: self.spec.data.clone(),
@@ -32,7 +32,7 @@ impl Resource for SecretStoreResource {
         };
         let proj = SecretStoreProjection(incoming);
         let spec_value = proj.to_cr_spec();
-        super::apply_to_store(config, "SecretStore", self.name(), &self.metadata, spec_value)
+        Ok(super::apply_to_store(config, "SecretStore", self.name(), &self.metadata, spec_value))
     }
 
     fn to_yaml(&self) -> Result<String> {
@@ -104,7 +104,7 @@ mod tests {
     fn secret_store_apply_and_get() {
         let mut config = make_config();
         let store = make_secret_store("my-secrets");
-        assert_eq!(store.apply(&mut config), ApplyResult::Created);
+        assert_eq!(store.apply(&mut config).expect("apply"), ApplyResult::Created);
 
         let loaded = SecretStoreResource::get_from(&config, "my-secrets")
             .expect("secret store should be present");
@@ -119,15 +119,15 @@ mod tests {
     fn secret_store_apply_unchanged() {
         let mut config = make_config();
         let store = make_secret_store("ss-unchanged");
-        assert_eq!(store.apply(&mut config), ApplyResult::Created);
-        assert_eq!(store.apply(&mut config), ApplyResult::Unchanged);
+        assert_eq!(store.apply(&mut config).expect("apply"), ApplyResult::Created);
+        assert_eq!(store.apply(&mut config).expect("apply"), ApplyResult::Unchanged);
     }
 
     #[test]
     fn secret_store_delete() {
         let mut config = make_config();
         let store = make_secret_store("ss-del");
-        store.apply(&mut config);
+        store.apply(&mut config).expect("apply");
         assert!(SecretStoreResource::delete_from(&mut config, "ss-del"));
         assert!(SecretStoreResource::get_from(&config, "ss-del").is_none());
     }
