@@ -1705,3 +1705,372 @@ fn test_validate_workflow_finalize_rule_whitespace_when_rejected() {
     let result = validate_workflow_finalize_rule(&rule, "wf1");
     assert!(result.is_err());
 }
+
+// ── CEL context coverage: exercise all StepPrehookContext variables ──
+
+fn make_prehook_ctx() -> StepPrehookContext {
+    StepPrehookContext {
+        task_id: "task-1".to_string(),
+        task_item_id: "item-1".to_string(),
+        cycle: 2,
+        step: "qa_testing".to_string(),
+        qa_file_path: "docs/qa/test.md".to_string(),
+        item_status: "pending".to_string(),
+        task_status: "running".to_string(),
+        qa_exit_code: Some(1),
+        fix_exit_code: Some(0),
+        retest_exit_code: Some(2),
+        active_ticket_count: 3,
+        new_ticket_count: 1,
+        qa_failed: true,
+        fix_required: true,
+        qa_confidence: Some(0.85),
+        qa_quality_score: Some(0.9),
+        fix_has_changes: Some(true),
+        upstream_artifacts: vec![],
+        build_error_count: 2,
+        test_failure_count: 3,
+        build_exit_code: Some(0),
+        test_exit_code: Some(1),
+        self_test_exit_code: Some(0),
+        self_test_passed: true,
+        max_cycles: 3,
+        is_last_cycle: false,
+        self_referential_safe: true,
+    }
+}
+
+#[test]
+fn test_prehook_cel_context_cycle_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("cycle == 2", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_max_cycles_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("max_cycles == 3", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_is_last_cycle_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("is_last_cycle == false", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_step_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("step == 'qa_testing'", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_qa_file_path_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("qa_file_path == 'docs/qa/test.md'", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_item_status_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("item_status == 'pending'", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_task_status_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("task_status == 'running'", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_build_errors_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("build_errors == 2", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_test_failures_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("test_failures == 3", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_build_exit_code_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("build_exit_code == 0", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_test_exit_code_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("test_exit_code == 1", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_self_referential_safe_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("self_referential_safe == true", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_task_id_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("task_id == 'task-1'", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_task_item_id_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("task_item_id == 'item-1'", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_fix_required_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("fix_required == true", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_retest_exit_code_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("retest_exit_code == 2", &ctx);
+    assert!(result.unwrap());
+}
+
+// ── CEL finalize context coverage: exercise ItemFinalizeContext variables ──
+
+fn make_finalize_ctx() -> ItemFinalizeContext {
+    ItemFinalizeContext {
+        task_id: "task-1".to_string(),
+        task_item_id: "item-1".to_string(),
+        cycle: 2,
+        qa_file_path: "docs/qa/test.md".to_string(),
+        item_status: "pending".to_string(),
+        task_status: "running".to_string(),
+        qa_exit_code: Some(1),
+        fix_exit_code: Some(0),
+        retest_exit_code: Some(0),
+        active_ticket_count: 2,
+        new_ticket_count: 1,
+        retest_new_ticket_count: 0,
+        qa_failed: true,
+        fix_required: true,
+        qa_configured: true,
+        qa_observed: true,
+        qa_enabled: true,
+        qa_ran: true,
+        qa_skipped: false,
+        fix_configured: true,
+        fix_enabled: true,
+        fix_ran: true,
+        fix_skipped: false,
+        fix_success: true,
+        retest_enabled: true,
+        retest_ran: true,
+        retest_success: false,
+        qa_confidence: Some(0.85),
+        qa_quality_score: Some(0.9),
+        fix_confidence: Some(0.7),
+        fix_quality_score: Some(0.8),
+        total_artifacts: 5,
+        has_ticket_artifacts: true,
+        has_code_change_artifacts: true,
+        is_last_cycle: false,
+    }
+}
+
+#[test]
+fn test_finalize_cel_context_qa_configured_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "qa_configured == true", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_qa_observed_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "qa_observed == true", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_qa_enabled_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "qa_enabled == true", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_qa_ran_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "qa_ran == true", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_qa_skipped_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "qa_skipped == false", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_fix_configured_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "fix_configured == true", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_fix_enabled_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "fix_enabled == true", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_fix_ran_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "fix_ran == true", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_fix_skipped_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "fix_skipped == false", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_fix_success_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "fix_success == true", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_retest_enabled_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "retest_enabled == true", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_retest_ran_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "retest_ran == true", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_retest_success_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "retest_success == false", "unresolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_retest_new_ticket_count_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "retest_new_ticket_count == 0", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_is_last_cycle_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "is_last_cycle == false", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+// ── resolve_workflow_finalize_outcome tests ────────────────────────
+
+#[test]
+fn test_resolve_finalize_outcome_empty_rules() {
+    let config = WorkflowFinalizeConfig { rules: vec![] };
+    let ctx = make_finalize_ctx();
+    let result = resolve_workflow_finalize_outcome(&config, &ctx).unwrap();
+    assert!(result.is_none());
+}
+
+#[test]
+fn test_resolve_finalize_outcome_first_matching_rule_wins() {
+    let config = WorkflowFinalizeConfig {
+        rules: vec![
+            make_rule("r1", "qa_failed == true", "unresolved", None),
+            make_rule("r2", "qa_failed == true", "resolved", None),
+        ],
+    };
+    let ctx = make_finalize_ctx();
+    let outcome = resolve_workflow_finalize_outcome(&config, &ctx).unwrap().unwrap();
+    assert_eq!(outcome.rule_id, "r1");
+    assert_eq!(outcome.status, "unresolved");
+}
+
+#[test]
+fn test_resolve_finalize_outcome_skips_non_matching_rules() {
+    let config = WorkflowFinalizeConfig {
+        rules: vec![
+            make_rule("r1", "qa_failed == false", "skipped", None),
+            make_rule("r2", "qa_failed == true", "unresolved", None),
+        ],
+    };
+    let ctx = make_finalize_ctx();
+    let outcome = resolve_workflow_finalize_outcome(&config, &ctx).unwrap().unwrap();
+    assert_eq!(outcome.rule_id, "r2");
+    assert_eq!(outcome.status, "unresolved");
+}
+
+#[test]
+fn test_resolve_finalize_outcome_custom_reason() {
+    let config = WorkflowFinalizeConfig {
+        rules: vec![make_rule(
+            "r1",
+            "qa_failed == true",
+            "unresolved",
+            Some("QA detected failures"),
+        )],
+    };
+    let ctx = make_finalize_ctx();
+    let outcome = resolve_workflow_finalize_outcome(&config, &ctx).unwrap().unwrap();
+    assert_eq!(outcome.reason, "QA detected failures");
+}
+
+#[test]
+fn test_resolve_finalize_outcome_default_reason() {
+    let config = WorkflowFinalizeConfig {
+        rules: vec![make_rule("r1", "qa_failed == true", "unresolved", None)],
+    };
+    let ctx = make_finalize_ctx();
+    let outcome = resolve_workflow_finalize_outcome(&config, &ctx).unwrap().unwrap();
+    assert_eq!(outcome.reason, "finalize rule 'r1' matched");
+}
+
+#[test]
+fn test_resolve_finalize_outcome_no_rules_match() {
+    let config = WorkflowFinalizeConfig {
+        rules: vec![
+            make_rule("r1", "qa_failed == false", "resolved", None),
+            make_rule("r2", "active_ticket_count == 0", "resolved", None),
+        ],
+    };
+    let ctx = make_finalize_ctx();
+    let result = resolve_workflow_finalize_outcome(&config, &ctx).unwrap();
+    assert!(result.is_none());
+}

@@ -215,4 +215,141 @@ mod tests {
         let back: StoreEntry = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(back.key, "bench_001");
     }
+
+    #[test]
+    fn store_op_all_variants_debug() {
+        let variants: Vec<StoreOp> = vec![
+            StoreOp::Get {
+                store_name: "s".into(),
+                project_id: "p".into(),
+                key: "k".into(),
+            },
+            StoreOp::Put {
+                store_name: "s".into(),
+                project_id: "p".into(),
+                key: "k".into(),
+                value: "v".into(),
+                task_id: "t".into(),
+            },
+            StoreOp::Delete {
+                store_name: "s".into(),
+                project_id: "p".into(),
+                key: "k".into(),
+            },
+            StoreOp::List {
+                store_name: "s".into(),
+                project_id: "p".into(),
+                limit: 10,
+                offset: 0,
+            },
+            StoreOp::Prune {
+                store_name: "s".into(),
+                project_id: "p".into(),
+                max_entries: Some(100),
+                ttl_days: Some(30),
+            },
+        ];
+        for op in &variants {
+            let debug = format!("{:?}", op);
+            assert!(!debug.is_empty());
+        }
+    }
+
+    #[test]
+    fn store_op_result_serde_round_trip_value() {
+        let result = StoreOpResult::Value(Some(serde_json::json!("hello")));
+        let json = serde_json::to_string(&result).expect("serialize");
+        let back: StoreOpResult = serde_json::from_str(&json).expect("deserialize");
+        match back {
+            StoreOpResult::Value(Some(v)) => assert_eq!(v, serde_json::json!("hello")),
+            _ => panic!("expected Value(Some)"),
+        }
+    }
+
+    #[test]
+    fn store_op_result_serde_round_trip_none() {
+        let result = StoreOpResult::Value(None);
+        let json = serde_json::to_string(&result).expect("serialize");
+        let back: StoreOpResult = serde_json::from_str(&json).expect("deserialize");
+        match back {
+            StoreOpResult::Value(None) => {}
+            _ => panic!("expected Value(None)"),
+        }
+    }
+
+    #[test]
+    fn store_op_result_serde_round_trip_entries() {
+        let result = StoreOpResult::Entries(vec![StoreEntry {
+            key: "k1".to_string(),
+            value: serde_json::json!(42),
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+        }]);
+        let json = serde_json::to_string(&result).expect("serialize");
+        let back: StoreOpResult = serde_json::from_str(&json).expect("deserialize");
+        match back {
+            StoreOpResult::Entries(entries) => {
+                assert_eq!(entries.len(), 1);
+                assert_eq!(entries[0].key, "k1");
+            }
+            _ => panic!("expected Entries"),
+        }
+    }
+
+    #[test]
+    fn store_op_result_serde_round_trip_ok() {
+        let result = StoreOpResult::Ok;
+        let json = serde_json::to_string(&result).expect("serialize");
+        let back: StoreOpResult = serde_json::from_str(&json).expect("deserialize");
+        assert!(matches!(back, StoreOpResult::Ok));
+    }
+
+    // ── resolve_store_config tests ──
+
+    use crate::test_utils::TestState;
+
+    fn make_store_manager() -> StoreManager {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        StoreManager::new(
+            state.async_database.clone(),
+            std::path::PathBuf::from("/tmp"),
+        )
+    }
+
+    #[test]
+    fn resolve_store_config_returns_default_when_not_found() {
+        let mgr = make_store_manager();
+        let cr = HashMap::new();
+        let config = mgr.resolve_store_config(&cr, "nonexistent");
+        assert_eq!(config.provider, "local");
+    }
+
+    // ── resolve_provider tests ──
+
+    #[test]
+    fn resolve_provider_builtin_local() {
+        let mgr = make_store_manager();
+        let cr = HashMap::new();
+        let provider = mgr.resolve_provider(&cr, "local").unwrap();
+        assert!(provider.builtin);
+        assert!(provider.commands.is_none());
+    }
+
+    #[test]
+    fn resolve_provider_builtin_file() {
+        let mgr = make_store_manager();
+        let cr = HashMap::new();
+        let provider = mgr.resolve_provider(&cr, "file").unwrap();
+        assert!(provider.builtin);
+    }
+
+    #[test]
+    fn resolve_provider_unknown_custom_not_found() {
+        let mgr = make_store_manager();
+        let cr = HashMap::new();
+        let result = mgr.resolve_provider(&cr, "my_custom_provider");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not found"));
+    }
+
 }

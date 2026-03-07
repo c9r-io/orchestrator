@@ -303,4 +303,156 @@ mod tests {
         assert!(evaluate_invariant_assertion("exit_code != 0", 1, ""));
         assert!(!evaluate_invariant_assertion("exit_code != 0", 0, ""));
     }
+
+    #[test]
+    fn test_has_rollback_violation() {
+        let results = vec![
+            InvariantResult {
+                name: "ok".to_string(),
+                passed: true,
+                message: String::new(),
+                on_violation: OnViolation::Rollback,
+            },
+            InvariantResult {
+                name: "bad".to_string(),
+                passed: false,
+                message: "regression".to_string(),
+                on_violation: OnViolation::Rollback,
+            },
+        ];
+        assert!(has_rollback_violation(&results));
+    }
+
+    #[test]
+    fn test_no_rollback_violation_when_all_pass() {
+        let results = vec![InvariantResult {
+            name: "ok".to_string(),
+            passed: true,
+            message: String::new(),
+            on_violation: OnViolation::Rollback,
+        }];
+        assert!(!has_rollback_violation(&results));
+    }
+
+    #[test]
+    fn test_no_rollback_violation_when_halt() {
+        let results = vec![InvariantResult {
+            name: "bad".to_string(),
+            passed: false,
+            message: "failed".to_string(),
+            on_violation: OnViolation::Halt,
+        }];
+        assert!(!has_rollback_violation(&results));
+    }
+
+    #[test]
+    fn test_has_halting_violation_empty_results() {
+        assert!(!has_halting_violation(&[]));
+    }
+
+    #[test]
+    fn test_has_rollback_violation_empty_results() {
+        assert!(!has_rollback_violation(&[]));
+    }
+
+    #[test]
+    fn test_evaluate_assertion_unsupported_expression() {
+        // Unsupported expression defaults to exit_code == 0
+        assert!(evaluate_invariant_assertion("some_unknown_thing", 0, ""));
+        assert!(!evaluate_invariant_assertion("some_unknown_thing", 1, ""));
+    }
+
+    #[test]
+    fn test_evaluate_assertion_invalid_number() {
+        // Invalid parse in exit_code == should default to exit_code == 0
+        assert!(evaluate_invariant_assertion("exit_code == abc", 0, ""));
+        assert!(!evaluate_invariant_assertion("exit_code == abc", 1, ""));
+    }
+
+    #[test]
+    fn test_evaluate_assertion_whitespace_handling() {
+        assert!(evaluate_invariant_assertion("  exit_code == 0  ", 0, ""));
+    }
+
+    #[test]
+    fn test_invariant_no_command_passes() {
+        let inv = make_invariant("no_cmd", None);
+        let result = run_single_invariant(&inv, Path::new("/tmp")).expect("run invariant");
+        assert!(result.passed);
+        assert!(result.message.is_empty());
+    }
+
+    #[test]
+    fn test_evaluate_invariants_empty_list() {
+        let results = evaluate_invariants(&[], InvariantCheckPoint::BeforeCycle, Path::new("/tmp"))
+            .expect("evaluate");
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_evaluate_invariants_all_matching_checkpoints() {
+        let inv1 = InvariantConfig {
+            check_at: vec![InvariantCheckPoint::BeforeCycle],
+            ..make_invariant("inv1", Some("true"))
+        };
+        let inv2 = InvariantConfig {
+            check_at: vec![InvariantCheckPoint::BeforeCycle],
+            ..make_invariant("inv2", Some("true"))
+        };
+        let results = evaluate_invariants(
+            &[inv1, inv2],
+            InvariantCheckPoint::BeforeCycle,
+            Path::new("/tmp"),
+        )
+        .expect("evaluate");
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn test_invariant_with_assert_expr_passing() {
+        let inv = InvariantConfig {
+            assert_expr: Some("exit_code == 0".to_string()),
+            ..make_invariant("assert_pass", Some("true"))
+        };
+        let result = run_single_invariant(&inv, Path::new("/tmp")).expect("run invariant");
+        assert!(result.passed);
+    }
+
+    #[test]
+    fn test_invariant_with_assert_expr_failing() {
+        let inv = InvariantConfig {
+            assert_expr: Some("exit_code != 0".to_string()),
+            ..make_invariant("assert_fail", Some("true"))
+        };
+        let result = run_single_invariant(&inv, Path::new("/tmp")).expect("run invariant");
+        assert!(!result.passed);
+        assert!(result.message.contains("assertion failed"));
+    }
+
+    #[test]
+    fn test_invariant_command_error_reported() {
+        let inv = make_invariant("bad_cmd", Some("/nonexistent/binary/xyz_12345"));
+        let result = run_single_invariant(&inv, Path::new("/tmp")).expect("run invariant");
+        assert!(!result.passed);
+        // Command itself fails to execute (not just non-zero exit)
+        // On macOS sh -c with a bad binary returns exit 127, which doesn't match expect_exit=0
+        assert!(!result.message.is_empty());
+    }
+
+    #[test]
+    fn test_file_matches_pattern_no_wildcard_exact() {
+        assert!(file_matches_pattern("main.rs", "main.rs"));
+        assert!(!file_matches_pattern("other.rs", "main.rs"));
+    }
+
+    #[test]
+    fn test_invariant_on_violation_preserved() {
+        let inv = InvariantConfig {
+            on_violation: OnViolation::Warn,
+            ..make_invariant("warn_inv", Some("false"))
+        };
+        let result = run_single_invariant(&inv, Path::new("/tmp")).expect("run invariant");
+        assert!(!result.passed);
+        assert_eq!(result.on_violation, OnViolation::Warn);
+    }
 }

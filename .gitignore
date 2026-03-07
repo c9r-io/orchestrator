@@ -11,3 +11,5 @@ data/
 .playwright-cli
 .playwright-mcp
 docs/workflow/minimax-secret.yaml
+.stable.json
+output.json
