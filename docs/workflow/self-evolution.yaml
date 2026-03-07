@@ -1,0 +1,351 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: self
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+  self_referential: true
+---
+# ── Step Templates ──────────────────────────────────────────────────────
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: evo_plan
+spec:
+  description: "Generate multiple candidate approaches for the goal"
+  prompt: >-
+    You are working on the Agent Orchestrator project at {source_tree}.
+    Your task: create 2 competing implementation plans for: {goal}.
+
+    Use /arch-guidance — read docs/architecture.md first.
+    Use /rust-conventions for coding patterns.
+
+    Output a JSON object with exactly this structure:
+    {
+      "analysis": "<brief problem analysis>",
+      "candidates": [
+        {
+          "id": "approach-a",
+          "name": "<short name>",
+          "description": "<1-sentence summary>",
+          "strategy": "<detailed approach>",
+          "risk": "<main risk>",
+          "estimated_complexity": "<low|medium|high>"
+        },
+        {
+          "id": "approach-b",
+          "name": "<short name>",
+          "description": "<1-sentence summary>",
+          "strategy": "<detailed approach>",
+          "risk": "<main risk>",
+          "estimated_complexity": "<low|medium|high>"
+        }
+      ]
+    }
+
+    Design TWO meaningfully different approaches. Do NOT create trivial variants.
+    One approach should favor simplicity/minimal change, the other should favor
+    thoroughness/correctness. Both must be viable.
+
+    Current diff in this cycle: {diff}
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: evo_implement
+spec:
+  description: "Implement a single candidate approach on its own branch"
+  prompt: >-
+    You are working on the Agent Orchestrator project at {source_tree}.
+
+    Use /rust-conventions for all Rust code.
+    Use /test-authoring — add unit tests for new logic.
+
+    You are implementing candidate: {item_label}
+    Approach description: {approach}
+    Strategy: {strategy}
+
+    Implement this approach. Follow the strategy exactly.
+    After writing code, run 'cd {source_tree}/core && cargo check' to verify compilation.
+
+    IMPORTANT: Keep changes minimal and focused. This is a competitive evaluation —
+    your implementation will be scored against an alternative approach.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: evo_benchmark
+spec:
+  description: "Benchmark a candidate implementation"
+  prompt: >-
+    You are evaluating candidate: {item_label} at {source_tree}.
+
+    Run the following checks and produce a score:
+
+    1. Compilation: cd {source_tree}/core && cargo check 2>&1
+    2. Tests: cd {source_tree}/core && cargo test --lib 2>&1
+    3. Clippy: cd {source_tree}/core && cargo clippy 2>&1
+    4. Diff size: git diff --stat
+
+    Score criteria (0-100):
+    - Compilation passes: +30
+    - All tests pass: +30
+    - No clippy warnings: +15
+    - Diff is focused (< 200 lines changed): +15
+    - Code clarity (subjective): +10
+
+    Output a JSON object:
+    {
+      "candidate": "{item_label}",
+      "compilation": true/false,
+      "tests_pass": true/false,
+      "clippy_clean": true/false,
+      "diff_lines": <number>,
+      "total_score": <0-100>,
+      "notes": "<brief evaluation>"
+    }
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: evo_apply_winner
+spec:
+  description: "Apply the winning candidate and finalize"
+  prompt: >-
+    You are working on the Agent Orchestrator project at {source_tree}.
+
+    The evolutionary selection has chosen a winner.
+    Winner data: {prev_winner}
+
+    Your job:
+    1. Ensure the winning approach's code is cleanly applied
+    2. Run 'cd {source_tree}/core && cargo test --lib' to confirm
+    3. Clean up any artifacts from the losing candidate
+    4. Run 'cd {source_tree}/core && cargo clippy -- -D warnings' for final check
+
+    Do NOT add new features or refactor beyond what the winner implemented.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: evo_align_tests
+spec:
+  description: "Final test alignment after winner is applied"
+  prompt: >-
+    /align-tests
+
+    Run unit tests, analyze failures caused by the recent changes,
+    update tests and/or implementation to align, iterate until stable.
+    Also fix all clippy warnings and compilation warnings.
+---
+# ── Agents ──────────────────────────────────────────────────────────────
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: evo_architect
+  description: "architect agent — generates competing candidate plans"
+spec:
+  capabilities:
+    - plan
+    - evaluate
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-opus
+    - fromRef: minimax
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: evo_coder
+  description: "coder agent — implements and benchmarks candidates"
+spec:
+  capabilities:
+    - implement
+    - qa_testing
+    - align_tests
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-sonnet
+    - fromRef: minimax
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: evo_reviewer
+  description: "reviewer agent — loop guard"
+spec:
+  capabilities:
+    - loop_guard
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-haiku
+    - fromRef: minimax
+---
+# ── Workflow ────────────────────────────────────────────────────────────
+#
+# Self-Evolution Workflow
+#
+# Unlike self-bootstrap (linear 2-cycle), this workflow uses WP03 Dynamic Items
+# + Selection to explore multiple candidate approaches in parallel, then selects
+# the best one via automated benchmarking.
+#
+# Pipeline:
+#   evo_plan (task) ─── generate_items ──► evo_implement (item x2) ──► evo_benchmark (item x2)
+#        │                                        │                          │
+#        │                                   parallel fan-out           captures score
+#        │                                                                   │
+#        └─────────────────────────────────────── select_best (task) ◄───────┘
+#                                                      │
+#                                                 store winner
+#                                                      │
+#                                              evo_apply_winner (task)
+#                                                      │
+#                                              evo_align_tests (task)
+#                                                      │
+#                                               self_test (builtin)
+#                                                      │
+#                                              loop_guard (builtin)
+#
+# Cost controls vs self-bootstrap:
+#   - 1 cycle only (no loop) — evolution replaces iteration
+#   - 2 candidates (not 3+) — sufficient for A/B comparison
+#   - max_parallel: 1 — sequential candidate execution to limit concurrency cost
+#   - No qa_testing/ticket_fix/doc_governance — focused on code evolution only
+#   - No self_restart — single-cycle, no binary rebuild needed
+#
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: self-evolution
+spec:
+  max_parallel: 1  # cost control: run candidates sequentially
+
+  steps:
+    # ── Phase 1: Generate candidate approaches ──
+    - id: evo_plan
+      type: plan
+      scope: task
+      required_capability: plan
+      template: evo_plan
+      enabled: true
+      repeatable: false
+      tty: false
+      behavior:
+        post_actions:
+          - type: generate_items
+            from_var: plan_output
+            json_path: "$.candidates"
+            mapping:
+              item_id: "$.id"
+              label: "$.name"
+              vars:
+                approach: "$.description"
+                strategy: "$.strategy"
+            replace: true
+
+    # ── Phase 2: Implement each candidate (item-scoped, parallel fan-out) ──
+    - id: evo_implement
+      type: implement
+      scope: item
+      required_capability: implement
+      template: evo_implement
+      enabled: true
+      repeatable: false
+      tty: false
+
+    # ── Phase 3: Benchmark each candidate (item-scoped) ──
+    - id: evo_benchmark
+      type: qa_testing
+      scope: item
+      required_capability: qa_testing
+      template: evo_benchmark
+      enabled: true
+      repeatable: false
+      tty: false
+      behavior:
+        captures:
+          - var: score
+            source: exit_code
+
+    # ── Phase 4: Select winner ──
+    - id: select_best
+      type: item_select
+      scope: task
+      enabled: true
+      repeatable: false
+      builtin: item_select
+      item_select_config:
+        strategy: max
+        metric_var: score
+        store_result:
+          namespace: evolution
+          key: winner_latest
+
+    # ── Phase 5: Apply winner and finalize ──
+    - id: evo_apply_winner
+      type: implement
+      scope: task
+      required_capability: implement
+      template: evo_apply_winner
+      enabled: true
+      repeatable: false
+      tty: false
+      store_inputs:
+        - store: evolution
+          key: winner_latest
+          as_var: prev_winner
+
+    - id: evo_align_tests
+      type: align_tests
+      scope: task
+      required_capability: align_tests
+      template: evo_align_tests
+      enabled: true
+      repeatable: true
+      tty: false
+
+    # Self-Test — cargo check + cargo test --lib + manifest validate (builtin)
+    - id: self_test
+      type: self_test
+      scope: task
+      builtin: self_test
+      enabled: true
+      repeatable: true
+      tty: false
+
+    # Loop guard (builtin, always last)
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+
+  # Single cycle — evolution replaces iteration
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+    stop_when_no_unresolved: false
+
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: true
+    checkpoint_strategy: git_tag
+    # Invariant: core must compile at completion
+    invariants:
+      - name: compilation_gate
+        command: "cd core && cargo check 2>&1"
+        expect_exit: 0
+        check_at:
+          - before_complete
+        on_violation: halt
+    # No spawning in this workflow
+    max_spawn_depth: 0
+    max_spawned_tasks: 0

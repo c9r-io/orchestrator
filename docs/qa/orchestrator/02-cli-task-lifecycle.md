@@ -52,6 +52,10 @@ rm -rf "workspace/${QA_PROJECT}"
 ./scripts/regression/run-cli-probes.sh --group task-create
 ```
 
+| Symptom | Likely Cause | Fix |
+|---|---|---|
+| `item-scoped` or `task-scoped` times out on first run but passes on retry | SQLite WAL contention between consecutive probe scenarios | Re-run the group; the inter-scenario cooldown (commit `85a5954`) prevents this in most cases |
+
 For manual verification, verify `task create --project <project> ...` target resolution using the fixed probe fixtures:
 
 1. For the task-scoped workflow on the populated workspace:
