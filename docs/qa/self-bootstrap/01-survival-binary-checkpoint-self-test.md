@@ -47,6 +47,8 @@ QA_PROJECT="qa-survival"
 | Task uses global workspace instead of project workspace | No `--workspace` flag and global default doesn't match project | Fixed: auto-resolves to project's single workspace when not specified |
 | "EMPTY_WORKFLOWS" error with project-only config | Global workflow check didn't account for project-scoped workflows | Fixed: validation now checks `has_project_workflows` |
 | "defaults.workflow does not exist" with project-only config | A global base config with at least one workflow/workspace/agent must exist before applying project-scoped resources | Apply `echo-workflow.yaml` (or any base fixture) first |
+| `orchestrator.sh` appears to hang after `[orchestrator] restart requested (exit 75)` | **Not a hang.** The `self_restart` step triggers exit 75; `orchestrator.sh` relaunches the binary which resumes the task in cycle 2. The `self_restart` step has `repeatable: false` so it is skipped on cycle 2, and the process exits normally. Total wall time ≈ 2× a single cycle. | Wait for the full run to complete. If testing restart behavior specifically, call the binary directly (bypassing `orchestrator.sh`) and verify exit code 75 on cycle 1, then re-run `task start <TASK_ID>` to observe cycle 2 completing with exit 0. |
+| `task create` via `orchestrator.sh` creates duplicate tasks | `orchestrator.sh` passes `"$@"` on restart, so `task create` re-runs after exit 75, creating a second task | Use `task create` via the binary directly (`core/target/release/agent-orchestrator task create ...`), then start with `orchestrator.sh task start <TASK_ID>`, or use `task create` + separate `task start` calls |
 
 ---
 
@@ -65,14 +67,24 @@ Verify that a `.stable` binary copy is created at the start of each cycle when b
    ```bash
    rm -f .stable
    ```
-2. Create and start a task using the `self-bootstrap` workflow:
+2. Create a task (use the binary directly to avoid duplicate-task on restart):
    ```bash
-   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workflow self-bootstrap --goal "test binary snapshot"
-   TASK_ID=$(./scripts/orchestrator.sh task list "${QA_PROJECT}" --json | jq -r '.[0].id')
-   ./scripts/orchestrator.sh task start "${QA_PROJECT}" "${TASK_ID}"
+   BINARY="core/target/release/agent-orchestrator"
+   $BINARY task create --project "${QA_PROJECT}" --workflow self-bootstrap --goal "test binary snapshot"
+   TASK_ID=$($BINARY task list -s restart_pending -o json 2>/dev/null | jq -r '.[0].id // empty')
+   # If task auto-started and exited 75, it is now restart_pending.
+   # If still pending, start it via orchestrator.sh which handles the restart loop:
+   [ -z "$TASK_ID" ] && TASK_ID=$($BINARY task list -s pending -o json 2>/dev/null | jq -r '.[0].id')
    ```
-3. Wait for the first cycle to begin (checkpoint_created event).
-4. Query events for `binary_snapshot_created`.
+3. Start (or resume) the task — `orchestrator.sh` handles exit-75 restart automatically:
+   ```bash
+   ./scripts/orchestrator.sh task start "${TASK_ID}"
+   ```
+   > **Note**: The process will exit 75 once (cycle 1 `self_restart`), relaunch,
+   > then complete normally on cycle 2 (`self_restart` skipped via `repeatable: false`).
+   > This is expected behavior, not a hang. Total wall time ≈ 2× a single cycle.
+4. Wait for the first cycle to begin (checkpoint_created event).
+5. Query events for `binary_snapshot_created`.
 
 ### Expected
 - `.stable` file exists in the workspace root
