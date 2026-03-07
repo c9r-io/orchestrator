@@ -40,3 +40,17 @@
 ```bash
 ./core/target/release/agent-orchestrator <command>
 ```
+
+## Claude Code Skill（面向 AI Agent）
+
+本指南的精简版以 Claude Code Skill 形式提供，安装后 Claude 将自动掌握编排器的配置与命令知识：
+
+```bash
+/install-skill skills/orchestrator-guide.skill
+```
+
+安装后，Claude 在处理编排器清单、工作流、CEL 表达式或 CLI 命令时会自动参考该指南。
+
+## English Version / 英文版
+
+See [../README.md](../README.md) for the English version of this guide.

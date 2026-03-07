@@ -35,14 +35,22 @@ All commands use the wrapper script:
 ./scripts/orchestrator.sh <command>
 ```
 
-## Chinese Version / 中文版
-
-See [zh/README.md](zh/README.md) for the full Chinese translation of this guide.
-
-## Binary Entry Point
-
 Or the binary directly:
 
 ```bash
 ./core/target/release/agent-orchestrator <command>
 ```
+
+## Claude Code Skill (for AI Agents)
+
+A condensed, agent-optimized version of this guide is available as a Claude Code Skill. Install it to give Claude deep knowledge of orchestrator configuration and commands:
+
+```bash
+/install-skill skills/orchestrator-guide.skill
+```
+
+Once installed, Claude will automatically reference the guide when working with orchestrator manifests, workflows, CEL expressions, or CLI commands.
+
+## Chinese Version / 中文版
+
+See [zh/README.md](zh/README.md) for the full Chinese translation of this guide.
