@@ -425,6 +425,8 @@ mod tests {
                     max_parallel: None,
                     timeout_secs: None,
                     item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 },
                 WorkflowStepConfig {
                     id: "self_test_recover".to_string(),
@@ -447,6 +449,8 @@ mod tests {
                     max_parallel: None,
                     timeout_secs: None,
                     item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {
@@ -498,6 +502,8 @@ mod tests {
                     max_parallel: None,
                     timeout_secs: None,
                     item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 },
                 WorkflowStepConfig {
                     id: "implement_phase_two".to_string(),
@@ -520,6 +526,8 @@ mod tests {
                     max_parallel: None,
                     timeout_secs: None,
                     item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {
@@ -571,6 +579,8 @@ mod tests {
                     max_parallel: None,
                     timeout_secs: None,
                     item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 },
                 WorkflowStepConfig {
                     id: "duplicate_step".to_string(),
@@ -593,6 +603,8 @@ mod tests {
                     max_parallel: None,
                     timeout_secs: None,
                     item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {
@@ -649,6 +661,8 @@ mod tests {
                 max_parallel: None,
                 timeout_secs: None,
                 item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             }],
             loop_policy: crate::config::WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -703,6 +717,8 @@ mod tests {
                     max_parallel: None,
                     timeout_secs: None,
                     item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 },
                 WorkflowStepConfig {
                     id: "self_test".to_string(),
@@ -725,6 +741,8 @@ mod tests {
                     max_parallel: None,
                     timeout_secs: None,
                     item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 },
             ],
             loop_policy: crate::config::WorkflowLoopConfig {

@@ -5,8 +5,8 @@ use std::sync::Arc;
 use super::{
     default_scope_for_step_id, is_known_builtin_step_name, AgentConfig, CostPreference,
     ExecutionMode, InvariantConfig, ItemSelectConfig, OrchestratorConfig, PipelineVariables,
-    SafetyConfig, StepBehavior, StepPrehookConfig, StepScope, WorkflowConfig,
-    WorkflowFinalizeConfig, WorkflowLoopConfig,
+    SafetyConfig, StepBehavior, StepPrehookConfig, StepScope, StoreInputConfig, StoreOutputConfig,
+    WorkflowConfig, WorkflowFinalizeConfig, WorkflowLoopConfig,
 };
 
 fn default_true() -> bool {
@@ -63,6 +63,12 @@ pub struct TaskExecutionStep {
     /// WP03: Configuration for item_select builtin step
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_select_config: Option<ItemSelectConfig>,
+    /// Store inputs: read values from workflow stores before step execution
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub store_inputs: Vec<StoreInputConfig>,
+    /// Store outputs: write pipeline vars to workflow stores after step execution
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub store_outputs: Vec<StoreOutputConfig>,
 }
 
 impl TaskExecutionStep {
@@ -322,6 +328,8 @@ mod tests {
             max_parallel: None,
             timeout_secs: None,
             item_select_config: None,
+            store_inputs: vec![],
+            store_outputs: vec![],
         }
     }
 
@@ -347,6 +355,8 @@ mod tests {
             max_parallel: None,
             timeout_secs: None,
             item_select_config: None,
+            store_inputs: vec![],
+            store_outputs: vec![],
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -373,6 +383,8 @@ mod tests {
             max_parallel: None,
             timeout_secs: None,
             item_select_config: None,
+            store_inputs: vec![],
+            store_outputs: vec![],
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -399,6 +411,8 @@ mod tests {
             max_parallel: None,
             timeout_secs: None,
             item_select_config: None,
+            store_inputs: vec![],
+            store_outputs: vec![],
         };
         assert_eq!(step.resolved_scope(), StepScope::Task);
     }
@@ -427,6 +441,8 @@ mod tests {
                     max_parallel: None,
                     timeout_secs: None,
                     item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 },
                 TaskExecutionStep {
                     id: "qa".to_string(),
@@ -448,6 +464,8 @@ mod tests {
                     max_parallel: None,
                     timeout_secs: None,
                     item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 },
             ],
             loop_policy: WorkflowLoopConfig::default(),

@@ -1,14 +1,17 @@
 use crate::config::{
-    ExecutionMode, OnFailureAction, PipelineVariables, TaskExecutionStep, TaskRuntimeContext,
+    ExecutionMode, OnFailureAction, PipelineVariables, StoreInputConfig, TaskExecutionStep,
+    TaskRuntimeContext,
 };
 use crate::events::insert_event;
 use crate::prehook::evaluate_step_prehook;
 use crate::state::InnerState;
+use crate::store::{StoreOp, StoreOpResult};
 use crate::ticket::scan_active_tickets_for_task_items;
 use anyhow::Result;
 use serde_json::json;
 use std::collections::HashSet;
 use std::sync::Arc;
+use tracing::warn;
 
 use super::super::phase_runner::{
     run_phase, run_phase_with_rotation, PhaseRunRequest, RotatingPhaseRunRequest,
@@ -148,6 +151,11 @@ pub async fn process_item_filtered(
                 json!({"step": phase, "step_id": &step.id, "step_scope": step.resolved_scope(), "reason": "prehook_false"}),
             ).await?;
             continue;
+        }
+
+        // 1b. Resolve store_inputs
+        if !step.store_inputs.is_empty() {
+            resolve_store_inputs(state, &task_ctx.project_id, &step.store_inputs, acc).await?;
         }
 
         // 2. Execute
@@ -339,6 +347,28 @@ async fn execute_builtin_step_dispatch(
             ).await?;
 
             if exit_code == EXIT_RESTART {
+                // Invariant checkpoint: before_restart
+                let inv_results = crate::scheduler::invariant::evaluate_invariants(
+                    &task_ctx.pinned_invariants,
+                    crate::config::InvariantCheckPoint::BeforeRestart,
+                    &task_ctx.workspace_root,
+                );
+                if let Ok(ref results) = inv_results {
+                    for r in results {
+                        let event_type = if r.passed { "invariant_passed" } else { "invariant_violated" };
+                        let _ = insert_event(
+                            state, task_id, Some(item_id), event_type,
+                            json!({"invariant": r.name, "checkpoint": "BeforeRestart", "passed": r.passed, "message": r.message}),
+                        ).await;
+                    }
+                    if crate::scheduler::invariant::has_halting_violation(results) {
+                        warn!("invariant halt at before_restart — aborting restart");
+                        acc.step_ran.insert(step.id.clone(), true);
+                        acc.exit_codes.insert(step.id.clone(), exit_code as i64);
+                        return Ok(BuiltinStepOutcome::EarlyReturn);
+                    }
+                }
+
                 // Persist pipeline vars to DB before exit so the relaunched process recovers them.
                 if let Ok(json) = serde_json::to_string(&acc.pipeline_vars) {
                     if let Err(e) = state
@@ -386,6 +416,20 @@ async fn execute_builtin_step_dispatch(
                 "step_finished",
                 json!({"step": "ticket_scan", "step_scope": step.resolved_scope(), "tickets": acc.active_tickets.len()}),
             ).await?;
+            Ok(BuiltinStepOutcome::Handled)
+        }
+
+        ExecutionMode::Builtin { name } if name == "item_select" => {
+            // Selection orchestrated at loop_engine level; this is a marker step
+            acc.step_ran.insert(step.id.clone(), true);
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "step_finished",
+                json!({"step": phase, "step_scope": step.resolved_scope(), "builtin": "item_select"}),
+            )
+            .await?;
             Ok(BuiltinStepOutcome::Handled)
         }
 
@@ -786,6 +830,82 @@ async fn execute_dynamic_steps(
             "dynamic_step_finished",
             json!({"step_id": ds.id, "step_scope": "item", "exit_code": result.exit_code, "success": result.is_success()}),
         ).await?;
+    }
+
+    Ok(())
+}
+
+/// Resolve store_inputs: read values from workflow stores and inject into pipeline vars.
+async fn resolve_store_inputs(
+    state: &Arc<InnerState>,
+    project_id: &str,
+    inputs: &[StoreInputConfig],
+    acc: &mut StepExecutionAccumulator,
+) -> Result<()> {
+    let cr = state
+        .active_config
+        .read()
+        .map_err(|e| anyhow::anyhow!("config lock: {}", e))?
+        .config
+        .custom_resources
+        .clone();
+
+    for input in inputs {
+        let result = state
+            .store_manager
+            .execute(
+                &cr,
+                StoreOp::Get {
+                    store_name: input.store.clone(),
+                    project_id: project_id.to_string(),
+                    key: input.key.clone(),
+                },
+            )
+            .await;
+
+        match result {
+            Ok(StoreOpResult::Value(Some(val))) => {
+                let val_str = match &val {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                };
+                acc.pipeline_vars
+                    .vars
+                    .insert(input.as_var.clone(), val_str);
+            }
+            Ok(StoreOpResult::Value(None)) => {
+                if input.required {
+                    anyhow::bail!(
+                        "store_input: required key '{}' not found in store '{}'",
+                        input.key,
+                        input.store
+                    );
+                }
+            }
+            Ok(_) => {
+                warn!(
+                    store = %input.store,
+                    key = %input.key,
+                    "store_input: unexpected result type"
+                );
+            }
+            Err(e) => {
+                if input.required {
+                    anyhow::bail!(
+                        "store_input: failed to read key '{}' from store '{}': {}",
+                        input.key,
+                        input.store,
+                        e
+                    );
+                }
+                warn!(
+                    error = %e,
+                    store = %input.store,
+                    key = %input.key,
+                    "store_input: read failed (non-required)"
+                );
+            }
+        }
     }
 
     Ok(())

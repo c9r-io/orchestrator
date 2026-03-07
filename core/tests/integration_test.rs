@@ -81,6 +81,8 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                         max_parallel: None,
                         timeout_secs: None,
                         item_select_config: None,
+                        store_inputs: vec![],
+                        store_outputs: vec![],
                     }],
                     loop_policy: WorkflowLoopConfig {
                         mode: LoopMode::Once,
@@ -603,6 +605,8 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             max_parallel: None,
                             timeout_secs: None,
                             item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
                         },
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
@@ -625,6 +629,8 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             max_parallel: None,
                             timeout_secs: None,
                             item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
                         },
                         WorkflowStepConfig {
                             id: "implement".to_string(),
@@ -647,6 +653,8 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             max_parallel: None,
                             timeout_secs: None,
                             item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
                         },
                         WorkflowStepConfig {
                             id: "qa_testing".to_string(),
@@ -669,6 +677,8 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             max_parallel: None,
                             timeout_secs: None,
                             item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
                         },
                         WorkflowStepConfig {
                             id: "ticket_fix".to_string(),
@@ -691,6 +701,8 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             max_parallel: None,
                             timeout_secs: None,
                             item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
                         },
                         WorkflowStepConfig {
                             id: "align_tests".to_string(),
@@ -713,6 +725,8 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             max_parallel: None,
                             timeout_secs: None,
                             item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
                         },
                         WorkflowStepConfig {
                             id: "doc_governance".to_string(),
@@ -735,6 +749,8 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             max_parallel: None,
                             timeout_secs: None,
                             item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
                         },
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
@@ -757,6 +773,8 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                             max_parallel: None,
                             timeout_secs: None,
                             item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
                         },
                     ],
                     loop_policy: WorkflowLoopConfig {
@@ -880,6 +898,8 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
                 max_parallel: None,
                 timeout_secs: None,
                 item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             },
             WorkflowStepConfig {
                 id: "align_tests".to_string(),
@@ -902,6 +922,8 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
                 max_parallel: None,
                 timeout_secs: None,
                 item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             },
         ],
         loop_policy: WorkflowLoopConfig {

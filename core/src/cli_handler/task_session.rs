@@ -160,6 +160,8 @@ impl CliHandler {
             max_parallel: None,
             timeout_secs: None,
             item_select_config: None,
+            store_inputs: vec![],
+            store_outputs: vec![],
         };
         plan.steps.insert(insert_idx, inserted_step);
 

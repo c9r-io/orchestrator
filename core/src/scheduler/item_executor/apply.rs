@@ -4,6 +4,7 @@ use crate::config::{
 use crate::events::insert_event;
 use crate::scheduler::spawn::{execute_spawn_task, execute_spawn_tasks, validate_spawn_depth};
 use crate::state::InnerState;
+use crate::store::StoreOp;
 use crate::ticket::{create_ticket_for_qa_failure, scan_active_tickets_for_task_items};
 use anyhow::Result;
 use serde_json::json;
@@ -168,9 +169,27 @@ pub(super) async fn apply_step_results(
                 // Buffer for application after segment completes
                 acc.pending_generate_items = Some(gen_action.clone());
             }
+            PostAction::StorePut {
+                store,
+                key,
+                from_var,
+            } => {
+                if let Some(value) = acc.pipeline_vars.vars.get(from_var).cloned() {
+                    if let Err(e) = execute_store_put(state, task_ctx, task_id, store, key, &value)
+                        .await
+                    {
+                        warn!(error = %e, store = %store, key = %key, "StorePut post-action failed");
+                    }
+                } else {
+                    warn!(from_var = %from_var, "StorePut: pipeline var not found");
+                }
+            }
             _ => {}
         }
     }
+
+    // Process store_outputs declarations
+    process_store_outputs(state, task_ctx, task_id, step, acc).await;
 
     // 6. Collect artifacts
     if step.behavior.collect_artifacts {
@@ -258,4 +277,66 @@ pub(super) async fn apply_step_results(
     }
 
     Ok(false)
+}
+
+/// Execute a single store put operation. Non-critical: logs on failure.
+async fn execute_store_put(
+    state: &Arc<InnerState>,
+    task_ctx: &TaskRuntimeContext,
+    task_id: &str,
+    store: &str,
+    key: &str,
+    value: &str,
+) -> Result<()> {
+    let cr = state
+        .active_config
+        .read()
+        .map_err(|e| anyhow::anyhow!("config lock: {}", e))?
+        .config
+        .custom_resources
+        .clone();
+    state
+        .store_manager
+        .execute(
+            &cr,
+            StoreOp::Put {
+                store_name: store.to_string(),
+                project_id: task_ctx.project_id.clone(),
+                key: key.to_string(),
+                value: value.to_string(),
+                task_id: task_id.to_string(),
+            },
+        )
+        .await?;
+    Ok(())
+}
+
+/// Process store_outputs declarations on a step, writing pipeline vars to stores.
+async fn process_store_outputs(
+    state: &Arc<InnerState>,
+    task_ctx: &TaskRuntimeContext,
+    task_id: &str,
+    step: &TaskExecutionStep,
+    acc: &StepExecutionAccumulator,
+) {
+    for output in &step.store_outputs {
+        if let Some(value) = acc.pipeline_vars.vars.get(&output.from_var) {
+            if let Err(e) =
+                execute_store_put(state, task_ctx, task_id, &output.store, &output.key, value).await
+            {
+                warn!(
+                    error = %e,
+                    store = %output.store,
+                    key = %output.key,
+                    "store_output write failed"
+                );
+            }
+        } else {
+            warn!(
+                from_var = %output.from_var,
+                store = %output.store,
+                "store_output: pipeline var not found"
+            );
+        }
+    }
 }

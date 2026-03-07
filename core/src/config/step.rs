@@ -87,6 +87,12 @@ pub enum PostAction {
     SpawnTasks(SpawnTasksAction),
     /// WP03: Generate dynamic task items from step output.
     GenerateItems(GenerateItemsAction),
+    /// WP01: Write a pipeline variable to a workflow store.
+    StorePut {
+        store: String,
+        key: String,
+        from_var: String,
+    },
 }
 
 /// How a step is executed.
@@ -432,6 +438,31 @@ mod tests {
             let scope: StepScope = serde_json::from_str(scope_str).expect("deserialize step scope");
             let json = serde_json::to_string(&scope).expect("serialize step scope");
             assert_eq!(&json, scope_str);
+        }
+    }
+
+    #[test]
+    fn test_post_action_store_put_serde_round_trip() {
+        let action = PostAction::StorePut {
+            store: "metrics".to_string(),
+            key: "bench_result".to_string(),
+            from_var: "qa_score".to_string(),
+        };
+        let json = serde_json::to_string(&action).expect("serialize StorePut");
+        assert!(json.contains("\"type\":\"store_put\""));
+        assert!(json.contains("\"store\":\"metrics\""));
+        assert!(json.contains("\"key\":\"bench_result\""));
+        assert!(json.contains("\"from_var\":\"qa_score\""));
+
+        let deserialized: PostAction =
+            serde_json::from_str(&json).expect("deserialize StorePut");
+        match deserialized {
+            PostAction::StorePut { store, key, from_var } => {
+                assert_eq!(store, "metrics");
+                assert_eq!(key, "bench_result");
+                assert_eq!(from_var, "qa_score");
+            }
+            _ => panic!("expected StorePut variant"),
         }
     }
 }

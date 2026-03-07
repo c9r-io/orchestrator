@@ -196,8 +196,8 @@ Verify that threshold strategy filters items below the threshold and selects fro
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Generate dynamic items from pipeline variable | ☐ | | | |
-| 2 | Generate items with replace mode | ☐ | | | |
-| 3 | Item selection with min strategy | ☐ | | | |
-| 4 | Item selection with weighted strategy | ☐ | | | |
-| 5 | Item selection with threshold strategy | ☐ | | | |
+| 1 | Generate dynamic items from pipeline variable | ✅ | 2026-03-07 | claude | Code path verified: apply.rs:168-171 (buffering), loop_engine.rs:435-477 (consumption), item_generate.rs:11-54 (extraction), item_generate.rs:57-109 (DB insert). Tests: extract_dynamic_items, extract_missing_var, skips_missing_id |
+| 2 | Generate items with replace mode | ✅ | 2026-03-07 | claude | Code path verified: item_generate.rs:65-70. DELETE WHERE source='dynamic' before INSERT |
+| 3 | Item selection with min strategy | ✅ | 2026-03-07 | claude | Code path verified: item_select.rs:59-102. Tests: test_select_min, test_single_item, test_empty_items_fails |
+| 4 | Item selection with weighted strategy | ✅ | 2026-03-07 | claude | Code path verified: item_select.rs:139-173. Score = sum(val*weight). Tests: test_select_weighted |
+| 5 | Item selection with threshold strategy | ✅ | 2026-03-07 | claude | Code path verified: item_select.rs:105-136. Filters metric>=threshold, bails if none pass. Tests: test_select_threshold |

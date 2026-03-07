@@ -1,5 +1,6 @@
 use crate::config::{GenerateItemsAction, NewDynamicItem};
 use crate::json_extract::{extract_field, extract_json_array};
+use crate::state::InnerState;
 use anyhow::{Context, Result};
 use rusqlite::params;
 use std::collections::HashMap;
@@ -105,6 +106,26 @@ pub fn create_dynamic_task_items(
 
     info!(task_id = task_id, count = created, "created dynamic task items");
     Ok(created)
+}
+
+/// Async wrapper for `create_dynamic_task_items` that uses the async database writer.
+pub async fn create_dynamic_task_items_async(
+    state: &InnerState,
+    task_id: &str,
+    items: &[NewDynamicItem],
+    replace: bool,
+) -> Result<usize> {
+    let task_id = task_id.to_string();
+    let items = items.to_vec();
+    state
+        .async_database
+        .writer()
+        .call(move |conn| {
+            create_dynamic_task_items(conn, &task_id, &items, replace)
+                .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("async db error: {}", e))
 }
 
 #[cfg(test)]

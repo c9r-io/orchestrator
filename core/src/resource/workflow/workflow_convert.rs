@@ -82,6 +82,8 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
                 max_parallel: step.max_parallel,
                 timeout_secs: step.timeout_secs,
                 item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             };
             normalize_step_execution_mode(&mut config_step).map_err(|e| anyhow!(e))?;
             Ok(config_step)
@@ -827,6 +829,8 @@ mod tests {
                     max_parallel: None,
                     timeout_secs: None,
                     item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 },
                 WorkflowStepConfig {
                     id: "qual".to_string(),
@@ -849,6 +853,8 @@ mod tests {
                     max_parallel: None,
                     timeout_secs: None,
                     item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 },
                 WorkflowStepConfig {
                     id: "bal".to_string(),
@@ -871,6 +877,8 @@ mod tests {
                     max_parallel: None,
                     timeout_secs: None,
                     item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 },
             ],
             loop_policy: WorkflowLoopConfig {
@@ -923,6 +931,8 @@ mod tests {
                 max_parallel: None,
                 timeout_secs: None,
                 item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Infinite,
@@ -988,6 +998,8 @@ mod tests {
                 max_parallel: None,
                 timeout_secs: None,
                 item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -1041,6 +1053,8 @@ mod tests {
                 max_parallel: None,
                 timeout_secs: None,
                 item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -1210,6 +1224,8 @@ mod tests {
                 max_parallel: None,
                 timeout_secs: None,
                 item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,

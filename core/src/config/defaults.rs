@@ -31,6 +31,8 @@ fn step_config(
         max_parallel: None,
         timeout_secs: None,
         item_select_config: None,
+        store_inputs: vec![],
+        store_outputs: vec![],
     }
 }
 

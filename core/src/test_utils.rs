@@ -103,6 +103,8 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                         max_parallel: None,
                         timeout_secs: None,
                         item_select_config: None,
+                        store_inputs: vec![],
+                        store_outputs: vec![],
                     }],
                     loop_policy: WorkflowLoopConfig {
                         mode: LoopMode::Once,

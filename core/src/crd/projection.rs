@@ -392,6 +392,8 @@ mod tests {
                     max_parallel: None,
                     timeout_secs: None,
                     item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 },
                 WorkflowStepConfig {
                     id: "self_test".to_string(),
@@ -414,6 +416,8 @@ mod tests {
                     max_parallel: None,
                     timeout_secs: None,
                     item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 },
             ],
             loop_policy: WorkflowLoopConfig {

@@ -147,6 +147,8 @@ mod tests {
                             max_parallel: None,
                             timeout_secs: None,
                             item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
                         },
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
@@ -170,6 +172,8 @@ mod tests {
                             max_parallel: None,
                             timeout_secs: None,
                             item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
                         },
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
@@ -193,6 +197,8 @@ mod tests {
                             max_parallel: None,
                             timeout_secs: None,
                             item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
                         },
                     ],
                     loop_policy: WorkflowLoopConfig {
@@ -299,12 +305,16 @@ mod tests {
                     max_parallel: None,
                     timeout_secs: None,
                     item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 }],
                 scope: None,
                 behavior: StepBehavior::default(),
                 max_parallel: None,
                 timeout_secs: None,
                 item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             }],
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
@@ -401,6 +411,8 @@ mod tests {
                             max_parallel: None,
                             timeout_secs: None,
                             item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
                         },
                         WorkflowStepConfig {
                             id: "qa_doc_gen".to_string(),
@@ -424,6 +436,8 @@ mod tests {
                             max_parallel: None,
                             timeout_secs: None,
                             item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
                         },
                         WorkflowStepConfig {
                             id: "loop_guard".to_string(),
@@ -447,6 +461,8 @@ mod tests {
                             max_parallel: None,
                             timeout_secs: None,
                             item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
                         },
                     ],
                     loop_policy: WorkflowLoopConfig {
@@ -701,6 +717,8 @@ mod tests {
                         max_parallel: None,
                         timeout_secs: None,
                         item_select_config: None,
+                        store_inputs: vec![],
+                        store_outputs: vec![],
                     },
                     WorkflowStepConfig {
                         id: "item_verify".to_string(),
@@ -723,6 +741,8 @@ mod tests {
                         max_parallel: None,
                         timeout_secs: None,
                         item_select_config: None,
+                        store_inputs: vec![],
+                        store_outputs: vec![],
                     },
                 ],
                 loop_policy: WorkflowLoopConfig {
@@ -827,6 +847,8 @@ mod tests {
                         max_parallel: None,
                         timeout_secs: None,
                         item_select_config: None,
+                        store_inputs: vec![],
+                        store_outputs: vec![],
                     },
                     WorkflowStepConfig {
                         id: "item_verify".to_string(),
@@ -849,6 +871,8 @@ mod tests {
                         max_parallel: None,
                         timeout_secs: None,
                         item_select_config: None,
+                        store_inputs: vec![],
+                        store_outputs: vec![],
                     },
                 ],
                 loop_policy: WorkflowLoopConfig {
@@ -961,6 +985,8 @@ mod tests {
                     max_parallel: None,
                     timeout_secs: None,
                     item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 }],
                 loop_policy: WorkflowLoopConfig {
                     mode: LoopMode::Fixed,

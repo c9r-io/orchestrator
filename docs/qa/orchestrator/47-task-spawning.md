@@ -212,8 +212,8 @@ SELECT workflow_id FROM tasks WHERE parent_task_id = '{parent_task_id}';
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Single task spawn via PostAction | ☐ | | | |
-| 2 | Batch task spawn from JSON pipeline variable | ☐ | | | |
-| 3 | Spawn depth limit enforcement | ☐ | | | |
-| 4 | Spawn inherits workspace and project | ☐ | | | |
-| 5 | Spawn with custom workflow override | ☐ | | | |
+| 1 | Single task spawn via PostAction | ✅ | 2026-03-07 | claude | Code path verified: spawn.rs:11-64, apply.rs:105-135. Unit tests: resolve_template, validate_spawn_depth |
+| 2 | Batch task spawn from JSON pipeline variable | ✅ | 2026-03-07 | claude | Code path verified: spawn.rs:67-148, apply.rs:136-167. max_tasks cap + per-item workflow override |
+| 3 | Spawn depth limit enforcement | ✅ | 2026-03-07 | claude | Code path verified: spawn.rs:151-165. Tests: at_limit, within_limit, no_limit |
+| 4 | Spawn inherits workspace and project | ✅ | 2026-03-07 | claude | Code path verified: spawn.rs:32-40. SpawnInherit defaults workspace=true, project=true |
+| 5 | Spawn with custom workflow override | ✅ | 2026-03-07 | claude | Code path verified: spawn.rs:24-27 (single), spawn.rs:94-99 (batch per-item) |

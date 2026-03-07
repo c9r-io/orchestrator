@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use super::{
     CostPreference, ItemSelectConfig, SafetyConfig, StepBehavior, StepPrehookConfig, StepScope,
-    WorkflowFinalizeConfig,
+    StoreInputConfig, StoreOutputConfig, WorkflowFinalizeConfig,
 };
 
 /// Workflow step configuration
@@ -57,6 +57,12 @@ pub struct WorkflowStepConfig {
     /// WP03: Configuration for item_select builtin step
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_select_config: Option<ItemSelectConfig>,
+    /// Store inputs: read values from workflow stores before step execution
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub store_inputs: Vec<StoreInputConfig>,
+    /// Store outputs: write pipeline vars to workflow stores after step execution
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub store_outputs: Vec<StoreOutputConfig>,
 }
 
 fn default_true() -> bool {
