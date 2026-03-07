@@ -89,8 +89,7 @@ mod tests {
     #[test]
     fn test_spawn_task_action_minimal() {
         let json = r#"{"goal": "improve {area}"}"#;
-        let action: SpawnTaskAction =
-            serde_json::from_str(json).expect("deserialize spawn task");
+        let action: SpawnTaskAction = serde_json::from_str(json).expect("deserialize spawn task");
         assert_eq!(action.goal, "improve {area}");
         assert!(action.workflow.is_none());
         assert!(action.inherit.workspace);
@@ -105,8 +104,7 @@ mod tests {
             "json_path": "$.goals",
             "mapping": {"goal": "$.description"}
         }"#;
-        let action: SpawnTasksAction =
-            serde_json::from_str(json).expect("deserialize spawn tasks");
+        let action: SpawnTasksAction = serde_json::from_str(json).expect("deserialize spawn tasks");
         assert_eq!(action.max_tasks, 5);
         assert!(action.queue);
         assert!(action.inherit.workspace);

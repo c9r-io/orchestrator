@@ -1857,7 +1857,10 @@ mod tests {
             .and_then(|v| v.as_str())
             .unwrap_or("");
         // Either a real sha256 or "unknown" — both are valid outcomes
-        assert!(!sha.is_empty(), "new_binary_sha256 should be present in event");
+        assert!(
+            !sha.is_empty(),
+            "new_binary_sha256 should be present in event"
+        );
     }
 
     #[tokio::test]
@@ -2037,15 +2040,24 @@ mod tests {
             serde_json::from_str(&event_payload).expect("parse payload");
 
         assert!(
-            payload.get("old_binary_sha256").and_then(|v| v.as_str()).is_some(),
+            payload
+                .get("old_binary_sha256")
+                .and_then(|v| v.as_str())
+                .is_some(),
             "self_restart_ready event should contain old_binary_sha256"
         );
         assert!(
-            payload.get("new_binary_sha256").and_then(|v| v.as_str()).is_some(),
+            payload
+                .get("new_binary_sha256")
+                .and_then(|v| v.as_str())
+                .is_some(),
             "self_restart_ready event should contain new_binary_sha256"
         );
         assert!(
-            payload.get("binary_changed").and_then(|v| v.as_bool()).is_some(),
+            payload
+                .get("binary_changed")
+                .and_then(|v| v.as_bool())
+                .is_some(),
             "self_restart_ready event should contain binary_changed"
         );
     }

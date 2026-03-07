@@ -175,7 +175,7 @@ fn select_weighted(items: &[ItemEvalState], config: &ItemSelectConfig) -> Result
 fn break_tie(candidates: &[usize], tie_break: TieBreak) -> usize {
     match tie_break {
         TieBreak::First => candidates[0],
-        TieBreak::Last => *candidates.last().unwrap(),
+        TieBreak::Last => candidates[candidates.len() - 1],
         TieBreak::Random => {
             // Deterministic for now: pick first
             candidates[0]

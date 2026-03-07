@@ -1180,7 +1180,11 @@ pub(super) mod test_fixtures {
                     command: None,
                     scope: None,
                     max_parallel: None,
-                    timeout_secs: None, behavior: Default::default(), item_select_config: None, store_inputs: vec![], store_outputs: vec![],
+                    timeout_secs: None,
+                    behavior: Default::default(),
+                    item_select_config: None,
+                    store_inputs: vec![],
+                    store_outputs: vec![],
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "once".to_string(),

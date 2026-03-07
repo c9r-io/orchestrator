@@ -140,8 +140,8 @@ impl CliHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::TestState;
     use crate::cli::{Cli, Commands, DbCommands};
+    use crate::test_utils::TestState;
 
     #[test]
     fn db_reset_force_gate_blocks_without_force_or_unsafe() {
@@ -176,9 +176,7 @@ mod tests {
             unsafe_mode: true,
             async_database: state.async_database.clone(),
             logs_dir: state.logs_dir.clone(),
-            active_config: std::sync::RwLock::new(
-                state.active_config.read().unwrap().clone()
-            ),
+            active_config: std::sync::RwLock::new(state.active_config.read().unwrap().clone()),
             active_config_error: std::sync::RwLock::new(None),
             active_config_notice: std::sync::RwLock::new(None),
             running: tokio::sync::Mutex::new(std::collections::HashMap::new()),

@@ -102,10 +102,8 @@ fn init_state(unsafe_mode: bool) -> Result<ManagedState> {
     let task_repo = Arc::new(
         agent_orchestrator::task_repository::AsyncSqliteTaskRepository::new(async_database.clone()),
     );
-    let store_manager = agent_orchestrator::store::StoreManager::new(
-        async_database.clone(),
-        app_root.clone(),
-    );
+    let store_manager =
+        agent_orchestrator::store::StoreManager::new(async_database.clone(), app_root.clone());
     Ok(ManagedState {
         inner: Arc::new(crate::state::InnerState {
             app_root,
@@ -591,9 +589,12 @@ fn main() -> Result<()> {
     }
     let state = init_state(cli.unsafe_mode)?;
     if cli.unsafe_mode {
-        state
-            .inner
-            .emit_event("", None, "unsafe_mode_activated", serde_json::json!({"command": format!("{:?}", cli.command)}));
+        state.inner.emit_event(
+            "",
+            None,
+            "unsafe_mode_activated",
+            serde_json::json!({"command": format!("{:?}", cli.command)}),
+        );
     }
 
     cli::run_cli_mode(state.inner.clone(), cli)

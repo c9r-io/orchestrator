@@ -1944,7 +1944,10 @@ mod tests {
     #[test]
     fn parse_unsafe_flag_sets_unsafe_mode_true() {
         let cli = Cli::parse_from(["orchestrator", "--unsafe", "task", "list"]);
-        assert!(cli.unsafe_mode, "--unsafe flag should set unsafe_mode to true");
+        assert!(
+            cli.unsafe_mode,
+            "--unsafe flag should set unsafe_mode to true"
+        );
     }
 
     #[test]

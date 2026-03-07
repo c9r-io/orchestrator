@@ -4,9 +4,9 @@ use crate::cli_types::{
 };
 use crate::config::{
     normalize_step_execution_mode, CheckpointStrategy, CostPreference, LoopMode, SafetyConfig,
-    StepHookEngine, StepPrehookConfig, StepPrehookUiConfig, StepScope,
-    WorkflowConfig, WorkflowFinalizeConfig, WorkflowFinalizeRule, WorkflowLoopConfig,
-    WorkflowLoopGuardConfig, WorkflowSafetyProfile, WorkflowStepConfig,
+    StepHookEngine, StepPrehookConfig, StepPrehookUiConfig, StepScope, WorkflowConfig,
+    WorkflowFinalizeConfig, WorkflowFinalizeRule, WorkflowLoopConfig, WorkflowLoopGuardConfig,
+    WorkflowSafetyProfile, WorkflowStepConfig,
 };
 use anyhow::{anyhow, Result};
 
@@ -47,7 +47,12 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
             };
             let is_builtin_type = matches!(
                 step.step_type.as_str(),
-                "init_once" | "loop_guard" | "ticket_scan" | "self_test" | "self_restart" | "item_select"
+                "init_once"
+                    | "loop_guard"
+                    | "ticket_scan"
+                    | "self_test"
+                    | "self_restart"
+                    | "item_select"
             );
             let required_capability = step.required_capability.clone().or_else(|| {
                 if is_builtin_type || step.builtin.is_some() {
@@ -441,7 +446,11 @@ mod tests {
                 command: Some("cargo test".to_string()),
                 scope: Some("task".to_string()),
                 max_parallel: None,
-                timeout_secs: None, behavior: Default::default(), item_select_config: None, store_inputs: vec![], store_outputs: vec![],
+                timeout_secs: None,
+                behavior: Default::default(),
+                item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "fixed".to_string(),
@@ -525,7 +534,11 @@ mod tests {
                 command: None,
                 scope: None,
                 max_parallel: None,
-                timeout_secs: None, behavior: Default::default(), item_select_config: None, store_inputs: vec![], store_outputs: vec![],
+                timeout_secs: None,
+                behavior: Default::default(),
+                item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -567,7 +580,11 @@ mod tests {
                 command: None,
                 scope: None,
                 max_parallel: None,
-                timeout_secs: None, behavior: Default::default(), item_select_config: None, store_inputs: vec![], store_outputs: vec![],
+                timeout_secs: None,
+                behavior: Default::default(),
+                item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -612,7 +629,11 @@ mod tests {
                 command: None,
                 scope: None,
                 max_parallel: None,
-                timeout_secs: None, behavior: Default::default(), item_select_config: None, store_inputs: vec![], store_outputs: vec![],
+                timeout_secs: None,
+                behavior: Default::default(),
+                item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -649,7 +670,11 @@ mod tests {
                 command: None,
                 scope: Some("item".to_string()),
                 max_parallel: None,
-                timeout_secs: None, behavior: Default::default(), item_select_config: None, store_inputs: vec![], store_outputs: vec![],
+                timeout_secs: None,
+                behavior: Default::default(),
+                item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -685,7 +710,11 @@ mod tests {
                 command: None,
                 scope: None,
                 max_parallel: None,
-                timeout_secs: None, behavior: Default::default(), item_select_config: None, store_inputs: vec![], store_outputs: vec![],
+                timeout_secs: None,
+                behavior: Default::default(),
+                item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -743,7 +772,11 @@ mod tests {
                 command: None,
                 scope: None,
                 max_parallel: None,
-                timeout_secs: None, behavior: Default::default(), item_select_config: None, store_inputs: vec![], store_outputs: vec![],
+                timeout_secs: None,
+                behavior: Default::default(),
+                item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -760,7 +793,11 @@ mod tests {
                 checkpoint_strategy: "git_stash".to_string(),
                 step_timeout_secs: None,
                 binary_snapshot: false,
-                profile: None, invariants: vec![], max_spawned_tasks: None, max_spawn_depth: None, spawn_cooldown_seconds: None,
+                profile: None,
+                invariants: vec![],
+                max_spawned_tasks: None,
+                max_spawn_depth: None,
+                spawn_cooldown_seconds: None,
             },
             max_parallel: None,
         };
@@ -789,7 +826,11 @@ mod tests {
                 command: None,
                 scope: None,
                 max_parallel: None,
-                timeout_secs: None, behavior: Default::default(), item_select_config: None, store_inputs: vec![], store_outputs: vec![],
+                timeout_secs: None,
+                behavior: Default::default(),
+                item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -806,7 +847,11 @@ mod tests {
                 checkpoint_strategy: "unknown_strat".to_string(),
                 step_timeout_secs: None,
                 binary_snapshot: false,
-                profile: None, invariants: vec![], max_spawned_tasks: None, max_spawn_depth: None, spawn_cooldown_seconds: None,
+                profile: None,
+                invariants: vec![],
+                max_spawned_tasks: None,
+                max_spawn_depth: None,
+                spawn_cooldown_seconds: None,
             },
             max_parallel: None,
         };
@@ -1181,7 +1226,11 @@ mod tests {
                 command: None,
                 scope: None,
                 max_parallel: None,
-                timeout_secs: None, behavior: Default::default(), item_select_config: None, store_inputs: vec![], store_outputs: vec![],
+                timeout_secs: None,
+                behavior: Default::default(),
+                item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),

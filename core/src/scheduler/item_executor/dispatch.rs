@@ -355,7 +355,11 @@ async fn execute_builtin_step_dispatch(
                 );
                 if let Ok(ref results) = inv_results {
                     for r in results {
-                        let event_type = if r.passed { "invariant_passed" } else { "invariant_violated" };
+                        let event_type = if r.passed {
+                            "invariant_passed"
+                        } else {
+                            "invariant_violated"
+                        };
                         let _ = insert_event(
                             state, task_id, Some(item_id), event_type,
                             json!({"invariant": r.name, "checkpoint": "BeforeRestart", "passed": r.passed, "message": r.message}),
@@ -869,9 +873,7 @@ async fn resolve_store_inputs(
                     serde_json::Value::String(s) => s.clone(),
                     other => other.to_string(),
                 };
-                acc.pipeline_vars
-                    .vars
-                    .insert(input.as_var.clone(), val_str);
+                acc.pipeline_vars.vars.insert(input.as_var.clone(), val_str);
             }
             Ok(StoreOpResult::Value(None)) => {
                 if input.required {

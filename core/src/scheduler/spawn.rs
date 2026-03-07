@@ -7,55 +7,55 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use tracing::{info, warn};
 
+/// Bundled context for spawn operations.
+pub struct SpawnContext<'a> {
+    pub state: &'a InnerState,
+    pub parent_task_id: &'a str,
+    pub parent_project_id: &'a str,
+    pub parent_workspace_id: &'a str,
+    pub parent_workflow_id: &'a str,
+    pub parent_spawn_depth: i64,
+    pub pipeline_vars: &'a HashMap<String, String>,
+}
+
 /// Execute a single task spawn from a post-action.
-pub fn execute_spawn_task(
-    state: &InnerState,
-    parent_task_id: &str,
-    parent_project_id: &str,
-    parent_workspace_id: &str,
-    parent_workflow_id: &str,
-    parent_spawn_depth: i64,
-    pipeline_vars: &HashMap<String, String>,
-    action: &SpawnTaskAction,
-) -> Result<String> {
-    // Resolve goal template
-    let goal = resolve_template(&action.goal, pipeline_vars);
+pub fn execute_spawn_task(ctx: &SpawnContext<'_>, action: &SpawnTaskAction) -> Result<String> {
+    let goal = resolve_template(&action.goal, ctx.pipeline_vars);
 
     let workflow_id = action
         .workflow
         .clone()
-        .unwrap_or_else(|| parent_workflow_id.to_string());
+        .unwrap_or_else(|| ctx.parent_workflow_id.to_string());
 
     let payload = CreateTaskPayload {
         name: Some(format!("spawn:{}", truncate_goal(&goal, 40))),
         goal: Some(goal),
         project_id: if action.inherit.project {
-            Some(parent_project_id.to_string())
+            Some(ctx.parent_project_id.to_string())
         } else {
             None
         },
         workspace_id: if action.inherit.workspace {
-            Some(parent_workspace_id.to_string())
+            Some(ctx.parent_workspace_id.to_string())
         } else {
             None
         },
         workflow_id: Some(workflow_id),
         target_files: None,
-        parent_task_id: Some(parent_task_id.to_string()),
+        parent_task_id: Some(ctx.parent_task_id.to_string()),
         spawn_reason: Some("spawn_task".to_string()),
     };
 
-    let summary = create_task_impl(state, payload)?;
+    let summary = create_task_impl(ctx.state, payload)?;
 
-    // Update spawn_depth in DB
-    let conn = crate::db::open_conn(&state.db_path)?;
+    let conn = crate::db::open_conn(&ctx.state.db_path)?;
     conn.execute(
         "UPDATE tasks SET spawn_depth = ?1 WHERE id = ?2",
-        rusqlite::params![parent_spawn_depth + 1, summary.id],
+        rusqlite::params![ctx.parent_spawn_depth + 1, summary.id],
     )?;
 
     info!(
-        parent = parent_task_id,
+        parent = ctx.parent_task_id,
         child = summary.id,
         "spawned child task"
     );
@@ -65,18 +65,15 @@ pub fn execute_spawn_task(
 
 /// Execute batch task spawning from a JSON pipeline variable.
 pub fn execute_spawn_tasks(
-    state: &InnerState,
-    parent_task_id: &str,
-    parent_project_id: &str,
-    parent_workspace_id: &str,
-    parent_workflow_id: &str,
-    parent_spawn_depth: i64,
-    pipeline_vars: &HashMap<String, String>,
+    ctx: &SpawnContext<'_>,
     action: &SpawnTasksAction,
 ) -> Result<Vec<String>> {
-    let json_str = pipeline_vars
-        .get(&action.from_var)
-        .with_context(|| format!("pipeline variable '{}' not found for spawn_tasks", action.from_var))?;
+    let json_str = ctx.pipeline_vars.get(&action.from_var).with_context(|| {
+        format!(
+            "pipeline variable '{}' not found for spawn_tasks",
+            action.from_var
+        )
+    })?;
 
     let items = extract_json_array(json_str, &action.json_path)?;
     let max = action.max_tasks.min(items.len());
@@ -86,7 +83,10 @@ pub fn execute_spawn_tasks(
         let goal = match extract_field(item, &action.mapping.goal) {
             Some(g) => g,
             None => {
-                warn!("skipping spawn item: no goal field at {}", action.mapping.goal);
+                warn!(
+                    "skipping spawn item: no goal field at {}",
+                    action.mapping.goal
+                );
                 continue;
             }
         };
@@ -96,7 +96,7 @@ pub fn execute_spawn_tasks(
             .workflow
             .as_ref()
             .and_then(|path| extract_field(item, path))
-            .unwrap_or_else(|| parent_workflow_id.to_string());
+            .unwrap_or_else(|| ctx.parent_workflow_id.to_string());
 
         let name = action
             .mapping
@@ -109,30 +109,30 @@ pub fn execute_spawn_tasks(
             name: Some(name),
             goal: Some(goal),
             project_id: if action.inherit.project {
-                Some(parent_project_id.to_string())
+                Some(ctx.parent_project_id.to_string())
             } else {
                 None
             },
             workspace_id: if action.inherit.workspace {
-                Some(parent_workspace_id.to_string())
+                Some(ctx.parent_workspace_id.to_string())
             } else {
                 None
             },
             workflow_id: Some(workflow_id),
             target_files: None,
-            parent_task_id: Some(parent_task_id.to_string()),
+            parent_task_id: Some(ctx.parent_task_id.to_string()),
             spawn_reason: Some("spawn_tasks".to_string()),
         };
 
-        match create_task_impl(state, payload) {
+        match create_task_impl(ctx.state, payload) {
             Ok(summary) => {
-                let conn = crate::db::open_conn(&state.db_path)?;
+                let conn = crate::db::open_conn(&ctx.state.db_path)?;
                 conn.execute(
                     "UPDATE tasks SET spawn_depth = ?1 WHERE id = ?2",
-                    rusqlite::params![parent_spawn_depth + 1, summary.id],
+                    rusqlite::params![ctx.parent_spawn_depth + 1, summary.id],
                 )?;
                 info!(
-                    parent = parent_task_id,
+                    parent = ctx.parent_task_id,
                     child = summary.id,
                     "spawned child task (batch)"
                 );
@@ -148,10 +148,7 @@ pub fn execute_spawn_tasks(
 }
 
 /// Validate spawn depth against safety limits.
-pub fn validate_spawn_depth(
-    current_depth: i64,
-    max_depth: Option<usize>,
-) -> Result<()> {
+pub fn validate_spawn_depth(current_depth: i64, max_depth: Option<usize>) -> Result<()> {
     if let Some(max) = max_depth {
         if current_depth as usize >= max {
             anyhow::bail!(

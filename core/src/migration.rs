@@ -604,10 +604,8 @@ fn m0008_workflow_primitives(conn: &Connection) -> Result<()> {
         "spawn_depth",
         "ALTER TABLE tasks ADD COLUMN spawn_depth INTEGER NOT NULL DEFAULT 0",
     )?;
-    conn.execute_batch(
-        "CREATE INDEX IF NOT EXISTS idx_tasks_parent_id ON tasks(parent_task_id);",
-    )
-    .context("m0008: create parent_task_id index")?;
+    conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_tasks_parent_id ON tasks(parent_task_id);")
+        .context("m0008: create parent_task_id index")?;
 
     // WP03: Dynamic item metadata
     ensure_column(

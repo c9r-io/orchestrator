@@ -91,7 +91,7 @@ impl CliHandler {
                                     println!("{}", serde_yml::to_string(&entries)?);
                                 }
                                 _ => {
-                                    println!("{:<30} {:<40} {}", "KEY", "UPDATED_AT", "VALUE");
+                                    println!("{:<30} {:<40} VALUE", "KEY", "UPDATED_AT");
                                     for entry in &entries {
                                         let val_str = serde_json::to_string(&entry.value)?;
                                         let truncated = if val_str.len() > 60 {
@@ -114,9 +114,11 @@ impl CliHandler {
             }
             StoreCommands::Prune { store, project } => {
                 // Read retention config from the store's WorkflowStore CRD
-                let config = self.state.active_config.read().map_err(|_| {
-                    anyhow::anyhow!("failed to read active config")
-                })?;
+                let config = self
+                    .state
+                    .active_config
+                    .read()
+                    .map_err(|_| anyhow::anyhow!("failed to read active config"))?;
                 let custom_resources = &config.config.custom_resources;
 
                 let store_config = {
@@ -145,11 +147,16 @@ impl CliHandler {
 
     async fn execute_store_op(&self, op: StoreOp) -> Result<StoreOpResult> {
         let custom_resources = {
-            let config = self.state.active_config.read().map_err(|_| {
-                anyhow::anyhow!("failed to read active config")
-            })?;
+            let config = self
+                .state
+                .active_config
+                .read()
+                .map_err(|_| anyhow::anyhow!("failed to read active config"))?;
             config.config.custom_resources.clone()
         };
-        self.state.store_manager.execute(&custom_resources, op).await
+        self.state
+            .store_manager
+            .execute(&custom_resources, op)
+            .await
     }
 }

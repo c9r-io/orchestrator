@@ -31,7 +31,9 @@ pub async fn stream_task_logs_impl(
     let redaction_patterns = {
         let active = read_loaded_config(state)?;
         let mut patterns = active.config.runner.redaction_patterns.clone();
-        patterns.extend(collect_all_sensitive_store_values(&active.config.env_stores));
+        patterns.extend(collect_all_sensitive_store_values(
+            &active.config.env_stores,
+        ));
         patterns
     };
 
@@ -99,7 +101,9 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
     let redaction_patterns = {
         let active = read_loaded_config(state)?;
         let mut patterns = active.config.runner.redaction_patterns.clone();
-        patterns.extend(collect_all_sensitive_store_values(&active.config.env_stores));
+        patterns.extend(collect_all_sensitive_store_values(
+            &active.config.env_stores,
+        ));
         patterns
     };
 

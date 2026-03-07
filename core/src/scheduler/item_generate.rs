@@ -12,14 +12,12 @@ pub fn extract_dynamic_items(
     pipeline_vars: &HashMap<String, String>,
     action: &GenerateItemsAction,
 ) -> Result<Vec<NewDynamicItem>> {
-    let json_str = pipeline_vars
-        .get(&action.from_var)
-        .with_context(|| {
-            format!(
-                "pipeline variable '{}' not found for generate_items",
-                action.from_var
-            )
-        })?;
+    let json_str = pipeline_vars.get(&action.from_var).with_context(|| {
+        format!(
+            "pipeline variable '{}' not found for generate_items",
+            action.from_var
+        )
+    })?;
 
     let items = extract_json_array(json_str, &action.json_path)?;
     let mut result = Vec::new();
@@ -104,7 +102,11 @@ pub fn create_dynamic_task_items(
         created += 1;
     }
 
-    info!(task_id = task_id, count = created, "created dynamic task items");
+    info!(
+        task_id = task_id,
+        count = created,
+        "created dynamic task items"
+    );
     Ok(created)
 }
 

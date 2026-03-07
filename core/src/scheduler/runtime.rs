@@ -278,7 +278,9 @@ pub async fn load_task_runtime_context(
                     match serde_json::from_str::<crate::config::PipelineVariables>(json) {
                         Ok(vars) => vars,
                         Err(e) => {
-                            tracing::warn!("failed to parse pipeline_vars_json, starting fresh: {e}");
+                            tracing::warn!(
+                                "failed to parse pipeline_vars_json, starting fresh: {e}"
+                            );
                             crate::config::PipelineVariables::default()
                         }
                     }
@@ -572,7 +574,10 @@ mod tests {
             async_database: base.async_database.clone(),
             logs_dir: base.logs_dir.clone(),
             active_config: std::sync::RwLock::new(
-                base.active_config.read().expect("lock active config").clone(),
+                base.active_config
+                    .read()
+                    .expect("lock active config")
+                    .clone(),
             ),
             active_config_error: std::sync::RwLock::new(None),
             active_config_notice: std::sync::RwLock::new(None),

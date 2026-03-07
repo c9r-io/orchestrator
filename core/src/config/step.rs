@@ -455,10 +455,13 @@ mod tests {
         assert!(json.contains("\"key\":\"bench_result\""));
         assert!(json.contains("\"from_var\":\"qa_score\""));
 
-        let deserialized: PostAction =
-            serde_json::from_str(&json).expect("deserialize StorePut");
+        let deserialized: PostAction = serde_json::from_str(&json).expect("deserialize StorePut");
         match deserialized {
-            PostAction::StorePut { store, key, from_var } => {
+            PostAction::StorePut {
+                store,
+                key,
+                from_var,
+            } => {
                 assert_eq!(store, "metrics");
                 assert_eq!(key, "bench_result");
                 assert_eq!(from_var, "qa_score");

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Built-in providers (local, file) are handled natively by the engine.
 /// User-defined providers delegate CRUD operations to shell commands.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StoreBackendProviderConfig {
     /// When true, the engine handles this provider natively (e.g. local=SQLite, file=filesystem).
     #[serde(default)]
@@ -27,15 +27,6 @@ pub struct StoreBackendCommands {
     pub list: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prune: Option<String>,
-}
-
-impl Default for StoreBackendProviderConfig {
-    fn default() -> Self {
-        Self {
-            builtin: false,
-            commands: None,
-        }
-    }
 }
 
 #[cfg(test)]

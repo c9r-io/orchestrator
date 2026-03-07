@@ -70,8 +70,7 @@ impl FileStoreBackend {
         if !path.exists() {
             return Ok(StoreOpResult::Value(None));
         }
-        let content =
-            std::fs::read_to_string(&path).context("failed to read store entry file")?;
+        let content = std::fs::read_to_string(&path).context("failed to read store entry file")?;
         let value: serde_json::Value =
             serde_json::from_str(&content).context("failed to parse store entry JSON")?;
         Ok(StoreOpResult::Value(Some(value)))
@@ -117,11 +116,7 @@ impl FileStoreBackend {
 
         let mut files: Vec<_> = read_dir
             .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.path()
-                    .extension()
-                    .is_some_and(|ext| ext == "json")
-            })
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
             .collect();
 
         // Sort by modification time (newest first)
@@ -184,11 +179,7 @@ impl FileStoreBackend {
             let read_dir = std::fs::read_dir(&dir).context("failed to read store directory")?;
             let mut files: Vec<_> = read_dir
                 .filter_map(|e| e.ok())
-                .filter(|e| {
-                    e.path()
-                        .extension()
-                        .is_some_and(|ext| ext == "json")
-                })
+                .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
                 .collect();
 
             files.sort_by(|a, b| {

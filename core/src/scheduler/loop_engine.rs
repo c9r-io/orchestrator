@@ -1,6 +1,8 @@
 use crate::config::{InvariantCheckPoint, LoopMode, OnViolation, StepScope};
 use crate::events::insert_event;
-use crate::scheduler::invariant::{evaluate_invariants, has_halting_violation, has_rollback_violation};
+use crate::scheduler::invariant::{
+    evaluate_invariants, has_halting_violation, has_rollback_violation,
+};
 use crate::state::InnerState;
 use anyhow::Result;
 use serde_json::json;
@@ -155,12 +157,33 @@ async fn run_task_loop_core(
     }
 
     // Invariant checkpoint: before_complete
-    if let Some(action) = check_invariants(&state, task_id, &task_ctx, InvariantCheckPoint::BeforeComplete).await? {
+    if let Some(action) = check_invariants(
+        &state,
+        task_id,
+        &task_ctx,
+        InvariantCheckPoint::BeforeComplete,
+    )
+    .await?
+    {
         if action == "halt" {
             set_task_status(&state, task_id, "failed", false).await?;
-            insert_event(&state, task_id, None, "task_failed", json!({"reason": "invariant_halt_before_complete"})).await?;
+            insert_event(
+                &state,
+                task_id,
+                None,
+                "task_failed",
+                json!({"reason": "invariant_halt_before_complete"}),
+            )
+            .await?;
             let unresolved = count_unresolved_items(&state, task_id).await?;
-            record_task_execution_metric(&state, task_id, "failed", task_ctx.current_cycle, unresolved).await?;
+            record_task_execution_metric(
+                &state,
+                task_id,
+                "failed",
+                task_ctx.current_cycle,
+                unresolved,
+            )
+            .await?;
             return Ok(());
         }
         // rollback at before_complete is treated as warn-only
@@ -337,7 +360,9 @@ async fn execute_cycle_segments(
     }
 
     // Invariant checkpoint: before_cycle
-    if let Some(action) = check_invariants(state, task_id, task_ctx, InvariantCheckPoint::BeforeCycle).await? {
+    if let Some(action) =
+        check_invariants(state, task_id, task_ctx, InvariantCheckPoint::BeforeCycle).await?
+    {
         match action {
             "halt" => {
                 set_task_status(state, task_id, "failed", false).await?;
@@ -351,7 +376,8 @@ async fn execute_cycle_segments(
     }
 
     let mut items = list_task_items_for_cycle(state, task_id).await?;
-    let mut task_item_paths: Vec<String> = items.iter().map(|item| item.qa_file_path.clone()).collect();
+    let mut task_item_paths: Vec<String> =
+        items.iter().map(|item| item.qa_file_path.clone()).collect();
 
     // Segment-based execution: group steps by scope and dispatch accordingly.
     // Task-scoped steps run once (using first item as context anchor).
@@ -399,7 +425,9 @@ async fn execute_cycle_segments(
                                 .update_task_pipeline_vars(task_id, &json)
                                 .await
                             {
-                                tracing::warn!("failed to persist pipeline_vars after task segment: {e}");
+                                tracing::warn!(
+                                    "failed to persist pipeline_vars after task segment: {e}"
+                                );
                             }
                         }
                         // Invariant checkpoint: after_implement (if this segment had implement steps)
@@ -602,15 +630,11 @@ async fn execute_cycle_segments(
                         if next.scope == StepScope::Task
                             && has_item_select_step(next, &task_ctx.execution_plan)
                         {
-                            if let Some(config) =
-                                find_item_select_config(&task_ctx.execution_plan)
+                            if let Some(config) = find_item_select_config(&task_ctx.execution_plan)
                             {
-                                let eval_states =
-                                    collect_item_eval_states(&items, &item_state);
-                                match super::item_select::execute_item_select(
-                                    &eval_states,
-                                    &config,
-                                ) {
+                                let eval_states = collect_item_eval_states(&items, &item_state);
+                                match super::item_select::execute_item_select(&eval_states, &config)
+                                {
                                     Ok(result) => {
                                         for id in &result.eliminated_ids {
                                             let _ = state
@@ -618,10 +642,7 @@ async fn execute_cycle_segments(
                                                 .update_task_item_status(id, "eliminated")
                                                 .await;
                                         }
-                                        promote_winner_vars(
-                                            &mut task_ctx.pipeline_vars,
-                                            &result,
-                                        );
+                                        promote_winner_vars(&mut task_ctx.pipeline_vars, &result);
                                         persist_selection_to_store(
                                             state, task_ctx, task_id, &result, &config,
                                         )
@@ -641,10 +662,8 @@ async fn execute_cycle_segments(
                                         items.retain(|item| {
                                             !result.eliminated_ids.contains(&item.id)
                                         });
-                                        task_item_paths = items
-                                            .iter()
-                                            .map(|i| i.qa_file_path.clone())
-                                            .collect();
+                                        task_item_paths =
+                                            items.iter().map(|i| i.qa_file_path.clone()).collect();
                                     }
                                     Err(e) => {
                                         warn!(error = %e, "item_select failed");
@@ -855,12 +874,33 @@ async fn execute_guard_steps(
             );
 
             // Run before_complete invariant check before finalizing
-            if let Some(action) = check_invariants(state, task_id, task_ctx, InvariantCheckPoint::BeforeComplete).await? {
+            if let Some(action) = check_invariants(
+                state,
+                task_id,
+                task_ctx,
+                InvariantCheckPoint::BeforeComplete,
+            )
+            .await?
+            {
                 if action == "halt" {
                     set_task_status(state, task_id, "failed", false).await?;
-                    insert_event(state, task_id, None, "task_failed", json!({"reason": "invariant_halt_before_complete"})).await?;
+                    insert_event(
+                        state,
+                        task_id,
+                        None,
+                        "task_failed",
+                        json!({"reason": "invariant_halt_before_complete"}),
+                    )
+                    .await?;
                     let unresolved = count_unresolved_items(state, task_id).await?;
-                    record_task_execution_metric(state, task_id, "failed", task_ctx.current_cycle, unresolved).await?;
+                    record_task_execution_metric(
+                        state,
+                        task_id,
+                        "failed",
+                        task_ctx.current_cycle,
+                        unresolved,
+                    )
+                    .await?;
                     return Ok(true);
                 }
             }
@@ -1100,10 +1140,7 @@ fn should_snapshot_binary(binary_snapshot: bool, self_referential: bool) -> bool
 }
 
 /// Check if a segment contains an item_select builtin step.
-fn has_item_select_step(
-    segment: &ScopeSegment,
-    plan: &crate::config::TaskExecutionPlan,
-) -> bool {
+fn has_item_select_step(segment: &ScopeSegment, plan: &crate::config::TaskExecutionPlan) -> bool {
     for step_id in &segment.step_ids {
         if let Some(step) = plan.step_by_id(step_id) {
             if step.builtin.as_deref() == Some("item_select") {
@@ -1118,9 +1155,7 @@ fn has_item_select_step(
 fn find_item_select_config(
     plan: &crate::config::TaskExecutionPlan,
 ) -> Option<crate::config::ItemSelectConfig> {
-    plan.steps
-        .iter()
-        .find_map(|s| s.item_select_config.clone())
+    plan.steps.iter().find_map(|s| s.item_select_config.clone())
 }
 
 /// Collect item evaluation states from item_state accumulators.
@@ -1131,12 +1166,12 @@ fn collect_item_eval_states(
     items
         .iter()
         .filter_map(|item| {
-            item_state.get(&item.id).map(|acc| {
-                super::item_select::ItemEvalState {
+            item_state
+                .get(&item.id)
+                .map(|acc| super::item_select::ItemEvalState {
                     item_id: item.id.clone(),
                     pipeline_vars: acc.pipeline_vars.vars.clone(),
-                }
-            })
+                })
         })
         .collect()
 }
@@ -2246,7 +2281,10 @@ mod tests {
 
         // has_item_select_step should find it
         assert!(has_item_select_step(&segments[1], &task_ctx.execution_plan));
-        assert!(!has_item_select_step(&segments[0], &task_ctx.execution_plan));
+        assert!(!has_item_select_step(
+            &segments[0],
+            &task_ctx.execution_plan
+        ));
 
         // find_item_select_config should return the config
         let config = find_item_select_config(&task_ctx.execution_plan);
@@ -2274,19 +2312,31 @@ mod tests {
         ];
         let mut item_state = HashMap::new();
         let mut acc_a = StepExecutionAccumulator::new(PipelineVariables::default());
-        acc_a.pipeline_vars.vars.insert("error_count".into(), "3".into());
+        acc_a
+            .pipeline_vars
+            .vars
+            .insert("error_count".into(), "3".into());
         item_state.insert("item-a".to_string(), acc_a);
 
         let mut acc_b = StepExecutionAccumulator::new(PipelineVariables::default());
-        acc_b.pipeline_vars.vars.insert("error_count".into(), "1".into());
+        acc_b
+            .pipeline_vars
+            .vars
+            .insert("error_count".into(), "1".into());
         item_state.insert("item-b".to_string(), acc_b);
 
         let eval_states = collect_item_eval_states(&items, &item_state);
         assert_eq!(eval_states.len(), 2);
         assert_eq!(eval_states[0].item_id, "item-a");
-        assert_eq!(eval_states[0].pipeline_vars.get("error_count").unwrap(), "3");
+        assert_eq!(
+            eval_states[0].pipeline_vars.get("error_count").unwrap(),
+            "3"
+        );
         assert_eq!(eval_states[1].item_id, "item-b");
-        assert_eq!(eval_states[1].pipeline_vars.get("error_count").unwrap(), "1");
+        assert_eq!(
+            eval_states[1].pipeline_vars.get("error_count").unwrap(),
+            "1"
+        );
     }
 
     #[test]

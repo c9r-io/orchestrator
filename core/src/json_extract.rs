@@ -90,10 +90,7 @@ mod tests {
     #[test]
     fn extract_field_nested() {
         let value = json!({"meta": {"id": "abc"}});
-        assert_eq!(
-            extract_field(&value, "$.meta.id"),
-            Some("abc".to_string())
-        );
+        assert_eq!(extract_field(&value, "$.meta.id"), Some("abc".to_string()));
     }
 
     #[test]
@@ -111,9 +108,6 @@ mod tests {
     #[test]
     fn extract_field_boolean() {
         let value = json!({"active": true});
-        assert_eq!(
-            extract_field(&value, "$.active"),
-            Some("true".to_string())
-        );
+        assert_eq!(extract_field(&value, "$.active"), Some("true".to_string()));
     }
 }

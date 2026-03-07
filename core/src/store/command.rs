@@ -7,7 +7,11 @@ use anyhow::{anyhow, Result};
 pub struct CommandAdapter;
 
 impl CommandAdapter {
-    pub async fn execute(&self, commands: &StoreBackendCommands, op: StoreOp) -> Result<StoreOpResult> {
+    pub async fn execute(
+        &self,
+        commands: &StoreBackendCommands,
+        op: StoreOp,
+    ) -> Result<StoreOpResult> {
         let (cmd_template, env_vars, parse_mode) = match &op {
             StoreOp::Get {
                 store_name,
@@ -69,9 +73,10 @@ impl CommandAdapter {
                 project_id,
                 ..
             } => {
-                let cmd = commands.prune.as_ref().ok_or_else(|| {
-                    anyhow!("provider does not support prune operation")
-                })?;
+                let cmd = commands
+                    .prune
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("provider does not support prune operation"))?;
                 (
                     cmd,
                     vec![
@@ -171,7 +176,10 @@ mod tests {
         let base = temp.path().to_str().expect("path");
 
         let commands = StoreBackendCommands {
-            get: format!("cat {}/\"$STORE_NAME\"-\"$KEY\".json 2>/dev/null || true", base),
+            get: format!(
+                "cat {}/\"$STORE_NAME\"-\"$KEY\".json 2>/dev/null || true",
+                base
+            ),
             put: format!("echo \"$VALUE\" > {}/\"$STORE_NAME\"-\"$KEY\".json", base),
             delete: format!("rm -f {}/\"$STORE_NAME\"-\"$KEY\".json", base),
             list: "echo '[]'".to_string(),

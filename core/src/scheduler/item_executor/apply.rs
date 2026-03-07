@@ -2,7 +2,9 @@ use crate::config::{
     OnFailureAction, OnSuccessAction, PostAction, TaskExecutionStep, TaskRuntimeContext,
 };
 use crate::events::insert_event;
-use crate::scheduler::spawn::{execute_spawn_task, execute_spawn_tasks, validate_spawn_depth};
+use crate::scheduler::spawn::{
+    execute_spawn_task, execute_spawn_tasks, validate_spawn_depth, SpawnContext,
+};
 use crate::state::InnerState;
 use crate::store::StoreOp;
 use crate::ticket::{create_ticket_for_qa_failure, scan_active_tickets_for_task_items};
@@ -103,22 +105,21 @@ pub(super) async fn apply_step_results(
                 acc.new_ticket_count = acc.active_tickets.len() as i64;
             }
             PostAction::SpawnTask(spawn_action) if result.is_success() => {
-                if let Err(e) = validate_spawn_depth(
-                    task_ctx.spawn_depth,
-                    task_ctx.safety.max_spawn_depth,
-                ) {
+                if let Err(e) =
+                    validate_spawn_depth(task_ctx.spawn_depth, task_ctx.safety.max_spawn_depth)
+                {
                     warn!(error = %e, "spawn_task skipped: depth limit");
                 } else {
-                    match execute_spawn_task(
+                    let spawn_ctx = SpawnContext {
                         state,
-                        task_id,
-                        &task_ctx.project_id,
-                        &task_ctx.workspace_id,
-                        &task_ctx.workflow_id,
-                        task_ctx.spawn_depth,
-                        &acc.pipeline_vars.vars,
-                        spawn_action,
-                    ) {
+                        parent_task_id: task_id,
+                        parent_project_id: &task_ctx.project_id,
+                        parent_workspace_id: &task_ctx.workspace_id,
+                        parent_workflow_id: &task_ctx.workflow_id,
+                        parent_spawn_depth: task_ctx.spawn_depth,
+                        pipeline_vars: &acc.pipeline_vars.vars,
+                    };
+                    match execute_spawn_task(&spawn_ctx, spawn_action) {
                         Ok(child_id) => {
                             insert_event(
                                 state,
@@ -134,22 +135,21 @@ pub(super) async fn apply_step_results(
                 }
             }
             PostAction::SpawnTasks(spawn_action) if result.is_success() => {
-                if let Err(e) = validate_spawn_depth(
-                    task_ctx.spawn_depth,
-                    task_ctx.safety.max_spawn_depth,
-                ) {
+                if let Err(e) =
+                    validate_spawn_depth(task_ctx.spawn_depth, task_ctx.safety.max_spawn_depth)
+                {
                     warn!(error = %e, "spawn_tasks skipped: depth limit");
                 } else {
-                    match execute_spawn_tasks(
+                    let spawn_ctx = SpawnContext {
                         state,
-                        task_id,
-                        &task_ctx.project_id,
-                        &task_ctx.workspace_id,
-                        &task_ctx.workflow_id,
-                        task_ctx.spawn_depth,
-                        &acc.pipeline_vars.vars,
-                        spawn_action,
-                    ) {
+                        parent_task_id: task_id,
+                        parent_project_id: &task_ctx.project_id,
+                        parent_workspace_id: &task_ctx.workspace_id,
+                        parent_workflow_id: &task_ctx.workflow_id,
+                        parent_spawn_depth: task_ctx.spawn_depth,
+                        pipeline_vars: &acc.pipeline_vars.vars,
+                    };
+                    match execute_spawn_tasks(&spawn_ctx, spawn_action) {
                         Ok(child_ids) => {
                             info!(count = child_ids.len(), "spawned batch tasks");
                             insert_event(
@@ -175,8 +175,8 @@ pub(super) async fn apply_step_results(
                 from_var,
             } => {
                 if let Some(value) = acc.pipeline_vars.vars.get(from_var).cloned() {
-                    if let Err(e) = execute_store_put(state, task_ctx, task_id, store, key, &value)
-                        .await
+                    if let Err(e) =
+                        execute_store_put(state, task_ctx, task_id, store, key, &value).await
                     {
                         warn!(error = %e, store = %store, key = %key, "StorePut post-action failed");
                     }

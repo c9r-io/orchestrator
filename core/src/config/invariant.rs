@@ -113,8 +113,7 @@ mod tests {
             "\"before_restart\"",
             "\"before_complete\"",
         ] {
-            let cp: InvariantCheckPoint =
-                serde_json::from_str(s).expect("deserialize checkpoint");
+            let cp: InvariantCheckPoint = serde_json::from_str(s).expect("deserialize checkpoint");
             let json = serde_json::to_string(&cp).expect("serialize checkpoint");
             assert_eq!(&json, s);
         }
@@ -123,8 +122,7 @@ mod tests {
     #[test]
     fn test_on_violation_serde_round_trip() {
         for s in &["\"halt\"", "\"rollback\"", "\"warn\""] {
-            let ov: OnViolation =
-                serde_json::from_str(s).expect("deserialize on_violation");
+            let ov: OnViolation = serde_json::from_str(s).expect("deserialize on_violation");
             let json = serde_json::to_string(&ov).expect("serialize on_violation");
             assert_eq!(&json, s);
         }

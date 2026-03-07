@@ -155,9 +155,10 @@ impl StoreManager {
                 _ => Err(anyhow!("unknown builtin provider: {}", provider_name)),
             }
         } else {
-            let commands = provider.commands.as_ref().ok_or_else(|| {
-                anyhow!("provider '{}' has no commands defined", provider_name)
-            })?;
+            let commands = provider
+                .commands
+                .as_ref()
+                .ok_or_else(|| anyhow!("provider '{}' has no commands defined", provider_name))?;
             self.command_adapter.execute(commands, op).await
         }
     }

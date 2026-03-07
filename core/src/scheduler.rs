@@ -1,8 +1,8 @@
 pub mod check;
 pub mod invariant;
+mod item_executor;
 pub mod item_generate;
 pub mod item_select;
-mod item_executor;
 mod loop_engine;
 mod phase_runner;
 mod query;

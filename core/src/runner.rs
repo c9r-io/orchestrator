@@ -134,10 +134,7 @@ mod tests {
         assert!(!result.contains("token"));
         assert!(!result.contains("TOKEN"));
         assert!(!result.contains("Token"));
-        assert_eq!(
-            result,
-            "[REDACTED] [REDACTED] [REDACTED] all here"
-        );
+        assert_eq!(result, "[REDACTED] [REDACTED] [REDACTED] all here");
     }
 
     #[test]

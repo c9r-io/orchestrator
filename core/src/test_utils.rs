@@ -276,10 +276,8 @@ impl TestState {
         let task_repo = Arc::new(crate::task_repository::AsyncSqliteTaskRepository::new(
             async_database.clone(),
         ));
-        let store_manager = crate::store::StoreManager::new(
-            async_database.clone(),
-            self.temp_root.clone(),
-        );
+        let store_manager =
+            crate::store::StoreManager::new(async_database.clone(), self.temp_root.clone());
         let state = Arc::new(InnerState {
             app_root: self.temp_root.clone(),
             db_path,

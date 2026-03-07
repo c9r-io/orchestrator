@@ -255,7 +255,9 @@ pub fn list_task_items_for_cycle(conn: &Connection, task_id: &str) -> Result<Vec
                 qa_file_path: row.get(1)?,
                 dynamic_vars_json: row.get(2)?,
                 label: row.get(3)?,
-                source: row.get::<_, Option<String>>(4)?.unwrap_or_else(|| "static".to_string()),
+                source: row
+                    .get::<_, Option<String>>(4)?
+                    .unwrap_or_else(|| "static".to_string()),
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;

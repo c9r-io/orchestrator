@@ -956,14 +956,8 @@ fn build_version_fields_populated() {
 
     let trace = build_trace("test-task", "completed", &events, &[]);
     let bv = trace.build_version.expect("should have build version");
-    assert!(
-        !bv.version.is_empty(),
-        "version should be populated"
-    );
-    assert!(
-        !bv.git_hash.is_empty(),
-        "git_hash should be populated"
-    );
+    assert!(!bv.version.is_empty(), "version should be populated");
+    assert!(!bv.git_hash.is_empty(), "git_hash should be populated");
     assert!(
         !bv.build_timestamp.is_empty(),
         "build_timestamp should be populated"
@@ -990,7 +984,9 @@ fn json_serialization_includes_build_version() {
         parsed.get("build_version").is_some(),
         "JSON should contain build_version"
     );
-    let bv = parsed.get("build_version").expect("build_version should exist");
+    let bv = parsed
+        .get("build_version")
+        .expect("build_version should exist");
     assert!(
         bv.get("version").is_some() && !bv.get("version").unwrap().is_null(),
         "version should be in JSON"
@@ -1000,8 +996,7 @@ fn json_serialization_includes_build_version() {
         "git_hash should be in JSON"
     );
     assert!(
-        bv.get("build_timestamp").is_some()
-            && !bv.get("build_timestamp").unwrap().is_null(),
+        bv.get("build_timestamp").is_some() && !bv.get("build_timestamp").unwrap().is_null(),
         "build_timestamp should be in JSON"
     );
 }

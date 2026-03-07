@@ -172,7 +172,10 @@ fn evaluate_invariant_assertion(expr: &str, exit_code: i32, _stdout: &str) -> bo
     }
 
     // Default: treat non-zero exit as failure
-    warn!(expr = expr, "unsupported invariant assertion expression, defaulting to exit_code == 0");
+    warn!(
+        expr = expr,
+        "unsupported invariant assertion expression, defaulting to exit_code == 0"
+    );
     exit_code == 0
 }
 
@@ -220,16 +223,14 @@ mod tests {
     #[test]
     fn test_passing_invariant() {
         let inv = make_invariant("pass", Some("true"));
-        let result =
-            run_single_invariant(&inv, Path::new("/tmp")).expect("run invariant");
+        let result = run_single_invariant(&inv, Path::new("/tmp")).expect("run invariant");
         assert!(result.passed);
     }
 
     #[test]
     fn test_failing_invariant() {
         let inv = make_invariant("fail", Some("false"));
-        let result =
-            run_single_invariant(&inv, Path::new("/tmp")).expect("run invariant");
+        let result = run_single_invariant(&inv, Path::new("/tmp")).expect("run invariant");
         assert!(!result.passed);
     }
 
@@ -239,8 +240,7 @@ mod tests {
             expect_exit: Some(1),
             ..make_invariant("expect_1", Some("false"))
         };
-        let result =
-            run_single_invariant(&inv, Path::new("/tmp")).expect("run invariant");
+        let result = run_single_invariant(&inv, Path::new("/tmp")).expect("run invariant");
         assert!(result.passed);
     }
 

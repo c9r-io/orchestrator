@@ -544,6 +544,9 @@ mod tests {
         let spec = config.to_cr_spec();
         let back = StoreBackendProviderConfig::from_cr_spec(&spec).expect("should deserialize");
         assert!(!back.builtin);
-        assert_eq!(back.commands.as_ref().map(|c| c.get.as_str()), Some("redis-cli GET $KEY"));
+        assert_eq!(
+            back.commands.as_ref().map(|c| c.get.as_str()),
+            Some("redis-cli GET $KEY")
+        );
     }
 }

@@ -132,7 +132,10 @@ mod tests {
         let value = json!("not an object");
         let err = validate_schema(&value, &schema);
         assert!(err.is_err());
-        assert!(err.unwrap_err().to_string().contains("expected type 'object'"));
+        assert!(err
+            .unwrap_err()
+            .to_string()
+            .contains("expected type 'object'"));
     }
 
     #[test]
@@ -147,7 +150,10 @@ mod tests {
         let value = json!({});
         let err = validate_schema(&value, &schema);
         assert!(err.is_err());
-        assert!(err.unwrap_err().to_string().contains("missing required field 'name'"));
+        assert!(err
+            .unwrap_err()
+            .to_string()
+            .contains("missing required field 'name'"));
     }
 
     #[test]

@@ -27,7 +27,10 @@ impl LocalStoreBackend {
                 key,
                 value,
                 task_id,
-            } => self.put(&store_name, &project_id, &key, &value, &task_id).await,
+            } => {
+                self.put(&store_name, &project_id, &key, &value, &task_id)
+                    .await
+            }
             StoreOp::Delete {
                 store_name,
                 project_id,
@@ -44,7 +47,10 @@ impl LocalStoreBackend {
                 project_id,
                 max_entries,
                 ttl_days,
-            } => self.prune(&store_name, &project_id, max_entries, ttl_days).await,
+            } => {
+                self.prune(&store_name, &project_id, max_entries, ttl_days)
+                    .await
+            }
         }
     }
 
@@ -116,12 +122,7 @@ impl LocalStoreBackend {
         Ok(StoreOpResult::Ok)
     }
 
-    async fn delete(
-        &self,
-        store_name: &str,
-        project_id: &str,
-        key: &str,
-    ) -> Result<StoreOpResult> {
+    async fn delete(&self, store_name: &str, project_id: &str, key: &str) -> Result<StoreOpResult> {
         let sn = store_name.to_string();
         let pid = project_id.to_string();
         let k = key.to_string();
@@ -261,7 +262,13 @@ mod tests {
 
         // Put
         let result = backend
-            .put("metrics", "", "bench_001", r#"{"test_count": 42}"#, "task-1")
+            .put(
+                "metrics",
+                "",
+                "bench_001",
+                r#"{"test_count": 42}"#,
+                "task-1",
+            )
             .await
             .expect("put should succeed");
         assert!(matches!(result, StoreOpResult::Ok));
