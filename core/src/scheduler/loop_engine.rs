@@ -489,9 +489,16 @@ async fn execute_cycle_segments(
                                                 json!({"count": new_items.len(), "replace": gen_action.replace}),
                                             )
                                             .await?;
-                                            // Refresh items list
-                                            items =
+                                            // Refresh items list — when dynamic items exist,
+                                            // subsequent item-scoped steps target only dynamic items
+                                            let all_items =
                                                 list_task_items_for_cycle(state, task_id).await?;
+                                            let has_dynamic = all_items.iter().any(|i| i.source == "dynamic");
+                                            items = if has_dynamic {
+                                                all_items.into_iter().filter(|i| i.source == "dynamic").collect()
+                                            } else {
+                                                all_items
+                                            };
                                             task_item_paths = items
                                                 .iter()
                                                 .map(|i| i.qa_file_path.clone())
