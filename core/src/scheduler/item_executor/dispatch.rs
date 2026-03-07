@@ -114,6 +114,19 @@ pub async fn process_item_filtered(
     let should_run_step =
         |step_id: &str| -> bool { step_filter.map_or(true, |f| f.contains(step_id)) };
     acc.merge_task_pipeline_vars(&task_ctx.pipeline_vars);
+
+    // Inject dynamic item variables (from generate_items) into pipeline vars
+    if let Some(ref label) = item.label {
+        acc.pipeline_vars.vars.insert("item_label".to_string(), label.clone());
+    }
+    if let Some(ref vars_json) = item.dynamic_vars_json {
+        if let Ok(vars) = serde_json::from_str::<std::collections::HashMap<String, String>>(vars_json) {
+            for (k, v) in vars {
+                acc.pipeline_vars.vars.insert(k, v);
+            }
+        }
+    }
+
     // ── Unified step loop ────────────────────────────────────────────
 
     for step in &task_ctx.execution_plan.steps {
