@@ -300,7 +300,8 @@ spec:
       repeatable: false       # only runs on cycle 1
       tty: false
       behavior:
-        on_failure: continue  # build failure is non-fatal, loop can still continue
+        on_failure:
+          action: continue  # build failure is non-fatal, loop can still continue
 
     # ── Item segment: qa_testing + ticket_fix (fan out per QA file) ──
     # Deferred to Cycle 2 (last cycle) so Cycle 1 stays focused on production code
