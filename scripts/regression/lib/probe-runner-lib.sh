@@ -86,6 +86,10 @@ probe_end_scenario() {
     _PROBE_FAIL_COUNT=$(( _PROBE_FAIL_COUNT + 1 ))
   fi
   _PROBE_STATUSES+=("$status")
+
+  # Brief pause to let SQLite WAL checkpoint complete before the next scenario
+  # opens new connections, preventing transient SQLITE_BUSY contention.
+  sleep 1
 }
 
 probe_record_duration() {
