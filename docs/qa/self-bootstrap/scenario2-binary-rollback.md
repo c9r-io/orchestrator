@@ -14,7 +14,19 @@ Verify that when auto-rollback triggers (after max consecutive failures), the `.
 ---
 
 ### Preconditions
-- ✅ Common Preconditions applied (qa-survival project, echo-workflow.yaml base)
+
+> **IMPORTANT: Must use mock fixture — never use `docs/workflow/self-bootstrap.yaml` (real Claude agents).**
+> See parent doc `01-survival-binary-checkpoint-self-test.md` for full Common Preconditions.
+
+```bash
+rm -f fixtures/ticket/auto_*.md
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
+QA_PROJECT="qa-survival"
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --force
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
+```
+
+- ✅ Common Preconditions applied (qa-survival project, **mock** self-bootstrap workflow)
 - ✅ `.stable` binary exists (from previous successful snapshot)
 - ✅ Workspace has `auto_rollback: true`, `checkpoint_strategy: git_tag`, `binary_snapshot: true`, `max_consecutive_failures: 3`
 

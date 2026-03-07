@@ -21,6 +21,11 @@ Workflow: `fixtures/manifests/bundles/self-bootstrap-mock.yaml`
 
 ### Common Preconditions
 
+> **CRITICAL: QA tests MUST use mock fixtures, never real workflows.**
+> The real workflow at `docs/workflow/self-bootstrap.yaml` uses live Claude agents
+> and will consume API credits rapidly. Always use `fixtures/manifests/bundles/self-bootstrap-mock.yaml`
+> which contains deterministic `echo` mock agents.
+
 > **Important**: Do NOT use `qa project create` for self-referential workflows.
 > `qa project create` always sets `self_referential: false` on the new workspace.
 > Instead, use `apply --project` to apply the self-bootstrap manifest directly

@@ -14,12 +14,24 @@ Verify that the `self_test` builtin step executes all three phases successfully 
 ---
 
 ### Preconditions
-- ✅ Common Preconditions applied (qa-survival project, self-bootstrap workflow)
+
+> **IMPORTANT: Must use mock fixture — never use `docs/workflow/self-bootstrap.yaml` (real Claude agents).**
+> See parent doc `01-survival-binary-checkpoint-self-test.md` for full Common Preconditions.
+
+```bash
+rm -f fixtures/ticket/auto_*.md
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
+QA_PROJECT="qa-survival"
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --force
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
+```
+
+- ✅ Common Preconditions applied (qa-survival project, **mock** self-bootstrap workflow)
 - ✅ Codebase is in a clean, compilable state (`cargo check` and `cargo test --lib` pass)
 - ✅ `scripts/orchestrator.sh` exists (for manifest validate phase)
 
 ### Steps
-1. Create and start a task using the `self-bootstrap` workflow
+1. Create and start a task using the `self-bootstrap` workflow (mock agents via fixture)
 2. Wait for the `self_test` step to execute (after `implement` step)
 3. Query the `step_finished` event for `self_test` in the events table
 4. Check pipeline variables are set correctly

@@ -14,7 +14,19 @@ Verify that binary snapshot is NOT created when `binary_snapshot: false` or when
 ---
 
 ### Preconditions
-- ✅ Common Preconditions applied (qa-survival project, echo-workflow.yaml base)
+
+> **IMPORTANT: Must use mock fixture — never use `docs/workflow/self-bootstrap.yaml` (real Claude agents).**
+> See parent doc `01-survival-binary-checkpoint-self-test.md` for full Common Preconditions.
+
+```bash
+rm -f fixtures/ticket/auto_*.md
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
+QA_PROJECT="qa-survival"
+./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --force
+./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
+```
+
+- ✅ Common Preconditions applied (qa-survival project, **mock** self-bootstrap workflow)
 - ✅ Release binary exists at `core/target/release/agent-orchestrator`
 - ✅ `.stable` file may exist from previous tests
 
