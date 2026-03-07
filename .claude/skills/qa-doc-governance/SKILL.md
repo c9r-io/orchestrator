@@ -38,11 +38,13 @@ Apply these rules in order:
 
 1. Fix executable correctness first.
 : Replace non-executable auth/session checks with explicit methods (incognito/private window, clear session cookie, explicit sign-out).
-2. Enforce visibility-first UI flows.
+2. Enforce mock-fixture-only for orchestrator workflows.
+: QA docs must reference `fixtures/manifests/bundles/*` mock fixtures (echo agents), never `docs/workflow/*` (real AI agents). Every doc must include explicit `apply -f fixtures/...` in preconditions. Standalone scenario stubs must inline precondition commands or cross-reference parent doc. Severity: P0.
+3. Enforce visibility-first UI flows.
 : UI scenarios start from visible entry points (sidebar, tab, button, quick links), not direct URL.
-3. Enforce scenario cap.
+4. Enforce scenario cap.
 : Keep each file `<=5` numbered scenarios. Split long files into base/advanced or topic-specific docs.
-4. Keep checklists mandatory.
+5. Keep checklists mandatory.
 : Every QA doc includes `## Checklist` / `## Regression Checklist` (or localized equivalent).
 
 ## Step 4: Sync Governance Artifacts

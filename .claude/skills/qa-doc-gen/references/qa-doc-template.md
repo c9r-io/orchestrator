@@ -112,4 +112,5 @@ You may add one unnumbered "General Scenario" at the end (does not count toward 
 4. For UI operations, reference buttons/menus by quoted UI labels (for example "Create", "Save").
 5. For API-tested scenarios, provide complete curl commands.
 6. Use English throughout; keep technical identifiers (SQL, API paths, field names) as-is.
+7. **Mock-fixture-only for orchestrator workflows**: QA docs that execute orchestrator workflows MUST reference mock fixtures from `fixtures/manifests/bundles/` (with deterministic `echo`/`exit` agents). NEVER reference real workflows from `docs/workflow/` which use live AI agents and consume API credits. The Preconditions section must include the explicit `apply -f fixtures/manifests/bundles/<mock>.yaml` command. Standalone scenario stubs must inline precondition commands or cross-reference the parent doc with a clear path.
 

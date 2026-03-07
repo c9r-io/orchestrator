@@ -60,6 +60,8 @@ Notes:
 
 **IMPORTANT: This skill is strictly for testing and reporting. NEVER attempt to fix, patch, or modify any source code during QA testing. If a test fails, create a ticket immediately and move on to the next scenario.**
 
+**CRITICAL — Mock-fixture-only rule**: Before executing any QA doc that runs orchestrator workflows, verify that the Preconditions section references a mock fixture from `fixtures/manifests/bundles/` (with deterministic `echo`/`exit` agents). NEVER apply or use real workflows from `docs/workflow/` — they invoke live AI agents (e.g. `claude -p`) and will exhaust API credits instantly. If a QA doc's preconditions are ambiguous or missing the explicit `apply -f fixtures/...` command, STOP and ask the user which mock fixture to use before proceeding.
+
 1. Confirm which QA document(s) to execute under `docs/qa/` (never assume when request is ambiguous).
 2. Parse scenarios and required setup (test data, environment, expected DB state).
 3. For each scenario:

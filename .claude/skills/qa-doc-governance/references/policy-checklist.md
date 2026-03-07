@@ -12,6 +12,11 @@
    - explicit sign out.
 6. `docs/qa/README.md` index must match filesystem docs.
 7. If present, `docs/qa/_manifest.yaml` must reflect current docs and scenario counts.
+8. **Mock-fixture-only rule**: Every QA doc that runs orchestrator workflows MUST:
+   - Reference a mock fixture from `fixtures/manifests/bundles/` (with deterministic `echo`/`exit` mock agents) — never a real workflow from `docs/workflow/` (which uses live AI agents and burns API credits).
+   - Include the explicit `apply -f fixtures/...` command in its Preconditions or Common Preconditions block so the test agent does not need to guess which fixture to use.
+   - Standalone scenario stub docs (e.g. `scenario*.md`) must either inline the full precondition commands or cross-reference the parent doc with an unambiguous path.
+   - Violation severity: **P0** — using real agents in QA can exhaust API budgets in seconds.
 
 ## Recommended Split Strategy For Long Docs
 
