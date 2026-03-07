@@ -431,6 +431,18 @@ pub struct SafetySpec {
     pub binary_snapshot: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
+    /// WP04: Invariant constraints
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub invariants: Vec<crate::config::InvariantConfig>,
+    /// WP02: Maximum total spawned tasks
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_spawned_tasks: Option<usize>,
+    /// WP02: Maximum spawn depth
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_spawn_depth: Option<usize>,
+    /// WP02: Cooldown between spawns in seconds
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spawn_cooldown_seconds: Option<u64>,
 }
 
 fn default_max_consecutive_failures() -> u32 {
@@ -488,6 +500,22 @@ pub struct WorkflowStepSpec {
     /// Per-step timeout in seconds (overrides global safety.step_timeout_secs)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_secs: Option<u64>,
+
+    /// Declarative step behavior (on_failure, captures, post_actions, etc.)
+    #[serde(default)]
+    pub behavior: crate::config::StepBehavior,
+
+    /// WP03: Configuration for item_select builtin step
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_select_config: Option<crate::config::ItemSelectConfig>,
+
+    /// WP01: Store inputs — read values from workflow stores before step execution
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub store_inputs: Vec<crate::config::StoreInputConfig>,
+
+    /// WP01: Store outputs — write pipeline vars to workflow stores after step execution
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub store_outputs: Vec<crate::config::StoreOutputConfig>,
 }
 
 fn default_true() -> bool {

@@ -16,7 +16,7 @@ pub enum StepScope {
 // ── Step Behavior declarations ─────────────────────────────────────
 
 /// Declarative behavior attached to each workflow step.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct StepBehavior {
     #[serde(default)]
     pub on_failure: OnFailureAction,
@@ -58,7 +58,7 @@ pub enum OnSuccessAction {
 }
 
 /// A single capture declaration: what to extract from a step result.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CaptureDecl {
     pub var: String,
     pub source: CaptureSource,
@@ -150,6 +150,7 @@ const KNOWN_STEP_IDS: &[&str] = &[
     "self_restart",
     "smoke_chain",
     "evaluate",
+    "item_select",
 ];
 
 const KNOWN_BUILTIN_STEP_NAMES: &[&str] = &[

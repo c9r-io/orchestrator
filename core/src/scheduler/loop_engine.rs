@@ -853,6 +853,18 @@ async fn execute_guard_steps(
                 "workflow_terminated",
                 json!({"guard_step": step.id}),
             );
+
+            // Run before_complete invariant check before finalizing
+            if let Some(action) = check_invariants(state, task_id, task_ctx, InvariantCheckPoint::BeforeComplete).await? {
+                if action == "halt" {
+                    set_task_status(state, task_id, "failed", false).await?;
+                    insert_event(state, task_id, None, "task_failed", json!({"reason": "invariant_halt_before_complete"})).await?;
+                    let unresolved = count_unresolved_items(state, task_id).await?;
+                    record_task_execution_metric(state, task_id, "failed", task_ctx.current_cycle, unresolved).await?;
+                    return Ok(true);
+                }
+            }
+
             set_task_status(state, task_id, "completed", true).await?;
             insert_event(state, task_id, None, "task_completed", json!({})).await?;
             state.emit_event(task_id, None, "task_completed", json!({}));

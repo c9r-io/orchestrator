@@ -1,337 +1,446 @@
-# WP05: Integration Validation — Self-Evolving Workflow End-to-End
+# WP05: Integration Validation — Primitive Composition Verification
 
 ## Goal
 
-Validate that all four workflow primitives (WP01–WP04) compose into a single `self-evolving.yaml` workflow that demonstrates:
-1. **Learning** — each run uses knowledge from previous runs
-2. **Goal discovery** — the workflow autonomously identifies what to improve next
-3. **Exploration** — multiple candidate approaches are tried in parallel
-4. **Safety** — immutable invariants prevent quality degradation
+Validate that WP01–WP04 **compose correctly** when used together in a single workflow. Individual primitive correctness is already covered by QA docs 46–49; WP05 focuses exclusively on **inter-primitive interactions** and **end-to-end composition**.
 
-All of this expressed in **workflow YAML** — no new built-in Rust behavior beyond the four primitives.
+## Design Principles
+
+1. **Decoupled layers** — each validation layer is independently runnable; failures isolate to a specific composition boundary
+2. **Deterministic** — all agents are mock shell commands with predictable output; no AI variance
+3. **Incremental** — layers build from pairwise composition to full integration; skip-to-layer is supported
+4. **Self-contained** — each fixture includes its own store seed data, invariant definitions, and expected outputs
 
 ## Dependencies
 
-- WP01 (Persistent Store) — implemented and tested
-- WP02 (Task Spawning) — implemented and tested
-- WP03 (Dynamic Items) — implemented and tested
-- WP04 (Invariant Constraints) — implemented and tested
+- WP01 (Persistent Store) — implemented (QA: 46)
+- WP02 (Task Spawning) — implemented (QA: 47)
+- WP03 (Dynamic Items + Selection) — implemented (QA: 48)
+- WP04 (Invariant Constraints) — implemented (QA: 49)
+- Engine wiring verified (QA: 50)
 
-## The Self-Evolving Workflow
+---
 
-### Architecture
+## Validation Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  meta_planner (task-scoped)                                      │
-│  Reads: store(journal), store(metrics), store(baselines)         │
-│  Outputs: improvement goals, candidate strategies                │
-│  Post-action: generate_items from candidates                     │
-├─────────────────────────────────────────────────────────────────┤
-│  implement (item-scoped, parallel)                               │
-│  Each candidate implements its strategy independently            │
-│  [after_implement: invariant check]                              │
-├─────────────────────────────────────────────────────────────────┤
-│  self_test (item-scoped, parallel)                               │
-│  Each candidate must pass cargo check + cargo test               │
-├─────────────────────────────────────────────────────────────────┤
-│  benchmark (item-scoped, parallel)                               │
-│  Measure: test count, compile time, test time                    │
-├─────────────────────────────────────────────────────────────────┤
-│  select_best (task-scoped)                                       │
-│  Pick winner by weighted metrics                                 │
-│  Store winner's metrics + approach to journal                    │
-├─────────────────────────────────────────────────────────────────┤
-│  self_restart (task-scoped)                                      │
-│  Build + verify + exit(75) for winner's code                     │
-│  [before_restart: invariant check]                               │
-├─────────────────────────────────────────────────────────────────┤
-│  qa_testing (item-scoped, last cycle)                            │
-│  Full QA on the evolved codebase                                 │
-├─────────────────────────────────────────────────────────────────┤
-│  record_results (task-scoped)                                    │
-│  Write metrics + journal entries to store                        │
-│  Optionally spawn follow-up tasks for discovered sub-goals       │
-│  [before_complete: invariant check]                              │
-└─────────────────────────────────────────────────────────────────┘
+Layer 1: Pairwise Composition (4 scenarios)
+  Each scenario exercises exactly 2 primitives interacting
+
+Layer 2: Triple Composition (2 scenarios)
+  Three primitives cooperating in a realistic sub-workflow
+
+Layer 3: Full Composition (2 scenarios)
+  All four primitives in a self-evolving workflow — happy path + violation path
 ```
 
-### Workflow YAML (Target State)
+Each layer has:
+- A fixture YAML (`fixtures/manifests/bundles/wp05-*.yaml`)
+- A corresponding section in the E2E script
+- Pass/fail assertions checking DB state via `sqlite3`
+
+---
+
+## Layer 1: Pairwise Composition
+
+### L1-A: Store + Spawning (WP01 x WP02)
+
+**What it proves**: A parent task writes context to store; spawned child reads it back.
+
+**Fixture**: `wp05-store-spawn.yaml`
+
+```
+Workflow: store-spawn-test
+  Step 1 (task-scoped): echo mock plan output
+    post_actions:
+      - store_put: { namespace: context, key: parent_finding, value_from: plan_output }
+      - spawn_task: { goal: "child-task", workflow: store-spawn-child }
+
+Child Workflow: store-spawn-child
+  Step 1 (task-scoped): echo child execution
+    store_inputs:
+      - namespace: context, key: parent_finding, into_var: inherited_context
+```
+
+**Assertions**:
+1. Child task exists with `parent_task_id` set to parent's ID
+2. Store key `context/parent_finding` contains parent's output
+3. Child task's pipeline_vars contain `inherited_context` populated from store
+
+**Boundary tested**: store_put in post_action -> spawn -> store_inputs in child
+
+---
+
+### L1-B: Store + Invariants (WP01 x WP04)
+
+**What it proves**: Invariant assertions can reference store values as baselines.
+
+**Fixture**: `wp05-store-invariant.yaml`
+
+```
+Pre-seed: store_put(baselines, min_test_count, "10")
+
+Workflow: store-invariant-test
+  Step 1 (task-scoped): echo '{"test_count": 8}'
+    captures: test_count
+
+  Invariant: test_count_no_regression
+    command: "echo 8"
+    capture_as: current_count
+    assert: "int(current_count) >= int(store('baselines', 'min_test_count'))"
+    check_at: [before_complete]
+    on_violation: halt
+    immutable: true
+```
+
+**Assertions**:
+1. Task status = `invariant_violated` (8 < 10)
+2. Event `invariant_violated` emitted with invariant name
+3. Re-run with `echo 12` -> task completes successfully (12 >= 10)
+
+**Boundary tested**: invariant assert expression reads live store values
+
+---
+
+### L1-C: Dynamic Items + Selection (WP03 isolated, baseline)
+
+**What it proves**: generate_items -> parallel execution -> item_select round-trip works end-to-end with mock agents.
+
+**Fixture**: `wp05-items-select.yaml`
+
+```
+Workflow: items-select-test
+  Step 1 (task-scoped, meta_planner):
+    command: echo '{"candidates":[{"id":"fast","name":"fast","description":"opt-speed"},{"id":"safe","name":"safe","description":"opt-safety"},{"id":"balanced","name":"balanced","description":"opt-both"}]}'
+    post_actions:
+      - generate_items: { from_var: plan_output, json_path: "$.candidates", ... }
+
+  Step 2 (item-scoped, benchmark):
+    command per item:
+      fast:     echo '{"score": 95}'
+      safe:     echo '{"score": 72}'
+      balanced: echo '{"score": 88}'
+    captures: score
+
+  Step 3 (task-scoped, select_best):
+    builtin: item_select
+    config: { strategy: max, metric_var: score }
+```
+
+**Assertions**:
+1. Three items created with source=`dynamic`
+2. Winner = `fast` (score 95)
+3. Winner status = `qa_passed`, others = `eliminated`
+4. Pipeline var `item_select_winner` = `fast`
+
+**Boundary tested**: generate_items -> item fan-out -> item_select convergence
+
+---
+
+### L1-D: Dynamic Items + Invariants (WP03 x WP04)
+
+**What it proves**: Invariant check fires per-item after implement, blocking bad candidates before selection.
+
+**Fixture**: `wp05-items-invariant.yaml`
+
+```
+Workflow: items-invariant-test
+  Step 1 (task-scoped): generate 2 candidates (good, bad)
+
+  Step 2 (item-scoped, implement):
+    good: exit 0
+    bad:  exit 0
+
+  Invariant: after_implement
+    command for good: exit 0
+    command for bad: exit 1   (simulated test failure)
+    check_at: [after_implement]
+    on_violation: halt
+```
+
+**Assertions**:
+1. `bad` item halted at after_implement checkpoint
+2. `good` item proceeds to next step
+3. Task does not fully halt (item-level violation, not task-level)
+
+**Boundary tested**: invariant checkpoint interacts correctly with multi-item execution
+
+---
+
+## Layer 2: Triple Composition
+
+### L2-A: Store + Items + Selection (WP01 x WP03)
+
+**What it proves**: Winner's metrics are persisted to store; a subsequent task reads the stored winner data.
+
+**Fixture**: `wp05-store-items-select.yaml`
+
+```
+Workflow: store-items-select-test
+  Step 1: generate 2 candidates
+  Step 2 (item-scoped): benchmark -> captures score
+  Step 3: item_select (strategy: max)
+    config.store_result: { namespace: evolution, key: winner_latest }
+  Step 4: store_put journal entry from task_summary
+    post_actions:
+      - spawn_task: { goal: "verify-store", workflow: verify-winner }
+
+Child Workflow: verify-winner
+  Step 1:
+    store_inputs:
+      - namespace: evolution, key: winner_latest, into_var: prev_winner
+```
+
+**Assertions**:
+1. Store key `evolution/winner_latest` contains winner ID and score
+2. Child task's `prev_winner` var matches the stored winner data
+3. Journal entry exists in `journal` namespace
+
+**Boundary tested**: item_select -> store_result -> spawn -> store_inputs (3-primitive data flow)
+
+---
+
+### L2-B: Items + Invariants + Store (WP03 x WP04 x WP01)
+
+**What it proves**: Invariant violations reference store baselines in a multi-candidate context; only candidates meeting the baseline survive selection.
+
+**Fixture**: `wp05-items-invariant-store.yaml`
+
+```
+Pre-seed: store_put(baselines, min_score, "80")
+
+Workflow: items-invariant-store-test
+  Step 1: generate 3 candidates
+  Step 2 (item-scoped, implement): each produces a score
+  Step 3 (item-scoped, benchmark): captures score
+
+  Invariant: score_baseline
+    assert: "int(score) >= int(store('baselines', 'min_score'))"
+    check_at: [before_complete]
+    on_violation: halt
+
+  Step 4: item_select (strategy: max, from surviving items)
+```
+
+**Assertions**:
+1. Candidates with score < 80 are halted by invariant
+2. Remaining candidates proceed to selection
+3. If all candidates fail invariant -> task status = `invariant_violated`
+4. Store baseline value (80) was read correctly during assertion evaluation
+
+**Boundary tested**: store-backed invariant assertion in multi-candidate pipeline
+
+---
+
+## Layer 3: Full Composition
+
+### L3-A: Self-Evolving Happy Path (WP01 x WP02 x WP03 x WP04)
+
+**What it proves**: All four primitives compose into a complete self-evolving cycle.
+
+**Fixture**: `wp05-self-evolving-mock.yaml`
+
+This is the full `self-evolving` workflow from the overview doc, but with all agents replaced by deterministic mock commands.
+
+```
+Pre-seed:
+  store_put(journal, recent_improvements, "[]")
+  store_put(metrics, latest, '{"test_count": 100}')
+  store_put(baselines, min_test_count, "100")
+  store_put(baselines, min_qa_docs, "1")
+
+Workflow: self-evolving (mock)
+  meta_planner: reads store(journal + metrics + baselines), outputs 3 candidates
+  implement (x3 parallel): mock code changes
+  self_test (x3 parallel): mock cargo test (all pass)
+  benchmark (x3 parallel): mock scores (101, 99, 103)
+  select_best: weighted by test_count -> winner = candidate with 103
+  self_restart: mock build (exit 0, skip actual restart)
+  qa_testing (last cycle): mock QA pass
+  record_results:
+    store_put journal entry
+    store_put metrics
+    spawn_tasks: 1 follow-up task
+
+  Invariants (immutable):
+    all_tests_pass: mock exit 0
+    test_count_no_regression: 103 >= 100 -> pass
+    no_deleted_qa_docs: count >= 1 -> pass
+
+  Loop: fixed, max_cycles: 2
+```
+
+**Assertions**:
+1. **Store round-trip**: meta_planner received seeded journal/metrics/baselines
+2. **Dynamic items**: 3 candidates created, all executed in parallel
+3. **Selection**: winner = candidate with score 103
+4. **Invariants**: all 3 passed at before_complete
+5. **Spawn**: 1 follow-up task created with correct parent lineage
+6. **Store persistence**: journal and metrics updated post-run
+7. **Cycle 2 learning**: second cycle's meta_planner sees cycle 1's journal entry
+
+**This is the capstone test** — it validates the full primitive composition without testing any individual primitive in isolation.
+
+---
+
+### L3-B: Self-Evolving Violation Path (WP01 x WP03 x WP04)
+
+**What it proves**: When all candidates regress below the store baseline, invariants halt the task safely — no broken code proceeds.
+
+**Fixture**: Reuses `wp05-self-evolving-mock.yaml` with override seed.
+
+```
+Pre-seed:
+  store_put(baselines, min_test_count, "200")  # impossibly high baseline
+
+Same workflow, but all candidates score < 200
+```
+
+**Assertions**:
+1. All candidates eliminated by invariant at before_complete
+2. Task status = `invariant_violated`
+3. No spawn_tasks executed (post-action gated on success)
+4. Store journal NOT updated (task did not succeed)
+5. Event stream contains `invariant_violated` with correct invariant name
+
+---
+
+## Fixture Design
+
+### Mock Agent Convention
+
+All mock agents use shell `echo` commands that output deterministic JSON:
+
+```yaml
+command: |
+  echo '{"confidence":0.95,"quality_score":0.9,"artifacts":[]}'
+```
+
+For item-scoped steps that need per-item variation, use the `{item_id}` template variable:
+
+```yaml
+command: |
+  case "{item_id}" in
+    fast)     echo '{"score": 95}' ;;
+    safe)     echo '{"score": 72}' ;;
+    balanced) echo '{"score": 88}' ;;
+  esac
+```
+
+### Store Seeding
+
+Each fixture includes `WorkflowStore` CRDs and a seed script section:
 
 ```yaml
 apiVersion: orchestrator.dev/v2
-kind: Workflow
+kind: WorkflowStore
 metadata:
-  name: self-evolving
+  name: baselines
 spec:
-  steps:
-    # ── Phase 1: Learn + Plan ──────────────────────────────
-    - id: meta_planner
-      type: plan
-      scope: task
-      enabled: true
-      repeatable: false
-      store_inputs:
-        - namespace: journal
-          key: recent_improvements
-          into_var: history
-          default: "[]"
-        - namespace: metrics
-          query: "ORDER BY updated_at DESC LIMIT 10"
-          into_var: recent_metrics
-        - namespace: baselines
-          key: quality_baseline
-          into_var: baseline
-          default: "{}"
-      post_actions:
-        - generate_items:
-            from_var: plan_output
-            json_path: "$.candidates"
-            mapping:
-              item_id: "$.id"
-              label: "$.name"
-              vars:
-                approach: "$.description"
-                target_files: "$.files"
-            replace: true
-
-    # ── Phase 2: Implement Candidates ──────────────────────
-    - id: implement
-      type: implement
-      scope: item
-      enabled: true
-      repeatable: true
-      max_parallel: 3
-
-    # ── Phase 3: Test + Benchmark ──────────────────────────
-    - id: self_test
-      type: self_test
-      scope: item
-      builtin: self_test
-
-    - id: benchmark
-      type: test
-      scope: item
-      max_parallel: 3
-      command: |
-        cd core
-        TEST_OUTPUT=$(cargo test --lib 2>&1)
-        TEST_COUNT=$(echo "$TEST_OUTPUT" | grep -oP '\d+ passed' | grep -oP '\d+')
-        echo "{\"test_count\": $TEST_COUNT}"
-      captures:
-        - regex: '"test_count":\s*(\d+)'
-          var: test_count
-
-    # ── Phase 4: Select Winner ─────────────────────────────
-    - id: select_best
-      type: evaluate
-      scope: task
-      builtin: item_select
-      config:
-        strategy: weighted
-        weights:
-          test_count: 1.0
-        store_result:
-          namespace: evolution
-          key: "winner_{{task_id}}"
-
-    # ── Phase 5: Apply + Restart ───────────────────────────
-    - id: self_restart
-      type: self_restart
-      scope: task
-      builtin: self_restart
-      repeatable: false
-
-    # ── Phase 6: QA (final cycle only) ─────────────────────
-    - id: qa_testing
-      type: qa_testing
-      scope: item
-      enabled: true
-      repeatable: true
-      prehook:
-        engine: cel
-        when: "is_last_cycle"
-        reason: "QA deferred to final cycle"
-
-    - id: align_tests
-      type: align_tests
-      scope: task
-      enabled: true
-      repeatable: true
-      prehook:
-        engine: cel
-        when: "is_last_cycle"
-
-    # ── Phase 7: Record + Spawn Follow-ups ─────────────────
-    - id: record_results
-      type: doc_governance
-      scope: task
-      enabled: true
-      repeatable: false
-      post_actions:
-        - store_put:
-            namespace: journal
-            key: "run_{{task_id}}"
-            value_from: task_summary
-            append_to: recent_improvements
-            max_entries: 50
-        - store_put:
-            namespace: metrics
-            key: "metrics_{{task_id}}"
-            value_from: benchmark_output
-        - spawn_tasks:
-            from_var: discovered_subgoals
-            json_path: "$.goals"
-            mapping:
-              goal: "$.goal"
-              workflow: "$.workflow"
-            max_tasks: 3
-            queue: true
-
-    - id: loop_guard
-      type: loop_guard
-      enabled: true
-      repeatable: true
-      is_guard: true
-      builtin: loop_guard
-
-  loop:
-    mode: fixed
-    max_cycles: 2
-    enabled: true
-
-  safety:
-    max_consecutive_failures: 3
-    auto_rollback: false
-    checkpoint_strategy: git_tag
-    max_spawned_tasks: 10
-    max_spawn_depth: 3
-
-    invariants:
-      - name: all_tests_pass
-        description: "All library unit tests must pass"
-        command: "cd core && cargo test --lib 2>&1"
-        expect_exit: 0
-        check_at: [after_implement, before_restart, before_complete]
-        on_violation: halt
-        immutable: true
-
-      - name: test_count_no_regression
-        description: "Test count must not decrease from baseline"
-        command: "cd core && cargo test --lib 2>&1 | grep -oP '\\d+ passed' | grep -oP '\\d+'"
-        capture_as: current_test_count
-        assert: "int(current_test_count) >= int(store('baselines', 'min_test_count'))"
-        check_at: [before_complete]
-        on_violation: halt
-        immutable: true
-
-      - name: no_deleted_qa_docs
-        description: "QA documents must not be deleted"
-        command: "find docs/qa -name '*.md' | wc -l"
-        capture_as: qa_doc_count
-        assert: "int(qa_doc_count) >= int(store('baselines', 'min_qa_docs'))"
-        check_at: [before_complete]
-        on_violation: halt
-        immutable: true
+  provider: local
+  schema:
+    fields:
+      - name: min_test_count
+        type: integer
+  retention:
+    max_entries: 100
 ```
 
-## Validation Scenarios
+Seed data is inserted by the test script before workflow execution:
 
-### Scenario 1: Store Round-Trip Across Tasks
+```bash
+$ORCH store put baselines min_test_count 100
+```
 
-**Goal**: Verify task A writes to store, task B reads it.
+---
 
-**Steps**:
-1. Run task A with workflow that writes `{plan_output}` to `store://journal/run_A`
-2. Run task B with workflow that reads `store://journal/run_A` into `{history}` var
-3. Verify task B's plan step received the value from task A
+## Test Script Architecture
 
-**Expected**: Task B's agent command includes task A's plan output in `{history}`.
+**File**: `scripts/qa/test-wp05-integration.sh`
 
-### Scenario 2: Task Spawning Chain
+```
+Usage: test-wp05-integration.sh [--layer N] [--scenario ID] [--verbose]
 
-**Goal**: Verify parent task spawns children, lineage is tracked, safety caps work.
+  --layer 1|2|3     Run only scenarios in the specified layer
+  --scenario L1-A   Run a single scenario by ID
+  --verbose         Show full orchestrator output
+  (no args)         Run all scenarios sequentially
+```
 
-**Steps**:
-1. Run parent task whose plan outputs 3 goals
-2. Verify 3 child tasks created with status `pending`
-3. Verify `parent_task_id` set correctly
-4. Start child tasks, verify they complete
-5. Run a task that tries to spawn 10 children with `max_tasks: 3` — verify only 3 created
+### Script Structure
 
-**Expected**: Correct lineage, safety cap enforced.
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-### Scenario 3: Dynamic Items with Selection
+# ── Shared utilities ──
+setup_db()          # init fresh DB + seed store
+teardown_db()       # cleanup
+assert_task_status()    # query tasks table
+assert_store_value()    # query store via CLI
+assert_event_exists()   # query events table
+assert_item_count()     # query task_items table
+assert_pipeline_var()   # query pipeline_vars
 
-**Goal**: Verify 3 candidates are created, executed in parallel, and the best one selected.
+# ── Layer 1 ──
+test_L1A_store_spawn()
+test_L1B_store_invariant()
+test_L1C_items_select()
+test_L1D_items_invariant()
 
-**Steps**:
-1. Run workflow with `generate_items` producing 3 candidates
-2. Each candidate runs a benchmark step capturing `bench_time_ms`
-3. `item_select` with `strategy: min` picks the fastest
-4. Verify winner status = `qa_passed`, others = `eliminated`
-5. Verify subsequent task-scoped steps use winner's pipeline vars
+# ── Layer 2 ──
+test_L2A_store_items_select()
+test_L2B_items_invariant_store()
 
-**Expected**: Winner selection correct, losers eliminated, winner context propagated.
+# ── Layer 3 ──
+test_L3A_self_evolving_happy()
+test_L3B_self_evolving_violation()
 
-### Scenario 4: Invariant Violation Halts Task
+# ── Runner ──
+run_layer() { ... }
+run_scenario() { ... }
+main() { parse_args; run_selected; report_summary; }
+```
 
-**Goal**: Verify an immutable invariant stops a task that introduces regression.
+Each `test_*` function follows the pattern:
 
-**Steps**:
-1. Set baseline `min_test_count = 1334` in store
-2. Run self-evolving workflow where implement step "deletes" a test file (mock)
-3. Invariant `test_count_no_regression` fires at `before_complete`
-4. Verify task status = `invariant_violated`
-5. Verify event `invariant_violated` with details
+```bash
+test_L1A_store_spawn() {
+  info "L1-A: Store + Spawning"
+  setup_db
+  $ORCH apply -f fixtures/manifests/bundles/wp05-store-spawn.yaml
+  $ORCH store put context parent_finding '{"finding":"optimize-parser"}'
+  $ORCH task create --goal "test-store-spawn" --workflow store-spawn-test
 
-**Expected**: Task halted, no broken code shipped.
+  $ORCH run --task "$TASK_ID" --max-steps 10
 
-### Scenario 5: Invariant Immutability
+  assert_store_value context parent_finding '{"finding":"optimize-parser"}'
+  assert_task_status "$CHILD_ID" pending
+  assert_pipeline_var "$CHILD_ID" inherited_context '{"finding":"optimize-parser"}'
+  teardown_db
+}
+```
 
-**Goal**: Verify that a workflow cannot modify its own immutable invariant.
-
-**Steps**:
-1. Start workflow with `immutable: true` invariant checking test count
-2. Implement step modifies the workflow config (tries to set invariant command to `echo 99999`)
-3. Invariant check runs at `before_complete`
-4. Verify the **original** invariant command was used, not the tampered one
-
-**Expected**: Engine uses pinned invariant, ignores modification.
-
-### Scenario 6: Full Self-Evolving Cycle
-
-**Goal**: End-to-end run of the self-evolving workflow.
-
-**Steps**:
-1. Initialize baselines in store (`min_test_count`, `min_qa_docs`)
-2. Run self-evolving workflow with goal "improve test coverage"
-3. Verify:
-   - meta_planner read history from store
-   - 3 candidates generated and implemented in parallel
-   - Winner selected by test_count metric
-   - self_restart built new binary
-   - QA ran on final cycle
-   - Results recorded to store
-   - Follow-up tasks spawned (if agent produced sub-goals)
-   - All invariants passed
-4. Run a **second** self-evolving task
-5. Verify the second run's meta_planner received the first run's journal entry
-
-**Expected**: Two consecutive self-evolving runs demonstrate learning (second run sees first run's history).
+---
 
 ## Deliverables
 
-1. `fixtures/manifests/bundles/self-evolving.yaml` — the full workflow
-2. `fixtures/manifests/bundles/self-evolving-mock.yaml` — mock agents for deterministic testing
-3. `scripts/qa/test-self-evolving-e2e.sh` — automated E2E validation script
-4. `docs/qa/self-bootstrap/50-self-evolving-workflow.md` — QA document with all 6 scenarios
+| # | File | Purpose |
+|---|------|---------|
+| 1 | `fixtures/manifests/bundles/wp05-store-spawn.yaml` | L1-A fixture |
+| 2 | `fixtures/manifests/bundles/wp05-store-invariant.yaml` | L1-B fixture |
+| 3 | `fixtures/manifests/bundles/wp05-items-select.yaml` | L1-C fixture |
+| 4 | `fixtures/manifests/bundles/wp05-items-invariant.yaml` | L1-D fixture |
+| 5 | `fixtures/manifests/bundles/wp05-store-items-select.yaml` | L2-A fixture |
+| 6 | `fixtures/manifests/bundles/wp05-items-invariant-store.yaml` | L2-B fixture |
+| 7 | `fixtures/manifests/bundles/wp05-self-evolving-mock.yaml` | L3-A/B fixture |
+| 8 | `scripts/qa/test-wp05-integration.sh` | Modular E2E test script |
+| 9 | `docs/qa/orchestrator/51-primitive-composition.md` | QA doc with all 8 scenarios |
 
 ## Success Criteria
 
-The self-evolving workflow:
-- Runs entirely from YAML configuration — no hardcoded self-improvement logic in Rust
-- Demonstrates measurable improvement across consecutive runs (metrics in store trend upward)
-- Halts safely when invariants are violated
-- Spawns follow-up tasks without human intervention
-- Composes all four primitives naturally without special-case interactions
+1. All 8 scenarios pass with deterministic mock agents
+2. Each layer can run independently (`--layer N`)
+3. No scenario depends on another scenario's side effects (fresh DB per test)
+4. Layer 3 proves that the four primitives compose without special-case engine code
+5. Violation path (L3-B) confirms safety: invariant halt prevents broken state propagation

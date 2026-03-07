@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Configuration for reading a value from a workflow store before step execution.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StoreInputConfig {
     /// Store name (WorkflowStore resource)
     pub store: String,
@@ -15,7 +15,7 @@ pub struct StoreInputConfig {
 }
 
 /// Configuration for writing a pipeline variable to a workflow store after step execution.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StoreOutputConfig {
     /// Store name (WorkflowStore resource)
     pub store: String,

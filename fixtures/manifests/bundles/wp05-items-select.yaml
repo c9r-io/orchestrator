@@ -1,0 +1,92 @@
+# WP05 Layer 1-C: Dynamic Items + Selection (WP03 baseline)
+# generate_items -> parallel execution -> item_select round-trip
+---
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: wp05-ws
+spec:
+  root_path: "."
+  qa_targets:
+    - fixtures/wp05-qa
+  ticket_dir: fixtures/ticket
+  self_referential: false
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: wp05_mock_agent
+spec:
+  capabilities:
+    - plan
+    - implement
+    - qa_testing
+    - loop_guard
+    - evaluate
+  command: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: wp05-items-select
+spec:
+  max_parallel: 3
+  steps:
+    # Task-scoped: generate 3 candidates
+    - id: plan
+      type: plan
+      scope: task
+      enabled: true
+      repeatable: false
+      command: "printf '%s' '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[],\"candidates\":[{\"id\":\"fast\",\"name\":\"fast-approach\",\"description\":\"optimize speed\"},{\"id\":\"safe\",\"name\":\"safe-approach\",\"description\":\"optimize safety\"},{\"id\":\"balanced\",\"name\":\"balanced-approach\",\"description\":\"balance both\"}]}'"
+      behavior:
+        post_actions:
+          - type: generate_items
+            from_var: plan_output
+            json_path: "$.candidates"
+            mapping:
+              item_id: "$.id"
+              label: "$.name"
+              vars:
+                approach: "$.description"
+            replace: true
+
+    # Item-scoped: benchmark each candidate
+    - id: benchmark
+      type: qa_testing
+      scope: item
+      enabled: true
+      repeatable: false
+      command: "printf '%s' '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[]}'"
+      behavior:
+        captures:
+          - var: score
+            source: exit_code
+
+    # Task-scoped: select best by score
+    - id: select_best
+      type: item_select
+      scope: task
+      enabled: true
+      repeatable: false
+      item_select_config:
+        strategy: max
+        metric_var: score
+        store_result:
+          namespace: evolution
+          key: winner_latest
+
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none

@@ -1,0 +1,95 @@
+# WP05 Layer 1-A: Store + Spawning (WP01 x WP02)
+# Parent task writes to store, spawns child that reads from store.
+---
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: wp05-ws
+spec:
+  root_path: "."
+  qa_targets:
+    - fixtures/wp05-qa
+  ticket_dir: fixtures/ticket
+  self_referential: false
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: wp05_mock_agent
+spec:
+  capabilities:
+    - plan
+    - implement
+    - loop_guard
+  command: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[]}'"
+---
+# Parent workflow: writes to store, spawns child
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: wp05-store-spawn-parent
+spec:
+  steps:
+    - id: plan
+      type: plan
+      scope: task
+      enabled: true
+      repeatable: false
+      command: "printf '%s' '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"parent-finding\",\"description\":\"optimize parser\",\"severity\":\"info\"}]}]}'"
+      behavior:
+        post_actions:
+          - type: store_put
+            store: context
+            key: parent_finding
+            from_var: plan_output
+          - type: spawn_task
+            goal: "child-verify-store-read"
+            workflow: wp05-store-spawn-child
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
+    max_spawned_tasks: 5
+    max_spawn_depth: 3
+---
+# Child workflow: reads from store
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: wp05-store-spawn-child
+spec:
+  steps:
+    - id: implement
+      type: implement
+      scope: task
+      enabled: true
+      repeatable: false
+      command: "printf '%s' '{\"confidence\":0.9,\"quality_score\":0.85,\"artifacts\":[]}'"
+      store_inputs:
+        - store: context
+          key: parent_finding
+          as_var: inherited_context
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
