@@ -175,14 +175,24 @@ Entry points:
    QA_PROJECT="qa-db-reset-test"
    ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "reset-test" --goal "reset test"
+   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --from-workspace default --workflow qa_only --force
+   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "reset-test" --goal "reset test" --no-start
    ```
+
+   > **Note**: `task create --project` requires the project workspace to contain at
+   > least one QA markdown file for item-scoped workflows. `qa project create` now
+   > copies `.md` files from the source workspace's QA target directories. If the
+   > project still has no files, either specify `--workflow` with a task-scoped workflow
+   > or provide explicit `--workspace` and `--workflow` flags.
 
 2. Verify task exists in project:
    ```bash
-   ./scripts/orchestrator.sh task list --project "${QA_PROJECT}"
+   ./scripts/orchestrator.sh task list -o json | jq '[.[] | select(.project_id == "'"${QA_PROJECT}"'")]'
    ```
+
+   > **Note**: `task list` does not support a `--project` filter flag. Use
+   > `task list -o json | jq '[.[] | select(.project_id == "...")]'` or
+   > `sqlite3 data/agent_orchestrator.db "SELECT id, name FROM tasks WHERE project_id = '...'"`.
 
 3. Reset the project:
    ```bash
@@ -191,13 +201,14 @@ Entry points:
 
 4. Verify task records within the project are cleared:
    ```bash
-   ./scripts/orchestrator.sh task list --project "${QA_PROJECT}"
+   ./scripts/orchestrator.sh task list -o json | jq '[.[] | select(.project_id == "'"${QA_PROJECT}"'")] | length'
+   # Expected: 0
    ```
 
 ### Expected
 
 - Project reset succeeds with `--force`.
-- Task records within the target project are cleared.
+- Task records within the target project are cleared (count = 0).
 - Other project data is unaffected.
 
 ---

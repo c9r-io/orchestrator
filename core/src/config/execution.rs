@@ -214,6 +214,8 @@ pub struct StepPrehookContext {
     pub max_cycles: u32,
     /// Whether this is the last cycle (cycle == max_cycles)
     pub is_last_cycle: bool,
+    /// Whether this QA doc is safe to run in a self-referential workspace
+    pub self_referential_safe: bool,
 }
 
 /// Artifact summary

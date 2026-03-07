@@ -51,6 +51,7 @@ impl CliHandler {
                 let resolved_root_path = root_path
                     .clone()
                     .unwrap_or_else(|| format!("workspace/{}", project_id));
+                let source_workspace_root_path = source_workspace.root_path.clone();
                 let resolved_qa_targets = if qa_target.is_empty() {
                     source_workspace.qa_targets
                 } else {
@@ -89,6 +90,7 @@ impl CliHandler {
                     .insert(workflow_id.clone(), source_workflow);
 
                 let workspace_root = self.state.app_root.join(&resolved_root_path);
+                let source_root = self.state.app_root.join(&source_workspace_root_path);
                 std::fs::create_dir_all(&workspace_root).with_context(|| {
                     format!(
                         "failed to create workspace root for project '{}': {}",
@@ -98,14 +100,28 @@ impl CliHandler {
                 })?;
                 if let Some(ws) = project.workspaces.get(&workspace_id) {
                     for target in &ws.qa_targets {
-                        std::fs::create_dir_all(workspace_root.join(target)).with_context(
-                            || {
-                                format!(
-                                    "failed to create qa target dir for project '{}': {}",
-                                    project_id, target
-                                )
-                            },
-                        )?;
+                        let dest_dir = workspace_root.join(target);
+                        std::fs::create_dir_all(&dest_dir).with_context(|| {
+                            format!(
+                                "failed to create qa target dir for project '{}': {}",
+                                project_id, target
+                            )
+                        })?;
+                        // Copy .md files from source workspace qa target into new workspace
+                        let src_dir = source_root.join(target);
+                        if src_dir.is_dir() {
+                            if let Ok(entries) = std::fs::read_dir(&src_dir) {
+                                for entry in entries.flatten() {
+                                    let name = entry.file_name();
+                                    let name_str = name.to_string_lossy();
+                                    if name_str.ends_with(".md")
+                                        && entry.file_type().map(|t| t.is_file()).unwrap_or(false)
+                                    {
+                                        let _ = std::fs::copy(entry.path(), dest_dir.join(&name));
+                                    }
+                                }
+                            }
+                        }
                     }
                     std::fs::create_dir_all(workspace_root.join(&ws.ticket_dir)).with_context(
                         || {

@@ -101,6 +101,22 @@ pub fn reset_db(
 
 pub fn reset_db_by_path(db_path: &Path, include_history: bool, include_config: bool) -> Result<()> {
     let conn = open_conn(db_path)?;
+
+    let active_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM tasks WHERE status IN ('running', 'restart_pending')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    if active_count > 0 {
+        anyhow::bail!(
+            "db reset blocked: {} active task(s) with status running/restart_pending. \
+             Use `qa project reset <project> --force` for project-scoped cleanup instead.",
+            active_count
+        );
+    }
+
     conn.execute("DELETE FROM events", [])?;
     conn.execute("DELETE FROM command_runs", [])?;
     conn.execute("DELETE FROM task_items", [])?;
@@ -461,6 +477,65 @@ mod tests {
             })
             .expect("count config after");
         assert_eq!(config_after, 0);
+    }
+
+    #[test]
+    fn reset_db_blocked_when_running_task_exists() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/guard_test.md");
+        std::fs::write(&qa_file, "# guard test\n").expect("seed qa file");
+
+        let task = create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
+
+        // Simulate running status
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET status = 'running' WHERE id = ?1",
+            params![task.id],
+        )
+        .expect("set task running");
+        drop(conn);
+
+        let result = reset_db(&state, false, false);
+        assert!(result.is_err());
+        let err = result.expect_err("should be blocked").to_string();
+        assert!(
+            err.contains("db reset blocked"),
+            "unexpected error: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn reset_db_blocked_when_restart_pending_task_exists() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/restart_guard.md");
+        std::fs::write(&qa_file, "# restart guard\n").expect("seed qa file");
+
+        let task = create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET status = 'restart_pending' WHERE id = ?1",
+            params![task.id],
+        )
+        .expect("set task restart_pending");
+        drop(conn);
+
+        let result = reset_db(&state, false, false);
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("should be blocked")
+            .to_string()
+            .contains("db reset blocked"));
     }
 
     // ── reset_project_data ──

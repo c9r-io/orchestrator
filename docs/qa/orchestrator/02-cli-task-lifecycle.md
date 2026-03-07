@@ -131,9 +131,11 @@ Expected:
 - Task created with `--no-start`.
 
 ### Steps
-1. Create task:
+1. Create task (specify `--workflow` explicitly — `qa project create` copies the
+   workspace/workflow into the project, but `task create` does not auto-resolve
+   the project's workflow without the flag):
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "fg-start" --goal "foreground" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workflow probe_task_scoped --name "fg-start" --goal "foreground" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 2. Start task in foreground:
    ```bash

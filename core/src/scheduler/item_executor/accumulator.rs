@@ -142,6 +142,11 @@ impl StepExecutionAccumulator {
                 .unwrap_or(false),
             max_cycles,
             is_last_cycle: task_ctx.current_cycle >= max_cycles,
+            self_referential_safe: crate::ticket::is_self_referential_safe(
+                &task_ctx.workspace_root,
+                &item.qa_file_path,
+                task_ctx.self_referential,
+            ),
         }
     }
 

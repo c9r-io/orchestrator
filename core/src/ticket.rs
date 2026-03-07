@@ -8,6 +8,42 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use walkdir::WalkDir;
 
+/// Parse QA doc frontmatter to check if the document is safe to run in a
+/// self-referential workspace. Returns `false` only if the frontmatter
+/// explicitly contains `self_referential_safe: false`. Defaults to `true`.
+pub fn parse_qa_doc_self_referential_safe(content: &str) -> bool {
+    let mut lines = content.lines();
+    // First line must be `---`
+    match lines.next() {
+        Some(line) if line.trim() == "---" => {}
+        _ => return true,
+    }
+    for line in lines {
+        let trimmed = line.trim();
+        if trimmed == "---" {
+            break;
+        }
+        if trimmed == "self_referential_safe: false" {
+            return false;
+        }
+    }
+    true
+}
+
+/// Check if a QA doc file is safe to run in a self-referential workspace.
+/// If the workspace is not self-referential, always returns `true`.
+/// If the file cannot be read, defaults to `true`.
+pub fn is_self_referential_safe(workspace_root: &Path, qa_file_path: &str, self_referential: bool) -> bool {
+    if !self_referential {
+        return true;
+    }
+    let abs_path = workspace_root.join(qa_file_path);
+    match std::fs::read_to_string(&abs_path) {
+        Ok(content) => parse_qa_doc_self_referential_safe(&content),
+        Err(_) => true,
+    }
+}
+
 pub fn normalize_rel_path_for_match(raw: &str) -> String {
     let value = raw.trim().trim_matches('`').replace('\\', "/");
     if value.is_empty() {
@@ -672,5 +708,39 @@ mod tests {
         assert_eq!(result["qa_document"], "docs/qa/a.md");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_parse_qa_doc_self_referential_safe_default() {
+        assert!(parse_qa_doc_self_referential_safe("# Title\nSome content"));
+    }
+
+    #[test]
+    fn test_parse_qa_doc_self_referential_safe_true() {
+        let content = "---\nself_referential_safe: true\n---\n# Title";
+        assert!(parse_qa_doc_self_referential_safe(content));
+    }
+
+    #[test]
+    fn test_parse_qa_doc_self_referential_safe_false() {
+        let content = "---\nself_referential_safe: false\n---\n# Title";
+        assert!(!parse_qa_doc_self_referential_safe(content));
+    }
+
+    #[test]
+    fn test_parse_qa_doc_no_frontmatter() {
+        assert!(parse_qa_doc_self_referential_safe("Just a regular file"));
+    }
+
+    #[test]
+    fn test_parse_qa_doc_empty_frontmatter() {
+        let content = "---\n---\n# Title";
+        assert!(parse_qa_doc_self_referential_safe(content));
+    }
+
+    #[test]
+    fn test_parse_qa_doc_other_frontmatter_fields() {
+        let content = "---\ntitle: Test Doc\npriority: high\n---\n# Title";
+        assert!(parse_qa_doc_self_referential_safe(content));
     }
 }

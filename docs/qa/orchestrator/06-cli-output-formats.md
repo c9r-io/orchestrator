@@ -11,6 +11,8 @@
 
 This document tests that all CLI commands support proper JSON and YAML output formats for scripting and integration.
 
+> **Note on log lines**: Structured log lines (e.g., `INFO agent_orchestrator: structured logging initialized`) are written to **stderr**, not stdout. When piping CLI output to `jq` or `yq`, only stdout is passed through the pipe, so log lines do **not** interfere with JSON/YAML parsing. If you see log lines interleaved in terminal output, that is normal stderr display — it does not affect `| jq` correctness.
+
 Project setup (run once):
 
 ```bash
@@ -129,15 +131,16 @@ rm -rf "workspace/${QA_PROJECT}"
    orchestrator manifest export -o yaml
    ```
 
-3. Verify config can be parsed:
+3. Verify config can be parsed (manifest export returns a CRD-style array):
    ```bash
-   orchestrator manifest export -o json | jq '.workspaces'
+   orchestrator manifest export -o json | jq '[.[] | select(.kind == "Workspace")]'
    ```
 
 ### Expected
 
-- Full configuration is output
+- Full configuration is output as a JSON array of CRD resources (`apiVersion`, `kind`, `metadata`, `spec`)
 - JSON/YAML is valid and parseable
+- Workspace resources can be filtered with `jq '[.[] | select(.kind == "Workspace")]'`
 
 ---
 

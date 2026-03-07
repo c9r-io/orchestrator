@@ -301,8 +301,8 @@ spec:
       tty: false
       prehook:
         engine: cel
-        when: "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\")"
-        reason: "QA testing deferred to final cycle and restricted to QA markdown documents"
+        when: "is_last_cycle && self_referential_safe && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\")"
+        reason: "QA testing deferred to final cycle; skips docs marked self_referential_safe: false"
 
     - id: ticket_fix
       type: ticket_fix
@@ -315,8 +315,8 @@ spec:
       max_parallel: 2  # ticket_fix is heavier — lower concurrency
       prehook:
         engine: cel
-        when: "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && active_ticket_count > 0"
-        reason: "Only fix tickets on last cycle for QA markdown documents when there are active tickets"
+        when: "is_last_cycle && self_referential_safe && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && active_ticket_count > 0"
+        reason: "Only fix tickets on last cycle for safe QA docs when there are active tickets"
 
     # ── Task segment: align_tests + doc_governance ──
     # Deferred to Cycle 2 for full validation pass

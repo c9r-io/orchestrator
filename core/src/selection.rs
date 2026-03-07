@@ -63,7 +63,11 @@ pub fn select_agent_advanced(
         })
         .collect();
 
-    scored.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+    scored.sort_by(|a, b| {
+        b.2.partial_cmp(&a.2)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(b.0))
+    });
 
     let top_count = std::cmp::min(3, scored.len());
     let top_slice = &scored[..top_count];

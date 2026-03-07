@@ -116,6 +116,12 @@ pub struct StepPrehookContext {
     pub max_cycles: u32,
     #[serde(default)]
     pub is_last_cycle: bool,
+    #[serde(default = "default_true")]
+    pub self_referential_safe: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

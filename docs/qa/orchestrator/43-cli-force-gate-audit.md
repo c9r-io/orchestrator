@@ -1,3 +1,6 @@
+---
+self_referential_safe: false
+---
 # Orchestrator - CLI Force Gate Audit
 
 **Module**: orchestrator

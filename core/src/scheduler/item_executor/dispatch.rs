@@ -793,6 +793,7 @@ async fn execute_dynamic_steps(
         self_test_passed: prehook_ctx.self_test_passed,
         max_cycles: prehook_ctx.max_cycles,
         is_last_cycle: prehook_ctx.is_last_cycle,
+        self_referential_safe: prehook_ctx.self_referential_safe,
     };
     let matched = pool.find_matching_steps(&dyn_ctx);
     for ds in matched {

@@ -142,6 +142,7 @@ fn test_evaluate_step_prehook_expression_true() {
         self_test_passed: false,
         max_cycles: 1,
         is_last_cycle: true,
+        self_referential_safe: true,
     };
     let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
     assert!(result.is_ok());
@@ -177,6 +178,7 @@ fn test_evaluate_step_prehook_expression_false() {
         self_test_passed: false,
         max_cycles: 1,
         is_last_cycle: true,
+        self_referential_safe: true,
     };
     let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
     assert!(result.is_ok());
@@ -212,6 +214,7 @@ fn test_evaluate_step_prehook_expression_invalid() {
         self_test_passed: false,
         max_cycles: 1,
         is_last_cycle: true,
+        self_referential_safe: true,
     };
     let result = evaluate_step_prehook_expression("invalid @#$ expression", &context);
     assert!(result.is_err());
@@ -246,6 +249,7 @@ fn test_evaluate_step_prehook_expression_qa_failed() {
         self_test_passed: false,
         max_cycles: 1,
         is_last_cycle: true,
+        self_referential_safe: true,
     };
     let result = evaluate_step_prehook_expression("qa_failed == true", &context);
     assert!(result.is_ok());
@@ -281,6 +285,7 @@ fn test_evaluate_step_prehook_expression_compound() {
         self_test_passed: false,
         max_cycles: 1,
         is_last_cycle: true,
+        self_referential_safe: true,
     };
     let result = evaluate_step_prehook_expression(
         "active_ticket_count > 0 && cycle >= 2 && qa_exit_code == 0",
@@ -320,6 +325,7 @@ fn test_build_errors_prehook_expression() {
         self_test_passed: false,
         max_cycles: 1,
         is_last_cycle: true,
+        self_referential_safe: true,
     };
     let result = evaluate_step_prehook_expression(
         "build_errors > 0 || test_failures > 0",
@@ -378,6 +384,7 @@ fn default_step_prehook_context() -> StepPrehookContext {
         self_test_passed: false,
         max_cycles: 1,
         is_last_cycle: true,
+        self_referential_safe: true,
     }
 }
 
@@ -462,6 +469,7 @@ fn test_max_cycles_and_is_last_cycle_cel_variables() {
         self_test_passed: false,
         max_cycles: 2,
         is_last_cycle: false,
+        self_referential_safe: true,
     };
     // cycle 1 of 2: not last cycle, skip qa_testing
     let result = evaluate_step_prehook_expression("is_last_cycle", &context);
@@ -481,6 +489,59 @@ fn test_max_cycles_and_is_last_cycle_cel_variables() {
     let result = evaluate_step_prehook_expression("is_last_cycle", &last_ctx);
     assert!(result.is_ok());
     assert!(result.expect("last cycle expression should be true"));
+}
+
+// ========================================================================
+// self_referential_safe CEL variable
+// ========================================================================
+
+#[test]
+fn test_self_referential_safe_cel_variable_true() {
+    let context = StepPrehookContext {
+        self_referential_safe: true,
+        ..default_step_prehook_context()
+    };
+    let result = evaluate_step_prehook_expression("self_referential_safe", &context);
+    assert!(result.is_ok());
+    assert!(result.expect("self_referential_safe should be true"));
+}
+
+#[test]
+fn test_self_referential_safe_cel_variable_false() {
+    let context = StepPrehookContext {
+        self_referential_safe: false,
+        ..default_step_prehook_context()
+    };
+    let result = evaluate_step_prehook_expression("self_referential_safe", &context);
+    assert!(result.is_ok());
+    assert!(!result.expect("self_referential_safe should be false"));
+}
+
+#[test]
+fn test_self_referential_safe_combined_with_is_last_cycle() {
+    let context = StepPrehookContext {
+        is_last_cycle: true,
+        self_referential_safe: true,
+        ..default_step_prehook_context()
+    };
+    let result = evaluate_step_prehook_expression(
+        "is_last_cycle && self_referential_safe",
+        &context,
+    );
+    assert!(result.is_ok());
+    assert!(result.expect("combined expression should be true"));
+
+    let unsafe_context = StepPrehookContext {
+        is_last_cycle: true,
+        self_referential_safe: false,
+        ..default_step_prehook_context()
+    };
+    let result = evaluate_step_prehook_expression(
+        "is_last_cycle && self_referential_safe",
+        &unsafe_context,
+    );
+    assert!(result.is_ok());
+    assert!(!result.expect("combined expression should be false when doc is unsafe"));
 }
 
 // ========================================================================
