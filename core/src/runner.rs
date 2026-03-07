@@ -61,7 +61,7 @@ mod tests {
     #[test]
     fn test_enforce_runner_policy_rejects_too_long_command() {
         let runner = make_runner_config();
-        let long_command = "x".repeat(16385);
+        let long_command = "x".repeat(131_073);
         let result = enforce_runner_policy(&runner, &long_command);
         assert!(result.is_err());
         assert!(result
@@ -358,8 +358,8 @@ pub fn enforce_runner_policy(runner: &RunnerConfig, command: &str) -> Result<()>
             "runner command contains blocked control characters (NUL/CR)"
         ));
     }
-    if command.len() > 16_384 {
-        return Err(anyhow!("runner command too long (>16384 bytes)"));
+    if command.len() > 131_072 {
+        return Err(anyhow!("runner command too long (>131072 bytes)"));
     }
 
     if runner.policy == RunnerPolicy::Allowlist {

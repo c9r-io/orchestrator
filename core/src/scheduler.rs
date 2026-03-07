@@ -545,10 +545,10 @@ mod tests {
             "plan_output_path placeholder should be expanded"
         );
 
-        // The rendered command should be within the 16KB runner limit
+        // The rendered command should be within the 128KB runner limit
         assert!(
-            qa_command.len() < 16384,
-            "rendered command ({} bytes) should be under 16KB limit",
+            qa_command.len() < 131_072,
+            "rendered command ({} bytes) should be under 128KB limit",
             qa_command.len()
         );
 
