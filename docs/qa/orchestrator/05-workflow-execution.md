@@ -18,6 +18,8 @@ selection can change the outcome.
 
 Every scenario starts from a clean slate. Two cleanup steps are required:
 
+> **Fixture Workflow IDs**: `echo-workflow.yaml` defines `qa_only`, `qa_fix`, `qa_fix_retest`, `loop_test`. `fail-workflow.yaml` defines `qa_fix` (fail variant). Do NOT use stale names like `basic` or `echo`.
+
 1. **Project isolation**: `apply` is additive — agents from previous test fixtures
    remain in the active config and participate in agent selection, causing unexpected
    failures. Re-apply the intended fixture and recreate the isolated QA project

@@ -48,6 +48,31 @@ done < <(
     | rg -v "task create --help|task create --format|does not depend on|^\S+:\d+:\s*\|" || true
 )
 
+echo "[qa-doc-lint] Checking workflow ID cross-reference against fixtures..."
+# Extract --workflow <id> from orchestrator QA docs and verify each ID exists in fixture YAMLs.
+# Scoped to docs/qa/orchestrator/*.md only — scripts and self-bootstrap docs often embed inline
+# workflow definitions that aren't in fixture bundles.
+fixture_workflows=$(rg -A3 'kind: Workflow' fixtures/manifests/bundles/*.yaml 2>/dev/null \
+  | rg 'name:' | sed 's/.*name: //' | sort -u)
+while IFS=: read -r file line match; do
+  wf_id=$(printf '%s' "$match" | rg -o '\-\-workflow\s+(\S+)' -r '$1')
+  # Skip placeholders (<...>), shell variables ($...), and quoted vars ("$...")
+  [[ -z "$wf_id" || "$wf_id" == *'<'* || "$wf_id" == *'$'* || "$wf_id" == *'"'* ]] && continue
+  if ! printf '%s\n' "$fixture_workflows" | rg -qx "$wf_id"; then
+    echo "[qa-doc-lint] Unknown workflow ID '$wf_id' at ${file}:${line} (not in any fixture)"
+    fail=1
+  fi
+done < <(rg -n -- '--workflow\s+\S+' docs/qa/orchestrator -g '*.md' 2>/dev/null || true)
+
+echo "[qa-doc-lint] Checking edit subcommand structure..."
+# Bare 'edit <resource>' without 'export' or 'open' subcommand is invalid.
+if rg -n 'orchestrator\s+edit\s+(?!export|open|--|-f|<)\S+' docs/qa -g '*.md' --pcre2 \
+    >/tmp/qa_doc_lint_edit.txt 2>/dev/null; then
+  echo "[qa-doc-lint] Found bare 'edit <resource>' (must use 'edit export' or 'edit open'):"
+  cat /tmp/qa_doc_lint_edit.txt
+  fail=1
+fi
+
 echo "[qa-doc-lint] Checking scenario count (<=5) for orchestrator docs..."
 while IFS= read -r file; do
   count=$( (rg -n '^## Scenario' "$file" || true) | wc -l | tr -d ' ')

@@ -11,7 +11,7 @@
 
 This document tests the edit commands for exporting and opening resources in the editor.
 
-Entry point: `orchestrator edit <command>`
+Entry point: `orchestrator edit <command>` (subcommands: `export`, `open`; bare `edit <resource>` is NOT valid)
 
 ---
 

@@ -80,6 +80,8 @@ Run:
 
 This checks:
 - banned stale patterns (`cd orchestrator`, `--workspace-id`, `orchestrator agent health`, `orchestrator/config/default.yaml`, `config bootstrap --from`, `--config <file>`)
+- workflow ID cross-reference: `--workflow <id>` in orchestrator QA docs must exist in fixture YAMLs
+- edit subcommand structure: bare `edit <resource>` is banned (must use `edit export` or `edit open`)
 - scenario count limit (<=5)
 - orchestrator QA docs are indexed in this README
 
@@ -138,6 +140,9 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/47-task-spawning.md` | 5 | WP02 task spawning: SpawnTask/SpawnTasks post-actions, spawn depth safety, task lineage tracking |
 | orchestrator | `docs/qa/orchestrator/48-dynamic-items-selection.md` | 5 | WP03 dynamic items + selection: GenerateItems post-action, item_select builtin, min/max/threshold/weighted strategies |
 | orchestrator | `docs/qa/orchestrator/49-invariant-constraints.md` | 5 | WP04 invariant constraints: command checks, protected files, checkpoint filtering, on_violation actions |
+| orchestrator | `docs/qa/orchestrator/50-engine-wiring-store-invariant-itemselect.md` | 5 | WP01-WP04 engine wiring: store I/O, PostAction::StorePut, invariant checkpoints |
+| orchestrator | `docs/qa/orchestrator/51-primitive-composition.md` | 5 | WP05 primitive composition: Store+Spawning, Store+Items, Invariant+Selection pairwise/triple |
+| orchestrator | `docs/qa/orchestrator/52-engine-wiring-dynamic-items-selection.md` | 2 | Split from doc 50: pending_generate_items consumption, item_select orchestration |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
 | script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |
