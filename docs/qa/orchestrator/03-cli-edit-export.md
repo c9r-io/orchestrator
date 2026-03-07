@@ -25,18 +25,38 @@ Entry point: `orchestrator edit <command>`
 
 1. Export workspace resource:
    ```bash
-   orchestrator edit export workspace/default
+   ./scripts/orchestrator.sh edit export workspace/default
    ```
 
-2. Verify exported YAML format:
+2. Read the temp file path printed to stdout and verify its contents:
    ```bash
-   # Output should be valid YAML with apiVersion, kind, metadata, spec
+   cat "$(./scripts/orchestrator.sh edit export workspace/default 2>/dev/null)"
+   ```
+
+3. Verify exported YAML contains exactly one document with the expected fields:
+   - `apiVersion: orchestrator.dev/v2`
+   - `kind: Workspace`
+   - `metadata.name: default`
+   - `spec.root_path`, `spec.qa_targets`, `spec.ticket_dir`
+
+4. Confirm no duplicate resources (no `---` separator, only one `kind:` line):
+   ```bash
+   grep -c '^kind:' "$(./scripts/orchestrator.sh edit export workspace/default 2>/dev/null)"
+   # Expected: 1
    ```
 
 ### Expected
 
-- Export shows workspace configuration in manifest format
+- Export writes a temp file containing exactly one Workspace resource in manifest format
+- No duplicate resource copies in the output
 - Output can be used with `orchestrator apply`
+
+### Troubleshooting
+
+| Symptom | Likely Cause | Resolution |
+|---------|-------------|------------|
+| Multiple `kind:` lines in output | Confused with `manifest export` which dumps all resources | Use `edit export` (single resource) not `manifest export` (all resources) |
+| Command not found | Missing `./scripts/` prefix | Use `./scripts/orchestrator.sh edit export workspace/default` |
 
 ---
 
