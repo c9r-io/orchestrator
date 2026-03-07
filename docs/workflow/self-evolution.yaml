@@ -24,32 +24,24 @@ spec:
     Use /arch-guidance — read docs/architecture.md first.
     Use /rust-conventions for coding patterns.
 
-    Output a JSON object with exactly this structure:
-    {
-      "analysis": "<brief problem analysis>",
-      "candidates": [
-        {
-          "id": "approach-a",
-          "name": "<short name>",
-          "description": "<1-sentence summary>",
-          "strategy": "<detailed approach>",
-          "risk": "<main risk>",
-          "estimated_complexity": "<low|medium|high>"
-        },
-        {
-          "id": "approach-b",
-          "name": "<short name>",
-          "description": "<1-sentence summary>",
-          "strategy": "<detailed approach>",
-          "risk": "<main risk>",
-          "estimated_complexity": "<low|medium|high>"
-        }
-      ]
-    }
+    Output a JSON object. The top-level object must have two keys:
+    - analysis (string): a brief problem analysis
+    - candidates (array of exactly 2 objects)
+
+    Each candidate object must have these keys:
+    - id (string): use approach-a and approach-b
+    - name (string): a short descriptive name
+    - description (string): a 1-sentence summary
+    - strategy (string): detailed implementation approach
+    - risk (string): the main risk of this approach
+    - estimated_complexity (string): low, medium, or high
 
     Design TWO meaningfully different approaches. Do NOT create trivial variants.
     One approach should favor simplicity/minimal change, the other should favor
     thoroughness/correctness. Both must be viable.
+
+    IMPORTANT: Your final output MUST be valid JSON only. No markdown, no explanation
+    outside the JSON. The orchestrator will parse this JSON to generate work items.
 
     Current diff in this cycle: {diff}
 ---
@@ -98,16 +90,16 @@ spec:
     - Diff is focused (< 200 lines changed): +15
     - Code clarity (subjective): +10
 
-    Output a JSON object:
-    {
-      "candidate": "{item_label}",
-      "compilation": true/false,
-      "tests_pass": true/false,
-      "clippy_clean": true/false,
-      "diff_lines": <number>,
-      "total_score": <0-100>,
-      "notes": "<brief evaluation>"
-    }
+    Output a JSON object with these keys:
+    - candidate (string): the candidate name
+    - compilation (boolean): whether cargo check passed
+    - tests_pass (boolean): whether cargo test passed
+    - clippy_clean (boolean): whether clippy had no warnings
+    - diff_lines (number): total lines changed
+    - total_score (number 0-100): sum of criteria above
+    - notes (string): brief evaluation summary
+
+    IMPORTANT: Your final output MUST be valid JSON only.
 ---
 apiVersion: orchestrator.dev/v2
 kind: StepTemplate
@@ -239,7 +231,7 @@ spec:
       behavior:
         post_actions:
           - type: generate_items
-            from_var: plan_output
+            from_var: evo_plan_output
             json_path: "$.candidates"
             mapping:
               item_id: "$.id"

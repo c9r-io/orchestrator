@@ -461,6 +461,11 @@ async fn execute_cycle_segments(
                         }
 
                         // Consume pending_generate_items from task segment
+                        tracing::info!(
+                            segment_idx,
+                            has_pending = task_acc.pending_generate_items.is_some(),
+                            "checking pending_generate_items after task segment"
+                        );
                         if let Some(gen_action) = task_acc.pending_generate_items.take() {
                             match super::item_generate::extract_dynamic_items(
                                 &task_acc.pipeline_vars.vars,

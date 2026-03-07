@@ -167,6 +167,12 @@ pub(super) async fn apply_step_results(
             }
             PostAction::GenerateItems(gen_action) => {
                 // Buffer for application after segment completes
+                tracing::info!(
+                    from_var = %gen_action.from_var,
+                    json_path = %gen_action.json_path,
+                    replace = gen_action.replace,
+                    "buffering GenerateItems post-action"
+                );
                 acc.pending_generate_items = Some(gen_action.clone());
             }
             PostAction::StorePut {
