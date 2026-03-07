@@ -223,9 +223,13 @@ pub enum TaskCommands {
         #[arg(long)]
         no_start: bool,
 
-        /// Enqueue task for background worker instead of running inline
-        #[arg(long)]
+        /// Enqueue task for background worker instead of running inline (default)
+        #[arg(long, default_value_t = true)]
         detach: bool,
+
+        /// Run task inline (blocking) instead of detaching to background worker
+        #[arg(long, conflicts_with = "detach")]
+        attach: bool,
     },
 
     /// Get task details

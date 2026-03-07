@@ -36,6 +36,7 @@ impl CliHandler {
                 target_file,
                 no_start,
                 detach,
+                attach,
             } => {
                 let payload = CreateTaskPayload {
                     name: name.clone(),
@@ -53,8 +54,9 @@ impl CliHandler {
                 };
                 let created = create_task_impl(&self.state, payload)?;
                 println!("Task created: {}", created.id);
+                let should_detach = *detach && !*attach;
                 if !no_start {
-                    if *detach {
+                    if should_detach {
                         cli_runtime().block_on(enqueue_task(&self.state, &created.id))?;
                         println!("Task enqueued: {}", created.id);
                     } else {
