@@ -17,26 +17,37 @@ description: >-
 
 The orchestrator uses a **client/server** model over gRPC:
 
-- **`orchestratord`** — daemon process (gRPC server + worker pool). Listens on UDS (`data/orchestrator.sock`) by default, or TCP with `--bind`.
-- **`orchestrator`** — thin CLI client that forwards all commands to the daemon via gRPC.
+- **`orchestratord`** — daemon binary (gRPC server + embedded worker pool). Listens on UDS (`data/orchestrator.sock`) by default, or TCP with `--bind`.
+- **`orchestrator`** — thin CLI client binary that forwards all commands to the daemon via gRPC. No core library dependency.
+
+Binary locations after `cargo build --release -p orchestratord -p orchestrator-cli`:
+- `target/release/orchestratord` — daemon
+- `target/release/orchestrator` — CLI client
 
 Start the daemon first, then use the CLI:
 
 ```bash
-orchestrator daemon start            # background (default)
-orchestrator daemon start --foreground  # foreground with restart loop
-orchestrator daemon status           # check daemon health
-orchestrator daemon stop             # graceful shutdown
-orchestrator daemon restart          # stop + start
+# Start daemon (standalone binary, not a CLI subcommand)
+orchestratord --foreground --workers 2           # foreground (recommended for monitoring)
+nohup orchestratord --foreground --workers 2 &   # background via nohup
+orchestratord --bind 0.0.0.0:9090 --workers 4   # TCP instead of UDS
+
+# Monitor daemon
+ps aux | grep orchestratord | grep -v grep       # check process
+orchestrator task worker status                   # check worker queue state
+
+# Stop daemon
+kill <pid>                                        # graceful SIGTERM
 ```
 
 ## Core Workflow
 
-1. `orchestrator daemon start` — start the daemon
+1. Start the daemon: `orchestratord --foreground --workers 2`
 2. `orchestrator init` — create SQLite schema
 3. `orchestrator apply -f manifest.yaml` — load resources
-4. `orchestrator task create --name X --goal Y --workflow Z` — create and run a task
-5. `orchestrator task info <id>` / `task logs <id>` — inspect results
+4. Restart daemon to pick up config changes
+5. `orchestrator task create --name X --goal Y --workflow Z` — create and run (auto-enqueues to worker)
+6. `orchestrator task info <id>` / `task trace <id>` / `task logs <id>` — inspect results
 
 Use `--project <id>` on `apply`, `get`, `describe`, `delete`, `task create/list`, and `store` to scope operations to a project. Use `orchestrator project reset <id> --force` to clean up a project's task data.
 

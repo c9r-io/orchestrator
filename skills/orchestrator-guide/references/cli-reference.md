@@ -42,20 +42,25 @@
 
 ## Daemon Lifecycle
 
-```bash
-# Start daemon (background by default)
-orchestrator daemon start
-orchestrator daemon start --foreground        # with restart loop
-orchestrator daemon start --bind 0.0.0.0:9090 # TCP instead of UDS
-orchestrator daemon start --workers 4         # worker pool size
+The daemon is a **standalone binary** (`orchestratord`), not a CLI subcommand.
 
-# Manage
-orchestrator daemon status                    # PID, version, uptime
-orchestrator daemon stop                      # graceful SIGTERM
-orchestrator daemon restart                   # stop + start
+```bash
+# Start daemon
+orchestratord --foreground --workers 2           # foreground (recommended)
+nohup orchestratord --foreground --workers 2 &   # background via nohup
+orchestratord --bind 0.0.0.0:9090 --workers 4   # TCP instead of UDS
+
+# Monitor
+ps aux | grep orchestratord | grep -v grep       # check process
+orchestrator task worker status                   # worker queue state
+
+# Stop
+kill <pid>                                        # graceful SIGTERM
 ```
 
 Connection: CLI connects via UDS (`data/orchestrator.sock`) by default, or `$ORCHESTRATOR_SOCKET` env.
+
+> **Important**: After `orchestrator apply` loads new resources, restart the daemon to pick up config changes.
 
 ## Init & Apply
 
@@ -88,20 +93,28 @@ orchestrator delete agent/old --force --project my-project
 orchestrator check
 ```
 
+> **Note**: `orchestrator get` requires valid global defaults config.
+> In project-only deployments (no global workspaces), `get` will fail.
+> Use sqlite queries to verify project-scoped resources:
+> ```bash
+> sqlite3 data/agent_orchestrator.db \
+>   "SELECT json_extract(config_json, '$.projects.\"<project>\".workspaces') \
+>    FROM orchestrator_config_versions ORDER BY id DESC LIMIT 1;"
+> ```
+
 ## Task Lifecycle
 
 ```bash
-# Create
+# Create (defaults to --detach: auto-enqueues to daemon worker, returns immediately)
 orchestrator task create \
   --name "task-name" --goal "description" \
   --workflow self-bootstrap --project my-project \
-  --target-file docs/qa/01.md   # repeatable
-orchestrator task create --name X --goal Y --no-start
-orchestrator task create --name X --goal Y --detach
+  --target-file docs/qa/01.md   # repeatable; -t shorthand
+
+# Create with blocking wait (foreground execution)
+orchestrator task create --name X --goal Y --attach
 
 # Control
-orchestrator task start <id>
-orchestrator task start <id> --detach
 orchestrator task pause <id>
 orchestrator task resume <id>
 orchestrator task retry <item_id> --force
@@ -111,12 +124,21 @@ orchestrator task list -o json
 orchestrator task list --project my-project    # filter by project
 orchestrator task info <id> -o yaml
 orchestrator task logs <id>
-orchestrator task watch <id>
-orchestrator task trace <id>
+orchestrator task watch <id>              # real-time auto-refreshing panel
+orchestrator task trace <id>              # execution timeline with anomaly detection
+
+# Worker management
+orchestrator task worker status           # queue state: pending tasks, stop signal
+orchestrator task worker start            # start standalone worker loop (non-daemon mode)
+orchestrator task worker stop             # signal worker to stop
 
 # Delete
 orchestrator task delete <id> --force
 ```
+
+> **Note**: In C/S mode, `task create` defaults to `--detach` (enqueue to daemon worker).
+> Tasks start executing immediately when a worker picks them up.
+> Use `--attach` for blocking inline execution.
 
 ## Persistent Store
 
