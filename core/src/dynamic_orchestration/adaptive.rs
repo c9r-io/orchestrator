@@ -1,7 +1,7 @@
+use crate::config::StepPrehookContext;
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use crate::config::StepPrehookContext;
 use serde::{Deserialize, Serialize};
 
 use super::dag::{DynamicExecutionPlan, PrehookConfig, WorkflowEdge, WorkflowNode};
@@ -158,7 +158,8 @@ impl AdaptivePlanner {
             .planner_agent
             .as_deref()
             .map(str::trim)
-            .is_none_or(str::is_empty)
+            .map(str::is_empty)
+            .unwrap_or(true)
         {
             return self.handle_failure(
                 AdaptiveFailureClass::Misconfigured,
@@ -350,7 +351,7 @@ pub fn adaptive_failure_class_name(class: AdaptiveFailureClass) -> &'static str 
 pub fn deterministic_fallback_plan(_context: &StepPrehookContext) -> DynamicExecutionPlan {
     let mut plan = DynamicExecutionPlan::new();
 
-    plan.add_node(WorkflowNode {
+    let _ = plan.add_node(WorkflowNode {
         id: "qa".to_string(),
         step_type: "qa".to_string(),
         agent_id: None,
@@ -358,10 +359,9 @@ pub fn deterministic_fallback_plan(_context: &StepPrehookContext) -> DynamicExec
         prehook: None,
         is_guard: false,
         repeatable: false,
-    })
-    .expect("deterministic fallback plan should add qa node");
+    });
 
-    plan.add_node(WorkflowNode {
+    let _ = plan.add_node(WorkflowNode {
         id: "fix".to_string(),
         step_type: "fix".to_string(),
         agent_id: None,
@@ -374,15 +374,13 @@ pub fn deterministic_fallback_plan(_context: &StepPrehookContext) -> DynamicExec
         }),
         is_guard: false,
         repeatable: true,
-    })
-    .expect("deterministic fallback plan should add fix node");
+    });
 
-    plan.add_edge(WorkflowEdge {
+    let _ = plan.add_edge(WorkflowEdge {
         from: "qa".to_string(),
         to: "fix".to_string(),
         condition: Some("qa_exit_code != 0 || active_ticket_count > 0".to_string()),
-    })
-    .expect("deterministic fallback plan should add edge");
+    });
 
     plan.entry = Some("qa".to_string());
     plan

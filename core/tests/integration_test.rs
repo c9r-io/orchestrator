@@ -93,6 +93,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                     fix: None,
                     retest: None,
                     dynamic_steps: vec![],
+                    adaptive: None,
                     safety: agent_orchestrator::config::SafetyConfig::default(),
                     max_parallel: None,
                 },
@@ -786,6 +787,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                     fix: None,
                     retest: None,
                     dynamic_steps: vec![],
+                    adaptive: None,
                     safety: SafetyConfig::default(),
                     max_parallel: None,
                 },
@@ -935,6 +937,7 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
         fix: None,
         retest: None,
         dynamic_steps: vec![],
+        adaptive: None,
         safety: agent_orchestrator::config::SafetyConfig::default(),
         max_parallel: None,
     };

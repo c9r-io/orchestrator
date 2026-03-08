@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod cases {
     use crate::config::StepScope;
     use crate::scheduler::phase_runner::types::*;
     use crate::scheduler::phase_runner::util::*;

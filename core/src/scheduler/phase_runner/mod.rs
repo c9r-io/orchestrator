@@ -341,7 +341,7 @@ pub async fn run_phase_with_selected_agent(
             command,
             workspace_root,
             workspace_id,
-            agent_id: &agent_id,
+            agent_id,
             runtime,
             step_timeout_secs,
             step_scope,

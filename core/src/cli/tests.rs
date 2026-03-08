@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod cases {
     use super::super::*;
     use clap::Parser;
 

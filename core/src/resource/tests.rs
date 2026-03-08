@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod cases {
     use super::super::helpers::metadata_from_parts;
     use super::super::*;
     use crate::cli_types::{
