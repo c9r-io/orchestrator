@@ -157,9 +157,10 @@ Verify CLI client connects to daemon over UDS and basic RPC round-trips work.
 ### Preconditions
 - Daemon running with at least 1 embedded worker (`--workers 1`).
 - Config applied with a valid workspace and workflow.
+- A QA project created for isolation: `./target/release/orchestrator qa project create cs-qa --force`
 
 ### Goal
-Verify task create, list, info, start, pause, and delete work through gRPC.
+Verify task lifecycle (create, list, info, start, pause, delete) works through gRPC.
 
 ### Steps
 1. Start daemon with embedded workers:
@@ -170,7 +171,7 @@ Verify task create, list, info, start, pause, and delete work through gRPC.
    ```
 2. Create task (no-start):
    ```bash
-   TASK_ID=$(./target/release/orchestrator task create --name "grpc-test" --goal "test" --no-start 2>&1 | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(./target/release/orchestrator task create --name "grpc-test" --goal "test" --project cs-qa --no-start 2>&1 | grep -oE '[0-9a-f-]{36}' | head -1)
    echo "Created: $TASK_ID"
    ```
 3. List tasks:
@@ -222,6 +223,7 @@ SELECT id, status FROM tasks WHERE id = '{task_id}';
 
 ### Preconditions
 - Daemon running with multiple workers (`--workers 3`).
+- A QA project created for isolation: `./target/release/orchestrator qa project create cs-qa --force`
 
 ### Goal
 Verify embedded daemon workers consume pending tasks concurrently and atomically.
@@ -236,7 +238,7 @@ Verify embedded daemon workers consume pending tasks concurrently and atomically
 2. Create 6 tasks in detach mode:
    ```bash
    for i in $(seq 1 6); do
-     ./target/release/orchestrator task create --name "batch-$i" --goal "batch test $i" --detach
+     ./target/release/orchestrator task create --name "batch-$i" --goal "batch test $i" --project cs-qa --detach
    done
    ```
 3. Monitor worker progress:
@@ -335,8 +337,8 @@ Verify resource apply (from file and stdin) and store CRUD operations work throu
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Daemon Startup and Shutdown | ☐ | | | |
-| 2 | CLI-to-Daemon gRPC Communication | ☐ | | | |
-| 3 | Task Lifecycle via gRPC | ☐ | | | |
-| 4 | Embedded Worker Queue Consumption | ☐ | | | |
-| 5 | Resource Apply and Store via gRPC | ☐ | | | |
+| 1 | Daemon Startup and Shutdown | ✅ | 2026-03-08 | Claude | PID/socket create+cleanup, startup/shutdown logs |
+| 2 | CLI-to-Daemon gRPC Communication | ✅ | 2026-03-08 | Claude | version, get, check all pass via gRPC |
+| 3 | Task Lifecycle via gRPC | ✅ | 2026-03-08 | Claude | create→list→info→start(detach)→logs→delete |
+| 4 | Embedded Worker Queue Consumption | ✅ | 2026-03-08 | Claude | 3 workers consumed 6 tasks concurrently |
+| 5 | Resource Apply and Store via gRPC | ✅ | 2026-03-08 | Claude | apply file/stdin/dry-run + store CRUD |
