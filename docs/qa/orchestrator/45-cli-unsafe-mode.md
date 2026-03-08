@@ -49,14 +49,14 @@ Verify `--unsafe` bypasses the `--force` gate on a project-scoped destructive co
 1. Create an isolated QA project with a task to operate on:
    ```bash
    QA_PROJECT="qa-unsafe-force-$(date +%s)"
-   orchestrator qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   orchestrator qa project create "${QA_PROJECT}" --force
+   orchestrator apply --project "${QA_PROJECT}" --force
    ```
 
-2. Run a force-gated command (`qa project reset`) with `--unsafe` but without `--force`:
+2. Run a force-gated command (`project reset`) with `--unsafe` but without `--force`:
    ```bash
-   orchestrator --unsafe qa project reset "${QA_PROJECT}" --keep-config 2>&1; echo "exit=$?"
+   orchestrator --unsafe project reset "${QA_PROJECT}" 2>&1; echo "exit=$?"
    ```
 
 ### Expected
@@ -82,9 +82,9 @@ Verify `--unsafe` overrides the manifest's `policy: allowlist` to `Unsafe` at ru
 1. Prepare isolated project with restrictive allowlist policy:
    ```bash
    QA_PROJECT="qa-unsafe-override"
-   orchestrator qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   orchestrator qa project create "${QA_PROJECT}" --force
+   orchestrator apply --project "${QA_PROJECT}" --force
    cat > /tmp/runner-allowlist-strict.yaml << 'YAML'
    runner:
      policy: allowlist

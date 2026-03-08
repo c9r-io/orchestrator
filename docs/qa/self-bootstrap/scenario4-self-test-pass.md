@@ -22,7 +22,7 @@ Verify that the `self_test` builtin step executes all three phases successfully 
 rm -f fixtures/ticket/auto_*.md
 orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml
 QA_PROJECT="qa-survival"
-orchestrator qa project reset "${QA_PROJECT}" --force
+orchestrator project reset "${QA_PROJECT}" --force --include-config
 orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
 ```
 

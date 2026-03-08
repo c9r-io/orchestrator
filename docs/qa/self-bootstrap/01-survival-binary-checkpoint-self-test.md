@@ -26,10 +26,9 @@ Workflow: `fixtures/manifests/bundles/self-bootstrap-mock.yaml`
 > and will consume API credits rapidly. Always use `fixtures/manifests/bundles/self-bootstrap-mock.yaml`
 > which contains deterministic `echo` mock agents.
 
-> **Important**: Do NOT use `qa project create` for self-referential workflows.
-> `qa project create` always sets `self_referential: false` on the new workspace.
-> Instead, use `apply --project` to apply the self-bootstrap manifest directly
-> into the project scope, preserving `self_referential: true`.
+> **Important**: For self-referential workflows, apply a manifest that explicitly
+> sets `self_referential: true` on the workspace. Use `apply -f <manifest> --project`
+> with a manifest that preserves `self_referential: true`.
 
 ```bash
 rm -f fixtures/ticket/auto_*.md
@@ -38,7 +37,7 @@ rm -f fixtures/ticket/auto_*.md
 orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml
 
 QA_PROJECT="qa-survival"
-orchestrator qa project reset "${QA_PROJECT}" --force
+orchestrator project reset "${QA_PROJECT}" --force --include-config
 orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
 ```
 
@@ -46,7 +45,7 @@ orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --proj
 
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
-| `binary_snapshot_created` event never emitted | `self_referential` resolved to `false` at runtime because `qa project create` was used instead of `apply --project` | Use `apply --project` to preserve workspace config including `self_referential: true` |
+| `binary_snapshot_created` event never emitted | `self_referential` resolved to `false` at runtime because the applied manifest does not set `self_referential: true` | Use `apply -f <manifest> --project` with a manifest that sets `self_referential: true` on the workspace |
 | `snapshot_binary` logs warning "release binary not found" | Binary not built | Run `cargo build --release -p orchestratord` before testing |
 | "no agent supports capability" on task create | Project-scoped agents not checked during validation | Fixed: `build_execution_plan_for_project` merges project + global agents |
 | Task uses global workspace instead of project workspace | No `--workspace` flag and global default doesn't match project | Fixed: auto-resolves to project's single workspace when not specified |

@@ -272,16 +272,13 @@ orchestrator db reset --force
 orchestrator db reset --force --include-config
 ```
 
-**Warning**: `db reset` is destructive. Use `qa project reset` for isolated cleanup.
+**Warning**: `db reset` is destructive. Use `project reset` for isolated cleanup.
 
-## QA Project Management
+## Project Management
 
 ```bash
 # Reset a project (isolated — does not affect other projects)
-orchestrator qa project reset <project> --keep-config --force
-
-# Create a fresh project scaffold
-orchestrator qa project create <project> --force
+orchestrator project reset <project> --force
 
 # QA doctor — validate concurrency guardrails
 orchestrator qa doctor

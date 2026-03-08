@@ -24,7 +24,7 @@ Entry point: `orchestrator <command>`
 
 ### Preconditions
 
-- Reset previous QA state — use `qa project reset` to clear task data, config,
+- Reset previous QA state — use `project reset` to clear task data, config,
   and auto-generated tickets without destroying global state.
 - Apply fixture into project scope — use `--project` to ensure only fixture
   agents participate in selection.
@@ -46,7 +46,7 @@ lower-cost agent is selected more frequently by the scoring algorithm.
 
 1. Reset and apply into project scope:
    ```bash
-   orchestrator qa project reset qa-cost --force
+   orchestrator project reset qa-cost --force --include-config
    orchestrator apply -f fixtures/manifests/bundles/selection-perf-test.yaml --project qa-cost
    ```
 
@@ -90,7 +90,7 @@ lower-cost agent is selected more frequently by the scoring algorithm.
 
 ### Preconditions
 
-- Reset previous QA state — `qa project reset` clears task data, config, and auto-tickets.
+- Reset previous QA state — `project reset` clears task data, config, and auto-tickets.
 
 ### Goal
 
@@ -109,7 +109,7 @@ both used successfully.
 
 1. Reset and apply into project scope:
    ```bash
-   orchestrator qa project reset qa-quality --force
+   orchestrator project reset qa-quality --force --include-config
    orchestrator apply -f fixtures/manifests/bundles/selection-quality-test.yaml --project qa-quality
    ```
 
@@ -151,7 +151,7 @@ both used successfully.
 
 ### Preconditions
 
-- Reset previous QA state — `qa project reset` clears task data, config, and auto-tickets.
+- Reset previous QA state — `project reset` clears task data, config, and auto-tickets.
 
 ### Goal
 
@@ -170,7 +170,7 @@ and the healthy agent handles an increasing share of work across cycles.
 
 1. Reset and apply into project scope:
    ```bash
-   orchestrator qa project reset qa-health --force
+   orchestrator project reset qa-health --force --include-config
    orchestrator apply -f fixtures/manifests/bundles/mixed-health.yaml --project qa-health
    ```
 
@@ -270,7 +270,7 @@ Validate that `task retry` resets a failed item to pending and re-queues it.
 
 ### Preconditions
 
-- Reset previous QA state — `qa project reset` clears task data, config, and auto-tickets.
+- Reset previous QA state — `project reset` clears task data, config, and auto-tickets.
 
 ### Goal
 
@@ -284,7 +284,7 @@ Validate that agent load tracking influences selection during execution.
 
 1. Reset and apply into project scope:
    ```bash
-   orchestrator qa project reset qa-load --force
+   orchestrator project reset qa-load --force --include-config
    orchestrator apply -f fixtures/manifests/bundles/selection-perf-test.yaml --project qa-load
    ```
 
@@ -325,7 +325,7 @@ Validate that agent load tracking influences selection during execution.
   deploy fixture agents into a project scope. Agent selection for project tasks
   uses project-scoped agents exclusively, so global/bootstrap agents never
   interfere with test assertions.
-- **Clean state via `qa project reset`**: Use `qa project reset <name> --force`
+- **Clean state via `project reset`**: Use `project reset <name> --force --include-config`
   before each scenario to clear task data, project config, and auto-generated
   ticket files in one command — no need to delete the DB file.
 

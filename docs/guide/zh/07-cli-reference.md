@@ -272,16 +272,13 @@ orchestrator db reset --force
 orchestrator db reset --force --include-config
 ```
 
-**警告**：`db reset` 是破坏性操作。使用 `qa project reset` 进行隔离的清理。
+**警告**：`db reset` 是破坏性操作。使用 `project reset` 进行隔离的清理。
 
-## QA 项目管理
+## 项目管理
 
 ```bash
 # 重置项目（隔离的 —— 不影响其他项目）
-orchestrator qa project reset <project> --keep-config --force
-
-# 创建新项目脚手架
-orchestrator qa project create <project> --force
+orchestrator project reset <project> --force
 
 # QA 诊断 —— 验证并发保护措施
 orchestrator qa doctor

@@ -68,12 +68,14 @@ pub async fn dispatch(
             resource,
             output,
             selector,
+            project,
         } => {
             let resp = client
                 .get(orchestrator_proto::GetRequest {
                     resource,
                     selector,
                     output_format: format_to_string(output),
+                    project,
                 })
                 .await?
                 .into_inner();
@@ -81,11 +83,16 @@ pub async fn dispatch(
             Ok(())
         }
 
-        Commands::Describe { resource, output } => {
+        Commands::Describe {
+            resource,
+            output,
+            project,
+        } => {
             let resp = client
                 .describe(orchestrator_proto::DescribeRequest {
                     resource,
                     output_format: format_to_string(output),
+                    project,
                 })
                 .await?
                 .into_inner();
@@ -93,9 +100,17 @@ pub async fn dispatch(
             Ok(())
         }
 
-        Commands::Delete { resource, force } => {
+        Commands::Delete {
+            resource,
+            force,
+            project,
+        } => {
             let resp = client
-                .delete(orchestrator_proto::DeleteRequest { resource, force })
+                .delete(orchestrator_proto::DeleteRequest {
+                    resource,
+                    force,
+                    project,
+                })
                 .await?
                 .into_inner();
             println!("{}", resp.message);
@@ -104,6 +119,7 @@ pub async fn dispatch(
 
         Commands::Task(cmd) => dispatch_task(client, cmd).await,
         Commands::Store(cmd) => dispatch_store(client, cmd).await,
+        Commands::Project(cmd) => dispatch_project(client, cmd).await,
 
         Commands::Debug { component } => {
             let resp = client
@@ -188,7 +204,7 @@ pub async fn dispatch(
             }
         }
 
-        // These are handled before dispatch
+        // These are handled before dispatch or dispatched above
         Commands::Version | Commands::Daemon(_) => unreachable!(),
     }
 }
@@ -202,12 +218,14 @@ async fn dispatch_task(
     match cmd {
         TaskCommands::List {
             status,
+            project,
             output,
             verbose: _,
         } => {
             let resp = client
                 .task_list(orchestrator_proto::TaskListRequest {
                     status_filter: status,
+                    project_filter: project,
                 })
                 .await?
                 .into_inner();
@@ -579,6 +597,32 @@ async fn dispatch_store(
         StoreCommands::Prune { store, project } => {
             let resp = client
                 .store_prune(orchestrator_proto::StorePruneRequest { store, project })
+                .await?
+                .into_inner();
+            println!("{}", resp.message);
+            Ok(())
+        }
+    }
+}
+
+async fn dispatch_project(
+    client: &mut OrchestratorServiceClient<Channel>,
+    cmd: crate::ProjectCommands,
+) -> Result<()> {
+    use crate::ProjectCommands;
+
+    match cmd {
+        ProjectCommands::Reset {
+            project_id,
+            force,
+            include_config,
+        } => {
+            let resp = client
+                .project_reset(orchestrator_proto::ProjectResetRequest {
+                    project_id,
+                    force,
+                    include_config,
+                })
                 .await?
                 .into_inner();
             println!("{}", resp.message);

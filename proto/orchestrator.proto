@@ -44,6 +44,9 @@ service OrchestratorService {
   rpc DbReset(DbResetRequest)         returns (DbResetResponse);
   rpc ManifestValidate(ManifestValidateRequest) returns (ManifestValidateResponse);
   rpc TaskTrace(TaskTraceRequest)     returns (TaskTraceResponse);
+
+  // Project management
+  rpc ProjectReset(ProjectResetRequest) returns (ProjectResetResponse);
 }
 
 // ─── Task messages ────────────────────────────────────────────
@@ -120,6 +123,7 @@ message TaskRetryResponse {
 
 message TaskListRequest {
   optional string status_filter = 1;
+  optional string project_filter = 2;
 }
 
 message TaskListResponse {
@@ -260,6 +264,7 @@ message GetRequest {
   string resource = 1;      // "workspace/default" or "workspaces"
   optional string selector = 2;
   string output_format = 3; // "table" | "json" | "yaml"
+  optional string project = 4;
 }
 
 message GetResponse {
@@ -270,6 +275,7 @@ message GetResponse {
 message DescribeRequest {
   string resource = 1;      // e.g., "workspace/default"
   string output_format = 2;
+  optional string project = 3;
 }
 
 message DescribeResponse {
@@ -280,6 +286,7 @@ message DescribeResponse {
 message DeleteRequest {
   string resource = 1;      // e.g., "workspace/old-ws"
   bool force = 2;
+  optional string project = 3;
 }
 
 message DeleteResponse {
@@ -446,4 +453,20 @@ message Anomaly {
   string severity = 2;
   string message = 3;
   optional string at = 4;
+}
+
+// ─── Project management ──────────────────────────────────────
+
+message ProjectResetRequest {
+  string project_id = 1;
+  bool force = 2;
+  bool include_config = 3;  // also remove project entry from config
+}
+
+message ProjectResetResponse {
+  string message = 1;
+  uint64 tasks_deleted = 2;
+  uint64 items_deleted = 3;
+  uint64 runs_deleted = 4;
+  uint64 events_deleted = 5;
 }

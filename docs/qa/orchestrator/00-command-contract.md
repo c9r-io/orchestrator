@@ -94,7 +94,7 @@ Daemon lifecycle:
 
 2. (Recommended for isolated QA reruns) Reset only the scenario project:
    ```bash
-   orchestrator qa project reset <qa-project-id> --keep-config --force
+   orchestrator project reset <qa-project-id> --force
    ```
 
 3. Validate workspace info positional argument:

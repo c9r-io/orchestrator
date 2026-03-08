@@ -223,10 +223,17 @@ impl OrchestratorService for OrchestratorServer {
             .await
             .map_err(|e| Status::internal(format!("{e}")))?;
 
-        let filtered: Vec<_> = match req.status_filter {
-            Some(ref s) if !s.is_empty() => tasks.into_iter().filter(|t| t.status == *s).collect(),
-            _ => tasks,
-        };
+        let filtered: Vec<_> = tasks
+            .into_iter()
+            .filter(|t| match &req.status_filter {
+                Some(s) if !s.is_empty() => t.status == *s,
+                _ => true,
+            })
+            .filter(|t| match &req.project_filter {
+                Some(p) if !p.is_empty() => t.project_id == *p,
+                _ => true,
+            })
+            .collect();
 
         let protos = filtered.into_iter().map(|t| summary_to_proto(&t)).collect();
         Ok(Response::new(TaskListResponse { tasks: protos }))
@@ -408,6 +415,7 @@ impl OrchestratorService for OrchestratorServer {
             &req.resource,
             req.selector.as_deref(),
             &req.output_format,
+            req.project.as_deref(),
         )
         .map_err(|e| Status::internal(format!("{e}")))?;
 
@@ -426,6 +434,7 @@ impl OrchestratorService for OrchestratorServer {
             &self.state,
             &req.resource,
             &req.output_format,
+            req.project.as_deref(),
         )
         .map_err(|e| Status::internal(format!("{e}")))?;
 
@@ -444,10 +453,15 @@ impl OrchestratorService for OrchestratorServer {
             &self.state,
             &req.resource,
             req.force,
+            req.project.as_deref(),
         )
         .map_err(|e| Status::internal(format!("{e}")))?;
+        let scope = req
+            .project
+            .map(|p| format!(" (project: {})", p))
+            .unwrap_or_default();
         Ok(Response::new(DeleteResponse {
-            message: format!("{} deleted", req.resource),
+            message: format!("{} deleted{}", req.resource, scope),
         }))
     }
 
@@ -685,6 +699,53 @@ impl OrchestratorService for OrchestratorServer {
             .collect();
 
         Ok(Response::new(TaskTraceResponse { entries, anomalies }))
+    }
+
+    // ─── Project management ──────────────────────────────────
+
+    async fn project_reset(
+        &self,
+        request: Request<ProjectResetRequest>,
+    ) -> Result<Response<ProjectResetResponse>, Status> {
+        let req = request.into_inner();
+
+        if !req.force {
+            return Err(Status::failed_precondition(
+                "use --force to confirm project reset",
+            ));
+        }
+
+        let stats = agent_orchestrator::db::reset_project_data(&self.state, &req.project_id)
+            .map_err(|e| Status::internal(format!("reset project data: {e}")))?;
+
+        if req.include_config {
+            let mut config = {
+                let active = agent_orchestrator::config_load::read_active_config(&self.state)
+                    .map_err(|e| Status::internal(format!("{e}")))?;
+                active.config.clone()
+            };
+            config.projects.remove(&req.project_id);
+            let yaml = serde_yml::to_string(&config)
+                .map_err(|e| Status::internal(format!("serialize config: {e}")))?;
+            agent_orchestrator::config_load::persist_config_and_reload(
+                &self.state,
+                config,
+                yaml,
+                "project-reset",
+            )
+            .map_err(|e| Status::internal(format!("persist config: {e}")))?;
+        }
+
+        Ok(Response::new(ProjectResetResponse {
+            message: format!(
+                "project '{}' reset: {} tasks, {} items, {} runs, {} events deleted",
+                req.project_id, stats.tasks, stats.task_items, stats.command_runs, stats.events
+            ),
+            tasks_deleted: stats.tasks,
+            items_deleted: stats.task_items,
+            runs_deleted: stats.command_runs,
+            events_deleted: stats.events,
+        }))
     }
 }
 

@@ -20,7 +20,7 @@ to global agents.
 Key CLI workflow:
 ```bash
 # Reset project state (task data + config + auto-tickets)
-orchestrator qa project reset <project> --force
+orchestrator project reset <project> --force --include-config
 
 # Deploy resources into project scope
 orchestrator apply -f <fixture> --project <project>
@@ -48,7 +48,7 @@ into the project config scope, not into the global config.
 
 1. Reset and apply into project scope:
    ```bash
-   orchestrator qa project reset qa-scope --force
+   orchestrator project reset qa-scope --force --include-config
    orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-scope
    ```
 
@@ -87,7 +87,7 @@ for selection, even when global agents have the same capability.
 
 1. Reset and apply into project scope:
    ```bash
-   orchestrator qa project reset qa-iso --force
+   orchestrator project reset qa-iso --force --include-config
    orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-iso
    ```
 
@@ -134,7 +134,7 @@ falls back to global agents.
 
 1. Reset and apply (project agents only have `qa` capability):
    ```bash
-   orchestrator qa project reset qa-fallback --force
+   orchestrator project reset qa-fallback --force --include-config
    orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-fallback
    ```
 
@@ -168,14 +168,14 @@ falls back to global agents.
 
 ### Goal
 
-Validate that `qa project reset --force` removes `auto_*.md` files from
+Validate that `project reset --force --include-config` removes `auto_*.md` files from
 project workspace ticket directories.
 
 ### Steps
 
 1. Set up project with ticket files:
    ```bash
-   orchestrator qa project reset qa-tickets --force
+   orchestrator project reset qa-tickets --force --include-config
    orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-tickets
    ```
 
@@ -197,7 +197,7 @@ project workspace ticket directories.
 
 3. Reset project:
    ```bash
-   orchestrator qa project reset qa-tickets --force
+   orchestrator project reset qa-tickets --force --include-config
    ```
 
 4. Verify tickets cleaned:
@@ -229,7 +229,7 @@ global agents, not project-scoped agents.
 
 1. Ensure project agents exist:
    ```bash
-   orchestrator qa project reset qa-global --force
+   orchestrator project reset qa-global --force --include-config
    orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-global
    ```
 

@@ -22,7 +22,7 @@ Entry point: `orchestrator <command>`
 
 ### Preconditions
 
-- Reset previous QA state — use `qa project reset` to clear task data and
+- Reset previous QA state — use `project reset` to clear task data and
   project config (including auto-generated tickets) without destroying global state.
 - Apply fixture into project scope — use `--project` to isolate fixture agents
   from global/bootstrap agents.
@@ -47,7 +47,7 @@ to the fix-capable agent when capabilities are disjoint.
 
 1. Reset and apply into project scope:
    ```bash
-   orchestrator qa project reset qa-cap --force
+   orchestrator project reset qa-cap --force --include-config
    orchestrator apply -f fixtures/manifests/bundles/capability-test.yaml --project qa-cap
    ```
 
@@ -85,7 +85,7 @@ to the fix-capable agent when capabilities are disjoint.
 
 ### Preconditions
 
-- Reset previous QA state — use `qa project reset` to clear task data, config,
+- Reset previous QA state — use `project reset` to clear task data, config,
   and auto-generated tickets without destroying global state.
 - Apply fixture into project scope — use `--project` to ensure only fixture
   agents participate in selection.
@@ -107,7 +107,7 @@ distributes work across them and each agent uses its own correct template.
 
 1. Reset and apply into project scope:
    ```bash
-   orchestrator qa project reset qa-multi --force
+   orchestrator project reset qa-multi --force --include-config
    orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-multi
    ```
 
@@ -143,7 +143,7 @@ distributes work across them and each agent uses its own correct template.
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
 | Other agents selected (e.g. `probe_fallback`, `env-agent`) | Fixture not applied with `--project`; global agents participate in selection | Use `apply -f ... --project <name>` to scope agents |
-| Items marked `unresolved` despite agents exiting 0 | Auto-ticket files in `fixtures/ticket/` from a prior run | Use `qa project reset <name> --force` to clean tickets |
+| Items marked `unresolved` despite agents exiting 0 | Auto-ticket files in `fixtures/ticket/` from a prior run | Use `project reset <name> --force --include-config` to clean tickets |
 
 ---
 
@@ -151,7 +151,7 @@ distributes work across them and each agent uses its own correct template.
 
 ### Preconditions
 
-- Reset previous QA state — `qa project reset` clears task data, config, and auto-tickets.
+- Reset previous QA state — `project reset` clears task data, config, and auto-tickets.
 
 ### Goal
 
@@ -168,7 +168,7 @@ Validate that repeatable steps execute in every loop cycle.
 
 1. Reset and apply into project scope:
    ```bash
-   orchestrator qa project reset qa-repeat --force
+   orchestrator project reset qa-repeat --force --include-config
    orchestrator apply -f fixtures/manifests/bundles/repeatable-test.yaml --project qa-repeat
    ```
 
@@ -204,7 +204,7 @@ Validate that repeatable steps execute in every loop cycle.
 
 ### Preconditions
 
-- Reset previous QA state — `qa project reset` clears task data, config, and auto-tickets.
+- Reset previous QA state — `project reset` clears task data, config, and auto-tickets.
 
 ### Goal
 
@@ -227,7 +227,7 @@ Validate that a guard step can terminate the workflow loop.
 
 1. Reset and apply into project scope:
    ```bash
-   orchestrator qa project reset qa-guard --force
+   orchestrator project reset qa-guard --force --include-config
    orchestrator apply -f fixtures/manifests/bundles/guard-test.yaml --project qa-guard
    ```
 
@@ -260,7 +260,7 @@ Validate that a guard step can terminate the workflow loop.
 
 ### Preconditions
 
-- Reset previous QA state — `qa project reset` clears task data, config, and auto-tickets.
+- Reset previous QA state — `project reset` clears task data, config, and auto-tickets.
 
 ### Goal
 
@@ -279,7 +279,7 @@ both agents are used for execution.
 
 1. Reset and apply into project scope:
    ```bash
-   orchestrator qa project reset qa-perf --force
+   orchestrator project reset qa-perf --force --include-config
    orchestrator apply -f fixtures/manifests/bundles/selection-perf-test.yaml --project qa-perf
    ```
 

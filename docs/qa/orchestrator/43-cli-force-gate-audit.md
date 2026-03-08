@@ -21,8 +21,8 @@ High-risk CLI operations that perform irreversible state changes must require `-
 | `delete <resource>` | Deletes resource from DB | ✓ existing |
 | `task delete <id>` | Deletes task + stops runtime | ✓ existing |
 | `db reset` | Drops and recreates database | ✓ existing |
-| `qa project reset <project>` | Resets project state | ✓ existing |
-| `qa project create <project>` | Overwrites existing project | ✓ existing |
+| `project reset <project>` | Resets project state | ✓ existing |
+| `apply --project <project>` | Overwrites existing project | ✓ existing |
 | `init` | Overwrites existing config | ✓ existing |
 | `task session close <id>` | Kills backing process | ✓ existing |
 | `config backfill-events` | Bulk UPDATE all event rows | ✓ new |

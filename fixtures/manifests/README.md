@@ -19,7 +19,7 @@ These fixtures replace legacy flat-config bootstrap flows.
 
 - Manifest fixtures are additive setup artifacts. They are not a substitute for deleting or resetting the whole orchestrator control-plane state.
 - Do not pair fixture application with `db reset --include-config` or `db reset --force --include-config` during routine QA runs.
-- Prefer isolated QA projects: recreate the project-local scaffold (`qa project reset`, remove `workspace/<project>`, then `qa project create`) and then apply the fixture needed by that scenario.
+- Prefer isolated QA projects: reset the project-local state (`project reset`, remove `workspace/<project>`) and then apply the fixture needed by that scenario with `apply --project`.
 - Bundle fixtures must not be used to hijack unrelated default workspace/workflow expectations for other active runs.
 
 ## CLI Probe Fixtures
@@ -52,4 +52,4 @@ It provides a self-referential workspace plus official probe workflows for:
 - self-referential trace/anomaly verification
 
 These scenarios run directly with `task create/start/watch/trace`; they do not
-use `qa project create`, which intentionally forces `self_referential: false`.
+use `apply --project`, which intentionally forces `self_referential: false`.

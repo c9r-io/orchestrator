@@ -22,11 +22,11 @@ Entry point: `orchestrator`
 ### Environment Isolation Setup
 
 ```bash
-orchestrator qa project reset qa-collab --force
+orchestrator project reset qa-collab --force --include-config
 orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project qa-collab
 ```
 
-> **Note**: Use `qa project reset` + `apply --project` to isolate fixture agents
+> **Note**: Use `project reset` + `apply --project` to isolate fixture agents
 > from global/bootstrap agents. Project-scoped agent selection ensures only
 > fixture-defined agents participate. Auto-ticket files are cleaned during reset.
 
@@ -77,7 +77,7 @@ WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
 ## Scenario 2: Strict Phase Validation Behavior
 
 ### Preconditions
-- Reset previous QA state — `qa project reset` clears task data, config, and auto-tickets.
+- Reset previous QA state — `project reset` clears task data, config, and auto-tickets.
 - **Important**: This scenario requires the `plain-text-agent.yaml` fixture
   which defines an agent that produces non-JSON output. The base
   `echo-workflow.yaml` fixture must be applied first to provide the Workspace
@@ -89,7 +89,7 @@ Verify non-JSON output is rejected for strict phases.
 ### Steps
 1. Reset and apply into project scope (two fixtures — base workspace + plain-text agent):
    ```bash
-   orchestrator qa project reset qa-strict --force
+   orchestrator project reset qa-strict --force --include-config
    orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project qa-strict
    orchestrator apply -f fixtures/manifests/bundles/plain-text-agent.yaml --project qa-strict
    ```

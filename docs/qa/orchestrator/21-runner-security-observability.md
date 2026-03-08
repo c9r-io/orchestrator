@@ -88,9 +88,9 @@ Ensure run-phase command execution is denied by runner policy before process spa
 1. Prepare isolated project and apply policy config:
    ```bash
    QA_PROJECT="qa-runner-deny"
-   orchestrator qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   orchestrator qa project create "${QA_PROJECT}" --force
+   orchestrator apply --project "${QA_PROJECT}" --force
    cat > /tmp/runner-policy-deny.yaml << 'YAML'
    runner:
      policy: allowlist

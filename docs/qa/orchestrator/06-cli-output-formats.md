@@ -18,15 +18,15 @@ Project setup (run once):
 ```bash
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml
-orchestrator qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
-orchestrator qa project create "${QA_PROJECT}" --force
+orchestrator apply --project "${QA_PROJECT}" --force
 ```
 
 ### Common Preconditions (Scenarios 2, 3, 5)
 
 - Config must be applied: `orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml`
-- Recreate the isolated project scaffold: `orchestrator qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true && rm -rf "workspace/${QA_PROJECT}" && orchestrator qa project create "${QA_PROJECT}" --force`
+- Recreate the isolated project scaffold: `orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true && rm -rf "workspace/${QA_PROJECT}" && orchestrator apply --project "${QA_PROJECT}" --force`
 
 ---
 

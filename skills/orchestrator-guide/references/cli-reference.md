@@ -134,8 +134,7 @@ orchestrator store prune <store>
 
 ```bash
 # Project-scoped reset (safe, isolated)
-orchestrator qa project reset <project> --keep-config --force
-orchestrator qa project create <project> --force
+orchestrator project reset <project> --force
 orchestrator qa doctor
 
 # Database reset (DESTRUCTIVE)

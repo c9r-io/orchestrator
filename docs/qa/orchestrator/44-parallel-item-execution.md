@@ -153,9 +153,9 @@ Verify that when `max_parallel` is not configured, item-scoped steps execute seq
    rm -f fixtures/ticket/auto_*.md
    QA_PROJECT="qa-par-seq-${USER}-$(date +%Y%m%d%H%M%S)"
    orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml
-   orchestrator qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   orchestrator qa project create "${QA_PROJECT}" --force
+   orchestrator apply --project "${QA_PROJECT}" --force
    ```
 
 2. Create and run a task with multiple QA items:

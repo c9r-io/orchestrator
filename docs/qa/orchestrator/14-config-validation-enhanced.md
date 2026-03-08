@@ -82,7 +82,7 @@ cargo build --release -p orchestrator-cli
 ```bash
 orchestrator init --force
 QA_PROJECT="qa-config-enhanced-${USER}-$(date +%Y%m%d%H%M%S)"
-orchestrator qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
 ```
 

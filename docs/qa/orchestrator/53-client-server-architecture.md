@@ -2,7 +2,7 @@
 
 **Module**: orchestrator
 **Scope**: Validate gRPC daemon lifecycle, CLI-to-daemon communication, embedded worker, and service layer correctness
-**Scenarios**: 5
+**Scenarios**: 6
 **Priority**: Critical
 
 ---
@@ -157,7 +157,7 @@ Verify CLI client connects to daemon over UDS and basic RPC round-trips work.
 ### Preconditions
 - Daemon running with at least 1 embedded worker (`--workers 1`).
 - Config applied with a valid workspace and workflow.
-- A QA project created for isolation: `./target/release/orchestrator qa project create cs-qa --force`
+- A QA project created for isolation: `./target/release/orchestrator apply --project cs-qa --force`
 
 ### Goal
 Verify task lifecycle (create, list, info, start, pause, delete) works through gRPC.
@@ -223,7 +223,7 @@ SELECT id, status FROM tasks WHERE id = '{task_id}';
 
 ### Preconditions
 - Daemon running with multiple workers (`--workers 3`).
-- A QA project created for isolation: `./target/release/orchestrator qa project create cs-qa --force`
+- A QA project created for isolation: `./target/release/orchestrator apply --project cs-qa --force`
 
 ### Goal
 Verify embedded daemon workers consume pending tasks concurrently and atomically.
@@ -333,12 +333,80 @@ Verify resource apply (from file and stdin) and store CRUD operations work throu
 
 ---
 
+## Scenario 6: Native Project Isolation via gRPC
+
+### Preconditions
+- Daemon running.
+- A valid fixture manifest available.
+
+### Goal
+Verify project-scoped resource management, task filtering, and project reset work natively through gRPC — without a dedicated `qa` subcommand.
+
+### Steps
+1. Start daemon:
+   ```bash
+   ./target/release/orchestratord --foreground &
+   DAEMON_PID=$!
+   sleep 2
+   ```
+2. Apply manifest to project scope:
+   ```bash
+   ./target/release/orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project iso-test
+   ```
+3. List project-scoped agents (should only show project agents):
+   ```bash
+   ./target/release/orchestrator get agents --project iso-test
+   ```
+4. Describe a project-scoped resource:
+   ```bash
+   ./target/release/orchestrator describe agent/mock_echo --project iso-test
+   ```
+5. Create a task in project scope:
+   ```bash
+   ./target/release/orchestrator task create --name "iso-task" --goal "isolation test" --project iso-test --workflow qa_only --no-start
+   ```
+6. List tasks filtered by project:
+   ```bash
+   ./target/release/orchestrator task list --project iso-test -o json
+   ```
+7. Delete a project-scoped resource:
+   ```bash
+   ./target/release/orchestrator delete agent/mock_echo --force --project iso-test
+   ```
+8. Reset project data:
+   ```bash
+   ./target/release/orchestrator project reset iso-test --force
+   ```
+9. Reset project with config removal:
+   ```bash
+   ./target/release/orchestrator project reset iso-test --force --include-config
+   ```
+10. Stop daemon:
+    ```bash
+    kill "$DAEMON_PID"
+    wait "$DAEMON_PID" 2>/dev/null
+    ```
+
+### Expected
+- `apply --project` creates resources in project scope with `(project: iso-test)` suffix.
+- `get agents --project` returns only project-scoped agents (not global).
+- `describe --project` returns project-scoped resource details.
+- `task create --project` creates task with correct `project_id`.
+- `task list --project` filters to only show that project's tasks.
+- `delete --project` removes resource from project config only.
+- `project reset --force` deletes tasks/items/runs/events for the project.
+- `project reset --force --include-config` also removes the project entry from configuration.
+- After `--include-config`, `get --project` returns "project not found" error.
+
+---
+
 ## Checklist
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Daemon Startup and Shutdown | ✅ | 2026-03-08 | Claude | PID/socket create+cleanup, startup/shutdown logs |
-| 2 | CLI-to-Daemon gRPC Communication | ✅ | 2026-03-08 | Claude | version, get, check all pass via gRPC |
-| 3 | Task Lifecycle via gRPC | ✅ | 2026-03-08 | Claude | create→list→info→start(detach)→logs→delete |
-| 4 | Embedded Worker Queue Consumption | ✅ | 2026-03-08 | Claude | 3 workers consumed 6 tasks concurrently |
-| 5 | Resource Apply and Store via gRPC | ✅ | 2026-03-08 | Claude | apply file/stdin/dry-run + store CRUD |
+| 1 | Daemon Startup and Shutdown | ✅ | 2026-03-09 | Claude | PID/socket create+cleanup, startup/shutdown logs |
+| 2 | CLI-to-Daemon gRPC Communication | ✅ | 2026-03-09 | Claude | version, get, check all pass via gRPC |
+| 3 | Task Lifecycle via gRPC | ✅ | 2026-03-09 | Claude | create→list→info→start(detach)→logs→delete |
+| 4 | Embedded Worker Queue Consumption | ✅ | 2026-03-09 | Claude | 3 workers consumed 6 tasks concurrently |
+| 5 | Resource Apply and Store via gRPC | ✅ | 2026-03-09 | Claude | apply file/stdin/dry-run + store CRUD |
+| 6 | Native Project Isolation via gRPC | ✅ | 2026-03-09 | Claude | apply/get/describe/delete/list --project + project reset |

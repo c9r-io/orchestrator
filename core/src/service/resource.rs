@@ -1,6 +1,4 @@
-use crate::config_load::{
-    load_raw_config_from_db, persist_config_and_reload, persist_raw_config, read_active_config,
-};
+use crate::config_load::{load_raw_config_from_db, persist_config_and_reload, read_active_config};
 use crate::crd::{self, ParsedManifest};
 use crate::resource::{
     apply_to_project, delete_resource_by_kind, dispatch_resource, kind_as_str,
@@ -130,7 +128,9 @@ pub fn apply_manifests(
 
     let config_version = if !dry_run && !results.is_empty() && errors.is_empty() {
         autofill_defaults_for_manifest_mode(&mut merged_config);
-        let overview = persist_raw_config(db_path, merged_config, "daemon-apply")?;
+        let yaml = serde_yml::to_string(&merged_config)
+            .context("failed to serialize config after apply")?;
+        let overview = persist_config_and_reload(state, merged_config, yaml, "daemon-apply")?;
         Some(overview.version)
     } else {
         None
@@ -149,19 +149,35 @@ pub fn get_resource(
     resource: &str,
     selector: Option<&str>,
     output_format: &str,
+    project: Option<&str>,
 ) -> Result<String> {
     let active = read_active_config(state)?;
-    // Delegate to a JSON serialization of the resource data
-    // For simplicity, serialize to the requested format
     let config = &active.config;
 
+    // Resolve effective config: project-scoped or global
+    let effective_config;
+    let cfg = if let Some(proj) = project {
+        let proj_cfg = config
+            .projects
+            .get(proj)
+            .context(format!("project not found: {}", proj))?;
+        effective_config = crate::config::OrchestratorConfig {
+            workspaces: proj_cfg.workspaces.clone(),
+            agents: proj_cfg.agents.clone(),
+            workflows: proj_cfg.workflows.clone(),
+            ..config.clone()
+        };
+        &effective_config
+    } else {
+        config
+    };
+
     if resource.contains('/') {
-        // Single resource get
         let parts: Vec<&str> = resource.splitn(2, '/').collect();
         let (kind, name) = (parts[0], parts[1]);
-        get_single_resource(config, kind, name, output_format)
+        get_single_resource(cfg, kind, name, output_format)
     } else {
-        get_list_resource(config, resource, selector, output_format)
+        get_list_resource(cfg, resource, selector, output_format)
     }
 }
 
@@ -225,13 +241,18 @@ pub fn describe_resource(
     state: &InnerState,
     resource: &str,
     output_format: &str,
+    project: Option<&str>,
 ) -> Result<String> {
-    // For now, describe is identical to get with yaml default
-    get_resource(state, resource, None, output_format)
+    get_resource(state, resource, None, output_format, project)
 }
 
 /// Delete a resource by kind/name.
-pub fn delete_resource(state: &InnerState, resource: &str, force: bool) -> Result<()> {
+pub fn delete_resource(
+    state: &InnerState,
+    resource: &str,
+    force: bool,
+    project: Option<&str>,
+) -> Result<()> {
     let parts: Vec<&str> = resource.split('/').collect();
     if parts.len() != 2 {
         anyhow::bail!("invalid resource format: {} (use kind/name)", resource);
@@ -247,28 +268,52 @@ pub fn delete_resource(state: &InnerState, resource: &str, force: bool) -> Resul
         active.config.clone()
     };
 
-    if (kind == "ws" || kind == "workspace") && config.defaults.workspace == name {
-        anyhow::bail!(
-            "cannot delete workspace '{}': it is the current default workspace",
-            name
-        );
-    }
-    if (kind == "wf" || kind == "workflow") && config.defaults.workflow == name {
-        anyhow::bail!(
-            "cannot delete workflow '{}': it is the current default workflow",
-            name
-        );
-    }
+    if let Some(proj) = project {
+        let proj_cfg = config
+            .projects
+            .get_mut(proj)
+            .context(format!("project not found: {}", proj))?;
+        let deleted = delete_resource_from_project(proj_cfg, kind, name)?;
+        if !deleted {
+            anyhow::bail!("{}/{} not found in project '{}'", kind, name, proj);
+        }
+    } else {
+        if (kind == "ws" || kind == "workspace") && config.defaults.workspace == name {
+            anyhow::bail!(
+                "cannot delete workspace '{}': it is the current default workspace",
+                name
+            );
+        }
+        if (kind == "wf" || kind == "workflow") && config.defaults.workflow == name {
+            anyhow::bail!(
+                "cannot delete workflow '{}': it is the current default workflow",
+                name
+            );
+        }
 
-    let deleted = delete_resource_by_kind(&mut config, kind, name)?;
-    if !deleted {
-        anyhow::bail!("{}/{} not found", kind, name);
+        let deleted = delete_resource_by_kind(&mut config, kind, name)?;
+        if !deleted {
+            anyhow::bail!("{}/{} not found", kind, name);
+        }
     }
 
     let yaml =
         serde_yml::to_string(&config).context("failed to serialize configuration after delete")?;
     persist_config_and_reload(state, config, yaml, "daemon")?;
     Ok(())
+}
+
+fn delete_resource_from_project(
+    proj: &mut crate::config::ProjectConfig,
+    kind: &str,
+    name: &str,
+) -> Result<bool> {
+    match kind {
+        "ws" | "workspace" => Ok(proj.workspaces.remove(name).is_some()),
+        "agent" => Ok(proj.agents.remove(name).is_some()),
+        "wf" | "workflow" => Ok(proj.workflows.remove(name).is_some()),
+        _ => anyhow::bail!("unknown resource type for project delete: {}", kind),
+    }
 }
 
 fn format_output<T: serde::Serialize>(value: &T, format: &str) -> Result<String> {

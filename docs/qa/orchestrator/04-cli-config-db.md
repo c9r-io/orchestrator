@@ -13,7 +13,7 @@ This document validates config lifecycle commands and database reset behavior.
 
 Entry points:
 - `orchestrator apply|manifest <command>`
-- `orchestrator qa project reset`
+- `orchestrator project reset`
 
 > **Note**: `apply` and `manifest validate` accept multi-document YAML with
 > `apiVersion`/`kind`/`metadata`/`spec` resources. The flat config format
@@ -173,14 +173,14 @@ Entry points:
 1. Prepare a project with at least one task:
    ```bash
    QA_PROJECT="qa-db-reset-test"
-   orchestrator qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   orchestrator qa project create "${QA_PROJECT}" --from-workspace default --workflow qa_only --force
+   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}" --force
    orchestrator task create --project "${QA_PROJECT}" --name "reset-test" --goal "reset test" --no-start
    ```
 
    > **Note**: `task create --project` requires the project workspace to contain at
-   > least one QA markdown file for item-scoped workflows. `qa project create` now
+   > least one QA markdown file for item-scoped workflows. `apply --project` now
    > copies `.md` files from the source workspace's QA target directories. If the
    > project still has no files, either specify `--workflow` with a task-scoped workflow
    > or provide explicit `--workspace` and `--workflow` flags.
@@ -196,7 +196,7 @@ Entry points:
 
 3. Reset the project:
    ```bash
-   orchestrator qa project reset "${QA_PROJECT}" --force
+   orchestrator project reset "${QA_PROJECT}" --force --include-config
    ```
 
 4. Verify task records within the project are cleared:

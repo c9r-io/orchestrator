@@ -103,7 +103,7 @@ orchestrator apply -f docs/workflow/self-bootstrap.yaml
 
 ```bash
 QA_PROJECT="qa-llm-selfbreak-${USER}-$(date +%Y%m%d%H%M%S)"
-orchestrator qa project create "${QA_PROJECT}" --from-workspace self --force
+orchestrator apply -f fixtures/manifests/bundles/self-bootstrap.yaml --project "${QA_PROJECT}" --force
 ```
 
 ---

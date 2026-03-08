@@ -19,23 +19,22 @@ Watchdog script: `scripts/watchdog.sh`.
 
 ### Common Preconditions
 
-> **Important**: Do NOT use `qa project create` for self-referential test scenarios.
-> `qa project create` always sets `self_referential: false` on the new workspace,
-> which causes validation to never trigger. Instead, use `apply --project` to apply
-> manifests directly into the project scope, preserving `self_referential: true`.
+> **Important**: For self-referential test scenarios, apply a manifest that explicitly
+> sets `self_referential: true` on the workspace. Use `apply -f <manifest> --project`
+> with a manifest that preserves `self_referential: true`.
 
 ```bash
 rm -f fixtures/ticket/auto_*.md
 
 QA_PROJECT="qa-enforcement"
-orchestrator qa project reset "${QA_PROJECT}" --force
+orchestrator project reset "${QA_PROJECT}" --force --include-config
 ```
 
 ### Troubleshooting
 
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
-| Task starts without `[SELF_REF_UNSAFE]` error despite `checkpoint_strategy: none` | `self_referential` resolved to `false` at runtime because `qa project create` was used or the manifest was applied globally without `--project` | Use `apply -f <manifest> --project <name>` to scope the workspace with `self_referential: true` into the project |
+| Task starts without `[SELF_REF_UNSAFE]` error despite `checkpoint_strategy: none` | `self_referential` resolved to `false` at runtime because `apply --project` was used or the manifest was applied globally without `--project` | Use `apply -f <manifest> --project <name>` to scope the workspace with `self_referential: true` into the project |
 
 ---
 

@@ -51,6 +51,9 @@ pub enum Commands {
 
         #[arg(short = 'l', long = "selector")]
         selector: Option<String>,
+
+        #[arg(short, long)]
+        project: Option<String>,
     },
 
     /// Describe a resource
@@ -61,6 +64,9 @@ pub enum Commands {
 
         #[arg(short, long, default_value = "yaml")]
         output: OutputFormat,
+
+        #[arg(long)]
+        project: Option<String>,
     },
 
     /// Delete a resource
@@ -71,6 +77,9 @@ pub enum Commands {
 
         #[arg(short, long)]
         force: bool,
+
+        #[arg(long)]
+        project: Option<String>,
     },
 
     /// Task operations
@@ -111,6 +120,10 @@ pub enum Commands {
     /// Manifest operations
     #[command(subcommand)]
     Manifest(ManifestCommands),
+
+    /// Project management
+    #[command(alias = "proj", subcommand)]
+    Project(ProjectCommands),
 
     /// Show version
     Version,
@@ -171,6 +184,9 @@ pub enum TaskCommands {
     List {
         #[arg(short, long)]
         status: Option<String>,
+
+        #[arg(short, long)]
+        project: Option<String>,
 
         #[arg(short, long, default_value = "table")]
         output: OutputFormat,
@@ -334,6 +350,23 @@ pub enum StoreCommands {
         store: String,
         #[arg(short, long, default_value = "")]
         project: String,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum ProjectCommands {
+    /// Reset a project's task data (tasks, items, runs, events)
+    Reset {
+        /// Project ID to reset
+        project_id: String,
+
+        /// Confirm the reset
+        #[arg(short, long)]
+        force: bool,
+
+        /// Also remove project entry from configuration
+        #[arg(long)]
+        include_config: bool,
     },
 }
 

@@ -79,7 +79,7 @@ Expected:
 
 ```bash
 QA_PROJECT="qa-survival-${USER}-$(date +%Y%m%d%H%M%S)"
-orchestrator qa project create "${QA_PROJECT}" --from-workspace self --force
+orchestrator apply -f fixtures/manifests/bundles/self-bootstrap.yaml --project "${QA_PROJECT}" --force
 ```
 
 ---

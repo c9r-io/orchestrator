@@ -55,9 +55,9 @@ Shell scripts for executable QA scenarios.
 
 - Each script uses an isolated QA project by default (auto-generated when `--project` is not provided).
 - Each script recreates only that project's local scaffold with:
-  - `orchestrator qa project reset <project> --keep-config --force`
+  - `orchestrator project reset <project> --force`
   - `rm -rf workspace/<project>`
-  - `orchestrator qa project create <project> --force`
+  - `orchestrator apply --project <project> --force`
 - The SQLite DB file is preserved across runs.
 - Each script uses a dedicated fixture to avoid cross-scenario config drift:
   - `test-task-pause-resume.sh` -> `fixtures/manifests/bundles/pause-resume-workflow.yaml`
