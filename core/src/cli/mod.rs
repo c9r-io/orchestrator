@@ -1,15 +1,17 @@
-mod task;
-mod resource;
-mod system;
 mod qa;
+mod resource;
 mod store;
+mod system;
+mod task;
 mod tests;
 
-pub use task::{TaskCommands, TaskWorkerCommands, TaskSessionCommands};
-pub use resource::{WorkspaceCommands, AgentCommands, WorkflowCommands, EditCommands, ManifestCommands};
-pub use system::{DbCommands, CompletionCommands, VerifyCommands, ConfigLifecycleCommands};
 pub use qa::{QaCommands, QaProjectCommands};
+pub use resource::{
+    AgentCommands, EditCommands, ManifestCommands, WorkflowCommands, WorkspaceCommands,
+};
 pub use store::StoreCommands;
+pub use system::{CompletionCommands, ConfigLifecycleCommands, DbCommands, VerifyCommands};
+pub use task::{TaskCommands, TaskSessionCommands, TaskWorkerCommands};
 
 use crate::cli_handler::CliHandler;
 use crate::state::InnerState;

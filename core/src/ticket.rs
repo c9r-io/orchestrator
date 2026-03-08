@@ -33,7 +33,11 @@ pub fn parse_qa_doc_self_referential_safe(content: &str) -> bool {
 /// Check if a QA doc file is safe to run in a self-referential workspace.
 /// If the workspace is not self-referential, always returns `true`.
 /// If the file cannot be read, defaults to `true`.
-pub fn is_self_referential_safe(workspace_root: &Path, qa_file_path: &str, self_referential: bool) -> bool {
+pub fn is_self_referential_safe(
+    workspace_root: &Path,
+    qa_file_path: &str,
+    self_referential: bool,
+) -> bool {
     if !self_referential {
         return true;
     }
@@ -693,6 +697,7 @@ mod tests {
             current_cycle: 0,
             init_done: false,
             dynamic_steps: vec![],
+            adaptive: None,
             pipeline_vars: crate::config::PipelineVariables::default(),
             safety: crate::config::SafetyConfig::default(),
             self_referential: false,

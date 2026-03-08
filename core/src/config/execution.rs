@@ -159,6 +159,7 @@ pub struct TaskRuntimeContext {
     pub current_cycle: u32,
     pub init_done: bool,
     pub dynamic_steps: Vec<crate::dynamic_orchestration::DynamicStepConfig>,
+    pub adaptive: Option<crate::dynamic_orchestration::AdaptivePlannerConfig>,
     /// Pipeline variables accumulated across steps in the current cycle
     pub pipeline_vars: PipelineVariables,
     /// Safety configuration

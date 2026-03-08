@@ -144,6 +144,21 @@ pub fn resolve_effective_agents<'a>(
     &config.agents
 }
 
+pub fn resolve_agent_by_id<'a>(
+    project_id: &str,
+    config: &'a crate::config::OrchestratorConfig,
+    agent_id: &str,
+) -> Option<&'a AgentConfig> {
+    if !project_id.is_empty() {
+        if let Some(project) = config.projects.get(project_id) {
+            if let Some(agent) = project.agents.get(agent_id) {
+                return Some(agent);
+            }
+        }
+    }
+    config.agents.get(agent_id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

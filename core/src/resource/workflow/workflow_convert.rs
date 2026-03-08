@@ -143,6 +143,7 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
                 },
             )
             .collect(),
+        adaptive: spec.adaptive.clone(),
         safety: crate::config::SafetyConfig {
             max_consecutive_failures: spec.safety.max_consecutive_failures,
             auto_rollback: spec.safety.auto_rollback,
@@ -259,6 +260,7 @@ pub(crate) fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
                 max_runs: dynamic_step.max_runs,
             })
             .collect(),
+        adaptive: config.adaptive.clone(),
         safety: safety_config_to_spec(&config.safety),
         max_parallel: config.max_parallel,
     }
@@ -478,6 +480,7 @@ mod tests {
                 priority: 10,
                 max_runs: Some(3),
             }],
+            adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
         };
@@ -549,6 +552,7 @@ mod tests {
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
+            adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
         };
@@ -595,6 +599,7 @@ mod tests {
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
+            adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
         };
@@ -644,6 +649,7 @@ mod tests {
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
+            adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
         };
@@ -685,6 +691,7 @@ mod tests {
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
+            adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
         };
@@ -725,6 +732,7 @@ mod tests {
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
+            adaptive: None,
             safety: SafetySpec {
                 max_consecutive_failures: 5,
                 auto_rollback: true,
@@ -787,6 +795,7 @@ mod tests {
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
+            adaptive: None,
             safety: SafetySpec {
                 max_consecutive_failures: 3,
                 auto_rollback: false,
@@ -841,6 +850,7 @@ mod tests {
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
+            adaptive: None,
             safety: SafetySpec {
                 max_consecutive_failures: 3,
                 auto_rollback: false,
@@ -955,6 +965,7 @@ mod tests {
             fix: None,
             retest: None,
             dynamic_steps: vec![],
+            adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
         };
@@ -1017,6 +1028,7 @@ mod tests {
                 priority: 5,
                 max_runs: Some(2),
             }],
+            adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
         };
@@ -1075,6 +1087,7 @@ mod tests {
             fix: None,
             retest: None,
             dynamic_steps: vec![],
+            adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
         };
@@ -1147,6 +1160,7 @@ mod tests {
             fix: None,
             retest: None,
             dynamic_steps: vec![],
+            adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
         };
@@ -1241,6 +1255,7 @@ mod tests {
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
+            adaptive: None,
             safety: SafetySpec {
                 max_consecutive_failures: 7,
                 auto_rollback: true,
@@ -1309,6 +1324,7 @@ mod tests {
             fix: None,
             retest: None,
             dynamic_steps: vec![],
+            adaptive: None,
             safety: SafetyConfig {
                 max_consecutive_failures: 5,
                 auto_rollback: true,

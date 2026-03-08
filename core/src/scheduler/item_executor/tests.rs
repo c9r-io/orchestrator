@@ -397,6 +397,7 @@ fn make_task_ctx(
         current_cycle,
         init_done: false,
         dynamic_steps: vec![],
+        adaptive: None,
         pipeline_vars: empty_pipeline(),
         safety: Default::default(),
         self_referential: false,

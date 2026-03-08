@@ -17,14 +17,17 @@ fn resolve_pipeline_var_content(
     pipeline_vars: &HashMap<String, String>,
     key: &str,
 ) -> Result<String> {
-    let inline = pipeline_vars.get(key).with_context(|| {
-        format!("pipeline variable '{}' not found for generate_items", key)
-    })?;
+    let inline = pipeline_vars
+        .get(key)
+        .with_context(|| format!("pipeline variable '{}' not found for generate_items", key))?;
 
     // If not truncated, check if it's raw stream-json JSONL and extract the result
     if !inline.contains("[truncated \u{2014}") && !inline.contains("[truncated —") {
         if let Some(result_text) = extract_stream_json_result(inline) {
-            info!(key, "resolved pipeline var from inline stream-json result field");
+            info!(
+                key,
+                "resolved pipeline var from inline stream-json result field"
+            );
             return Ok(result_text);
         }
         return Ok(inline.clone());
@@ -33,12 +36,14 @@ fn resolve_pipeline_var_content(
     // Fall back to spill file
     let path_key = format!("{}_path", key);
     let path = pipeline_vars.get(&path_key).with_context(|| {
-        format!("pipeline variable '{}' is truncated but no spill path '{}' found", key, path_key)
+        format!(
+            "pipeline variable '{}' is truncated but no spill path '{}' found",
+            key, path_key
+        )
     })?;
 
-    let content = std::fs::read_to_string(path).with_context(|| {
-        format!("failed to read spill file at '{}'", path)
-    })?;
+    let content = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read spill file at '{}'", path))?;
 
     // Check if content looks like stream-json JSONL (multiple JSON lines from claude)
     // and extract the `result` field from the last `type: result` line
@@ -402,8 +407,14 @@ mod tests {
         std::fs::write(&spill_path, r#"{"items": [{"id": "a"}]}"#).unwrap();
 
         let mut vars = HashMap::new();
-        vars.insert("data".to_string(), "[truncated — output too long]".to_string());
-        vars.insert("data_path".to_string(), spill_path.to_string_lossy().to_string());
+        vars.insert(
+            "data".to_string(),
+            "[truncated — output too long]".to_string(),
+        );
+        vars.insert(
+            "data_path".to_string(),
+            spill_path.to_string_lossy().to_string(),
+        );
 
         let result = resolve_pipeline_var_content(&vars, "data").expect("resolve content");
         assert_eq!(result, r#"{"items": [{"id": "a"}]}"#);
@@ -422,8 +433,14 @@ mod tests {
         std::fs::write(&spill_path, spill_content).unwrap();
 
         let mut vars = HashMap::new();
-        vars.insert("data".to_string(), "[truncated — output too long]".to_string());
-        vars.insert("data_path".to_string(), spill_path.to_string_lossy().to_string());
+        vars.insert(
+            "data".to_string(),
+            "[truncated — output too long]".to_string(),
+        );
+        vars.insert(
+            "data_path".to_string(),
+            spill_path.to_string_lossy().to_string(),
+        );
 
         let result = resolve_pipeline_var_content(&vars, "data").expect("resolve content");
         assert_eq!(result, r#"{"id": "approach-a"}"#);
@@ -441,7 +458,10 @@ mod tests {
     #[test]
     fn test_resolve_pipeline_var_content_truncated_missing_path() {
         let mut vars = HashMap::new();
-        vars.insert("data".to_string(), "[truncated — output too long]".to_string());
+        vars.insert(
+            "data".to_string(),
+            "[truncated — output too long]".to_string(),
+        );
 
         let result = resolve_pipeline_var_content(&vars, "data");
         assert!(result.is_err());

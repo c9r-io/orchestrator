@@ -1,13 +1,13 @@
-mod types;
-mod util;
+mod record;
 mod setup;
 mod spawn;
-mod wait;
-mod validate;
-mod record;
 mod tests;
+mod types;
+mod util;
+mod validate;
+mod wait;
 
-pub use types::{PhaseRunRequest, RotatingPhaseRunRequest};
+pub use types::{PhaseRunRequest, RotatingPhaseRunRequest, SelectedPhaseRunRequest};
 pub(crate) use util::shell_escape;
 
 use crate::config::PromptDelivery;
@@ -20,11 +20,11 @@ use std::sync::Arc;
 
 use super::RunningTask;
 
+use record::record_phase_results;
 use setup::setup_phase_execution;
 use spawn::spawn_phase_process;
 use validate::validate_phase_output_stage;
 use wait::wait_for_process;
-use record::record_phase_results;
 
 /// Orchestrator: runs a single phase with timeout by calling the 5 extracted stages in sequence.
 async fn run_phase_with_timeout(
@@ -210,6 +210,57 @@ pub async fn run_phase_with_rotation(
         MetricsCollector::increment_load(metrics);
     }
 
+    run_phase_with_selected_agent(
+        state,
+        SelectedPhaseRunRequest {
+            task_id,
+            item_id,
+            step_id,
+            phase,
+            tty,
+            agent_id: &agent_id,
+            command_template: &template,
+            prompt_delivery,
+            rel_path,
+            ticket_paths,
+            workspace_root,
+            workspace_id,
+            cycle,
+            runtime,
+            pipeline_vars,
+            step_timeout_secs,
+            step_scope,
+            step_template_prompt,
+        },
+    )
+    .await
+}
+
+pub async fn run_phase_with_selected_agent(
+    state: &Arc<InnerState>,
+    request: SelectedPhaseRunRequest<'_>,
+) -> Result<crate::dto::RunResult> {
+    let SelectedPhaseRunRequest {
+        task_id,
+        item_id,
+        step_id,
+        phase,
+        tty,
+        agent_id,
+        command_template,
+        prompt_delivery,
+        rel_path,
+        ticket_paths,
+        workspace_root,
+        workspace_id,
+        cycle,
+        runtime,
+        pipeline_vars,
+        step_timeout_secs,
+        step_scope,
+        step_template_prompt,
+    } = request;
+
     // Render template variables into the step template prompt, then inject into agent command
     let rendered_prompt = step_template_prompt.map(|prompt| {
         let mut rendered = prompt
@@ -239,21 +290,21 @@ pub async fn run_phase_with_rotation(
     let (mut command, prompt_payload) = match prompt_delivery {
         PromptDelivery::Arg => {
             let cmd = if let Some(ref prompt) = rendered_prompt {
-                template.replace("{prompt}", prompt)
+                command_template.replace("{prompt}", prompt)
             } else {
-                template
+                command_template.to_string()
             };
             (cmd, None)
         }
         _ => {
-            if template.contains("{prompt}") {
+            if command_template.contains("{prompt}") {
                 tracing::warn!(
                     agent_id = %agent_id,
                     "command contains {{prompt}} but prompt_delivery={:?}; placeholder ignored",
                     prompt_delivery
                 );
             }
-            (template, rendered_prompt)
+            (command_template.to_string(), rendered_prompt)
         }
     };
 

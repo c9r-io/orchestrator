@@ -184,8 +184,7 @@ pub(super) async fn execute_task_segment(
                         } else {
                             all_items
                         };
-                        *task_item_paths =
-                            items.iter().map(|i| i.qa_file_path.clone()).collect();
+                        *task_item_paths = items.iter().map(|i| i.qa_file_path.clone()).collect();
                     }
                     Err(e) => {
                         warn!(error = %e, "failed to create dynamic items");

@@ -58,6 +58,7 @@ fn workflow_crd() -> CustomResourceDefinition {
                 "loop_policy": { "type": "object" },
                 "finalize": { "type": "object" },
                 "dynamic_steps": { "type": "array" },
+                "adaptive": { "type": "object" },
                 "safety": { "type": "object" }
             }
         }))],

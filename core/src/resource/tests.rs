@@ -1,8 +1,10 @@
 #[cfg(test)]
 mod tests {
-    use super::super::*;
     use super::super::helpers::metadata_from_parts;
-    use crate::cli_types::{AgentSpec, OrchestratorResource, ResourceMetadata, ResourceSpec, WorkspaceSpec};
+    use super::super::*;
+    use crate::cli_types::{
+        AgentSpec, OrchestratorResource, ResourceMetadata, ResourceSpec, WorkspaceSpec,
+    };
     use crate::config::OrchestratorConfig;
     use crate::config_load::read_active_config;
     use crate::test_utils::TestState;

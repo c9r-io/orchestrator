@@ -432,6 +432,7 @@ mod tests {
             fix: None,
             retest: None,
             dynamic_steps: vec![],
+            adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
         };
@@ -471,6 +472,7 @@ mod tests {
             fix: None,
             retest: None,
             dynamic_steps: vec![],
+            adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
         };

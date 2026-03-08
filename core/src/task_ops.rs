@@ -283,6 +283,7 @@ mod tests {
             fix: None,
             retest: None,
             dynamic_steps: vec![],
+            adaptive: None,
             safety: SafetyConfig::default(),
             max_parallel: None,
         }

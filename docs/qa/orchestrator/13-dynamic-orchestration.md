@@ -1,7 +1,7 @@
 # Orchestrator - Dynamic Orchestration & Adaptive Workflow
 
 **Module**: orchestrator
-**Scope**: Validate dynamic prehook decisions, DAG execution, dynamic step pool, adaptive planning interfaces
+**Scope**: Validate dynamic prehook decisions, DAG execution, dynamic step pool, and adaptive runtime planning
 **Scenarios**: 5
 **Priority**: High
 
@@ -14,7 +14,7 @@ This document tests the new dynamic orchestration features:
 - DynamicStepPool for runtime step selection
 - DAG execution engine with topological sort and cycle detection
 - Conditional edge evaluation
-- AdaptivePlanner interfaces (Phase 4)
+- AdaptivePlanner runtime execution, validation, and fallback behavior
 
 Entry point: `orchestrator` CLI, config file modifications, Rust unit tests
 
@@ -41,7 +41,7 @@ Entry point: `orchestrator` CLI, config file modifications, Rust unit tests
 
 3. Check PrehookDecision enum in code:
    ```bash
-   grep -n "enum PrehookDecision" core/src/dynamic_orchestration.rs
+   rg -n "enum PrehookDecision" core/src/dynamic_orchestration
    ```
 
 ### Expected
@@ -113,7 +113,7 @@ N/A - Unit test verification
 
 3. Check DynamicExecutionPlan structure:
    ```bash
-   grep -n "struct DynamicExecutionPlan" core/src/dynamic_orchestration.rs
+   rg -n "struct DynamicExecutionPlan" core/src/dynamic_orchestration
    ```
 
 ### Expected
@@ -163,38 +163,80 @@ N/A - Unit test verification
 
 ---
 
-## Scenario 5: Adaptive Planner Disabled Mode
+## Scenario 5: Adaptive Planner Runtime, Validation, And Fallback
 
 ### Preconditions
 
-- AdaptivePlanner defined but disabled by default
+- Adaptive planner implementation present in `core/src/dynamic_orchestration/adaptive.rs`
+- Workflow config supports `adaptive:` block
+- Adaptive planner agent uses capability `adaptive_plan`
 
 ### Steps
 
-1. Run adaptive planner test:
+1. Run targeted adaptive and validation tests:
    ```bash
-   cd core && cargo test test_adaptive_planner_disabled
+   cd core && cargo test adaptive_planner --lib
+   cd core && cargo test workflow_convert --lib
+   cd core && cargo test validate_workflow --lib
    ```
 
-2. Verify disabled behavior:
+2. Verify planner success, fallback, and validation coverage:
    ```
-   test dynamic_orchestration::tests::test_adaptive_planner_disabled ... ok
+   test dynamic_orchestration::adaptive::tests::test_adaptive_planner_generate_plan_enabled ... ok
+   test dynamic_orchestration::adaptive::tests::test_adaptive_planner_soft_fallback_on_invalid_json ... ok
+   test dynamic_orchestration::adaptive::tests::test_adaptive_planner_fail_closed_on_invalid_json ... ok
+   test dynamic_orchestration::adaptive::tests::test_adaptive_planner_rejects_missing_planner_agent ... ok
    ```
 
-3. Check AdaptivePlannerConfig defaults:
+3. Check workflow export contains adaptive configuration:
    ```bash
-   grep -A 5 "impl Default for AdaptivePlannerConfig" core/src/dynamic_orchestration.rs
+   ./scripts/orchestrator.sh manifest export -f /tmp/exported-config.yaml
+   grep -A 8 "adaptive:" /tmp/exported-config.yaml || true
+   ```
+
+4. Check runtime event names for adaptive orchestration:
+   ```bash
+   rg -n "adaptive_plan_requested|adaptive_plan_succeeded|adaptive_plan_failed|adaptive_plan_fallback_used" core/src/scheduler/item_executor/dispatch.rs
+   ```
+
+5. Check validation logic for planner agent capability:
+   ```bash
+   rg -n "adaptive_plan" core/src/config_load/validate.rs
    ```
 
 ### Expected
 
-- AdaptivePlannerConfig.enabled defaults to false
-- generate_plan() returns error when disabled
-- LlmClient trait defined but not implemented (Phase 4 placeholder)
+- `workflow.adaptive` is part of manifest/config roundtrip and can carry `planner_agent` and `fallback_mode`
+- Adaptive planner uses an agent-backed executor instead of a vendor-specific client
+- Valid JSON DAG output is accepted as a runtime execution plan
+- Invalid JSON or invalid DAG can trigger deterministic fallback when `fallback_mode=soft_fallback`
+- Missing `planner_agent` or planner agents without capability `adaptive_plan` are rejected by workflow validation
+- Runtime emits `adaptive_plan_requested`, `adaptive_plan_succeeded`, `adaptive_plan_failed`, and `adaptive_plan_fallback_used` events
+- Strict JSON validation applies to phase `adaptive_plan`
 
 ### DB Checks
 
-N/A - Unit test verification
+1. Create a task that uses an adaptive-enabled workflow and inspect the events table:
+   ```bash
+   sqlite3 data/agent_orchestrator.db "
+   SELECT event_type, payload_json
+   FROM events
+   WHERE event_type LIKE 'adaptive_plan_%'
+   ORDER BY id DESC
+   LIMIT 20;
+   "
+   ```
+
+2. Verify at least one of the following event flows appears:
+   - `adaptive_plan_requested` -> `adaptive_plan_succeeded`
+   - `adaptive_plan_requested` -> `adaptive_plan_fallback_used`
+   - `adaptive_plan_requested` -> `adaptive_plan_failed`
+
+3. When fallback is exercised, verify payload includes planner error metadata:
+   - `error_class`
+   - `fallback_mode`
+   - `node_count`
+   - `edge_count`
 
 ---
 
@@ -212,4 +254,4 @@ All tests are unit tests, no cleanup required.
 | 2. DynamicStepPool Matching | | |
 | 3. DAG Topological Sort | | |
 | 4. Cycle Detection | | |
-| 5. Adaptive Planner Disabled | | |
+| 5. Adaptive Planner Runtime, Validation, And Fallback | | |

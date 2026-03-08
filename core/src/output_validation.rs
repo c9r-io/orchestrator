@@ -42,7 +42,7 @@ fn is_strict_phase(phase: &str) -> bool {
     // SDLC phases (qa_testing, qa_doc_gen, ticket_fix, align_tests, doc_governance)
     // use interactive CLI agents with stream-json output (multiple JSON lines),
     // which cannot be parsed as a single JSON value.
-    matches!(phase, "qa" | "fix" | "retest" | "guard")
+    matches!(phase, "qa" | "fix" | "retest" | "guard" | "adaptive_plan")
 }
 
 /// Returns true for phases that produce build/test structured output

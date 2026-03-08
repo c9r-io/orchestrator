@@ -18,9 +18,9 @@ mod step_template;
 pub(crate) mod workflow;
 pub(crate) mod workspace;
 
-mod registry;
-pub(crate) mod helpers;
 mod apply;
+pub(crate) mod helpers;
+mod registry;
 #[cfg(test)]
 pub(crate) mod test_fixtures;
 mod tests;
@@ -43,12 +43,12 @@ pub use workspace::WorkspaceResource;
 
 // ── Re-exports (from new submodules) ──────────────────────────────────────────
 
-pub use registry::*;
 pub use helpers::metadata_from_store;
 pub(crate) use helpers::{
-    apply_to_store, delete_from_store, manifest_yaml, metadata_with_name,
-    serializes_equal, validate_resource_name,
+    apply_to_store, delete_from_store, manifest_yaml, metadata_with_name, serializes_equal,
+    validate_resource_name,
 };
+pub use registry::*;
 // apply_to_map is used by submodules via super:: and by apply.rs directly
 pub use apply::apply_to_project;
 

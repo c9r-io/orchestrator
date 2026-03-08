@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::config::StepScope;
-    use crate::scheduler::phase_runner::util::*;
     use crate::scheduler::phase_runner::types::*;
+    use crate::scheduler::phase_runner::util::*;
 
     #[test]
     fn shell_escape_simple_string() {

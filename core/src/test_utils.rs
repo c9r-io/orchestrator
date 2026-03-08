@@ -120,6 +120,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                     fix: None,
                     retest: None,
                     dynamic_steps: vec![],
+                    adaptive: None,
                     safety: SafetyConfig::default(),
                     max_parallel: None,
                 },

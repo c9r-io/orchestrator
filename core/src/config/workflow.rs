@@ -86,6 +86,8 @@ pub struct WorkflowConfig {
     pub retest: Option<String>,
     #[serde(default)]
     pub dynamic_steps: Vec<crate::dynamic_orchestration::DynamicStepConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adaptive: Option<crate::dynamic_orchestration::AdaptivePlannerConfig>,
     /// Safety configuration for self-bootstrap scenarios
     #[serde(default)]
     pub safety: SafetyConfig,

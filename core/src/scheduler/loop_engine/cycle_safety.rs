@@ -1,7 +1,9 @@
 use crate::config::InvariantCheckPoint;
 use crate::config::OnViolation;
 use crate::events::insert_event;
-use crate::scheduler::invariant::{evaluate_invariants, has_halting_violation, has_rollback_violation};
+use crate::scheduler::invariant::{
+    evaluate_invariants, has_halting_violation, has_rollback_violation,
+};
 use crate::scheduler::safety::{
     create_checkpoint, restore_binary_snapshot, rollback_to_checkpoint, snapshot_binary,
 };

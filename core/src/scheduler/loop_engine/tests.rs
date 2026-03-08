@@ -1,7 +1,9 @@
 use super::continuation::*;
 use super::cycle_safety::*;
 use super::segment::*;
-use crate::config::{LoopMode, PipelineVariables, StepScope, WorkflowLoopConfig, WorkflowLoopGuardConfig};
+use crate::config::{
+    LoopMode, PipelineVariables, StepScope, WorkflowLoopConfig, WorkflowLoopGuardConfig,
+};
 use crate::scheduler::item_executor::StepExecutionAccumulator;
 use crate::test_utils::TestState;
 use std::collections::HashMap;
@@ -199,6 +201,7 @@ fn build_segments_groups_contiguous_scopes() {
         current_cycle: 1,
         init_done: true,
         dynamic_steps: vec![],
+        adaptive: None,
         pipeline_vars: PipelineVariables::default(),
         safety: SafetyConfig::default(),
         self_referential: false,
@@ -294,6 +297,7 @@ fn build_segments_skips_guards() {
         current_cycle: 1,
         init_done: true,
         dynamic_steps: vec![],
+        adaptive: None,
         pipeline_vars: PipelineVariables::default(),
         safety: SafetyConfig::default(),
         self_referential: false,
@@ -509,6 +513,7 @@ fn collect_remaining_item_step_steps_returns_only_item_steps_after_segment() {
         },
         init_done: true,
         dynamic_steps: vec![],
+        adaptive: None,
         pipeline_vars: PipelineVariables::default(),
         safety: SafetyConfig::default(),
         self_referential: false,
@@ -570,6 +575,7 @@ fn collect_remaining_item_step_steps_skips_non_repeatable_steps_after_first_cycl
         },
         init_done: true,
         dynamic_steps: vec![],
+        adaptive: None,
         pipeline_vars: PipelineVariables::default(),
         safety: SafetyConfig::default(),
         self_referential: false,
@@ -706,6 +712,7 @@ fn build_segments_skips_disabled_steps() {
         current_cycle: 1,
         init_done: true,
         dynamic_steps: vec![],
+        adaptive: None,
         pipeline_vars: PipelineVariables::default(),
         safety: SafetyConfig::default(),
         self_referential: false,
@@ -738,6 +745,7 @@ fn build_segments_empty_when_no_steps() {
         current_cycle: 1,
         init_done: true,
         dynamic_steps: vec![],
+        adaptive: None,
         pipeline_vars: PipelineVariables::default(),
         safety: SafetyConfig::default(),
         self_referential: false,
@@ -907,6 +915,7 @@ fn collect_remaining_item_step_steps_from_start_index_2() {
         },
         init_done: true,
         dynamic_steps: vec![],
+        adaptive: None,
         pipeline_vars: PipelineVariables::default(),
         safety: SafetyConfig::default(),
         self_referential: false,
@@ -1041,6 +1050,7 @@ fn build_segments_item_select_is_task_scoped() {
         current_cycle: 1,
         init_done: true,
         dynamic_steps: vec![],
+        adaptive: None,
         pipeline_vars: PipelineVariables::default(),
         safety: SafetyConfig::default(),
         self_referential: false,

@@ -524,10 +524,8 @@ fn test_self_referential_safe_combined_with_is_last_cycle() {
         self_referential_safe: true,
         ..default_step_prehook_context()
     };
-    let result = evaluate_step_prehook_expression(
-        "is_last_cycle && self_referential_safe",
-        &context,
-    );
+    let result =
+        evaluate_step_prehook_expression("is_last_cycle && self_referential_safe", &context);
     assert!(result.is_ok());
     assert!(result.expect("combined expression should be true"));
 
@@ -536,10 +534,8 @@ fn test_self_referential_safe_combined_with_is_last_cycle() {
         self_referential_safe: false,
         ..default_step_prehook_context()
     };
-    let result = evaluate_step_prehook_expression(
-        "is_last_cycle && self_referential_safe",
-        &unsafe_context,
-    );
+    let result =
+        evaluate_step_prehook_expression("is_last_cycle && self_referential_safe", &unsafe_context);
     assert!(result.is_ok());
     assert!(!result.expect("combined expression should be false when doc is unsafe"));
 }
@@ -2018,7 +2014,9 @@ fn test_resolve_finalize_outcome_first_matching_rule_wins() {
         ],
     };
     let ctx = make_finalize_ctx();
-    let outcome = resolve_workflow_finalize_outcome(&config, &ctx).unwrap().unwrap();
+    let outcome = resolve_workflow_finalize_outcome(&config, &ctx)
+        .unwrap()
+        .unwrap();
     assert_eq!(outcome.rule_id, "r1");
     assert_eq!(outcome.status, "unresolved");
 }
@@ -2032,7 +2030,9 @@ fn test_resolve_finalize_outcome_skips_non_matching_rules() {
         ],
     };
     let ctx = make_finalize_ctx();
-    let outcome = resolve_workflow_finalize_outcome(&config, &ctx).unwrap().unwrap();
+    let outcome = resolve_workflow_finalize_outcome(&config, &ctx)
+        .unwrap()
+        .unwrap();
     assert_eq!(outcome.rule_id, "r2");
     assert_eq!(outcome.status, "unresolved");
 }
@@ -2048,7 +2048,9 @@ fn test_resolve_finalize_outcome_custom_reason() {
         )],
     };
     let ctx = make_finalize_ctx();
-    let outcome = resolve_workflow_finalize_outcome(&config, &ctx).unwrap().unwrap();
+    let outcome = resolve_workflow_finalize_outcome(&config, &ctx)
+        .unwrap()
+        .unwrap();
     assert_eq!(outcome.reason, "QA detected failures");
 }
 
@@ -2058,7 +2060,9 @@ fn test_resolve_finalize_outcome_default_reason() {
         rules: vec![make_rule("r1", "qa_failed == true", "unresolved", None)],
     };
     let ctx = make_finalize_ctx();
-    let outcome = resolve_workflow_finalize_outcome(&config, &ctx).unwrap().unwrap();
+    let outcome = resolve_workflow_finalize_outcome(&config, &ctx)
+        .unwrap()
+        .unwrap();
     assert_eq!(outcome.reason, "finalize rule 'r1' matched");
 }
 

@@ -114,3 +114,24 @@ pub struct RotatingPhaseRunRequest<'a> {
     /// Project ID for project-scoped agent selection (empty = global)
     pub project_id: &'a str,
 }
+
+pub struct SelectedPhaseRunRequest<'a> {
+    pub task_id: &'a str,
+    pub item_id: &'a str,
+    pub step_id: &'a str,
+    pub phase: &'a str,
+    pub tty: bool,
+    pub agent_id: &'a str,
+    pub command_template: &'a str,
+    pub prompt_delivery: PromptDelivery,
+    pub rel_path: &'a str,
+    pub ticket_paths: &'a [String],
+    pub workspace_root: &'a Path,
+    pub workspace_id: &'a str,
+    pub cycle: u32,
+    pub runtime: &'a RunningTask,
+    pub pipeline_vars: Option<&'a PipelineVariables>,
+    pub step_timeout_secs: Option<u64>,
+    pub step_scope: StepScope,
+    pub step_template_prompt: Option<&'a str>,
+}

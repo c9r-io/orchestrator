@@ -1,5 +1,5 @@
-use super::*;
 use super::snapshot::{sha256_hex, RELEASE_BINARY_REL, STABLE_FILE, STABLE_MANIFEST, STABLE_TMP};
+use super::*;
 use crate::events::insert_event;
 use crate::test_utils::TestState;
 use rusqlite::OptionalExtension;
@@ -532,8 +532,7 @@ async fn test_snapshot_verify_sha256() {
 
     let manifest_str =
         std::fs::read_to_string(temp_dir.join(STABLE_MANIFEST)).expect("read manifest");
-    let manifest: SnapshotManifest =
-        serde_json::from_str(&manifest_str).expect("parse manifest");
+    let manifest: SnapshotManifest = serde_json::from_str(&manifest_str).expect("parse manifest");
 
     assert_eq!(
         actual_sha, manifest.sha256,
@@ -590,8 +589,7 @@ async fn test_restore_rejects_corrupt_stable() {
         .expect("snapshot should succeed");
 
     // Corrupt the .stable file
-    std::fs::write(temp_dir.join(STABLE_FILE), b"corrupted content")
-        .expect("corrupt stable file");
+    std::fs::write(temp_dir.join(STABLE_FILE), b"corrupted content").expect("corrupt stable file");
 
     let result = restore_binary_snapshot(&temp_dir).await;
     assert!(result.is_err(), "restore should fail with corrupt .stable");
@@ -840,8 +838,7 @@ async fn test_snapshot_overwrites_existing_stable() {
 
     let manifest_str =
         std::fs::read_to_string(temp_dir.join(STABLE_MANIFEST)).expect("read manifest");
-    let manifest: SnapshotManifest =
-        serde_json::from_str(&manifest_str).expect("parse manifest");
+    let manifest: SnapshotManifest = serde_json::from_str(&manifest_str).expect("parse manifest");
     let expected_sha = sha256_hex(content_b);
     assert_eq!(
         manifest.sha256, expected_sha,
@@ -856,8 +853,7 @@ async fn test_snapshot_overwrites_existing_stable() {
 #[tokio::test]
 async fn test_snapshot_empty_binary() {
     // Well-known SHA-256 of zero bytes
-    const EMPTY_SHA256: &str =
-        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
     let temp_dir = std::env::temp_dir().join(format!(
         "safety-test-empty-{}",
@@ -880,8 +876,7 @@ async fn test_snapshot_empty_binary() {
 
     let manifest_str =
         std::fs::read_to_string(temp_dir.join(STABLE_MANIFEST)).expect("read manifest");
-    let manifest: SnapshotManifest =
-        serde_json::from_str(&manifest_str).expect("parse manifest");
+    let manifest: SnapshotManifest = serde_json::from_str(&manifest_str).expect("parse manifest");
     assert_eq!(manifest.size_bytes, 0);
     assert_eq!(
         manifest.sha256, EMPTY_SHA256,
@@ -1207,10 +1202,9 @@ async fn test_execute_self_restart_step_binary_read_fails_uses_unknown() {
     // and document the fallback by deleting binary before the sha256 read.
     // Since snapshot happens before sha256 read, removing after verify but snapshot copies it:
     // We'll just verify success path produces EXIT_RESTART with some sha256 recorded.
-    let result =
-        execute_self_restart_step(&workspace_root, &state, "task-sha-unknown", "item-1")
-            .await
-            .expect("should return exit code");
+    let result = execute_self_restart_step(&workspace_root, &state, "task-sha-unknown", "item-1")
+        .await
+        .expect("should return exit code");
 
     unsafe {
         std::env::remove_var("ORCH_SELF_TEST_CARGO");
@@ -1325,10 +1319,8 @@ async fn test_snapshot_manifest_size_matches_content() {
         .await
         .expect("snapshot should succeed");
 
-    let manifest_str =
-        std::fs::read_to_string(root.join(STABLE_MANIFEST)).expect("read manifest");
-    let manifest: SnapshotManifest =
-        serde_json::from_str(&manifest_str).expect("parse manifest");
+    let manifest_str = std::fs::read_to_string(root.join(STABLE_MANIFEST)).expect("read manifest");
+    let manifest: SnapshotManifest = serde_json::from_str(&manifest_str).expect("parse manifest");
 
     assert_eq!(
         manifest.size_bytes,
@@ -1418,8 +1410,7 @@ async fn test_execute_self_restart_step_records_old_binary_sha256() {
             |row| row.get(0),
         )
         .expect("query event");
-    let payload: serde_json::Value =
-        serde_json::from_str(&event_payload).expect("parse payload");
+    let payload: serde_json::Value = serde_json::from_str(&event_payload).expect("parse payload");
 
     assert!(
         payload
@@ -1484,8 +1475,7 @@ async fn test_verify_post_restart_binary_includes_old_sha256() {
             |row| row.get(0),
         )
         .expect("query binary_verification event");
-    let vp: serde_json::Value =
-        serde_json::from_str(&verification_payload).expect("parse payload");
+    let vp: serde_json::Value = serde_json::from_str(&verification_payload).expect("parse payload");
 
     assert_eq!(
         vp.get("old_binary_sha256").and_then(|v| v.as_str()),

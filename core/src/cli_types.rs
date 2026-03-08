@@ -405,6 +405,10 @@ pub struct WorkflowSpec {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dynamic_steps: Vec<DynamicStepSpec>,
 
+    /// Optional adaptive planner configuration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adaptive: Option<crate::dynamic_orchestration::AdaptivePlannerConfig>,
+
     /// Safety configuration for self-bootstrap scenarios
     #[serde(default)]
     pub safety: SafetySpec,

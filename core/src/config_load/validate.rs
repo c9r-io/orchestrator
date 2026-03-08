@@ -100,6 +100,7 @@ pub fn validate_workflow_config(
             );
         }
     }
+    validate_adaptive_workflow_config(workflow, workflow_id, &config.agents)?;
     Ok(())
 }
 
@@ -195,6 +196,93 @@ pub(crate) fn validate_workflow_config_with_agents(
             );
         }
     }
+    validate_adaptive_workflow_config_refs(workflow, workflow_id, all_agents)?;
+    Ok(())
+}
+
+fn validate_adaptive_workflow_config(
+    workflow: &WorkflowConfig,
+    workflow_id: &str,
+    all_agents: &HashMap<String, crate::config::AgentConfig>,
+) -> Result<()> {
+    let Some(adaptive) = workflow.adaptive.as_ref() else {
+        return Ok(());
+    };
+    if !adaptive.enabled {
+        return Ok(());
+    }
+
+    let planner_agent = adaptive
+        .planner_agent
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "workflow '{}' adaptive planner is enabled but adaptive.planner_agent is missing",
+                workflow_id
+            )
+        })?;
+
+    let agent = all_agents.get(planner_agent).ok_or_else(|| {
+        anyhow::anyhow!(
+            "workflow '{}' adaptive planner references unknown agent '{}'",
+            workflow_id,
+            planner_agent
+        )
+    })?;
+
+    if !agent.supports_capability("adaptive_plan") {
+        anyhow::bail!(
+            "workflow '{}' adaptive planner agent '{}' must support capability 'adaptive_plan'",
+            workflow_id,
+            planner_agent
+        );
+    }
+
+    Ok(())
+}
+
+fn validate_adaptive_workflow_config_refs(
+    workflow: &WorkflowConfig,
+    workflow_id: &str,
+    all_agents: &HashMap<String, &crate::config::AgentConfig>,
+) -> Result<()> {
+    let Some(adaptive) = workflow.adaptive.as_ref() else {
+        return Ok(());
+    };
+    if !adaptive.enabled {
+        return Ok(());
+    }
+
+    let planner_agent = adaptive
+        .planner_agent
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "workflow '{}' adaptive planner is enabled but adaptive.planner_agent is missing",
+                workflow_id
+            )
+        })?;
+
+    let agent = all_agents.get(planner_agent).copied().ok_or_else(|| {
+        anyhow::anyhow!(
+            "workflow '{}' adaptive planner references unknown agent '{}'",
+            workflow_id,
+            planner_agent
+        )
+    })?;
+
+    if !agent.supports_capability("adaptive_plan") {
+        anyhow::bail!(
+            "workflow '{}' adaptive planner agent '{}' must support capability 'adaptive_plan'",
+            workflow_id,
+            planner_agent
+        );
+    }
+
     Ok(())
 }
 
@@ -465,6 +553,7 @@ mod tests {
             fix: None,
             retest: None,
             dynamic_steps: vec![],
+            adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
         };
@@ -542,6 +631,7 @@ mod tests {
             fix: None,
             retest: None,
             dynamic_steps: vec![],
+            adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
         };
@@ -619,6 +709,7 @@ mod tests {
             fix: None,
             retest: None,
             dynamic_steps: vec![],
+            adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
         };
@@ -673,6 +764,7 @@ mod tests {
             fix: None,
             retest: None,
             dynamic_steps: vec![],
+            adaptive: None,
             safety: crate::config::SafetyConfig {
                 checkpoint_strategy: crate::config::CheckpointStrategy::GitTag,
                 auto_rollback: true,
@@ -754,6 +846,7 @@ mod tests {
             fix: None,
             retest: None,
             dynamic_steps: vec![],
+            adaptive: None,
             safety: crate::config::SafetyConfig {
                 checkpoint_strategy: crate::config::CheckpointStrategy::GitTag,
                 auto_rollback: true,
@@ -783,6 +876,7 @@ mod tests {
             fix: None,
             retest: None,
             dynamic_steps: vec![],
+            adaptive: None,
             safety: crate::config::SafetyConfig {
                 checkpoint_strategy: crate::config::CheckpointStrategy::None,
                 auto_rollback: true,

@@ -241,6 +241,7 @@ pub async fn load_task_runtime_context(
     resolve_workspace_path(&workspace_root, &ticket_dir, "task.ticket_dir")?;
 
     let dynamic_steps = workflow.dynamic_steps.clone();
+    let adaptive = workflow.adaptive.clone();
     let safety = workflow.safety.clone();
     let self_referential = active
         .config
@@ -272,6 +273,7 @@ pub async fn load_task_runtime_context(
         current_cycle: current_cycle.max(0) as u32,
         init_done: init_done == 1,
         dynamic_steps,
+        adaptive,
         pipeline_vars: {
             let mut pv = match runtime_row.pipeline_vars_json.as_deref() {
                 Some(json) if !json.is_empty() => {

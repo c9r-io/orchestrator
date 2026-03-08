@@ -2,19 +2,25 @@ use crate::config::{
     ExecutionMode, OnFailureAction, PipelineVariables, StoreInputConfig, TaskExecutionStep,
     TaskRuntimeContext,
 };
+use crate::dynamic_orchestration::{
+    AdaptivePlanExecutor, AdaptivePlanSource, AdaptivePlanner, ExecutionHistoryRecord,
+    StepExecutionRecord, StepPrehookContext as DynamicStepContext,
+};
 use crate::events::insert_event;
 use crate::prehook::evaluate_step_prehook;
 use crate::state::InnerState;
 use crate::store::{StoreOp, StoreOpResult};
 use crate::ticket::scan_active_tickets_for_task_items;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
+use async_trait::async_trait;
 use serde_json::json;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 use tracing::warn;
 
 use super::super::phase_runner::{
-    run_phase, run_phase_with_rotation, PhaseRunRequest, RotatingPhaseRunRequest,
+    run_phase, run_phase_with_rotation, run_phase_with_selected_agent, PhaseRunRequest,
+    RotatingPhaseRunRequest, SelectedPhaseRunRequest,
 };
 use super::super::safety::{execute_self_restart_step, execute_self_test_step, EXIT_RESTART};
 use super::super::RunningTask;
@@ -117,10 +123,14 @@ pub async fn process_item_filtered(
 
     // Inject dynamic item variables (from generate_items) into pipeline vars
     if let Some(ref label) = item.label {
-        acc.pipeline_vars.vars.insert("item_label".to_string(), label.clone());
+        acc.pipeline_vars
+            .vars
+            .insert("item_label".to_string(), label.clone());
     }
     if let Some(ref vars_json) = item.dynamic_vars_json {
-        if let Ok(vars) = serde_json::from_str::<std::collections::HashMap<String, String>>(vars_json) {
+        if let Ok(vars) =
+            serde_json::from_str::<std::collections::HashMap<String, String>>(vars_json)
+        {
             for (k, v) in vars {
                 acc.pipeline_vars.vars.insert(k, v);
             }
@@ -766,11 +776,93 @@ async fn execute_dynamic_steps(
     step_filter: Option<&HashSet<String>>,
     acc: &mut StepExecutionAccumulator,
 ) -> Result<()> {
-    if task_ctx.dynamic_steps.is_empty() || step_filter.is_some() {
+    if step_filter.is_some() {
         return Ok(());
     }
 
-    let item_id = item.id.as_str();
+    if let Some(adaptive_config) = task_ctx.adaptive.clone().filter(|cfg| cfg.enabled) {
+        let history = build_adaptive_history(task_id, item.id.as_str(), task_ctx, acc);
+        let mut planner = AdaptivePlanner::new(adaptive_config.clone());
+        for record in history {
+            planner.add_history(record);
+        }
+        let planner_ctx = build_dynamic_step_context(task_id, item, task_ctx, acc, "adaptive_plan");
+        insert_event(
+            state,
+            task_id,
+            Some(item.id.as_str()),
+            "adaptive_plan_requested",
+            json!({
+                "planner_agent": adaptive_config.planner_agent,
+                "cycle": task_ctx.current_cycle,
+                "fallback_mode": adaptive_config.fallback_mode,
+            }),
+        )
+        .await?;
+
+        let executor = AgentBackedAdaptiveExecutor {
+            state,
+            task_id,
+            item_id: item.id.as_str(),
+            item,
+            task_ctx,
+            runtime,
+        };
+        match planner.generate_plan(&executor, &planner_ctx).await {
+            Ok(outcome) => {
+                let event_name = match outcome.metadata.source {
+                    AdaptivePlanSource::Planner => "adaptive_plan_succeeded",
+                    AdaptivePlanSource::DeterministicFallback => "adaptive_plan_fallback_used",
+                };
+                insert_event(
+                    state,
+                    task_id,
+                    Some(item.id.as_str()),
+                    event_name,
+                    json!({
+                        "planner_agent": adaptive_config.planner_agent,
+                        "cycle": task_ctx.current_cycle,
+                        "fallback_mode": adaptive_config.fallback_mode,
+                        "error_class": outcome.metadata.error_class.map(crate::dynamic_orchestration::adaptive_failure_class_name),
+                        "node_count": outcome.plan.nodes.len(),
+                        "edge_count": outcome.plan.edges.len(),
+                    }),
+                )
+                .await?;
+                return execute_adaptive_plan(
+                    state,
+                    task_id,
+                    item,
+                    task_ctx,
+                    runtime,
+                    acc,
+                    &outcome.plan,
+                )
+                .await;
+            }
+            Err(err) => {
+                insert_event(
+                    state,
+                    task_id,
+                    Some(item.id.as_str()),
+                    "adaptive_plan_failed",
+                    json!({
+                        "planner_agent": adaptive_config.planner_agent,
+                        "cycle": task_ctx.current_cycle,
+                        "fallback_mode": adaptive_config.fallback_mode,
+                        "error": err.to_string(),
+                    }),
+                )
+                .await?;
+                return Err(err);
+            }
+        }
+    }
+
+    if task_ctx.dynamic_steps.is_empty() {
+        return Ok(());
+    }
+
     let pool = {
         let mut p = crate::dynamic_orchestration::DynamicStepPool::new();
         for ds in &task_ctx.dynamic_steps {
@@ -778,12 +870,93 @@ async fn execute_dynamic_steps(
         }
         p
     };
-    let prehook_ctx = acc.to_prehook_context(task_id, item, task_ctx, "dynamic");
-    let dyn_ctx = crate::dynamic_orchestration::StepPrehookContext {
+    let dyn_ctx = build_dynamic_step_context(task_id, item, task_ctx, acc, "dynamic");
+    let matched: Vec<_> = pool
+        .find_matching_steps(&dyn_ctx)
+        .into_iter()
+        .cloned()
+        .collect();
+    for ds in &matched {
+        execute_dynamic_step_config(state, task_id, item, task_ctx, runtime, acc, ds).await?;
+    }
+
+    Ok(())
+}
+
+#[async_trait]
+impl AdaptivePlanExecutor for AgentBackedAdaptiveExecutor<'_> {
+    async fn execute(
+        &self,
+        prompt: &str,
+        config: &crate::dynamic_orchestration::AdaptivePlannerConfig,
+    ) -> Result<String> {
+        let planner_agent = config
+            .planner_agent
+            .as_deref()
+            .ok_or_else(|| anyhow!("adaptive planner agent is missing"))?;
+        let (command, prompt_delivery) = {
+            let active = crate::config_load::read_active_config(self.state)?;
+            let agent = crate::selection::resolve_agent_by_id(
+                &self.task_ctx.project_id,
+                &active.config,
+                planner_agent,
+            )
+            .ok_or_else(|| anyhow!("adaptive planner agent not found: {}", planner_agent))?;
+            (agent.command.clone(), agent.prompt_delivery)
+        };
+        let result = run_phase_with_selected_agent(
+            self.state,
+            SelectedPhaseRunRequest {
+                task_id: self.task_id,
+                item_id: self.item_id,
+                step_id: "adaptive_plan",
+                phase: "adaptive_plan",
+                tty: false,
+                agent_id: planner_agent,
+                command_template: &command,
+                prompt_delivery,
+                rel_path: &self.item.qa_file_path,
+                ticket_paths: &[],
+                workspace_root: &self.task_ctx.workspace_root,
+                workspace_id: &self.task_ctx.workspace_id,
+                cycle: self.task_ctx.current_cycle,
+                runtime: self.runtime,
+                pipeline_vars: None,
+                step_timeout_secs: self.task_ctx.safety.step_timeout_secs,
+                step_scope: crate::config::StepScope::Item,
+                step_template_prompt: Some(prompt),
+            },
+        )
+        .await?;
+        let output = result
+            .output
+            .ok_or_else(|| anyhow!("adaptive planner produced no structured output"))?;
+        Ok(output.stdout)
+    }
+}
+
+struct AgentBackedAdaptiveExecutor<'a> {
+    state: &'a Arc<InnerState>,
+    task_id: &'a str,
+    item_id: &'a str,
+    item: &'a crate::dto::TaskItemRow,
+    task_ctx: &'a TaskRuntimeContext,
+    runtime: &'a RunningTask,
+}
+
+fn build_dynamic_step_context(
+    task_id: &str,
+    item: &crate::dto::TaskItemRow,
+    task_ctx: &TaskRuntimeContext,
+    acc: &StepExecutionAccumulator,
+    step_id: &str,
+) -> DynamicStepContext {
+    let prehook_ctx = acc.to_prehook_context(task_id, item, task_ctx, step_id);
+    DynamicStepContext {
         task_id: prehook_ctx.task_id,
         task_item_id: prehook_ctx.task_item_id,
         cycle: prehook_ctx.cycle,
-        step: "dynamic".to_string(),
+        step: prehook_ctx.step,
         qa_file_path: prehook_ctx.qa_file_path,
         item_status: prehook_ctx.item_status,
         task_status: prehook_ctx.task_status,
@@ -807,18 +980,171 @@ async fn execute_dynamic_steps(
         max_cycles: prehook_ctx.max_cycles,
         is_last_cycle: prehook_ctx.is_last_cycle,
         self_referential_safe: prehook_ctx.self_referential_safe,
+    }
+}
+
+fn build_adaptive_history(
+    task_id: &str,
+    item_id: &str,
+    task_ctx: &TaskRuntimeContext,
+    acc: &StepExecutionAccumulator,
+) -> Vec<ExecutionHistoryRecord> {
+    let mut steps: Vec<StepExecutionRecord> = acc
+        .exit_codes
+        .iter()
+        .map(|(step_id, exit_code)| StepExecutionRecord {
+            step_id: step_id.clone(),
+            step_type: step_id.clone(),
+            exit_code: *exit_code,
+            duration_ms: 0,
+            confidence: if step_id.contains("qa") {
+                acc.qa_confidence
+            } else {
+                acc.fix_confidence
+            },
+            quality_score: if step_id.contains("qa") {
+                acc.qa_quality_score
+            } else {
+                acc.fix_quality_score
+            },
+            tickets_created: acc.new_ticket_count,
+            tickets_resolved: 0,
+        })
+        .collect();
+    steps.sort_by(|a, b| a.step_id.cmp(&b.step_id));
+
+    if steps.is_empty() {
+        return Vec::new();
+    }
+
+    vec![ExecutionHistoryRecord {
+        task_id: task_id.to_string(),
+        item_id: item_id.to_string(),
+        cycle: task_ctx.current_cycle,
+        steps,
+        final_status: acc.item_status.clone(),
+        timestamp: chrono::Utc::now(),
+    }]
+}
+
+async fn execute_adaptive_plan(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    item: &crate::dto::TaskItemRow,
+    task_ctx: &TaskRuntimeContext,
+    runtime: &RunningTask,
+    acc: &mut StepExecutionAccumulator,
+    plan: &crate::dynamic_orchestration::DynamicExecutionPlan,
+) -> Result<()> {
+    let mut queue: VecDeque<String> = if let Some(entry) = plan.entry.clone() {
+        VecDeque::from([entry])
+    } else {
+        let mut entries: Vec<String> = plan
+            .get_entry_nodes()
+            .into_iter()
+            .map(|node| node.id.clone())
+            .collect();
+        entries.sort();
+        entries.into()
     };
-    let matched = pool.find_matching_steps(&dyn_ctx);
-    for ds in matched {
-        insert_event(
+    let mut executed = HashSet::new();
+
+    while let Some(node_id) = queue.pop_front() {
+        if !executed.insert(node_id.clone()) {
+            continue;
+        }
+        let node = plan
+            .get_node(&node_id)
+            .ok_or_else(|| anyhow!("adaptive plan node disappeared: {}", node_id))?;
+        let dyn_step = crate::dynamic_orchestration::DynamicStepConfig {
+            id: node.id.clone(),
+            description: None,
+            step_type: node.step_type.clone(),
+            agent_id: node.agent_id.clone(),
+            template: node.template.clone(),
+            trigger: node.prehook.as_ref().map(|prehook| prehook.when.clone()),
+            priority: 0,
+            max_runs: None,
+        };
+        execute_dynamic_step_config(state, task_id, item, task_ctx, runtime, acc, &dyn_step)
+            .await?;
+
+        let dyn_ctx = build_dynamic_step_context(task_id, item, task_ctx, acc, &node_id);
+        for next in plan.find_next_nodes(&node_id, &dyn_ctx) {
+            if !executed.contains(&next) {
+                queue.push_back(next);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn execute_dynamic_step_config(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    item: &crate::dto::TaskItemRow,
+    task_ctx: &TaskRuntimeContext,
+    runtime: &RunningTask,
+    acc: &mut StepExecutionAccumulator,
+    ds: &crate::dynamic_orchestration::DynamicStepConfig,
+) -> Result<()> {
+    let item_id = item.id.as_str();
+    insert_event(
+        state,
+        task_id,
+        Some(item_id),
+        "dynamic_step_started",
+        json!({"step_id": ds.id, "step_type": ds.step_type, "step_scope": "item", "priority": ds.priority}),
+    )
+    .await?;
+    let result = if let Some(agent_id) = ds.agent_id.as_deref() {
+        let (command, prompt_delivery) = {
+            let active = crate::config_load::read_active_config(state)?;
+            let agent = crate::selection::resolve_agent_by_id(
+                &task_ctx.project_id,
+                &active.config,
+                agent_id,
+            )
+            .ok_or_else(|| {
+                anyhow!(
+                    "dynamic step '{}' references unknown agent '{}'",
+                    ds.id,
+                    agent_id
+                )
+            })?;
+            (
+                ds.template.clone().unwrap_or_else(|| agent.command.clone()),
+                agent.prompt_delivery,
+            )
+        };
+        run_phase_with_selected_agent(
             state,
-            task_id,
-            Some(item_id),
-            "dynamic_step_started",
-            json!({"step_id": ds.id, "step_type": ds.step_type, "step_scope": "item", "priority": ds.priority}),
-        ).await?;
+            SelectedPhaseRunRequest {
+                task_id,
+                item_id,
+                step_id: &ds.id,
+                phase: &ds.step_type,
+                tty: false,
+                agent_id,
+                command_template: &command,
+                prompt_delivery,
+                rel_path: &item.qa_file_path,
+                ticket_paths: &acc.active_tickets,
+                workspace_root: &task_ctx.workspace_root,
+                workspace_id: &task_ctx.workspace_id,
+                cycle: task_ctx.current_cycle,
+                runtime,
+                pipeline_vars: None,
+                step_timeout_secs: task_ctx.safety.step_timeout_secs,
+                step_scope: crate::config::StepScope::Item,
+                step_template_prompt: None,
+            },
+        )
+        .await?
+    } else {
         let cap = Some(ds.step_type.as_str());
-        let result = run_phase_with_rotation(
+        run_phase_with_rotation(
             state,
             RotatingPhaseRunRequest {
                 task_id,
@@ -836,20 +1162,45 @@ async fn execute_dynamic_steps(
                 pipeline_vars: None,
                 step_timeout_secs: task_ctx.safety.step_timeout_secs,
                 step_scope: crate::config::StepScope::Item,
-                step_template_prompt: None,
+                step_template_prompt: ds.template.as_deref(),
                 project_id: &task_ctx.project_id,
             },
         )
-        .await?;
-        insert_event(
-            state,
-            task_id,
-            Some(item_id),
-            "dynamic_step_finished",
-            json!({"step_id": ds.id, "step_scope": "item", "exit_code": result.exit_code, "success": result.is_success()}),
-        ).await?;
+        .await?
+    };
+    insert_event(
+        state,
+        task_id,
+        Some(item_id),
+        "dynamic_step_finished",
+        json!({"step_id": ds.id, "step_scope": "item", "exit_code": result.exit_code, "success": result.is_success()}),
+    )
+    .await?;
+    acc.exit_codes.insert(ds.id.clone(), result.exit_code);
+    acc.step_ran.insert(ds.id.clone(), true);
+    match ds.step_type.as_str() {
+        "qa" => {
+            acc.flags
+                .insert("qa_failed".to_string(), !result.is_success());
+            if let Some(output) = result.output.as_ref() {
+                acc.qa_confidence = Some(output.confidence);
+                acc.qa_quality_score = Some(output.quality_score);
+            }
+        }
+        "fix" => {
+            acc.flags
+                .insert("fix_success".to_string(), result.is_success());
+            if let Some(output) = result.output.as_ref() {
+                acc.fix_confidence = Some(output.confidence);
+                acc.fix_quality_score = Some(output.quality_score);
+            }
+        }
+        "retest" => {
+            acc.flags
+                .insert("retest_success".to_string(), result.is_success());
+        }
+        _ => {}
     }
-
     Ok(())
 }
 

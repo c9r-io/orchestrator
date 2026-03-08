@@ -166,6 +166,7 @@ impl CliHandler {
                     },
                     finalize: WorkflowFinalizeSpec { rules: vec![] },
                     dynamic_steps: vec![],
+                    adaptive: None,
                     safety: SafetySpec::default(),
                     max_parallel: None,
                 };
