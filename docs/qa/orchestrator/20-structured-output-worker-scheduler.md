@@ -15,8 +15,11 @@ This document validates the refactor that moved `collab` capabilities into the s
 - structured output persistence in `command_runs`
 - phase execution result publication to MessageBus with observable events
 - dual CLI model: foreground run and detach queue + worker loop
+- C/S mode: daemon-embedded workers replace standalone `task worker start`
 
-Entry point: `./scripts/orchestrator.sh`
+Entry point: `./scripts/orchestrator.sh` (standalone) or `./target/release/orchestrator` (C/S client)
+
+**C/S mode note**: Scenarios 4 and 5 can also be validated through the C/S architecture where `orchestratord --workers N` embeds the worker loop directly in the daemon process. See `docs/qa/orchestrator/53-client-server-architecture.md` for dedicated C/S scenarios.
 
 ---
 

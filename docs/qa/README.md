@@ -11,7 +11,8 @@ This directory contains reproducible, verifiable QA test documents.
 ## QA Contract
 
 - Canonical CLI contract: `docs/qa/orchestrator/00-command-contract.md`
-- Preferred entry point: `./scripts/orchestrator.sh <command>`
+- Preferred entry point (standalone): `./scripts/orchestrator.sh <command>`
+- C/S entry points: `./target/release/orchestratord` (daemon) + `./target/release/orchestrator` (client)
 - Repository root is the default execution directory for all QA steps.
 
 ## Document Rules (Strict)
@@ -143,6 +144,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/50-engine-wiring-store-invariant-itemselect.md` | 5 | WP01-WP04 engine wiring: store I/O, PostAction::StorePut, invariant checkpoints |
 | orchestrator | `docs/qa/orchestrator/51-primitive-composition.md` | 5 | WP05 primitive composition: Store+Spawning, Store+Items, Invariant+Selection pairwise/triple |
 | orchestrator | `docs/qa/orchestrator/52-engine-wiring-dynamic-items-selection.md` | 2 | Split from doc 50: pending_generate_items consumption, item_select orchestration |
+| orchestrator | `docs/qa/orchestrator/53-client-server-architecture.md` | 5 | C/S architecture: daemon lifecycle, gRPC communication, embedded workers, service layer |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
 | script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |

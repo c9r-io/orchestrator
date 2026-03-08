@@ -13,7 +13,8 @@ This document validates task lifecycle behavior after scheduler refactor:
 
 - foreground execution path (`task start/resume/retry`)
 - detached queue execution (`--detach`)
-- worker commands (`task worker start|stop|status`)
+- worker commands (`task worker start|stop|status`) — standalone mode
+- daemon-embedded workers (`orchestratord --workers N`) — C/S mode
 - task logs and retry behavior
 
 Task creation target resolution now follows workflow scope:
@@ -30,7 +31,9 @@ Runtime control commands also need to remain stable while a task is actively run
 - `task watch` should keep the last visible frame until a fresh snapshot is ready
 - `task watch` should display the real step scope instead of inferring it from an anchor item binding
 
-Entry point: `./scripts/orchestrator.sh task <command>`
+Entry point: `./scripts/orchestrator.sh task <command>` (standalone) or `./target/release/orchestrator task <command>` (C/S client)
+
+**C/S mode note**: In C/S mode, the daemon (`orchestratord`) embeds background workers that automatically consume pending tasks. The standalone `task worker start|stop|status` commands are not needed — use `orchestratord --workers N` instead. See `docs/qa/orchestrator/53-client-server-architecture.md` for C/S-specific scenarios.
 
 ### Project Isolation Setup
 

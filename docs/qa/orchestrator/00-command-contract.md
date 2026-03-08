@@ -14,7 +14,12 @@ All files under `docs/qa/orchestrator/` must align with this contract.
 
 Runtime state source of truth is SQLite. YAML is used as import/export/edit artifact when needed.
 
-Entry point: `./scripts/orchestrator.sh <command>` (recommended) or `./core/target/release/agent-orchestrator <command>`.
+Entry point: `./scripts/orchestrator.sh <command>` (standalone) or `./target/release/orchestrator <command>` (C/S client).
+
+C/S architecture entry points (requires daemon running):
+- Daemon: `./target/release/orchestratord [--foreground] [--bind addr] [--workers N]`
+- CLI client: `./target/release/orchestrator <command>`
+- Daemon management: `./target/release/orchestrator daemon start|stop|status|restart`
 
 ---
 
@@ -40,7 +45,7 @@ Entry point: `./scripts/orchestrator.sh <command>` (recommended) or `./core/targ
    - `workspace`
    - `agent`
    - `workflow`
-  - `manifest`
+   - `manifest`
    - `edit`
    - `db`
    - `qa`
@@ -49,10 +54,23 @@ Entry point: `./scripts/orchestrator.sh <command>` (recommended) or `./core/targ
    - `exec`
    - `store`
 
+3. Confirm C/S CLI (`orchestrator`) top-level commands:
+   - `daemon` (start/stop/status/restart)
+   - `apply`
+   - `get`
+   - `describe`
+   - `delete`
+   - `task` (list/create/info/start/pause/resume/logs/delete/retry)
+   - `store` (get/put/delete/list/prune)
+   - `debug`
+   - `check`
+   - `version`
+
 ### Expected Result
 
 - Help output includes all commands above.
-- `task worker` subcommands are visible under `task --help`.
+- `task worker` subcommands are visible under `task --help` (standalone mode).
+- C/S CLI includes `daemon` subcommand family for lifecycle management.
 - Deprecated/removed command groups are not documented in QA steps.
 
 ---
