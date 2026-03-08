@@ -114,11 +114,10 @@ pub fn select_agent_by_preference(
     Ok((agent_id.clone(), command, config.prompt_delivery))
 }
 
-/// Resolve effective agents for a task: project-scoped agents are **exclusive**
-/// when the project has agents registered. No fallback to global agents.
-/// This enforces project isolation — if a project lacks an agent with the
-/// required capability, selection will fail with a clear error rather than
-/// silently falling back to global agents (which may invoke paid AI services).
+/// Resolve effective agents for a task. Strict project isolation:
+/// - Project-scoped tasks use only project agents (even if empty).
+/// - Non-project tasks (empty project_id) use top-level config agents.
+/// No fallback from project scope to global agents.
 pub fn resolve_effective_agents<'a>(
     project_id: &str,
     config: &'a crate::config::OrchestratorConfig,
@@ -126,16 +125,15 @@ pub fn resolve_effective_agents<'a>(
 ) -> &'a HashMap<String, AgentConfig> {
     if !project_id.is_empty() {
         if let Some(project) = config.projects.get(project_id) {
-            if !project.agents.is_empty() {
-                return &project.agents;
-            }
+            return &project.agents;
         }
     }
     &config.agents
 }
 
-/// Resolve an agent by ID. When a project has agents registered, only look
-/// in the project scope — never fall back to global agents.
+/// Resolve an agent by ID. Strict project isolation:
+/// - Project-scoped tasks look up agents only in the project scope.
+/// - Non-project tasks look up in top-level config.
 pub fn resolve_agent_by_id<'a>(
     project_id: &str,
     config: &'a crate::config::OrchestratorConfig,
@@ -143,9 +141,7 @@ pub fn resolve_agent_by_id<'a>(
 ) -> Option<&'a AgentConfig> {
     if !project_id.is_empty() {
         if let Some(project) = config.projects.get(project_id) {
-            if !project.agents.is_empty() {
-                return project.agents.get(agent_id);
-            }
+            return project.agents.get(agent_id);
         }
     }
     config.agents.get(agent_id)
@@ -536,14 +532,15 @@ mod tests {
     #[test]
     fn resolve_effective_agents_returns_global_for_unknown_project() {
         let config = make_config_with_project_agents();
+        // Unknown project falls back to top-level agents (no project entry exists)
         let agents = resolve_effective_agents("no-such-project", &config, Some("qa"));
         assert!(agents.contains_key("global_qa"));
     }
 
     #[test]
-    fn resolve_effective_agents_returns_global_for_empty_project_agents() {
+    fn resolve_effective_agents_returns_empty_for_empty_project_agents() {
         let mut config = make_config_with_project_agents();
-        // Create project with no agents
+        // Create project with no agents — strict isolation means no fallback
         config.projects.insert(
             "empty-proj".to_string(),
             crate::config::ProjectConfig {
@@ -554,6 +551,6 @@ mod tests {
             },
         );
         let agents = resolve_effective_agents("empty-proj", &config, Some("qa"));
-        assert!(agents.contains_key("global_qa"));
+        assert!(agents.is_empty(), "empty project must not fall back to global agents");
     }
 }

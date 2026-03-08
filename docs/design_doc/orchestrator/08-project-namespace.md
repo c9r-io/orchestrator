@@ -15,8 +15,7 @@ The orchestrator originally had flat global namespaces for workspaces, workflows
 
 - Add Project as top-level namespace concept
 - Allow project-level workspace, workflow, agent definitions
-- Implement resource resolution with project-first fallback to global
-- Maintain backward compatibility with existing global config
+- Enforce strict project isolation — no fallback to global resources
 
 ## Non-goals
 
@@ -30,9 +29,9 @@ The orchestrator originally had flat global namespaces for workspaces, workflows
 
 ## Key Design
 
-1. **ProjectConfig Structure**: Contains workspaces, agents, workflows - all optional to allow partial overrides
-2. **Resolution Priority**: Project resources first, then global fallback
-3. **Backward Compatibility**: Global workspaces/agents/workflows remain valid; existing configs migrate to "default" project
+1. **ProjectConfig Structure**: Contains workspaces, agents, workflows — project-scoped tasks use only these resources
+2. **Strict Isolation**: No fallback to global resources; if a project lacks a required resource, the operation fails with a clear error
+3. **Explicit Projects**: Every project must be explicitly created via `apply --project`; there is no implicit "default" project
 4. **Database Schema**: project_id added to tasks and command_runs tables
 
 ## Alternatives And Tradeoffs
@@ -43,8 +42,8 @@ The orchestrator originally had flat global namespaces for workspaces, workflows
 
 ## Risks And Mitigations
 
-- Risk: Breaking existing configs without project field
-  - Mitigation: Defaults.project = "default", auto-migration on load
+- Risk: Strict isolation may break workflows that relied on global resources
+  - Mitigation: Clear error messages guide users to apply resources into the project scope
 
 ## Observability
 
@@ -55,7 +54,7 @@ The orchestrator originally had flat global namespaces for workspaces, workflows
 
 - Migration: Add project_id column to existing tables (default empty string)
 - Rollback: Remove project_id column (data loss acceptable for rollback)
-- Compatibility: Fully backward compatible; global config works as before
+- Compatibility: Project-scoped tasks require all resources in the project; non-project tasks use top-level config
 
 ## Test Plan
 
@@ -71,6 +70,6 @@ The orchestrator originally had flat global namespaces for workspaces, workflows
 
 - [ ] Tasks store project_id in database
 - [ ] CLI --project flag works
-- [ ] Project-level resources override global resources
-- [ ] Fallback to global when project resource not found
-- [ ] Default project "default" exists with existing config
+- [ ] Project-level resources are exclusive — no global fallback
+- [ ] Missing project resource fails with clear error
+- [ ] Projects must be explicitly created via `apply --project`

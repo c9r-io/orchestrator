@@ -201,6 +201,16 @@ pub async fn dispatch(
                     }
                     Ok(())
                 }
+                ManifestCommands::Export { output } => {
+                    let resp = client
+                        .manifest_export(orchestrator_proto::ManifestExportRequest {
+                            output_format: format_to_string(output),
+                        })
+                        .await?
+                        .into_inner();
+                    print!("{}", resp.content);
+                    Ok(())
+                }
             }
         }
 

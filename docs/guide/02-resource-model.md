@@ -77,7 +77,7 @@ When a step requires a capability (e.g., `required_capability: implement`), the 
 
 - Capability match (required)
 - Cost metadata (lower is preferred)
-- Project-scoped agents (applied with `--project`) override global agents
+- Project-scoped agents (applied with `--project`) are used exclusively — no fallback to global agents
 
 ## 3. StepTemplate
 

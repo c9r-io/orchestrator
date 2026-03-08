@@ -190,14 +190,26 @@ pub async fn load_task_runtime_context(
     let project_id = runtime_row.project_id;
 
     let active = read_active_config(state)?;
-    // Look up workflow: try project-scoped first, then global
-    let workflow = active
-        .config
-        .projects
-        .get(&project_id)
-        .and_then(|p| p.workflows.get(&workflow_id))
-        .or_else(|| active.config.workflows.get(&workflow_id))
-        .with_context(|| format!("workflow not found for task {}: {}", task_id, workflow_id))?;
+    // Strict project isolation: project-scoped tasks use only project resources
+    let workflow = if !project_id.is_empty() {
+        active
+            .config
+            .projects
+            .get(&project_id)
+            .and_then(|p| p.workflows.get(&workflow_id))
+            .with_context(|| {
+                format!(
+                    "workflow not found: {} in project '{}' for task {}",
+                    workflow_id, project_id, task_id
+                )
+            })?
+    } else {
+        active
+            .config
+            .workflows
+            .get(&workflow_id)
+            .with_context(|| format!("workflow not found for task {}: {}", task_id, workflow_id))?
+    };
 
     let mut execution_plan = serde_json::from_str::<TaskExecutionPlan>(&execution_plan_json)
         .ok()
@@ -249,14 +261,22 @@ pub async fn load_task_runtime_context(
     let dynamic_steps = workflow.dynamic_steps.clone();
     let adaptive = workflow.adaptive.clone();
     let safety = workflow.safety.clone();
-    let self_referential = active
-        .config
-        .projects
-        .get(&project_id)
-        .and_then(|p| p.workspaces.get(&workspace_id))
-        .or_else(|| active.config.workspaces.get(&workspace_id))
-        .map(|ws| ws.self_referential)
-        .unwrap_or(false);
+    let self_referential = if !project_id.is_empty() {
+        active
+            .config
+            .projects
+            .get(&project_id)
+            .and_then(|p| p.workspaces.get(&workspace_id))
+            .map(|ws| ws.self_referential)
+            .unwrap_or(false)
+    } else {
+        active
+            .config
+            .workspaces
+            .get(&workspace_id)
+            .map(|ws| ws.self_referential)
+            .unwrap_or(false)
+    };
 
     if !state.unsafe_mode
         && (self_referential

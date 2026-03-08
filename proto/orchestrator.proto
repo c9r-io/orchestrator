@@ -43,6 +43,7 @@ service OrchestratorService {
   rpc Init(InitRequest)               returns (InitResponse);
   rpc DbReset(DbResetRequest)         returns (DbResetResponse);
   rpc ManifestValidate(ManifestValidateRequest) returns (ManifestValidateResponse);
+  rpc ManifestExport(ManifestExportRequest) returns (ManifestExportResponse);
   rpc TaskTrace(TaskTraceRequest)     returns (TaskTraceResponse);
 
   // Project management
@@ -428,6 +429,15 @@ message ManifestValidateResponse {
   bool valid = 1;
   repeated string errors = 2;
   string message = 3;
+}
+
+message ManifestExportRequest {
+  string output_format = 1;  // "json" | "yaml"
+}
+
+message ManifestExportResponse {
+  string content = 1;
+  string format = 2;
 }
 
 message TaskTraceRequest {

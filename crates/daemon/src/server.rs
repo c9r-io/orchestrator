@@ -168,6 +168,11 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<TaskDeleteRequest>,
     ) -> Result<Response<TaskDeleteResponse>, Status> {
         let req = request.into_inner();
+        if !req.force {
+            return Err(Status::failed_precondition(
+                "use --force to confirm task deletion",
+            ));
+        }
         let id = agent_orchestrator::service::task::resolve_id(&self.state, &req.task_id)
             .await
             .map_err(|e| Status::internal(format!("{e}")))?;
@@ -184,6 +189,11 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<TaskRetryRequest>,
     ) -> Result<Response<TaskRetryResponse>, Status> {
         let req = request.into_inner();
+        if !req.force {
+            return Err(Status::failed_precondition(
+                "use --force to confirm task retry",
+            ));
+        }
         let task_id =
             agent_orchestrator::service::task::retry_task_item(&self.state, &req.task_item_id)
                 .map_err(|e| Status::internal(format!("{e}")))?;
@@ -659,6 +669,20 @@ impl OrchestratorService for OrchestratorServer {
             valid,
             errors,
             message,
+        }))
+    }
+
+    async fn manifest_export(
+        &self,
+        request: Request<ManifestExportRequest>,
+    ) -> Result<Response<ManifestExportResponse>, Status> {
+        let req = request.into_inner();
+        let content =
+            agent_orchestrator::service::resource::export_manifests(&self.state, &req.output_format)
+                .map_err(|e| Status::internal(format!("{e}")))?;
+        Ok(Response::new(ManifestExportResponse {
+            content,
+            format: req.output_format,
         }))
     }
 

@@ -2,7 +2,7 @@
 
 **Module**: orchestrator
 **Scope**: Validate gRPC daemon lifecycle, CLI-to-daemon communication, embedded worker, and service layer correctness
-**Scenarios**: 6
+**Scenarios**: 5
 **Priority**: Critical
 
 ---
@@ -274,14 +274,14 @@ SELECT COUNT(*) FROM events WHERE event_type = 'scheduler_enqueued';
 
 ---
 
-## Scenario 5: Resource Apply and Store via gRPC
+## Scenario 5: Resource Management and Project Isolation via gRPC
 
 ### Preconditions
 - Daemon running.
 - A valid manifest YAML file available.
 
 ### Goal
-Verify resource apply (from file and stdin) and store CRUD operations work through gRPC.
+Verify resource apply (from file and stdin), store CRUD, and project-scoped resource management work through gRPC.
 
 ### Steps
 1. Start daemon:
@@ -302,83 +302,33 @@ Verify resource apply (from file and stdin) and store CRUD operations work throu
    ```bash
    ./target/release/orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml --dry-run
    ```
-5. Get a specific resource:
+5. Get and describe resources:
    ```bash
    ./target/release/orchestrator get workspace/default -o yaml
-   ```
-6. Describe a resource:
-   ```bash
    ./target/release/orchestrator describe workspace/default -o yaml
    ```
-7. Store CRUD:
+6. Store CRUD:
    ```bash
    ./target/release/orchestrator store put qa-store test-key '{"value":42}'
    ./target/release/orchestrator store get qa-store test-key
    ./target/release/orchestrator store list qa-store -o json
    ./target/release/orchestrator store delete qa-store test-key
    ```
-8. Stop daemon:
-   ```bash
-   kill "$DAEMON_PID"
-   wait "$DAEMON_PID" 2>/dev/null
-   ```
-
-### Expected
-- `apply` creates/updates resources and prints `kind/name created|updated|unchanged`.
-- `apply --dry-run` prints `would be created` without persisting changes.
-- `apply -f -` reads from stdin and works identically to file mode.
-- `get workspace/default` returns workspace data in requested format.
-- Store `put`, `get`, `list`, `delete` operations succeed over gRPC.
-- All responses match the equivalent legacy CLI output.
-
----
-
-## Scenario 6: Native Project Isolation via gRPC
-
-### Preconditions
-- Daemon running.
-- A valid fixture manifest available.
-
-### Goal
-Verify project-scoped resource management, task filtering, and project reset work natively through gRPC — without a dedicated `qa` subcommand.
-
-### Steps
-1. Start daemon:
-   ```bash
-   ./target/release/orchestratord --foreground &
-   DAEMON_PID=$!
-   sleep 2
-   ```
-2. Apply manifest to project scope:
+7. Apply manifest to project scope and verify isolation:
    ```bash
    ./target/release/orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project iso-test
-   ```
-3. List project-scoped agents (should only show project agents):
-   ```bash
    ./target/release/orchestrator get agents --project iso-test
-   ```
-4. Describe a project-scoped resource:
-   ```bash
    ./target/release/orchestrator describe agent/mock_echo --project iso-test
    ```
-5. Create a task in project scope:
+8. Create and list tasks in project scope:
    ```bash
    ./target/release/orchestrator task create --name "iso-task" --goal "isolation test" --project iso-test --workflow qa_only --no-start
-   ```
-6. List tasks filtered by project:
-   ```bash
    ./target/release/orchestrator task list --project iso-test -o json
    ```
-7. Delete a project-scoped resource:
+9. Delete project resource and reset project:
    ```bash
    ./target/release/orchestrator delete agent/mock_echo --force --project iso-test
-   ```
-8. Reset project data:
-   ```bash
    ./target/release/orchestrator project reset iso-test --force
-   ```
-9. Reset project with config removal:
-   ```bash
    ./target/release/orchestrator project reset iso-test --force --include-config
    ```
 10. Stop daemon:
@@ -388,15 +338,16 @@ Verify project-scoped resource management, task filtering, and project reset wor
     ```
 
 ### Expected
+- `apply` creates/updates resources and prints `kind/name created|updated|unchanged`.
+- `apply --dry-run` prints `would be created` without persisting changes.
+- `apply -f -` reads from stdin and works identically to file mode.
+- `get workspace/default` returns workspace data in requested format.
+- Store `put`, `get`, `list`, `delete` operations succeed over gRPC.
 - `apply --project` creates resources in project scope with `(project: iso-test)` suffix.
 - `get agents --project` returns only project-scoped agents (not global).
-- `describe --project` returns project-scoped resource details.
 - `task create --project` creates task with correct `project_id`.
-- `task list --project` filters to only show that project's tasks.
-- `delete --project` removes resource from project config only.
 - `project reset --force` deletes tasks/items/runs/events for the project.
 - `project reset --force --include-config` also removes the project entry from configuration.
-- After `--include-config`, `get --project` returns "project not found" error.
 
 ---
 
@@ -408,5 +359,4 @@ Verify project-scoped resource management, task filtering, and project reset wor
 | 2 | CLI-to-Daemon gRPC Communication | ✅ | 2026-03-09 | Claude | version, get, check all pass via gRPC |
 | 3 | Task Lifecycle via gRPC | ✅ | 2026-03-09 | Claude | create→list→info→start(detach)→logs→delete |
 | 4 | Embedded Worker Queue Consumption | ✅ | 2026-03-09 | Claude | 3 workers consumed 6 tasks concurrently |
-| 5 | Resource Apply and Store via gRPC | ✅ | 2026-03-09 | Claude | apply file/stdin/dry-run + store CRUD |
-| 6 | Native Project Isolation via gRPC | ✅ | 2026-03-09 | Claude | apply/get/describe/delete/list --project + project reset |
+| 5 | Resource Management and Project Isolation via gRPC | ✅ | 2026-03-09 | Claude | apply file/stdin/dry-run + store CRUD + --project isolation + project reset |

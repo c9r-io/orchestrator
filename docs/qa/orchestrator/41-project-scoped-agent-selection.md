@@ -1,7 +1,7 @@
 # Orchestrator - Project-Scoped Agent Selection
 
 **Module**: orchestrator
-**Scope**: Validate project-scoped resource deployment (`apply --project`) and hierarchical agent selection
+**Scope**: Validate project-scoped resource deployment (`apply --project`) and strict project-isolated agent selection
 **Scenarios**: 5
 **Priority**: High
 
@@ -13,9 +13,10 @@ Agent selection must be isolated per project: only agents deployed into a
 project scope should participate in selection for that project's tasks. This
 prevents QA fixture agents from interfering with bootstrap agents and vice versa.
 
-The implementation uses hierarchical resolution: project-scoped agents take
-priority when they have the required capability; otherwise selection falls back
-to global agents.
+Agent selection is strictly project-isolated: only agents deployed into a
+project scope participate in selection for that project's tasks. There is no
+fallback to global agents — if the project lacks an agent with the required
+capability, the task fails with a clear error.
 
 Key CLI workflow:
 ```bash
@@ -118,45 +119,47 @@ for selection, even when global agents have the same capability.
 
 ---
 
-## Scenario 3: Global Fallback When Project Lacks Capability
+## Scenario 3: Missing Capability Fails Without Fallback
 
 ### Preconditions
 
 - Reset previous QA state.
-- Global config has at least one agent with `fix` capability (from bootstrap).
+- Global config has agents with `fix` capability (from bootstrap).
 
 ### Goal
 
-Validate that when a project's agents lack the required capability, selection
-falls back to global agents.
+Validate that when a project's agents lack a required capability, the task
+fails with a clear error instead of silently falling back to global agents.
 
 ### Steps
 
 1. Reset and apply (project agents only have `qa` capability):
    ```bash
-   orchestrator project reset qa-fallback --force --include-config
-   orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-fallback
+   orchestrator project reset qa-nofallback --force --include-config
+   orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-nofallback
    ```
 
-2. Inspect project agents capabilities:
+2. Confirm project agents only have `qa`:
    ```bash
-   orchestrator manifest export | python3 -c "
-   import sys, yaml
-   cfg = yaml.safe_load(sys.stdin)
-   proj = cfg.get('projects', {}).get('qa-fallback', {})
-   for name, agent in proj.get('agents', {}).items():
-       print(f'{name}: {agent.get(\"capabilities\", [])}')
-   global_agents = cfg.get('agents', {})
-   fix_agents = [n for n, a in global_agents.items() if 'fix' in a.get('capabilities', [])]
-   print(f'global fix-capable: {fix_agents}')
-   "
+   orchestrator get agents --project qa-nofallback -o json
+   ```
+
+3. Attempt a workflow that requires `fix` capability:
+   ```bash
+   orchestrator task create \
+     --project qa-nofallback \
+     --name "no-fallback-test" \
+     --goal "Should fail — project lacks fix agent" \
+     --workspace default \
+     --workflow qa_fix \
+     --attach 2>&1; echo "EXIT=$?"
    ```
 
 ### Expected
 
-- Project agents have `qa` capability only
-- If a step requires `fix` capability, the runtime would fall back to global agents
-- This verifies the hierarchical resolution: project-first, global-fallback
+- Task creation or execution fails with a clear error about missing `fix` capability.
+- No global agents are selected — strict project isolation is enforced.
+- Exit code is non-zero.
 
 ---
 
@@ -213,46 +216,46 @@ project workspace ticket directories.
 
 ---
 
-## Scenario 5: Non-Project Tasks Use Global Agents
+## Scenario 5: Cross-Project Agent Isolation
 
 ### Preconditions
 
-- Global config has agents (from bootstrap or init).
-- A project with scoped agents exists.
+- Two separate projects exist, each with different agents.
 
 ### Goal
 
-Validate that tasks created WITHOUT `--project` (or with empty project) use
-global agents, not project-scoped agents.
+Validate that agents from one project never leak into another project's tasks.
 
 ### Steps
 
-1. Ensure project agents exist:
+1. Create two isolated projects:
    ```bash
-   orchestrator project reset qa-global --force --include-config
-   orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-global
+   orchestrator project reset qa-proj-a --force --include-config
+   orchestrator project reset qa-proj-b --force --include-config
+   orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-proj-a
+   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project qa-proj-b
    ```
 
-2. Create task WITHOUT `--project`:
+2. List agents in each project:
+   ```bash
+   orchestrator get agents --project qa-proj-a -o json
+   orchestrator get agents --project qa-proj-b -o json
+   ```
+
+3. Create task in project B:
    ```bash
    TASK_ID=$(orchestrator task create \
-     --project default \
-     --name "global-agent-test" \
-     --goal "Verify global agents used" \
+     --project qa-proj-b \
+     --name "cross-isolation-test" \
+     --goal "Verify agents from project A are not used" \
      --workspace default \
      --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 
-3. Verify project_id in task record:
-   ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT project_id FROM tasks WHERE id = '${TASK_ID}';"
-   ```
-
 ### Expected
 
-- Task project_id is `default` (not `qa-global`)
-- If task were started, global agents would be selected (not `mock_echo_alpha`/`mock_echo_beta`)
+- Project A agents (`mock_echo_alpha`, `mock_echo_beta`) do not appear in project B agent list.
+- Task created in project B would only use project B agents (`mock_echo`).
 
 ---
 
@@ -262,6 +265,6 @@ global agents, not project-scoped agents.
 |---|----------|--------|-----------|--------|-------|
 | 1 | Apply --project Routes to Project Scope | ☐ | | | |
 | 2 | Project-Scoped Agent Selection Isolation | ☐ | | | |
-| 3 | Global Fallback When Project Lacks Capability | ☐ | | | |
+| 3 | Missing Capability Fails Without Fallback | ☐ | | | |
 | 4 | QA Project Reset Cleans Auto-Tickets | ☐ | | | |
-| 5 | Non-Project Tasks Use Global Agents | ☐ | | | |
+| 5 | Cross-Project Agent Isolation | ☐ | | | |

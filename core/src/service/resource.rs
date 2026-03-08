@@ -153,8 +153,8 @@ pub fn get_resource(
 ) -> Result<String> {
     let active = read_active_config(state)?;
     let config = &active.config;
-
-    // Resolve effective config: project-scoped or global
+    // Resolve effective config: project-scoped or global.
+    // All resources are project-scoped — no fallback to global config.
     let effective_config;
     let cfg = if let Some(proj) = project {
         let proj_cfg = config
@@ -173,11 +173,14 @@ pub fn get_resource(
     };
 
     if resource.contains('/') {
+        if selector.is_some() {
+            anyhow::bail!("label selector (-l) cannot be used with a named resource; use it with list queries only");
+        }
         let parts: Vec<&str> = resource.splitn(2, '/').collect();
         let (kind, name) = (parts[0], parts[1]);
         get_single_resource(cfg, kind, name, output_format)
     } else {
-        get_list_resource(cfg, resource, selector, output_format)
+        get_list_resource(cfg, resource, selector, output_format, &config.resource_store)
     }
 }
 
@@ -216,24 +219,63 @@ fn get_single_resource(
 fn get_list_resource(
     config: &crate::config::OrchestratorConfig,
     resource_type: &str,
-    _selector: Option<&str>,
+    selector: Option<&str>,
     output_format: &str,
+    resource_store: &crate::crd::store::ResourceStore,
 ) -> Result<String> {
-    match resource_type {
-        "ws" | "workspace" | "workspaces" => {
-            let names: Vec<&String> = config.workspaces.keys().collect();
-            format_output(&names, output_format)
-        }
-        "agent" | "agents" => {
-            let names: Vec<&String> = config.agents.keys().collect();
-            format_output(&names, output_format)
-        }
-        "wf" | "workflow" | "workflows" => {
-            let names: Vec<&String> = config.workflows.keys().collect();
-            format_output(&names, output_format)
-        }
+    let (names, crd_kind): (Vec<&String>, &str) = match resource_type {
+        "ws" | "workspace" | "workspaces" => (config.workspaces.keys().collect(), "Workspace"),
+        "agent" | "agents" => (config.agents.keys().collect(), "Agent"),
+        "wf" | "workflow" | "workflows" => (config.workflows.keys().collect(), "Workflow"),
         _ => anyhow::bail!("unknown list resource type: {}", resource_type),
+    };
+
+    let filtered: Vec<&String> = if let Some(sel) = selector {
+        let conditions = parse_label_selector(sel)?;
+        names
+            .into_iter()
+            .filter(|name| {
+                let labels = resource_store
+                    .get(crd_kind, name)
+                    .and_then(|cr| cr.metadata.labels.as_ref());
+                match_labels(labels, &conditions)
+            })
+            .collect()
+    } else {
+        names
+    };
+
+    format_output(&filtered, output_format)
+}
+
+/// Parse a label selector string like "env=dev,tier=qa" into key-value pairs.
+fn parse_label_selector(selector: &str) -> Result<Vec<(String, String)>> {
+    let mut conditions = Vec::new();
+    for part in selector.split(',') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        let kv: Vec<&str> = part.splitn(2, '=').collect();
+        if kv.len() != 2 {
+            anyhow::bail!("invalid label selector: '{}' (expected key=value)", part);
+        }
+        conditions.push((kv[0].to_string(), kv[1].to_string()));
     }
+    Ok(conditions)
+}
+
+/// Check if a resource's labels match all selector conditions (AND logic).
+fn match_labels(
+    labels: Option<&std::collections::HashMap<String, String>>,
+    conditions: &[(String, String)],
+) -> bool {
+    let Some(labels) = labels else {
+        return conditions.is_empty();
+    };
+    conditions
+        .iter()
+        .all(|(k, v)| labels.get(k).map(|lv| lv == v).unwrap_or(false))
 }
 
 /// Describe a resource (detailed view).
@@ -313,6 +355,39 @@ fn delete_resource_from_project(
         "agent" => Ok(proj.agents.remove(name).is_some()),
         "wf" | "workflow" => Ok(proj.workflows.remove(name).is_some()),
         _ => anyhow::bail!("unknown resource type for project delete: {}", kind),
+    }
+}
+
+/// Export all resources as manifest documents in JSON or YAML format.
+pub fn export_manifests(state: &InnerState, output_format: &str) -> Result<String> {
+    let active = read_active_config(state)?;
+    let config = &active.config;
+
+    let builtin_docs = crate::resource::export_manifest_documents(config);
+    let crd_docs = crate::resource::export_crd_documents(config);
+
+    match output_format {
+        "json" => {
+            let mut all = serde_json::to_value(&builtin_docs)?;
+            if let serde_json::Value::Array(ref mut arr) = all {
+                for doc in crd_docs {
+                    if let Ok(json_val) = serde_json::to_value(&doc) {
+                        arr.push(json_val);
+                    }
+                }
+            }
+            Ok(serde_json::to_string_pretty(&all)?)
+        }
+        _ => {
+            let mut parts = Vec::new();
+            for doc in &builtin_docs {
+                parts.push(serde_yml::to_string(doc)?);
+            }
+            for doc in &crd_docs {
+                parts.push(serde_yml::to_string(doc)?);
+            }
+            Ok(parts.join("---\n"))
+        }
     }
 }
 

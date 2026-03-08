@@ -203,7 +203,7 @@ N/A - Unit test verification
    orchestrator task create \
      -n adaptive-success \
      -g "adaptive runtime success verification" \
-     -p "$QA_PROJECT" \
+     --project "$QA_PROJECT" \
      -w adaptive_ws \
      -W adaptive_success \
      --attach
@@ -214,7 +214,7 @@ N/A - Unit test verification
    orchestrator task create \
      -n adaptive-fallback \
      -g "adaptive runtime fallback verification" \
-     -p "$QA_PROJECT" \
+     --project "$QA_PROJECT" \
      -w adaptive_ws \
      -W adaptive_fallback \
      --attach

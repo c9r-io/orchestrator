@@ -151,6 +151,12 @@ pub enum ManifestCommands {
         #[arg(short = 'f', long = "file")]
         file: String,
     },
+
+    /// Export all resources as manifest documents
+    Export {
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone)]

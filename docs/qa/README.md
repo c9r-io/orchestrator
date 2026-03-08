@@ -133,7 +133,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/38-agent-env-resolution.md` | 5 | Agent env resolution: direct value, fromRef, refValue, validation, and secret redaction |
 | orchestrator | `docs/qa/orchestrator/39-prompt-delivery.md` | 5 | PromptDelivery abstraction: default arg, stdin, file, env modes, preflight validation |
 | orchestrator | `docs/qa/orchestrator/40-custom-resource-definitions.md` | 5 | CRD extension system: registration, validation, get/describe/delete, cascade protection, export round-trip |
-| orchestrator | `docs/qa/orchestrator/41-project-scoped-agent-selection.md` | 5 | Project-scoped agent selection: apply --project, hierarchical resolution, ticket cleanup, global fallback |
+| orchestrator | `docs/qa/orchestrator/41-project-scoped-agent-selection.md` | 5 | Project-scoped agent selection: apply --project, strict isolation, ticket cleanup, cross-project isolation |
 | orchestrator | `docs/qa/orchestrator/42-crd-unified-resource-store.md` | 5 | Unified CRD ResourceStore: builtin CRD bootstrap, CrdProjectable round-trip, targeted writeback, apply/delete integration, edge cases |
 | orchestrator | `docs/qa/orchestrator/43-cli-force-gate-audit.md` | 5 | CLI force gate audit: backfill-events, task retry, and existing force-gate regression checks |
 | orchestrator | `docs/qa/orchestrator/44-parallel-item-execution.md` | 5 | Parallel item execution: max_parallel config, semaphore-gated JoinSet, RunningTask::fork(), pool size 20 |

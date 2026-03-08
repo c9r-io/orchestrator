@@ -39,9 +39,10 @@ projects:
         steps: [...]
 ```
 
-Resource resolution priority:
-1. Project-level resources first
-2. Fall back to global resources if not found in project
+Resource resolution:
+- All resources are **project-scoped** — `--project` resolves against `config.projects[<name>]` only.
+- There is **no fallback** to global config. If the project doesn't exist in `config.projects`, the command fails with `"project not found"`.
+- The `defaults.project` field names the default project but does **not** create an implicit entry; it must be explicitly created via `apply --project <name>`.
 
 ---
 
@@ -133,33 +134,51 @@ Validate that when project doesn't define a workflow, the `defaults.workflow` fr
 
 ### Preconditions
 
-- Project with multiple workspaces configured
-- Use `orchestrator` CLI for all commands
+- An explicit project has been created via `apply --project` (the project must exist in `config.projects`).
+- Use `orchestrator` CLI for all commands.
 
 ### Goal
 
-Validate workspace resolution within project context.
+Validate workspace resolution within an explicitly-created project context, and that referencing a non-existent project returns a clear error.
 
 ### Steps
 
-1. List workspaces via CLI:
+1. Create project resources:
    ```bash
-   orchestrator workspace list --project default
+   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project ws-test
    ```
 
-2. Create task without explicit workspace (should resolve project/default workspace):
+2. List workspaces scoped to the project:
+   ```bash
+   orchestrator get workspaces --project ws-test
+   ```
+
+3. Verify non-existent project returns clear error:
+   ```bash
+   orchestrator get workspaces --project nonexistent-project
+   ```
+
+4. Create task in the project without explicit workspace:
    ```bash
    orchestrator task create \
      --name "test-project-workspace-resolution" \
      --goal "verify project workspace resolution" \
-     --project default \
+     --project ws-test \
      --no-start
    ```
 
 ### Expected
 
-- Workspace list shows workspaces from default project
-- Task is created successfully without explicit `--workspace`
+- Step 2: workspace list returns only the project's workspaces.
+- Step 3: command fails with `"project not found: nonexistent-project"`.
+- Step 4: task is created successfully; workspace is resolved from project config.
+
+### Troubleshooting
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| `project not found: default` | "default" project was never explicitly created via `apply --project default` | Apply resources with `--project default` first, or use a project name that has been applied |
+| Empty workspace list | Resources were applied globally (without `--project`) | Re-apply manifests with `--project <name>` |
 
 ---
 

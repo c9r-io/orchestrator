@@ -143,34 +143,49 @@ pub fn create_task_impl(
         active.default_workspace_id.clone()
     });
 
-    let workspace = active
-        .projects
-        .get(&project_id)
-        .and_then(|p| p.workspaces.get(&workspace_id).cloned())
-        .or_else(|| active.workspaces.get(&workspace_id).cloned())
-        .with_context(|| {
-            format!(
-                "workspace not found: {} (checked project '{}' then global)",
-                workspace_id, project_id
-            )
-        })?;
+    let workspace = if !project_id.is_empty() {
+        active
+            .projects
+            .get(&project_id)
+            .and_then(|p| p.workspaces.get(&workspace_id).cloned())
+            .with_context(|| {
+                format!(
+                    "workspace not found: {} in project '{}'",
+                    workspace_id, project_id
+                )
+            })?
+    } else {
+        active
+            .workspaces
+            .get(&workspace_id)
+            .cloned()
+            .with_context(|| format!("workspace not found: {}", workspace_id))?
+    };
 
     let workflow_id = payload
         .workflow_id
         .clone()
         .unwrap_or_else(|| active.default_workflow_id.clone());
 
-    let workflow = active
-        .projects
-        .get(&project_id)
-        .and_then(|p| p.workflows.get(&workflow_id).cloned())
-        .or_else(|| active.config.workflows.get(&workflow_id).cloned())
-        .with_context(|| {
-            format!(
-                "workflow not found: {} (checked project '{}' then global)",
-                workflow_id, project_id
-            )
-        })?;
+    let workflow = if !project_id.is_empty() {
+        active
+            .projects
+            .get(&project_id)
+            .and_then(|p| p.workflows.get(&workflow_id).cloned())
+            .with_context(|| {
+                format!(
+                    "workflow not found: {} in project '{}'",
+                    workflow_id, project_id
+                )
+            })?
+    } else {
+        active
+            .config
+            .workflows
+            .get(&workflow_id)
+            .cloned()
+            .with_context(|| format!("workflow not found: {}", workflow_id))?
+    };
 
     let execution_plan = if !project_id.is_empty() {
         build_execution_plan_for_project(&active.config, &workflow, &workflow_id, &project_id)?
@@ -630,7 +645,7 @@ mod tests {
     }
 
     #[test]
-    fn create_task_with_explicit_project_falls_back_to_global_workspace_and_workflow() {
+    fn create_task_with_empty_project_rejects_missing_workspace() {
         let mut ts = TestState::new().with_workflow("task_only", task_only_workflow());
         let state = ts.build();
 
@@ -656,7 +671,7 @@ mod tests {
         }
 
         let payload = CreateTaskPayload {
-            name: Some("Project Fallback".to_string()),
+            name: Some("Project Strict".to_string()),
             goal: None,
             project_id: Some("proj-a".to_string()),
             workspace_id: Some("default".to_string()),
@@ -665,14 +680,11 @@ mod tests {
             parent_task_id: None,
             spawn_reason: None,
         };
-        let result = create_task_impl(&state, payload).expect("create project fallback task");
-        assert_eq!(result.project_id, "proj-a");
-        assert_eq!(result.workspace_id, "default");
-        assert_eq!(result.workflow_id, "task_only");
-        assert_eq!(result.total_items, 1);
-        let (target_files, item_paths) = load_task_storage(&state, &result.id);
-        assert!(target_files.is_empty());
-        assert_eq!(item_paths, vec![UNASSIGNED_QA_FILE_PATH.to_string()]);
+        let err = create_task_impl(&state, payload).unwrap_err();
+        assert!(
+            err.to_string().contains("workspace not found"),
+            "expected workspace-not-found error, got: {err}"
+        );
     }
 
     #[test]
