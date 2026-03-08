@@ -44,10 +44,9 @@ kill <pid>                                        # graceful SIGTERM
 
 1. Start the daemon: `orchestratord --foreground --workers 2`
 2. `orchestrator init` — create SQLite schema
-3. `orchestrator apply -f manifest.yaml` — load resources
-4. Restart daemon to pick up config changes
-5. `orchestrator task create --name X --goal Y --workflow Z` — create and run (auto-enqueues to worker)
-6. `orchestrator task info <id>` / `task trace <id>` / `task logs <id>` — inspect results
+3. `orchestrator apply -f manifest.yaml` — load resources (daemon hot-reloads config via RwLock, no restart needed)
+4. `orchestrator task create --name X --goal Y --workflow Z` — create and run (auto-enqueues to worker)
+5. `orchestrator task info <id>` / `task trace <id>` / `task logs <id>` — inspect results
 
 Use `--project <id>` on `apply`, `get`, `describe`, `delete`, `task create/list`, and `store` to scope operations to a project. Use `orchestrator project reset <id> --force` to clean up a project's task data.
 

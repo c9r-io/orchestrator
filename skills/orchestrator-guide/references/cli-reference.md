@@ -60,7 +60,7 @@ kill <pid>                                        # graceful SIGTERM
 
 Connection: CLI connects via UDS (`data/orchestrator.sock`) by default, or `$ORCHESTRATOR_SOCKET` env.
 
-> **Important**: After `orchestrator apply` loads new resources, restart the daemon to pick up config changes.
+> Config changes from `apply` are hot-reloaded into the daemon via `RwLock<ActiveConfig>` — no restart needed.
 
 ## Init & Apply
 

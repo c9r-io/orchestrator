@@ -114,7 +114,6 @@ orchestrator apply -f docs/workflow/minimax-secret.yaml --project self-evolution
 orchestrator apply -f docs/workflow/self-evolution.yaml --project self-evolution
 ```
 
-> ⚠️ 加载完资源后需重启 daemon，使其加载最新配置。
 
 ### 3.3 验证资源已加载
 
