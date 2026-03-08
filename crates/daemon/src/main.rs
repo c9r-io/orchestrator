@@ -43,7 +43,8 @@ fn main() -> Result<()> {
         .context("failed to build tokio runtime")?;
 
     rt.block_on(async move {
-        let state = agent_orchestrator::service::bootstrap::init_state(false)
+        let state = agent_orchestrator::service::bootstrap::init_state_async(false)
+            .await
             .context("failed to initialize orchestrator state")?;
         let inner = state.inner.clone();
 
