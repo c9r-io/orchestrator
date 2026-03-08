@@ -1,4 +1,3 @@
-pub mod daemon;
 pub mod version;
 
 use anyhow::Result;
@@ -214,8 +213,8 @@ pub async fn dispatch(
             }
         }
 
-        // These are handled before dispatch or dispatched above
-        Commands::Version | Commands::Daemon(_) => unreachable!(),
+        // Handled before dispatch
+        Commands::Version => unreachable!(),
     }
 }
 

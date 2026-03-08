@@ -69,6 +69,28 @@ pub fn run_db_reset(
         anyhow::bail!("Use --force to confirm database reset");
     }
     crate::db::reset_db_by_path(&state.db_path, include_history, include_config)?;
+
+    // When config is cleared from SQLite, sync the daemon's in-memory state
+    // to avoid stale ActiveConfig surviving until the next `apply`.
+    if include_config {
+        if let Ok(mut active) = state.active_config.write() {
+            *active = crate::config::ActiveConfig {
+                config: Default::default(),
+                workspaces: Default::default(),
+                projects: Default::default(),
+                default_project_id: String::new(),
+                default_workspace_id: String::new(),
+                default_workflow_id: String::new(),
+            };
+        }
+        if let Ok(mut error) = state.active_config_error.write() {
+            *error = None;
+        }
+        if let Ok(mut notice) = state.active_config_notice.write() {
+            *notice = None;
+        }
+    }
+
     let mut msg = "Database reset completed".to_string();
     if include_config {
         msg.push_str("\nAll config versions deleted (next apply starts from blank)");

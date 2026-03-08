@@ -23,10 +23,6 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
-    /// Daemon lifecycle management
-    #[command(subcommand)]
-    Daemon(DaemonCommands),
-
     /// Apply resource manifests
     #[command(alias = "ap")]
     Apply {
@@ -157,30 +153,6 @@ pub enum ManifestCommands {
         #[arg(short, long, default_value = "yaml")]
         output: OutputFormat,
     },
-}
-
-#[derive(Subcommand, Debug, Clone)]
-pub enum DaemonCommands {
-    /// Start the daemon
-    Start {
-        /// Run in foreground (don't daemonize)
-        #[arg(long)]
-        foreground: bool,
-
-        /// TCP bind address (default: UDS)
-        #[arg(long)]
-        bind: Option<String>,
-
-        /// Number of workers
-        #[arg(long, default_value = "1")]
-        workers: usize,
-    },
-    /// Stop the daemon
-    Stop,
-    /// Show daemon status
-    Status,
-    /// Restart the daemon
-    Restart,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -394,7 +366,6 @@ fn main() -> Result<()> {
     rt.block_on(async move {
         match cli.command {
             Commands::Version => commands::version::run().await,
-            Commands::Daemon(cmd) => commands::daemon::run(cmd).await,
             _ => {
                 let mut client = client::connect().await?;
                 commands::dispatch(&mut client, cli.command).await

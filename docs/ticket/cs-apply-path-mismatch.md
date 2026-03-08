@@ -1,11 +1,12 @@
-# C/S 模式下 db/init/apply 的执行路径不一致
+# C/S 模式下 db reset 未同步 daemon 内存状态
+
+## 状态：已修复
 
 ## 问题描述
 
-在 C/S 架构下，`orchestrator db reset`、`orchestrator init`、`orchestrator apply` 存在两条执行路径：
+在 C/S 架构下，`orchestrator db reset --include-config` 通过 RPC 清除了 SQLite 中的 config 数据，但 daemon 的内存 `RwLock<ActiveConfig>` 未被同步重置。在 `db reset` 和下一次 `apply` 之间，daemon 仍持有旧的 config 状态。
 
-1. **通过 daemon RPC**（新 CLI `target/release/orchestrator`）：CLI 发送 gRPC 请求给 daemon，daemon 执行操作并原子更新内存中的 `ActiveConfig`。
-2. **直接操作 SQLite**（旧单体 CLI `core/target/release/agent-orchestrator`）：绕过 daemon，直接写入数据库。daemon 的内存状态不会更新。
+对比：`apply` 的实现 (`persist_config_and_reload`) 在写入 SQLite 后会通过 `write_active_config(state)` 原子更新内存。`db_reset` 缺少这一步。
 
 ## 实际遇到的场景
 
@@ -13,23 +14,22 @@ self-evolution 执行过程中：
 
 1. 旧 daemon（用旧二进制启动）正在运行
 2. 修复了 project-only config 验证 bug 后重新构建
-3. 使用旧 CLI symlink（指向 `core/target/release/`）执行 `db reset` + `init` + `apply`
-4. 旧 CLI 直接写入 SQLite，旧 daemon 的内存 config 未更新
-5. `task create` 使用新 CLI 发给旧 daemon，旧 daemon 仍用旧代码验证，报错
+3. 使用旧 CLI symlink（指向已废弃的 `core/target/release/agent-orchestrator`）执行操作
+4. 旧单体二进制绕过 daemon 直接写入 SQLite，daemon 内存未更新
+5. `task create` 发给旧 daemon，报错
 
 ## 根因
 
-- 执行模板文档中的启动步骤没有明确区分 CLI 二进制版本
-- `db reset` / `init` 在新 CLI 中是否走 RPC 尚不确定——如果它们仍然直接操作 SQLite（因为这些是 bootstrap 操作，daemon 可能还没启动），则存在 daemon 内存状态与磁盘状态不一致的窗口
+1. **代码层面**：`run_db_reset` 只清除 SQLite，未同步重置 daemon 内存中的 `ActiveConfig`
+2. **操作层面**：使用了已废弃的旧单体二进制（`core/target/release/agent-orchestrator`），该二进制绕过 daemon RPC 直接操作数据库
 
-## 建议修复
+## 修复内容
 
-1. **文档层面**（已完成）：执行模板中明确使用新 CLI 二进制路径，并说明 apply 通过 RPC 热加载不需要重启
-2. **代码层面**：确认 `db reset` / `init` 在 C/S 模式下的行为：
-   - 如果 daemon 未运行，直接操作 SQLite 是合理的
-   - 如果 daemon 已运行，应通过 RPC 通知 daemon reload，或至少给出警告
-3. **CLI 层面**：当 daemon 正在运行时，`db reset` 和 `init` 应检测并警告用户（类似 k8s 的 `kubectl` 不会让你直接操作 etcd）
+1. **代码修复**（已完成）：`run_db_reset` 在 `include_config` 时同步清空 daemon 内存中的 `ActiveConfig`、`active_config_error`、`active_config_notice`
+   - 文件：`core/src/service/system.rs`
+2. **旧二进制清理**（已完成）：`core` crate 已是纯 library crate（无 `main.rs`、无 `[[bin]]`），不再产生独立二进制。`core/target/release/agent-orchestrator` 为历史构建残留物，已标记为废弃
+3. **文档对齐**（已完成）：执行模板和 skill 文档统一使用新 CLI 路径 `target/release/orchestrator`
 
 ## 严重性
 
-中。不影响功能正确性，但会导致操作者困惑和浪费调试时间。
+低。正常操作流程中 `db reset --include-config` 后必然紧跟 `apply`，不一致窗口很短。

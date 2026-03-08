@@ -25,7 +25,7 @@ pub async fn connect() -> Result<OrchestratorServiceClient<Channel>> {
 
     if !socket_path.exists() {
         anyhow::bail!(
-            "daemon socket not found at {}. Is the daemon running?\n  Start it with: orchestrator daemon start",
+            "daemon socket not found at {}. Is the daemon running?\n  Start it with: orchestratord --foreground --workers 2",
             socket_path.display()
         );
     }

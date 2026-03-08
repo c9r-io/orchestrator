@@ -21,6 +21,3 @@ tonic = "0.12"
 tokio-stream = "0.1"
 tower = "0.4"
 hyper-util = "0.1"
-
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"
