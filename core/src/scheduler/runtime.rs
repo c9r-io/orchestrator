@@ -204,7 +204,13 @@ pub async fn load_task_runtime_context(
         .filter(|plan| !plan.steps.is_empty())
         .unwrap_or_else(|| {
             build_execution_plan_for_project(&active.config, workflow, &workflow_id, &project_id)
-                .or_else(|_| build_execution_plan(&active.config, workflow, &workflow_id))
+                .or_else(|e| {
+                    if project_id.is_empty() {
+                        build_execution_plan(&active.config, workflow, &workflow_id)
+                    } else {
+                        Err(e) // No fallback for project-scoped tasks
+                    }
+                })
                 .unwrap_or(TaskExecutionPlan {
                     steps: Vec::new(),
                     loop_policy: crate::config::WorkflowLoopConfig::default(),

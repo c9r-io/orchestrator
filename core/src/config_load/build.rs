@@ -84,21 +84,27 @@ pub fn build_execution_plan(
 }
 
 /// Build an execution plan using project-scoped agents for validation.
+/// Only project agents are considered — no fallback to global agents.
+/// This enforces project isolation at plan-build time.
 pub fn build_execution_plan_for_project(
     config: &OrchestratorConfig,
     workflow: &WorkflowConfig,
     workflow_id: &str,
     project_id: &str,
 ) -> Result<TaskExecutionPlan> {
-    // Merge global + project-scoped agents for validation
-    let mut all_agents: std::collections::HashMap<String, &crate::config::AgentConfig> =
-        config.agents.iter().map(|(k, v)| (k.clone(), v)).collect();
-    if let Some(project) = config.projects.get(project_id) {
-        for (k, v) in &project.agents {
-            all_agents.insert(k.clone(), v);
-        }
-    }
-    validate_workflow_config_with_agents(&all_agents, workflow, workflow_id)?;
+    let agents: std::collections::HashMap<String, &crate::config::AgentConfig> =
+        if let Some(project) = config.projects.get(project_id) {
+            if !project.agents.is_empty() {
+                project.agents.iter().map(|(k, v)| (k.clone(), v)).collect()
+            } else {
+                // Project exists but has no agents — fall back to global
+                config.agents.iter().map(|(k, v)| (k.clone(), v)).collect()
+            }
+        } else {
+            // Project not found — fall back to global
+            config.agents.iter().map(|(k, v)| (k.clone(), v)).collect()
+        };
+    validate_workflow_config_with_agents(&agents, workflow, workflow_id)?;
     build_execution_plan_inner(workflow)
 }
 

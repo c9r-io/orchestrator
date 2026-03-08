@@ -114,36 +114,28 @@ pub fn select_agent_by_preference(
     Ok((agent_id.clone(), command, config.prompt_delivery))
 }
 
-/// Resolve effective agents for a task: project-scoped agents take priority
-/// over global agents when the project has any agent with the required capability.
-/// If project_id is empty or the project has no matching agents, falls back to global.
+/// Resolve effective agents for a task: project-scoped agents are **exclusive**
+/// when the project has agents registered. No fallback to global agents.
+/// This enforces project isolation — if a project lacks an agent with the
+/// required capability, selection will fail with a clear error rather than
+/// silently falling back to global agents (which may invoke paid AI services).
 pub fn resolve_effective_agents<'a>(
     project_id: &str,
     config: &'a crate::config::OrchestratorConfig,
-    capability: Option<&str>,
+    _capability: Option<&str>,
 ) -> &'a HashMap<String, AgentConfig> {
     if !project_id.is_empty() {
         if let Some(project) = config.projects.get(project_id) {
             if !project.agents.is_empty() {
-                // If a capability is required, check if any project agent has it
-                if let Some(cap) = capability {
-                    let has_capable = project
-                        .agents
-                        .values()
-                        .any(|agent| agent.supports_capability(cap));
-                    if has_capable {
-                        return &project.agents;
-                    }
-                } else {
-                    // No capability required — project has agents, use them
-                    return &project.agents;
-                }
+                return &project.agents;
             }
         }
     }
     &config.agents
 }
 
+/// Resolve an agent by ID. When a project has agents registered, only look
+/// in the project scope — never fall back to global agents.
 pub fn resolve_agent_by_id<'a>(
     project_id: &str,
     config: &'a crate::config::OrchestratorConfig,
@@ -151,8 +143,8 @@ pub fn resolve_agent_by_id<'a>(
 ) -> Option<&'a AgentConfig> {
     if !project_id.is_empty() {
         if let Some(project) = config.projects.get(project_id) {
-            if let Some(agent) = project.agents.get(agent_id) {
-                return Some(agent);
+            if !project.agents.is_empty() {
+                return project.agents.get(agent_id);
             }
         }
     }
@@ -515,12 +507,13 @@ mod tests {
     }
 
     #[test]
-    fn resolve_effective_agents_falls_back_to_global_when_project_lacks_capability() {
+    fn resolve_effective_agents_stays_in_project_even_when_capability_missing() {
         let config = make_config_with_project_agents();
-        // Project has no "fix" agent → fall back to global
+        // Project has no "fix" agent — but should NOT fall back to global.
+        // Returns project agents; selection will fail with a clear error.
         let agents = resolve_effective_agents("my-project", &config, Some("fix"));
-        assert!(agents.contains_key("global_fix"));
-        assert!(!agents.contains_key("proj_qa"));
+        assert!(agents.contains_key("proj_qa"));
+        assert!(!agents.contains_key("global_fix"));
     }
 
     #[test]

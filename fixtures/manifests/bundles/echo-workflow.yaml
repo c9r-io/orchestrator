@@ -18,6 +18,16 @@ spec:
     - fix
     - retest
     - loop_guard
+    - plan
+    - implement
+    - qa_testing
+    - qa_doc_gen
+    - align_tests
+    - doc_governance
+    - ticket_fix
+    - evaluate
+    - build
+    - test
   command: "echo '{\"confidence\":0.93,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-pass\",\"description\":\"qa passed for target-file\",\"severity\":\"info\"}]}]}'"
 ---
 apiVersion: orchestrator.dev/v2
