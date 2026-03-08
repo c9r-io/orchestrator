@@ -1,6 +1,6 @@
 # Self-Bootstrap Survival Smoke Runbook
 
-Date baseline: 2026-02-27
+Date baseline: 2026-03-08
 Repository: `/Volumes/Yotta/ai_native_sdlc`
 Entry CLI: `./scripts/run-cli.sh`
 
@@ -39,7 +39,7 @@ cd /Volumes/Yotta/ai_native_sdlc
 ### 2.1 Build and Verify CLI
 
 ```bash
-cd core && cargo build --release && cd ..
+cargo build --release -p orchestratord -p orchestrator
 
 orchestratord --help
 orchestrator task --help
@@ -200,7 +200,7 @@ kill "$START_PID" 2>/dev/null; wait "$START_PID" 2>/dev/null
 
 # Verify .stable was created
 ls -la .stable
-ls -la core/target/release/agent-orchestrator
+ls -la target/release/orchestratord
 
 # Query events
 sqlite3 data/agent_orchestrator.db "
@@ -228,7 +228,7 @@ Expected:
 
 ```bash
 # Verify codebase is clean first
-cd core && cargo check && cargo test --lib && cd ..
+cargo check -p agent-orchestrator && cargo test -p agent-orchestrator --lib
 
 cat > /tmp/smoke-selftest.yaml <<'YAML'
 apiVersion: orchestrator.dev/v2
@@ -381,7 +381,7 @@ idx = text.rfind(needle)
 assert idx != -1, "marker not found"
 p.write_text(text[:idx] + text[idx + len(needle):])
 PY
-cd core && cargo check && cd ..
+cargo check -p agent-orchestrator
 ```
 
 Expected:
@@ -545,12 +545,12 @@ Expected:
 
 ```bash
 # Create .stable from known-good binary
-cp core/target/release/agent-orchestrator .stable
+cp target/release/orchestratord .stable
 
 # Replace binary with broken one
-cp core/target/release/agent-orchestrator /tmp/smoke-binary-backup
-echo "broken" > core/target/release/agent-orchestrator
-chmod +x core/target/release/agent-orchestrator
+cp target/release/orchestratord /tmp/smoke-binary-backup
+echo "broken" > target/release/orchestratord
+chmod +x target/release/orchestratord
 
 # Start watchdog with fast poll
 WATCHDOG_POLL_INTERVAL=2 WATCHDOG_MAX_FAILURES=3 WATCHDOG_HEALTH_TIMEOUT=2 \
@@ -563,9 +563,9 @@ until rg -q "binary restored successfully" /tmp/smoke-watchdog.txt; do
 done
 
 # Verify binary restored and healthy after the restore completes
-core/target/release/agent-orchestrator --help >/dev/null 2>&1
+target/release/orchestratord --help >/dev/null 2>&1
 sleep 2
-core/target/release/agent-orchestrator --help >/dev/null 2>&1
+target/release/orchestratord --help >/dev/null 2>&1
 
 # Check watchdog output
 cat /tmp/smoke-watchdog.txt
@@ -576,7 +576,7 @@ wait "$WATCHDOG_PID" 2>/dev/null
 tail -1 /tmp/smoke-watchdog.txt
 
 # Restore original binary
-cp /tmp/smoke-binary-backup core/target/release/agent-orchestrator
+cp /tmp/smoke-binary-backup target/release/orchestratord
 rm -f /tmp/smoke-binary-backup
 ```
 
@@ -585,7 +585,7 @@ Expected:
 - `health check failed (1/3)`, `(2/3)`, `(3/3)`
 - `3 consecutive failures — triggering restore`
 - `[watchdog] binary restored successfully`
-- `agent-orchestrator --help` exits 0 after restore
+- `orchestratord --help` exits 0 after restore
 - `[watchdog] shutting down gracefully`
 
 ---

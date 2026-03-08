@@ -166,7 +166,7 @@ Cycle 2 (validation):  implement → self_test → qa_testing → ticket_fix →
 
 - `repeatable: false` on plan/qa_doc_gen → only Cycle 1
 - QA steps gated by `prehook.when: "is_last_cycle"` → only Cycle 2
-- Exit code 75 from self_restart → watchdog relaunches with new binary
+- `self_restart` uses exec-based hot reload inside the daemon (preserves PID); CLI foreground mode has exit-code-75 fallback loop
 
 ### Self-Referential Workspace
 
@@ -180,7 +180,15 @@ spec:
 1. **Binary Snapshot**: `.stable` backup at cycle start
 2. **Self-Test Gate**: cargo check + cargo test --lib + manifest validate
 3. **Self-Referential Enforcement**: `self_referential_safe` prehook variable filters unsafe QA docs
-4. **Watchdog**: daemon restores .stable on consecutive crashes
+4. **Watchdog**: restores `.stable` on consecutive crashes
+
+### Self-Restart Flow (exec-based)
+
+1. `execute_self_restart_step()` builds new binary, verifies via `--help`, snapshots as `.stable`
+2. Returns `RestartRequestedError` up the call stack
+3. Daemon worker catches the error, sends binary path via watch channel
+4. Daemon drains workers (30s timeout), then calls `exec()` to replace process in-place (same PID)
+5. Fallback: if exec fails, CLI foreground loop catches exit code 75 and relaunches
 
 ## Safety Configuration
 

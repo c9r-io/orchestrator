@@ -13,16 +13,30 @@ description: >-
 
 # Agent Orchestrator Guide
 
-## Entry Point
+## Architecture (Client/Server)
 
-All commands: `orchestrator <command>` (CLI client) or `orchestratord` (daemon).
+The orchestrator uses a **client/server** model over gRPC:
+
+- **`orchestratord`** — daemon process (gRPC server + worker pool). Listens on UDS (`data/orchestrator.sock`) by default, or TCP with `--bind`.
+- **`orchestrator`** — thin CLI client that forwards all commands to the daemon via gRPC.
+
+Start the daemon first, then use the CLI:
+
+```bash
+orchestrator daemon start            # background (default)
+orchestrator daemon start --foreground  # foreground with restart loop
+orchestrator daemon status           # check daemon health
+orchestrator daemon stop             # graceful shutdown
+orchestrator daemon restart          # stop + start
+```
 
 ## Core Workflow
 
-1. `init` — create SQLite schema
-2. `apply -f manifest.yaml` — load resources (Workspace/Agent/Workflow/StepTemplate)
-3. `task create --name X --goal Y --workflow Z` — create and run a task
-4. `task info <id>` / `task logs <id>` — inspect results
+1. `orchestrator daemon start` — start the daemon
+2. `orchestrator init` — create SQLite schema
+3. `orchestrator apply -f manifest.yaml` — load resources
+4. `orchestrator task create --name X --goal Y --workflow Z` — create and run a task
+5. `orchestrator task info <id>` / `task logs <id>` — inspect results
 
 ## Resource Kinds
 

@@ -3,7 +3,9 @@
 ## Table of Contents
 - [Global Options](#global-options)
 - [Aliases](#aliases)
+- [Daemon Lifecycle](#daemon-lifecycle)
 - [Init & Apply](#init--apply)
+- [Manifest Operations](#manifest-operations)
 - [Resource Queries](#resource-queries)
 - [Task Lifecycle](#task-lifecycle)
 - [Persistent Store](#persistent-store)
@@ -35,94 +37,119 @@
 | edit | e |
 | config | cfg |
 | check | ck |
+| daemon | d |
+
+## Daemon Lifecycle
+
+```bash
+# Start daemon (background by default)
+orchestrator daemon start
+orchestrator daemon start --foreground        # with restart loop
+orchestrator daemon start --bind 0.0.0.0:9090 # TCP instead of UDS
+orchestrator daemon start --workers 4         # worker pool size
+
+# Manage
+orchestrator daemon status                    # PID, version, uptime
+orchestrator daemon stop                      # graceful SIGTERM
+orchestrator daemon restart                   # stop + start
+```
+
+Connection: CLI connects via UDS (`data/orchestrator.sock`) by default, or `$ORCHESTRATOR_SOCKET` env.
 
 ## Init & Apply
 
 ```bash
-./scripts/run-cli.sh init
-./scripts/run-cli.sh apply -f manifest.yaml
-./scripts/run-cli.sh apply -f manifest.yaml --dry-run
-./scripts/run-cli.sh apply -f manifest.yaml --project my-project
-cat manifest.yaml | ./scripts/run-cli.sh apply -f -
+orchestrator init
+orchestrator apply -f manifest.yaml
+orchestrator apply -f manifest.yaml --dry-run
+orchestrator apply -f manifest.yaml --project my-project
+cat manifest.yaml | orchestrator apply -f -
+```
+
+## Manifest Operations
+
+```bash
+orchestrator manifest validate -f manifest.yaml
+cat manifest.yaml | orchestrator manifest validate -f -
 ```
 
 ## Resource Queries
 
 ```bash
-./scripts/run-cli.sh get workspaces
-./scripts/run-cli.sh get agents -o json
-./scripts/run-cli.sh get workflows -o yaml
-./scripts/run-cli.sh get workspaces -l env=dev
-./scripts/run-cli.sh describe workspace default
-./scripts/run-cli.sh delete agent old-agent
-./scripts/run-cli.sh manifest export
-./scripts/run-cli.sh edit workspace default
-./scripts/run-cli.sh check
+orchestrator get workspaces
+orchestrator get agents -o json
+orchestrator get workflows -o yaml
+orchestrator get workspaces -l env=dev
+orchestrator describe workspace default
+orchestrator delete agent old-agent
+orchestrator manifest export
+orchestrator edit workspace default
+orchestrator check
 ```
 
 ## Task Lifecycle
 
 ```bash
 # Create
-./scripts/run-cli.sh task create \
+orchestrator task create \
   --name "task-name" --goal "description" \
   --workflow self-bootstrap --project my-project \
   --target-file docs/qa/01.md   # repeatable
-./scripts/run-cli.sh task create --name X --goal Y --no-start
-./scripts/run-cli.sh task create --name X --goal Y --detach
+orchestrator task create --name X --goal Y --no-start
+orchestrator task create --name X --goal Y --detach
 
 # Control
-./scripts/run-cli.sh task start <id>
-./scripts/run-cli.sh task start <id> --detach
-./scripts/run-cli.sh task pause <id>
-./scripts/run-cli.sh task resume <id>
-./scripts/run-cli.sh task retry <id> --item <item_id> --force
+orchestrator task start <id>
+orchestrator task start <id> --detach
+orchestrator task pause <id>
+orchestrator task resume <id>
+orchestrator task retry <id> --item <item_id> --force
 
 # Inspect
-./scripts/run-cli.sh task list -o json
-./scripts/run-cli.sh task info <id> -o yaml
-./scripts/run-cli.sh task logs <id>
-./scripts/run-cli.sh task watch <id>
-./scripts/run-cli.sh task trace <id>
+orchestrator task list -o json
+orchestrator task info <id> -o yaml
+orchestrator task logs <id>
+orchestrator task watch <id>
+orchestrator task trace <id>
 
 # Other
-./scripts/run-cli.sh task delete <id>
-./scripts/run-cli.sh task edit --help
-./scripts/run-cli.sh task worker start
-./scripts/run-cli.sh task session list
-./scripts/run-cli.sh exec -it <task_id> <step_id>
+orchestrator task delete <id>
+orchestrator task edit --help
+orchestrator task worker start
+orchestrator task session list
+orchestrator exec -it <task_id> <step_id>
 ```
 
 ## Persistent Store
 
 ```bash
-./scripts/run-cli.sh store put <store> <key> <value>
-./scripts/run-cli.sh store get <store> <key>
-./scripts/run-cli.sh store list <store>
-./scripts/run-cli.sh store delete <store> <key>
-./scripts/run-cli.sh store prune <store>
+orchestrator store put <store> <key> <value>
+orchestrator store get <store> <key>
+orchestrator store list <store>
+orchestrator store delete <store> <key>
+orchestrator store prune <store>
 ```
 
 ## QA & Database
 
 ```bash
 # Project-scoped reset (safe, isolated)
-./scripts/run-cli.sh qa project reset <project> --keep-config --force
-./scripts/run-cli.sh qa project create <project> --force
-./scripts/run-cli.sh qa doctor
+orchestrator qa project reset <project> --keep-config --force
+orchestrator qa project create <project> --force
+orchestrator qa doctor
 
 # Database reset (DESTRUCTIVE)
-./scripts/run-cli.sh db reset --force
-./scripts/run-cli.sh db reset --force --include-config
+orchestrator db reset --force
+orchestrator db reset --force --include-config
 ```
 
 ## Other Commands
 
 ```bash
-./scripts/run-cli.sh debug
-./scripts/run-cli.sh verify
-./scripts/run-cli.sh version
-./scripts/run-cli.sh config heal-log
-./scripts/run-cli.sh config backfill-events --force
-./scripts/run-cli.sh completion bash > ~/.bash_completion.d/orchestrator
+orchestrator debug
+orchestrator verify
+orchestrator version
+orchestrator config heal-log
+orchestrator config backfill-events --force
+orchestrator completion bash > ~/.bash_completion.d/orchestrator
 ```
