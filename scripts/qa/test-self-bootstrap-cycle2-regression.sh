@@ -45,7 +45,7 @@ mkdir -p fixtures/bootstrap-qa
 printf '# Bootstrap QA target\n' > fixtures/bootstrap-qa/bootstrap-check.md
 
 info "Applying deterministic fixture resources"
-$ORCH apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml >/dev/null
+$ORCH apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml --project self-bootstrap >/dev/null
 
 WORKFLOW_FILE="$(mktemp "${TMPDIR:-/tmp}/qa-cycle2-regression.XXXXXX.yaml")"
 cat > "$WORKFLOW_FILE" <<'EOF'
@@ -131,9 +131,10 @@ spec:
 EOF
 
 info "Applying deterministic regression workflow"
-$ORCH apply -f "$WORKFLOW_FILE" >/dev/null
+$ORCH apply -f "$WORKFLOW_FILE" --project self-bootstrap >/dev/null
 
 TASK_ID="$($ORCH task create \
+  --project self-bootstrap \
   --workspace bootstrap-ws \
   --workflow qa_cycle2_validation_deterministic \
   --target-file fixtures/bootstrap-qa/bootstrap-check.md \

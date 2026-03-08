@@ -68,6 +68,7 @@ spec:
     - ticket_fix
     - doc_governance
     - align_tests
+    - loop_guard
   command: "echo '{\"confidence\":0.9,\"quality_score\":0.88,\"artifacts\":[]}'"
 ---
 apiVersion: orchestrator.dev/v2
