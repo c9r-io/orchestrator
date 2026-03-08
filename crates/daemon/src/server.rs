@@ -326,10 +326,65 @@ impl OrchestratorService for OrchestratorServer {
 
     async fn task_watch(
         &self,
-        _request: Request<TaskWatchRequest>,
+        request: Request<TaskWatchRequest>,
     ) -> Result<Response<Self::TaskWatchStream>, Status> {
-        // TODO: implement watch streaming
-        Err(Status::unimplemented("task watch not yet implemented"))
+        let req = request.into_inner();
+        let state = self.state.clone();
+        let interval_secs = if req.interval_secs == 0 {
+            2
+        } else {
+            req.interval_secs
+        };
+        let (tx, rx) = tokio::sync::mpsc::channel(16);
+
+        tokio::spawn(async move {
+            let interval = std::time::Duration::from_secs(interval_secs);
+            loop {
+                let summary = match agent_orchestrator::service::task::load_summary(
+                    &state,
+                    &req.task_id,
+                )
+                .await
+                {
+                    Ok(s) => s,
+                    Err(_) => break,
+                };
+
+                let detail = match agent_orchestrator::service::task::get_task_detail(
+                    &state,
+                    &req.task_id,
+                )
+                .await
+                {
+                    Ok(d) => d,
+                    Err(_) => break,
+                };
+
+                let snapshot = TaskWatchSnapshot {
+                    task: Some(summary_to_proto(&summary)),
+                    items: detail.items.into_iter().map(item_to_proto).collect(),
+                };
+
+                if tx.send(Ok(snapshot)).await.is_err() {
+                    break; // client disconnected
+                }
+
+                // Stop streaming on terminal status
+                let terminal = matches!(
+                    summary.status.as_str(),
+                    "completed" | "failed" | "cancelled" | "deleted"
+                );
+                if terminal {
+                    break;
+                }
+
+                tokio::time::sleep(interval).await;
+            }
+        });
+
+        Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
+            rx,
+        )))
     }
 
     // ─── Resource management ──────────────────────────────────
@@ -557,6 +612,85 @@ impl OrchestratorService for OrchestratorServer {
             format: req.output_format,
             exit_code,
         }))
+    }
+
+    async fn init(
+        &self,
+        request: Request<InitRequest>,
+    ) -> Result<Response<InitResponse>, Status> {
+        let req = request.into_inner();
+        let message = agent_orchestrator::service::system::run_init(
+            &self.state,
+            req.root.as_deref(),
+        )
+        .map_err(|e| Status::internal(format!("{e}")))?;
+        Ok(Response::new(InitResponse { message }))
+    }
+
+    async fn db_reset(
+        &self,
+        request: Request<DbResetRequest>,
+    ) -> Result<Response<DbResetResponse>, Status> {
+        let req = request.into_inner();
+        let message = agent_orchestrator::service::system::run_db_reset(
+            &self.state,
+            req.force,
+            req.include_history,
+            req.include_config,
+        )
+        .map_err(|e| Status::internal(format!("{e}")))?;
+        Ok(Response::new(DbResetResponse { message }))
+    }
+
+    async fn manifest_validate(
+        &self,
+        request: Request<ManifestValidateRequest>,
+    ) -> Result<Response<ManifestValidateResponse>, Status> {
+        let req = request.into_inner();
+        let (valid, errors, message) =
+            agent_orchestrator::service::system::validate_manifests(&self.state, &req.content)
+                .map_err(|e| Status::internal(format!("{e}")))?;
+        Ok(Response::new(ManifestValidateResponse {
+            valid,
+            errors,
+            message,
+        }))
+    }
+
+    async fn task_trace(
+        &self,
+        request: Request<TaskTraceRequest>,
+    ) -> Result<Response<TaskTraceResponse>, Status> {
+        let req = request.into_inner();
+        let result =
+            agent_orchestrator::service::task::get_task_trace(&self.state, &req.task_id, req.verbose)
+                .await
+                .map_err(|e| Status::internal(format!("{e}")))?;
+
+        let entries = result
+            .entries
+            .into_iter()
+            .map(|e| TraceEntry {
+                timestamp: e.timestamp,
+                event_type: e.event_type,
+                step: e.step,
+                item_id: e.item_id,
+                payload_json: e.payload_json,
+            })
+            .collect();
+
+        let anomalies = result
+            .anomalies
+            .into_iter()
+            .map(|a| Anomaly {
+                rule: a.rule,
+                severity: format!("{:?}", a.severity).to_lowercase(),
+                message: a.message,
+                at: a.at,
+            })
+            .collect();
+
+        Ok(Response::new(TaskTraceResponse { entries, anomalies }))
     }
 }
 

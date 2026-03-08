@@ -7,7 +7,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-BINARY_PATH="${BINARY_PATH:-$PROJECT_ROOT/core/target/release/agent-orchestrator}"
+BINARY_PATH="${BINARY_PATH:-$PROJECT_ROOT/target/release/orchestratord}"
 STABLE_PATH="${STABLE_PATH:-$PROJECT_ROOT/.stable}"
 POLL_INTERVAL="${WATCHDOG_POLL_INTERVAL:-60}"
 MAX_FAILURES="${WATCHDOG_MAX_FAILURES:-3}"

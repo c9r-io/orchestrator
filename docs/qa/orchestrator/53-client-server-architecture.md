@@ -20,7 +20,7 @@ The daemon holds all state (engine, DB, task queue) and the CLI is a thin RPC cl
 Entry points:
 - Daemon: `./target/release/orchestratord [--foreground] [--bind addr] [--workers N]`
 - CLI: `./target/release/orchestrator <command>`
-- Legacy (standalone): `./scripts/orchestrator.sh <command>`
+- Foreground with restart: `orchestrator daemon start -f`
 
 ---
 

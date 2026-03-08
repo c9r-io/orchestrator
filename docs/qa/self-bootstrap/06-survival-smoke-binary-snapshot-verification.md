@@ -24,7 +24,7 @@ Module: `core/src/scheduler/safety.rs`
 
 ### Preconditions
 - Temporary workspace directory exists
-- Release binary exists at `core/target/release/agent-orchestrator`
+- Release binary exists at `target/release/orchestratord`
 - `.stable` file exists with identical content
 
 ### Goal
@@ -32,7 +32,7 @@ Verify that `verify_binary_snapshot` returns a successful result indicating bina
 
 ### Steps
 1. Create temp workspace dir
-2. Create `core/target/release/agent-orchestrator` with content: "BINARY_v1.0"
+2. Create `target/release/orchestratord` with content: "BINARY_v1.0"
 3. Call `snapshot_binary(&workspace_root).await`
 4. Call `verify_binary_snapshot(&workspace_root).await`
 5. Check the returned `BinaryVerificationResult`
@@ -56,7 +56,7 @@ Verify that `verify_binary_snapshot` correctly detects when the release binary d
 
 ### Steps
 1. Create temp workspace dir
-2. Create `core/target/release/agent-orchestrator` with content: "ORIGINAL_BINARY"
+2. Create `target/release/orchestratord` with content: "ORIGINAL_BINARY"
 3. Call `snapshot_binary(&workspace_root).await`
 4. Modify the release binary: write "MODIFIED_BINARY"
 5. Call `verify_binary_snapshot(&workspace_root).await`
@@ -80,7 +80,7 @@ End-to-end verification that the entire snapshot/restore workflow maintains bina
 
 ### Steps
 1. Create temp workspace dir
-2. Create `core/target/release/agent-orchestrator` with test content: `vec![0xDE, 0xAD, 0xBE, 0xEF]`
+2. Create `target/release/orchestratord` with test content: `vec![0xDE, 0xAD, 0xBE, 0xEF]`
 3. Call `snapshot_binary(&workspace_root).await` - creates `.stable`
 4. Modify the release binary: write `vec![0xCA, 0xFE, 0xBA, 0xBE]`
 5. Call `verify_binary_snapshot(&workspace_root).await` - should report mismatch
@@ -114,7 +114,7 @@ assert!(result.verified);
 
 ### Preconditions
 - Temporary workspace directory exists
-- Release binary exists at `core/target/release/agent-orchestrator`
+- Release binary exists at `target/release/orchestratord`
 - No `.stable` file exists in workspace
 
 ### Goal
@@ -122,7 +122,7 @@ Verify that `verify_binary_snapshot` returns an error when the `.stable` snapsho
 
 ### Steps
 1. Create temp workspace dir
-2. Create `core/target/release/agent-orchestrator` with test content
+2. Create `target/release/orchestratord` with test content
 3. Ensure no `.stable` file exists
 4. Call `verify_binary_snapshot(&workspace_root).await`
 
@@ -135,7 +135,7 @@ Verify that `verify_binary_snapshot` returns an error when the `.stable` snapsho
 
 ### Preconditions
 - Temporary workspace directory exists
-- No release binary exists at `core/target/release/agent-orchestrator`
+- No release binary exists at `target/release/orchestratord`
 - `.stable` file may or may not exist
 
 ### Goal

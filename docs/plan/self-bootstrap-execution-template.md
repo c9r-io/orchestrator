@@ -170,7 +170,7 @@ cd core && cargo build --release && cd ..
 ### 4.3 进程监控
 
 ```bash
-ps aux | grep -E "opencode|agent-orchestrator" | grep -v grep
+ps aux | grep -E "opencode|orchestratord" | grep -v grep
 git diff --stat
 ```
 

@@ -2,7 +2,8 @@ use crate::config_load::read_active_config;
 use crate::scheduler::check::run_checks;
 use crate::scheduler_service::{pending_task_count, worker_stop_signal_path};
 use crate::state::InnerState;
-use anyhow::Result;
+use anyhow::{Context, Result};
+use std::path::Path;
 
 /// Get debug information for a component.
 pub fn debug_info(state: &InnerState, component: Option<&str>) -> Result<String> {
@@ -37,6 +38,111 @@ pub async fn worker_status(state: &InnerState) -> Result<orchestrator_proto::Wor
         stop_signal,
         active_workers: 0, // TODO: track active worker count
     })
+}
+
+/// Initialize orchestrator runtime at the given root.
+pub fn run_init(state: &InnerState, root: Option<&str>) -> Result<String> {
+    if let Some(root_path) = root {
+        let path = if Path::new(root_path).is_absolute() {
+            std::path::PathBuf::from(root_path)
+        } else {
+            state.app_root.join(root_path)
+        };
+        std::fs::create_dir_all(&path)
+            .with_context(|| format!("failed to create workspace root {}", path.display()))?;
+    }
+    Ok(format!(
+        "Orchestrator initialized at {} (sqlite: {})",
+        state.app_root.display(),
+        state.db_path.display()
+    ))
+}
+
+/// Reset the database.
+pub fn run_db_reset(
+    state: &InnerState,
+    force: bool,
+    include_history: bool,
+    include_config: bool,
+) -> Result<String> {
+    if !force {
+        anyhow::bail!("Use --force to confirm database reset");
+    }
+    crate::db::reset_db_by_path(&state.db_path, include_history, include_config)?;
+    let mut msg = "Database reset completed".to_string();
+    if include_config {
+        msg.push_str("\nAll config versions deleted (next apply starts from blank)");
+    } else if include_history {
+        msg.push_str("\nConfig version history cleared (active version preserved)");
+    }
+    Ok(msg)
+}
+
+/// Validate manifest YAML content. Returns (valid, errors, message).
+pub fn validate_manifests(
+    state: &InnerState,
+    content: &str,
+) -> Result<(bool, Vec<String>, String)> {
+    use crate::crd::{self, ParsedManifest};
+    use crate::resource::{dispatch_resource, kind_as_str, Resource};
+
+    let manifests = match crate::resource::parse_manifests_from_yaml(content) {
+        Ok(m) => m,
+        Err(e) => return Ok((false, vec![e.to_string()], "Parse error".to_string())),
+    };
+
+    let mut merged_config = crate::config_load::load_raw_config_from_db(&state.db_path)?
+        .map(|(cfg, _, _)| cfg)
+        .unwrap_or_default();
+
+    let mut errors = Vec::new();
+    for (index, manifest) in manifests.into_iter().enumerate() {
+        match manifest {
+            ParsedManifest::Builtin(resource) => {
+                if let Err(error) = resource.validate_version() {
+                    errors.push(format!("document {}: {}", index + 1, error));
+                    continue;
+                }
+                let registered = match dispatch_resource(resource) {
+                    Ok(r) => r,
+                    Err(error) => {
+                        errors.push(format!("document {}: {}", index + 1, error));
+                        continue;
+                    }
+                };
+                if let Err(error) = registered.validate() {
+                    errors.push(format!(
+                        "{}/{} invalid: {}",
+                        kind_as_str(registered.kind()),
+                        registered.name(),
+                        error
+                    ));
+                    continue;
+                }
+                let _ = registered.apply(&mut merged_config);
+            }
+            ParsedManifest::Crd(crd_manifest) => {
+                if let Err(error) = crd::apply_crd(&mut merged_config, crd_manifest) {
+                    errors.push(format!("document {}: {}", index + 1, error));
+                }
+            }
+            ParsedManifest::Custom(cr_manifest) => {
+                if let Err(error) = crd::apply_custom_resource(&mut merged_config, cr_manifest) {
+                    errors.push(format!("document {}: {}", index + 1, error));
+                }
+            }
+        }
+    }
+
+    if !errors.is_empty() {
+        return Ok((false, errors, "Validation failed".to_string()));
+    }
+
+    // Try to build active config to validate the full configuration
+    match crate::config_load::build_active_config(&state.app_root, merged_config) {
+        Ok(_) => Ok((true, vec![], "Manifest is valid".to_string())),
+        Err(e) => Ok((false, vec![e.to_string()], "Config build failed".to_string())),
+    }
 }
 
 /// Run preflight checks. Returns (content, exit_code).

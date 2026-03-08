@@ -20,14 +20,14 @@ Verify that binary snapshot is NOT created when `binary_snapshot: false` or when
 
 ```bash
 rm -f fixtures/ticket/auto_*.md
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
+orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml
 QA_PROJECT="qa-survival"
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --force
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
+orchestrator qa project reset "${QA_PROJECT}" --force
+orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
 ```
 
 - ✅ Common Preconditions applied (qa-survival project, **mock** self-bootstrap workflow)
-- ✅ Release binary exists at `core/target/release/agent-orchestrator`
+- ✅ Release binary exists at `target/release/orchestratord`
 - ✅ `.stable` file may exist from previous tests
 
 ### Steps

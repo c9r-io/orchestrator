@@ -33,7 +33,7 @@ All tests use temporary directories created via `tempfile::tempdir()` (or std::e
 
 ### Preconditions
 - Temporary workspace directory exists
-- `core/target/release/agent-orchestrator` does NOT exist in workspace
+- `target/release/orchestratord` does NOT exist in workspace
 - A test file at `test_binary` with known content
 
 ### Goal
@@ -42,7 +42,7 @@ Verify that snapshot_binary copies the binary to `.stable` when binary exists.
 ### Steps
 1. Create temp workspace dir
 2. Create `core/target/release/` directory structure
-3. Write test content to `core/target/release/agent-orchestrator`
+3. Write test content to `target/release/orchestratord`
 4. Call `snapshot_binary(&workspace_root).await`
 5. Verify `.stable` file exists
 
@@ -54,7 +54,7 @@ Verify that snapshot_binary copies the binary to `.stable` when binary exists.
 ### Expected Data State
 ```rust
 // Verify file contents match
-let original = fs::read(workspace_root.join("core/target/release/agent-orchestrator")).await?;
+let original = fs::read(workspace_root.join("target/release/orchestratord")).await?;
 let stable = fs::read(workspace_root.join(".stable")).await?;
 assert_eq!(original, stable);
 ```
@@ -98,7 +98,7 @@ Verify that restore_binary_snapshot copies `.stable` back to release binary path
 
 ### Expected
 - `restore_binary_snapshot` returns `Ok(())`
-- `core/target/release/agent-orchestrator` exists
+- `target/release/orchestratord` exists
 - Content matches `.stable`
 
 ---
@@ -132,7 +132,7 @@ Verify that content integrity is maintained through a full snapshot/restore cycl
 
 ### Steps
 1. Create temp workspace dir
-2. Create `core/target/release/agent-orchestrator` with known content: "MOCK_BINARY_v1.0"
+2. Create `target/release/orchestratord` with known content: "MOCK_BINARY_v1.0"
 3. Call `snapshot_binary(&workspace_root).await`
 4. Modify original binary (write different content)
 5. Call `restore_binary_snapshot(&workspace_root).await`

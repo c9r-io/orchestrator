@@ -35,11 +35,11 @@ Workflow: `fixtures/manifests/bundles/self-bootstrap-mock.yaml`
 rm -f fixtures/ticket/auto_*.md
 
 # A global base config must exist first (provides defaults)
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
+orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml
 
 QA_PROJECT="qa-survival"
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --force
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
+orchestrator qa project reset "${QA_PROJECT}" --force
+orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
 ```
 
 ### Troubleshooting
@@ -47,13 +47,13 @@ QA_PROJECT="qa-survival"
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
 | `binary_snapshot_created` event never emitted | `self_referential` resolved to `false` at runtime because `qa project create` was used instead of `apply --project` | Use `apply --project` to preserve workspace config including `self_referential: true` |
-| `snapshot_binary` logs warning "release binary not found" | Binary not built | Run `cd core && cargo build --release` before testing |
+| `snapshot_binary` logs warning "release binary not found" | Binary not built | Run `cargo build --release -p orchestratord` before testing |
 | "no agent supports capability" on task create | Project-scoped agents not checked during validation | Fixed: `build_execution_plan_for_project` merges project + global agents |
 | Task uses global workspace instead of project workspace | No `--workspace` flag and global default doesn't match project | Fixed: auto-resolves to project's single workspace when not specified |
 | "EMPTY_WORKFLOWS" error with project-only config | Global workflow check didn't account for project-scoped workflows | Fixed: validation now checks `has_project_workflows` |
 | "defaults.workflow does not exist" with project-only config | A global base config with at least one workflow/workspace/agent must exist before applying project-scoped resources | Apply `echo-workflow.yaml` (or any base fixture) first |
-| `orchestrator.sh` appears to hang after `[orchestrator] restart requested (exit 75)` | **Not a hang.** The `self_restart` step triggers exit 75; `orchestrator.sh` relaunches the binary which resumes the task in cycle 2. The `self_restart` step has `repeatable: false` so it is skipped on cycle 2, and the process exits normally. Total wall time ≈ 2× a single cycle. | Wait for the full run to complete. If testing restart behavior specifically, call the binary directly (bypassing `orchestrator.sh`) and verify exit code 75 on cycle 1, then re-run `task start <TASK_ID>` to observe cycle 2 completing with exit 0. |
-| `task create` via `orchestrator.sh` creates duplicate tasks | `orchestrator.sh` passes `"$@"` on restart, so `task create` re-runs after exit 75, creating a second task | Use `task create` via the binary directly (`core/target/release/agent-orchestrator task create ...`), then start with `orchestrator.sh task start <TASK_ID>`, or use `task create` + separate `task start` calls |
+| `orchestrator daemon start -f` appears to hang after `[orchestrator] restart requested (exit 75)` | **Not a hang.** The `self_restart` step triggers exit 75; the daemon's built-in restart loop relaunches the process which resumes the task in cycle 2. The `self_restart` step has `repeatable: false` so it is skipped on cycle 2, and the process exits normally. Total wall time ≈ 2× a single cycle. | Wait for the full run to complete. If testing restart behavior specifically, call the binary directly (bypassing the restart loop) and verify exit code 75 on cycle 1, then re-run `task start <TASK_ID>` to observe cycle 2 completing with exit 0. |
+| `task create` via `orchestrator daemon start -f` creates duplicate tasks | The restart loop passes original args on restart, so `task create` re-runs after exit 75, creating a second task | Use `task create` via the binary directly (`target/release/orchestratord task create ...`), then start with `orchestrator daemon start -f task start <TASK_ID>`, or use `task create` + separate `task start` calls |
 
 ---
 
@@ -61,7 +61,7 @@ QA_PROJECT="qa-survival"
 
 ### Preconditions
 - Common Preconditions applied
-- Release binary exists at `core/target/release/agent-orchestrator` (run `cd core && cargo build --release` if needed)
+- Release binary exists at `target/release/orchestratord` (run `cargo build --release -p orchestratord` if needed)
 - Workspace `self` has `self_referential: true` and `binary_snapshot: true`
 
 ### Goal
@@ -74,16 +74,16 @@ Verify that a `.stable` binary copy is created at the start of each cycle when b
    ```
 2. Create a task (use the binary directly to avoid duplicate-task on restart):
    ```bash
-   BINARY="core/target/release/agent-orchestrator"
+   BINARY="target/release/orchestratord"
    $BINARY task create --project "${QA_PROJECT}" --workflow self-bootstrap --goal "test binary snapshot"
    TASK_ID=$($BINARY task list -s restart_pending -o json 2>/dev/null | jq -r '.[0].id // empty')
    # If task auto-started and exited 75, it is now restart_pending.
    # If still pending, start it via orchestrator.sh which handles the restart loop:
    [ -z "$TASK_ID" ] && TASK_ID=$($BINARY task list -s pending -o json 2>/dev/null | jq -r '.[0].id')
    ```
-3. Start (or resume) the task — `orchestrator.sh` handles exit-75 restart automatically:
+3. Start (or resume) the task — `orchestrator daemon start -f` handles exit-75 restart automatically:
    ```bash
-   ./scripts/orchestrator.sh task start "${TASK_ID}"
+   orchestrator daemon start -f task start "${TASK_ID}"
    ```
    > **Note**: The process will exit 75 once (cycle 1 `self_restart`), relaunch,
    > then complete normally on cycle 2 (`self_restart` skipped via `repeatable: false`).
@@ -119,7 +119,7 @@ Verify that when auto-rollback triggers (after max consecutive failures), the `.
 ### Steps
 1. Ensure `.stable` binary exists:
    ```bash
-   cp core/target/release/agent-orchestrator .stable
+   cp target/release/orchestratord .stable
    ```
 2. Create a task that will fail repeatedly (e.g., introduce a compile error in the implement step output).
 3. Start the task and wait for 3 consecutive failures to trigger auto-rollback.
@@ -128,7 +128,7 @@ Verify that when auto-rollback triggers (after max consecutive failures), the `.
 ### Expected
 - Event `auto_rollback` is emitted after 3 consecutive failures
 - Event `binary_snapshot_restored` is emitted in the same cycle as auto-rollback
-- The release binary at `core/target/release/agent-orchestrator` matches the `.stable` file
+- The release binary at `target/release/orchestratord` matches the `.stable` file
 - `consecutive_failures` counter is reset to 0 after rollback
 
 ### Expected Data State
@@ -183,7 +183,7 @@ WHERE task_id = '{task_id}' AND event_type = 'binary_snapshot_created';
 ### Preconditions
 - Common Preconditions applied
 - Codebase is in a clean, compilable state (`cargo check` and `cargo test --lib` pass)
-- `scripts/orchestrator.sh` exists (for manifest validate phase)
+- `orchestrator` CLI is available (for manifest validate phase)
 
 ### Goal
 Verify that the `self_test` builtin step executes all three phases successfully and sets pipeline variables correctly.

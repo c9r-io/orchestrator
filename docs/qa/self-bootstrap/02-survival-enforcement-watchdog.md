@@ -28,7 +28,7 @@ Watchdog script: `scripts/watchdog.sh`.
 rm -f fixtures/ticket/auto_*.md
 
 QA_PROJECT="qa-enforcement"
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --force
+orchestrator qa project reset "${QA_PROJECT}" --force
 ```
 
 ### Troubleshooting
@@ -76,11 +76,11 @@ Verify that starting a task on a self-referential workspace with `checkpoint_str
        checkpoint_strategy: none
    ```
    ```bash
-   ./scripts/orchestrator.sh apply -f /tmp/unsafe-manifest.yaml --project "${QA_PROJECT}"
+   orchestrator apply -f /tmp/unsafe-manifest.yaml --project "${QA_PROJECT}"
    ```
 2. Create a task and attempt to start it:
    ```bash
-   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workflow unsafe-workflow --goal "test unsafe"
+   orchestrator task create --project "${QA_PROJECT}" --workflow unsafe-workflow --goal "test unsafe"
    ```
 
 ### Expected
@@ -133,11 +133,11 @@ Verify that a warning is emitted (not a hard error) when `auto_rollback: false` 
        checkpoint_strategy: git_tag
    ```
    ```bash
-   ./scripts/orchestrator.sh apply -f /tmp/warn-manifest.yaml --project "${QA_PROJECT}"
+   orchestrator apply -f /tmp/warn-manifest.yaml --project "${QA_PROJECT}"
    ```
 2. Create a task and start it, capturing stderr:
    ```bash
-   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workflow warn-workflow --goal "test warn" 2>/tmp/warn-stderr.txt
+   orchestrator task create --project "${QA_PROJECT}" --workflow warn-workflow --goal "test warn" 2>/tmp/warn-stderr.txt
    cat /tmp/warn-stderr.txt
    ```
 
@@ -189,11 +189,11 @@ Verify that a warning is emitted when a self-referential workspace workflow has 
        checkpoint_strategy: git_tag
    ```
    ```bash
-   ./scripts/orchestrator.sh apply -f /tmp/notest-manifest.yaml --project "${QA_PROJECT}"
+   orchestrator apply -f /tmp/notest-manifest.yaml --project "${QA_PROJECT}"
    ```
 2. Create a task and start it, capturing stderr:
    ```bash
-   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workflow notest-workflow --goal "test no self_test" 2>/tmp/notest-stderr.txt
+   orchestrator task create --project "${QA_PROJECT}" --workflow notest-workflow --goal "test no self_test" 2>/tmp/notest-stderr.txt
    cat /tmp/notest-stderr.txt
    ```
 
@@ -207,7 +207,7 @@ Verify that a warning is emitted when a self-referential workspace workflow has 
 ## Scenario 4: Watchdog Detects Healthy Binary and Resets Failure Counter
 
 ### Preconditions
-- Release binary exists and is functional (`core/target/release/agent-orchestrator --help` exits 0)
+- Release binary exists and is functional (`target/release/orchestratord --help` exits 0)
 - No watchdog process currently running
 
 ### Goal
@@ -246,7 +246,7 @@ Verify that the watchdog script correctly identifies a healthy binary and resets
 ### Preconditions
 - `.stable` binary exists and is valid:
   ```bash
-  cp core/target/release/agent-orchestrator .stable
+  cp target/release/orchestratord .stable
   ```
 - Backup the real binary for restoration after test
 
@@ -256,9 +256,9 @@ Verify that the watchdog restores the `.stable` binary after `WATCHDOG_MAX_FAILU
 ### Steps
 1. Back up the real binary and replace it with a broken one:
    ```bash
-   cp core/target/release/agent-orchestrator /tmp/agent-orchestrator-backup
-   echo "broken" > core/target/release/agent-orchestrator
-   chmod +x core/target/release/agent-orchestrator
+   cp target/release/orchestratord /tmp/orchestratord-backup
+   echo "broken" > target/release/orchestratord
+   chmod +x target/release/orchestratord
    ```
 2. Start the watchdog with short intervals:
    ```bash
@@ -274,21 +274,21 @@ Verify that the watchdog restores the `.stable` binary after `WATCHDOG_MAX_FAILU
    ```bash
    cat /tmp/watchdog-restore.txt
    # Verify the binary works again
-   core/target/release/agent-orchestrator --help >/dev/null 2>&1 && echo "RESTORED" || echo "STILL BROKEN"
+   target/release/orchestratord --help >/dev/null 2>&1 && echo "RESTORED" || echo "STILL BROKEN"
    ```
 5. Stop watchdog and clean up:
    ```bash
    kill "$WATCHDOG_PID" 2>/dev/null; wait "$WATCHDOG_PID" 2>/dev/null
    # Restore the original binary (in case .stable was different)
-   cp /tmp/agent-orchestrator-backup core/target/release/agent-orchestrator
-   rm -f /tmp/agent-orchestrator-backup
+   cp /tmp/orchestratord-backup target/release/orchestratord
+   rm -f /tmp/orchestratord-backup
    ```
 
 ### Expected
 - Watchdog output shows 3 consecutive failure messages: `health check failed (1/3)`, `(2/3)`, `(3/3)`
 - After 3rd failure: `3 consecutive failures — triggering restore`
 - Restore message: `[watchdog] binary restored successfully`
-- Binary at `core/target/release/agent-orchestrator` is now functional (exits 0 on `--help`)
+- Binary at `target/release/orchestratord` is now functional (exits 0 on `--help`)
 - Failure counter resets to 0 after successful restore
 - If binary recovers before 3 failures, output shows: `binary recovered after N failure(s)`
 

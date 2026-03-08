@@ -13,18 +13,17 @@ pub const EXIT_RESTART: i64 = 75;
 
 /// Self-restart builtin step: rebuild the binary, verify it, snapshot .stable,
 /// set task status to restart_pending, and return EXIT_RESTART so the process
-/// wrapper (orchestrator.sh) re-launches the new binary.
+/// wrapper (`orchestrator daemon start -f`) re-launches the new binary.
 pub async fn execute_self_restart_step(
     workspace_root: &Path,
     state: &InnerState,
     task_id: &str,
     item_id: &str,
 ) -> Result<i64> {
-    let core_dir = workspace_root.join("core");
     let cargo_bin = std::env::var("ORCH_SELF_TEST_CARGO").unwrap_or_else(|_| "cargo".to_string());
     let binary_path = workspace_root.join(RELEASE_BINARY_REL);
 
-    // Phase 1: cargo build --release
+    // Phase 1: cargo build --release -p orchestratord
     state.emit_event(
         task_id,
         Some(item_id),
@@ -32,8 +31,8 @@ pub async fn execute_self_restart_step(
         json!({"phase": "cargo_build_release"}),
     );
     let build_output = tokio::process::Command::new(&cargo_bin)
-        .args(["build", "--release"])
-        .current_dir(&core_dir)
+        .args(["build", "--release", "-p", "orchestratord"])
+        .current_dir(workspace_root)
         .output()
         .await
         .context("failed to run cargo build --release")?;

@@ -14,7 +14,7 @@ qa_repo_root() {
 qa_binary_path() {
   local root
   root="$(qa_repo_root)"
-  echo "$root/core/target/release/agent-orchestrator"
+  echo "$root/target/release/orchestrator"
 }
 
 qa_require_binary() {
@@ -22,7 +22,7 @@ qa_require_binary() {
   bin="$(qa_binary_path)"
   if [[ ! -x "$bin" ]]; then
     qa_error "Binary not found: $bin"
-    qa_error "Build it with: (cd core && cargo build --release)"
+    qa_error "Build it with: cargo build --release -p orchestrator-cli"
     exit 2
   fi
 }

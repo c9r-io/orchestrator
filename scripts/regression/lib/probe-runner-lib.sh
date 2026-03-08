@@ -33,11 +33,11 @@ probe_repo_root() {
 
 probe_init() {
   PROBE_REPO_ROOT="$(probe_repo_root)"
-  PROBE_BINARY="$PROBE_REPO_ROOT/core/target/release/agent-orchestrator"
+  PROBE_BINARY="$PROBE_REPO_ROOT/target/release/orchestrator"
 
   if [[ ! -x "$PROBE_BINARY" ]]; then
     probe_error "Binary not found: $PROBE_BINARY"
-    probe_error "Build it with: (cd core && cargo build --release)"
+    probe_error "Build it with: cargo build --release -p orchestrator-cli"
     exit 2
   fi
 }

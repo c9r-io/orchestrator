@@ -20,14 +20,39 @@ pub async fn run(cmd: DaemonCommands) -> Result<()> {
             }
 
             if foreground {
-                // Run in foreground — replace current process
-                let status = std::process::Command::new(&daemon_binary)
-                    .args(&args)
-                    .status()
-                    .with_context(|| {
-                        format!("failed to start daemon: {}", daemon_binary.display())
-                    })?;
-                std::process::exit(status.code().unwrap_or(1));
+                // Run in foreground with restart loop — if daemon exits with code 75,
+                // relaunch it (self-restart after binary rebuild).
+                const EXIT_RESTART: i32 = 75;
+                loop {
+                    let status = std::process::Command::new(&daemon_binary)
+                        .args(&args)
+                        .status()
+                        .with_context(|| {
+                            format!("failed to start daemon: {}", daemon_binary.display())
+                        })?;
+                    let code = status.code().unwrap_or(1);
+                    if code == EXIT_RESTART {
+                        eprintln!(
+                            "[orchestrator] restart requested (exit {}) — re-launching daemon",
+                            EXIT_RESTART
+                        );
+                        // Verify daemon binary still exists
+                        if !daemon_binary.exists() {
+                            eprintln!(
+                                "[orchestrator] daemon binary missing after restart — rebuilding"
+                            );
+                            let rebuild = std::process::Command::new("cargo")
+                                .args(["build", "--release", "-p", "orchestratord"])
+                                .status();
+                            if let Err(e) = rebuild {
+                                eprintln!("[orchestrator] rebuild failed: {}", e);
+                                std::process::exit(1);
+                            }
+                        }
+                        continue;
+                    }
+                    std::process::exit(code);
+                }
             } else {
                 // Daemonize — spawn and detach
                 let child = std::process::Command::new(&daemon_binary)

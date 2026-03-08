@@ -1028,7 +1028,7 @@ fn binary_snapshot_smoke_verify_integration() {
     ));
     std::fs::create_dir_all(&temp_dir).expect("create temp dir");
 
-    let binary_path = temp_dir.join("core/target/release/agent-orchestrator");
+    let binary_path = temp_dir.join("target/release/orchestratord");
     let original_content = vec![0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE];
     {
         let parent = binary_path

@@ -33,12 +33,10 @@ cargo test cli_types::tests resource::tests --lib
 
 ```bash
 # 构建二进制
-cd core
-cargo build --release
+cargo build --release -p orchestrator-cli
 
 # 使用 CLI 校验配置文件
-cd ..
-./core/target/release/agent-orchestrator manifest validate -f /tmp/test-config.yaml
+./target/release/orchestrator manifest validate -f /tmp/test-config.yaml
 ```
 
 ---
@@ -59,7 +57,7 @@ cd ..
    ```
 2. 执行:
    ```bash
-   ./core/target/release/agent-orchestrator manifest validate -f /tmp/invalid-yaml.yaml
+   ./target/release/orchestrator manifest validate -f /tmp/invalid-yaml.yaml
    ```
 
 ### Expected
@@ -82,9 +80,9 @@ cd ..
 ### Preconditions
 
 ```bash
-./scripts/orchestrator.sh init --force
+orchestrator init --force
 QA_PROJECT="qa-config-enhanced-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+orchestrator qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
 ```
 
@@ -121,7 +119,7 @@ rm -rf "workspace/${QA_PROJECT}"
    ```
 2. 执行:
    ```bash
-   ./core/target/release/agent-orchestrator manifest validate -f /tmp/multi-error.yaml
+   ./target/release/orchestrator manifest validate -f /tmp/multi-error.yaml
    ```
 
 ### Expected
@@ -182,7 +180,7 @@ rm -rf "workspace/${QA_PROJECT}"
    ```
 2. 执行:
    ```bash
-   ./core/target/release/agent-orchestrator manifest validate -f /tmp/missing-path.yaml
+   ./target/release/orchestrator manifest validate -f /tmp/missing-path.yaml
    ```
 
 ### Expected
@@ -237,7 +235,7 @@ rm -rf "workspace/${QA_PROJECT}"
    ```
 2. 执行:
    ```bash
-   ./core/target/release/agent-orchestrator manifest validate -f /tmp/path-escape.yaml
+   ./target/release/orchestrator manifest validate -f /tmp/path-escape.yaml
    ```
 
 ### Expected
@@ -257,8 +255,8 @@ rm -rf "workspace/${QA_PROJECT}"
 
 1. 使用已有配置:
    ```bash
-   ./scripts/orchestrator.sh manifest export -f /tmp/exported-config.yaml
-   ./core/target/release/agent-orchestrator manifest validate -f /tmp/exported-config.yaml
+   orchestrator manifest export -f /tmp/exported-config.yaml
+   ./target/release/orchestrator manifest validate -f /tmp/exported-config.yaml
    ```
 
 ### Expected

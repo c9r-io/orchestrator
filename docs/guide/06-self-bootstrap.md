@@ -72,11 +72,11 @@ prehook:
   reason: "Skip unsafe self-referential QA docs"
 ```
 
-### Layer 4: Watchdog Script
+### Layer 4: Watchdog
 
-The `scripts/orchestrator.sh` wrapper acts as a watchdog. If the orchestrator process crashes consecutively (exit code != 0 and != 75), the watchdog restores the `.stable` binary snapshot and restarts.
+The `orchestrator daemon start -f` command runs the daemon in the foreground with a built-in restart loop. If the orchestrator process crashes consecutively (exit code != 0 and != 75), the watchdog restores the `.stable` binary snapshot and restarts.
 
-Exit code 75 is the self-restart signal: the `self_restart` builtin step rebuilds the binary and exits with code 75, telling the wrapper to relaunch with the new binary.
+Exit code 75 is the self-restart signal: the `self_restart` builtin step rebuilds the binary and exits with code 75, telling the restart loop to relaunch with the new binary.
 
 ## Self-Restart Flow
 

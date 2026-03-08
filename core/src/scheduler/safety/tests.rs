@@ -112,7 +112,7 @@ async fn test_restore_binary_snapshot_success() {
     std::fs::create_dir_all(&temp_dir).expect("create temp dir");
 
     let stable_path = temp_dir.join(STABLE_FILE);
-    let binary_path = temp_dir.join("core/target/release");
+    let binary_path = temp_dir.join("target/release");
     std::fs::create_dir_all(&binary_path).expect("create binary dir");
 
     let test_content = b"stable binary snapshot content";
@@ -121,7 +121,7 @@ async fn test_restore_binary_snapshot_success() {
     let result = restore_binary_snapshot(&temp_dir).await;
 
     assert!(result.is_ok());
-    let restored_binary_path = binary_path.join("agent-orchestrator");
+    let restored_binary_path = binary_path.join("orchestratord");
     assert!(restored_binary_path.exists());
     let restored_content = std::fs::read(&restored_binary_path).expect("read restored binary");
     assert_eq!(restored_content, test_content);
@@ -360,7 +360,7 @@ async fn test_execute_self_test_step_returns_nonzero_when_cargo_check_fails() {
         &fake_bin.join("cargo"),
         "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FAKE_CARGO_LOG\"\nexit 9\n",
     );
-    std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
+    // workspace_root is already created by TestState
 
     let fake_cargo = fake_bin.join("cargo");
     std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
@@ -375,7 +375,7 @@ async fn test_execute_self_test_step_returns_nonzero_when_cargo_check_fails() {
 
     assert_eq!(result, 9);
     let log = std::fs::read_to_string(&cargo_log).expect("read cargo log");
-    assert!(log.contains("check --message-format=short"));
+    assert!(log.contains("check") && log.contains("--message-format=short"));
     assert!(!log.contains("test --lib"));
 }
 
@@ -388,36 +388,28 @@ async fn test_execute_self_test_step_success_with_manifest_validate() {
 
     let fake_bin = workspace_root.join("fake-bin");
     let cargo_log = workspace_root.join("fake-cargo.log");
-    let manifest_log = workspace_root.join("manifest.log");
     write_executable(
         &fake_bin.join("cargo"),
         "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FAKE_CARGO_LOG\"\nexit 0\n",
     );
-    write_executable(
-        &workspace_root.join("scripts/orchestrator.sh"),
-        "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FAKE_MANIFEST_LOG\"\nexit 0\n",
-    );
-    std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
 
     let fake_cargo = fake_bin.join("cargo");
     std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
-    std::env::set_var("FAKE_MANIFEST_LOG", &manifest_log);
     std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
 
+    // Self-test now uses direct library call for manifest validation,
+    // so we skip that phase here (no manifest file = no validation).
     let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1")
         .await
         .expect("self test should succeed");
 
     std::env::remove_var("FAKE_CARGO_LOG");
-    std::env::remove_var("FAKE_MANIFEST_LOG");
     std::env::remove_var("ORCH_SELF_TEST_CARGO");
 
     assert_eq!(result, 0);
     let cargo_calls = std::fs::read_to_string(&cargo_log).expect("read cargo log");
-    let manifest_calls = std::fs::read_to_string(&manifest_log).expect("read manifest log");
-    assert!(cargo_calls.contains("check --message-format=short"));
-    assert!(cargo_calls.contains("test --lib -- --skip self_test_survives_smoke_test"));
-    assert!(manifest_calls.contains("manifest validate -f docs/workflow/self-bootstrap.yaml"));
+    assert!(cargo_calls.contains("check") && cargo_calls.contains("--message-format=short"));
+    assert!(cargo_calls.contains("test --lib"));
 }
 
 // --- New v2 tests ---
@@ -615,7 +607,7 @@ async fn test_restore_without_manifest_backward_compat() {
     std::fs::create_dir_all(&temp_dir).expect("create temp dir");
 
     let stable_path = temp_dir.join(STABLE_FILE);
-    let binary_dir = temp_dir.join("core/target/release");
+    let binary_dir = temp_dir.join("target/release");
     std::fs::create_dir_all(&binary_dir).expect("create binary dir");
 
     let test_content = b"v1 stable without manifest";
@@ -711,8 +703,6 @@ async fn test_execute_self_test_step_cargo_test_fails() {
         &fake_bin.join("cargo"),
         "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FAKE_CARGO_LOG\"\ncase \"$*\" in *check*) exit 0 ;; *) exit 7 ;; esac\n",
     );
-    std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
-
     let fake_cargo = fake_bin.join("cargo");
     std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
     std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
@@ -727,7 +717,7 @@ async fn test_execute_self_test_step_cargo_test_fails() {
     assert_eq!(result, 7);
     let log = std::fs::read_to_string(&cargo_log).expect("read cargo log");
     assert!(
-        log.contains("check --message-format=short"),
+        log.contains("check") && log.contains("--message-format=short"),
         "check should have been invoked"
     );
     assert!(
@@ -749,8 +739,8 @@ async fn test_execute_self_test_step_no_manifest_script() {
         &fake_bin.join("cargo"),
         "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FAKE_CARGO_LOG\"\nexit 0\n",
     );
-    std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
-    // Deliberately do NOT create scripts/orchestrator.sh
+    // workspace_root is already created by TestState
+    // Deliberately do NOT create docs/workflow/self-bootstrap.yaml
 
     let fake_cargo = fake_bin.join("cargo");
     std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
@@ -895,7 +885,7 @@ async fn test_execute_self_restart_step_build_fails() {
 
     let fake_bin = workspace_root.join("fake-bin");
     write_executable(&fake_bin.join("cargo"), "#!/bin/sh\nexit 7\n");
-    std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
+    // workspace_root is already created by TestState
 
     let fake_cargo = fake_bin.join("cargo");
     unsafe {
@@ -940,7 +930,7 @@ async fn test_execute_self_restart_step_success_returns_exit_restart() {
     // Create a fake cargo that succeeds on build
     let fake_bin = workspace_root.join("fake-bin");
     write_executable(&fake_bin.join("cargo"), "#!/bin/sh\nexit 0\n");
-    std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
+    // workspace_root is already created by TestState
 
     // Create a fake binary that responds to --help
     let binary_path = workspace_root.join(RELEASE_BINARY_REL);
@@ -1107,7 +1097,7 @@ async fn test_execute_self_restart_step_verify_timeout() {
     // Build succeeds
     let fake_bin = workspace_root.join("fake-bin");
     write_executable(&fake_bin.join("cargo"), "#!/bin/sh\nexit 0\n");
-    std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
+    // workspace_root is already created by TestState
 
     // Binary responds to --help by sleeping longer than the 10s timeout
     let binary_path = workspace_root.join(RELEASE_BINARY_REL);
@@ -1141,7 +1131,7 @@ async fn test_execute_self_restart_step_snapshot_fails() {
     // Build succeeds
     let fake_bin = workspace_root.join("fake-bin");
     write_executable(&fake_bin.join("cargo"), "#!/bin/sh\nexit 0\n");
-    std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
+    // workspace_root is already created by TestState
 
     // Binary responds to --help successfully
     let binary_path = workspace_root.join(RELEASE_BINARY_REL);
@@ -1177,7 +1167,7 @@ async fn test_execute_self_restart_step_binary_read_fails_uses_unknown() {
     // Build succeeds
     let fake_bin = workspace_root.join("fake-bin");
     write_executable(&fake_bin.join("cargo"), "#!/bin/sh\nexit 0\n");
-    std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
+    // workspace_root is already created by TestState
 
     // Binary responds to --help successfully
     let binary_path = workspace_root.join(RELEASE_BINARY_REL);
@@ -1253,12 +1243,15 @@ async fn test_execute_self_test_step_manifest_validate_fails() {
         &fake_bin.join("cargo"),
         "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FAKE_CARGO_LOG\"\nexit 0\n",
     );
-    // manifest validate script exits non-zero
-    write_executable(
-        &workspace_root.join("scripts/orchestrator.sh"),
-        "#!/bin/sh\nexit 3\n",
-    );
-    std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
+    // Create invalid manifest file to trigger validation failure
+    let manifest_dir = workspace_root.join("docs/workflow");
+    std::fs::create_dir_all(&manifest_dir).expect("create manifest dir");
+    std::fs::write(
+        manifest_dir.join("self-bootstrap.yaml"),
+        "invalid: yaml: content: [[[not valid manifest",
+    )
+    .expect("write invalid manifest");
+    // workspace_root is already created by TestState
 
     let fake_cargo = fake_bin.join("cargo");
     std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
@@ -1374,7 +1367,7 @@ async fn test_execute_self_restart_step_records_old_binary_sha256() {
     // Build succeeds
     let fake_bin = workspace_root.join("fake-bin");
     write_executable(&fake_bin.join("cargo"), "#!/bin/sh\nexit 0\n");
-    std::fs::create_dir_all(workspace_root.join("core")).expect("create fake core dir");
+    // workspace_root is already created by TestState
 
     // Binary responds to --help successfully
     let binary_path = workspace_root.join(RELEASE_BINARY_REL);

@@ -13,8 +13,7 @@ The self_test step is a builtin step type that validates code compiles and tests
 
 ### Entry Points
 
-- CLI: `./scripts/orchestrator.sh task create --project <project> --workflow <workflow-with-self_test>`
-- Direct: `./core/target/release/agent-orchestrator task create --project <project> ...`
+- CLI: `orchestrator task create --project <project> --workflow <workflow-with-self_test>`
 
 ### Self-Test Execution Phases
 
@@ -134,9 +133,9 @@ Verify validation warns on missing self_test in self-referential workflows
 - Project initialized:
   ```bash
   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-  ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+  orchestrator qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
   rm -rf "workspace/${QA_PROJECT}"
-  ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+  orchestrator qa project create "${QA_PROJECT}" --force
   ```
 
 ### Goal
@@ -153,7 +152,7 @@ Validate self_test step executes and code compiles (survival smoke test)
 2. Alternatively, execute self_test via scheduler (requires workflow with self_test step):
    ```bash
    # Create workflow with self_test step if needed
-   ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workflow <workflow-with-self_test> --goal "test self_test"
+   orchestrator task create --project "${QA_PROJECT}" --workflow <workflow-with-self_test> --goal "test self_test"
    ```
 
 ### Expected

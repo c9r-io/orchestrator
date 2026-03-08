@@ -10,7 +10,6 @@ pub async fn execute_self_test_step(
     task_id: &str,
     item_id: &str,
 ) -> Result<i64> {
-    let core_dir = workspace_root.join("core");
     let cargo_bin = std::env::var("ORCH_SELF_TEST_CARGO").unwrap_or_else(|_| "cargo".to_string());
 
     state.emit_event(
@@ -20,8 +19,8 @@ pub async fn execute_self_test_step(
         json!({"phase": "cargo_check"}),
     );
     let check_output = tokio::process::Command::new(&cargo_bin)
-        .args(["check", "--message-format=short"])
-        .current_dir(&core_dir)
+        .args(["check", "--workspace", "--message-format=short"])
+        .current_dir(workspace_root)
         .output()
         .await
         .context("failed to run cargo check")?;
@@ -54,11 +53,13 @@ pub async fn execute_self_test_step(
         .args([
             "test",
             "--lib",
+            "-p",
+            "agent-orchestrator",
             "--",
             "--skip",
             "self_test_survives_smoke_test",
         ])
-        .current_dir(&core_dir)
+        .current_dir(workspace_root)
         .output()
         .await
         .context("failed to run cargo test --lib")?;
@@ -85,47 +86,47 @@ pub async fn execute_self_test_step(
         json!({"phase": "cargo_test_lib", "passed": true}),
     );
 
-    let script_path = workspace_root.join("scripts/orchestrator.sh");
-    if script_path.exists() {
-        state.emit_event(
-            task_id,
-            Some(item_id),
-            "self_test_phase",
-            json!({"phase": "manifest_validate"}),
-        );
-        let validate_output = tokio::process::Command::new(&script_path)
-            .args([
-                "manifest",
-                "validate",
-                "-f",
-                "docs/workflow/self-bootstrap.yaml",
-            ])
-            .current_dir(workspace_root)
-            .output()
-            .await
-            .context("failed to run manifest validate")?;
+    // Manifest validate — use direct library call instead of shelling out
+    state.emit_event(
+        task_id,
+        Some(item_id),
+        "self_test_phase",
+        json!({"phase": "manifest_validate"}),
+    );
+    let manifest_path = workspace_root.join("docs/workflow/self-bootstrap.yaml");
+    if manifest_path.exists() {
+        let validate_passed = match std::fs::read_to_string(&manifest_path) {
+            Ok(content) => {
+                match crate::service::system::validate_manifests(state, &content) {
+                    Ok((valid, errors, _msg)) => {
+                        if !valid {
+                            for err in &errors {
+                                error!(phase = "manifest_validate", error = %err, "validation error");
+                            }
+                        }
+                        valid
+                    }
+                    Err(e) => {
+                        error!(phase = "manifest_validate", error = %e, "validation failed");
+                        false
+                    }
+                }
+            }
+            Err(e) => {
+                error!(phase = "manifest_validate", error = %e, "failed to read manifest");
+                false
+            }
+        };
 
-        if !validate_output.status.success() {
-            let stderr = String::from_utf8_lossy(&validate_output.stderr);
-            error!(
-                phase = "manifest_validate",
-                stderr = %stderr.trim(),
-                "self-test phase failed"
-            );
-            state.emit_event(
-                task_id,
-                Some(item_id),
-                "self_test_phase",
-                json!({"phase": "manifest_validate", "passed": false}),
-            );
-            return Ok(validate_output.status.code().unwrap_or(1) as i64);
-        }
         state.emit_event(
             task_id,
             Some(item_id),
             "self_test_phase",
-            json!({"phase": "manifest_validate", "passed": true}),
+            json!({"phase": "manifest_validate", "passed": validate_passed}),
         );
+        if !validate_passed {
+            return Ok(1);
+        }
     }
 
     Ok(0)

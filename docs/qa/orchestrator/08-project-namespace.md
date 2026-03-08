@@ -11,7 +11,7 @@
 
 The orchestrator now supports a Project concept to constrain resource naming spaces, similar to Kubernetes namespace. A project can contain multiple workspaces, and workspaces within the same project can share project-level workflows and agents.
 
-Entry point: `./core/target/release/agent-orchestrator <command>`
+Entry point: `orchestrator <command>` (CLI)
 
 ### Config Model
 
@@ -49,9 +49,9 @@ Resource resolution priority:
 
 ### Preconditions
 
-- Orchestrator binary built at `./core/target/release/agent-orchestrator`
+- Orchestrator binary built at `./target/release/orchestrator`
 - Default project/workspace/workflow already initialized in SQLite config
-- Use `./scripts/orchestrator.sh` (wrapper) for all commands, not the direct binary
+- Use `orchestrator` CLI for all commands
 
 ### Goal
 
@@ -61,7 +61,7 @@ Validate task creation with explicit project specification stores project_id in 
 
 1. Create task with explicit project:
    ```bash
-   ./core/target/release/agent-orchestrator task create \
+   ./target/release/orchestrator task create \
      --name "test-project-task" \
      --goal "Test project namespace" \
      --project default \
@@ -72,7 +72,7 @@ Validate task creation with explicit project specification stores project_id in 
 
 2. Get task details to verify project_id:
    ```bash
-   ./core/target/release/agent-orchestrator task info {task_id}
+   ./target/release/orchestrator task info {task_id}
    ```
 
 3. Query database for project_id:
@@ -95,7 +95,7 @@ Validate task creation with explicit project specification stores project_id in 
 - At least one workflow exists in the global config
 - `defaults.workflow` is set (auto-filled to `qa_only` if present, or the first workflow alphabetically)
 - Default project exists without custom workflows
-- Use `./scripts/orchestrator.sh` (wrapper) for all commands, not the direct binary
+- Use `orchestrator` CLI for all commands
 
 ### Goal
 
@@ -105,12 +105,12 @@ Validate that when project doesn't define a workflow, the `defaults.workflow` fr
 
 1. Check current default workflow:
    ```bash
-   ./scripts/orchestrator.sh manifest export | grep 'workflow:'
+   orchestrator manifest export | grep 'workflow:'
    ```
 
 2. Create task without explicit workflow (should use default):
    ```bash
-   ./scripts/orchestrator.sh task create \
+   orchestrator task create \
      --name "test-fallback-workflow" \
      --goal "Test fallback" \
      --project default \
@@ -134,7 +134,7 @@ Validate that when project doesn't define a workflow, the `defaults.workflow` fr
 ### Preconditions
 
 - Project with multiple workspaces configured
-- Use `./scripts/orchestrator.sh` (wrapper) for all commands, not the direct binary
+- Use `orchestrator` CLI for all commands
 
 ### Goal
 
@@ -144,12 +144,12 @@ Validate workspace resolution within project context.
 
 1. List workspaces via CLI:
    ```bash
-   ./scripts/orchestrator.sh workspace list --project default
+   orchestrator workspace list --project default
    ```
 
 2. Create task without explicit workspace (should resolve project/default workspace):
    ```bash
-   ./scripts/orchestrator.sh task create \
+   orchestrator task create \
      --name "test-project-workspace-resolution" \
      --goal "verify project workspace resolution" \
      --project default \
@@ -168,7 +168,7 @@ Validate workspace resolution within project context.
 ### Preconditions
 
 - Orchestrator CLI available
-- Use `./scripts/orchestrator.sh` (wrapper) for all commands, not the direct binary
+- Use `orchestrator` CLI for all commands
 
 ### Goal
 
@@ -178,12 +178,12 @@ Validate CLI --project flag is recognized and passed correctly.
 
 1. Test project flag with help:
    ```bash
-   ./core/target/release/agent-orchestrator task create --help
+   ./target/release/orchestrator task create --help
    ```
 
 2. Create task with project flag:
    ```bash
-   ./core/target/release/agent-orchestrator task create \
+   ./target/release/orchestrator task create \
      --project default \
      --name "test-cli-project-flag" \
      --goal "Test CLI flag"
@@ -215,7 +215,7 @@ Validate that project resources are isolated from each other.
 
 1. Validate the two-projects fixture (projects define their own workspaces and agents; global workspaces/agents are empty):
    ```bash
-   ./scripts/orchestrator.sh manifest validate -f fixtures/manifests/bundles/two-projects.yaml
+   orchestrator manifest validate -f fixtures/manifests/bundles/two-projects.yaml
    ```
 
 ### Expected
@@ -237,7 +237,7 @@ Validate that defaults.project is required and defaults to "default".
 
 1. Check current config:
    ```bash
-   ./core/target/release/agent-orchestrator manifest export | grep -A5 "defaults:"
+   ./target/release/orchestrator manifest export | grep -A5 "defaults:"
    ```
 
 2. Verify project field exists in defaults

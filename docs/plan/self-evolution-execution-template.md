@@ -198,7 +198,7 @@ self-evolution 相比 self-bootstrap 有以下特有的观察点：
 ### 4.4 进程监控
 
 ```bash
-ps aux | grep -E "opencode|agent-orchestrator" | grep -v grep
+ps aux | grep -E "opencode|orchestratord" | grep -v grep
 git diff --stat
 ```
 

@@ -9,14 +9,14 @@
 
 ## Background
 
-The `self_restart` step extends the self-bootstrap survival mechanism with a 5th layer: after `self_test` passes, the orchestrator rebuilds its own binary, verifies it, snapshots `.stable`, sets the task to `restart_pending`, and exits with code 75. The process wrapper (`orchestrator.sh`) detects exit 75 and relaunches the new binary, which auto-claims the `restart_pending` task and resumes the loop.
+The `self_restart` step extends the self-bootstrap survival mechanism with a 5th layer: after `self_test` passes, the orchestrator rebuilds its own binary, verifies it, snapshots `.stable`, sets the task to `restart_pending`, and exits with code 75. The daemon's foreground mode (`orchestrator daemon start -f`) detects exit 75 and relaunches the new binary, which auto-claims the `restart_pending` task and resumes the loop.
 
 Key functions:
 - `execute_self_restart_step()` in `core/src/scheduler/safety.rs`
 - `EXIT_RESTART = 75` constant
 - `prepare_task_for_start_batch()` restart_pending branch in `core/src/task_repository/state.rs`
 - `claim_next_pending_task()` priority SQL in `core/src/scheduler_service.rs`
-- Restart loop in `scripts/orchestrator.sh`
+- Restart loop in `orchestrator daemon start -f`
 
 Workflow: `fixtures/manifests/bundles/self-bootstrap-mock.yaml`
 
@@ -41,7 +41,7 @@ Workflow: `fixtures/manifests/bundles/self-bootstrap-mock.yaml`
 
 ### Preconditions
 - `cargo check` and `cargo test --lib` pass (codebase compiles)
-- Release binary exists at `core/target/release/agent-orchestrator`
+- Release binary exists at `target/release/orchestratord`
 
 ### Goal
 Verify that the unit tests for `execute_self_restart_step` pass: build succeeds, binary verification succeeds, `.stable` is created, EXIT_RESTART (75) is returned, and task status is set to `restart_pending`.
@@ -157,22 +157,17 @@ LIMIT 1;
 
 ---
 
-## Scenario 5: orchestrator.sh Restart Loop and Step Registration
+## Scenario 5: Daemon Restart Loop and Step Registration
 
 ### Preconditions
 - Repository checked out at `/Volumes/Yotta/ai_native_sdlc`
-- `scripts/orchestrator.sh` exists and is executable
+- `orchestrator daemon start -f` is available (built-in restart loop with exit code 75 handling)
 
 ### Goal
-Verify that (a) `orchestrator.sh` contains the restart-aware loop detecting exit code 75, (b) `self_restart` is registered as a known builtin step, and (c) the `self-bootstrap.yaml` workflow includes the `self_restart` step in the correct position.
+Verify that (a) the daemon's foreground mode contains the restart-aware loop detecting exit code 75, (b) `self_restart` is registered as a known builtin step, and (c) the `self-bootstrap.yaml` workflow includes the `self_restart` step in the correct position.
 
 ### Steps
-1. Verify orchestrator.sh contains the restart loop:
-   ```bash
-   grep -c 'RESTART_EXIT=75' scripts/orchestrator.sh
-   grep -c 'while true' scripts/orchestrator.sh
-   grep -c 'restart requested' scripts/orchestrator.sh
-   ```
+1. Verify the daemon handles exit code 75 restart loop (built into the binary).
 2. Verify self_restart is registered as a known step and builtin:
    ```bash
    cd /Volumes/Yotta/ai_native_sdlc/core
@@ -188,11 +183,11 @@ Verify that (a) `orchestrator.sh` contains the restart-aware loop detecting exit
    ```
 5. Verify manifest validates with the new step:
    ```bash
-   ./scripts/orchestrator.sh manifest validate -f fixtures/manifests/bundles/self-bootstrap-mock.yaml 2>&1
+   orchestrator manifest validate -f fixtures/manifests/bundles/self-bootstrap-mock.yaml 2>&1
    ```
 
 ### Expected
-- `RESTART_EXIT=75` and `while true` loop found in `orchestrator.sh`
+- Exit code 75 restart loop is built into the daemon's foreground mode
 - `test_validate_step_type_known_ids` passes (includes `self_restart`)
 - `self_restart` step appears in YAML with `builtin: self_restart`, `repeatable: false`, `on_failure: continue`
 - `manifest validate` passes without errors
@@ -214,7 +209,7 @@ Results are persisted as a `binary_verification` event with `verified: true/fals
 - `test_verify_post_restart_binary_with_mismatch` — SHA256 mismatch = warning logged
 
 ### E2E verification note
-Full end-to-end testing (exit 75 → orchestrator.sh relaunch → new binary claims restart_pending → SHA256 verification) requires an actual `cargo build --release` cycle and is validated during real self-bootstrap runs, not in unit tests. The unit tests validate each layer independently.
+Full end-to-end testing (exit 75 → daemon restart loop relaunch → new binary claims restart_pending → SHA256 verification) requires an actual `cargo build --release` cycle and is validated during real self-bootstrap runs, not in unit tests. The unit tests validate each layer independently.
 
 ---
 
@@ -226,4 +221,4 @@ Full end-to-end testing (exit 75 → orchestrator.sh relaunch → new binary cla
 | 2 | self_restart Step Build Failure | PASS | 2026-03-05 | claude | Unit test pass: exit_code==7 (mock), not 75, no restart_pending |
 | 3 | restart_pending Task Resumption Preserves Item State | PASS | 2026-03-05 | claude | Items preserved as qa_passed, completed_at cleared |
 | 4 | claim_next_pending_task Prioritizes restart_pending | PASS | 2026-03-05 | claude | restart_pending claimed before pending; resumable includes restart_pending |
-| 5 | orchestrator.sh Restart Loop and Step Registration | PASS | 2026-03-05 | claude | RESTART_EXIT=75 present, while loop present, step registered, manifest validates |
+| 5 | Daemon Restart Loop and Step Registration | PASS | 2026-03-05 | claude | Daemon restart loop handles exit 75, step registered, manifest validates |

@@ -17,7 +17,7 @@ This document validates the refactor that moved `collab` capabilities into the s
 - dual CLI model: foreground run and detach queue + worker loop
 - C/S mode: daemon-embedded workers replace standalone `task worker start`
 
-Entry point: `./scripts/orchestrator.sh` (standalone) or `./target/release/orchestrator` (C/S client)
+Entry point: `orchestrator` (CLI client) or `orchestratord` (daemon)
 
 **C/S mode note**: Scenarios 4 and 5 can also be validated through the C/S architecture where `orchestratord --workers N` embeds the worker loop directly in the daemon process. See `docs/qa/orchestrator/53-client-server-architecture.md` for dedicated C/S scenarios.
 
@@ -55,12 +55,12 @@ Verify strict-mode validation fails phase output when `qa` stdout is not JSON.
 ### Steps
 1. Reset and apply the plain-text-agent fixture into project scope:
    ```bash
-   ./scripts/orchestrator.sh qa project reset qa-plain --force
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/plain-text-agent.yaml --project qa-plain
+   orchestrator qa project reset qa-plain --force
+   orchestrator apply -f fixtures/manifests/bundles/plain-text-agent.yaml --project qa-plain
    ```
 2. Create and run a task that uses non-JSON `qa` output:
    ```bash
-   ./scripts/orchestrator.sh task create --project qa-plain --workflow plain_text_test
+   orchestrator task create --project qa-plain --workflow plain_text_test
    ```
 3. Check validation failure event:
    ```bash
@@ -137,7 +137,7 @@ Verify phase outputs are published and observable in persisted events.
 ### Steps
 1. Run a task to completion (or failure):
    ```bash
-   ./scripts/orchestrator.sh task start {task_id} || true
+   orchestrator task start {task_id} || true
    ```
 2. Query phase publication events:
    ```bash
@@ -170,15 +170,15 @@ Verify `--detach` no longer executes task inline and enqueues it for worker proc
 ### Steps
 1. Create a task in detach mode:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "detach-create" --goal "queue" --detach | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "detach-create" --goal "queue" --detach | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 2. Enqueue an existing task explicitly:
    ```bash
-   ./scripts/orchestrator.sh task start "${TASK_ID}" --detach
+   orchestrator task start "${TASK_ID}" --detach
    ```
 3. Query queue and scheduling events:
    ```bash
-   ./scripts/orchestrator.sh task worker status
+   orchestrator task worker status
    sqlite3 data/agent_orchestrator.db "SELECT event_type FROM events WHERE task_id='${TASK_ID}' AND event_type='scheduler_enqueued' ORDER BY id DESC LIMIT 5;"
    ```
 
@@ -207,22 +207,22 @@ Verify worker loop consumes pending tasks and honors stop signal.
 ### Steps
 1. Start worker in terminal A:
    ```bash
-   ./scripts/orchestrator.sh task worker start --poll-ms 500 --workers 3
+   orchestrator task worker start --poll-ms 500 --workers 3
    ```
 2. In terminal B, monitor queue:
    ```bash
-   ./scripts/orchestrator.sh task worker status
-   ./scripts/orchestrator.sh task list -o json
+   orchestrator task worker status
+   orchestrator task list -o json
    ```
 3. Stop worker:
    ```bash
-   ./scripts/orchestrator.sh task worker stop
+   orchestrator task worker stop
    ```
 4. Wait for worker process to fully exit, then confirm stop signal cleared:
    ```bash
    # Wait for worker process to exit
-   while pgrep -f "agent-orchestrator task worker" > /dev/null 2>&1; do sleep 1; done
-   ./scripts/orchestrator.sh task worker status
+   while pgrep -f "orchestrator task worker" > /dev/null 2>&1; do sleep 1; done
+   orchestrator task worker status
    ```
 
 ### Expected

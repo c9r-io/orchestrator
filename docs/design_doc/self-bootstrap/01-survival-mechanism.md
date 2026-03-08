@@ -33,7 +33,7 @@ When the orchestrator runs in self-referential mode (modifying its own source co
 
 ### Layer 1: Binary Checkpoint
 
-At cycle start (after git tag checkpoint), the scheduler copies the release binary (`core/target/release/agent-orchestrator`) to `.stable` in the workspace root. On auto-rollback (after `max_consecutive_failures` exceeded), the `.stable` binary is restored over the live binary.
+At cycle start (after git tag checkpoint), the scheduler copies the release binary (`target/release/orchestratord`) to `.stable` in the workspace root. On auto-rollback (after `max_consecutive_failures` exceeded), the `.stable` binary is restored over the live binary.
 
 - Functions: `snapshot_binary()`, `restore_binary_snapshot()` in `core/src/scheduler.rs`
 - Config field: `binary_snapshot: bool` in `SafetyConfig` and `SafetySpec`
@@ -45,7 +45,7 @@ A builtin step (`self_test`) inserted between `implement` and `qa_testing` in th
 
 1. `cargo check --message-format=short` in `core/`
 2. `cargo test --lib` in `core/`
-3. `scripts/orchestrator.sh manifest validate -f docs/workflow/self-bootstrap.yaml` (if script exists)
+3. `orchestrator manifest validate -f docs/workflow/self-bootstrap.yaml` (if binary exists)
 
 If any phase fails, the step returns a non-zero exit code. Pipeline variables `self_test_exit_code` and `self_test_passed` are set for downstream prehook evaluation.
 

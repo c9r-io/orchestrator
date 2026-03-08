@@ -15,7 +15,7 @@ description: >-
 
 ## Entry Point
 
-All commands: `./scripts/orchestrator.sh <command>` or `./core/target/release/agent-orchestrator <command>`.
+All commands: `orchestrator <command>` (CLI client) or `orchestratord` (daemon).
 
 ## Core Workflow
 

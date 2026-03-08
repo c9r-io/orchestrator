@@ -26,7 +26,7 @@ Key files:
 ## Scenario 1: --version Flag Shows Git Hash
 
 ### Preconditions
-- Binary built with `cargo build --release` from `core/`
+- Binary built with `cargo build --release` from workspace root
 
 ### Goal
 Verify that `--version` includes the package version and git hash in parentheses.
@@ -34,12 +34,12 @@ Verify that `--version` includes the package version and git hash in parentheses
 ### Steps
 1. Build the release binary:
    ```bash
-   cd /Volumes/Yotta/ai_native_sdlc/core
+   cd /Volumes/Yotta/ai_native_sdlc
    cargo build --release 2>&1 | tail -5
    ```
 2. Run with `--version`:
    ```bash
-   ./target/release/agent-orchestrator --version
+   ./target/release/orchestrator --version
    ```
 
 ### Expected
@@ -60,8 +60,8 @@ Verify that `version` subcommand prints version, git hash, and build time in hum
 ### Steps
 1. Run the version subcommand:
    ```bash
-   cd /Volumes/Yotta/ai_native_sdlc/core
-   ./target/release/agent-orchestrator version
+   cd /Volumes/Yotta/ai_native_sdlc
+   ./target/release/orchestrator version
    ```
 
 ### Expected
@@ -85,12 +85,12 @@ Verify that `version --json` produces valid JSON with all three fields.
 ### Steps
 1. Run with `--json` flag:
    ```bash
-   cd /Volumes/Yotta/ai_native_sdlc/core
-   ./target/release/agent-orchestrator version --json 2>/dev/null
+   cd /Volumes/Yotta/ai_native_sdlc
+   ./target/release/orchestrator version --json 2>/dev/null
    ```
 2. Validate JSON structure:
    ```bash
-   ./target/release/agent-orchestrator version --json 2>/dev/null | python3 -c "
+   ./target/release/orchestrator version --json 2>/dev/null | python3 -c "
    import sys, json
    d = json.load(sys.stdin)
    assert 'version' in d, 'missing version key'

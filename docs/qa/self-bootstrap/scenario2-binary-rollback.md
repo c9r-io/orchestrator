@@ -20,10 +20,10 @@ Verify that when auto-rollback triggers (after max consecutive failures), the `.
 
 ```bash
 rm -f fixtures/ticket/auto_*.md
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
+orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml
 QA_PROJECT="qa-survival"
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --force
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
+orchestrator qa project reset "${QA_PROJECT}" --force
+orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
 ```
 
 - ✅ Common Preconditions applied (qa-survival project, **mock** self-bootstrap workflow)
@@ -33,7 +33,7 @@ QA_PROJECT="qa-survival"
 ### Steps
 1. Ensure `.stable` binary exists:
    ```bash
-   cp core/target/release/agent-orchestrator .stable
+   cp target/release/orchestratord .stable
    ```
 2. Create a task that will fail repeatedly (introduce a compile error in the implement step output)
 3. Start the task and wait for 3 consecutive failures to trigger auto-rollback
@@ -52,7 +52,7 @@ QA_PROJECT="qa-survival"
 ### Expected Results
 - Event `auto_rollback` emitted after 3 consecutive failures
 - Event `binary_snapshot_restored` emitted in same cycle as auto-rollback
-- Release binary at `core/target/release/agent-orchestrator` matches `.stable` file
+- Release binary at `target/release/orchestratord` matches `.stable` file
 - `consecutive_failures` counter reset to 0 after rollback
 
 ---

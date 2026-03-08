@@ -126,6 +126,68 @@ pub async fn dispatch(
             std::process::exit(resp.exit_code);
         }
 
+        Commands::Init { root } => {
+            let resp = client
+                .init(orchestrator_proto::InitRequest { root })
+                .await?
+                .into_inner();
+            println!("{}", resp.message);
+            Ok(())
+        }
+
+        Commands::Db(cmd) => {
+            use crate::DbCommands;
+            match cmd {
+                DbCommands::Reset {
+                    force,
+                    include_history,
+                    include_config,
+                } => {
+                    let resp = client
+                        .db_reset(orchestrator_proto::DbResetRequest {
+                            force,
+                            include_history,
+                            include_config,
+                        })
+                        .await?
+                        .into_inner();
+                    println!("{}", resp.message);
+                    Ok(())
+                }
+            }
+        }
+
+        Commands::Manifest(cmd) => {
+            use crate::ManifestCommands;
+            match cmd {
+                ManifestCommands::Validate { file } => {
+                    let content = if file == "-" {
+                        use std::io::Read;
+                        let mut buf = String::new();
+                        std::io::stdin().read_to_string(&mut buf)?;
+                        buf
+                    } else {
+                        std::fs::read_to_string(&file).map_err(|e| {
+                            anyhow::anyhow!("failed to read manifest file '{}': {}", file, e)
+                        })?
+                    };
+
+                    let resp = client
+                        .manifest_validate(orchestrator_proto::ManifestValidateRequest { content })
+                        .await?
+                        .into_inner();
+                    println!("{}", resp.message);
+                    for err in &resp.errors {
+                        eprintln!("  {}", err);
+                    }
+                    if !resp.valid {
+                        std::process::exit(1);
+                    }
+                    Ok(())
+                }
+            }
+        }
+
         // These are handled before dispatch
         Commands::Version | Commands::Daemon(_) => unreachable!(),
     }
@@ -294,6 +356,92 @@ async fn dispatch_task(
                 .await?
                 .into_inner();
             println!("{}", resp.message);
+            Ok(())
+        }
+
+        TaskCommands::Watch { task_id, interval } => {
+            let mut stream = client
+                .task_watch(orchestrator_proto::TaskWatchRequest {
+                    task_id,
+                    interval_secs: interval,
+                })
+                .await?
+                .into_inner();
+
+            use tokio_stream::StreamExt;
+            while let Some(snapshot) = stream.next().await {
+                match snapshot {
+                    Ok(s) => {
+                        if let Some(task) = &s.task {
+                            println!(
+                                "[{}] status={} items={}/{} failed={}",
+                                task.id,
+                                task.status,
+                                task.finished_items,
+                                task.total_items,
+                                task.failed_items
+                            );
+                            for item in &s.items {
+                                println!(
+                                    "  item {} status={}",
+                                    &item.id[..8.min(item.id.len())],
+                                    item.status
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("watch error: {}", e);
+                        break;
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        TaskCommands::Trace { task_id, verbose } => {
+            let resp = client
+                .task_trace(orchestrator_proto::TaskTraceRequest { task_id, verbose })
+                .await?
+                .into_inner();
+
+            println!("TRACE TIMELINE ({} events)", resp.entries.len());
+            println!("{:-<70}", "");
+            for entry in &resp.entries {
+                let item = entry
+                    .item_id
+                    .as_deref()
+                    .map(|id| format!(" item={}", &id[..8.min(id.len())]))
+                    .unwrap_or_default();
+                let step = if entry.step.is_empty() {
+                    String::new()
+                } else {
+                    format!(" step={}", entry.step)
+                };
+                println!(
+                    "{} {}{}{}",
+                    entry.timestamp, entry.event_type, step, item
+                );
+            }
+
+            if !resp.anomalies.is_empty() {
+                println!("\nANOMALIES ({} detected)", resp.anomalies.len());
+                println!("{:-<70}", "");
+                for anomaly in &resp.anomalies {
+                    let at = anomaly
+                        .at
+                        .as_deref()
+                        .map(|t| format!(" at {}", t))
+                        .unwrap_or_default();
+                    println!(
+                        "[{}] {}: {}{}",
+                        anomaly.severity.to_uppercase(),
+                        anomaly.rule,
+                        anomaly.message,
+                        at
+                    );
+                }
+            }
             Ok(())
         }
     }

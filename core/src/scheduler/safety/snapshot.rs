@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
-pub(super) const RELEASE_BINARY_REL: &str = "core/target/release/agent-orchestrator";
+pub(super) const RELEASE_BINARY_REL: &str = "target/release/orchestratord";
 pub(super) const STABLE_FILE: &str = ".stable";
 pub(super) const STABLE_MANIFEST: &str = ".stable.json";
 pub(super) const STABLE_TMP: &str = ".stable.tmp";

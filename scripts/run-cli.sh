@@ -3,13 +3,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-BINARY="$REPO_ROOT/core/target/release/agent-orchestrator"
+BINARY="$REPO_ROOT/target/release/orchestrator"
 
 if [[ ! -x "$BINARY" ]]; then
-  echo "Building orchestrator..."
-  cd "$REPO_ROOT/core"
-  cargo build --release
-  BINARY="$REPO_ROOT/core/target/release/agent-orchestrator"
+  echo "Building orchestrator CLI..."
+  cd "$REPO_ROOT"
+  cargo build --release -p orchestrator-cli
+  BINARY="$REPO_ROOT/target/release/orchestrator"
 fi
 
 exec "$BINARY" "$@"

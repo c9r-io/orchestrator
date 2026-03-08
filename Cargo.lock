@@ -10,8 +10,6 @@ dependencies = [
  "async-trait",
  "cel-interpreter",
  "chrono",
- "clap",
- "clap_complete",
  "glob",
  "libc",
  "orchestrator-proto",

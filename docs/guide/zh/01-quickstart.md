@@ -18,16 +18,16 @@ cargo build --workspace --release
 
 | 二进制 | 路径 | 用途 |
 |--------|------|------|
-| `agent-orchestrator` | `core/target/release/agent-orchestrator` | 单体 CLI（传统） |
+| `agent-orchestrator` | `core/target/release/agent-orchestrator` | 单体 CLI（传统，已弃用） |
 | `orchestratord` | `target/release/orchestratord` | 守护进程（gRPC 服务端 + 内嵌工作器） |
 | `orchestrator` | `target/release/orchestrator` | CLI 客户端（通过 gRPC 连接守护进程） |
 
-包装脚本 `./scripts/orchestrator.sh` 运行单体二进制。C/S 模式请直接使用 `orchestratord` + `orchestrator`。
+C/S 模式（推荐）请直接使用 `orchestratord` + `orchestrator`。传统单体二进制已弃用。
 
 ## 第二步：初始化数据库
 
 ```bash
-./scripts/orchestrator.sh init
+orchestrator init
 ```
 
 这会在 `data/agent_orchestrator.db` 创建 SQLite 表结构。注意：此命令**不会**加载任何配置 —— 配置在下一步完成。
@@ -77,21 +77,21 @@ spec:
 ## 第四步：应用清单
 
 ```bash
-./scripts/orchestrator.sh apply -f my-first-workflow.yaml
+orchestrator apply -f my-first-workflow.yaml
 ```
 
 这会将所有资源（Workspace、Agent、Workflow）加载到数据库中。你可以验证：
 
 ```bash
-./scripts/orchestrator.sh get workspaces
-./scripts/orchestrator.sh get agents
-./scripts/orchestrator.sh get workflows
+orchestrator get workspaces
+orchestrator get agents
+orchestrator get workflows
 ```
 
 ## 第五步：创建并运行任务
 
 ```bash
-./scripts/orchestrator.sh task create \
+orchestrator task create \
   --name "my-first-task" \
   --goal "Verify QA docs pass" \
   --workflow simple_qa
@@ -102,7 +102,7 @@ spec:
 如果只创建不启动：
 
 ```bash
-./scripts/orchestrator.sh task create \
+orchestrator task create \
   --name "my-first-task" \
   --goal "Verify QA docs pass" \
   --workflow simple_qa \
@@ -112,21 +112,21 @@ spec:
 然后手动启动：
 
 ```bash
-./scripts/orchestrator.sh task start <task_id>
+orchestrator task start <task_id>
 ```
 
 ## 第六步：查看结果
 
 ```bash
 # 列出所有任务
-./scripts/orchestrator.sh task list
+orchestrator task list
 
 # 任务详情（表格、JSON 或 YAML 格式）
-./scripts/orchestrator.sh task info <task_id>
-./scripts/orchestrator.sh task info <task_id> -o json
+orchestrator task info <task_id>
+orchestrator task info <task_id> -o json
 
 # 查看执行日志
-./scripts/orchestrator.sh task logs <task_id>
+orchestrator task logs <task_id>
 ```
 
 ## 刚才发生了什么？

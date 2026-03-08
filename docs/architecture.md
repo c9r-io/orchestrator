@@ -1,6 +1,6 @@
 # Agent Orchestrator Architecture
 
-This document describes the architecture of the `agent-orchestrator`, a local CLI tool designed to automate the AI-native development lifecycle through intelligent agent orchestration.
+This document describes the architecture of the agent orchestrator system, a local tool designed to automate the AI-native development lifecycle through intelligent agent orchestration. The system is composed of a core library crate (`agent-orchestrator`), a daemon binary (`orchestratord`), and a CLI client binary (`orchestrator`).
 
 ## 1. Project Overview
 
@@ -210,17 +210,16 @@ Pure business logic extracted from `cli_handler/`, used by both the standalone C
 
 ## 5. Deployment Model
 
-The Agent Orchestrator is distributed as a Cargo workspace with three binaries:
+The Agent Orchestrator is distributed as a Cargo workspace with a core library and two binaries:
 
-| Binary | Crate | Purpose |
-|--------|-------|---------|
-| `agent-orchestrator` | `core` | Standalone CLI (legacy) |
-| `orchestratord` | `crates/daemon` | Daemon — gRPC server + embedded workers |
-| `orchestrator` | `crates/cli` | CLI client — lightweight gRPC client |
+| Crate | Type | Purpose |
+|-------|------|---------|
+| `core` (`agent-orchestrator`) | Library | Core engine — scheduling, orchestration, state management |
+| `crates/daemon` (`orchestratord`) | Binary | Daemon — gRPC server + embedded workers |
+| `crates/cli` (`orchestrator`) | Binary | CLI client — lightweight gRPC client |
 
-- **Standalone mode**: Single binary, direct execution.
-- **C/S mode**: Daemon runs persistently, CLI client connects via Unix Domain Socket (`data/orchestrator.sock`) or TCP (`--bind`).
-- Both modes require `sqlite3` and standard shell utilities (`bash`, `grep`, etc.) if used by agents.
+- **C/S mode** (primary): Daemon (`orchestratord`) runs persistently, CLI client (`orchestrator`) connects via Unix Domain Socket (`data/orchestrator.sock`) or TCP (`--bind`).
+- Both binaries require `sqlite3` and standard shell utilities (`bash`, `grep`, etc.) if used by agents.
 
 ## 6. Observability
 

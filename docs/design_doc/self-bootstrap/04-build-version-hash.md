@@ -70,7 +70,7 @@ After implementing `self_restart` with SHA256 binary verification, there was no 
 
 ## Acceptance Criteria
 - `cargo build --release` — build.rs runs without error
-- `./target/release/agent-orchestrator --version` → `0.1.0 (abc1234)`
-- `./target/release/agent-orchestrator version` → version, git hash, build time in plain text
-- `./target/release/agent-orchestrator version --json` → JSON with version, git_hash, build_time keys
+- `./target/release/orchestrator --version` → `0.1.0 (abc1234)`
+- `./target/release/orchestrator version` → version, git hash, build time in plain text
+- `./target/release/orchestrator version --json` → JSON with version, git_hash, build_time keys
 - `cargo test --lib` — all tests pass

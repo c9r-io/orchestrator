@@ -98,8 +98,46 @@ pub enum Commands {
         output: OutputFormat,
     },
 
+    /// Initialize orchestrator runtime
+    Init {
+        /// Workspace root directory to create
+        root: Option<String>,
+    },
+
+    /// Database operations
+    #[command(subcommand)]
+    Db(DbCommands),
+
+    /// Manifest operations
+    #[command(subcommand)]
+    Manifest(ManifestCommands),
+
     /// Show version
     Version,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum DbCommands {
+    /// Reset the database
+    Reset {
+        #[arg(long)]
+        force: bool,
+
+        #[arg(long)]
+        include_history: bool,
+
+        #[arg(long)]
+        include_config: bool,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum ManifestCommands {
+    /// Validate a manifest file
+    Validate {
+        #[arg(short = 'f', long = "file")]
+        file: String,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -236,6 +274,24 @@ pub enum TaskCommands {
 
         #[arg(short, long)]
         force: bool,
+    },
+
+    /// Watch task status (streaming updates)
+    Watch {
+        task_id: String,
+
+        /// Polling interval in seconds
+        #[arg(long, default_value = "2")]
+        interval: u64,
+    },
+
+    /// Show task event trace
+    Trace {
+        task_id: String,
+
+        /// Show all events (not just key lifecycle events)
+        #[arg(long)]
+        verbose: bool,
     },
 }
 

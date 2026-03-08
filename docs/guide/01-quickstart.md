@@ -18,16 +18,16 @@ This produces three binaries:
 
 | Binary | Path | Purpose |
 |--------|------|---------|
-| `agent-orchestrator` | `core/target/release/agent-orchestrator` | Standalone CLI (legacy) |
+| `agent-orchestrator` | `core/target/release/agent-orchestrator` | Standalone CLI (legacy, deprecated) |
 | `orchestratord` | `target/release/orchestratord` | Daemon (gRPC server + embedded workers) |
 | `orchestrator` | `target/release/orchestrator` | CLI client (connects to daemon via gRPC) |
 
-The wrapper script `./scripts/orchestrator.sh` runs the standalone binary. For C/S mode, use `orchestratord` + `orchestrator` directly.
+For C/S mode (recommended), use `orchestratord` + `orchestrator`. The legacy standalone binary is deprecated.
 
 ## Step 2: Initialize the Database
 
 ```bash
-./scripts/orchestrator.sh init
+orchestrator init
 ```
 
 This creates the SQLite schema at `data/agent_orchestrator.db`. It does **not** load any configuration — that comes next.
@@ -77,21 +77,21 @@ spec:
 ## Step 4: Apply the Manifest
 
 ```bash
-./scripts/orchestrator.sh apply -f my-first-workflow.yaml
+orchestrator apply -f my-first-workflow.yaml
 ```
 
 This loads all resources (Workspace, Agent, Workflow) into the database. You can verify:
 
 ```bash
-./scripts/orchestrator.sh get workspaces
-./scripts/orchestrator.sh get agents
-./scripts/orchestrator.sh get workflows
+orchestrator get workspaces
+orchestrator get agents
+orchestrator get workflows
 ```
 
 ## Step 5: Create and Run a Task
 
 ```bash
-./scripts/orchestrator.sh task create \
+orchestrator task create \
   --name "my-first-task" \
   --goal "Verify QA docs pass" \
   --workflow simple_qa
@@ -102,7 +102,7 @@ This creates a task, binds it to the `default` workspace and `simple_qa` workflo
 To create without starting:
 
 ```bash
-./scripts/orchestrator.sh task create \
+orchestrator task create \
   --name "my-first-task" \
   --goal "Verify QA docs pass" \
   --workflow simple_qa \
@@ -112,21 +112,21 @@ To create without starting:
 Then start it manually:
 
 ```bash
-./scripts/orchestrator.sh task start <task_id>
+orchestrator task start <task_id>
 ```
 
 ## Step 6: Inspect Results
 
 ```bash
 # List all tasks
-./scripts/orchestrator.sh task list
+orchestrator task list
 
 # Task details (table, JSON, or YAML)
-./scripts/orchestrator.sh task info <task_id>
-./scripts/orchestrator.sh task info <task_id> -o json
+orchestrator task info <task_id>
+orchestrator task info <task_id> -o json
 
 # View execution logs
-./scripts/orchestrator.sh task logs <task_id>
+orchestrator task logs <task_id>
 ```
 
 ## What Just Happened?

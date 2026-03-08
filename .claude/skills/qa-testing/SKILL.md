@@ -21,15 +21,15 @@ Execute scenario-based QA testing driven by `docs/qa/**/*.md` documents.
    # DANGER: NEVER run `rm -f data/agent_orchestrator.db` or `db reset --include-config`
    # during an active workflow run. Doing so destroys all in-flight task state.
    # Only initialize when no database exists at all.
-   test -f data/agent_orchestrator.db || ./scripts/orchestrator.sh init
+   test -f data/agent_orchestrator.db || orchestrator init
    ```
 
 3. **For QA scenario isolation** — use project-scoped reset instead of destroying global state:
    ```bash
    # Reset a specific project's QA state (task data + config + auto-tickets)
-   ./scripts/orchestrator.sh qa project reset <project> --force
+   orchestrator qa project reset <project> --force
    # Deploy fixtures into project scope (global config untouched)
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/<fixture>.yaml --project <project>
+   orchestrator apply -f fixtures/manifests/bundles/<fixture>.yaml --project <project>
    ```
 
 3. QA docs exist under `docs/qa/`.
@@ -106,7 +106,7 @@ For orchestrator CLI, check logs in `data/logs/` directory:
 ```bash
 ls -la data/logs/
 # or check specific task logs
-./scripts/orchestrator.sh task logs <task-id>
+orchestrator task logs <task-id>
 ```
 
 ## Database Validation (Optional)
@@ -236,10 +236,10 @@ The correct reset sequence between batches uses **project-scoped isolation** ins
 
 ```bash
 # Reset project state (task data + project config + auto-tickets)
-./scripts/orchestrator.sh qa project reset <project> --force
+orchestrator qa project reset <project> --force
 
 # Apply fixture into project scope (global config untouched)
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/<relevant>.yaml --project <project>
+orchestrator apply -f fixtures/manifests/bundles/<relevant>.yaml --project <project>
 
 # DO NOT delete docs/ticket/*.md — preserve prior batch tickets
 # DO NOT run `rm -f data/agent_orchestrator.db` — this destroys all state including bootstrap
@@ -277,17 +277,17 @@ For **QA scenario isolation** (recommended — preserves global/bootstrap state)
 
 ```bash
 # Reset a specific project's QA state
-./scripts/orchestrator.sh qa project reset <project> --force
+orchestrator qa project reset <project> --force
 
 # Deploy fixtures into project scope
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/<fixture>.yaml --project <project>
+orchestrator apply -f fixtures/manifests/bundles/<fixture>.yaml --project <project>
 ```
 
 For **full runtime re-initialization** (only when DB is missing or schema needs upgrade):
 
 ```bash
 # Only if DB does not exist or is corrupted
-./scripts/orchestrator.sh init --force
+orchestrator init --force
 ```
 
 **CRITICAL**: Do NOT use `rm -f data/agent_orchestrator.db` during routine QA. This destroys all in-flight task state, bootstrap config, and event history.
@@ -300,14 +300,14 @@ The orchestrator no longer has hardcoded defaults. For QA scenarios, prefer proj
 
 ```bash
 # Preferred: project-scoped reset (preserves global state)
-./scripts/orchestrator.sh qa project reset <project> --force
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/<fixture>.yaml --project <project>
+orchestrator qa project reset <project> --force
+orchestrator apply -f fixtures/manifests/bundles/<fixture>.yaml --project <project>
 
 # Only if DB does not exist at all:
-./scripts/orchestrator.sh init --force
+orchestrator init --force
 
 # Or with custom root path
-./scripts/orchestrator.sh init --root /path/to/project
+orchestrator init --root /path/to/project
 ```
 
 **CRITICAL**: Do NOT use `rm -f data/agent_orchestrator.db` for QA resets. This destroys all state including bootstrap config, in-flight tasks, and event history. Use `qa project reset` for per-project isolation.
@@ -321,7 +321,7 @@ This creates:
 
 1. **Run the actual command first** — don't try to guess the problem:
    ```bash
-   ./scripts/orchestrator.sh task list
+   orchestrator task list
    ```
    Read the actual error message before making any changes.
 
@@ -348,7 +348,7 @@ This creates:
    - Always check git history to understand what changed
 
 4. **Project-specific entry points**:
-   - Not all projects use Docker — check `scripts/orchestrator.sh` for CLI tools
+   - Not all projects use Docker — check `orchestrator` CLI for available commands
    - Look for `scripts/*.sh` files in the project root
    - Check `package.json` scripts for test commands
 

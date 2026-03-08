@@ -11,7 +11,7 @@
 
 The Agent Orchestrator CLI provides kubectl-like command interface for task orchestration. This document tests the CLI interface using structured JSON mock outputs (including sleep-delayed outputs) to validate the full agent orchestration pipeline under strict phase validation.
 
-Entry point: `./scripts/orchestrator.sh <command>` or `./core/target/release/agent-orchestrator <command>`
+Entry point: `orchestrator <command>` (CLI) or `orchestratord` (daemon)
 
 ### Test Agent Configuration
 
@@ -47,14 +47,14 @@ agents:
 
 ### Preconditions
 
-- Orchestrator binary built and available at `./core/target/release/agent-orchestrator`
+- Orchestrator binary built and available at `./target/release/orchestrator`
 - Runtime initialized and mock config applied into SQLite:
    ```bash
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/output-formats.yaml
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml
+   orchestrator qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   orchestrator qa project create "${QA_PROJECT}" --force
    ```
 
 ### Goal
@@ -65,7 +65,7 @@ Validate task creation and execution with mock bash agent completes successfully
 
 1. Create a new task with mock echo agent:
    ```bash
-   ./core/target/release/agent-orchestrator task create \
+   ./target/release/orchestrator task create \
      --name "test-task-echo" \
      --goal "Test agent orchestration" \
      --project "${QA_PROJECT}" \
@@ -75,12 +75,12 @@ Validate task creation and execution with mock bash agent completes successfully
 
 2. List tasks to verify creation:
    ```bash
-   ./core/target/release/agent-orchestrator task list
+   ./target/release/orchestrator task list
    ```
 
 3. Get task details:
    ```bash
-   ./core/target/release/agent-orchestrator task info {task_id}
+   ./target/release/orchestrator task info {task_id}
    ```
 
 ### Expected
@@ -106,25 +106,25 @@ Validate task list filtering by status works correctly.
 
 1. Create multiple tasks with different scenarios:
    ```bash
-   ./core/target/release/agent-orchestrator task create --project "${QA_PROJECT}" --name "task-1" --goal "test1" --no-start
-   ./core/target/release/agent-orchestrator task create --project "${QA_PROJECT}" --name "task-2" --goal "test2" --no-start
+   ./target/release/orchestrator task create --project "${QA_PROJECT}" --name "task-1" --goal "test1" --no-start
+   ./target/release/orchestrator task create --project "${QA_PROJECT}" --name "task-2" --goal "test2" --no-start
    ```
 
 2. List all tasks:
    ```bash
-   ./core/target/release/agent-orchestrator task list
+   ./target/release/orchestrator task list
    ```
 
 3. Filter by status (if tasks exist):
    ```bash
-   ./core/target/release/agent-orchestrator task list --status pending
-   ./core/target/release/agent-orchestrator task list --status completed
+   ./target/release/orchestrator task list --status pending
+   ./target/release/orchestrator task list --status completed
    ```
 
 4. Test output formats:
    ```bash
-   ./core/target/release/agent-orchestrator task list -o json
-   ./core/target/release/agent-orchestrator task list -o yaml
+   ./target/release/orchestrator task list -o json
+   ./target/release/orchestrator task list -o yaml
    ```
 
 ### Expected
@@ -149,28 +149,28 @@ Validate workspace listing and configuration viewing work correctly.
 
 1. List workspaces:
    ```bash
-   ./core/target/release/agent-orchestrator workspace list
+   ./target/release/orchestrator workspace list
    ```
 
 2. Get workspace details:
    ```bash
-   ./core/target/release/agent-orchestrator workspace info default
+   ./target/release/orchestrator workspace info default
    ```
 
 3. View current configuration:
    ```bash
-   ./core/target/release/agent-orchestrator manifest export
-   ./core/target/release/agent-orchestrator manifest export -o json
+   ./target/release/orchestrator manifest export
+   ./target/release/orchestrator manifest export -o json
    ```
 
 4. List available workflows:
    ```bash
-   ./core/target/release/agent-orchestrator get workflows
+   ./target/release/orchestrator get workflows
    ```
 
 5. List available agents:
    ```bash
-   ./core/target/release/agent-orchestrator get agents
+   ./target/release/orchestrator get agents
    ```
 
 ### Expected
@@ -212,22 +212,22 @@ Validate apply command with dry-run mode doesn't persist changes.
 
 2. Apply with dry-run (should not persist):
    ```bash
-   ./core/target/release/agent-orchestrator apply -f fixtures/manifests/bundles/test-workspace.yaml --dry-run
+   ./target/release/orchestrator apply -f fixtures/manifests/bundles/test-workspace.yaml --dry-run
    ```
 
 3. Verify workspace was NOT created:
    ```bash
-   ./core/target/release/agent-orchestrator workspace list
+   ./target/release/orchestrator workspace list
    ```
 
 4. Apply without dry-run:
    ```bash
-   ./core/target/release/agent-orchestrator apply -f fixtures/manifests/bundles/test-workspace.yaml
+   ./target/release/orchestrator apply -f fixtures/manifests/bundles/test-workspace.yaml
    ```
 
 5. Verify workspace WAS created:
    ```bash
-   ./core/target/release/agent-orchestrator workspace info test-workspace
+   ./target/release/orchestrator workspace info test-workspace
    ```
 
 ### Expected
@@ -271,12 +271,12 @@ Validate configuration validation catches invalid configurations.
 
 2. Validate the invalid manifest:
    ```bash
-   ./core/target/release/agent-orchestrator manifest validate -f /tmp/invalid-config.yaml
+   ./target/release/orchestrator manifest validate -f /tmp/invalid-config.yaml
    ```
 
 3. Validate a known-good manifest:
    ```bash
-   ./core/target/release/agent-orchestrator manifest validate -f fixtures/manifests/bundles/echo-workflow.yaml
+   ./target/release/orchestrator manifest validate -f fixtures/manifests/bundles/echo-workflow.yaml
    ```
 
 ### Expected
@@ -300,22 +300,22 @@ Validate task deletion requires --force flag.
 
 1. Create a task:
    ```bash
-   ./core/target/release/agent-orchestrator task create --project "${QA_PROJECT}" --name "delete-me" --goal "test" --no-start
+   ./target/release/orchestrator task create --project "${QA_PROJECT}" --name "delete-me" --goal "test" --no-start
    ```
 
 2. Try to delete without force (should prompt):
    ```bash
-   ./core/target/release/agent-orchestrator task delete {task_id}
+   ./target/release/orchestrator task delete {task_id}
    ```
 
 3. Delete with force:
    ```bash
-   ./core/target/release/agent-orchestrator task delete {task_id} --force
+   ./target/release/orchestrator task delete {task_id} --force
    ```
 
 4. Verify deletion:
    ```bash
-   ./core/target/release/agent-orchestrator task list
+   ./target/release/orchestrator task list
    ```
 
 ### Expected

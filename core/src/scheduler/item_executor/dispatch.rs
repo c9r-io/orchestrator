@@ -413,7 +413,7 @@ async fn execute_builtin_step_dispatch(
                     }
                 }
                 // All state is persisted (restart_pending set by execute_self_restart_step).
-                // Exit process so the wrapper script (orchestrator.sh) relaunches the new binary.
+                // Exit process so the daemon supervisor relaunches the new binary.
                 std::process::exit(EXIT_RESTART as i32);
             }
 

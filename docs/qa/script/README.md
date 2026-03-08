@@ -28,12 +28,12 @@ Shell scripts for executable QA scenarios.
 
 1. Binary exists:
    ```bash
-   ls -la core/target/release/agent-orchestrator
+   ls -la target/release/orchestrator
    ```
 
 2. Build when missing:
    ```bash
-   (cd core && cargo build --release)
+   cargo build --release -p orchestrator-cli
    ```
 
 3. Optional tools:
@@ -73,7 +73,7 @@ Shell scripts for executable QA scenarios.
 - Binary not found:
   - rebuild release binary.
 - Task stuck:
-  - inspect `./scripts/orchestrator.sh task list`
+  - inspect `orchestrator task list`
   - force delete stale task if needed.
 - DB lock:
   - stop concurrent runs and retry.

@@ -35,7 +35,7 @@ The self-bootstrap workflow already supports self-modification verification (`se
 ```
 Layer 1: Builtin Step          Layer 2: Process Wrapper       Layer 3: Task Resumption
 ┌─────────────────────┐        ┌──────────────────────┐       ┌──────────────────────┐
-│ self_restart step    │        │ orchestrator.sh      │       │ task worker / CLI     │
+│ self_restart step    │        │ daemon start -f      │       │ task worker / CLI     │
 │                      │        │                      │       │                      │
 │ 1. cargo build       │  exit  │ while true:          │ start │ claim_next:           │
 │ 2. verify binary     │──75──▶ │   run binary         │──────▶│   restart_pending     │
@@ -56,11 +56,11 @@ Layer 1: Builtin Step          Layer 2: Process Wrapper       Layer 3: Task Resu
 
 ## Alternatives And Tradeoffs
 
-- **Option A (chosen): Exit code + wrapper loop** — Simple, Unix-standard, no IPC needed, wrapper is a thin bash loop
+- **Option A (chosen): Exit code + built-in restart loop** — Simple, Unix-standard, no IPC needed, daemon's foreground mode handles restart
 - **Option B: Signal-based (SIGHUP)** — More complex, requires signal handler in async runtime, harder to test
 - **Option C: exec() self-replace** — Loses parent supervision, no wrapper to detect crashes
 
-Why we chose A: Simplest to implement, test, and debug. Each layer is independently verifiable. The wrapper script already exists and just needs a loop.
+Why we chose A: Simplest to implement, test, and debug. Each layer is independently verifiable. The daemon's foreground mode (`orchestrator daemon start -f`) has a built-in restart loop.
 
 ## Risks And Mitigations
 
@@ -79,12 +79,12 @@ Why we chose A: Simplest to implement, test, and debug. Each layer is independen
 - Pipeline variable: `self_restart_exit_code` — available to subsequent steps
 - Task status transition: `running` → `restart_pending` → `running` (visible in `task info`)
 - Events table: `step_finished` with `{"step": "self_restart", "restart": true/false}`
-- Wrapper log: `[orchestrator] restart requested (exit 75) — re-launching`
+- Daemon log: `[orchestrator] restart requested (exit 75) — re-launching`
 
 ## Operations / Release
 
 - Config: Reuses `ORCH_SELF_TEST_CARGO` env var for testability (mock cargo in tests)
-- Binary path: `core/target/release/agent-orchestrator` (same as existing `RELEASE_BINARY_REL`)
+- Binary path: `target/release/orchestratord` (same as existing `RELEASE_BINARY_REL`)
 - Migration: No DB schema changes — `restart_pending` is a new status value in existing `status TEXT` column
 - Compatibility: Backward compatible — old binaries without `self_restart` step simply skip it (unknown step ID would fail validation, but the step is only in the updated workflow YAML)
 
@@ -108,6 +108,6 @@ Why we chose A: Simplest to implement, test, and debug. Each layer is independen
 
 - `self_restart` step builds, verifies, snapshots, and exits 75 when build succeeds
 - Build failure returns non-zero (not 75), task continues normally
-- `orchestrator.sh` relaunches binary on exit 75
+- `orchestrator daemon start -f` relaunches binary on exit 75
 - New binary auto-claims `restart_pending` task and resumes at next cycle
 - Item statuses are preserved across the restart boundary

@@ -41,8 +41,8 @@ cd /Volumes/Yotta/ai_native_sdlc
 ```bash
 cd core && cargo build --release && cd ..
 
-./scripts/orchestrator.sh --help
-./scripts/orchestrator.sh task --help
+orchestratord --help
+orchestrator task --help
 ```
 
 Expected: help output prints without error.
