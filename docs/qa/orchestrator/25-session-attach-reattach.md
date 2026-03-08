@@ -16,7 +16,7 @@ This document validates the session-oriented interaction flow introduced for tty
 - Auto-routing behavior: `exec task/<task_id>/step/<step_id>` prefers active session when present
 - Attach and re-attach behavior for interactive sessions
 
-Entry point: `./scripts/orchestrator.sh`
+Entry point: `./scripts/run-cli.sh`
 
 ---
 
@@ -34,18 +34,18 @@ Validate that users can discover session-oriented commands and target syntax fro
 
 1. Verify task session subcommand family:
    ```bash
-   ./scripts/orchestrator.sh task --help | rg "session"
-   ./scripts/orchestrator.sh task session --help
+   ./scripts/run-cli.sh task --help | rg "session"
+   ./scripts/run-cli.sh task session --help
    ```
 2. Verify session subcommand details:
    ```bash
-   ./scripts/orchestrator.sh task session list --help
-   ./scripts/orchestrator.sh task session info --help
-   ./scripts/orchestrator.sh task session close --help
+   ./scripts/run-cli.sh task session list --help
+   ./scripts/run-cli.sh task session info --help
+   ./scripts/run-cli.sh task session close --help
    ```
 3. Verify `exec` target supports both selector formats:
    ```bash
-   ./scripts/orchestrator.sh exec --help
+   ./scripts/run-cli.sh exec --help
    ```
 
 ### Expected
@@ -125,12 +125,12 @@ Validate both direct session attach and task-step auto-routing to active session
 
 1. Attach directly by session id:
    ```bash
-   printf 'session-direct-attach\n' | ./scripts/orchestrator.sh exec -it session/{session_id} -- cat
+   printf 'session-direct-attach\n' | ./scripts/run-cli.sh exec -it session/{session_id} -- cat
    ```
 2. Detach after output verification (Ctrl+C or process completion).
 3. Re-attach via task-step target:
    ```bash
-   printf 'session-reattach\n' | ./scripts/orchestrator.sh exec -it task/{task_id}/step/{plan_step_id} -- cat
+   printf 'session-reattach\n' | ./scripts/run-cli.sh exec -it task/{task_id}/step/{plan_step_id} -- cat
    ```
 
 ### Expected
@@ -164,7 +164,7 @@ Validate command injection path without `-it` against `session/<session_id>`.
 
 1. Inject a non-interactive command:
    ```bash
-   ./scripts/orchestrator.sh exec session/{session_id} -- echo session-noninteractive
+   ./scripts/run-cli.sh exec session/{session_id} -- echo session-noninteractive
    ```
 2. Read last output lines:
    ```bash
@@ -201,15 +201,15 @@ Validate closure semantics and post-close attach rejection behavior.
 
 1. Close session gracefully:
    ```bash
-   ./scripts/orchestrator.sh task session close {session_id}
+   ./scripts/run-cli.sh task session close {session_id}
    ```
 2. Validate state changed:
    ```bash
-   ./scripts/orchestrator.sh task session info {session_id} -o json
+   ./scripts/run-cli.sh task session info {session_id} -o json
    ```
 3. Try to attach closed session:
    ```bash
-   ./scripts/orchestrator.sh exec -it session/{session_id} -- cat
+   ./scripts/run-cli.sh exec -it session/{session_id} -- cat
    ```
 
 ### Expected

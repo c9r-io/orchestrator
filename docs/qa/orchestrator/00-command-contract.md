@@ -14,12 +14,12 @@ All files under `docs/qa/orchestrator/` must align with this contract.
 
 Runtime state source of truth is SQLite. YAML is used as import/export/edit artifact when needed.
 
-Entry point: `./scripts/orchestrator.sh <command>` (standalone) or `./target/release/orchestrator <command>` (C/S client).
+Entry point: `./scripts/run-cli.sh <command>` (auto-builds + calls CLI client) or `./target/release/orchestrator <command>`.
 
-C/S architecture entry points (requires daemon running):
-- Daemon: `./target/release/orchestratord [--foreground] [--bind addr] [--workers N]`
-- CLI client: `./target/release/orchestrator <command>`
-- Daemon management: `./target/release/orchestrator daemon start|stop|status|restart`
+Daemon lifecycle:
+- Start: `orchestrator daemon start -f` (foreground with restart loop) or `orchestrator daemon start` (background)
+- Stop/status/restart: `orchestrator daemon stop|status|restart`
+- Direct: `./target/release/orchestratord [--foreground] [--bind addr] [--workers N]`
 
 ---
 
@@ -33,7 +33,7 @@ C/S architecture entry points (requires daemon running):
 
 1. Show help:
    ```bash
-   ./scripts/orchestrator.sh --help
+   ./scripts/run-cli.sh --help
    ```
 
 2. Confirm top-level commands exist:
@@ -88,42 +88,42 @@ C/S architecture entry points (requires daemon running):
 
 1. Apply manifest environment (if not already done):
    ```bash
-   ./scripts/orchestrator.sh init
-   ./scripts/orchestrator.sh apply -f <manifest.yaml>
+   ./scripts/run-cli.sh init
+   ./scripts/run-cli.sh apply -f <manifest.yaml>
    ```
 
 2. (Recommended for isolated QA reruns) Reset only the scenario project:
    ```bash
-   ./scripts/orchestrator.sh qa project reset <qa-project-id> --keep-config --force
+   ./scripts/run-cli.sh qa project reset <qa-project-id> --keep-config --force
    ```
 
 3. Validate workspace info positional argument:
    ```bash
-   ./scripts/orchestrator.sh workspace info default
+   ./scripts/run-cli.sh workspace info default
    ```
 
 4. Validate output format flags:
    ```bash
-   ./scripts/orchestrator.sh task list -o json
-   ./scripts/orchestrator.sh task info {task_id} -o yaml
-   ./scripts/orchestrator.sh get workspaces -o yaml
+   ./scripts/run-cli.sh task list -o json
+   ./scripts/run-cli.sh task info {task_id} -o yaml
+   ./scripts/run-cli.sh get workspaces -o yaml
    ```
 
 5. Validate task create does not depend on `--format`:
    ```bash
-   ./scripts/orchestrator.sh task create --project <qa-project-id> --name "contract-check" --goal "check" --no-start
+   ./scripts/run-cli.sh task create --project <qa-project-id> --name "contract-check" --goal "check" --no-start
    ```
 
 6. Validate new scheduling flags and worker commands:
    ```bash
-   ./scripts/orchestrator.sh task create --help | rg -- "--detach"
-   ./scripts/orchestrator.sh task start --help | rg -- "--detach"
-   ./scripts/orchestrator.sh task worker --help
+   ./scripts/run-cli.sh task create --help | rg -- "--detach"
+   ./scripts/run-cli.sh task start --help | rg -- "--detach"
+   ./scripts/run-cli.sh task worker --help
    ```
 7. Validate task edit and exec command families:
    ```bash
-   ./scripts/orchestrator.sh task edit --help
-   ./scripts/orchestrator.sh exec --help
+   ./scripts/run-cli.sh task edit --help
+   ./scripts/run-cli.sh exec --help
    ```
 
 ### Expected Result
@@ -146,26 +146,26 @@ C/S architecture entry points (requires daemon running):
 
 1. Validate list-style get:
    ```bash
-   ./scripts/orchestrator.sh get workspaces
-   ./scripts/orchestrator.sh get agents
-   ./scripts/orchestrator.sh get workflows
+   ./scripts/run-cli.sh get workspaces
+   ./scripts/run-cli.sh get agents
+   ./scripts/run-cli.sh get workflows
    ```
 
 2. Validate label selector syntax:
    ```bash
-   ./scripts/orchestrator.sh get workspaces -l env=dev
+   ./scripts/run-cli.sh get workspaces -l env=dev
    ```
 
 3. Validate stdin apply contract:
    ```bash
-   cat fixtures/manifests/bundles/output-formats.yaml | ./scripts/orchestrator.sh apply -f -
+   cat fixtures/manifests/bundles/output-formats.yaml | ./scripts/run-cli.sh apply -f -
    ```
 
 4. Validate create command surfaces:
    ```bash
-   ./scripts/orchestrator.sh workspace create --help
-   ./scripts/orchestrator.sh agent create --help
-   ./scripts/orchestrator.sh workflow create --help
+   ./scripts/run-cli.sh workspace create --help
+   ./scripts/run-cli.sh agent create --help
+   ./scripts/run-cli.sh workflow create --help
    ```
 
 ### Expected Result

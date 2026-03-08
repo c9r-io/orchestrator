@@ -42,12 +42,12 @@ Verify that agents without an explicit `promptDelivery` field default to `arg` m
    ```
 2. Run:
    ```bash
-   ./scripts/orchestrator.sh get agent default-delivery-agent -o yaml
+   ./scripts/run-cli.sh get agent default-delivery-agent -o yaml
    ```
 3. Verify that the output does **not** contain a `promptDelivery` field (skipped when default).
 4. Run:
    ```bash
-   ./scripts/orchestrator.sh manifest export -o yaml | grep -A5 "default-delivery-agent"
+   ./scripts/run-cli.sh manifest export -o yaml | grep -A5 "default-delivery-agent"
    ```
 
 ### Expected
@@ -80,12 +80,12 @@ Verify that an agent with `promptDelivery: stdin` is stored correctly, round-tri
    ```
 2. Run:
    ```bash
-   ./scripts/orchestrator.sh get agent stdin-agent -o yaml
+   ./scripts/run-cli.sh get agent stdin-agent -o yaml
    ```
 3. Verify the output contains `promptDelivery: stdin`.
 4. Export and re-apply:
    ```bash
-   ./scripts/orchestrator.sh manifest export -o yaml > /tmp/qa-pd-export.yaml
+   ./scripts/run-cli.sh manifest export -o yaml > /tmp/qa-pd-export.yaml
    grep "promptDelivery" /tmp/qa-pd-export.yaml
    ```
 
@@ -119,11 +119,11 @@ Verify that an agent with `promptDelivery: file` is stored correctly and preflig
    ```
 2. Run:
    ```bash
-   ./scripts/orchestrator.sh get agent file-agent -o yaml
+   ./scripts/run-cli.sh get agent file-agent -o yaml
    ```
 3. Run preflight check:
    ```bash
-   ./scripts/orchestrator.sh check all 2>&1
+   ./scripts/run-cli.sh check all 2>&1
    ```
 
 ### Expected
@@ -167,7 +167,7 @@ Verify that the preflight check system warns on misconfigured prompt delivery co
    ```
 3. Run preflight check:
    ```bash
-   ./scripts/orchestrator.sh check all 2>&1
+   ./scripts/run-cli.sh check all 2>&1
    ```
 
 ### Expected
@@ -200,15 +200,15 @@ Verify that `promptDelivery: env` is correctly serialized, deserialized, and rou
    ```
 2. Run:
    ```bash
-   ./scripts/orchestrator.sh get agent env-agent -o yaml
+   ./scripts/run-cli.sh get agent env-agent -o yaml
    ```
 3. Verify `promptDelivery: env` in output.
 4. Delete and re-apply from export:
    ```bash
-   ./scripts/orchestrator.sh manifest export -o yaml > /tmp/qa-pd-env.yaml
-   ./scripts/orchestrator.sh delete agent env-agent
-   ./scripts/orchestrator.sh apply -f /tmp/qa-pd-env.yaml
-   ./scripts/orchestrator.sh get agent env-agent -o yaml
+   ./scripts/run-cli.sh manifest export -o yaml > /tmp/qa-pd-env.yaml
+   ./scripts/run-cli.sh delete agent env-agent
+   ./scripts/run-cli.sh apply -f /tmp/qa-pd-env.yaml
+   ./scripts/run-cli.sh get agent env-agent -o yaml
    ```
 
 ### Expected

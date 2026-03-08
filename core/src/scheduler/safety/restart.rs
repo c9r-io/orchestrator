@@ -4,22 +4,52 @@ use crate::events::insert_event;
 use crate::state::InnerState;
 use anyhow::{Context, Result};
 use serde_json::json;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::error;
 
 /// Exit code that signals the process wrapper to relaunch the binary.
 /// Uses sysexits.h EX_TEMPFAIL (75) — "temporary failure, try again."
+/// Kept as fallback for the CLI foreground restart loop.
 pub const EXIT_RESTART: i64 = 75;
 
+/// Outcome of `execute_self_restart_step`.
+/// Core returns this signal; the daemon layer decides how to act on it.
+#[derive(Debug)]
+pub enum SelfRestartOutcome {
+    /// Build, verify, and snapshot succeeded. Daemon should exec the new binary.
+    RestartReady { binary_path: PathBuf },
+    /// A phase failed. The returned code is the step exit code (non-75).
+    Failed(i64),
+}
+
+/// Sentinel error to propagate a restart signal up the call stack.
+/// Daemon layer catches this via `downcast_ref` and performs `exec()`.
+#[derive(Debug)]
+pub struct RestartRequestedError {
+    pub binary_path: PathBuf,
+}
+
+impl std::fmt::Display for RestartRequestedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "restart requested: exec {}",
+            self.binary_path.display()
+        )
+    }
+}
+
+impl std::error::Error for RestartRequestedError {}
+
 /// Self-restart builtin step: rebuild the binary, verify it, snapshot .stable,
-/// set task status to restart_pending, and return EXIT_RESTART so the process
-/// wrapper (`orchestrator daemon start -f`) re-launches the new binary.
+/// set task status to restart_pending, and return `SelfRestartOutcome` so the
+/// daemon can exec the new binary (or the CLI wrapper can fallback-restart).
 pub async fn execute_self_restart_step(
     workspace_root: &Path,
     state: &InnerState,
     task_id: &str,
     item_id: &str,
-) -> Result<i64> {
+) -> Result<SelfRestartOutcome> {
     let cargo_bin = std::env::var("ORCH_SELF_TEST_CARGO").unwrap_or_else(|_| "cargo".to_string());
     let binary_path = workspace_root.join(RELEASE_BINARY_REL);
 
@@ -46,7 +76,9 @@ pub async fn execute_self_restart_step(
             "self_restart_phase",
             json!({"phase": "cargo_build_release", "passed": false}),
         );
-        return Ok(build_output.status.code().unwrap_or(1) as i64);
+        return Ok(SelfRestartOutcome::Failed(
+            build_output.status.code().unwrap_or(1) as i64,
+        ));
     }
     state.emit_event(
         task_id,
@@ -88,7 +120,7 @@ pub async fn execute_self_restart_step(
                 "self_restart_phase",
                 json!({"phase": "verify_binary", "passed": false}),
             );
-            return Ok(1);
+            return Ok(SelfRestartOutcome::Failed(1));
         }
         Ok(Err(e)) => {
             error!(phase = "verify_binary", error = %e, "failed to execute new binary");
@@ -98,7 +130,7 @@ pub async fn execute_self_restart_step(
                 "self_restart_phase",
                 json!({"phase": "verify_binary", "passed": false, "error": e.to_string()}),
             );
-            return Ok(1);
+            return Ok(SelfRestartOutcome::Failed(1));
         }
         Err(_) => {
             error!(phase = "verify_binary", "new binary --help timed out (10s)");
@@ -108,7 +140,7 @@ pub async fn execute_self_restart_step(
                 "self_restart_phase",
                 json!({"phase": "verify_binary", "passed": false, "error": "timeout"}),
             );
-            return Ok(1);
+            return Ok(SelfRestartOutcome::Failed(1));
         }
     }
 
@@ -148,7 +180,7 @@ pub async fn execute_self_restart_step(
             "self_restart_phase",
             json!({"phase": "snapshot_binary", "passed": false, "error": e.to_string()}),
         );
-        return Ok(1);
+        return Ok(SelfRestartOutcome::Failed(1));
     }
     state.emit_event(
         task_id,
@@ -190,7 +222,7 @@ pub async fn execute_self_restart_step(
     )
     .await?;
 
-    Ok(EXIT_RESTART)
+    Ok(SelfRestartOutcome::RestartReady { binary_path })
 }
 
 /// Verify the running binary matches what was recorded before restart.

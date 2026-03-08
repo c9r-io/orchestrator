@@ -17,16 +17,16 @@ Project setup (run once):
 
 ```bash
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/output-formats.yaml
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+./scripts/run-cli.sh apply -f fixtures/manifests/bundles/output-formats.yaml
+./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+./scripts/run-cli.sh qa project create "${QA_PROJECT}" --force
 ```
 
 ### Common Preconditions (Scenarios 2, 3, 5)
 
 - Config must be applied: `orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml`
-- Recreate the isolated project scaffold: `./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true && rm -rf "workspace/${QA_PROJECT}" && ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force`
+- Recreate the isolated project scaffold: `./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true && rm -rf "workspace/${QA_PROJECT}" && ./scripts/run-cli.sh qa project create "${QA_PROJECT}" --force`
 
 ---
 

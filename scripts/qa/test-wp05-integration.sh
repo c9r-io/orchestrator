@@ -19,7 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
 
-ORCH="./scripts/orchestrator.sh"
+ORCH="./scripts/run-cli.sh"
 DB="data/agent_orchestrator.db"
 VERBOSE=false
 RUN_LAYER=""

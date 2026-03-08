@@ -11,7 +11,7 @@
 
 This document is split from `13-dynamic-orchestration.md` to keep each QA document within 5 scenarios.
 
-Entry point: `./scripts/orchestrator.sh manifest <command>`
+Entry point: `./scripts/run-cli.sh manifest <command>`
 
 ---
 
@@ -19,14 +19,14 @@ Entry point: `./scripts/orchestrator.sh manifest <command>`
 
 ### Preconditions
 
-- Orchestrator initialized: `./scripts/orchestrator.sh init --force`
-- Config applied: `./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/output-formats.yaml` (or any valid config fixture)
+- Orchestrator initialized: `./scripts/run-cli.sh init --force`
+- Config applied: `./scripts/run-cli.sh apply -f fixtures/manifests/bundles/output-formats.yaml` (or any valid config fixture)
 
 ### Steps
 
 1. Export runtime config:
    ```bash
-   ./scripts/orchestrator.sh manifest export -f /tmp/exported-config.yaml
+   ./scripts/run-cli.sh manifest export -f /tmp/exported-config.yaml
    ```
 
 2. Verify adaptive workflow snippet:
@@ -41,7 +41,7 @@ Entry point: `./scripts/orchestrator.sh manifest <command>`
 
 4. Validate exported YAML:
    ```bash
-   ./scripts/orchestrator.sh manifest validate -f /tmp/exported-config.yaml
+   ./scripts/run-cli.sh manifest validate -f /tmp/exported-config.yaml
    ```
 
 ### Expected

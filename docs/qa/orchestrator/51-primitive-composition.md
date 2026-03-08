@@ -41,7 +41,7 @@ scripts/qa/test-wp05-integration.sh [--layer N] [--scenario ID] [--verbose]
 
 ### Preconditions
 - Orchestrator binary built (`cargo build --release`)
-- Database initialized (`./scripts/orchestrator.sh init`)
+- Database initialized (`./scripts/run-cli.sh init`)
 - Fixture: `fixtures/manifests/bundles/wp05-store-spawn.yaml`
 
 ### Goal
@@ -50,18 +50,18 @@ Verify that a parent task can write to a persistent store via `store_put` post-a
 ### Steps
 1. Apply the fixture into project scope:
    ```bash
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/wp05-store-spawn.yaml --project wp05-L1A
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/wp05-store-spawn.yaml --project wp05-L1A
    ```
 2. Create and start a task:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/run-cli.sh task create \
      --project wp05-L1A \
      --workspace wp05-ws \
      -W wp05-store-spawn-parent \
      --target-file fixtures/wp05-qa/wp05-check.md \
      --goal "test store+spawn" \
      --no-start 2>&1 | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh task start "$TASK_ID" >/dev/null 2>&1
+   ./scripts/run-cli.sh task start "$TASK_ID" >/dev/null 2>&1
    ```
 3. Query task status:
    ```bash
@@ -115,18 +115,18 @@ Verify that `before_complete` invariant violations halt the task (status = faile
 ### Steps — Violation Path
 1. Apply fixture:
    ```bash
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/wp05-store-invariant.yaml --project wp05-L1B
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/wp05-store-invariant.yaml --project wp05-L1B
    ```
 2. Create and start task with the failing workflow:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/run-cli.sh task create \
      --project wp05-L1B \
      --workspace wp05-ws \
      -W wp05-store-invariant-fail \
      --target-file fixtures/wp05-qa/wp05-check.md \
      --goal "test invariant fail" \
      --no-start 2>&1 | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh task start "$TASK_ID" >/dev/null 2>&1 || true
+   ./scripts/run-cli.sh task start "$TASK_ID" >/dev/null 2>&1 || true
    ```
 3. Verify task failed:
    ```bash
@@ -144,14 +144,14 @@ Verify that `before_complete` invariant violations halt the task (status = faile
 ### Steps — Pass Path
 5. Create and start task with the passing workflow:
    ```bash
-   TASK_ID2=$(./scripts/orchestrator.sh task create \
+   TASK_ID2=$(./scripts/run-cli.sh task create \
      --project wp05-L1B \
      --workspace wp05-ws \
      -W wp05-store-invariant-pass \
      --target-file fixtures/wp05-qa/wp05-check.md \
      --goal "test invariant pass" \
      --no-start 2>&1 | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh task start "$TASK_ID2" >/dev/null 2>&1
+   ./scripts/run-cli.sh task start "$TASK_ID2" >/dev/null 2>&1
    ```
 6. Verify task completed:
    ```bash
@@ -178,18 +178,18 @@ Verify the full WP03 pipeline: `generate_items` → item-scoped execution → `i
 ### Steps
 1. Apply fixture:
    ```bash
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/wp05-items-select.yaml --project wp05-L1C
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/wp05-items-select.yaml --project wp05-L1C
    ```
 2. Create and start task:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/run-cli.sh task create \
      --project wp05-L1C \
      --workspace wp05-ws \
      -W wp05-items-select \
      --target-file fixtures/wp05-qa/wp05-check.md \
      --goal "test items+select" \
      --no-start 2>&1 | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh task start "$TASK_ID" >/dev/null 2>&1
+   ./scripts/run-cli.sh task start "$TASK_ID" >/dev/null 2>&1
    ```
 3. Verify dynamic items were generated:
    ```bash
@@ -227,18 +227,18 @@ Verify that invariants fire correctly after dynamically generated items complete
 ### Steps
 1. Apply fixture:
    ```bash
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/wp05-items-invariant.yaml --project wp05-L1D
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/wp05-items-invariant.yaml --project wp05-L1D
    ```
 2. Create and start task:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/run-cli.sh task create \
      --project wp05-L1D \
      --workspace wp05-ws \
      -W wp05-items-invariant \
      --target-file fixtures/wp05-qa/wp05-check.md \
      --goal "test items+invariant" \
      --no-start 2>&1 | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh task start "$TASK_ID" >/dev/null 2>&1
+   ./scripts/run-cli.sh task start "$TASK_ID" >/dev/null 2>&1
    ```
 3. Verify items generated:
    ```bash
@@ -271,18 +271,18 @@ Verify triple-primitive composition: dynamic items feed into selection, winner i
 ### Steps
 1. Apply fixture:
    ```bash
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/wp05-store-items-select.yaml --project wp05-L2A
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/wp05-store-items-select.yaml --project wp05-L2A
    ```
 2. Create and start task:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/run-cli.sh task create \
      --project wp05-L2A \
      --workspace wp05-ws \
      -W wp05-store-items-select \
      --target-file fixtures/wp05-qa/wp05-check.md \
      --goal "test store+items+select+spawn" \
      --no-start 2>&1 | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh task start "$TASK_ID" >/dev/null 2>&1
+   ./scripts/run-cli.sh task start "$TASK_ID" >/dev/null 2>&1
    ```
 3. Verify items generated:
    ```bash

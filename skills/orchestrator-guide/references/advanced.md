@@ -180,7 +180,7 @@ spec:
 1. **Binary Snapshot**: `.stable` backup at cycle start
 2. **Self-Test Gate**: cargo check + cargo test --lib + manifest validate
 3. **Self-Referential Enforcement**: `self_referential_safe` prehook variable filters unsafe QA docs
-4. **Watchdog**: orchestrator.sh restores .stable on consecutive crashes
+4. **Watchdog**: daemon restores .stable on consecutive crashes
 
 ## Safety Configuration
 

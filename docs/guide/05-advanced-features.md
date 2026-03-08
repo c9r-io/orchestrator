@@ -67,20 +67,20 @@ spec:
 
 ```bash
 # Apply CRD + instances
-./scripts/orchestrator.sh apply -f crd-manifest.yaml
+./scripts/run-cli.sh apply -f crd-manifest.yaml
 
 # List instances
-./scripts/orchestrator.sh get promptlibraries
-./scripts/orchestrator.sh get pl                    # using short name
+./scripts/run-cli.sh get promptlibraries
+./scripts/run-cli.sh get pl                    # using short name
 
 # Describe
-./scripts/orchestrator.sh describe promptlibrary qa-prompts
+./scripts/run-cli.sh describe promptlibrary qa-prompts
 
 # Delete
-./scripts/orchestrator.sh delete promptlibrary qa-prompts
+./scripts/run-cli.sh delete promptlibrary qa-prompts
 
 # Export
-./scripts/orchestrator.sh manifest export           # includes CRD resources
+./scripts/run-cli.sh manifest export           # includes CRD resources
 ```
 
 ### CRD Validation
@@ -142,16 +142,16 @@ steps:
 
 ```bash
 # Put a value
-./scripts/orchestrator.sh store put context my_key "my_value"
+./scripts/run-cli.sh store put context my_key "my_value"
 
 # Get a value
-./scripts/orchestrator.sh store get context my_key
+./scripts/run-cli.sh store get context my_key
 
 # List keys
-./scripts/orchestrator.sh store list context
+./scripts/run-cli.sh store list context
 
 # Delete a key
-./scripts/orchestrator.sh store delete context my_key
+./scripts/run-cli.sh store delete context my_key
 ```
 
 ## Task Spawning (WP02)

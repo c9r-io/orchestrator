@@ -6,7 +6,7 @@ Agent Orchestrator CLI 全部命令速查。
 
 | 模式 | 命令 | 说明 |
 |------|------|------|
-| 单体 | `./scripts/orchestrator.sh <command>` | 传统单进程 CLI |
+| 单体 | `./scripts/run-cli.sh <command>` | 传统单进程 CLI |
 | C/S 守护进程 | `./target/release/orchestratord [flags]` | gRPC 服务端 + 内嵌工作器 |
 | C/S 客户端 | `./target/release/orchestrator <command>` | 轻量 gRPC 客户端 |
 
@@ -53,7 +53,7 @@ Agent Orchestrator CLI 全部命令速查。
 创建运行时目录和 SQLite 表结构。
 
 ```bash
-./scripts/orchestrator.sh init
+./scripts/run-cli.sh init
 ```
 
 ### apply
@@ -62,16 +62,16 @@ Agent Orchestrator CLI 全部命令速查。
 
 ```bash
 # 从文件
-./scripts/orchestrator.sh apply -f manifest.yaml
+./scripts/run-cli.sh apply -f manifest.yaml
 
 # 从标准输入
-cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
+cat manifest.yaml | ./scripts/run-cli.sh apply -f -
 
 # 试运行（仅验证）
-./scripts/orchestrator.sh apply -f manifest.yaml --dry-run
+./scripts/run-cli.sh apply -f manifest.yaml --dry-run
 
 # 项目级应用
-./scripts/orchestrator.sh apply -f manifest.yaml --project my-project
+./scripts/run-cli.sh apply -f manifest.yaml --project my-project
 ```
 
 ### check
@@ -79,7 +79,7 @@ cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
 预检验证：交叉引用代理、工作流和模板。
 
 ```bash
-./scripts/orchestrator.sh check
+./scripts/run-cli.sh check
 ```
 
 ## 资源查询
@@ -89,16 +89,16 @@ cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
 列出资源（kubectl 风格）。
 
 ```bash
-./scripts/orchestrator.sh get workspaces
-./scripts/orchestrator.sh get agents
-./scripts/orchestrator.sh get workflows
+./scripts/run-cli.sh get workspaces
+./scripts/run-cli.sh get agents
+./scripts/run-cli.sh get workflows
 
 # 输出格式
-./scripts/orchestrator.sh get agents -o json
-./scripts/orchestrator.sh get agents -o yaml
+./scripts/run-cli.sh get agents -o json
+./scripts/run-cli.sh get agents -o yaml
 
 # 标签选择器
-./scripts/orchestrator.sh get workspaces -l env=dev,team=platform
+./scripts/run-cli.sh get workspaces -l env=dev,team=platform
 ```
 
 ### describe
@@ -106,9 +106,9 @@ cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
 单个资源的详细视图。
 
 ```bash
-./scripts/orchestrator.sh describe workspace default
-./scripts/orchestrator.sh describe agent coder
-./scripts/orchestrator.sh describe workflow self-bootstrap
+./scripts/run-cli.sh describe workspace default
+./scripts/run-cli.sh describe agent coder
+./scripts/run-cli.sh describe workflow self-bootstrap
 ```
 
 ### delete
@@ -116,27 +116,27 @@ cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
 按 kind/name 删除资源。
 
 ```bash
-./scripts/orchestrator.sh delete workspace my-ws
-./scripts/orchestrator.sh delete agent old-agent
+./scripts/run-cli.sh delete workspace my-ws
+./scripts/run-cli.sh delete agent old-agent
 ```
 
 ## 工作区
 
 ```bash
-./scripts/orchestrator.sh workspace info default          # 位置参数
-./scripts/orchestrator.sh workspace create --help
+./scripts/run-cli.sh workspace info default          # 位置参数
+./scripts/run-cli.sh workspace create --help
 ```
 
 ## 代理
 
 ```bash
-./scripts/orchestrator.sh agent create --help
+./scripts/run-cli.sh agent create --help
 ```
 
 ## 工作流
 
 ```bash
-./scripts/orchestrator.sh workflow create --help
+./scripts/run-cli.sh workflow create --help
 ```
 
 ## 任务生命周期
@@ -144,7 +144,7 @@ cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
 ### task create
 
 ```bash
-./scripts/orchestrator.sh task create \
+./scripts/run-cli.sh task create \
   --name "my-task" \
   --goal "实现功能 X" \
   --workflow self-bootstrap \
@@ -167,34 +167,34 @@ cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
 ### task list / info
 
 ```bash
-./scripts/orchestrator.sh task list
-./scripts/orchestrator.sh task list -o json
+./scripts/run-cli.sh task list
+./scripts/run-cli.sh task list -o json
 
-./scripts/orchestrator.sh task info <task_id>
-./scripts/orchestrator.sh task info <task_id> -o yaml
+./scripts/run-cli.sh task info <task_id>
+./scripts/run-cli.sh task info <task_id> -o yaml
 ```
 
 ### task start / pause / resume
 
 ```bash
-./scripts/orchestrator.sh task start <task_id>
-./scripts/orchestrator.sh task start <task_id> --detach
+./scripts/run-cli.sh task start <task_id>
+./scripts/run-cli.sh task start <task_id> --detach
 
-./scripts/orchestrator.sh task pause <task_id>
-./scripts/orchestrator.sh task resume <task_id>
+./scripts/run-cli.sh task pause <task_id>
+./scripts/run-cli.sh task resume <task_id>
 ```
 
 ### task logs / watch / trace
 
 ```bash
 # 查看执行日志
-./scripts/orchestrator.sh task logs <task_id>
+./scripts/run-cli.sh task logs <task_id>
 
 # 实时监控（自动刷新状态面板）
-./scripts/orchestrator.sh task watch <task_id>
+./scripts/run-cli.sh task watch <task_id>
 
 # 执行追踪与异常检测
-./scripts/orchestrator.sh task trace <task_id>
+./scripts/run-cli.sh task trace <task_id>
 ```
 
 ### task retry
@@ -202,7 +202,7 @@ cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
 重试失败的任务项。
 
 ```bash
-./scripts/orchestrator.sh task retry <task_id> --item <item_id> --force
+./scripts/run-cli.sh task retry <task_id> --item <item_id> --force
 ```
 
 ### task edit
@@ -210,13 +210,13 @@ cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
 向运行中任务的执行计划插入步骤。
 
 ```bash
-./scripts/orchestrator.sh task edit --help
+./scripts/run-cli.sh task edit --help
 ```
 
 ### task delete
 
 ```bash
-./scripts/orchestrator.sh task delete <task_id>
+./scripts/run-cli.sh task delete <task_id>
 ```
 
 ### task worker（单体模式）
@@ -224,10 +224,10 @@ cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
 处理分离任务的后台工作器（仅限单体模式）。
 
 ```bash
-./scripts/orchestrator.sh task worker start
-./scripts/orchestrator.sh task worker start --poll-ms 500 --workers 3
-./scripts/orchestrator.sh task worker stop
-./scripts/orchestrator.sh task worker status
+./scripts/run-cli.sh task worker start
+./scripts/run-cli.sh task worker start --poll-ms 500 --workers 3
+./scripts/run-cli.sh task worker stop
+./scripts/run-cli.sh task worker status
 ```
 
 > **C/S 模式**：工作器内嵌于守护进程。使用 `orchestratord --workers N` 替代，无需单独的 worker 命令。
@@ -237,9 +237,9 @@ cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
 附加任务执行的会话管理。
 
 ```bash
-./scripts/orchestrator.sh task session list
-./scripts/orchestrator.sh task session info <session_id>
-./scripts/orchestrator.sh task session close <session_id>
+./scripts/run-cli.sh task session list
+./scripts/run-cli.sh task session info <session_id>
+./scripts/run-cli.sh task session close <session_id>
 ```
 
 ## Exec
@@ -247,29 +247,29 @@ cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
 在任务步骤上下文中执行命令。
 
 ```bash
-./scripts/orchestrator.sh exec --help
+./scripts/run-cli.sh exec --help
 
 # 交互模式
-./scripts/orchestrator.sh exec -it <task_id> <step_id>
+./scripts/run-cli.sh exec -it <task_id> <step_id>
 ```
 
 ## 清单与编辑
 
 ```bash
 # 导出所有配置为 YAML
-./scripts/orchestrator.sh manifest export
+./scripts/run-cli.sh manifest export
 
 # 交互式编辑资源（打开 $EDITOR）
-./scripts/orchestrator.sh edit workspace default
-./scripts/orchestrator.sh edit workflow self-bootstrap
+./scripts/run-cli.sh edit workspace default
+./scripts/run-cli.sh edit workflow self-bootstrap
 ```
 
 ## 数据库
 
 ```bash
 # 重置数据库（破坏性 —— 需要 --force）
-./scripts/orchestrator.sh db reset --force
-./scripts/orchestrator.sh db reset --force --include-config
+./scripts/run-cli.sh db reset --force
+./scripts/run-cli.sh db reset --force --include-config
 ```
 
 **警告**：`db reset` 是破坏性操作。使用 `qa project reset` 进行隔离的清理。
@@ -278,49 +278,49 @@ cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
 
 ```bash
 # 重置项目（隔离的 —— 不影响其他项目）
-./scripts/orchestrator.sh qa project reset <project> --keep-config --force
+./scripts/run-cli.sh qa project reset <project> --keep-config --force
 
 # 创建新项目脚手架
-./scripts/orchestrator.sh qa project create <project> --force
+./scripts/run-cli.sh qa project create <project> --force
 
 # QA 诊断 —— 验证并发保护措施
-./scripts/orchestrator.sh qa doctor
+./scripts/run-cli.sh qa doctor
 ```
 
 ## 持久化存储
 
 ```bash
-./scripts/orchestrator.sh store get <store_name> <key>
-./scripts/orchestrator.sh store put <store_name> <key> <value>
-./scripts/orchestrator.sh store delete <store_name> <key>
-./scripts/orchestrator.sh store list <store_name>
-./scripts/orchestrator.sh store prune <store_name>
+./scripts/run-cli.sh store get <store_name> <key>
+./scripts/run-cli.sh store put <store_name> <key> <value>
+./scripts/run-cli.sh store delete <store_name> <key>
+./scripts/run-cli.sh store list <store_name>
+./scripts/run-cli.sh store prune <store_name>
 ```
 
 ## 配置生命周期
 
 ```bash
 # 显示自修复审计日志
-./scripts/orchestrator.sh config heal-log
+./scripts/run-cli.sh config heal-log
 
 # 回填旧事件中缺失的 step_scope
-./scripts/orchestrator.sh config backfill-events --force
+./scripts/run-cli.sh config backfill-events --force
 ```
 
 ## 调试与验证
 
 ```bash
-./scripts/orchestrator.sh debug           # 检查内部状态
-./scripts/orchestrator.sh verify          # 运行验证检查
-./scripts/orchestrator.sh version         # 构建版本 + git 哈希
+./scripts/run-cli.sh debug           # 检查内部状态
+./scripts/run-cli.sh verify          # 运行验证检查
+./scripts/run-cli.sh version         # 构建版本 + git 哈希
 ```
 
 ## Shell 补全
 
 ```bash
 # 生成补全脚本（bash/zsh/fish）
-./scripts/orchestrator.sh completion bash > ~/.bash_completion.d/orchestrator
-./scripts/orchestrator.sh completion zsh > ~/.zfunc/_orchestrator
+./scripts/run-cli.sh completion bash > ~/.bash_completion.d/orchestrator
+./scripts/run-cli.sh completion zsh > ~/.zfunc/_orchestrator
 ```
 
 ## 输出格式

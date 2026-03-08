@@ -2,7 +2,7 @@
 
 Date baseline: 2026-02-27
 Repository: `/Volumes/Yotta/ai_native_sdlc`
-Entry CLI: `./scripts/orchestrator.sh`
+Entry CLI: `./scripts/run-cli.sh`
 
 This runbook is a reproducible, copy-paste oriented smoke process that validates
 the orchestrator's self-bootstrap workflow **and** the 4-layer survival mechanism
@@ -52,7 +52,7 @@ Expected: help output prints without error.
 ```bash
 # Cold-start safe reset
 rm -f data/agent_orchestrator.db config/default.yaml
-./scripts/orchestrator.sh init -f
+./scripts/run-cli.sh init -f
 ```
 
 Runtime data locations:
@@ -62,12 +62,12 @@ Runtime data locations:
 ### 2.3 Apply Self-Bootstrap Resources
 
 ```bash
-./scripts/orchestrator.sh manifest validate -f docs/workflow/self-bootstrap.yaml
-./scripts/orchestrator.sh apply -f docs/workflow/self-bootstrap.yaml
+./scripts/run-cli.sh manifest validate -f docs/workflow/self-bootstrap.yaml
+./scripts/run-cli.sh apply -f docs/workflow/self-bootstrap.yaml
 
-./scripts/orchestrator.sh get workspace
-./scripts/orchestrator.sh get workflow
-./scripts/orchestrator.sh get agent
+./scripts/run-cli.sh get workspace
+./scripts/run-cli.sh get workflow
+./scripts/run-cli.sh get agent
 ```
 
 Expected:
@@ -79,7 +79,7 @@ Expected:
 
 ```bash
 QA_PROJECT="qa-survival-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --from-workspace self --force
+./scripts/run-cli.sh qa project create "${QA_PROJECT}" --from-workspace self --force
 ```
 
 ---
@@ -115,14 +115,14 @@ spec:
     auto_rollback: true
 YAML
 
-./scripts/orchestrator.sh apply -f /tmp/smoke-unsafe.yaml
+./scripts/run-cli.sh apply -f /tmp/smoke-unsafe.yaml
 
-./scripts/orchestrator.sh task create --project "${QA_PROJECT}" \
+./scripts/run-cli.sh task create --project "${QA_PROJECT}" \
   -w smoke-unsafe -W smoke-unsafe-wf \
   --no-start -g "smoke: expect hard error"
 
-TASK_ID=$(./scripts/orchestrator.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
-./scripts/orchestrator.sh task start "$TASK_ID" 2>&1 | tee /tmp/smoke-unsafe-out.txt
+TASK_ID=$(./scripts/run-cli.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
+./scripts/run-cli.sh task start "$TASK_ID" 2>&1 | tee /tmp/smoke-unsafe-out.txt
 ```
 
 Expected:
@@ -158,14 +158,14 @@ spec:
     auto_rollback: false
 YAML
 
-./scripts/orchestrator.sh apply -f /tmp/smoke-warn.yaml
+./scripts/run-cli.sh apply -f /tmp/smoke-warn.yaml
 
-./scripts/orchestrator.sh task create --project "${QA_PROJECT}" \
+./scripts/run-cli.sh task create --project "${QA_PROJECT}" \
   -w smoke-warn -W smoke-warn-wf \
   --no-start -g "smoke: expect warnings"
 
-TASK_ID2=$(./scripts/orchestrator.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
-./scripts/orchestrator.sh task start "$TASK_ID2" 2>/tmp/smoke-warn-stderr.txt &
+TASK_ID2=$(./scripts/run-cli.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
+./scripts/run-cli.sh task start "$TASK_ID2" 2>/tmp/smoke-warn-stderr.txt &
 TASK_PID=$!
 sleep 3
 kill "$TASK_PID" 2>/dev/null; wait "$TASK_PID" 2>/dev/null
@@ -184,18 +184,18 @@ Expected:
 ```bash
 rm -f .stable
 
-./scripts/orchestrator.sh task create --project "${QA_PROJECT}" \
+./scripts/run-cli.sh task create --project "${QA_PROJECT}" \
   -w self -W self-bootstrap \
   --no-start \
   -g "SURVIVAL SMOKE: binary snapshot verification"
 
-TASK_ID=$(./scripts/orchestrator.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
+TASK_ID=$(./scripts/run-cli.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
 
 # Start inline so the task actually begins even when no background worker is running
-./scripts/orchestrator.sh task start "$TASK_ID" >/tmp/smoke-snapshot-stdout.txt 2>/tmp/smoke-snapshot-stderr.txt &
+./scripts/run-cli.sh task start "$TASK_ID" >/tmp/smoke-snapshot-stdout.txt 2>/tmp/smoke-snapshot-stderr.txt &
 START_PID=$!
 sleep 5
-./scripts/orchestrator.sh task pause "$TASK_ID"
+./scripts/run-cli.sh task pause "$TASK_ID"
 kill "$START_PID" 2>/dev/null; wait "$START_PID" 2>/dev/null
 
 # Verify .stable was created
@@ -273,16 +273,16 @@ spec:
     auto_rollback: true
 YAML
 
-./scripts/orchestrator.sh apply -f /tmp/smoke-selftest.yaml
+./scripts/run-cli.sh apply -f /tmp/smoke-selftest.yaml
 
-./scripts/orchestrator.sh task create --project "${QA_PROJECT}" \
+./scripts/run-cli.sh task create --project "${QA_PROJECT}" \
   -w self -W smoke-selftest \
   --no-start \
   -g "SURVIVAL SMOKE: self_test should pass on clean codebase" \
   -t core/src/lib.rs
 
-TASK_ID=$(./scripts/orchestrator.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
-./scripts/orchestrator.sh task start "$TASK_ID"
+TASK_ID=$(./scripts/run-cli.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
+./scripts/run-cli.sh task start "$TASK_ID"
 
 # Query step events
 sqlite3 data/agent_orchestrator.db "
@@ -348,16 +348,16 @@ spec:
     auto_rollback: true
 YAML
 
-./scripts/orchestrator.sh apply -f /tmp/smoke-selfbreak.yaml
+./scripts/run-cli.sh apply -f /tmp/smoke-selfbreak.yaml
 
-./scripts/orchestrator.sh task create --project "${QA_PROJECT}" \
+./scripts/run-cli.sh task create --project "${QA_PROJECT}" \
   -w self -W smoke-selfbreak \
   --no-start \
   -g "SURVIVAL SMOKE: real agent self-modify should be caught by self_test" \
   -t docs/qa/orchestrator/27-self-test-step.md
 
-TASK_ID=$(./scripts/orchestrator.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
-./scripts/orchestrator.sh task start "$TASK_ID"
+TASK_ID=$(./scripts/run-cli.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
+./scripts/run-cli.sh task start "$TASK_ID"
 
 # Query evidence
 sqlite3 data/agent_orchestrator.db "
@@ -473,17 +473,17 @@ spec:
     auto_rollback: true
 YAML
 
-./scripts/orchestrator.sh apply -f /tmp/smoke-chain.yaml
+./scripts/run-cli.sh apply -f /tmp/smoke-chain.yaml
 
-./scripts/orchestrator.sh task create --project "${QA_PROJECT}" \
+./scripts/run-cli.sh task create --project "${QA_PROJECT}" \
   -n survival-smoke-chain-local \
   -w self -W smoke-chain-local \
   --no-start \
   -g "SMOKE CHAIN LOCAL: verify plan -> qa_doc_gen -> implement -> self_test with plan_output propagation" \
   -t core/src/lib.rs
 
-TASK_ID=$(./scripts/orchestrator.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
-./scripts/orchestrator.sh task start "$TASK_ID"
+TASK_ID=$(./scripts/run-cli.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
+./scripts/run-cli.sh task start "$TASK_ID"
 ```
 
 ### 6.1 Validate Step Execution
@@ -612,8 +612,8 @@ Expected:
 
 ```bash
 # Delete smoke tasks
-./scripts/orchestrator.sh task list -o json | jq -r '.[].id' | while read tid; do
-  ./scripts/orchestrator.sh task delete "$tid" -f 2>/dev/null
+./scripts/run-cli.sh task list -o json | jq -r '.[].id' | while read tid; do
+  ./scripts/run-cli.sh task delete "$tid" -f 2>/dev/null
 done
 
 # Remove temp manifests
@@ -625,21 +625,21 @@ rm -f .stable
 
 # Remove smoke agents (smoke-noop, smoke-local-*, smoke-breaker)
 for agent in smoke-noop smoke-local-plan smoke-local-doc smoke-local-impl smoke-breaker; do
-  ./scripts/orchestrator.sh delete agent "$agent" 2>/dev/null
+  ./scripts/run-cli.sh delete agent "$agent" 2>/dev/null
 done
 
 # Remove smoke workspaces and workflows
 for ws in smoke-unsafe smoke-warn; do
-  ./scripts/orchestrator.sh delete workspace "$ws" 2>/dev/null
+  ./scripts/run-cli.sh delete workspace "$ws" 2>/dev/null
 done
 for wf in smoke-selftest smoke-selfbreak smoke-chain-local smoke-unsafe-wf smoke-warn-wf; do
-  ./scripts/orchestrator.sh delete workflow "$wf" 2>/dev/null
+  ./scripts/run-cli.sh delete workflow "$wf" 2>/dev/null
 done
 
 # Optional full reset (cold-start safe)
 rm -f data/agent_orchestrator.db data/agent_orchestrator.db-wal data/agent_orchestrator.db-shm
 rm -f config/default.yaml
-./scripts/orchestrator.sh init -f
+./scripts/run-cli.sh init -f
 
 # Verify no dirty state left in the repository
 if [ -n "$(git status --porcelain)" ]; then

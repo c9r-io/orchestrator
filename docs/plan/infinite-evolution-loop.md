@@ -141,7 +141,7 @@ loop:
 完成后，只需一条命令即可启动持续自主进化：
 
 ```bash
-./scripts/orchestrator.sh task create \
+./scripts/run-cli.sh task create \
   -n "continuous-evolution" \
   -w self -W self-evolve-bootstrap \
   -g "持续改进 orchestrator 代码质量、性能和功能"

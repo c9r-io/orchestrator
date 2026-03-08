@@ -14,7 +14,7 @@ agents based on their declared capabilities. Each scenario uses a dedicated
 fixture where agent output is identifiable, so routing correctness can be
 verified by inspecting logs.
 
-Entry point: `./scripts/orchestrator.sh <command>`
+Entry point: `./scripts/run-cli.sh <command>`
 
 ---
 
@@ -47,25 +47,25 @@ to the fix-capable agent when capabilities are disjoint.
 
 1. Reset and apply into project scope:
    ```bash
-   ./scripts/orchestrator.sh qa project reset qa-cap --force
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/capability-test.yaml --project qa-cap
+   ./scripts/run-cli.sh qa project reset qa-cap --force
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/capability-test.yaml --project qa-cap
    ```
 
 2. Create and run task:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/run-cli.sh task create \
      --project qa-cap \
      --name "capability-test" \
      --goal "Test capability isolation" \
      --workspace default \
      --workflow test_capability \
      --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh task start "${TASK_ID}"
+   ./scripts/run-cli.sh task start "${TASK_ID}"
    ```
 
 3. Inspect logs:
    ```bash
-   ./scripts/orchestrator.sh task logs "${TASK_ID}"
+   ./scripts/run-cli.sh task logs "${TASK_ID}"
    ```
 
 ### Expected
@@ -107,25 +107,25 @@ distributes work across them and each agent uses its own correct template.
 
 1. Reset and apply into project scope:
    ```bash
-   ./scripts/orchestrator.sh qa project reset qa-multi --force
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-multi
+   ./scripts/run-cli.sh qa project reset qa-multi --force
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-multi
    ```
 
 2. Create and run task:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/run-cli.sh task create \
      --project qa-multi \
      --name "multi-agent-test" \
      --goal "Test multi-agent distribution" \
      --workspace default \
      --workflow multi_agent_qa \
      --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh task start "${TASK_ID}"
+   ./scripts/run-cli.sh task start "${TASK_ID}"
    ```
 
 3. Inspect logs and agent distribution:
    ```bash
-   ./scripts/orchestrator.sh task info "${TASK_ID}"
+   ./scripts/run-cli.sh task info "${TASK_ID}"
    sqlite3 data/agent_orchestrator.db \
      "SELECT cr.agent_id, COUNT(*) FROM command_runs cr
       WHERE cr.task_item_id IN (SELECT id FROM task_items WHERE task_id = '${TASK_ID}')
@@ -168,25 +168,25 @@ Validate that repeatable steps execute in every loop cycle.
 
 1. Reset and apply into project scope:
    ```bash
-   ./scripts/orchestrator.sh qa project reset qa-repeat --force
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/repeatable-test.yaml --project qa-repeat
+   ./scripts/run-cli.sh qa project reset qa-repeat --force
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/repeatable-test.yaml --project qa-repeat
    ```
 
 2. Create and run task:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/run-cli.sh task create \
      --project qa-repeat \
      --name "repeatable-test" \
      --goal "Loop workflow test" \
      --workspace default \
      --workflow repeat_test \
      --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh task start "${TASK_ID}"
+   ./scripts/run-cli.sh task start "${TASK_ID}"
    ```
 
 3. Verify cycles:
    ```bash
-   ./scripts/orchestrator.sh task info "${TASK_ID}"
+   ./scripts/run-cli.sh task info "${TASK_ID}"
    sqlite3 data/agent_orchestrator.db \
      "SELECT current_cycle FROM tasks WHERE id = '${TASK_ID}'"
    ```
@@ -227,25 +227,25 @@ Validate that a guard step can terminate the workflow loop.
 
 1. Reset and apply into project scope:
    ```bash
-   ./scripts/orchestrator.sh qa project reset qa-guard --force
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/guard-test.yaml --project qa-guard
+   ./scripts/run-cli.sh qa project reset qa-guard --force
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/guard-test.yaml --project qa-guard
    ```
 
 2. Create and run task:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/run-cli.sh task create \
      --project qa-guard \
      --name "guard-test" \
      --goal "Guard step test" \
      --workspace default \
      --workflow guard_test \
      --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh task start "${TASK_ID}"
+   ./scripts/run-cli.sh task start "${TASK_ID}"
    ```
 
 3. Inspect result:
    ```bash
-   ./scripts/orchestrator.sh task info "${TASK_ID}"
+   ./scripts/run-cli.sh task info "${TASK_ID}"
    ```
 
 ### Expected
@@ -279,26 +279,26 @@ both agents are used for execution.
 
 1. Reset and apply into project scope:
    ```bash
-   ./scripts/orchestrator.sh qa project reset qa-perf --force
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml --project qa-perf
+   ./scripts/run-cli.sh qa project reset qa-perf --force
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml --project qa-perf
    ```
 
 2. Create and run task:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/run-cli.sh task create \
      --project qa-perf \
      --name "selection-perf" \
      --goal "Selection performance baseline" \
      --workspace default \
      --workflow selection_test \
      --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh task start "${TASK_ID}"
+   ./scripts/run-cli.sh task start "${TASK_ID}"
    ```
 
 3. Inspect result:
    ```bash
-   ./scripts/orchestrator.sh task info "${TASK_ID}"
-   ./scripts/orchestrator.sh task logs "${TASK_ID}"
+   ./scripts/run-cli.sh task info "${TASK_ID}"
+   ./scripts/run-cli.sh task logs "${TASK_ID}"
    ```
 
 ### Expected

@@ -20,12 +20,12 @@ The CRD extension system allows users to define new resource types beyond the 9 
 - Two-phase YAML parsing: `kind` string is read first to route to builtin Resource trait or CRD validation path
 
 **Entry points**:
-- `./scripts/orchestrator.sh apply -f <manifest.yaml>` — register CRD and create CR instances
-- `./scripts/orchestrator.sh get <plural|short_name>` — list custom resources
-- `./scripts/orchestrator.sh get <kind_or_alias>/<name> -o yaml` — get single CR
-- `./scripts/orchestrator.sh describe <kind_or_alias>/<name>` — describe CR
-- `./scripts/orchestrator.sh delete <kind_or_alias>/<name> --force` — delete CR
-- `./scripts/orchestrator.sh manifest export -o yaml` — export includes CRD + CR
+- `./scripts/run-cli.sh apply -f <manifest.yaml>` — register CRD and create CR instances
+- `./scripts/run-cli.sh get <plural|short_name>` — list custom resources
+- `./scripts/run-cli.sh get <kind_or_alias>/<name> -o yaml` — get single CR
+- `./scripts/run-cli.sh describe <kind_or_alias>/<name>` — describe CR
+- `./scripts/run-cli.sh delete <kind_or_alias>/<name> --force` — delete CR
+- `./scripts/run-cli.sh manifest export -o yaml` — export includes CRD + CR
 
 ### Test Fixture
 
@@ -39,7 +39,7 @@ The fixture file `fixtures/manifests/bundles/crd-test.yaml` contains:
 ## Scenario 1: CRD Registration and Custom Resource Creation
 
 ### Preconditions
-- Orchestrator initialized (`./scripts/orchestrator.sh init`)
+- Orchestrator initialized (`./scripts/run-cli.sh init`)
 - Fixture file `fixtures/manifests/bundles/crd-test.yaml` exists
 
 ### Goal
@@ -49,7 +49,7 @@ Verify that a CRD can be registered and a custom resource instance created in a 
 
 1. Apply the CRD test fixture:
    ```bash
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/crd-test.yaml
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/crd-test.yaml
    ```
 
 2. Verify apply output contains all three resources:
@@ -62,12 +62,12 @@ Verify that a CRD can be registered and a custom resource instance created in a 
 
 3. Verify the CRD is queryable (list custom resources):
    ```bash
-   ./scripts/orchestrator.sh get promptlibraries
+   ./scripts/run-cli.sh get promptlibraries
    ```
 
 4. Verify the CR instance is retrievable:
    ```bash
-   ./scripts/orchestrator.sh get pl/qa-prompts -o yaml
+   ./scripts/run-cli.sh get pl/qa-prompts -o yaml
    ```
 
 ### Expected
@@ -92,14 +92,14 @@ Verify that schema validation (missing required fields) and CEL validation (empt
 
 1. Apply an invalid CR that is missing the required `prompts` field:
    ```bash
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/crd-test-invalid.yaml
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/crd-test-invalid.yaml
    ```
 
 2. Verify the apply reports validation errors and exits with code 1.
 
 3. Verify no invalid resource was persisted:
    ```bash
-   ./scripts/orchestrator.sh get promptlibraries
+   ./scripts/run-cli.sh get promptlibraries
    # Should NOT contain "invalid-prompts"
    ```
 
@@ -122,22 +122,22 @@ Verify get/describe/list operations work for custom resources, including label-b
 
 1. Get single CR in JSON format:
    ```bash
-   ./scripts/orchestrator.sh get pl/qa-prompts -o json
+   ./scripts/run-cli.sh get pl/qa-prompts -o json
    ```
 
 2. Describe the CR:
    ```bash
-   ./scripts/orchestrator.sh describe pl/qa-prompts
+   ./scripts/run-cli.sh describe pl/qa-prompts
    ```
 
 3. List with label selector:
    ```bash
-   ./scripts/orchestrator.sh get promptlibraries -l team=platform
+   ./scripts/run-cli.sh get promptlibraries -l team=platform
    ```
 
 4. List with non-matching label selector:
    ```bash
-   ./scripts/orchestrator.sh get promptlibraries -l team=nonexistent
+   ./scripts/run-cli.sh get promptlibraries -l team=nonexistent
    ```
 
 ### Expected
@@ -160,29 +160,29 @@ Verify that deleting a CR works, deleting a CRD with existing instances is rejec
 
 1. Attempt to delete the CRD while instances exist:
    ```bash
-   ./scripts/orchestrator.sh delete crd/PromptLibrary --force
+   ./scripts/run-cli.sh delete crd/PromptLibrary --force
    ```
    Expected: fails with "custom resource instances still exist"
 
 2. Delete the CR instance:
    ```bash
-   ./scripts/orchestrator.sh delete pl/qa-prompts --force
+   ./scripts/run-cli.sh delete pl/qa-prompts --force
    ```
 
 3. Verify deletion:
    ```bash
-   ./scripts/orchestrator.sh get promptlibraries
+   ./scripts/run-cli.sh get promptlibraries
    # Should be empty
    ```
 
 4. Now delete the CRD:
    ```bash
-   ./scripts/orchestrator.sh delete crd/PromptLibrary --force
+   ./scripts/run-cli.sh delete crd/PromptLibrary --force
    ```
 
 5. Verify CRD is gone (listing should fail):
    ```bash
-   ./scripts/orchestrator.sh get promptlibraries
+   ./scripts/run-cli.sh get promptlibraries
    # Should error: "unknown list resource type"
    ```
 
@@ -206,12 +206,12 @@ Verify that CRD definitions and custom resource instances are included in `manif
 
 1. Apply the CRD test fixture:
    ```bash
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/crd-test.yaml
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/crd-test.yaml
    ```
 
 2. Export the full manifest:
    ```bash
-   ./scripts/orchestrator.sh manifest export -o yaml > /tmp/crd-export.yaml
+   ./scripts/run-cli.sh manifest export -o yaml > /tmp/crd-export.yaml
    ```
 
 3. Verify the export contains CRD and CR:
@@ -222,7 +222,7 @@ Verify that CRD definitions and custom resource instances are included in `manif
 
 4. Re-apply the exported manifest:
    ```bash
-   ./scripts/orchestrator.sh apply -f /tmp/crd-export.yaml
+   ./scripts/run-cli.sh apply -f /tmp/crd-export.yaml
    ```
 
 5. Verify all resources are `unchanged`:

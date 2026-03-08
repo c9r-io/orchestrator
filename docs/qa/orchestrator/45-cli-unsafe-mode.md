@@ -25,7 +25,7 @@ This flag does NOT disable redaction, timeouts, or stagnation detection. It is C
 Force-gate behavior without `--unsafe` is validated in `docs/qa/orchestrator/43-cli-force-gate-audit.md`.
 Runner policy YAML-level configuration is validated in `docs/qa/orchestrator/21-runner-security-observability.md` and `docs/qa/orchestrator/31-runner-policy-defaults-compatibility.md`.
 
-Entry point: `./scripts/orchestrator.sh`
+Entry point: `./scripts/run-cli.sh`
 
 ---
 
@@ -49,14 +49,14 @@ Verify `--unsafe` bypasses the `--force` gate on a project-scoped destructive co
 1. Create an isolated QA project with a task to operate on:
    ```bash
    QA_PROJECT="qa-unsafe-force-$(date +%s)"
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   ./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/run-cli.sh qa project create "${QA_PROJECT}" --force
    ```
 
 2. Run a force-gated command (`qa project reset`) with `--unsafe` but without `--force`:
    ```bash
-   ./scripts/orchestrator.sh --unsafe qa project reset "${QA_PROJECT}" --keep-config 2>&1; echo "exit=$?"
+   ./scripts/run-cli.sh --unsafe qa project reset "${QA_PROJECT}" --keep-config 2>&1; echo "exit=$?"
    ```
 
 ### Expected
@@ -82,9 +82,9 @@ Verify `--unsafe` overrides the manifest's `policy: allowlist` to `Unsafe` at ru
 1. Prepare isolated project with restrictive allowlist policy:
    ```bash
    QA_PROJECT="qa-unsafe-override"
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   ./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/run-cli.sh qa project create "${QA_PROJECT}" --force
    cat > /tmp/runner-allowlist-strict.yaml << 'YAML'
    runner:
      policy: allowlist
@@ -124,18 +124,18 @@ Verify `--unsafe` overrides the manifest's `policy: allowlist` to `Unsafe` at ru
        finalize:
          rules: []
    YAML
-   ./scripts/orchestrator.sh apply --project "${QA_PROJECT}" -f /tmp/runner-allowlist-strict.yaml
+   ./scripts/run-cli.sh apply --project "${QA_PROJECT}" -f /tmp/runner-allowlist-strict.yaml
    ```
 
 2. Create and start task WITH `--unsafe`:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh --unsafe task create --project "${QA_PROJECT}" --name "unsafe-override" --goal "policy override" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh --unsafe task start "${TASK_ID}" || true
+   TASK_ID=$(./scripts/run-cli.sh --unsafe task create --project "${QA_PROJECT}" --name "unsafe-override" --goal "policy override" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ./scripts/run-cli.sh --unsafe task start "${TASK_ID}" || true
    ```
 
 3. Inspect task result:
    ```bash
-   ./scripts/orchestrator.sh task info "${TASK_ID}" -o json
+   ./scripts/run-cli.sh task info "${TASK_ID}" -o json
    ```
 
 ### Expected
@@ -159,7 +159,7 @@ Verify that any command invoked with `--unsafe` emits an `unsafe_mode_activated`
 
 1. Run a read-only command with `--unsafe`:
    ```bash
-   ./scripts/orchestrator.sh --unsafe get agents
+   ./scripts/run-cli.sh --unsafe get agents
    ```
 
 2. Query the events table for the audit event:
@@ -198,7 +198,7 @@ Verify that `--unsafe` prints a visible warning to stderr.
 
 1. Run any command with `--unsafe`, capturing stderr:
    ```bash
-   ./scripts/orchestrator.sh --unsafe get agents 2>/tmp/unsafe-stderr.txt
+   ./scripts/run-cli.sh --unsafe get agents 2>/tmp/unsafe-stderr.txt
    cat /tmp/unsafe-stderr.txt
    ```
 
@@ -228,7 +228,7 @@ Regression guard: verify that force gates still block without `--unsafe` or `--f
 
 1. Run `db reset` without `--force` or `--unsafe`:
    ```bash
-   ./scripts/orchestrator.sh db reset 2>&1; echo "exit=$?"
+   ./scripts/run-cli.sh db reset 2>&1; echo "exit=$?"
    ```
 
 2. Run `task retry` without `--force` or `--unsafe` (requires a retryable item):
@@ -236,7 +236,7 @@ Regression guard: verify that force gates still block without `--unsafe` or `--f
    ITEM_ID=$(sqlite3 data/agent_orchestrator.db \
      "SELECT id FROM task_items WHERE status IN ('qa_failed','unresolved') LIMIT 1;")
    if [ -n "$ITEM_ID" ]; then
-     ./scripts/orchestrator.sh task retry "$ITEM_ID" 2>&1; echo "exit=$?"
+     ./scripts/run-cli.sh task retry "$ITEM_ID" 2>&1; echo "exit=$?"
    fi
    ```
 

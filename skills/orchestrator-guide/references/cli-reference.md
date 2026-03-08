@@ -39,90 +39,90 @@
 ## Init & Apply
 
 ```bash
-./scripts/orchestrator.sh init
-./scripts/orchestrator.sh apply -f manifest.yaml
-./scripts/orchestrator.sh apply -f manifest.yaml --dry-run
-./scripts/orchestrator.sh apply -f manifest.yaml --project my-project
-cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
+./scripts/run-cli.sh init
+./scripts/run-cli.sh apply -f manifest.yaml
+./scripts/run-cli.sh apply -f manifest.yaml --dry-run
+./scripts/run-cli.sh apply -f manifest.yaml --project my-project
+cat manifest.yaml | ./scripts/run-cli.sh apply -f -
 ```
 
 ## Resource Queries
 
 ```bash
-./scripts/orchestrator.sh get workspaces
-./scripts/orchestrator.sh get agents -o json
-./scripts/orchestrator.sh get workflows -o yaml
-./scripts/orchestrator.sh get workspaces -l env=dev
-./scripts/orchestrator.sh describe workspace default
-./scripts/orchestrator.sh delete agent old-agent
-./scripts/orchestrator.sh manifest export
-./scripts/orchestrator.sh edit workspace default
-./scripts/orchestrator.sh check
+./scripts/run-cli.sh get workspaces
+./scripts/run-cli.sh get agents -o json
+./scripts/run-cli.sh get workflows -o yaml
+./scripts/run-cli.sh get workspaces -l env=dev
+./scripts/run-cli.sh describe workspace default
+./scripts/run-cli.sh delete agent old-agent
+./scripts/run-cli.sh manifest export
+./scripts/run-cli.sh edit workspace default
+./scripts/run-cli.sh check
 ```
 
 ## Task Lifecycle
 
 ```bash
 # Create
-./scripts/orchestrator.sh task create \
+./scripts/run-cli.sh task create \
   --name "task-name" --goal "description" \
   --workflow self-bootstrap --project my-project \
   --target-file docs/qa/01.md   # repeatable
-./scripts/orchestrator.sh task create --name X --goal Y --no-start
-./scripts/orchestrator.sh task create --name X --goal Y --detach
+./scripts/run-cli.sh task create --name X --goal Y --no-start
+./scripts/run-cli.sh task create --name X --goal Y --detach
 
 # Control
-./scripts/orchestrator.sh task start <id>
-./scripts/orchestrator.sh task start <id> --detach
-./scripts/orchestrator.sh task pause <id>
-./scripts/orchestrator.sh task resume <id>
-./scripts/orchestrator.sh task retry <id> --item <item_id> --force
+./scripts/run-cli.sh task start <id>
+./scripts/run-cli.sh task start <id> --detach
+./scripts/run-cli.sh task pause <id>
+./scripts/run-cli.sh task resume <id>
+./scripts/run-cli.sh task retry <id> --item <item_id> --force
 
 # Inspect
-./scripts/orchestrator.sh task list -o json
-./scripts/orchestrator.sh task info <id> -o yaml
-./scripts/orchestrator.sh task logs <id>
-./scripts/orchestrator.sh task watch <id>
-./scripts/orchestrator.sh task trace <id>
+./scripts/run-cli.sh task list -o json
+./scripts/run-cli.sh task info <id> -o yaml
+./scripts/run-cli.sh task logs <id>
+./scripts/run-cli.sh task watch <id>
+./scripts/run-cli.sh task trace <id>
 
 # Other
-./scripts/orchestrator.sh task delete <id>
-./scripts/orchestrator.sh task edit --help
-./scripts/orchestrator.sh task worker start
-./scripts/orchestrator.sh task session list
-./scripts/orchestrator.sh exec -it <task_id> <step_id>
+./scripts/run-cli.sh task delete <id>
+./scripts/run-cli.sh task edit --help
+./scripts/run-cli.sh task worker start
+./scripts/run-cli.sh task session list
+./scripts/run-cli.sh exec -it <task_id> <step_id>
 ```
 
 ## Persistent Store
 
 ```bash
-./scripts/orchestrator.sh store put <store> <key> <value>
-./scripts/orchestrator.sh store get <store> <key>
-./scripts/orchestrator.sh store list <store>
-./scripts/orchestrator.sh store delete <store> <key>
-./scripts/orchestrator.sh store prune <store>
+./scripts/run-cli.sh store put <store> <key> <value>
+./scripts/run-cli.sh store get <store> <key>
+./scripts/run-cli.sh store list <store>
+./scripts/run-cli.sh store delete <store> <key>
+./scripts/run-cli.sh store prune <store>
 ```
 
 ## QA & Database
 
 ```bash
 # Project-scoped reset (safe, isolated)
-./scripts/orchestrator.sh qa project reset <project> --keep-config --force
-./scripts/orchestrator.sh qa project create <project> --force
-./scripts/orchestrator.sh qa doctor
+./scripts/run-cli.sh qa project reset <project> --keep-config --force
+./scripts/run-cli.sh qa project create <project> --force
+./scripts/run-cli.sh qa doctor
 
 # Database reset (DESTRUCTIVE)
-./scripts/orchestrator.sh db reset --force
-./scripts/orchestrator.sh db reset --force --include-config
+./scripts/run-cli.sh db reset --force
+./scripts/run-cli.sh db reset --force --include-config
 ```
 
 ## Other Commands
 
 ```bash
-./scripts/orchestrator.sh debug
-./scripts/orchestrator.sh verify
-./scripts/orchestrator.sh version
-./scripts/orchestrator.sh config heal-log
-./scripts/orchestrator.sh config backfill-events --force
-./scripts/orchestrator.sh completion bash > ~/.bash_completion.d/orchestrator
+./scripts/run-cli.sh debug
+./scripts/run-cli.sh verify
+./scripts/run-cli.sh version
+./scripts/run-cli.sh config heal-log
+./scripts/run-cli.sh config backfill-events --force
+./scripts/run-cli.sh completion bash > ~/.bash_completion.d/orchestrator
 ```

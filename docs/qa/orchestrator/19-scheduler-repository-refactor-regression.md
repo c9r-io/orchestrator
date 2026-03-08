@@ -16,7 +16,7 @@ This document validates internal scheduler refactor outcomes that are externally
 - command run persistence after async-path refactor
 - `task logs` behavior when log files are missing (explicit error, no silent fallback)
 
-Entry point: `./scripts/orchestrator.sh`
+Entry point: `./scripts/run-cli.sh`
 
 ---
 
@@ -62,15 +62,15 @@ Ensure summary timestamps are sourced from `tasks.created_at` and `tasks.updated
 1. Initialize and apply fixture:
    ```bash
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh init
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   ./scripts/run-cli.sh init
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
+   ./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/run-cli.sh qa project create "${QA_PROJECT}" --force
    ```
 2. Create task without auto-start:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "ts-map" --goal "timestamp mapping" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(./scripts/run-cli.sh task create --project "${QA_PROJECT}" --name "ts-map" --goal "timestamp mapping" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 3. Query DB source-of-truth:
    ```bash
@@ -78,7 +78,7 @@ Ensure summary timestamps are sourced from `tasks.created_at` and `tasks.updated
    ```
 4. Query CLI summary:
    ```bash
-   ./scripts/orchestrator.sh task info "${TASK_ID}" -o json
+   ./scripts/run-cli.sh task info "${TASK_ID}" -o json
    ```
 
 ### Expected
@@ -107,7 +107,7 @@ Verify transactional start preparation resets unresolved items when task status 
 ### Steps
 1. Create a task:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "prep-reset" --goal "reset unresolved" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(./scripts/run-cli.sh task create --project "${QA_PROJECT}" --name "prep-reset" --goal "reset unresolved" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 2. Simulate failed/unresolved state:
    ```bash
@@ -116,7 +116,7 @@ Verify transactional start preparation resets unresolved items when task status 
    ```
 3. Start task:
    ```bash
-   ./scripts/orchestrator.sh task start "${TASK_ID}" || true
+   ./scripts/run-cli.sh task start "${TASK_ID}" || true
    ```
 4. Inspect task items:
    ```bash
@@ -164,8 +164,8 @@ Ensure `command_runs` records persist both legacy execution fields and structure
 ### Steps
 1. Create and start task:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "run-persist" --goal "persist command runs" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh task start "${TASK_ID}" || true
+   TASK_ID=$(./scripts/run-cli.sh task create --project "${QA_PROJECT}" --name "run-persist" --goal "persist command runs" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ./scripts/run-cli.sh task start "${TASK_ID}" || true
    ```
 2. Verify run records:
    ```bash
@@ -206,8 +206,8 @@ Verify missing log files are reported as explicit errors instead of silent empty
 ### Steps
 1. Create/start a task to produce runs:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "log-obs" --goal "log observability" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh task start "${TASK_ID}" || true
+   TASK_ID=$(./scripts/run-cli.sh task create --project "${QA_PROJECT}" --name "log-obs" --goal "log observability" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ./scripts/run-cli.sh task start "${TASK_ID}" || true
    ```
 2. Corrupt one run path:
    ```bash
@@ -215,7 +215,7 @@ Verify missing log files are reported as explicit errors instead of silent empty
    ```
 3. Read logs:
    ```bash
-   ./scripts/orchestrator.sh task logs "${TASK_ID}"
+   ./scripts/run-cli.sh task logs "${TASK_ID}"
    ```
 
 ### Expected
@@ -245,12 +245,12 @@ Verify task deletion still removes dependent records after repository extraction
 ### Steps
 1. Create/start a task:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "delete-clean" --goal "delete cleanup" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh task start "${TASK_ID}" || true
+   TASK_ID=$(./scripts/run-cli.sh task create --project "${QA_PROJECT}" --name "delete-clean" --goal "delete cleanup" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ./scripts/run-cli.sh task start "${TASK_ID}" || true
    ```
 2. Delete task:
    ```bash
-   ./scripts/orchestrator.sh task delete "${TASK_ID}" --force
+   ./scripts/run-cli.sh task delete "${TASK_ID}" --force
    ```
 3. Validate DB cleanup:
    ```bash

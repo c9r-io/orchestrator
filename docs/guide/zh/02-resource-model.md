@@ -164,43 +164,43 @@ spec:
 
 ```bash
 # 从文件
-./scripts/orchestrator.sh apply -f manifest.yaml
+./scripts/run-cli.sh apply -f manifest.yaml
 
 # 从标准输入
-cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
+cat manifest.yaml | ./scripts/run-cli.sh apply -f -
 
 # 试运行（仅验证不写入）
-./scripts/orchestrator.sh apply -f manifest.yaml --dry-run
+./scripts/run-cli.sh apply -f manifest.yaml --dry-run
 ```
 
 ### 查询
 
 ```bash
 # 列出资源
-./scripts/orchestrator.sh get workspaces
-./scripts/orchestrator.sh get agents
-./scripts/orchestrator.sh get workflows
+./scripts/run-cli.sh get workspaces
+./scripts/run-cli.sh get agents
+./scripts/run-cli.sh get workflows
 
 # 详情视图
-./scripts/orchestrator.sh describe workspace default
-./scripts/orchestrator.sh workspace info default
+./scripts/run-cli.sh describe workspace default
+./scripts/run-cli.sh workspace info default
 
 # 输出格式
-./scripts/orchestrator.sh get agents -o json
-./scripts/orchestrator.sh get agents -o yaml
+./scripts/run-cli.sh get agents -o json
+./scripts/run-cli.sh get agents -o yaml
 
 # 标签选择器
-./scripts/orchestrator.sh get workspaces -l env=dev
+./scripts/run-cli.sh get workspaces -l env=dev
 ```
 
 ### 导出
 
 ```bash
 # 导出所有配置为 YAML
-./scripts/orchestrator.sh manifest export
+./scripts/run-cli.sh manifest export
 
 # 交互式编辑
-./scripts/orchestrator.sh edit workspace default
+./scripts/run-cli.sh edit workspace default
 ```
 
 ## 多文档清单
@@ -245,7 +245,7 @@ spec:
 然后一次性应用：
 
 ```bash
-./scripts/orchestrator.sh apply -f everything-in-one.yaml
+./scripts/run-cli.sh apply -f everything-in-one.yaml
 ```
 
 ## 下一步

@@ -11,7 +11,7 @@
 
 This document is split from `07-capability-orchestration.md` to keep each QA document within 5 scenarios.
 
-Entry point: `./scripts/orchestrator.sh manifest export`
+Entry point: `./scripts/run-cli.sh manifest export`
 
 ---
 
@@ -19,24 +19,24 @@ Entry point: `./scripts/orchestrator.sh manifest export`
 
 ### Preconditions
 
-- Orchestrator initialized: `./scripts/orchestrator.sh init --force`
-- Config applied with capability fields: `./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/capability-test.yaml`
+- Orchestrator initialized: `./scripts/run-cli.sh init --force`
+- Config applied with capability fields: `./scripts/run-cli.sh apply -f fixtures/manifests/bundles/capability-test.yaml`
 
 ### Steps
 
 1. Export current runtime config to a temporary YAML file:
    ```bash
-   ./scripts/orchestrator.sh manifest export -f /tmp/exported-config.yaml
+   ./scripts/run-cli.sh manifest export -f /tmp/exported-config.yaml
    ```
 
 2. Inspect agent fields:
    ```bash
-   ./scripts/orchestrator.sh manifest export -o json | jq '.agents'
+   ./scripts/run-cli.sh manifest export -o json | jq '.agents'
    ```
 
 3. Inspect workflow step fields:
    ```bash
-   ./scripts/orchestrator.sh manifest export -o json | jq '.workflows | to_entries[0].value.steps'
+   ./scripts/run-cli.sh manifest export -o json | jq '.workflows | to_entries[0].value.steps'
    ```
 
 ### Expected

@@ -49,12 +49,12 @@ Verify `max_parallel` field is accepted in workflow YAML, propagated through the
 
 2. Verify the self-bootstrap YAML parses without errors:
    ```bash
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --dry-run 2>&1
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --dry-run 2>&1
    ```
 
 3. Check that the workflow-level `max_parallel: 4` and step-level `max_parallel: 2` (ticket_fix) are present in the dry-run output:
    ```bash
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --dry-run 2>&1 | grep -i "max_parallel" || echo "field not in dry-run text output"
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --dry-run 2>&1 | grep -i "max_parallel" || echo "field not in dry-run text output"
    ```
 
 ### Expected
@@ -152,21 +152,21 @@ Verify that when `max_parallel` is not configured, item-scoped steps execute seq
    ```bash
    rm -f fixtures/ticket/auto_*.md
    QA_PROJECT="qa-par-seq-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
+   ./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/run-cli.sh qa project create "${QA_PROJECT}" --force
    ```
 
 2. Create and run a task with multiple QA items:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create \
+   TASK_ID=$(./scripts/run-cli.sh task create \
      --name "par-seq-test" \
      --goal "Verify sequential item execution" \
      --project "${QA_PROJECT}" \
      --workflow qa_only \
      --json 2>/dev/null | jq -r '.task_id // .id')
-   ./scripts/orchestrator.sh task start "${TASK_ID}"
+   ./scripts/run-cli.sh task start "${TASK_ID}"
    sleep 10
    ```
 

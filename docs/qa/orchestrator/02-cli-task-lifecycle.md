@@ -31,7 +31,7 @@ Runtime control commands also need to remain stable while a task is actively run
 - `task watch` should keep the last visible frame until a fresh snapshot is ready
 - `task watch` should display the real step scope instead of inferring it from an anchor item binding
 
-Entry point: `./scripts/orchestrator.sh task <command>` (standalone) or `./target/release/orchestrator task <command>` (C/S client)
+Entry point: `./scripts/run-cli.sh task <command>` (standalone) or `./target/release/orchestrator task <command>` (C/S client)
 
 **C/S mode note**: In C/S mode, the daemon (`orchestratord`) embeds background workers that automatically consume pending tasks. The standalone `task worker start|stop|status` commands are not needed — use `orchestratord --workers N` instead. See `docs/qa/orchestrator/53-client-server-architecture.md` for C/S-specific scenarios.
 
@@ -41,10 +41,10 @@ Run once before scenarios:
 
 ```bash
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+./scripts/run-cli.sh apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
+./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --from-workspace cli_probe_ws --workflow probe_task_scoped --force
+./scripts/run-cli.sh qa project create "${QA_PROJECT}" --from-workspace cli_probe_ws --workflow probe_task_scoped --force
 ```
 
 ### Target Resolution Supplemental Checks
@@ -62,13 +62,13 @@ rm -rf "workspace/${QA_PROJECT}"
 For manual verification, verify `task create --project <project> ...` target resolution using the fixed probe fixtures:
 
 1. For the task-scoped workflow on the populated workspace:
-   - `./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_task_scoped --name "task-default" --goal "task default" --no-start`
-   - `./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_task_scoped --name "task-single" --goal "task single" --target-file fixtures/qa-probe-targets/sample-a.md --no-start`
-   - `./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_task_scoped --name "task-multi" --goal "task multi" --target-file fixtures/qa-probe-targets/sample-a.md --target-file fixtures/qa-probe-targets/sample-b.md --no-start`
+   - `./scripts/run-cli.sh task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_task_scoped --name "task-default" --goal "task default" --no-start`
+   - `./scripts/run-cli.sh task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_task_scoped --name "task-single" --goal "task single" --target-file fixtures/qa-probe-targets/sample-a.md --no-start`
+   - `./scripts/run-cli.sh task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_task_scoped --name "task-multi" --goal "task multi" --target-file fixtures/qa-probe-targets/sample-a.md --target-file fixtures/qa-probe-targets/sample-b.md --no-start`
 2. For the item-scoped workflow on the empty workspace:
-   - `./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workspace cli_probe_empty_ws --workflow probe_item_scoped --name "item-empty" --goal "item empty" --no-start`
+   - `./scripts/run-cli.sh task create --project "${QA_PROJECT}" --workspace cli_probe_empty_ws --workflow probe_item_scoped --name "item-empty" --goal "item empty" --no-start`
 3. For the item-scoped workflow with explicit targets:
-   - `./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_item_scoped --name "item-explicit" --goal "item explicit" --target-file fixtures/qa-probe-targets/sample-a.md --target-file fixtures/qa-probe-targets/sample-b.md --no-start`
+   - `./scripts/run-cli.sh task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_item_scoped --name "item-explicit" --goal "item explicit" --target-file fixtures/qa-probe-targets/sample-a.md --target-file fixtures/qa-probe-targets/sample-b.md --no-start`
 
 Expected:
 - `probe_task_scoped` uses a synthetic anchor when `--target-file` is omitted.
@@ -90,13 +90,13 @@ For manual verification against a real in-flight task from the fixed probe fixtu
 
 1. Create a detached task that will run long enough to observe live state:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_runtime_control --name "runtime-control" --goal "runtime control validation" --detach | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(./scripts/run-cli.sh task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_runtime_control --name "runtime-control" --goal "runtime control validation" --detach | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 2. Start a worker in another terminal and wait for the task to enter `running`.
 3. While the task is still running:
-   - run `./scripts/orchestrator.sh task info "${TASK_ID}" -o json` multiple times
-   - run `./scripts/orchestrator.sh task logs "${TASK_ID}" --tail 20`
-   - run `./scripts/orchestrator.sh task watch "${TASK_ID}" --interval 1`
+   - run `./scripts/run-cli.sh task info "${TASK_ID}" -o json` multiple times
+   - run `./scripts/run-cli.sh task logs "${TASK_ID}" --tail 20`
+   - run `./scripts/run-cli.sh task watch "${TASK_ID}" --interval 1`
 4. Stop the worker after the task reaches a terminal state.
 
 Expected:
@@ -117,7 +117,7 @@ the active runtime config intact and only apply the dedicated probe fixtures.
 
 1. Apply the self-referential probe fixtures:
    ```bash
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-referential-probe-fixtures.yaml
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/self-referential-probe-fixtures.yaml
    ```
 2. Submit a detached task directly against the global workspace `self_ref_probe_ws` using `self_ref_probe_runtime_control`.
 3. Submit a detached task directly against the global workspace `self_ref_probe_ws` using `self_ref_probe_low_output`.
@@ -142,15 +142,15 @@ Expected:
    workspace/workflow into the project, but `task create` does not auto-resolve
    the project's workflow without the flag):
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --workflow probe_task_scoped --name "fg-start" --goal "foreground" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(./scripts/run-cli.sh task create --project "${QA_PROJECT}" --workflow probe_task_scoped --name "fg-start" --goal "foreground" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 2. Start task in foreground:
    ```bash
-   ./scripts/orchestrator.sh task start "${TASK_ID}" || true
+   ./scripts/run-cli.sh task start "${TASK_ID}" || true
    ```
 3. Inspect result:
    ```bash
-   ./scripts/orchestrator.sh task info "${TASK_ID}" -o json
+   ./scripts/run-cli.sh task info "${TASK_ID}" -o json
    ```
 
 ### Expected
@@ -178,15 +178,15 @@ Verify `--detach` does not execute inline and enqueues task.
 ### Steps
 1. Create in detach mode:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "detach-mode" --goal "queue" --detach | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(./scripts/run-cli.sh task create --project "${QA_PROJECT}" --name "detach-mode" --goal "queue" --detach | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 2. Check task state:
    ```bash
-   ./scripts/orchestrator.sh task info "${TASK_ID}" -o json
+   ./scripts/run-cli.sh task info "${TASK_ID}" -o json
    ```
 3. Re-enqueue with start detach:
    ```bash
-   ./scripts/orchestrator.sh task start "${TASK_ID}" --detach
+   ./scripts/run-cli.sh task start "${TASK_ID}" --detach
    ```
 
 ### Expected
@@ -211,23 +211,23 @@ WHERE id = '{task_id}';
 ### Steps
 1. Start worker in terminal A:
    ```bash
-   ./scripts/orchestrator.sh task worker start --poll-ms 500
+   ./scripts/run-cli.sh task worker start --poll-ms 500
    ```
    Optional (parallel consumers):
    ```bash
-   ./scripts/orchestrator.sh task worker start --poll-ms 500 --workers 3
+   ./scripts/run-cli.sh task worker start --poll-ms 500 --workers 3
    ```
 2. In terminal B, check status:
    ```bash
-   ./scripts/orchestrator.sh task worker status
+   ./scripts/run-cli.sh task worker status
    ```
 3. Stop worker:
    ```bash
-   ./scripts/orchestrator.sh task worker stop
+   ./scripts/run-cli.sh task worker stop
    ```
 4. Re-check status:
    ```bash
-   ./scripts/orchestrator.sh task worker status
+   ./scripts/run-cli.sh task worker status
    ```
 
 ### Expected
@@ -257,15 +257,15 @@ LIMIT 5;
 ### Steps
 1. View logs:
    ```bash
-   ./scripts/orchestrator.sh task logs {task_id}
+   ./scripts/run-cli.sh task logs {task_id}
    ```
 2. View last lines:
    ```bash
-   ./scripts/orchestrator.sh task logs {task_id} --tail 10
+   ./scripts/run-cli.sh task logs {task_id} --tail 10
    ```
 3. View with timestamps:
    ```bash
-   ./scripts/orchestrator.sh task logs {task_id} --timestamps
+   ./scripts/run-cli.sh task logs {task_id} --timestamps
    ```
 
 ### Expected
@@ -292,19 +292,19 @@ ORDER BY started_at DESC;
 ### Steps
 1. Find retry target item:
    ```bash
-   ./scripts/orchestrator.sh task info {task_id} -o json
+   ./scripts/run-cli.sh task info {task_id} -o json
    ```
 2. Attempt retry without `--force` (safety gate):
    ```bash
-   ./scripts/orchestrator.sh task retry {task_item_id} 2>&1; echo "exit=$?"
+   ./scripts/run-cli.sh task retry {task_item_id} 2>&1; echo "exit=$?"
    ```
 3. Retry in foreground with `--force`:
    ```bash
-   ./scripts/orchestrator.sh task retry {task_item_id} --force || true
+   ./scripts/run-cli.sh task retry {task_item_id} --force || true
    ```
 4. Retry in detach mode with `--force`:
    ```bash
-   ./scripts/orchestrator.sh task retry {task_item_id} --detach --force
+   ./scripts/run-cli.sh task retry {task_item_id} --detach --force
    ```
 
 ### Expected

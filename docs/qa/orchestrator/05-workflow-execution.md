@@ -30,17 +30,17 @@ Every scenario starts from a clean slate. Two cleanup steps are required:
 
 ```bash
 # 1. Ensure runtime is initialized
-./scripts/orchestrator.sh init --force
+./scripts/run-cli.sh init --force
 
 # 2. Clean stale auto-generated tickets
 rm -f fixtures/ticket/auto_*.md
 
 # 3. Apply fixture and recreate the isolated project scaffold
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
+./scripts/run-cli.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+./scripts/run-cli.sh qa project create "${QA_PROJECT}" --force
 ```
 
 Scenario 4 uses a different fixture (`fail-workflow.yaml`) — see its own
@@ -65,7 +65,7 @@ preconditions section.
 
 1. Create task:
    ```bash
-   ./scripts/orchestrator.sh task create \
+   ./scripts/run-cli.sh task create \
      --name "qa-only-test" \
      --goal "Test QA only workflow" \
      --project "${QA_PROJECT}" \
@@ -75,13 +75,13 @@ preconditions section.
 
 2. Start task and wait for completion:
    ```bash
-   ./scripts/orchestrator.sh task start {task_id}
+   ./scripts/run-cli.sh task start {task_id}
    ```
 
 3. Inspect result:
    ```bash
-   ./scripts/orchestrator.sh task info {task_id}
-   ./scripts/orchestrator.sh task logs {task_id}
+   ./scripts/run-cli.sh task info {task_id}
+   ./scripts/run-cli.sh task logs {task_id}
    ```
 
 ### Expected
@@ -102,7 +102,7 @@ preconditions section.
 
 1. Create task:
    ```bash
-   ./scripts/orchestrator.sh task create \
+   ./scripts/run-cli.sh task create \
      --name "qa-fix-test" \
      --goal "Test QA and fix workflow" \
      --project "${QA_PROJECT}" \
@@ -112,13 +112,13 @@ preconditions section.
 
 2. Start task:
    ```bash
-   ./scripts/orchestrator.sh task start {task_id}
+   ./scripts/run-cli.sh task start {task_id}
    ```
 
 3. Inspect result:
    ```bash
-   ./scripts/orchestrator.sh task info {task_id}
-   ./scripts/orchestrator.sh task logs {task_id}
+   ./scripts/run-cli.sh task info {task_id}
+   ./scripts/run-cli.sh task logs {task_id}
    ```
 
 ### Expected
@@ -140,7 +140,7 @@ preconditions section.
 
 1. Create task:
    ```bash
-   ./scripts/orchestrator.sh task create \
+   ./scripts/run-cli.sh task create \
      --name "qa-fix-retest-test" \
      --goal "Test full workflow" \
      --project "${QA_PROJECT}" \
@@ -150,13 +150,13 @@ preconditions section.
 
 2. Start task:
    ```bash
-   ./scripts/orchestrator.sh task start {task_id}
+   ./scripts/run-cli.sh task start {task_id}
    ```
 
 3. Inspect result:
    ```bash
-   ./scripts/orchestrator.sh task info {task_id}
-   ./scripts/orchestrator.sh task logs {task_id}
+   ./scripts/run-cli.sh task info {task_id}
+   ./scripts/run-cli.sh task logs {task_id}
    ```
 
 ### Expected
@@ -176,19 +176,19 @@ preconditions section.
 This scenario uses a **different fixture** with only the `mock_fail` agent:
 
 ```bash
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/fail-workflow.yaml
+./scripts/run-cli.sh apply -f fixtures/manifests/bundles/fail-workflow.yaml
 
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+./scripts/run-cli.sh qa project create "${QA_PROJECT}" --force
 ```
 
 ### Steps
 
 1. Create task:
    ```bash
-   ./scripts/orchestrator.sh task create \
+   ./scripts/run-cli.sh task create \
      --name "ticket-test" \
      --goal "Test ticket creation" \
      --project "${QA_PROJECT}" \
@@ -198,13 +198,13 @@ rm -rf "workspace/${QA_PROJECT}"
 
 2. Start task:
    ```bash
-   ./scripts/orchestrator.sh task start {task_id}
+   ./scripts/run-cli.sh task start {task_id}
    ```
 
 3. Check task result and ticket directory:
    ```bash
-   ./scripts/orchestrator.sh task info {task_id}
-   ./scripts/orchestrator.sh task logs {task_id}
+   ./scripts/run-cli.sh task info {task_id}
+   ./scripts/run-cli.sh task logs {task_id}
    ls fixtures/ticket/auto_*.md
    ```
 
@@ -242,7 +242,7 @@ rm -rf "workspace/${QA_PROJECT}"
 
 1. Create task with loop_test workflow:
    ```bash
-   ./scripts/orchestrator.sh task create \
+   ./scripts/run-cli.sh task create \
      --name "loop-mode-test" \
      --goal "Test infinite loop with max_cycles" \
      --project "${QA_PROJECT}" \
@@ -252,12 +252,12 @@ rm -rf "workspace/${QA_PROJECT}"
 
 2. Start task:
    ```bash
-   ./scripts/orchestrator.sh task start {task_id}
+   ./scripts/run-cli.sh task start {task_id}
    ```
 
 3. Verify cycle count:
    ```bash
-   ./scripts/orchestrator.sh task info {task_id}
+   ./scripts/run-cli.sh task info {task_id}
    sqlite3 data/agent_orchestrator.db \
      "SELECT current_cycle FROM tasks WHERE id = '{task_id}'"
    ```

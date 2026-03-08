@@ -47,7 +47,7 @@ The project structure is organized as follows:
 │   ├── daemon.pid        # Daemon PID file (C/S mode)
 │   └── logs/             # Execution logs
 ├── docs/                 # Documentation & QA/Design artifacts
-├── scripts/              # Helper scripts (e.g., `orchestrator.sh`)
+├── scripts/              # Helper scripts (e.g., `run-cli.sh`)
 ├── workspace/            # Default location for managed projects/workspaces
 └── fixtures/             # Test configurations and data
 ```

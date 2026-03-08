@@ -30,7 +30,7 @@ High-risk CLI operations that perform irreversible state changes must require `-
 
 The `--unsafe` global CLI flag bypasses all force gates at once — see `docs/qa/orchestrator/45-cli-unsafe-mode.md`.
 
-Entry point: `./scripts/orchestrator.sh <command>`
+Entry point: `./scripts/run-cli.sh <command>`
 
 ---
 
@@ -45,7 +45,7 @@ Verify `config backfill-events` refuses to run without `--force`.
 ### Steps
 1. Run without `--force`:
    ```bash
-   ./scripts/orchestrator.sh config backfill-events 2>&1; echo "exit=$?"
+   ./scripts/run-cli.sh config backfill-events 2>&1; echo "exit=$?"
    ```
 
 2. Verify no database changes occurred:
@@ -72,7 +72,7 @@ Verify `config backfill-events --force` performs the backfill.
 ### Steps
 1. Run with `--force`:
    ```bash
-   ./scripts/orchestrator.sh config backfill-events --force
+   ./scripts/run-cli.sh config backfill-events --force
    ```
 
 ### Expected
@@ -98,7 +98,7 @@ Verify `task retry` refuses to run without `--force`.
 
 2. Attempt retry without `--force`:
    ```bash
-   ./scripts/orchestrator.sh task retry "$ITEM_ID" 2>&1; echo "exit=$?"
+   ./scripts/run-cli.sh task retry "$ITEM_ID" 2>&1; echo "exit=$?"
    ```
 
 3. Verify item state unchanged:
@@ -131,7 +131,7 @@ Verify `task retry --force` resets item and re-executes.
 
 2. Retry with `--force`:
    ```bash
-   ./scripts/orchestrator.sh task retry "$ITEM_ID" --force || true
+   ./scripts/run-cli.sh task retry "$ITEM_ID" --force || true
    ```
 
 3. Check item state:
@@ -158,20 +158,20 @@ Verify that pre-existing `--force` gates still function correctly.
 ### Steps
 1. `task delete` without `--force`:
    ```bash
-   ./scripts/orchestrator.sh task delete nonexistent-id 2>&1; echo "exit=$?"
+   ./scripts/run-cli.sh task delete nonexistent-id 2>&1; echo "exit=$?"
    ```
 
 2. `db reset` without `--force`:
    ```bash
-   ./scripts/orchestrator.sh db reset 2>&1; echo "exit=$?"
+   ./scripts/run-cli.sh db reset 2>&1; echo "exit=$?"
    ```
 
 3. Verify `--help` documents `--force` for each command:
    ```bash
-   ./scripts/orchestrator.sh task delete --help 2>&1 | grep -c '\-\-force'
-   ./scripts/orchestrator.sh task retry --help 2>&1 | grep -c '\-\-force'
-   ./scripts/orchestrator.sh db reset --help 2>&1 | grep -c '\-\-force'
-   ./scripts/orchestrator.sh config backfill-events --help 2>&1 | grep -c '\-\-force'
+   ./scripts/run-cli.sh task delete --help 2>&1 | grep -c '\-\-force'
+   ./scripts/run-cli.sh task retry --help 2>&1 | grep -c '\-\-force'
+   ./scripts/run-cli.sh db reset --help 2>&1 | grep -c '\-\-force'
+   ./scripts/run-cli.sh config backfill-events --help 2>&1 | grep -c '\-\-force'
    ```
 
 ### Expected

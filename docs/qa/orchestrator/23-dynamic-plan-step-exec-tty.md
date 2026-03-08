@@ -16,7 +16,7 @@ This document validates the new interactive planning workflow:
 - `exec` supports target selector `task/<task_id>/step/<step_id>` and `session/<session_id>`
 - `exec -it` requires step `tty=true`
 
-Entry point: `./scripts/orchestrator.sh`
+Entry point: `./scripts/run-cli.sh`
 
 ---
 
@@ -30,16 +30,16 @@ Entry point: `./scripts/orchestrator.sh`
 
 1. Verify root command includes `exec`:
    ```bash
-   ./scripts/orchestrator.sh --help | rg "exec"
+   ./scripts/run-cli.sh --help | rg "exec"
    ```
 2. Verify task subcommand includes `edit`:
    ```bash
-   ./scripts/orchestrator.sh task --help | rg "edit"
+   ./scripts/run-cli.sh task --help | rg "edit"
    ```
 3. Verify usage and flags:
    ```bash
-   ./scripts/orchestrator.sh exec --help
-   ./scripts/orchestrator.sh task edit --help
+   ./scripts/run-cli.sh exec --help
+   ./scripts/run-cli.sh task edit --help
    ```
 
 ### Expected
@@ -68,19 +68,19 @@ SELECT COUNT(*) FROM tasks;
 
 1. Apply manifest with plan-capable agent and create isolated task:
    ```bash
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/output-formats.yaml
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/output-formats.yaml
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   ./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "plan-insert" --goal "insert plan before qa" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ./scripts/run-cli.sh qa project create "${QA_PROJECT}" --force
+   TASK_ID=$(./scripts/run-cli.sh task create --project "${QA_PROJECT}" --name "plan-insert" --goal "insert plan before qa" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 
-   > **Troubleshooting**: If `task start` in Scenario 3 fails with `No healthy agent found with capability: plan`, verify the applied config includes an agent with `plan` capability: `./scripts/orchestrator.sh get agents | grep plan`.
+   > **Troubleshooting**: If `task start` in Scenario 3 fails with `No healthy agent found with capability: plan`, verify the applied config includes an agent with `plan` capability: `./scripts/run-cli.sh get agents | grep plan`.
 2. Insert plan step:
    ```bash
-   ./scripts/orchestrator.sh task edit "${TASK_ID}" --insert-before qa --step plan --tty
+   ./scripts/run-cli.sh task edit "${TASK_ID}" --insert-before qa --step plan --tty
    ```
 3. Verify execution plan structure:
    ```bash
@@ -119,7 +119,7 @@ SELECT
 
 1. Start task:
    ```bash
-   ./scripts/orchestrator.sh task start "{task_id}" || true
+   ./scripts/run-cli.sh task start "{task_id}" || true
    ```
 2. Query recent events:
    ```bash
@@ -157,7 +157,7 @@ WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
 
 1. Run interactive exec against non-tty step:
    ```bash
-   ./scripts/orchestrator.sh exec -it task/{task_id}/step/qa -- echo "should-fail"
+   ./scripts/run-cli.sh exec -it task/{task_id}/step/qa -- echo "should-fail"
    ```
 
 ### Expected
@@ -188,11 +188,11 @@ WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
 
 1. Run non-interactive exec:
    ```bash
-   ./scripts/orchestrator.sh exec task/{task_id}/step/{step_id} -- echo "exec-smoke"
+   ./scripts/run-cli.sh exec task/{task_id}/step/{step_id} -- echo "exec-smoke"
    ```
 2. Validate command output contains marker:
    ```bash
-   ./scripts/orchestrator.sh exec task/{task_id}/step/{step_id} -- echo "exec-smoke-2"
+   ./scripts/run-cli.sh exec task/{task_id}/step/{step_id} -- echo "exec-smoke-2"
    ```
 
 ### Expected

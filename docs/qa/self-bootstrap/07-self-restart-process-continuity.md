@@ -1,7 +1,7 @@
 # Self-Bootstrap - Self-Restart and Process Continuity
 
 **Module**: self-bootstrap
-**Scope**: Validate the self_restart builtin step (Layer 5), orchestrator.sh restart loop, restart_pending task resumption, and priority claiming
+**Scope**: Validate the self_restart builtin step (Layer 5), daemon restart loop, restart_pending task resumption, and priority claiming
 **Scenarios**: 5
 **Priority**: High
 

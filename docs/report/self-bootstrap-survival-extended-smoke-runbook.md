@@ -2,7 +2,7 @@
 
 Date baseline: 2026-02-27
 Repository: `/Volumes/Yotta/ai_native_sdlc`
-Entry CLI: `./scripts/orchestrator.sh`
+Entry CLI: `./scripts/run-cli.sh`
 
 This runbook is a **high-cost, high-confidence** extension of
 `docs/report/self-bootstrap-survival-smoke-runbook.md`.
@@ -95,15 +95,15 @@ Expected:
 
 ```bash
 rm -f data/agent_orchestrator.db config/default.yaml
-./scripts/orchestrator.sh init -f
-./scripts/orchestrator.sh apply -f docs/workflow/self-bootstrap.yaml
+./scripts/run-cli.sh init -f
+./scripts/run-cli.sh apply -f docs/workflow/self-bootstrap.yaml
 ```
 
 ### 4.3 Create Dedicated QA Project
 
 ```bash
 QA_PROJECT="qa-llm-selfbreak-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --from-workspace self --force
+./scripts/run-cli.sh qa project create "${QA_PROJECT}" --from-workspace self --force
 ```
 
 ---
@@ -171,21 +171,21 @@ spec:
     auto_rollback: true
 YAML
 
-./scripts/orchestrator.sh apply -f /tmp/smoke-llm-selfbreak.yaml
+./scripts/run-cli.sh apply -f /tmp/smoke-llm-selfbreak.yaml
 ```
 
 ### 5.2 Create And Start The Destructive Validation Task
 
 ```bash
-./scripts/orchestrator.sh task create --project "${QA_PROJECT}" \
+./scripts/run-cli.sh task create --project "${QA_PROJECT}" \
   -n "llm-selfbreak-$(date +%s)" \
   -w self -W smoke-llm-selfbreak \
   --no-start \
   -g "LLM self-modify smoke: intentionally append compile-breaking line and let self_test catch it" \
   -t core/src/lib.rs
 
-TASK_ID=$(./scripts/orchestrator.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
-./scripts/orchestrator.sh task start "$TASK_ID"
+TASK_ID=$(./scripts/run-cli.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
+./scripts/run-cli.sh task start "$TASK_ID"
 ```
 
 ### 5.3 Verify The Real LLM Agent Performed The Modification
@@ -258,9 +258,9 @@ Expected:
 ### 5.7 Remove Temporary Resources
 
 ```bash
-./scripts/orchestrator.sh task delete "$TASK_ID" -f
-./scripts/orchestrator.sh delete workflow/smoke-llm-selfbreak -f
-./scripts/orchestrator.sh delete agent/smoke-llm-breaker -f
+./scripts/run-cli.sh task delete "$TASK_ID" -f
+./scripts/run-cli.sh delete workflow/smoke-llm-selfbreak -f
+./scripts/run-cli.sh delete agent/smoke-llm-breaker -f
 rm -f /tmp/smoke-llm-selfbreak.yaml
 ```
 

@@ -12,7 +12,10 @@ mod self_test;
 mod snapshot;
 
 pub use checkpoint::{create_checkpoint, rollback_to_checkpoint};
-pub use restart::{execute_self_restart_step, verify_post_restart_binary, EXIT_RESTART};
+pub use restart::{
+    execute_self_restart_step, verify_post_restart_binary, RestartRequestedError,
+    SelfRestartOutcome, EXIT_RESTART,
+};
 pub use self_test::execute_self_test_step;
 pub use snapshot::{
     restore_binary_snapshot, snapshot_binary, verify_binary_snapshot, BinaryVerificationResult,

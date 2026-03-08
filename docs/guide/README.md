@@ -32,7 +32,7 @@ This guide helps you understand and use the Agent Orchestrator — a CLI tool fo
 ### Standalone Mode (legacy)
 
 ```bash
-./scripts/orchestrator.sh <command>
+./scripts/run-cli.sh <command>
 ```
 
 ### Client/Server Mode (recommended)

@@ -18,17 +18,17 @@
 
 1. List workspaces:
    ```bash
-   ./scripts/orchestrator.sh get workspaces -o table
+   ./scripts/run-cli.sh get workspaces -o table
    ```
 
 2. List agents:
    ```bash
-   ./scripts/orchestrator.sh get agents -o json
+   ./scripts/run-cli.sh get agents -o json
    ```
 
 3. List workflows:
    ```bash
-   ./scripts/orchestrator.sh get workflows -o yaml
+   ./scripts/run-cli.sh get workflows -o yaml
    ```
 
 ### Expected Result
@@ -50,17 +50,17 @@
 
 1. Query with single selector:
    ```bash
-   ./scripts/orchestrator.sh get workspaces -l env=dev -o json
+   ./scripts/run-cli.sh get workspaces -l env=dev -o json
    ```
 
 2. Query with multi-condition selector:
    ```bash
-   ./scripts/orchestrator.sh get agents -l env=dev,tier=qa -o yaml
+   ./scripts/run-cli.sh get agents -l env=dev,tier=qa -o yaml
    ```
 
 3. Validate single-resource get rejects selector:
    ```bash
-   ./scripts/orchestrator.sh get workspace/default -l env=dev
+   ./scripts/run-cli.sh get workspace/default -l env=dev
    ```
 
 ### Expected Result
@@ -81,7 +81,7 @@
 
 1. Workspace create dry run:
    ```bash
-   ./scripts/orchestrator.sh workspace create ws-demo \
+   ./scripts/run-cli.sh workspace create ws-demo \
      --root-path workspace/ws-demo \
      --qa-target docs/qa \
      --label env=dev \
@@ -90,7 +90,7 @@
 
 2. Agent create persist:
    ```bash
-   ./scripts/orchestrator.sh agent create qa-agent \
+   ./scripts/run-cli.sh agent create qa-agent \
      --template-qa 'echo qa {rel_path}' \
      --capability qa \
      --label env=dev
@@ -98,7 +98,7 @@
 
 3. Workflow create persist:
    ```bash
-   ./scripts/orchestrator.sh workflow create qa-flow \
+   ./scripts/run-cli.sh workflow create qa-flow \
      --step qa --step fix \
      --loop-mode infinite \
      --max-cycles 3 \
@@ -107,8 +107,8 @@
 
 4. Verify created resources are queryable:
    ```bash
-   ./scripts/orchestrator.sh get agents -l env=dev
-   ./scripts/orchestrator.sh get workflows -l env=dev
+   ./scripts/run-cli.sh get agents -l env=dev
+   ./scripts/run-cli.sh get workflows -l env=dev
    ```
 
 ### Expected Result
@@ -129,7 +129,7 @@
 
 1. Apply manifest from stdin:
    ```bash
-   cat <<'YAML' | ./scripts/orchestrator.sh apply -f -
+   cat <<'YAML' | ./scripts/run-cli.sh apply -f -
    apiVersion: orchestrator.dev/v2
    kind: Agent
    metadata:
@@ -144,7 +144,7 @@
 
 2. Verify resource exists and label selector works:
    ```bash
-   ./scripts/orchestrator.sh get agents -l source=stdin -o table
+   ./scripts/run-cli.sh get agents -l source=stdin -o table
    ```
 
 ### Expected Result

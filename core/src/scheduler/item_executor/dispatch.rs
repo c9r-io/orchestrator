@@ -22,7 +22,9 @@ use super::super::phase_runner::{
     run_phase, run_phase_with_rotation, run_phase_with_selected_agent, PhaseRunRequest,
     RotatingPhaseRunRequest, SelectedPhaseRunRequest,
 };
-use super::super::safety::{execute_self_restart_step, execute_self_test_step, EXIT_RESTART};
+use super::super::safety::{
+    execute_self_restart_step, execute_self_test_step, RestartRequestedError, SelfRestartOutcome,
+};
 use super::super::RunningTask;
 use super::accumulator::StepExecutionAccumulator;
 use super::apply::apply_step_results;
@@ -224,6 +226,9 @@ pub async fn process_item_filtered(
             BuiltinStepOutcome::Handled => continue,
             BuiltinStepOutcome::EarlyReturn => return Ok(()),
             BuiltinStepOutcome::NotBuiltin => {}
+            BuiltinStepOutcome::RestartRequested { binary_path } => {
+                return Err(RestartRequestedError { binary_path }.into());
+            }
         }
 
         // Execute chain or agent/generic steps, producing a RunResult.
@@ -283,6 +288,10 @@ enum BuiltinStepOutcome {
     EarlyReturn,
     /// Not a recognized builtin dispatch; fall through to agent/generic execution.
     NotBuiltin,
+    /// Self-restart succeeded; daemon should exec the new binary.
+    RestartRequested {
+        binary_path: std::path::PathBuf,
+    },
 }
 
 /// Dispatch self_test, self_restart, and ticket_scan builtin steps.
@@ -357,83 +366,101 @@ async fn execute_builtin_step_dispatch(
         }
 
         ExecutionMode::Builtin { name } if name == "self_restart" => {
-            // Self-restart builtin: rebuild, verify, snapshot, then exit for relaunch
+            // Self-restart builtin: rebuild, verify, snapshot, then signal restart
             let ws_root = std::path::Path::new(&task_ctx.workspace_root);
-            let exit_code = execute_self_restart_step(ws_root, state, task_id, item_id)
+            let outcome = execute_self_restart_step(ws_root, state, task_id, item_id)
                 .await
-                .unwrap_or(1);
+                .unwrap_or(SelfRestartOutcome::Failed(1));
 
-            acc.pipeline_vars
-                .vars
-                .insert("self_restart_exit_code".to_string(), exit_code.to_string());
+            match outcome {
+                SelfRestartOutcome::RestartReady { binary_path } => {
+                    let exit_code: i64 = 75; // EXIT_RESTART for event/vars compat
+                    acc.pipeline_vars
+                        .vars
+                        .insert("self_restart_exit_code".to_string(), exit_code.to_string());
 
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                "step_finished",
-                json!({"step": phase, "step_scope": step.resolved_scope(), "exit_code": exit_code, "restart": exit_code == EXIT_RESTART}),
-            ).await?;
+                    insert_event(
+                        state,
+                        task_id,
+                        Some(item_id),
+                        "step_finished",
+                        json!({"step": phase, "step_scope": step.resolved_scope(), "exit_code": exit_code, "restart": true}),
+                    ).await?;
 
-            if exit_code == EXIT_RESTART {
-                // Invariant checkpoint: before_restart
-                let inv_results = crate::scheduler::invariant::evaluate_invariants(
-                    &task_ctx.pinned_invariants,
-                    crate::config::InvariantCheckPoint::BeforeRestart,
-                    &task_ctx.workspace_root,
-                );
-                if let Ok(ref results) = inv_results {
-                    for r in results {
-                        let event_type = if r.passed {
-                            "invariant_passed"
-                        } else {
-                            "invariant_violated"
-                        };
-                        let _ = insert_event(
-                            state, task_id, Some(item_id), event_type,
-                            json!({"invariant": r.name, "checkpoint": "BeforeRestart", "passed": r.passed, "message": r.message}),
-                        ).await;
+                    // Invariant checkpoint: before_restart
+                    let inv_results = crate::scheduler::invariant::evaluate_invariants(
+                        &task_ctx.pinned_invariants,
+                        crate::config::InvariantCheckPoint::BeforeRestart,
+                        &task_ctx.workspace_root,
+                    );
+                    if let Ok(ref results) = inv_results {
+                        for r in results {
+                            let event_type = if r.passed {
+                                "invariant_passed"
+                            } else {
+                                "invariant_violated"
+                            };
+                            let _ = insert_event(
+                                state, task_id, Some(item_id), event_type,
+                                json!({"invariant": r.name, "checkpoint": "BeforeRestart", "passed": r.passed, "message": r.message}),
+                            ).await;
+                        }
+                        if crate::scheduler::invariant::has_halting_violation(results) {
+                            warn!("invariant halt at before_restart — aborting restart");
+                            acc.step_ran.insert(step.id.clone(), true);
+                            acc.exit_codes.insert(step.id.clone(), exit_code);
+                            return Ok(BuiltinStepOutcome::EarlyReturn);
+                        }
                     }
-                    if crate::scheduler::invariant::has_halting_violation(results) {
-                        warn!("invariant halt at before_restart — aborting restart");
-                        acc.step_ran.insert(step.id.clone(), true);
-                        acc.exit_codes.insert(step.id.clone(), exit_code as i64);
-                        return Ok(BuiltinStepOutcome::EarlyReturn);
+
+                    // Persist pipeline vars to DB before restart so the new process recovers them.
+                    if let Ok(json) = serde_json::to_string(&acc.pipeline_vars) {
+                        if let Err(e) = state
+                            .db_writer
+                            .update_task_pipeline_vars(task_id, &json)
+                            .await
+                        {
+                            tracing::warn!("failed to persist pipeline_vars before restart: {e}");
+                        }
                     }
+
+                    acc.step_ran.insert(step.id.clone(), true);
+                    acc.exit_codes.insert(step.id.clone(), exit_code);
+                    // Signal restart up the call stack — daemon layer handles exec()
+                    Ok(BuiltinStepOutcome::RestartRequested { binary_path })
                 }
+                SelfRestartOutcome::Failed(exit_code) => {
+                    acc.pipeline_vars
+                        .vars
+                        .insert("self_restart_exit_code".to_string(), exit_code.to_string());
 
-                // Persist pipeline vars to DB before exit so the relaunched process recovers them.
-                if let Ok(json) = serde_json::to_string(&acc.pipeline_vars) {
-                    if let Err(e) = state
-                        .db_writer
-                        .update_task_pipeline_vars(task_id, &json)
-                        .await
-                    {
-                        tracing::warn!("failed to persist pipeline_vars before restart: {e}");
+                    insert_event(
+                        state,
+                        task_id,
+                        Some(item_id),
+                        "step_finished",
+                        json!({"step": phase, "step_scope": step.resolved_scope(), "exit_code": exit_code, "restart": false}),
+                    ).await?;
+
+                    // Build or verification failed — apply on_failure behavior
+                    if exit_code != 0 {
+                        match &step.behavior.on_failure {
+                            OnFailureAction::Continue => {}
+                            OnFailureAction::SetStatus { status } => {
+                                acc.item_status = status.clone();
+                            }
+                            OnFailureAction::EarlyReturn { status } => {
+                                acc.item_status = status.clone();
+                                acc.terminal = true;
+                                return Ok(BuiltinStepOutcome::EarlyReturn);
+                            }
+                        }
                     }
+                    acc.step_ran.insert(step.id.clone(), true);
+                    acc.exit_codes.insert(step.id.clone(), exit_code);
+                    Ok(BuiltinStepOutcome::Handled)
                 }
-                // All state is persisted (restart_pending set by execute_self_restart_step).
-                // Exit process so the daemon supervisor relaunches the new binary.
-                std::process::exit(EXIT_RESTART as i32);
             }
-
-            // Build or verification failed — apply on_failure behavior
-            if exit_code != 0 {
-                match &step.behavior.on_failure {
-                    OnFailureAction::Continue => {}
-                    OnFailureAction::SetStatus { status } => {
-                        acc.item_status = status.clone();
-                    }
-                    OnFailureAction::EarlyReturn { status } => {
-                        acc.item_status = status.clone();
-                        acc.terminal = true;
-                        return Ok(BuiltinStepOutcome::EarlyReturn);
-                    }
-                }
-            }
-            acc.step_ran.insert(step.id.clone(), true);
-            acc.exit_codes.insert(step.id.clone(), exit_code as i64);
-            Ok(BuiltinStepOutcome::Handled)
         }
 
         ExecutionMode::Builtin { name } if name == "ticket_scan" => {

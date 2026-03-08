@@ -100,20 +100,20 @@ cd /Volumes/Yotta/ai_native_sdlc
 
 cd core && cargo build --release && cd ..
 
-./scripts/orchestrator.sh db reset -f --include-config --include-history
-./scripts/orchestrator.sh init -f
-./scripts/orchestrator.sh apply -f docs/workflow/claude-secret.yaml
-./scripts/orchestrator.sh apply -f docs/workflow/minimax-secret.yaml
+./scripts/run-cli.sh db reset -f --include-config --include-history
+./scripts/run-cli.sh init -f
+./scripts/run-cli.sh apply -f docs/workflow/claude-secret.yaml
+./scripts/run-cli.sh apply -f docs/workflow/minimax-secret.yaml
 # 如需使用 Claude 原生 API，注释上行即可（claude-* 的模型配置将生效）
-./scripts/orchestrator.sh apply -f docs/workflow/self-evolution.yaml
+./scripts/run-cli.sh apply -f docs/workflow/self-evolution.yaml
 ```
 
 ### 3.2 验证资源已加载
 
 ```bash
-./scripts/orchestrator.sh get workspace
-./scripts/orchestrator.sh get workflow
-./scripts/orchestrator.sh get agent
+./scripts/run-cli.sh get workspace
+./scripts/run-cli.sh get workflow
+./scripts/run-cli.sh get agent
 ```
 
 预期至少可见：
@@ -127,7 +127,7 @@ cd core && cargo build --release && cd ..
 self-evolution 不需要指定 `-t` 目标文件——动态 item 由 `evo_plan` 的 `generate_items` 在运行时生成，不依赖静态 QA 文件扫描。
 
 ```bash
-./scripts/orchestrator.sh task create \
+./scripts/run-cli.sh task create \
   -n "<任务名>" \
   -w self -W self-evolution \
   --no-start \
@@ -137,7 +137,7 @@ self-evolution 不需要指定 `-t` 目标文件——动态 item 由 `evo_plan`
 记录返回的 `<task_id>`，然后启动：
 
 ```bash
-./scripts/orchestrator.sh task start <task_id>
+./scripts/run-cli.sh task start <task_id>
 ```
 
 ---
@@ -147,9 +147,9 @@ self-evolution 不需要指定 `-t` 目标文件——动态 item 由 `evo_plan`
 ### 4.1 状态监控
 
 ```bash
-./scripts/orchestrator.sh task list
-./scripts/orchestrator.sh task info <task_id> -o json
-./scripts/orchestrator.sh task trace <task_id>
+./scripts/run-cli.sh task list
+./scripts/run-cli.sh task info <task_id> -o json
+./scripts/run-cli.sh task trace <task_id>
 ```
 
 重点观察：
@@ -183,8 +183,8 @@ self-evolution 相比 self-bootstrap 有以下特有的观察点：
 ### 4.3 日志监控
 
 ```bash
-./scripts/orchestrator.sh task logs --tail 100 <task_id>
-./scripts/orchestrator.sh task logs --tail 200 <task_id>
+./scripts/run-cli.sh task logs --tail 100 <task_id>
+./scripts/run-cli.sh task logs --tail 200 <task_id>
 ```
 
 重点观察：
@@ -211,7 +211,7 @@ git diff --stat
 ### 4.5 补充诊断命令
 
 ```bash
-./scripts/orchestrator.sh task trace <task_id> --json
+./scripts/run-cli.sh task trace <task_id> --json
 sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id = '<task_id>' ORDER BY id DESC LIMIT 20;"
 ```
 
@@ -303,8 +303,8 @@ sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events 
 建议记录方式：
 
 ```bash
-./scripts/orchestrator.sh task info <task_id> -o json
-./scripts/orchestrator.sh task logs --tail 200 <task_id>
+./scripts/run-cli.sh task info <task_id> -o json
+./scripts/run-cli.sh task logs --tail 200 <task_id>
 git diff --stat
 ```
 

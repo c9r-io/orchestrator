@@ -78,7 +78,7 @@ Verify that a `.stable` binary copy is created at the start of each cycle when b
    $BINARY task create --project "${QA_PROJECT}" --workflow self-bootstrap --goal "test binary snapshot"
    TASK_ID=$($BINARY task list -s restart_pending -o json 2>/dev/null | jq -r '.[0].id // empty')
    # If task auto-started and exited 75, it is now restart_pending.
-   # If still pending, start it via orchestrator.sh which handles the restart loop:
+   # If still pending, start it via the daemon which handles the restart loop:
    [ -z "$TASK_ID" ] && TASK_ID=$($BINARY task list -s pending -o json 2>/dev/null | jq -r '.[0].id')
    ```
 3. Start (or resume) the task — `orchestrator daemon start -f` handles exit-75 restart automatically:

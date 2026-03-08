@@ -20,15 +20,15 @@ Verify that the `self_test` builtin step executes all three phases successfully 
 
 ```bash
 rm -f fixtures/ticket/auto_*.md
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
+./scripts/run-cli.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
 QA_PROJECT="qa-survival"
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --force
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
+./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --force
+./scripts/run-cli.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
 ```
 
 - ✅ Common Preconditions applied (qa-survival project, **mock** self-bootstrap workflow)
 - ✅ Codebase is in a clean, compilable state (`cargo check` and `cargo test --lib` pass)
-- ✅ `scripts/orchestrator.sh` exists (for manifest validate phase)
+- ✅ `scripts/run-cli.sh` exists (for manifest validate phase)
 
 ### Steps
 1. Create and start a task using the `self-bootstrap` workflow (mock agents via fixture)

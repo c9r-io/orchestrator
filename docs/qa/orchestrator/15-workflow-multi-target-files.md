@@ -11,18 +11,18 @@
 
 This document is split from `05-workflow-execution.md` to keep each QA document within 5 scenarios.
 
-Entry point: `./scripts/orchestrator.sh task <command>`
+Entry point: `./scripts/run-cli.sh task <command>`
 
 Project setup (run once):
 
 ```bash
-./scripts/orchestrator.sh init --force
+./scripts/run-cli.sh init --force
 
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+./scripts/run-cli.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml
+./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+./scripts/run-cli.sh qa project create "${QA_PROJECT}" --force
 ```
 
 > Note: Fixture application is additive. Re-apply the expected fixture and
@@ -43,7 +43,7 @@ rm -rf "workspace/${QA_PROJECT}"
 
 1. Create task with explicit multi-target inputs:
    ```bash
-   ./scripts/orchestrator.sh task create \
+   ./scripts/run-cli.sh task create \
      --name "multi-file-test" \
      --goal "Test multiple files" \
      --project "${QA_PROJECT}" \
@@ -54,12 +54,12 @@ rm -rf "workspace/${QA_PROJECT}"
 
 2. Start task:
    ```bash
-   ./scripts/orchestrator.sh task start {task_id}
+   ./scripts/run-cli.sh task start {task_id}
    ```
 
 3. Check task details:
    ```bash
-   ./scripts/orchestrator.sh task info {task_id}
+   ./scripts/run-cli.sh task info {task_id}
    ```
 
 ### Expected

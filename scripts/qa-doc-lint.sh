@@ -8,7 +8,7 @@ fail=0
 
 # Existing orchestrator-specific guardrails.
 echo "[qa-doc-lint] Checking banned patterns..."
-BANNED_PATTERN='orchestrator/config/default\.yaml|cd orchestrator|--workspace-id|orchestrator agent health|config bootstrap --from|--config <file>|--config <path>|localhost:1423/api|/api/task-options'
+BANNED_PATTERN='orchestrator/config/default\.yaml|cd orchestrator|--workspace-id|orchestrator agent health|config bootstrap --from|--config <file>|--config <path>|localhost:1423/api|/api/task-options|scripts/orchestrator\.sh'
 if rg -n "$BANNED_PATTERN" \
   docs/qa/orchestrator docs/design_doc docs/report \
   -g '!docs/qa/orchestrator/00-command-contract.md' >/tmp/qa_doc_lint_banned.txt 2>/dev/null; then

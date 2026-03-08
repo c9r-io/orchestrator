@@ -894,15 +894,17 @@ async fn test_execute_self_restart_step_build_fails() {
 
     let result = execute_self_restart_step(&workspace_root, &state, "task-1", "item-1")
         .await
-        .expect("self restart should return exit code");
+        .expect("self restart should return outcome");
 
     unsafe {
         std::env::remove_var("ORCH_SELF_TEST_CARGO");
     }
 
-    // Build failure should return the cargo exit code, not EXIT_RESTART
-    assert_eq!(result, 7);
-    assert_ne!(result, EXIT_RESTART);
+    // Build failure should return Failed with the cargo exit code
+    match result {
+        SelfRestartOutcome::Failed(code) => assert_eq!(code, 7),
+        SelfRestartOutcome::RestartReady { .. } => panic!("expected Failed, got RestartReady"),
+    }
 
     // Task status should NOT be restart_pending
     let conn = crate::db::open_conn(&state.db_path).expect("open conn");
@@ -950,13 +952,17 @@ async fn test_execute_self_restart_step_success_returns_exit_restart() {
 
     let result = execute_self_restart_step(&workspace_root, &state, "task-restart", "item-1")
         .await
-        .expect("self restart should return exit code");
+        .expect("self restart should return outcome");
 
     unsafe {
         std::env::remove_var("ORCH_SELF_TEST_CARGO");
     }
 
-    assert_eq!(result, EXIT_RESTART);
+    assert!(
+        matches!(result, SelfRestartOutcome::RestartReady { .. }),
+        "expected RestartReady, got {:?}",
+        result
+    );
 
     // Task status should be restart_pending
     let status: String = conn
@@ -1110,15 +1116,17 @@ async fn test_execute_self_restart_step_verify_timeout() {
 
     let result = execute_self_restart_step(&workspace_root, &state, "task-timeout", "item-1")
         .await
-        .expect("should return exit code even on timeout");
+        .expect("should return outcome even on timeout");
 
     unsafe {
         std::env::remove_var("ORCH_SELF_TEST_CARGO");
     }
 
-    // Timeout path returns 1, not EXIT_RESTART
-    assert_eq!(result, 1);
-    assert_ne!(result, EXIT_RESTART);
+    // Timeout path returns Failed(1)
+    match result {
+        SelfRestartOutcome::Failed(code) => assert_eq!(code, 1),
+        SelfRestartOutcome::RestartReady { .. } => panic!("expected Failed, got RestartReady"),
+    }
 }
 
 #[tokio::test]
@@ -1147,14 +1155,16 @@ async fn test_execute_self_restart_step_snapshot_fails() {
 
     let result = execute_self_restart_step(&workspace_root, &state, "task-snap-fail", "item-1")
         .await
-        .expect("should return exit code on snapshot failure");
+        .expect("should return outcome on snapshot failure");
 
     unsafe {
         std::env::remove_var("ORCH_SELF_TEST_CARGO");
     }
 
-    assert_eq!(result, 1);
-    assert_ne!(result, EXIT_RESTART);
+    match result {
+        SelfRestartOutcome::Failed(code) => assert_eq!(code, 1),
+        SelfRestartOutcome::RestartReady { .. } => panic!("expected Failed, got RestartReady"),
+    }
 }
 
 #[tokio::test]
@@ -1191,17 +1201,21 @@ async fn test_execute_self_restart_step_binary_read_fails_uses_unknown() {
     // We can't easily race this, so instead we verify the success path records a real sha256,
     // and document the fallback by deleting binary before the sha256 read.
     // Since snapshot happens before sha256 read, removing after verify but snapshot copies it:
-    // We'll just verify success path produces EXIT_RESTART with some sha256 recorded.
+    // We'll just verify success path produces RestartReady with some sha256 recorded.
     let result = execute_self_restart_step(&workspace_root, &state, "task-sha-unknown", "item-1")
         .await
-        .expect("should return exit code");
+        .expect("should return outcome");
 
     unsafe {
         std::env::remove_var("ORCH_SELF_TEST_CARGO");
     }
 
-    // On success, EXIT_RESTART is returned
-    assert_eq!(result, EXIT_RESTART);
+    // On success, RestartReady is returned
+    assert!(
+        matches!(result, SelfRestartOutcome::RestartReady { .. }),
+        "expected RestartReady, got {:?}",
+        result
+    );
 
     // Check that self_restart_ready event was recorded with a new_binary_sha256 field
     let event_payload: Option<String> = conn
@@ -1387,13 +1401,17 @@ async fn test_execute_self_restart_step_records_old_binary_sha256() {
 
     let result = execute_self_restart_step(&workspace_root, &state, "task-old-sha", "item-1")
         .await
-        .expect("should return exit code");
+        .expect("should return outcome");
 
     unsafe {
         std::env::remove_var("ORCH_SELF_TEST_CARGO");
     }
 
-    assert_eq!(result, EXIT_RESTART);
+    assert!(
+        matches!(result, SelfRestartOutcome::RestartReady { .. }),
+        "expected RestartReady, got {:?}",
+        result
+    );
 
     // Verify the self_restart_ready event has old_binary_sha256, new_binary_sha256, and binary_changed
     let event_payload: String = conn

@@ -164,43 +164,43 @@ Workflow configuration is detailed in [Chapter 03](03-workflow-configuration.md)
 
 ```bash
 # From file
-./scripts/orchestrator.sh apply -f manifest.yaml
+./scripts/run-cli.sh apply -f manifest.yaml
 
 # From stdin
-cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
+cat manifest.yaml | ./scripts/run-cli.sh apply -f -
 
 # Dry-run (validate without writing)
-./scripts/orchestrator.sh apply -f manifest.yaml --dry-run
+./scripts/run-cli.sh apply -f manifest.yaml --dry-run
 ```
 
 ### Query
 
 ```bash
 # List resources
-./scripts/orchestrator.sh get workspaces
-./scripts/orchestrator.sh get agents
-./scripts/orchestrator.sh get workflows
+./scripts/run-cli.sh get workspaces
+./scripts/run-cli.sh get agents
+./scripts/run-cli.sh get workflows
 
 # Detail view
-./scripts/orchestrator.sh describe workspace default
-./scripts/orchestrator.sh workspace info default
+./scripts/run-cli.sh describe workspace default
+./scripts/run-cli.sh workspace info default
 
 # Output formats
-./scripts/orchestrator.sh get agents -o json
-./scripts/orchestrator.sh get agents -o yaml
+./scripts/run-cli.sh get agents -o json
+./scripts/run-cli.sh get agents -o yaml
 
 # Label selector
-./scripts/orchestrator.sh get workspaces -l env=dev
+./scripts/run-cli.sh get workspaces -l env=dev
 ```
 
 ### Export
 
 ```bash
 # Export all config as YAML
-./scripts/orchestrator.sh manifest export
+./scripts/run-cli.sh manifest export
 
 # Edit interactively
-./scripts/orchestrator.sh edit workspace default
+./scripts/run-cli.sh edit workspace default
 ```
 
 ## Multi-Document Manifests
@@ -245,7 +245,7 @@ spec:
 Then apply it all at once:
 
 ```bash
-./scripts/orchestrator.sh apply -f everything-in-one.yaml
+./scripts/run-cli.sh apply -f everything-in-one.yaml
 ```
 
 ## Next Steps

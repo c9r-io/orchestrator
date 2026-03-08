@@ -22,7 +22,7 @@ The orchestrator combines workflow engines with agent coordination to enable:
 The orchestrator supports **standalone** (monolithic CLI) and **client/server** (daemon + gRPC client) modes:
 
 ```
-Standalone:   orchestrator.sh ──> [Engine + DB + Workers] (single process)
+Standalone:   run-cli.sh ──> [Engine + DB + Workers] (single process)
 
 Client/Server:
   orchestrator (CLI) ──gRPC/UDS──> orchestratord (daemon)
@@ -170,10 +170,10 @@ workflows:
 ### Standalone Mode
 
 ```bash
-./scripts/orchestrator.sh init
-./scripts/orchestrator.sh apply -f manifest.yaml
-./scripts/orchestrator.sh task create --goal "QA run"
-./scripts/orchestrator.sh task start <task_id>
+./scripts/run-cli.sh init
+./scripts/run-cli.sh apply -f manifest.yaml
+./scripts/run-cli.sh task create --goal "QA run"
+./scripts/run-cli.sh task start <task_id>
 ```
 
 ### Client/Server Mode
@@ -302,9 +302,9 @@ cargo build --workspace --release
 ### Standalone Mode
 
 ```bash
-./scripts/orchestrator.sh init
-./scripts/orchestrator.sh apply -f fixtures/capability-test.yaml
-./scripts/orchestrator.sh task create --goal "My first QA run"
+./scripts/run-cli.sh init
+./scripts/run-cli.sh apply -f fixtures/capability-test.yaml
+./scripts/run-cli.sh task create --goal "My first QA run"
 ```
 
 ### Client/Server Mode

@@ -20,8 +20,9 @@ pub async fn run(cmd: DaemonCommands) -> Result<()> {
             }
 
             if foreground {
-                // Run in foreground with restart loop — if daemon exits with code 75,
-                // relaunch it (self-restart after binary rebuild).
+                // Run in foreground with restart loop.
+                // Primary path: daemon handles restart internally via exec() (same PID).
+                // Fallback: if exec fails, daemon exits with code 75 and this loop relaunches it.
                 const EXIT_RESTART: i32 = 75;
                 loop {
                     let status = std::process::Command::new(&daemon_binary)

@@ -158,7 +158,7 @@ Verify that config build-time validation catches agents referencing non-existent
    ```
 2. Apply and observe validation error:
    ```bash
-   ./scripts/orchestrator.sh apply -f /tmp/bad-fromref-agent.yaml
+   ./scripts/run-cli.sh apply -f /tmp/bad-fromref-agent.yaml
    ```
 3. Save a manifest referencing a missing store via `refValue`:
    ```bash
@@ -178,7 +178,7 @@ Verify that config build-time validation catches agents referencing non-existent
    ```
 4. Apply and observe validation error:
    ```bash
-   ./scripts/orchestrator.sh apply -f /tmp/bad-refvalue-agent.yaml
+   ./scripts/run-cli.sh apply -f /tmp/bad-refvalue-agent.yaml
    ```
 
 ### Expected

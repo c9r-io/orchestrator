@@ -33,10 +33,10 @@ Every scenario starts from a clean project with at least one completed task:
 
 ```bash
 QA_PROJECT="qa-trace-$(date +%s)"
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+./scripts/run-cli.sh apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
+./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --from-workspace cli_probe_ws --workflow probe_task_scoped --force
+./scripts/run-cli.sh qa project create "${QA_PROJECT}" --from-workspace cli_probe_ws --workflow probe_task_scoped --force
 ```
 
 ---
@@ -56,12 +56,12 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 
 1. Create and run a task to completion:
    ```bash
-   ./scripts/orchestrator.sh task create --goal "trace test" --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_task_scoped
+   ./scripts/run-cli.sh task create --goal "trace test" --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_task_scoped
    ```
 2. Note the `{task_id}` from output
 3. Run trace:
    ```bash
-   ./scripts/orchestrator.sh task trace {task_id}
+   ./scripts/run-cli.sh task trace {task_id}
    ```
 
 ### Expected
@@ -86,11 +86,11 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 
 1. Run trace with `--json`:
    ```bash
-   ./scripts/orchestrator.sh task trace {task_id} --json
+   ./scripts/run-cli.sh task trace {task_id} --json
    ```
 2. Pipe through `jq` to validate:
    ```bash
-   ./scripts/orchestrator.sh task trace {task_id} --json | jq .
+   ./scripts/run-cli.sh task trace {task_id} --json | jq .
    ```
 
 ### Expected
@@ -116,11 +116,11 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 
 1. Run trace with `--verbose` for the task-scoped fixture:
    ```bash
-   ./scripts/orchestrator.sh task trace {task_scoped_task_id} --verbose
+   ./scripts/run-cli.sh task trace {task_scoped_task_id} --verbose
    ```
 2. Run trace with `--verbose` for the item-scoped fixture:
    ```bash
-   ./scripts/orchestrator.sh task trace {item_scoped_task_id} --verbose
+   ./scripts/run-cli.sh task trace {item_scoped_task_id} --verbose
    ```
 
 ### Expected
@@ -153,8 +153,8 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
    ```
 3. If the current config is runnable and you have a known failing task with a non-zero step exit, run:
    ```bash
-   ./scripts/orchestrator.sh task trace {task_id}
-   ./scripts/orchestrator.sh task trace {task_id} --json | jq '.anomalies[] | select(.rule == "nonzero_exit")'
+   ./scripts/run-cli.sh task trace {task_id}
+   ./scripts/run-cli.sh task trace {task_id} --json | jq '.anomalies[] | select(.rule == "nonzero_exit")'
    ```
 
 ### Expected
@@ -188,11 +188,11 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 
 1. Confirm the current config is invalid with a command that requires a runnable config:
    ```bash
-   ./scripts/orchestrator.sh check
+   ./scripts/run-cli.sh check
    ```
 2. Run trace for a historical task:
    ```bash
-   ./scripts/orchestrator.sh task trace {task_id} --json | jq '.summary'
+   ./scripts/run-cli.sh task trace {task_id} --json | jq '.summary'
    ```
 
 ### Expected
@@ -212,14 +212,14 @@ runtime fixtures, not control-plane reinitialization.
 
 1. Apply the self-referential probe fixtures:
    ```bash
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-referential-probe-fixtures.yaml
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/self-referential-probe-fixtures.yaml
    ```
 2. Run a low-output self-referential probe task to completion.
 3. Run an active-output self-referential probe task to completion.
 4. Inspect both traces:
    ```bash
-   ./scripts/orchestrator.sh task trace {low_output_task_id} --json | jq '.anomalies'
-   ./scripts/orchestrator.sh task trace {active_output_task_id} --json | jq '.anomalies'
+   ./scripts/run-cli.sh task trace {low_output_task_id} --json | jq '.anomalies'
+   ./scripts/run-cli.sh task trace {active_output_task_id} --json | jq '.anomalies'
    ```
 
 Expected:

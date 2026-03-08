@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use tonic::transport::Server;
 use tracing::{error, info};
 
+use agent_orchestrator::scheduler::safety::RestartRequestedError;
 use agent_orchestrator::scheduler::{load_task_summary, run_task_loop, RunningTask};
 use agent_orchestrator::scheduler_service::{
     claim_next_pending_task, clear_worker_stop_signal, worker_stop_signal_path,
@@ -67,28 +68,44 @@ fn main() -> Result<()> {
 
         // Shutdown coordination: watch channel shared between server and workers
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+        // Restart coordination: worker sends binary path when restart is requested
+        let (restart_tx, restart_rx) =
+            tokio::sync::watch::channel::<Option<std::path::PathBuf>>(None);
 
         // Spawn worker tasks
         let mut worker_handles = Vec::with_capacity(worker_count);
         for idx in 0..worker_count {
             let rx = shutdown_rx.clone();
             let st = inner.clone();
-            let handle = tokio::spawn(worker_loop(st, idx, rx));
+            let rtx = restart_tx.clone();
+            let handle = tokio::spawn(worker_loop(st, idx, rx, rtx));
             worker_handles.push(handle);
         }
+        drop(restart_tx); // drop original sender so only workers hold it
         info!(workers = worker_count, "background workers started");
 
         let service = server::OrchestratorServer::new(inner.clone());
         let grpc_service = OrchestratorServiceServer::new(service);
 
+        // Shutdown future: listen for OS signals OR restart request from a worker
+        let shutdown_fut = {
+            let inner2 = inner.clone();
+            let mut restart_rx2 = restart_rx.clone();
+            async move {
+                tokio::select! {
+                    _ = lifecycle::shutdown_signal(inner2) => {}
+                    _ = restart_rx2.changed() => {}
+                }
+            }
+        };
+
         // Determine bind address: UDS by default, TCP if --bind provided
         if let Some(addr) = bind_addr {
             let addr = addr.parse().context("invalid bind address")?;
             info!(%addr, "listening on TCP");
-            let shutdown = lifecycle::shutdown_signal(inner.clone());
             Server::builder()
                 .add_service(grpc_service)
-                .serve_with_shutdown(addr, shutdown)
+                .serve_with_shutdown(addr, shutdown_fut)
                 .await
                 .context("gRPC server error")?;
         } else {
@@ -101,10 +118,9 @@ fn main() -> Result<()> {
             let uds_stream = tokio_stream::wrappers::UnixListenerStream::new(uds);
 
             info!(socket = %socket_path.display(), "listening on UDS");
-            let shutdown = lifecycle::shutdown_signal(inner.clone());
             Server::builder()
                 .add_service(grpc_service)
-                .serve_with_incoming_shutdown(uds_stream, shutdown)
+                .serve_with_incoming_shutdown(uds_stream, shutdown_fut)
                 .await
                 .context("gRPC server error")?;
         }
@@ -129,7 +145,21 @@ fn main() -> Result<()> {
             }
         }
 
-        // Cleanup
+        // Check if this was a restart request
+        if let Some(binary_path) = restart_rx.borrow().clone() {
+            info!(binary = %binary_path.display(), "exec-ing new daemon binary");
+            lifecycle::cleanup(&socket_path, &pid_path);
+
+            use std::os::unix::process::CommandExt;
+            let err = std::process::Command::new(&binary_path)
+                .args(std::env::args_os().skip(1))
+                .exec();
+            // exec() only returns on error
+            error!("exec failed: {}", err);
+            std::process::exit(1);
+        }
+
+        // Normal shutdown
         lifecycle::cleanup(&socket_path, &pid_path);
         info!("orchestratord stopped");
         Ok(())
@@ -141,6 +171,7 @@ async fn worker_loop(
     state: Arc<InnerState>,
     worker_idx: usize,
     mut shutdown: tokio::sync::watch::Receiver<bool>,
+    restart_tx: tokio::sync::watch::Sender<Option<std::path::PathBuf>>,
 ) {
     let wake_path = worker_wake_signal_path(&state);
     let stop_path = worker_stop_signal_path(&state);
@@ -181,6 +212,12 @@ async fn worker_loop(
                         }
                     }
                     Err(e) => {
+                        // Check if this is a restart request (not a real error)
+                        if let Some(restart) = e.downcast_ref::<RestartRequestedError>() {
+                            info!(worker = worker_num, "restart requested, signalling daemon");
+                            let _ = restart_tx.send(Some(restart.binary_path.clone()));
+                            return; // worker exits cleanly
+                        }
                         error!(worker = worker_num, %task_id, error = %e, "task failed");
                     }
                 }

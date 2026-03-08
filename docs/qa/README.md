@@ -11,8 +11,9 @@ This directory contains reproducible, verifiable QA test documents.
 ## QA Contract
 
 - Canonical CLI contract: `docs/qa/orchestrator/00-command-contract.md`
-- Preferred entry point (standalone): `./scripts/orchestrator.sh <command>`
-- C/S entry points: `./target/release/orchestratord` (daemon) + `./target/release/orchestrator` (client)
+- Preferred entry point: `./scripts/run-cli.sh <command>` (auto-builds + calls CLI client)
+- Daemon: `orchestrator daemon start -f` (foreground) or `orchestrator daemon start` (background)
+- Direct binary: `./target/release/orchestrator <command>` (C/S client)
 - Repository root is the default execution directory for all QA steps.
 
 ## Document Rules (Strict)
@@ -152,7 +153,7 @@ This checks:
 | self-bootstrap | `docs/qa/self-bootstrap/02-survival-enforcement-watchdog.md` | 5 | Survival Layer 3-4: self-referential enforcement and watchdog script |
 | self-bootstrap | `docs/qa/self-bootstrap/05-survival-smoke-binary-snapshot.md` | 5 | Unit tests for snapshot_binary() and restore_binary_snapshot() |
 | self-bootstrap | `docs/qa/self-bootstrap/06-survival-smoke-binary-snapshot-verification.md` | 5 | Binary snapshot verification function and integration test |
-| self-bootstrap | `docs/qa/self-bootstrap/07-self-restart-process-continuity.md` | 5 | Self-restart builtin step, restart_pending resumption, orchestrator.sh restart loop, priority claiming |
+| self-bootstrap | `docs/qa/self-bootstrap/07-self-restart-process-continuity.md` | 5 | Self-restart builtin step, restart_pending resumption, daemon restart loop, priority claiming |
 | self-bootstrap | `docs/qa/self-bootstrap/08-build-version-hash.md` | 5 | Build version hash: compile-time git hash/timestamp, version subcommand, restart event enrichment |
 | self-bootstrap | `docs/qa/self-bootstrap/09-self-restart-old-new-sha256-audit.md` | 4 | Self-restart old/new binary SHA256 audit chain: old_binary_sha256, new_binary_sha256, binary_changed, backward compat |
 | self-bootstrap | `docs/qa/self-bootstrap/04-cycle2-validation-and-runtime-timestamps.md` | 2 | Regression: fixed two-cycle QA validation chain and task/item runtime timestamps |

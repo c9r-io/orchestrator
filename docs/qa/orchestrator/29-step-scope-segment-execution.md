@@ -69,15 +69,15 @@ Verify that plan and implement steps execute exactly once per cycle, regardless 
    ```bash
    rm -f fixtures/ticket/auto_*.md
    QA_PROJECT="qa-scope-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml
+   ./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+   ./scripts/run-cli.sh qa project create "${QA_PROJECT}" --force
    ```
 
 2. Create a task targeting multiple QA files:
    ```bash
-   ./scripts/orchestrator.sh task create \
+   ./scripts/run-cli.sh task create \
      --name "scope-multi-item" \
      --goal "Test scope with multiple items" \
      --project "${QA_PROJECT}" \
@@ -88,7 +88,7 @@ Verify that plan and implement steps execute exactly once per cycle, regardless 
 
 3. Start task and wait:
    ```bash
-   ./scripts/orchestrator.sh task start {task_id}
+   ./scripts/run-cli.sh task start {task_id}
    ```
 
 4. Count step executions:
@@ -177,13 +177,13 @@ Verify that pipeline variables set during task-scoped segments (e.g., `plan_outp
 
 1. Create and run a task with `sdlc_pipeline_vars` workflow (plan produces output, qa_testing references it):
    ```bash
-   ./scripts/orchestrator.sh task create \
+   ./scripts/run-cli.sh task create \
      --name "scope-pipeline-vars" \
      --goal "Test pipeline var propagation across segments" \
      --project "${QA_PROJECT}" \
      --workflow sdlc_pipeline_vars \
      --no-start
-   ./scripts/orchestrator.sh task start {task_id}
+   ./scripts/run-cli.sh task start {task_id}
    ```
 
 2. Check that qa_testing received the plan_output:
@@ -217,7 +217,7 @@ Verify that `default_scope_for_step_id()` correctly classifies all self-bootstra
 
 1. Apply self-bootstrap manifest:
    ```bash
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --dry-run
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --dry-run
    ```
 
 2. Run unit test to verify default_scope mapping:

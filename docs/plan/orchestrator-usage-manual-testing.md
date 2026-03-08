@@ -5,7 +5,7 @@ This document is a practical, copy-paste oriented guide for manually testing the
 Entry point:
 
 ```bash
-./scripts/orchestrator.sh
+./scripts/run-cli.sh
 ```
 
 ---
@@ -21,8 +21,8 @@ cd /Volumes/Yotta/ai_native_sdlc
 Verify CLI surface:
 
 ```bash
-./scripts/orchestrator.sh --help
-./scripts/orchestrator.sh task --help
+./scripts/run-cli.sh --help
+./scripts/run-cli.sh task --help
 ```
 
 ---
@@ -30,8 +30,8 @@ Verify CLI surface:
 ## 2. Clean Runtime State
 
 ```bash
-./scripts/orchestrator.sh db reset -f --include-config --include-history
-./scripts/orchestrator.sh init -f
+./scripts/run-cli.sh db reset -f --include-config --include-history
+./scripts/run-cli.sh init -f
 ```
 
 Runtime data locations:
@@ -43,11 +43,11 @@ Runtime data locations:
 ## 3. Apply Self-Bootstrap Workflow
 
 ```bash
-./scripts/orchestrator.sh manifest validate -f docs/workflow/self-bootstrap.yaml
-./scripts/orchestrator.sh apply -f docs/workflow/self-bootstrap.yaml
-./scripts/orchestrator.sh get workflow
-./scripts/orchestrator.sh get agent
-./scripts/orchestrator.sh get workspace
+./scripts/run-cli.sh manifest validate -f docs/workflow/self-bootstrap.yaml
+./scripts/run-cli.sh apply -f docs/workflow/self-bootstrap.yaml
+./scripts/run-cli.sh get workflow
+./scripts/run-cli.sh get agent
+./scripts/run-cli.sh get workspace
 ```
 
 Expected:
@@ -99,8 +99,8 @@ spec:
     stop_when_no_unresolved: true
 YAML
 
-./scripts/orchestrator.sh manifest validate -f /tmp/self-bootstrap-smoke.yaml
-./scripts/orchestrator.sh apply -f /tmp/self-bootstrap-smoke.yaml
+./scripts/run-cli.sh manifest validate -f /tmp/self-bootstrap-smoke.yaml
+./scripts/run-cli.sh apply -f /tmp/self-bootstrap-smoke.yaml
 ```
 
 ---
@@ -115,7 +115,7 @@ Important:
 Create task without auto start:
 
 ```bash
-./scripts/orchestrator.sh task create \
+./scripts/run-cli.sh task create \
   -n self-bootstrap-manual \
   -w self \
   -W self-bootstrap-smoke \
@@ -127,20 +127,20 @@ Create task without auto start:
 Start task:
 
 ```bash
-./scripts/orchestrator.sh task start <task_id>
+./scripts/run-cli.sh task start <task_id>
 ```
 
 Watch summary:
 
 ```bash
-./scripts/orchestrator.sh task list -o json
-./scripts/orchestrator.sh task info <task_id> -o json
+./scripts/run-cli.sh task list -o json
+./scripts/run-cli.sh task info <task_id> -o json
 ```
 
 Watch logs:
 
 ```bash
-./scripts/orchestrator.sh task logs <task_id> --tail 50
+./scripts/run-cli.sh task logs <task_id> --tail 50
 ```
 
 ---
@@ -236,11 +236,11 @@ LIMIT 1;"
 Delete a task:
 
 ```bash
-./scripts/orchestrator.sh task delete <task_id> -f
+./scripts/run-cli.sh task delete <task_id> -f
 ```
 
 Reset DB/config:
 
 ```bash
-./scripts/orchestrator.sh db reset -f --include-config --include-history
+./scripts/run-cli.sh db reset -f --include-config --include-history
 ```

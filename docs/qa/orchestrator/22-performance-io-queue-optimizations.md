@@ -18,7 +18,7 @@ This document validates performance-related refactor behavior introduced in sche
 - pending queue consumption is atomic claim-and-run
 - worker supports concurrent consumers via `--workers N`, while runtime remains bounded by global semaphore
 
-Entry point: `./scripts/orchestrator.sh`
+Entry point: `./scripts/run-cli.sh`
 
 ---
 
@@ -32,12 +32,12 @@ Entry point: `./scripts/orchestrator.sh`
 1. Create and run a task:
    ```bash
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/output-formats.yaml
-   ./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/output-formats.yaml
+   ./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
-   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "single-persist" --goal "command run payload completeness" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh task start "${TASK_ID}" || true
+   ./scripts/run-cli.sh qa project create "${QA_PROJECT}" --force
+   TASK_ID=$(./scripts/run-cli.sh task create --project "${QA_PROJECT}" --name "single-persist" --goal "command run payload completeness" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ./scripts/run-cli.sh task start "${TASK_ID}" || true
    ```
 2. Verify run payload columns:
    ```bash
@@ -107,12 +107,12 @@ WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
      finalize:
        rules: []
    YAML
-   ./scripts/orchestrator.sh apply -f /tmp/large-output-manifest.yaml
+   ./scripts/run-cli.sh apply -f /tmp/large-output-manifest.yaml
    ```
 2. Run task:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "bounded-read" --goal "bounded output read" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/orchestrator.sh task start "${TASK_ID}" || true
+   TASK_ID=$(./scripts/run-cli.sh task create --project "${QA_PROJECT}" --name "bounded-read" --goal "bounded output read" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ./scripts/run-cli.sh task start "${TASK_ID}" || true
    ```
 3. Verify truncated metadata in validation event payload:
    ```bash
@@ -153,7 +153,7 @@ WHERE task_id = '{task_id}'
    ```
 3. Read logs:
    ```bash
-   ./scripts/orchestrator.sh task logs {task_id} --tail 1
+   ./scripts/run-cli.sh task logs {task_id} --tail 1
    ```
 
 ### Expected
@@ -180,15 +180,15 @@ LIMIT 1;
 ### Steps
 1. Create one pending task:
    ```bash
-   TASK_ID=$(./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "atomic-claim" --goal "single winner" --detach | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(./scripts/run-cli.sh task create --project "${QA_PROJECT}" --name "atomic-claim" --goal "single winner" --detach | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 2. Start worker with parallel consumers:
    ```bash
-   ./scripts/orchestrator.sh task worker start --poll-ms 200 --workers 2
+   ./scripts/run-cli.sh task worker start --poll-ms 200 --workers 2
    ```
 3. Stop worker after completion:
    ```bash
-   ./scripts/orchestrator.sh task worker stop
+   ./scripts/run-cli.sh task worker stop
    ```
 4. Verify task executed once by phase-run uniqueness:
    ```bash
@@ -218,12 +218,12 @@ WHERE id = '{task_id}';
 1. Batch create detached tasks:
    ```bash
    for i in $(seq 1 20); do
-     ./scripts/orchestrator.sh task create --project "${QA_PROJECT}" --name "mw-${i}" --goal "throughput" --detach >/dev/null
+     ./scripts/run-cli.sh task create --project "${QA_PROJECT}" --name "mw-${i}" --goal "throughput" --detach >/dev/null
    done
    ```
 2. Start high worker count:
    ```bash
-   ./scripts/orchestrator.sh task worker start --poll-ms 200 --workers 20
+   ./scripts/run-cli.sh task worker start --poll-ms 200 --workers 20
    ```
 3. During run, sample running count:
    ```bash
@@ -231,7 +231,7 @@ WHERE id = '{task_id}';
    ```
 4. Stop worker:
    ```bash
-   ./scripts/orchestrator.sh task worker stop
+   ./scripts/run-cli.sh task worker stop
    ```
 
 ### Expected

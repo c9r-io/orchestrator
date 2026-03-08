@@ -25,12 +25,12 @@ Entry point: `orchestrator edit <command>` (subcommands: `export`, `open`; bare 
 
 1. Export workspace resource:
    ```bash
-   ./scripts/orchestrator.sh edit export workspace/default
+   ./scripts/run-cli.sh edit export workspace/default
    ```
 
 2. Read the temp file path printed to stdout and verify its contents:
    ```bash
-   cat "$(./scripts/orchestrator.sh edit export workspace/default 2>/dev/null)"
+   cat "$(./scripts/run-cli.sh edit export workspace/default 2>/dev/null)"
    ```
 
 3. Verify exported YAML contains exactly one document with the expected fields:
@@ -41,7 +41,7 @@ Entry point: `orchestrator edit <command>` (subcommands: `export`, `open`; bare 
 
 4. Confirm no duplicate resources (no `---` separator, only one `kind:` line):
    ```bash
-   grep -c '^kind:' "$(./scripts/orchestrator.sh edit export workspace/default 2>/dev/null)"
+   grep -c '^kind:' "$(./scripts/run-cli.sh edit export workspace/default 2>/dev/null)"
    # Expected: 1
    ```
 
@@ -56,7 +56,7 @@ Entry point: `orchestrator edit <command>` (subcommands: `export`, `open`; bare 
 | Symptom | Likely Cause | Resolution |
 |---------|-------------|------------|
 | Multiple `kind:` lines in output | Confused with `manifest export` which dumps all resources | Use `edit export` (single resource) not `manifest export` (all resources) |
-| Command not found | Missing `./scripts/` prefix | Use `./scripts/orchestrator.sh edit export workspace/default` |
+| Command not found | Missing `./scripts/` prefix | Use `./scripts/run-cli.sh edit export workspace/default` |
 
 ---
 

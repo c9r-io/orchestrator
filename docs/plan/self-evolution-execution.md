@@ -85,19 +85,19 @@ cd /Volumes/Yotta/ai_native_sdlc
 
 cd core && cargo build --release && cd ..
 
-./scripts/orchestrator.sh db reset -f --include-config --include-history
-./scripts/orchestrator.sh init -f
-./scripts/orchestrator.sh apply -f docs/workflow/claude-secret.yaml
-./scripts/orchestrator.sh apply -f docs/workflow/minimax-secret.yaml
-./scripts/orchestrator.sh apply -f docs/workflow/self-evolution.yaml
+./scripts/run-cli.sh db reset -f --include-config --include-history
+./scripts/run-cli.sh init -f
+./scripts/run-cli.sh apply -f docs/workflow/claude-secret.yaml
+./scripts/run-cli.sh apply -f docs/workflow/minimax-secret.yaml
+./scripts/run-cli.sh apply -f docs/workflow/self-evolution.yaml
 ```
 
 ### 3.2 验证资源已加载
 
 ```bash
-./scripts/orchestrator.sh get workspace
-./scripts/orchestrator.sh get workflow
-./scripts/orchestrator.sh get agent
+./scripts/run-cli.sh get workspace
+./scripts/run-cli.sh get workflow
+./scripts/run-cli.sh get agent
 ```
 
 预期至少可见：
@@ -109,7 +109,7 @@ cd core && cargo build --release && cd ..
 ### 3.3 创建任务
 
 ```bash
-./scripts/orchestrator.sh task create \
+./scripts/run-cli.sh task create \
   -n "evo-prompt-template-enhance" \
   -w self -W self-evolution \
   --no-start \
@@ -119,7 +119,7 @@ cd core && cargo build --release && cd ..
 记录返回的 `<task_id>`，然后启动：
 
 ```bash
-./scripts/orchestrator.sh task start <task_id>
+./scripts/run-cli.sh task start <task_id>
 ```
 
 ---
@@ -129,9 +129,9 @@ cd core && cargo build --release && cd ..
 ### 4.1 状态监控
 
 ```bash
-./scripts/orchestrator.sh task list
-./scripts/orchestrator.sh task info <task_id> -o json
-./scripts/orchestrator.sh task trace <task_id>
+./scripts/run-cli.sh task list
+./scripts/run-cli.sh task info <task_id> -o json
+./scripts/run-cli.sh task trace <task_id>
 ```
 
 ### 4.2 进化过程关键事件
@@ -159,8 +159,8 @@ cd core && cargo build --release && cd ..
 ### 4.3 日志监控
 
 ```bash
-./scripts/orchestrator.sh task logs --tail 100 <task_id>
-./scripts/orchestrator.sh task logs --tail 200 <task_id>
+./scripts/run-cli.sh task logs --tail 100 <task_id>
+./scripts/run-cli.sh task logs --tail 200 <task_id>
 ```
 
 重点观察：

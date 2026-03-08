@@ -11,7 +11,7 @@
 
 测试使用 `apply` 命令创建 workspace、agent、workflow 配置资源。
 
-Entry point: `./scripts/orchestrator.sh <command>`
+Entry point: `./scripts/run-cli.sh <command>`
 
 ---
 
@@ -47,12 +47,12 @@ Entry point: `./scripts/orchestrator.sh <command>`
 
 2. Apply with dry-run:
    ```bash
-   ./scripts/orchestrator.sh apply -f /tmp/test-ws.yaml --dry-run
+   ./scripts/run-cli.sh apply -f /tmp/test-ws.yaml --dry-run
    ```
 
 3. 验证未创建:
    ```bash
-   ./scripts/orchestrator.sh workspace list
+   ./scripts/run-cli.sh workspace list
    ```
 
 ### Expected
@@ -77,12 +77,12 @@ Entry point: `./scripts/orchestrator.sh <command>`
 1. 创建实际 workspace:
    ```bash
    mkdir -p /tmp/test-ws
-   ./scripts/orchestrator.sh apply -f /tmp/test-ws.yaml
+   ./scripts/run-cli.sh apply -f /tmp/test-ws.yaml
    ```
 
 2. 验证已创建:
    ```bash
-   ./scripts/orchestrator.sh workspace info test-ws-dryrun
+   ./scripts/run-cli.sh workspace info test-ws-dryrun
    ```
 
 ### Expected
@@ -121,7 +121,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
    EOF
    
    mkdir -p /tmp/minimal
-   ./scripts/orchestrator.sh apply -f /tmp/minimal-config.yaml
+   ./scripts/run-cli.sh apply -f /tmp/minimal-config.yaml
    ```
 
 2. 创建 agent:
@@ -137,7 +137,7 @@ Entry point: `./scripts/orchestrator.sh <command>`
      command: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"test-qa\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
    EOF
    
-   ./scripts/orchestrator.sh apply -f /tmp/test-agent.yaml
+   ./scripts/run-cli.sh apply -f /tmp/test-agent.yaml
    ```
 
 3. 创建 workflow:
@@ -158,13 +158,13 @@ Entry point: `./scripts/orchestrator.sh <command>`
        rules: []
    EOF
    
-   ./scripts/orchestrator.sh apply -f /tmp/test-workflow.yaml
+   ./scripts/run-cli.sh apply -f /tmp/test-workflow.yaml
    ```
 
 4. 验证配置:
    ```bash
-   ./scripts/orchestrator.sh get agents
-   ./scripts/orchestrator.sh get workflows
+   ./scripts/run-cli.sh get agents
+   ./scripts/run-cli.sh get workflows
    ```
 
 ### Expected
@@ -201,12 +201,12 @@ Entry point: `./scripts/orchestrator.sh <command>`
      ticket_dir: fixtures/ticket
    EOF
    
-   ./scripts/orchestrator.sh apply -f /tmp/update-ws.yaml
+   ./scripts/run-cli.sh apply -f /tmp/update-ws.yaml
    ```
 
 2. 验证更新:
    ```bash
-   ./scripts/orchestrator.sh workspace info minimal-ws
+   ./scripts/run-cli.sh workspace info minimal-ws
    ```
 
 ### Expected

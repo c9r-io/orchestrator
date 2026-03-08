@@ -6,7 +6,7 @@ Quick-reference for all Agent Orchestrator CLI commands.
 
 | Mode | Command | Description |
 |------|---------|-------------|
-| Standalone | `./scripts/orchestrator.sh <command>` | Legacy monolithic CLI |
+| Standalone | `./scripts/run-cli.sh <command>` | Legacy monolithic CLI |
 | C/S Daemon | `./target/release/orchestratord [flags]` | gRPC server + embedded workers |
 | C/S Client | `./target/release/orchestrator <command>` | Lightweight gRPC client |
 
@@ -53,7 +53,7 @@ Several commands have short aliases for convenience:
 Create runtime directories and SQLite schema.
 
 ```bash
-./scripts/orchestrator.sh init
+./scripts/run-cli.sh init
 ```
 
 ### apply
@@ -62,16 +62,16 @@ Load resources from a YAML manifest into the database.
 
 ```bash
 # From file
-./scripts/orchestrator.sh apply -f manifest.yaml
+./scripts/run-cli.sh apply -f manifest.yaml
 
 # From stdin
-cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
+cat manifest.yaml | ./scripts/run-cli.sh apply -f -
 
 # Dry-run (validate only)
-./scripts/orchestrator.sh apply -f manifest.yaml --dry-run
+./scripts/run-cli.sh apply -f manifest.yaml --dry-run
 
 # Project-scoped apply
-./scripts/orchestrator.sh apply -f manifest.yaml --project my-project
+./scripts/run-cli.sh apply -f manifest.yaml --project my-project
 ```
 
 ### check
@@ -79,7 +79,7 @@ cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
 Preflight validation: cross-reference agents, workflows, and templates.
 
 ```bash
-./scripts/orchestrator.sh check
+./scripts/run-cli.sh check
 ```
 
 ## Resource Queries
@@ -89,16 +89,16 @@ Preflight validation: cross-reference agents, workflows, and templates.
 List resources (kubectl-style).
 
 ```bash
-./scripts/orchestrator.sh get workspaces
-./scripts/orchestrator.sh get agents
-./scripts/orchestrator.sh get workflows
+./scripts/run-cli.sh get workspaces
+./scripts/run-cli.sh get agents
+./scripts/run-cli.sh get workflows
 
 # Output format
-./scripts/orchestrator.sh get agents -o json
-./scripts/orchestrator.sh get agents -o yaml
+./scripts/run-cli.sh get agents -o json
+./scripts/run-cli.sh get agents -o yaml
 
 # Label selector
-./scripts/orchestrator.sh get workspaces -l env=dev,team=platform
+./scripts/run-cli.sh get workspaces -l env=dev,team=platform
 ```
 
 ### describe
@@ -106,9 +106,9 @@ List resources (kubectl-style).
 Detailed view of a single resource.
 
 ```bash
-./scripts/orchestrator.sh describe workspace default
-./scripts/orchestrator.sh describe agent coder
-./scripts/orchestrator.sh describe workflow self-bootstrap
+./scripts/run-cli.sh describe workspace default
+./scripts/run-cli.sh describe agent coder
+./scripts/run-cli.sh describe workflow self-bootstrap
 ```
 
 ### delete
@@ -116,27 +116,27 @@ Detailed view of a single resource.
 Delete a resource by kind/name.
 
 ```bash
-./scripts/orchestrator.sh delete workspace my-ws
-./scripts/orchestrator.sh delete agent old-agent
+./scripts/run-cli.sh delete workspace my-ws
+./scripts/run-cli.sh delete agent old-agent
 ```
 
 ## Workspace
 
 ```bash
-./scripts/orchestrator.sh workspace info default          # positional arg
-./scripts/orchestrator.sh workspace create --help
+./scripts/run-cli.sh workspace info default          # positional arg
+./scripts/run-cli.sh workspace create --help
 ```
 
 ## Agent
 
 ```bash
-./scripts/orchestrator.sh agent create --help
+./scripts/run-cli.sh agent create --help
 ```
 
 ## Workflow
 
 ```bash
-./scripts/orchestrator.sh workflow create --help
+./scripts/run-cli.sh workflow create --help
 ```
 
 ## Task Lifecycle
@@ -144,7 +144,7 @@ Delete a resource by kind/name.
 ### task create
 
 ```bash
-./scripts/orchestrator.sh task create \
+./scripts/run-cli.sh task create \
   --name "my-task" \
   --goal "Implement feature X" \
   --workflow self-bootstrap \
@@ -167,34 +167,34 @@ Delete a resource by kind/name.
 ### task list / info
 
 ```bash
-./scripts/orchestrator.sh task list
-./scripts/orchestrator.sh task list -o json
+./scripts/run-cli.sh task list
+./scripts/run-cli.sh task list -o json
 
-./scripts/orchestrator.sh task info <task_id>
-./scripts/orchestrator.sh task info <task_id> -o yaml
+./scripts/run-cli.sh task info <task_id>
+./scripts/run-cli.sh task info <task_id> -o yaml
 ```
 
 ### task start / pause / resume
 
 ```bash
-./scripts/orchestrator.sh task start <task_id>
-./scripts/orchestrator.sh task start <task_id> --detach
+./scripts/run-cli.sh task start <task_id>
+./scripts/run-cli.sh task start <task_id> --detach
 
-./scripts/orchestrator.sh task pause <task_id>
-./scripts/orchestrator.sh task resume <task_id>
+./scripts/run-cli.sh task pause <task_id>
+./scripts/run-cli.sh task resume <task_id>
 ```
 
 ### task logs / watch / trace
 
 ```bash
 # View execution logs
-./scripts/orchestrator.sh task logs <task_id>
+./scripts/run-cli.sh task logs <task_id>
 
 # Live watch (auto-refreshing status panel)
-./scripts/orchestrator.sh task watch <task_id>
+./scripts/run-cli.sh task watch <task_id>
 
 # Execution trace with anomaly detection
-./scripts/orchestrator.sh task trace <task_id>
+./scripts/run-cli.sh task trace <task_id>
 ```
 
 ### task retry
@@ -202,7 +202,7 @@ Delete a resource by kind/name.
 Retry a failed task item.
 
 ```bash
-./scripts/orchestrator.sh task retry <task_id> --item <item_id> --force
+./scripts/run-cli.sh task retry <task_id> --item <item_id> --force
 ```
 
 ### task edit
@@ -210,13 +210,13 @@ Retry a failed task item.
 Insert a step into a running task's execution plan.
 
 ```bash
-./scripts/orchestrator.sh task edit --help
+./scripts/run-cli.sh task edit --help
 ```
 
 ### task delete
 
 ```bash
-./scripts/orchestrator.sh task delete <task_id>
+./scripts/run-cli.sh task delete <task_id>
 ```
 
 ### task worker (standalone mode)
@@ -224,10 +224,10 @@ Insert a step into a running task's execution plan.
 Background worker for processing detached tasks (standalone mode only).
 
 ```bash
-./scripts/orchestrator.sh task worker start
-./scripts/orchestrator.sh task worker start --poll-ms 500 --workers 3
-./scripts/orchestrator.sh task worker stop
-./scripts/orchestrator.sh task worker status
+./scripts/run-cli.sh task worker start
+./scripts/run-cli.sh task worker start --poll-ms 500 --workers 3
+./scripts/run-cli.sh task worker stop
+./scripts/run-cli.sh task worker status
 ```
 
 > **C/S mode**: Workers are embedded in the daemon. Use `orchestratord --workers N` instead. No separate worker command is needed.
@@ -237,9 +237,9 @@ Background worker for processing detached tasks (standalone mode only).
 Session management for attached task execution.
 
 ```bash
-./scripts/orchestrator.sh task session list
-./scripts/orchestrator.sh task session info <session_id>
-./scripts/orchestrator.sh task session close <session_id>
+./scripts/run-cli.sh task session list
+./scripts/run-cli.sh task session info <session_id>
+./scripts/run-cli.sh task session close <session_id>
 ```
 
 ## Exec
@@ -247,29 +247,29 @@ Session management for attached task execution.
 Execute a command in a task step context.
 
 ```bash
-./scripts/orchestrator.sh exec --help
+./scripts/run-cli.sh exec --help
 
 # Interactive mode
-./scripts/orchestrator.sh exec -it <task_id> <step_id>
+./scripts/run-cli.sh exec -it <task_id> <step_id>
 ```
 
 ## Manifest & Edit
 
 ```bash
 # Export all config as YAML
-./scripts/orchestrator.sh manifest export
+./scripts/run-cli.sh manifest export
 
 # Edit a resource interactively (opens $EDITOR)
-./scripts/orchestrator.sh edit workspace default
-./scripts/orchestrator.sh edit workflow self-bootstrap
+./scripts/run-cli.sh edit workspace default
+./scripts/run-cli.sh edit workflow self-bootstrap
 ```
 
 ## Database
 
 ```bash
 # Reset database (destructive — requires --force)
-./scripts/orchestrator.sh db reset --force
-./scripts/orchestrator.sh db reset --force --include-config
+./scripts/run-cli.sh db reset --force
+./scripts/run-cli.sh db reset --force --include-config
 ```
 
 **Warning**: `db reset` is destructive. Use `qa project reset` for isolated cleanup.
@@ -278,49 +278,49 @@ Execute a command in a task step context.
 
 ```bash
 # Reset a project (isolated — does not affect other projects)
-./scripts/orchestrator.sh qa project reset <project> --keep-config --force
+./scripts/run-cli.sh qa project reset <project> --keep-config --force
 
 # Create a fresh project scaffold
-./scripts/orchestrator.sh qa project create <project> --force
+./scripts/run-cli.sh qa project create <project> --force
 
 # QA doctor — validate concurrency guardrails
-./scripts/orchestrator.sh qa doctor
+./scripts/run-cli.sh qa doctor
 ```
 
 ## Persistent Store
 
 ```bash
-./scripts/orchestrator.sh store get <store_name> <key>
-./scripts/orchestrator.sh store put <store_name> <key> <value>
-./scripts/orchestrator.sh store delete <store_name> <key>
-./scripts/orchestrator.sh store list <store_name>
-./scripts/orchestrator.sh store prune <store_name>
+./scripts/run-cli.sh store get <store_name> <key>
+./scripts/run-cli.sh store put <store_name> <key> <value>
+./scripts/run-cli.sh store delete <store_name> <key>
+./scripts/run-cli.sh store list <store_name>
+./scripts/run-cli.sh store prune <store_name>
 ```
 
 ## Config Lifecycle
 
 ```bash
 # Show self-heal audit log
-./scripts/orchestrator.sh config heal-log
+./scripts/run-cli.sh config heal-log
 
 # Backfill missing step_scope in legacy events
-./scripts/orchestrator.sh config backfill-events --force
+./scripts/run-cli.sh config backfill-events --force
 ```
 
 ## Debug & Verify
 
 ```bash
-./scripts/orchestrator.sh debug           # inspect internal state
-./scripts/orchestrator.sh verify          # run verification checks
-./scripts/orchestrator.sh version         # build version + git hash
+./scripts/run-cli.sh debug           # inspect internal state
+./scripts/run-cli.sh verify          # run verification checks
+./scripts/run-cli.sh version         # build version + git hash
 ```
 
 ## Shell Completion
 
 ```bash
 # Generate completions (bash/zsh/fish)
-./scripts/orchestrator.sh completion bash > ~/.bash_completion.d/orchestrator
-./scripts/orchestrator.sh completion zsh > ~/.zfunc/_orchestrator
+./scripts/run-cli.sh completion bash > ~/.bash_completion.d/orchestrator
+./scripts/run-cli.sh completion zsh > ~/.zfunc/_orchestrator
 ```
 
 ## Output Formats

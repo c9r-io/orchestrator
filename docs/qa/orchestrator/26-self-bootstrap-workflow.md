@@ -34,10 +34,10 @@ Fixture: `fixtures/manifests/bundles/self-bootstrap-test.yaml`
 rm -f fixtures/ticket/auto_*.md
 
 QA_PROJECT="qa-bootstrap-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml
-./scripts/orchestrator.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+./scripts/run-cli.sh apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml
+./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
-./scripts/orchestrator.sh qa project create "${QA_PROJECT}" --force
+./scripts/run-cli.sh qa project create "${QA_PROJECT}" --force
 ```
 
 ---
