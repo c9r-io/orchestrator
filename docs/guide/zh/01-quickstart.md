@@ -11,10 +11,18 @@
 ## 第一步：构建
 
 ```bash
-cd core && cargo build --release && cd ..
+cargo build --workspace --release
 ```
 
-二进制文件位于 `./core/target/release/agent-orchestrator`。推荐使用包装脚本 `./scripts/orchestrator.sh` 作为入口。
+构建产生三个二进制文件：
+
+| 二进制 | 路径 | 用途 |
+|--------|------|------|
+| `agent-orchestrator` | `core/target/release/agent-orchestrator` | 单体 CLI（传统） |
+| `orchestratord` | `target/release/orchestratord` | 守护进程（gRPC 服务端 + 内嵌工作器） |
+| `orchestrator` | `target/release/orchestrator` | CLI 客户端（通过 gRPC 连接守护进程） |
+
+包装脚本 `./scripts/orchestrator.sh` 运行单体二进制。C/S 模式请直接使用 `orchestratord` + `orchestrator`。
 
 ## 第二步：初始化数据库
 

@@ -11,10 +11,18 @@ Run your first workflow in 5 minutes.
 ## Step 1: Build
 
 ```bash
-cd core && cargo build --release && cd ..
+cargo build --workspace --release
 ```
 
-The binary is at `./core/target/release/agent-orchestrator`. The wrapper script `./scripts/orchestrator.sh` is the recommended entry point.
+This produces three binaries:
+
+| Binary | Path | Purpose |
+|--------|------|---------|
+| `agent-orchestrator` | `core/target/release/agent-orchestrator` | Standalone CLI (legacy) |
+| `orchestratord` | `target/release/orchestratord` | Daemon (gRPC server + embedded workers) |
+| `orchestrator` | `target/release/orchestrator` | CLI client (connects to daemon via gRPC) |
+
+The wrapper script `./scripts/orchestrator.sh` runs the standalone binary. For C/S mode, use `orchestratord` + `orchestrator` directly.
 
 ## Step 2: Initialize the Database
 
@@ -128,6 +136,23 @@ Then start it manually:
 3. `task create` bound a workspace + workflow, discovered QA target files as task items, and ran the `qa` step on each item
 4. The `echo_agent` was selected (it has the `qa` capability) and its command was executed for each item
 5. Results (exit code, stdout, stderr) were captured in the database
+
+## Alternative: Client/Server Mode
+
+Instead of running tasks inline, you can use the daemon for background execution:
+
+```bash
+# Start daemon with 2 background workers
+./target/release/orchestratord --foreground --workers 2
+
+# In another terminal — use the gRPC client
+./target/release/orchestrator apply -f my-first-workflow.yaml
+./target/release/orchestrator task create --name "my-task" --goal "QA" --workflow simple_qa --detach
+./target/release/orchestrator task list
+./target/release/orchestrator task logs <task_id>
+```
+
+The daemon holds all state, automatically picks up enqueued tasks, and the CLI client communicates over a Unix socket. See [07 - CLI Reference](07-cli-reference.md) for daemon commands.
 
 ## Next Steps
 

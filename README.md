@@ -19,10 +19,31 @@ The orchestrator combines workflow engines with agent coordination to enable:
 
 ## Architecture
 
+The orchestrator supports **standalone** (monolithic CLI) and **client/server** (daemon + gRPC client) modes:
+
+```
+Standalone:   orchestrator.sh ──> [Engine + DB + Workers] (single process)
+
+Client/Server:
+  orchestrator (CLI) ──gRPC/UDS──> orchestratord (daemon)
+                                      ├── gRPC server (tonic)
+                                      ├── Embedded workers (N configurable)
+                                      ├── Engine + DB
+                                      └── Lifecycle (PID, socket, signals)
+```
+
+### Internal Components
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        CLI (kubectl-style)                       │
-│  task create/start/pause/resume | workspace | agent | workflow  │
+│              CLI / gRPC Client (kubectl-style)                   │
+│  task create/start/pause/resume | apply | get | store | daemon  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                Service Layer (core/src/service/)                 │
+│  Pure business logic: task, resource, store, system, bootstrap  │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -41,14 +62,6 @@ The orchestrator combines workflow engines with agent coordination to enable:
 │  - Health-aware agent selection                                  │
 │  - Metrics-based scoring                                        │
 │  - Load balancing                                               │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        Message Bus                               │
-│  - Agent-to-agent communication                                 │
-│  - Artifact registry                                            │
-│  - Shared state                                                │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -154,45 +167,53 @@ workflows:
 
 ## CLI Commands
 
+### Standalone Mode
+
 ```bash
-# Initialize
-orchestrator init
+./scripts/orchestrator.sh init
+./scripts/orchestrator.sh apply -f manifest.yaml
+./scripts/orchestrator.sh task create --goal "QA run"
+./scripts/orchestrator.sh task start <task_id>
+```
 
-# Apply resources
-orchestrator apply -f manifest.yaml
+### Client/Server Mode
 
-# Task lifecycle
-orchestrator task create --goal "QA run"
-orchestrator task start <task_id>
-orchestrator task pause <task_id>
-orchestrator task resume <task_id>
-orchestrator task logs <task_id>
+```bash
+# Start daemon with embedded workers
+./target/release/orchestratord --foreground --workers 2
 
-# Resource management
-orchestrator get workspace/agent/workflow
-orchestrator describe workflow/basic
-orchestrator delete workspace/old-ws
-
-# Configuration
-orchestrator manifest export
-orchestrator manifest validate -f config.yaml
+# CLI client (connects to daemon via Unix socket)
+./target/release/orchestrator apply -f manifest.yaml
+./target/release/orchestrator task create --goal "QA run" --detach
+./target/release/orchestrator task list
+./target/release/orchestrator task logs <task_id>
+./target/release/orchestrator get workspaces -o json
+./target/release/orchestrator store put mystore key '{"value":1}'
+./target/release/orchestrator daemon status
 ```
 
 ## Project Structure
 
 ```
 .
-├── core/                    # Rust orchestrator CLI
+├── Cargo.toml               # Workspace root
+├── core/                    # Rust orchestrator engine (library)
 │   ├── src/
+│   │   ├── service/        # Pure business logic layer
 │   │   ├── scheduler.rs    # Task scheduling & loop execution
 │   │   ├── runner.rs      # Command execution
 │   │   ├── selection.rs   # Agent selection engine
 │   │   ├── prehook.rs     # CEL-based prehook evaluation
-│   │   ├── dynamic_orchestration.rs  # DAG & Prehook 2.0
-│   │   ├── collab.rs     # Message bus & artifacts
-│   │   ├── health.rs      # Agent health management
-│   │   └── config.rs      # Configuration structures
+│   │   └── ...
 │   └── Cargo.toml
+│
+├── crates/
+│   ├── proto/              # gRPC codegen (tonic + prost)
+│   ├── daemon/             # orchestratord (gRPC server + workers)
+│   └── cli/                # orchestrator (lightweight gRPC client)
+│
+├── proto/                   # Protocol buffer definitions
+│   └── orchestrator.proto
 │
 ├── .claude/skills/        # AI development skills
 │   ├── project-bootstrap/ # Initialize full-stack projects
@@ -266,26 +287,36 @@ See [SKILLS.md](./SKILLS.md) for the complete list of available skills and how t
 - **Async**: Tokio
 - **Database**: SQLite (bundled)
 - **CLI**: Clap + Clap Complete
+- **RPC**: tonic + prost (gRPC over UDS/TCP)
 - **Condition Engine**: cel-interpreter
 - **Serialization**: Serde (JSON/YAML)
 
 ## Getting Started
 
-### Initialize
+### Build
+
 ```bash
-cd core && cargo build --release
-./target/release/orchestrator init
+cargo build --workspace --release
 ```
 
-### Apply Config
+### Standalone Mode
+
 ```bash
+./scripts/orchestrator.sh init
+./scripts/orchestrator.sh apply -f fixtures/capability-test.yaml
+./scripts/orchestrator.sh task create --goal "My first QA run"
+```
+
+### Client/Server Mode
+
+```bash
+# Start daemon
+./target/release/orchestratord --foreground --workers 1
+
+# In another terminal
 ./target/release/orchestrator apply -f fixtures/capability-test.yaml
-```
-
-### Run Task
-```bash
-./target/release/orchestrator task create --goal "My first QA run"
-./target/release/orchestrator task start <task_id>
+./target/release/orchestrator task create --goal "My first QA run" --detach
+./target/release/orchestrator task list
 ```
 
 ## Documentation

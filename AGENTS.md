@@ -64,9 +64,16 @@ workflows:
 
 ### Tech Stack
 
-- **Backend**: Rust (CLI binary)
+- **Backend**: Rust (Cargo workspace)
 - **Database**: SQLite for task/item lifecycle tracking
 - **CLI**: kubectl-style interface for task management
+- **RPC**: gRPC (tonic + prost) for client/server mode
+- **Transport**: Unix Domain Socket (default) or TCP
+
+### Execution Modes
+
+- **Standalone**: `./scripts/orchestrator.sh` — single-process CLI
+- **Client/Server**: `orchestratord` (daemon) + `orchestrator` (client) — daemon holds state, CLI communicates via gRPC
 
 ---
 

@@ -18,17 +18,35 @@ The project structure is organized as follows:
 
 ```
 /
-├── core/                 # The core Rust application (CLI & Orchestrator logic)
-│   ├── src/              # Source code
-│   └── Cargo.toml        # Rust dependencies
+├── Cargo.toml            # Workspace root (members: core, crates/*)
+├── core/                 # Core Rust library (orchestrator engine)
+│   ├── src/
+│   │   ├── service/      # Pure business logic layer (task, resource, store, system)
+│   │   ├── scheduler.rs  # Task scheduling & loop execution
+│   │   └── ...
+│   └── Cargo.toml
+├── crates/
+│   ├── proto/            # gRPC codegen (tonic + prost)
+│   │   ├── src/lib.rs    # Generated types + re-exports
+│   │   └── build.rs      # tonic_build
+│   ├── daemon/           # orchestratord binary
+│   │   └── src/
+│   │       ├── main.rs   # Entry point, worker loop, signal handling
+│   │       ├── server.rs # OrchestratorService gRPC impl
+│   │       └── lifecycle.rs  # PID, socket, shutdown
+│   └── cli/              # orchestrator binary (no core dependency!)
+│       └── src/
+│           ├── main.rs   # Clap commands, dispatch
+│           ├── client.rs # UDS/TCP gRPC client
+│           └── commands/ # Command handlers
+├── proto/
+│   └── orchestrator.proto  # gRPC service definition
 ├── data/                 # Runtime data storage
-│   ├── agent_orchestrator.db  # SQLite database (Task state, Events)
-│   └── logs/             # Execution logs (stdout/stderr of agents)
+│   ├── agent_orchestrator.db  # SQLite database
+│   ├── orchestrator.sock # Daemon Unix socket (C/S mode)
+│   ├── daemon.pid        # Daemon PID file (C/S mode)
+│   └── logs/             # Execution logs
 ├── docs/                 # Documentation & QA/Design artifacts
-│   ├── architecture.md   # This document
-│   ├── design-system.md  # (Reference for generated UIs, if any)
-│   ├── qa/               # QA test plans
-│   └── ticket/           # Failure tickets generated during runs
 ├── scripts/              # Helper scripts (e.g., `orchestrator.sh`)
 ├── workspace/            # Default location for managed projects/workspaces
 └── fixtures/             # Test configurations and data
@@ -36,9 +54,14 @@ The project structure is organized as follows:
 
 ## 3. System Architecture
 
-The system is a standalone CLI application that orchestrates external processes (Agents) to modify files in a target Workspace.
+The system supports two execution modes:
+
+1. **Standalone mode**: A monolithic CLI that embeds the engine directly.
+2. **Client/Server mode**: A long-running daemon (`orchestratord`) that holds all state and exposes a gRPC API, plus a lightweight CLI client (`orchestrator`) that communicates over Unix Domain Socket.
 
 ### 3.1 High-Level Design
+
+#### Standalone Mode (legacy)
 
 ```mermaid
 flowchart TB
@@ -56,10 +79,49 @@ flowchart TB
     Agent -->|Logs| FS
 ```
 
+#### Client/Server Mode
+
+```mermaid
+flowchart TB
+    User[Developer]
+    CLIClient[orchestrator CLI client]
+    Daemon[orchestratord daemon]
+    GRPC[gRPC / UDS]
+    Worker[Embedded Workers]
+    DB[(SQLite DB)]
+    FS[File System]
+    Agent[Agent Process]
+
+    User -->|Commands| CLIClient
+    CLIClient -->|gRPC| GRPC
+    GRPC -->|RPC| Daemon
+    Daemon -->|Read/Write State| DB
+    Daemon -->|Read/Write Config| FS
+    Daemon -->|Spawn Workers| Worker
+    Worker -->|Spawn/Monitor| Agent
+    Agent -->|Modify| FS
+    Agent -->|Logs| FS
+```
+
+**Workspace layout** (C/S mode):
+
+```
+crates/
+  proto/         # gRPC service definitions (tonic + prost)
+  daemon/        # orchestratord binary (gRPC server + embedded workers)
+  cli/           # orchestrator binary (lightweight gRPC client, no core dependency)
+core/
+  src/service/   # Pure business logic layer (task, resource, store, system)
+proto/
+  orchestrator.proto   # Protocol buffer definitions
+```
+
 ### 3.2 Core Components
 
-1.  **CLI Interface (`core/src/cli.rs`)**:
-    *   Parses user commands (`init`, `apply`, `task`, `workspace`, `config`).
+1.  **CLI Interface**:
+    *   **Standalone** (`core/src/cli.rs`): Parses user commands and executes directly.
+    *   **C/S Client** (`crates/cli/`): Lightweight gRPC client that sends commands to the daemon.
+    *   **C/S Daemon** (`crates/daemon/`): gRPC server that translates RPC calls into service layer calls.
     *   Displays output (tables, JSON, YAML).
 
 2.  **Orchestrator Engine (`core/src/lib.rs`, `scheduler.rs`)**:
@@ -117,10 +179,24 @@ A **Task** is the unit of execution, binding a Workspace and Workflow to a set o
 
 - **Dual Mode Execution**:
   - Foreground: `task create/start/resume/retry` runs inline and waits for completion.
-  - Background: `--detach` enqueues tasks; `task worker start` drains pending tasks.
+  - Background: `--detach` enqueues tasks for worker processing.
+- **Worker Models**:
+  - Standalone: `task worker start --workers N` runs a separate worker loop.
+  - C/S: `orchestratord --workers N` embeds workers directly in the daemon process.
 - **Queue State**:
   - Pending tasks are tracked via task status (`pending`) in SQLite.
   - Worker emits scheduling lifecycle events such as `scheduler_enqueued`.
+  - Claims are atomic (`claim_next_pending_task`) to prevent duplicate execution under parallel workers.
+
+#### Service Layer (`core/src/service/`)
+
+Pure business logic extracted from `cli_handler/`, used by both the standalone CLI and the daemon's gRPC server:
+
+- `task.rs` — create, start, pause, resume, delete, retry, list, info, logs
+- `resource.rs` — apply manifests, get/describe/delete resources
+- `store.rs` — persistent store CRUD and prune
+- `system.rs` — debug info, worker status, preflight check
+- `bootstrap.rs` — state initialization (sync and async variants)
 
 ## 4. Tech Stack
 
@@ -128,16 +204,23 @@ A **Task** is the unit of execution, binding a Workspace and Workflow to a set o
 - **CLI Framework**: `clap`
 - **Database**: `rusqlite` (SQLite)
 - **Async Runtime**: `tokio`
+- **RPC**: `tonic` + `prost` (gRPC with Protocol Buffers)
 - **Serialization**: `serde`, `serde_json`, `serde_yaml`
 - **Scripting**: `cel-interpreter` (for dynamic prehook logic)
 
 ## 5. Deployment Model
 
-The Agent Orchestrator is distributed as a single binary or run via cargo/scripts.
+The Agent Orchestrator is distributed as a Cargo workspace with three binaries:
 
-- **Local Development**:
-  - Run via `cargo run --release` or `./scripts/orchestrator.sh`.
-  - Requires `sqlite3` and standard shell utilities (`bash`, `grep`, etc.) if used by agents.
+| Binary | Crate | Purpose |
+|--------|-------|---------|
+| `agent-orchestrator` | `core` | Standalone CLI (legacy) |
+| `orchestratord` | `crates/daemon` | Daemon — gRPC server + embedded workers |
+| `orchestrator` | `crates/cli` | CLI client — lightweight gRPC client |
+
+- **Standalone mode**: Single binary, direct execution.
+- **C/S mode**: Daemon runs persistently, CLI client connects via Unix Domain Socket (`data/orchestrator.sock`) or TCP (`--bind`).
+- Both modes require `sqlite3` and standard shell utilities (`bash`, `grep`, etc.) if used by agents.
 
 ## 6. Observability
 

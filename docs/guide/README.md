@@ -18,7 +18,7 @@ This guide helps you understand and use the Agent Orchestrator — a CLI tool fo
 | [04 - CEL Prehooks](04-cel-prehooks.md) | Dynamic step gating with CEL expressions | Intermediate |
 | [05 - Advanced Features](05-advanced-features.md) | CRDs, Persistent Store, Task Spawning, Invariants | Advanced |
 | [06 - Self-Bootstrap](06-self-bootstrap.md) | Self-modifying workflows and survival mechanisms | Advanced |
-| [07 - CLI Reference](07-cli-reference.md) | Command quick-reference table | Reference |
+| [07 - CLI Reference](07-cli-reference.md) | Command quick-reference (standalone + C/S) | Reference |
 
 ## Complementary Resources
 
@@ -27,19 +27,32 @@ This guide helps you understand and use the Agent Orchestrator — a CLI tool fo
 - **Design Docs**: `docs/design_doc/` — detailed feature designs
 - **Fixture Manifests**: `fixtures/manifests/bundles/` — real YAML examples
 
-## Entry Point
+## Entry Points
 
-All commands use the wrapper script:
+### Standalone Mode (legacy)
 
 ```bash
 ./scripts/orchestrator.sh <command>
 ```
 
-Or the binary directly:
+### Client/Server Mode (recommended)
+
+The orchestrator supports a C/S architecture where a long-running daemon holds all state and the CLI is a lightweight gRPC client:
 
 ```bash
-./core/target/release/agent-orchestrator <command>
+# Start daemon (background workers auto-consume enqueued tasks)
+./target/release/orchestratord --foreground --workers 2
+
+# Use CLI client (connects to daemon via Unix socket)
+./target/release/orchestrator <command>
+
+# Or manage daemon lifecycle via CLI
+./target/release/orchestrator daemon start
+./target/release/orchestrator daemon status
+./target/release/orchestrator daemon stop
 ```
+
+See [07 - CLI Reference](07-cli-reference.md) for the complete C/S command surface.
 
 ## Claude Code Skill (for AI Agents)
 

@@ -2,7 +2,15 @@
 
 Quick-reference for all Agent Orchestrator CLI commands.
 
-**Entry point**: `./scripts/orchestrator.sh <command>` (recommended)
+## Entry Points
+
+| Mode | Command | Description |
+|------|---------|-------------|
+| Standalone | `./scripts/orchestrator.sh <command>` | Legacy monolithic CLI |
+| C/S Daemon | `./target/release/orchestratord [flags]` | gRPC server + embedded workers |
+| C/S Client | `./target/release/orchestrator <command>` | Lightweight gRPC client |
+
+**Standalone mode** runs everything in-process. **C/S mode** separates the daemon (state, DB, workers) from the CLI client (thin gRPC calls over Unix socket).
 
 ## Global Options
 
@@ -211,14 +219,18 @@ Insert a step into a running task's execution plan.
 ./scripts/orchestrator.sh task delete <task_id>
 ```
 
-### task worker
+### task worker (standalone mode)
 
-Background worker for processing detached tasks.
+Background worker for processing detached tasks (standalone mode only).
 
 ```bash
 ./scripts/orchestrator.sh task worker start
-./scripts/orchestrator.sh task worker --help
+./scripts/orchestrator.sh task worker start --poll-ms 500 --workers 3
+./scripts/orchestrator.sh task worker stop
+./scripts/orchestrator.sh task worker status
 ```
+
+> **C/S mode**: Workers are embedded in the daemon. Use `orchestratord --workers N` instead. No separate worker command is needed.
 
 ### task session
 
@@ -319,6 +331,81 @@ Most `get` and `info` commands support `-o` for output format:
 -o json    # JSON output
 -o yaml    # YAML output
 # (default) # table output
+```
+
+## Daemon (C/S Mode)
+
+### orchestratord
+
+The daemon binary that runs the gRPC server and embedded background workers.
+
+```bash
+# Start in foreground (recommended for development)
+./target/release/orchestratord --foreground
+
+# With multiple workers
+./target/release/orchestratord --foreground --workers 3
+
+# TCP bind (for remote access)
+./target/release/orchestratord --foreground --bind 0.0.0.0:50051
+```
+
+| Flag | Description |
+|------|-------------|
+| `--foreground`, `-f` | Run in foreground (don't daemonize) |
+| `--bind <addr>` | TCP bind address (default: Unix socket) |
+| `--workers <N>` | Number of background workers (default: 1) |
+
+Files created:
+- PID: `data/daemon.pid`
+- Socket: `data/orchestrator.sock`
+
+### daemon management (via CLI client)
+
+```bash
+./target/release/orchestrator daemon start              # start daemon in background
+./target/release/orchestrator daemon start --foreground  # foreground mode
+./target/release/orchestrator daemon status              # check if running
+./target/release/orchestrator daemon stop                # graceful shutdown
+./target/release/orchestrator daemon restart             # stop + start
+```
+
+### C/S CLI command surface
+
+All commands below connect to the daemon via Unix socket:
+
+```bash
+# Resource management
+./target/release/orchestrator apply -f manifest.yaml
+./target/release/orchestrator apply -f - < manifest.yaml
+./target/release/orchestrator apply -f manifest.yaml --dry-run
+./target/release/orchestrator get workspaces -o json
+./target/release/orchestrator describe workspace/default -o yaml
+./target/release/orchestrator delete workspace/old --force
+
+# Task lifecycle
+./target/release/orchestrator task create --name "test" --goal "goal" --detach
+./target/release/orchestrator task list -o json
+./target/release/orchestrator task info <task_id>
+./target/release/orchestrator task start <task_id> --detach
+./target/release/orchestrator task pause <task_id>
+./target/release/orchestrator task resume <task_id>
+./target/release/orchestrator task logs <task_id> --tail 50
+./target/release/orchestrator task logs <task_id> --follow
+./target/release/orchestrator task delete <task_id> --force
+./target/release/orchestrator task retry <item_id> --force
+
+# Store
+./target/release/orchestrator store put <store> <key> <value>
+./target/release/orchestrator store get <store> <key>
+./target/release/orchestrator store list <store> -o json
+./target/release/orchestrator store delete <store> <key>
+./target/release/orchestrator store prune <store>
+
+# System
+./target/release/orchestrator version
+./target/release/orchestrator debug --component config
+./target/release/orchestrator check -o json
 ```
 
 ## Structured Agent Output

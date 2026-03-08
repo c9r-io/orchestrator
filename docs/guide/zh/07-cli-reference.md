@@ -2,7 +2,15 @@
 
 Agent Orchestrator CLI 全部命令速查。
 
-**入口**：`./scripts/orchestrator.sh <command>`（推荐）
+## 入口
+
+| 模式 | 命令 | 说明 |
+|------|------|------|
+| 单体 | `./scripts/orchestrator.sh <command>` | 传统单进程 CLI |
+| C/S 守护进程 | `./target/release/orchestratord [flags]` | gRPC 服务端 + 内嵌工作器 |
+| C/S 客户端 | `./target/release/orchestrator <command>` | 轻量 gRPC 客户端 |
+
+**单体模式**在单进程中运行一切。**C/S 模式**将守护进程（状态、数据库、工作器）与 CLI 客户端（通过 Unix 套接字的 gRPC 调用）分离。
 
 ## 全局选项
 
@@ -211,14 +219,18 @@ cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
 ./scripts/orchestrator.sh task delete <task_id>
 ```
 
-### task worker
+### task worker（单体模式）
 
-处理分离任务的后台工作器。
+处理分离任务的后台工作器（仅限单体模式）。
 
 ```bash
 ./scripts/orchestrator.sh task worker start
-./scripts/orchestrator.sh task worker --help
+./scripts/orchestrator.sh task worker start --poll-ms 500 --workers 3
+./scripts/orchestrator.sh task worker stop
+./scripts/orchestrator.sh task worker status
 ```
+
+> **C/S 模式**：工作器内嵌于守护进程。使用 `orchestratord --workers N` 替代，无需单独的 worker 命令。
 
 ### task session
 
@@ -319,6 +331,68 @@ cat manifest.yaml | ./scripts/orchestrator.sh apply -f -
 -o json    # JSON 输出
 -o yaml    # YAML 输出
 # （默认）  # 表格输出
+```
+
+## 守护进程（C/S 模式）
+
+### orchestratord
+
+运行 gRPC 服务端和内嵌后台工作器的守护进程二进制。
+
+```bash
+# 前台启动（推荐用于开发）
+./target/release/orchestratord --foreground
+
+# 多工作器
+./target/release/orchestratord --foreground --workers 3
+
+# TCP 绑定（远程访问）
+./target/release/orchestratord --foreground --bind 0.0.0.0:50051
+```
+
+| 标志 | 说明 |
+|------|------|
+| `--foreground`, `-f` | 前台运行（不后台化） |
+| `--bind <addr>` | TCP 绑定地址（默认：Unix 套接字） |
+| `--workers <N>` | 后台工作器数量（默认：1） |
+
+### 守护进程管理（通过 CLI 客户端）
+
+```bash
+./target/release/orchestrator daemon start     # 后台启动守护进程
+./target/release/orchestrator daemon status     # 检查是否运行
+./target/release/orchestrator daemon stop       # 优雅关闭
+./target/release/orchestrator daemon restart    # 停止 + 启动
+```
+
+### C/S CLI 命令列表
+
+以下命令通过 Unix 套接字连接守护进程：
+
+```bash
+# 资源管理
+./target/release/orchestrator apply -f manifest.yaml
+./target/release/orchestrator get workspaces -o json
+./target/release/orchestrator describe workspace/default -o yaml
+./target/release/orchestrator delete workspace/old --force
+
+# 任务生命周期
+./target/release/orchestrator task create --name "test" --goal "goal" --detach
+./target/release/orchestrator task list -o json
+./target/release/orchestrator task info <task_id>
+./target/release/orchestrator task start <task_id> --detach
+./target/release/orchestrator task pause <task_id>
+./target/release/orchestrator task logs <task_id> --tail 50
+
+# 持久化存储
+./target/release/orchestrator store put <store> <key> <value>
+./target/release/orchestrator store get <store> <key>
+./target/release/orchestrator store list <store> -o json
+
+# 系统
+./target/release/orchestrator version
+./target/release/orchestrator debug --component config
+./target/release/orchestrator check -o json
 ```
 
 ## 结构化代理输出
