@@ -67,7 +67,9 @@ plan -> qa_doc_gen -> implement -> self_test -> self_restart -> qa_testing -> ti
 
 ## 3. 启动步骤
 
-### 3.1 构建并初始化运行时
+### 3.1 构建并启动 daemon
+
+C/S 架构下，CLI（`orchestrator`）通过 Unix Domain Socket 连接 daemon（`orchestratord`）。
 
 ```bash
 cd /Volumes/Yotta/ai_native_sdlc
@@ -75,9 +77,22 @@ cd /Volumes/Yotta/ai_native_sdlc
 cargo build --release -p orchestratord -p orchestrator-cli
 
 # 启动 daemon（如未运行）
-orchestrator daemon start
-orchestrator daemon status
+# --foreground 保持前台输出日志；--workers 指定并行 worker 数
+nohup ./target/release/orchestratord --foreground --workers 2 > /tmp/orchestratord.log 2>&1 &
 
+# 验证 daemon 运行
+ps aux | grep orchestratord | grep -v grep
+# 验证 worker 状态
+orchestrator task worker status
+```
+
+> ⚠️ CLI 二进制路径：C/S 模式的 CLI 在 `target/release/orchestrator`（crates/cli），
+> 不是旧的单体二进制 `core/target/release/agent-orchestrator`。
+> 如有 symlink 指向旧路径需更新。
+
+### 3.2 初始化数据库并加载资源
+
+```bash
 orchestrator db reset -f --include-config --include-history
 orchestrator init -f
 orchestrator apply -f docs/workflow/claude-secret.yaml --project self-bootstrap
@@ -87,23 +102,39 @@ orchestrator apply -f docs/workflow/minimax-secret.yaml --project self-bootstrap
 orchestrator apply -f docs/workflow/self-bootstrap.yaml --project self-bootstrap
 ```
 
-### 3.2 验证资源已加载
+> ⚠️ 加载完资源后需重启 daemon，使其加载最新配置。
+
+### 3.3 验证资源已加载
+
+project-only 部署下 `orchestrator get` 会因全局 defaults 为空报错，
+改用 sqlite 直接验证：
 
 ```bash
-orchestrator get workspaces --project self-bootstrap
-orchestrator get workflows --project self-bootstrap
-orchestrator get agents --project self-bootstrap
+sqlite3 data/agent_orchestrator.db \
+  "SELECT json_group_array(key) FROM (
+     SELECT key FROM json_each(
+       (SELECT json_extract(config_json, '$.projects.\"self-bootstrap\".workspaces')
+        FROM orchestrator_config_versions ORDER BY id DESC LIMIT 1)
+     )
+   );"
+# 预期: ["self"]
+
+sqlite3 data/agent_orchestrator.db \
+  "SELECT json_group_array(key) FROM (
+     SELECT key FROM json_each(
+       (SELECT json_extract(config_json, '$.projects.\"self-bootstrap\".agents')
+        FROM orchestrator_config_versions ORDER BY id DESC LIMIT 1)
+     )
+   );"
+# 预期: ["architect","coder","reviewer","tester"]
 ```
 
-预期至少可见：
+### 3.4 创建任务（把目标交给 orchestrator）
 
-1. workspace `self`
-2. workflow `self-bootstrap`
-3. agents `architect`、`coder`、`tester`、`reviewer`
+C/S 模式下 `task create` 默认 `--detach`（enqueue 到 daemon worker），
+任务创建即自动开始执行，不需要单独 `task start`。
 
-### 3.3 创建任务（把目标交给 orchestrator）
-
-在创建任务前，先确认目标文件范围。请向用户确认以下选项：
+在创建任务前，先确认目标文件范围：
 
 - **选项 A：指定文件**（推荐）——只处理与本次课题直接相关的文件，执行速度快、聚焦度高。
 - **选项 B：全量扫描**——省略 `-t`，系统自动扫描 `qa_targets` 配置的文件夹（默认 `docs/qa/`）下所有 `.md` 文件。适用于全面回归或文档治理场景，但 item 数量可能较多，执行时间相应增加。
@@ -115,7 +146,6 @@ orchestrator task create \
   -n "<任务名>" \
   -w self -W self-bootstrap \
   --project self-bootstrap \
-  --no-start \
   -g "<将上方任务目标压缩成单行，直接作为 goal 传入>" \
   -t <目标文件1> \
   -t <目标文件2>
@@ -128,14 +158,19 @@ orchestrator task create \
   -n "<任务名>" \
   -w self -W self-bootstrap \
   --project self-bootstrap \
-  --no-start \
   -g "<将上方任务目标压缩成单行，直接作为 goal 传入>"
 ```
 
-记录返回的 `<task_id>`，然后启动：
+记录返回的 `<task_id>`。任务会立即被 worker 认领并开始执行。
+
+如需手动阻塞等待（如脚本中），可用 `--attach`：
 
 ```bash
-orchestrator task start <task_id>
+orchestrator task create --attach \
+  -n "<任务名>" \
+  -w self -W self-bootstrap \
+  --project self-bootstrap \
+  -g "..."
 ```
 
 ---
@@ -148,8 +183,9 @@ orchestrator task start <task_id>
 
 ```bash
 orchestrator task list
-orchestrator task info <task_id> -o json
-orchestrator task trace <task_id>
+orchestrator task info <task_id>
+orchestrator task trace <task_id>    # 带异常检测的执行时间线
+orchestrator task watch <task_id>    # 实时刷新状态面板
 ```
 
 重点观察：
@@ -175,10 +211,19 @@ orchestrator task logs --tail 200 <task_id>
 4. `qa_testing` / `ticket_fix` 是否发现并回收回归问题
 5. 日志中各步骤的输出是否能定位卡住或偏题发生在哪一段
 
-### 4.3 进程监控
+### 4.3 进程 / daemon 监控
 
 ```bash
-ps aux | grep -E "opencode|orchestratord" | grep -v grep
+# daemon 进程
+ps aux | grep orchestratord | grep -v grep
+
+# daemon worker 队列状态
+orchestrator task worker status
+
+# agent 子进程（claude -p）
+ps aux | grep "claude -p" | grep -v grep
+
+# 代码变更
 git diff --stat
 ```
 
@@ -285,10 +330,19 @@ Cycle 2 中重点观察：
 3. `self_test` 失效或被绕过
 4. `qa_testing` 持续产生同类 ticket，进入无效循环
 
+### 7.2 C/S 架构特有异常
+
+| 异常 | 判断方式 | 处理 |
+|------|---------|------|
+| daemon 未运行 | CLI 报 `failed to connect to daemon at .../orchestrator.sock` | 用 `orchestratord --foreground --workers 2` 启动 |
+| CLI 指向旧单体二进制 | `which orchestrator` 指向 `core/target/release/` | 更新 symlink 到 `target/release/orchestrator` |
+| 重建后 daemon 仍用旧代码 | 观察到已修复的 bug 复现 | 杀掉旧 daemon 进程再启动新的 |
+| task create 后任务立即开始 | task list 显示 `running` | C/S 模式默认 `--detach`，这是正常行为 |
+
 建议记录方式：
 
 ```bash
-orchestrator task info <task_id> -o json
+orchestrator task info <task_id>
 orchestrator task logs --tail 200 <task_id>
 git diff --stat
 ```
