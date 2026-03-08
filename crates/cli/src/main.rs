@@ -1,0 +1,313 @@
+mod client;
+mod commands;
+mod output;
+
+use anyhow::{Context, Result};
+use clap::{Parser, Subcommand, ValueEnum};
+
+/// Agent Orchestrator CLI — lightweight gRPC client
+#[derive(Parser, Debug)]
+#[command(
+    name = "orchestrator",
+    version,
+    about = "Agent Orchestrator — workflow automation CLI"
+)]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Commands,
+
+    /// Enable verbose output
+    #[arg(short, long, global = true)]
+    pub verbose: bool,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum Commands {
+    /// Daemon lifecycle management
+    #[command(subcommand)]
+    Daemon(DaemonCommands),
+
+    /// Apply resource manifests
+    #[command(alias = "ap")]
+    Apply {
+        #[arg(short = 'f', long = "file")]
+        file: String,
+
+        #[arg(long)]
+        dry_run: bool,
+
+        #[arg(long)]
+        project: Option<String>,
+    },
+
+    /// Get resource(s)
+    #[command(alias = "g")]
+    Get {
+        #[arg(value_name = "RESOURCE")]
+        resource: String,
+
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+
+        #[arg(short = 'l', long = "selector")]
+        selector: Option<String>,
+    },
+
+    /// Describe a resource
+    #[command(alias = "desc")]
+    Describe {
+        #[arg(value_name = "RESOURCE")]
+        resource: String,
+
+        #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+
+    /// Delete a resource
+    #[command(alias = "rm")]
+    Delete {
+        #[arg(value_name = "RESOURCE")]
+        resource: String,
+
+        #[arg(short, long)]
+        force: bool,
+    },
+
+    /// Task operations
+    #[command(alias = "t", subcommand)]
+    Task(TaskCommands),
+
+    /// Store operations
+    #[command(subcommand)]
+    Store(StoreCommands),
+
+    /// System debug info
+    #[command(alias = "dbg")]
+    Debug {
+        #[arg(long)]
+        component: Option<String>,
+    },
+
+    /// Preflight check
+    #[command(alias = "ck")]
+    Check {
+        #[arg(long)]
+        workflow: Option<String>,
+
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+
+    /// Show version
+    Version,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum DaemonCommands {
+    /// Start the daemon
+    Start {
+        /// Run in foreground (don't daemonize)
+        #[arg(long)]
+        foreground: bool,
+
+        /// TCP bind address (default: UDS)
+        #[arg(long)]
+        bind: Option<String>,
+
+        /// Number of workers
+        #[arg(long, default_value = "1")]
+        workers: usize,
+    },
+    /// Stop the daemon
+    Stop,
+    /// Show daemon status
+    Status,
+    /// Restart the daemon
+    Restart,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum TaskCommands {
+    /// List tasks
+    #[command(alias = "ls")]
+    List {
+        #[arg(short, long)]
+        status: Option<String>,
+
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+
+        #[arg(short, long)]
+        verbose: bool,
+    },
+
+    /// Create a new task
+    #[command(alias = "new")]
+    Create {
+        #[arg(short, long)]
+        name: Option<String>,
+
+        #[arg(short, long)]
+        goal: Option<String>,
+
+        #[arg(short, long)]
+        project: Option<String>,
+
+        #[arg(short, long)]
+        workspace: Option<String>,
+
+        #[arg(short = 'W', long)]
+        workflow: Option<String>,
+
+        #[arg(short, long)]
+        target_file: Vec<String>,
+
+        #[arg(long)]
+        no_start: bool,
+
+        #[arg(long, default_value_t = true)]
+        detach: bool,
+
+        #[arg(long, conflicts_with = "detach")]
+        attach: bool,
+    },
+
+    /// Get task details
+    #[command(alias = "get")]
+    Info {
+        task_id: String,
+
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+
+    /// Start a task
+    Start {
+        task_id: Option<String>,
+
+        #[arg(long, short)]
+        latest: bool,
+
+        #[arg(long)]
+        detach: bool,
+    },
+
+    /// Pause a running task
+    Pause { task_id: String },
+
+    /// Resume a paused task
+    Resume {
+        task_id: String,
+
+        #[arg(long)]
+        detach: bool,
+    },
+
+    /// View task logs
+    #[command(alias = "log")]
+    Logs {
+        task_id: String,
+
+        #[arg(short, long)]
+        follow: bool,
+
+        #[arg(short = 'n', long, default_value = "100")]
+        tail: usize,
+
+        #[arg(long)]
+        timestamps: bool,
+    },
+
+    /// Delete a task
+    #[command(alias = "rm")]
+    Delete {
+        task_id: String,
+
+        #[arg(short, long)]
+        force: bool,
+    },
+
+    /// Retry a failed task item
+    Retry {
+        task_item_id: String,
+
+        #[arg(long)]
+        detach: bool,
+
+        #[arg(short, long)]
+        force: bool,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum StoreCommands {
+    Get {
+        store: String,
+        key: String,
+        #[arg(short, long, default_value = "")]
+        project: String,
+    },
+    Put {
+        store: String,
+        key: String,
+        value: String,
+        #[arg(short, long, default_value = "")]
+        project: String,
+        #[arg(short, long, default_value = "")]
+        task_id: String,
+    },
+    Delete {
+        store: String,
+        key: String,
+        #[arg(short, long, default_value = "")]
+        project: String,
+    },
+    #[command(alias = "ls")]
+    List {
+        store: String,
+        #[arg(short, long, default_value = "")]
+        project: String,
+        #[arg(short, long, default_value = "100")]
+        limit: u64,
+        #[arg(long, default_value = "0")]
+        offset: u64,
+        #[arg(short = 'o', long, default_value = "table")]
+        output: OutputFormat,
+    },
+    Prune {
+        store: String,
+        #[arg(short, long, default_value = "")]
+        project: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
+pub enum OutputFormat {
+    Table,
+    Json,
+    Yaml,
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("failed to build tokio runtime")?;
+
+    rt.block_on(async move {
+        match cli.command {
+            Commands::Version => {
+                commands::version::run().await
+            }
+            Commands::Daemon(cmd) => {
+                commands::daemon::run(cmd).await
+            }
+            _ => {
+                let mut client = client::connect().await?;
+                commands::dispatch(&mut client, cli.command).await
+            }
+        }
+    })
+}

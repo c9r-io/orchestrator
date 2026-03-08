@@ -13,3 +13,4 @@ data/
 docs/workflow/minimax-secret.yaml
 .stable.json
 output.json
+target/

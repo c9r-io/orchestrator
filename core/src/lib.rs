@@ -30,6 +30,7 @@ pub mod runner;
 pub mod scheduler;
 pub mod scheduler_service;
 pub mod selection;
+pub mod service;
 pub mod session_store;
 pub mod state;
 pub mod store;

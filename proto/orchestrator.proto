@@ -1,0 +1,390 @@
+syntax = "proto3";
+
+package orchestrator;
+
+// ─── Task lifecycle ───────────────────────────────────────────
+service OrchestratorService {
+  // Task lifecycle
+  rpc TaskCreate(TaskCreateRequest)   returns (TaskCreateResponse);
+  rpc TaskStart(TaskStartRequest)     returns (TaskStartResponse);
+  rpc TaskPause(TaskPauseRequest)     returns (TaskPauseResponse);
+  rpc TaskResume(TaskResumeRequest)   returns (TaskResumeResponse);
+  rpc TaskDelete(TaskDeleteRequest)   returns (TaskDeleteResponse);
+  rpc TaskRetry(TaskRetryRequest)     returns (TaskRetryResponse);
+
+  // Task queries
+  rpc TaskList(TaskListRequest)       returns (TaskListResponse);
+  rpc TaskInfo(TaskInfoRequest)       returns (TaskInfoResponse);
+
+  // Task streaming (server-streaming)
+  rpc TaskLogs(TaskLogsRequest)       returns (stream TaskLogChunk);
+  rpc TaskFollow(TaskFollowRequest)   returns (stream TaskLogLine);
+  rpc TaskWatch(TaskWatchRequest)     returns (stream TaskWatchSnapshot);
+
+  // Resource management
+  rpc Apply(ApplyRequest)             returns (ApplyResponse);
+  rpc Get(GetRequest)                 returns (GetResponse);
+  rpc Describe(DescribeRequest)       returns (DescribeResponse);
+  rpc Delete(DeleteRequest)           returns (DeleteResponse);
+
+  // Store
+  rpc StoreGet(StoreGetRequest)       returns (StoreGetResponse);
+  rpc StorePut(StorePutRequest)       returns (StorePutResponse);
+  rpc StoreDelete(StoreDeleteRequest) returns (StoreDeleteResponse);
+  rpc StoreList(StoreListRequest)     returns (StoreListResponse);
+  rpc StorePrune(StorePruneRequest)   returns (StorePruneResponse);
+
+  // System
+  rpc Ping(PingRequest)               returns (PingResponse);
+  rpc Shutdown(ShutdownRequest)       returns (ShutdownResponse);
+  rpc ConfigDebug(ConfigDebugRequest) returns (ConfigDebugResponse);
+  rpc WorkerStatus(WorkerStatusRequest) returns (WorkerStatusResponse);
+  rpc Check(CheckRequest)             returns (CheckResponse);
+}
+
+// ─── Task messages ────────────────────────────────────────────
+
+message TaskCreateRequest {
+  optional string name = 1;
+  optional string goal = 2;
+  optional string project_id = 3;
+  optional string workspace_id = 4;
+  optional string workflow_id = 5;
+  repeated string target_files = 6;
+  bool no_start = 7;
+  bool detach = 8;
+}
+
+message TaskCreateResponse {
+  string task_id = 1;
+  string status = 2;      // "created" | "enqueued" | "running"
+  string message = 3;
+}
+
+message TaskStartRequest {
+  optional string task_id = 1;
+  bool latest = 2;
+  bool detach = 3;
+}
+
+message TaskStartResponse {
+  string task_id = 1;
+  string status = 2;
+  string message = 3;
+}
+
+message TaskPauseRequest {
+  string task_id = 1;
+}
+
+message TaskPauseResponse {
+  string task_id = 1;
+  string message = 2;
+}
+
+message TaskResumeRequest {
+  string task_id = 1;
+  bool detach = 2;
+}
+
+message TaskResumeResponse {
+  string task_id = 1;
+  string status = 2;
+  string message = 3;
+}
+
+message TaskDeleteRequest {
+  string task_id = 1;
+  bool force = 2;
+}
+
+message TaskDeleteResponse {
+  string message = 1;
+}
+
+message TaskRetryRequest {
+  string task_item_id = 1;
+  bool detach = 2;
+  bool force = 3;
+}
+
+message TaskRetryResponse {
+  string task_id = 1;
+  string status = 2;
+  string message = 3;
+}
+
+message TaskListRequest {
+  optional string status_filter = 1;
+}
+
+message TaskListResponse {
+  repeated TaskSummary tasks = 1;
+}
+
+message TaskSummary {
+  string id = 1;
+  string name = 2;
+  string status = 3;
+  optional string started_at = 4;
+  optional string completed_at = 5;
+  string goal = 6;
+  string project_id = 7;
+  string workspace_id = 8;
+  string workflow_id = 9;
+  repeated string target_files = 10;
+  int64 total_items = 11;
+  int64 finished_items = 12;
+  int64 failed_items = 13;
+  string created_at = 14;
+  string updated_at = 15;
+  optional string parent_task_id = 16;
+  optional string spawn_reason = 17;
+  int64 spawn_depth = 18;
+}
+
+message TaskInfoRequest {
+  string task_id = 1;
+}
+
+message TaskInfoResponse {
+  TaskSummary task = 1;
+  repeated TaskItem items = 2;
+  repeated CommandRun runs = 3;
+  repeated Event events = 4;
+}
+
+message TaskItem {
+  string id = 1;
+  string task_id = 2;
+  int64 order_no = 3;
+  string qa_file_path = 4;
+  string status = 5;
+  repeated string ticket_files = 6;
+  string ticket_content_json = 7;
+  bool fix_required = 8;
+  bool fixed = 9;
+  string last_error = 10;
+  optional string started_at = 11;
+  optional string completed_at = 12;
+  string updated_at = 13;
+}
+
+message CommandRun {
+  string id = 1;
+  string task_item_id = 2;
+  string phase = 3;
+  string command = 4;
+  string cwd = 5;
+  string workspace_id = 6;
+  string agent_id = 7;
+  optional int64 exit_code = 8;
+  string stdout_path = 9;
+  string stderr_path = 10;
+  string started_at = 11;
+  optional string ended_at = 12;
+  bool interrupted = 13;
+}
+
+message Event {
+  int64 id = 1;
+  string task_id = 2;
+  optional string task_item_id = 3;
+  string event_type = 4;
+  string payload_json = 5;
+  string created_at = 6;
+}
+
+// ─── Task streaming ───────────────────────────────────────────
+
+message TaskLogsRequest {
+  string task_id = 1;
+  uint64 tail = 2;
+  bool timestamps = 3;
+}
+
+message TaskLogChunk {
+  string run_id = 1;
+  string phase = 2;
+  string content = 3;
+  string stdout_path = 4;
+  string stderr_path = 5;
+  optional string started_at = 6;
+}
+
+message TaskFollowRequest {
+  string task_id = 1;
+}
+
+message TaskLogLine {
+  string line = 1;
+  string timestamp = 2;
+}
+
+message TaskWatchRequest {
+  string task_id = 1;
+  uint64 interval_secs = 2;
+}
+
+message TaskWatchSnapshot {
+  TaskSummary task = 1;
+  repeated TaskItem items = 2;
+}
+
+// ─── Resource management ──────────────────────────────────────
+
+message ApplyRequest {
+  string content = 1;       // YAML manifest content
+  bool dry_run = 2;
+  optional string project = 3;
+}
+
+message ApplyResultEntry {
+  string kind = 1;
+  string name = 2;
+  string action = 3;        // "created" | "updated" | "unchanged"
+  optional string project_scope = 4;
+}
+
+message ApplyResponse {
+  repeated ApplyResultEntry results = 1;
+  optional int64 config_version = 2;
+  repeated string errors = 3;
+}
+
+message GetRequest {
+  string resource = 1;      // "workspace/default" or "workspaces"
+  optional string selector = 2;
+  string output_format = 3; // "table" | "json" | "yaml"
+}
+
+message GetResponse {
+  string content = 1;       // serialized output (JSON or YAML)
+  string format = 2;
+}
+
+message DescribeRequest {
+  string resource = 1;      // e.g., "workspace/default"
+  string output_format = 2;
+}
+
+message DescribeResponse {
+  string content = 1;
+  string format = 2;
+}
+
+message DeleteRequest {
+  string resource = 1;      // e.g., "workspace/old-ws"
+  bool force = 2;
+}
+
+message DeleteResponse {
+  string message = 1;
+}
+
+// ─── Store ────────────────────────────────────────────────────
+
+message StoreGetRequest {
+  string store = 1;
+  string key = 2;
+  string project = 3;
+}
+
+message StoreGetResponse {
+  optional string value_json = 1;
+  bool found = 2;
+}
+
+message StorePutRequest {
+  string store = 1;
+  string key = 2;
+  string value_json = 3;
+  string project = 4;
+  string task_id = 5;
+}
+
+message StorePutResponse {
+  string message = 1;
+}
+
+message StoreDeleteRequest {
+  string store = 1;
+  string key = 2;
+  string project = 3;
+}
+
+message StoreDeleteResponse {
+  string message = 1;
+}
+
+message StoreListRequest {
+  string store = 1;
+  string project = 2;
+  uint64 limit = 3;
+  uint64 offset = 4;
+}
+
+message StoreEntry {
+  string key = 1;
+  string value_json = 2;
+  string updated_at = 3;
+}
+
+message StoreListResponse {
+  repeated StoreEntry entries = 1;
+}
+
+message StorePruneRequest {
+  string store = 1;
+  string project = 2;
+}
+
+message StorePruneResponse {
+  string message = 1;
+}
+
+// ─── System ───────────────────────────────────────────────────
+
+message PingRequest {}
+
+message PingResponse {
+  string version = 1;
+  string git_hash = 2;
+  string uptime_secs = 3;
+}
+
+message ShutdownRequest {
+  bool graceful = 1;
+}
+
+message ShutdownResponse {
+  string message = 1;
+}
+
+message ConfigDebugRequest {
+  optional string component = 1;
+}
+
+message ConfigDebugResponse {
+  string content = 1;
+  string format = 2;
+}
+
+message WorkerStatusRequest {}
+
+message WorkerStatusResponse {
+  int64 pending_tasks = 1;
+  bool stop_signal = 2;
+  int64 active_workers = 3;
+}
+
+message CheckRequest {
+  optional string workflow = 1;
+  string output_format = 2;
+}
+
+message CheckResponse {
+  string content = 1;
+  string format = 2;
+  int32 exit_code = 3;
+}
