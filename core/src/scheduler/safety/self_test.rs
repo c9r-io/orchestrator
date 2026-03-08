@@ -96,22 +96,20 @@ pub async fn execute_self_test_step(
     let manifest_path = workspace_root.join("docs/workflow/self-bootstrap.yaml");
     if manifest_path.exists() {
         let validate_passed = match std::fs::read_to_string(&manifest_path) {
-            Ok(content) => {
-                match crate::service::system::validate_manifests(state, &content) {
-                    Ok((valid, errors, _msg)) => {
-                        if !valid {
-                            for err in &errors {
-                                error!(phase = "manifest_validate", error = %err, "validation error");
-                            }
+            Ok(content) => match crate::service::system::validate_manifests(state, &content) {
+                Ok((valid, errors, _msg)) => {
+                    if !valid {
+                        for err in &errors {
+                            error!(phase = "manifest_validate", error = %err, "validation error");
                         }
-                        valid
                     }
-                    Err(e) => {
-                        error!(phase = "manifest_validate", error = %e, "validation failed");
-                        false
-                    }
+                    valid
                 }
-            }
+                Err(e) => {
+                    error!(phase = "manifest_validate", error = %e, "validation failed");
+                    false
+                }
+            },
             Err(e) => {
                 error!(phase = "manifest_validate", error = %e, "failed to read manifest");
                 false

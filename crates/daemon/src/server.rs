@@ -340,25 +340,21 @@ impl OrchestratorService for OrchestratorServer {
         tokio::spawn(async move {
             let interval = std::time::Duration::from_secs(interval_secs);
             loop {
-                let summary = match agent_orchestrator::service::task::load_summary(
-                    &state,
-                    &req.task_id,
-                )
-                .await
-                {
-                    Ok(s) => s,
-                    Err(_) => break,
-                };
+                let summary =
+                    match agent_orchestrator::service::task::load_summary(&state, &req.task_id)
+                        .await
+                    {
+                        Ok(s) => s,
+                        Err(_) => break,
+                    };
 
-                let detail = match agent_orchestrator::service::task::get_task_detail(
-                    &state,
-                    &req.task_id,
-                )
-                .await
-                {
-                    Ok(d) => d,
-                    Err(_) => break,
-                };
+                let detail =
+                    match agent_orchestrator::service::task::get_task_detail(&state, &req.task_id)
+                        .await
+                    {
+                        Ok(d) => d,
+                        Err(_) => break,
+                    };
 
                 let snapshot = TaskWatchSnapshot {
                     task: Some(summary_to_proto(&summary)),
@@ -614,16 +610,11 @@ impl OrchestratorService for OrchestratorServer {
         }))
     }
 
-    async fn init(
-        &self,
-        request: Request<InitRequest>,
-    ) -> Result<Response<InitResponse>, Status> {
+    async fn init(&self, request: Request<InitRequest>) -> Result<Response<InitResponse>, Status> {
         let req = request.into_inner();
-        let message = agent_orchestrator::service::system::run_init(
-            &self.state,
-            req.root.as_deref(),
-        )
-        .map_err(|e| Status::internal(format!("{e}")))?;
+        let message =
+            agent_orchestrator::service::system::run_init(&self.state, req.root.as_deref())
+                .map_err(|e| Status::internal(format!("{e}")))?;
         Ok(Response::new(InitResponse { message }))
     }
 
@@ -662,10 +653,13 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<TaskTraceRequest>,
     ) -> Result<Response<TaskTraceResponse>, Status> {
         let req = request.into_inner();
-        let result =
-            agent_orchestrator::service::task::get_task_trace(&self.state, &req.task_id, req.verbose)
-                .await
-                .map_err(|e| Status::internal(format!("{e}")))?;
+        let result = agent_orchestrator::service::task::get_task_trace(
+            &self.state,
+            &req.task_id,
+            req.verbose,
+        )
+        .await
+        .map_err(|e| Status::internal(format!("{e}")))?;
 
         let entries = result
             .entries

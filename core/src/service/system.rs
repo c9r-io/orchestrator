@@ -141,7 +141,11 @@ pub fn validate_manifests(
     // Try to build active config to validate the full configuration
     match crate::config_load::build_active_config(&state.app_root, merged_config) {
         Ok(_) => Ok((true, vec![], "Manifest is valid".to_string())),
-        Err(e) => Ok((false, vec![e.to_string()], "Config build failed".to_string())),
+        Err(e) => Ok((
+            false,
+            vec![e.to_string()],
+            "Config build failed".to_string(),
+        )),
     }
 }
 

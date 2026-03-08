@@ -418,10 +418,7 @@ async fn dispatch_task(
                 } else {
                     format!(" step={}", entry.step)
                 };
-                println!(
-                    "{} {}{}{}",
-                    entry.timestamp, entry.event_type, step, item
-                );
+                println!("{} {}{}{}", entry.timestamp, entry.event_type, step, item);
             }
 
             if !resp.anomalies.is_empty() {

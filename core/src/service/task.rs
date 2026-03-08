@@ -168,11 +168,22 @@ pub async fn get_task_trace(
             .and_then(|v| v.get("step").and_then(|s| s.as_str()).map(String::from))
             .unwrap_or_default();
 
-        if verbose || matches!(event_type.as_str(),
-            "step_started" | "step_finished" | "cycle_started" | "cycle_finished"
-            | "task_started" | "task_finished" | "self_restart_phase" | "self_test_phase"
-            | "self_restart_ready" | "binary_verification" | "anomaly"
-        ) {
+        if verbose
+            || matches!(
+                event_type.as_str(),
+                "step_started"
+                    | "step_finished"
+                    | "cycle_started"
+                    | "cycle_finished"
+                    | "task_started"
+                    | "task_finished"
+                    | "self_restart_phase"
+                    | "self_test_phase"
+                    | "self_restart_ready"
+                    | "binary_verification"
+                    | "anomaly"
+            )
+        {
             entries.push(TraceEntry {
                 timestamp: created_at.clone(),
                 event_type: event_type.clone(),
@@ -216,10 +227,7 @@ pub async fn get_task_trace(
                     if exit_code != 0 {
                         anomalies.push(crate::anomaly::Anomaly::new(
                             crate::anomaly::AnomalyRule::NonzeroExit,
-                            format!(
-                                "step '{}' exited with code {}",
-                                step, exit_code
-                            ),
+                            format!("step '{}' exited with code {}", step, exit_code),
                             Some(created_at.clone()),
                         ));
                     }

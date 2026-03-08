@@ -289,9 +289,7 @@ enum BuiltinStepOutcome {
     /// Not a recognized builtin dispatch; fall through to agent/generic execution.
     NotBuiltin,
     /// Self-restart succeeded; daemon should exec the new binary.
-    RestartRequested {
-        binary_path: std::path::PathBuf,
-    },
+    RestartRequested { binary_path: std::path::PathBuf },
 }
 
 /// Dispatch self_test, self_restart, and ticket_scan builtin steps.

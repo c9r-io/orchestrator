@@ -31,11 +31,7 @@ pub struct RestartRequestedError {
 
 impl std::fmt::Display for RestartRequestedError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "restart requested: exec {}",
-            self.binary_path.display()
-        )
+        write!(f, "restart requested: exec {}", self.binary_path.display())
     }
 }
 
