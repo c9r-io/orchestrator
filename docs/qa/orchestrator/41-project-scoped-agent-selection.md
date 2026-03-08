@@ -263,8 +263,8 @@ Validate that agents from one project never leak into another project's tasks.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Apply --project Routes to Project Scope | ☐ | | | |
-| 2 | Project-Scoped Agent Selection Isolation | ☐ | | | |
-| 3 | Missing Capability Fails Without Fallback | ☐ | | | |
-| 4 | QA Project Reset Cleans Auto-Tickets | ☐ | | | |
-| 5 | Cross-Project Agent Isolation | ☐ | | | |
+| 1 | Apply --project Routes to Project Scope | ✅ | 2026-03-09 | Claude | Agents in project scope only, not global |
+| 2 | Project-Scoped Agent Selection Isolation | ✅ | 2026-03-09 | Claude | Only project agents in command_runs |
+| 3 | Missing Capability Fails Without Fallback | ✅ | 2026-03-09 | Claude | Strict isolation, clear error, no fallback |
+| 4 | QA Project Reset Cleans Auto-Tickets | ✅ | 2026-03-09 | Claude | auto_*.md cleaned, manual tickets preserved |
+| 5 | Cross-Project Agent Isolation | ✅ | 2026-03-09 | Claude | No agent leakage between projects |

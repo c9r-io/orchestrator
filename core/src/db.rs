@@ -11,6 +11,7 @@ pub struct ProjectResetStats {
     pub task_items: u64,
     pub command_runs: u64,
     pub events: u64,
+    pub tickets_cleaned: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -217,6 +218,7 @@ pub fn reset_project_data(
         task_items: task_items.max(0) as u64,
         command_runs: command_runs.max(0) as u64,
         events: events.max(0) as u64,
+        tickets_cleaned: 0,
     })
 }
 
@@ -553,6 +555,7 @@ mod tests {
                 task_items: 0,
                 command_runs: 0,
                 events: 0,
+                tickets_cleaned: 0,
             }
         );
     }
@@ -566,6 +569,7 @@ mod tests {
             task_items: 2,
             command_runs: 3,
             events: 4,
+            tickets_cleaned: 0,
         };
         let b = a;
         assert_eq!(a, b);

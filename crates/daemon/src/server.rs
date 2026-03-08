@@ -739,8 +739,34 @@ impl OrchestratorService for OrchestratorServer {
             ));
         }
 
-        let stats = agent_orchestrator::db::reset_project_data(&self.state, &req.project_id)
+        let mut stats = agent_orchestrator::db::reset_project_data(&self.state, &req.project_id)
             .map_err(|e| Status::internal(format!("reset project data: {e}")))?;
+
+        // Clean auto-ticket files from project workspace ticket directories
+        {
+            let active = agent_orchestrator::config_load::read_active_config(&self.state)
+                .map_err(|e| Status::internal(format!("{e}")))?;
+            if let Some(project) = active.config.projects.get(&req.project_id) {
+                for ws_config in project.workspaces.values() {
+                    let ticket_path = self.state.app_root
+                        .join(&ws_config.root_path)
+                        .join(&ws_config.ticket_dir);
+                    if ticket_path.is_dir() {
+                        if let Ok(entries) = std::fs::read_dir(&ticket_path) {
+                            for entry in entries.flatten() {
+                                let name = entry.file_name();
+                                let name_str = name.to_string_lossy();
+                                if name_str.starts_with("auto_") && name_str.ends_with(".md") {
+                                    if std::fs::remove_file(entry.path()).is_ok() {
+                                        stats.tickets_cleaned += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         if req.include_config {
             let mut config = {
@@ -760,15 +786,21 @@ impl OrchestratorService for OrchestratorServer {
             .map_err(|e| Status::internal(format!("persist config: {e}")))?;
         }
 
+        let mut message = format!(
+            "project '{}' reset: {} tasks, {} items, {} runs, {} events deleted",
+            req.project_id, stats.tasks, stats.task_items, stats.command_runs, stats.events
+        );
+        if stats.tickets_cleaned > 0 {
+            message.push_str(&format!(", {} tickets cleaned", stats.tickets_cleaned));
+        }
+
         Ok(Response::new(ProjectResetResponse {
-            message: format!(
-                "project '{}' reset: {} tasks, {} items, {} runs, {} events deleted",
-                req.project_id, stats.tasks, stats.task_items, stats.command_runs, stats.events
-            ),
+            message,
             tasks_deleted: stats.tasks,
             items_deleted: stats.task_items,
             runs_deleted: stats.command_runs,
             events_deleted: stats.events,
+            tickets_cleaned: stats.tickets_cleaned,
         }))
     }
 }

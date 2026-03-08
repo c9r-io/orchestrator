@@ -479,4 +479,5 @@ message ProjectResetResponse {
   uint64 items_deleted = 3;
   uint64 runs_deleted = 4;
   uint64 events_deleted = 5;
+  uint64 tickets_cleaned = 6;
 }
