@@ -702,6 +702,7 @@ pub async fn execute_builtin_step(
                 prompt_delivery: crate::config::PromptDelivery::Arg,
                 prompt_payload: None,
                 pipe_stdin: false,
+                project_id: &task_ctx.project_id,
             },
         )
         .await?
@@ -951,6 +952,7 @@ impl AdaptivePlanExecutor for AgentBackedAdaptiveExecutor<'_> {
                 step_timeout_secs: self.task_ctx.safety.step_timeout_secs,
                 step_scope: crate::config::StepScope::Item,
                 step_template_prompt: Some(prompt),
+                project_id: &self.task_ctx.project_id,
             },
         )
         .await?;
@@ -1165,6 +1167,7 @@ async fn execute_dynamic_step_config(
                 step_timeout_secs: task_ctx.safety.step_timeout_secs,
                 step_scope: crate::config::StepScope::Item,
                 step_template_prompt: None,
+                project_id: &task_ctx.project_id,
             },
         )
         .await?

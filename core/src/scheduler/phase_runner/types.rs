@@ -91,6 +91,8 @@ pub struct PhaseRunRequest<'a> {
     pub prompt_payload: Option<String>,
     /// Whether to pipe stdin to the child process.
     pub pipe_stdin: bool,
+    /// Project ID for project-scoped agent env resolution (empty = non-project).
+    pub project_id: &'a str,
 }
 
 pub struct RotatingPhaseRunRequest<'a> {
@@ -111,7 +113,7 @@ pub struct RotatingPhaseRunRequest<'a> {
     pub step_scope: StepScope,
     /// Prompt from a resolved StepTemplate, injected into the agent command's {prompt} placeholder
     pub step_template_prompt: Option<&'a str>,
-    /// Project ID for project-scoped agent selection (empty = global)
+    /// Project ID for project-scoped agent selection (empty = non-project).
     pub project_id: &'a str,
 }
 
@@ -134,4 +136,6 @@ pub struct SelectedPhaseRunRequest<'a> {
     pub step_timeout_secs: Option<u64>,
     pub step_scope: StepScope,
     pub step_template_prompt: Option<&'a str>,
+    /// Project ID for project-scoped agent env resolution (empty = non-project).
+    pub project_id: &'a str,
 }

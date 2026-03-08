@@ -142,7 +142,7 @@ distributes work across them and each agent uses its own correct template.
 
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
-| Other agents selected (e.g. `probe_fallback`, `env-agent`) | Fixture not applied with `--project`; global agents participate in selection | Use `apply -f ... --project <name>` to scope agents |
+| Other agents selected (e.g. `probe_fallback`, `env-agent`) | Fixture not applied with `--project`; agents from wrong project participate | Use `apply -f ... --project <name>` to scope agents |
 | Items marked `unresolved` despite agents exiting 0 | Auto-ticket files in `fixtures/ticket/` from a prior run | Use `project reset <name> --force --include-config` to clean tickets |
 
 ---

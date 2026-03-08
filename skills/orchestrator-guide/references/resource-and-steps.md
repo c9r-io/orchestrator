@@ -39,7 +39,7 @@ spec:
     cost: 100               # lower = preferred in selection
 ```
 
-Selection priority: capability match (required) → cost (lower preferred) → project-scoped overrides global.
+Selection priority: capability match (required) → cost (lower preferred). Agents are strictly project-scoped — only agents applied to the target project participate in selection.
 
 ## StepTemplate
 

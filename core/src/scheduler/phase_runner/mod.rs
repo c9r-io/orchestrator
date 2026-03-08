@@ -47,6 +47,7 @@ async fn run_phase_with_timeout(
         prompt_delivery,
         prompt_payload,
         pipe_stdin: req_pipe_stdin,
+        project_id,
     } = request;
 
     // Stage 1: setup
@@ -62,6 +63,7 @@ async fn run_phase_with_timeout(
         agent_id,
         prompt_delivery,
         &prompt_payload,
+        project_id,
     )
     .await?;
 
@@ -231,6 +233,7 @@ pub async fn run_phase_with_rotation(
             step_timeout_secs,
             step_scope,
             step_template_prompt,
+            project_id,
         },
     )
     .await
@@ -259,6 +262,7 @@ pub async fn run_phase_with_selected_agent(
         step_timeout_secs,
         step_scope,
         step_template_prompt,
+        project_id,
     } = request;
 
     // Render template variables into the step template prompt, then inject into agent command
@@ -348,6 +352,7 @@ pub async fn run_phase_with_selected_agent(
             prompt_delivery,
             prompt_payload,
             pipe_stdin: prompt_delivery == PromptDelivery::Stdin,
+            project_id,
         },
     )
     .await

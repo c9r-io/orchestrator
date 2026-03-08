@@ -127,6 +127,10 @@ pub fn resolve_effective_agents<'a>(
         if let Some(project) = config.projects.get(project_id) {
             return &project.agents;
         }
+        // Project specified but not found — return empty set (no fallback)
+        static EMPTY: std::sync::LazyLock<HashMap<String, AgentConfig>> =
+            std::sync::LazyLock::new(HashMap::new);
+        return &EMPTY;
     }
     &config.agents
 }
@@ -140,9 +144,10 @@ pub fn resolve_agent_by_id<'a>(
     agent_id: &str,
 ) -> Option<&'a AgentConfig> {
     if !project_id.is_empty() {
-        if let Some(project) = config.projects.get(project_id) {
-            return project.agents.get(agent_id);
-        }
+        return config
+            .projects
+            .get(project_id)
+            .and_then(|p| p.agents.get(agent_id));
     }
     config.agents.get(agent_id)
 }
@@ -530,11 +535,11 @@ mod tests {
     }
 
     #[test]
-    fn resolve_effective_agents_returns_global_for_unknown_project() {
+    fn resolve_effective_agents_returns_empty_for_unknown_project() {
         let config = make_config_with_project_agents();
-        // Unknown project falls back to top-level agents (no project entry exists)
+        // Unknown project — strict isolation means empty, not fallback to top-level
         let agents = resolve_effective_agents("no-such-project", &config, Some("qa"));
-        assert!(agents.contains_key("global_qa"));
+        assert!(agents.is_empty(), "unknown project must not fall back to top-level agents");
     }
 
     #[test]

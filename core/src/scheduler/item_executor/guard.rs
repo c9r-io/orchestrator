@@ -100,6 +100,7 @@ pub async fn execute_guard_step(
             prompt_delivery: crate::config::PromptDelivery::Arg,
             prompt_payload: None,
             pipe_stdin: false,
+            project_id: &task_ctx.project_id,
         },
     )
     .await?;

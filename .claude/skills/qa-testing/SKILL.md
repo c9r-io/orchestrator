@@ -24,11 +24,11 @@ Execute scenario-based QA testing driven by `docs/qa/**/*.md` documents.
    test -f data/agent_orchestrator.db || orchestrator init
    ```
 
-3. **For QA scenario isolation** — use project-scoped reset instead of destroying global state:
+3. **For QA scenario isolation** — use project-scoped reset instead of destroying shared state:
    ```bash
    # Reset a specific project's QA state (task data + config + auto-tickets)
    orchestrator project reset <project> --force
-   # Deploy fixtures into project scope (global config untouched)
+   # Deploy fixtures into project scope (other projects untouched)
    orchestrator apply -f fixtures/manifests/bundles/<fixture>.yaml --project <project>
    ```
 
@@ -232,25 +232,25 @@ Item-scoped steps can run in parallel when `max_parallel > 1` is configured in t
 
 ### 3. Environment Reset Between Batches
 
-The correct reset sequence between batches uses **project-scoped isolation** instead of destroying the global DB:
+The correct reset sequence between batches uses **project-scoped isolation** instead of destroying the shared DB:
 
 ```bash
 # Reset project state (task data + project config + auto-tickets)
 orchestrator project reset <project> --force --include-config
 
-# Apply fixture into project scope (global config untouched)
+# Apply fixture into project scope (other projects untouched)
 orchestrator apply -f fixtures/manifests/bundles/<relevant>.yaml --project <project>
 
 # DO NOT delete docs/ticket/*.md — preserve prior batch tickets
 # DO NOT run `rm -f data/agent_orchestrator.db` — this destroys all state including bootstrap
 ```
 
-**CRITICAL**: Never use `rm -f data/agent_orchestrator.db` for QA environment resets. Use `project reset` + `apply --project` to isolate each QA batch into its own project scope without affecting global/bootstrap agents.
+**CRITICAL**: Never use `rm -f data/agent_orchestrator.db` for QA environment resets. Use `project reset` + `apply --project` to isolate each QA batch into its own project scope without affecting other projects.
 
 ### 4. `init` vs `project reset` vs `apply --project`
 
 - `init` creates the DB schema and a minimal default config. It does **not** load fixture data.
-- `project reset <project> --force` resets task data and auto-tickets for the named project — without touching global config or other projects. Add `--include-config` to also remove the project config entry.
+- `project reset <project> --force` resets task data and auto-tickets for the named project — without touching other projects. Add `--include-config` to also remove the project config entry.
 - `apply -f <fixture> --project <project>` deploys agents/workflows/workspaces into the project scope. Only project-scoped agents participate in selection for that project's tasks.
 - Most QA scenarios should use `project reset` + `apply --project` instead of `init` + `config bootstrap`.
 
@@ -299,7 +299,7 @@ orchestrator init --force
 The orchestrator no longer has hardcoded defaults. For QA scenarios, prefer project-scoped isolation:
 
 ```bash
-# Preferred: project-scoped reset (preserves global state)
+# Preferred: project-scoped reset (preserves other projects)
 orchestrator project reset <project> --force --include-config
 orchestrator apply -f fixtures/manifests/bundles/<fixture>.yaml --project <project>
 
