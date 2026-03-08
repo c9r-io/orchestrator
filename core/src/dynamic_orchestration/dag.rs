@@ -2,9 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
+use crate::config::StepPrehookContext;
 use serde::{Deserialize, Serialize};
 
-use super::step_pool::{evaluate_simple_condition, StepPrehookContext};
+use super::step_pool::evaluate_simple_condition;
 
 /// A node in the workflow DAG
 #[derive(Debug, Clone, Serialize, Deserialize)]

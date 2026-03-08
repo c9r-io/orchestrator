@@ -179,7 +179,7 @@ pub struct TaskRuntimeContext {
 }
 
 /// Step prehook context for evaluation
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StepPrehookContext {
     pub task_id: String,
     pub task_item_id: String,
@@ -198,29 +198,37 @@ pub struct StepPrehookContext {
     pub qa_confidence: Option<f32>,
     pub qa_quality_score: Option<f32>,
     pub fix_has_changes: Option<bool>,
+    #[serde(default)]
     pub upstream_artifacts: Vec<ArtifactSummary>,
     /// Number of build errors from the last build step
+    #[serde(default)]
     pub build_error_count: i64,
     /// Number of test failures from the last test step
+    #[serde(default)]
     pub test_failure_count: i64,
     /// Exit code of the last build step
     pub build_exit_code: Option<i64>,
     /// Exit code of the last test step
     pub test_exit_code: Option<i64>,
     /// Exit code of the last self_test step
+    #[serde(default)]
     pub self_test_exit_code: Option<i64>,
     /// Whether the last self_test step passed
+    #[serde(default)]
     pub self_test_passed: bool,
     /// Maximum number of cycles configured for this workflow
+    #[serde(default)]
     pub max_cycles: u32,
     /// Whether this is the last cycle (cycle == max_cycles)
+    #[serde(default)]
     pub is_last_cycle: bool,
     /// Whether this QA doc is safe to run in a self-referential workspace
+    #[serde(default = "default_true")]
     pub self_referential_safe: bool,
 }
 
 /// Artifact summary
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ArtifactSummary {
     pub phase: String,
     pub kind: String,
@@ -562,5 +570,67 @@ mod tests {
                 name
             );
         }
+    }
+
+    #[test]
+    fn step_prehook_context_serde_defaults_round_trip() {
+        let json = serde_json::json!({
+            "task_id": "task-1",
+            "task_item_id": "item-1",
+            "cycle": 1,
+            "step": "qa_testing",
+            "qa_file_path": "docs/qa/test.md",
+            "item_status": "pending",
+            "task_status": "running",
+            "qa_exit_code": 1,
+            "fix_exit_code": null,
+            "retest_exit_code": null,
+            "active_ticket_count": 2,
+            "new_ticket_count": 1,
+            "qa_failed": true,
+            "fix_required": true,
+            "qa_confidence": 0.9,
+            "qa_quality_score": 0.7,
+            "fix_has_changes": null
+        });
+
+        let context: StepPrehookContext =
+            serde_json::from_value(json).expect("context should deserialize");
+        assert!(context.upstream_artifacts.is_empty());
+        assert_eq!(context.build_error_count, 0);
+        assert_eq!(context.test_failure_count, 0);
+        assert_eq!(context.self_test_exit_code, None);
+        assert!(!context.self_test_passed);
+        assert_eq!(context.max_cycles, 0);
+        assert!(!context.is_last_cycle);
+        assert!(context.self_referential_safe);
+
+        let artifact = ArtifactSummary {
+            phase: "qa".to_string(),
+            kind: "report".to_string(),
+            path: Some("artifacts/report.json".to_string()),
+        };
+        let round_trip = StepPrehookContext {
+            upstream_artifacts: vec![artifact],
+            build_error_count: 3,
+            test_failure_count: 4,
+            self_test_exit_code: Some(2),
+            self_test_passed: true,
+            max_cycles: 5,
+            is_last_cycle: false,
+            self_referential_safe: false,
+            ..context
+        };
+        let serialized = serde_json::to_value(&round_trip).expect("context should serialize");
+        let reparsed: StepPrehookContext =
+            serde_json::from_value(serialized).expect("context should round-trip");
+        assert_eq!(reparsed.upstream_artifacts.len(), 1);
+        assert_eq!(reparsed.build_error_count, 3);
+        assert_eq!(reparsed.test_failure_count, 4);
+        assert_eq!(reparsed.self_test_exit_code, Some(2));
+        assert!(reparsed.self_test_passed);
+        assert_eq!(reparsed.max_cycles, 5);
+        assert!(!reparsed.is_last_cycle);
+        assert!(!reparsed.self_referential_safe);
     }
 }

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::config::StepPrehookContext;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for a dynamic step in the pool
@@ -77,58 +78,6 @@ impl DynamicStepPool {
     pub fn get(&self, id: &str) -> Option<&DynamicStepConfig> {
         self.steps.get(id)
     }
-}
-
-/// Context passed to dynamic step evaluation
-/// Mirrors the main module's StepPrehookContext for compatibility
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct StepPrehookContext {
-    pub task_id: String,
-    pub task_item_id: String,
-    pub cycle: u32,
-    pub step: String,
-    pub qa_file_path: String,
-    pub item_status: String,
-    pub task_status: String,
-    pub qa_exit_code: Option<i64>,
-    pub fix_exit_code: Option<i64>,
-    pub retest_exit_code: Option<i64>,
-    pub active_ticket_count: i64,
-    pub new_ticket_count: i64,
-    pub qa_failed: bool,
-    pub fix_required: bool,
-    pub qa_confidence: Option<f32>,
-    pub qa_quality_score: Option<f32>,
-    pub fix_has_changes: Option<bool>,
-    #[serde(default)]
-    pub upstream_artifacts: Vec<ArtifactSummary>,
-    #[serde(default)]
-    pub build_error_count: i64,
-    #[serde(default)]
-    pub test_failure_count: i64,
-    pub build_exit_code: Option<i64>,
-    pub test_exit_code: Option<i64>,
-    #[serde(default)]
-    pub self_test_exit_code: Option<i64>,
-    #[serde(default)]
-    pub self_test_passed: bool,
-    #[serde(default)]
-    pub max_cycles: u32,
-    #[serde(default)]
-    pub is_last_cycle: bool,
-    #[serde(default = "default_true")]
-    pub self_referential_safe: bool,
-}
-
-fn default_true() -> bool {
-    true
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ArtifactSummary {
-    pub phase: String,
-    pub kind: String,
-    pub path: Option<String>,
 }
 
 /// Simple condition evaluator for basic triggers

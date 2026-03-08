@@ -3,6 +3,8 @@
 //! Provides enhanced prehook capabilities, dynamic step execution,
 //! and DAG-based workflow orchestration for adaptive agent orchestration.
 
+pub use crate::config::StepPrehookContext;
+
 mod adaptive;
 mod dag;
 mod prehook;

@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use crate::config::StepPrehookContext;
 use serde::{Deserialize, Serialize};
 
 use super::dag::{DynamicExecutionPlan, PrehookConfig, WorkflowEdge, WorkflowNode};
-use super::step_pool::StepPrehookContext;
 
 /// Configuration for agent-driven adaptive planning.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
