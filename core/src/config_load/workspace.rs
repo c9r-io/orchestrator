@@ -90,23 +90,35 @@ pub fn resolve_and_validate_workspaces(
         );
     }
 
+    // When all resources live inside projects (no global workspaces/workflows),
+    // empty defaults are acceptable — task create supplies --project explicitly.
+    let all_project_scoped = config.workspaces.is_empty()
+        && config.workflows.is_empty()
+        && has_project_workspaces
+        && has_project_workflows;
+
     let default_ws = &config.defaults.workspace;
-    let default_in_projects = config
-        .projects
-        .values()
-        .any(|p| p.workspaces.contains_key(default_ws));
-    if !resolved.contains_key(default_ws) && !default_in_projects {
-        anyhow::bail!("defaults.workspace '{}' does not exist", default_ws);
+    if !default_ws.is_empty() || !all_project_scoped {
+        let default_in_projects = config
+            .projects
+            .values()
+            .any(|p| p.workspaces.contains_key(default_ws));
+        if !resolved.contains_key(default_ws) && !default_in_projects {
+            anyhow::bail!("defaults.workspace '{}' does not exist", default_ws);
+        }
     }
-    let default_wf_in_projects = config
-        .projects
-        .values()
-        .any(|p| p.workflows.contains_key(&config.defaults.workflow));
-    if !config.workflows.contains_key(&config.defaults.workflow) && !default_wf_in_projects {
-        anyhow::bail!(
-            "defaults.workflow '{}' does not exist",
-            config.defaults.workflow
-        );
+    let default_wf = &config.defaults.workflow;
+    if !default_wf.is_empty() || !all_project_scoped {
+        let default_wf_in_projects = config
+            .projects
+            .values()
+            .any(|p| p.workflows.contains_key(default_wf));
+        if !config.workflows.contains_key(default_wf) && !default_wf_in_projects {
+            anyhow::bail!(
+                "defaults.workflow '{}' does not exist",
+                default_wf
+            );
+        }
     }
 
     // Validate top-level workflows against top-level agents only (project-scoped agents

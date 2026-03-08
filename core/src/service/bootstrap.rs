@@ -81,16 +81,20 @@ fn build_active_config_result(
 )> {
     match build_active_config_with_self_heal(app_root, db_path, config.clone()) {
         Ok((active, report)) => {
-            let default_workspace = active
-                .workspaces
-                .get(&active.default_workspace_id)
-                .context("default workspace is missing after config validation")?;
-            backfill_legacy_data(
-                db_path,
-                &active.default_workspace_id,
-                &active.default_workflow_id,
-                default_workspace,
-            )?;
+            // When all resources are project-scoped, default_workspace_id may be empty;
+            // skip legacy backfill in that case.
+            if !active.default_workspace_id.is_empty() {
+                let default_workspace = active
+                    .workspaces
+                    .get(&active.default_workspace_id)
+                    .context("default workspace is missing after config validation")?;
+                backfill_legacy_data(
+                    db_path,
+                    &active.default_workspace_id,
+                    &active.default_workflow_id,
+                    default_workspace,
+                )?;
+            }
             Ok((active, None, report))
         }
         Err(error) => Ok((
