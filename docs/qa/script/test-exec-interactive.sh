@@ -17,7 +17,7 @@ cd "$REPO_ROOT"
 
 qa_info "Preparing isolated config for exec interactive simulation..."
 
-mkdir -p "$REPO_ROOT/workspace/default/docs/qa" "$REPO_ROOT/workspace/default/docs/ticket"
+mkdir -p "$REPO_ROOT/workspace/default/docs/qa" "$REPO_ROOT/workspace/default/fixtures/ticket"
 cat > "$REPO_ROOT/workspace/default/docs/qa/exec-smoke.md" <<'MD'
 # Exec Interactive Smoke
 MD
@@ -32,7 +32,7 @@ spec:
   root_path: workspace/default
   qa_targets:
     - docs/qa
-  ticket_dir: docs/ticket
+  ticket_dir: fixtures/ticket
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent

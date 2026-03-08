@@ -101,7 +101,7 @@ rm -rf "workspace/${QA_PROJECT}"
      root_path: /tmp
      qa_targets:
        - docs/qa
-     ticket_dir: docs/ticket
+     ticket_dir: fixtures/ticket
    ---
    apiVersion: orchestrator.dev/v2
    kind: RuntimePolicy

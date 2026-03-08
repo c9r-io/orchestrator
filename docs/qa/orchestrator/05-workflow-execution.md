@@ -227,7 +227,7 @@ rm -rf "workspace/${QA_PROJECT}"
 
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
-| No ticket files found in `workspace/${QA_PROJECT}/docs/ticket/` | The task uses the global `default` workspace (ticket_dir: `fixtures/ticket`), not the project workspace | Check `fixtures/ticket/auto_*.md` instead |
+| No ticket files found in `workspace/${QA_PROJECT}/fixtures/ticket/` | The task uses the global `default` workspace (ticket_dir: `fixtures/ticket`), not the project workspace | Check `fixtures/ticket/auto_*.md` instead |
 | `Failed: 0` when expecting failures | Fix phase succeeds (exit 0), transitioning items from `qa_failed` to `fixed` | This is correct behavior; "Failed" counts only items whose final status is a failure state |
 
 ---

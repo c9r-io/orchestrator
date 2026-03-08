@@ -52,7 +52,7 @@ Ensure that explicitly setting `policy: unsafe` is accepted, applied, and the ta
      default:
        root_path: .
        qa_targets: [docs/qa]
-       ticket_dir: docs/ticket
+       ticket_dir: fixtures/ticket
    agents:
      mock:
        metadata:
@@ -129,7 +129,7 @@ Ensure that `policy: legacy` in YAML manifests is accepted as a backward-compati
      default:
        root_path: .
        qa_targets: [docs/qa]
-       ticket_dir: docs/ticket
+       ticket_dir: fixtures/ticket
    agents:
      mock:
        metadata:

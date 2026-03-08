@@ -83,7 +83,7 @@ WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
    spec:
      root_path: workspace/default
      qa_targets: ["docs/qa/**/*.md"]
-     ticket_dir: docs/ticket
+     ticket_dir: fixtures/ticket
    ---
    apiVersion: orchestrator.dev/v2
    kind: Agent

@@ -117,7 +117,7 @@ qa_prepare_project() {
     --workflow "$workflow" \
     --root-path "$project_root" \
     --qa-target "docs/qa" \
-    --ticket-dir "docs/ticket" \
+    --ticket-dir "fixtures/ticket" \
     --force >/dev/null
   root="$(qa_repo_root)"
   sample_dir="$root/$project_root/docs/qa"
@@ -135,8 +135,8 @@ qa_reset_project_data() {
   bin="$(qa_binary_path)"
   project_root="$(qa_project_root)"
   "$bin" qa project reset "$QA_PROJECT" --keep-config --force >/dev/null
-  rm -rf "$project_root/docs/ticket" "$project_root/docs/qa"
-  mkdir -p "$project_root/docs/qa" "$project_root/docs/ticket"
+  rm -rf "$project_root/fixtures/ticket" "$project_root/docs/qa"
+  mkdir -p "$project_root/docs/qa" "$project_root/fixtures/ticket"
 }
 
 qa_recreate_project() {

@@ -109,7 +109,7 @@ Ensure run-phase command execution is denied by runner policy before process spa
      default:
        root_path: .
        qa_targets: [docs/qa]
-       ticket_dir: docs/ticket
+       ticket_dir: fixtures/ticket
    agents:
      mock:
        metadata:
@@ -188,7 +188,7 @@ Ensure sensitive token is redacted in persisted structured output and in `task l
    spec:
      root_path: "."
      qa_targets: [docs/qa]
-     ticket_dir: docs/ticket
+     ticket_dir: fixtures/ticket
    ---
    apiVersion: orchestrator.dev/v2
    kind: Agent

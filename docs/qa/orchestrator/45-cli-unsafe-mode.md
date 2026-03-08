@@ -102,7 +102,7 @@ Verify `--unsafe` overrides the manifest's `policy: allowlist` to `Unsafe` at ru
      default:
        root_path: .
        qa_targets: [docs/qa]
-       ticket_dir: docs/ticket
+       ticket_dir: fixtures/ticket
    agents:
      mock:
        metadata:

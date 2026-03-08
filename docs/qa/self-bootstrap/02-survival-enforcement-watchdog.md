@@ -57,7 +57,7 @@ Verify that starting a task on a self-referential workspace with `checkpoint_str
    spec:
      root_path: "."
      qa_targets: [docs/qa]
-     ticket_dir: docs/ticket
+     ticket_dir: fixtures/ticket
      self_referential: true
    ---
    apiVersion: orchestrator.dev/v2
@@ -114,7 +114,7 @@ Verify that a warning is emitted (not a hard error) when `auto_rollback: false` 
    spec:
      root_path: "."
      qa_targets: [docs/qa]
-     ticket_dir: docs/ticket
+     ticket_dir: fixtures/ticket
      self_referential: true
    ---
    apiVersion: orchestrator.dev/v2
@@ -166,7 +166,7 @@ Verify that a warning is emitted when a self-referential workspace workflow has 
    spec:
      root_path: "."
      qa_targets: [docs/qa]
-     ticket_dir: docs/ticket
+     ticket_dir: fixtures/ticket
      self_referential: true
    ---
    apiVersion: orchestrator.dev/v2
