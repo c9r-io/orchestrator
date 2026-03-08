@@ -41,7 +41,8 @@ Apply self-bootstrap resources:
 
 ```bash
 orchestrator manifest validate -f docs/workflow/self-bootstrap.yaml
-orchestrator apply -f docs/workflow/self-bootstrap.yaml
+# ⚠️  必须使用 --project，否则真实 AI agent 会注册到全局空间
+orchestrator apply -f docs/workflow/self-bootstrap.yaml --project self-bootstrap
 orchestrator get workflow
 orchestrator get agent
 orchestrator get workspace
@@ -97,7 +98,7 @@ spec:
 YAML
 
 orchestrator manifest validate -f /tmp/self-bootstrap-smoke.yaml
-orchestrator apply -f /tmp/self-bootstrap-smoke.yaml
+orchestrator apply -f /tmp/self-bootstrap-smoke.yaml --project self-bootstrap
 ```
 
 ---
@@ -107,7 +108,7 @@ orchestrator apply -f /tmp/self-bootstrap-smoke.yaml
 Create task (do not auto-start):
 
 ```bash
-orchestrator task create \
+orchestrator task create --project self-bootstrap \
   -n self-bootstrap-smoke-final \
   -w self \
   -W self-bootstrap-smoke \

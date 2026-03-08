@@ -91,9 +91,10 @@ orchestrator daemon status
 
 orchestrator db reset -f --include-config --include-history
 orchestrator init -f
-orchestrator apply -f docs/workflow/claude-secret.yaml
-orchestrator apply -f docs/workflow/minimax-secret.yaml
-orchestrator apply -f docs/workflow/self-evolution.yaml
+orchestrator apply -f docs/workflow/claude-secret.yaml --project self-evolution
+orchestrator apply -f docs/workflow/minimax-secret.yaml --project self-evolution
+# ⚠️  必须使用 --project，否则真实 AI agent 会注册到全局空间
+orchestrator apply -f docs/workflow/self-evolution.yaml --project self-evolution
 ```
 
 ### 3.2 验证资源已加载
@@ -116,6 +117,7 @@ orchestrator get agent
 orchestrator task create \
   -n "evo-prompt-template-enhance" \
   -w self -W self-evolution \
+  --project self-evolution \
   --no-start \
   -g "增强 StepTemplate prompt 变量解析：支持 {var:-default} 默认值语法和 {?var}...{/var} 条件段落语法。纯 Rust 实现，不引入外部模板引擎。保留现有 {var} 语法完全向后兼容。未定义变量产生 warn 日志而非静默保留占位符。"
 ```

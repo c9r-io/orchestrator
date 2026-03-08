@@ -1,3 +1,11 @@
+# ⚠️  WARNING: This manifest contains real AI agents (evo_architect, evo_coder)
+# that invoke `claude -p` and consume API credits.
+# ALWAYS apply with --project to prevent global registration:
+#
+#   orchestrator apply -f docs/workflow/self-evolution.yaml --project self-evolution
+#
+# NEVER apply without --project — doing so registers paid agents globally,
+# making them available as fallback for ANY project's tasks.
 apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:

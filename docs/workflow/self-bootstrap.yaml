@@ -1,3 +1,9 @@
+# ⚠️  WARNING: This manifest contains real AI agents that invoke `claude -p`
+# and consume API credits. ALWAYS apply with --project:
+#
+#   orchestrator apply -f docs/workflow/self-bootstrap.yaml --project self-bootstrap
+#
+# NEVER apply without --project — doing so registers paid agents globally.
 apiVersion: orchestrator.dev/v2
 kind: Workspace
 metadata:

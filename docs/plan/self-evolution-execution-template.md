@@ -106,10 +106,11 @@ orchestrator daemon status
 
 orchestrator db reset -f --include-config --include-history
 orchestrator init -f
-orchestrator apply -f docs/workflow/claude-secret.yaml
-orchestrator apply -f docs/workflow/minimax-secret.yaml
+orchestrator apply -f docs/workflow/claude-secret.yaml --project self-evolution
+orchestrator apply -f docs/workflow/minimax-secret.yaml --project self-evolution
 # 如需使用 Claude 原生 API，注释上行即可（claude-* 的模型配置将生效）
-orchestrator apply -f docs/workflow/self-evolution.yaml
+# ⚠️  必须使用 --project，否则真实 AI agent 会注册到全局空间
+orchestrator apply -f docs/workflow/self-evolution.yaml --project self-evolution
 ```
 
 ### 3.2 验证资源已加载
@@ -134,6 +135,7 @@ self-evolution 不需要指定 `-t` 目标文件——动态 item 由 `evo_plan`
 orchestrator task create \
   -n "<任务名>" \
   -w self -W self-evolution \
+  --project self-evolution \
   --no-start \
   -g "<将上方任务目标压缩成单行，直接作为 goal 传入>"
 ```

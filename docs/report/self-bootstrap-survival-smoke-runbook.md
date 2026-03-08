@@ -63,7 +63,8 @@ Runtime data locations:
 
 ```bash
 orchestrator manifest validate -f docs/workflow/self-bootstrap.yaml
-orchestrator apply -f docs/workflow/self-bootstrap.yaml
+# ⚠️  必须使用 --project，否则真实 AI agent 会注册到全局空间
+orchestrator apply -f docs/workflow/self-bootstrap.yaml --project self-bootstrap
 
 orchestrator get workspace
 orchestrator get workflow

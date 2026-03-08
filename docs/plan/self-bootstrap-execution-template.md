@@ -80,18 +80,19 @@ orchestrator daemon status
 
 orchestrator db reset -f --include-config --include-history
 orchestrator init -f
-orchestrator apply -f docs/workflow/claude-secret.yaml
-orchestrator apply -f docs/workflow/minimax-secret.yaml
+orchestrator apply -f docs/workflow/claude-secret.yaml --project self-bootstrap
+orchestrator apply -f docs/workflow/minimax-secret.yaml --project self-bootstrap
 # 如需使用 Claude 原生 API，注释上行即可（claude-* 的模型配置将生效）
-orchestrator apply -f docs/workflow/self-bootstrap.yaml
+# ⚠️  必须使用 --project，否则真实 AI agent 会注册到全局空间
+orchestrator apply -f docs/workflow/self-bootstrap.yaml --project self-bootstrap
 ```
 
 ### 3.2 验证资源已加载
 
 ```bash
-orchestrator get workspace
-orchestrator get workflow
-orchestrator get agent
+orchestrator get workspaces --project self-bootstrap
+orchestrator get workflows --project self-bootstrap
+orchestrator get agents --project self-bootstrap
 ```
 
 预期至少可见：
@@ -113,6 +114,7 @@ orchestrator get agent
 orchestrator task create \
   -n "<任务名>" \
   -w self -W self-bootstrap \
+  --project self-bootstrap \
   --no-start \
   -g "<将上方任务目标压缩成单行，直接作为 goal 传入>" \
   -t <目标文件1> \
@@ -125,6 +127,7 @@ orchestrator task create \
 orchestrator task create \
   -n "<任务名>" \
   -w self -W self-bootstrap \
+  --project self-bootstrap \
   --no-start \
   -g "<将上方任务目标压缩成单行，直接作为 goal 传入>"
 ```

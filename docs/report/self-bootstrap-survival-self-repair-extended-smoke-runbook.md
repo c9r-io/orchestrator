@@ -106,7 +106,8 @@ Expected:
 ```bash
 rm -f data/agent_orchestrator.db config/default.yaml
 orchestrator init -f
-orchestrator apply -f docs/workflow/self-bootstrap.yaml
+# ⚠️  必须使用 --project，否则真实 AI agent 会注册到全局空间
+orchestrator apply -f docs/workflow/self-bootstrap.yaml --project self-bootstrap
 ```
 
 ### 4.3 Dedicated QA Project
@@ -225,7 +226,7 @@ spec:
     auto_rollback: true
 YAML
 
-orchestrator apply -f /tmp/smoke-llm-selfrepair.yaml
+orchestrator apply -f /tmp/smoke-llm-selfrepair.yaml --project self-bootstrap
 ```
 
 Expected:

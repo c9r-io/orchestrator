@@ -144,6 +144,7 @@ loop:
 orchestrator task create \
   -n "continuous-evolution" \
   -w self -W self-evolve-bootstrap \
+  --project self-evolution \
   -g "持续改进 orchestrator 代码质量、性能和功能"
 ```
 
