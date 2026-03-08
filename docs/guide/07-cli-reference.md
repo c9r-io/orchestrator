@@ -4,28 +4,22 @@ Quick-reference for all Agent Orchestrator CLI commands.
 
 ## Entry Points
 
-| Mode | Command | Description |
-|------|---------|-------------|
-| Standalone | `orchestrator <command>` | Legacy monolithic CLI |
-| C/S Daemon | `./target/release/orchestratord [flags]` | gRPC server + embedded workers |
-| C/S Client | `./target/release/orchestrator <command>` | Lightweight gRPC client |
+| Binary | Description |
+|--------|-------------|
+| `orchestratord` | gRPC daemon — server + embedded workers |
+| `orchestrator` | CLI client — lightweight gRPC calls over Unix socket |
 
-**Standalone mode** runs everything in-process. **C/S mode** separates the daemon (state, DB, workers) from the CLI client (thin gRPC calls over Unix socket).
+The daemon holds all state (engine, DB, task queue). The CLI is a thin RPC client.
 
 ## Global Options
 
 | Flag | Description |
 |------|-------------|
 | `-v, --verbose` | Enable verbose output |
-| `--log-level <LEVEL>` | Override log level: `error`, `warn`, `info`, `debug`, `trace` |
-| `--log-format <FORMAT>` | Console log format: `pretty`, `json` |
-| `--unsafe` | Bypass all `--force` gates and override runner policy to Unsafe |
 | `-h, --help` | Print help |
 | `-V, --version` | Print version |
 
 ## Command Aliases
-
-Several commands have short aliases for convenience:
 
 | Command | Alias |
 |---------|-------|
@@ -38,12 +32,10 @@ Several commands have short aliases for convenience:
 | `task create` | `task new` |
 | `task info` | `task get` |
 | `task logs` | `task log` |
-| `workspace` | `ws` |
-| `manifest` | `m` |
-| `edit` | `e` |
-| `completion` | `comp` |
-| `config` | `cfg` |
+| `task delete` | `task rm` |
+| `project` | `proj` |
 | `check` | `ck` |
+| `debug` | `dbg` |
 | `store list` | `store ls` |
 
 ## Initialization & Configuration
@@ -97,8 +89,8 @@ orchestrator get workflows
 orchestrator get agents -o json
 orchestrator get agents -o yaml
 
-# Label selector
-orchestrator get workspaces -l env=dev,team=platform
+# Project-scoped query
+orchestrator get agents --project my-project
 ```
 
 ### describe
@@ -106,9 +98,11 @@ orchestrator get workspaces -l env=dev,team=platform
 Detailed view of a single resource.
 
 ```bash
-orchestrator describe workspace default
-orchestrator describe agent coder
-orchestrator describe workflow self-bootstrap
+orchestrator describe workspace/default
+orchestrator describe agent/coder
+
+# Project-scoped
+orchestrator describe agent/my-agent --project my-project
 ```
 
 ### delete
@@ -116,27 +110,11 @@ orchestrator describe workflow self-bootstrap
 Delete a resource by kind/name.
 
 ```bash
-orchestrator delete workspace my-ws
-orchestrator delete agent old-agent
-```
+orchestrator delete workspace/my-ws --force
+orchestrator delete agent/old-agent --force
 
-## Workspace
-
-```bash
-orchestrator workspace info default          # positional arg
-orchestrator workspace create --help
-```
-
-## Agent
-
-```bash
-orchestrator agent create --help
-```
-
-## Workflow
-
-```bash
-orchestrator workflow create --help
+# Project-scoped
+orchestrator delete agent/old --force --project my-project
 ```
 
 ## Task Lifecycle
@@ -169,6 +147,7 @@ orchestrator task create \
 ```bash
 orchestrator task list
 orchestrator task list -o json
+orchestrator task list --project my-project    # filter by project
 
 orchestrator task info <task_id>
 orchestrator task info <task_id> -o yaml
@@ -205,63 +184,17 @@ Retry a failed task item.
 orchestrator task retry <task_id> --item <item_id> --force
 ```
 
-### task edit
-
-Insert a step into a running task's execution plan.
-
-```bash
-orchestrator task edit --help
-```
-
 ### task delete
 
 ```bash
-orchestrator task delete <task_id>
+orchestrator task delete <task_id> --force
 ```
 
-### task worker (standalone mode)
-
-Background worker for processing detached tasks (standalone mode only).
+## Manifest
 
 ```bash
-orchestrator task worker start
-orchestrator task worker start --poll-ms 500 --workers 3
-orchestrator task worker stop
-orchestrator task worker status
-```
-
-> **C/S mode**: Workers are embedded in the daemon. Use `orchestratord --workers N` instead. No separate worker command is needed.
-
-### task session
-
-Session management for attached task execution.
-
-```bash
-orchestrator task session list
-orchestrator task session info <session_id>
-orchestrator task session close <session_id>
-```
-
-## Exec
-
-Execute a command in a task step context.
-
-```bash
-orchestrator exec --help
-
-# Interactive mode
-orchestrator exec -it <task_id> <step_id>
-```
-
-## Manifest & Edit
-
-```bash
-# Export all config as YAML
-orchestrator manifest export
-
-# Edit a resource interactively (opens $EDITOR)
-orchestrator edit workspace default
-orchestrator edit workflow self-bootstrap
+# Validate a manifest file
+orchestrator manifest validate -f manifest.yaml
 ```
 
 ## Database
@@ -276,12 +209,20 @@ orchestrator db reset --force --include-config
 
 ## Project Management
 
+Project isolation is native — use `--project` on `apply`, `get`, `describe`, `delete`, `task create`, `task list`, and `store` commands.
+
 ```bash
-# Reset a project (isolated — does not affect other projects)
+# Apply resources to a project scope
+orchestrator apply -f manifest.yaml --project my-project
+
+# Query project-scoped resources
+orchestrator get agents --project my-project
+
+# Reset a project's task data (tasks, items, runs, events)
 orchestrator project reset <project> --force
 
-# QA doctor — validate concurrency guardrails
-orchestrator qa doctor
+# Reset + remove project entry from configuration
+orchestrator project reset <project> --force --include-config
 ```
 
 ## Persistent Store
@@ -292,32 +233,20 @@ orchestrator store put <store_name> <key> <value>
 orchestrator store delete <store_name> <key>
 orchestrator store list <store_name>
 orchestrator store prune <store_name>
+
+# Project-scoped store
+orchestrator store get <store_name> <key> --project my-project
+orchestrator store put <store_name> <key> <value> --project my-project
 ```
 
-## Config Lifecycle
+## Debug & System
 
 ```bash
-# Show self-heal audit log
-orchestrator config heal-log
-
-# Backfill missing step_scope in legacy events
-orchestrator config backfill-events --force
-```
-
-## Debug & Verify
-
-```bash
-orchestrator debug           # inspect internal state
-orchestrator verify          # run verification checks
-orchestrator version         # build version + git hash
-```
-
-## Shell Completion
-
-```bash
-# Generate completions (bash/zsh/fish)
-orchestrator completion bash > ~/.bash_completion.d/orchestrator
-orchestrator completion zsh > ~/.zfunc/_orchestrator
+orchestrator debug                   # inspect internal state
+orchestrator debug --component config  # show active config
+orchestrator version                 # build version + git hash
+orchestrator check                   # preflight validation
+orchestrator check -o json           # structured check output
 ```
 
 ## Output Formats
@@ -369,40 +298,45 @@ Files created:
 
 ### C/S CLI command surface
 
-All commands below connect to the daemon via Unix socket:
+All commands connect to the daemon via Unix socket:
 
 ```bash
-# Resource management
-./target/release/orchestrator apply -f manifest.yaml
-./target/release/orchestrator apply -f - < manifest.yaml
-./target/release/orchestrator apply -f manifest.yaml --dry-run
-./target/release/orchestrator get workspaces -o json
-./target/release/orchestrator describe workspace/default -o yaml
-./target/release/orchestrator delete workspace/old --force
+# Resource management (--project for project scope)
+orchestrator apply -f manifest.yaml [--project <id>] [--dry-run]
+orchestrator get <resource> [-o json|yaml] [--project <id>]
+orchestrator describe <kind/name> [--project <id>]
+orchestrator delete <kind/name> --force [--project <id>]
 
 # Task lifecycle
-./target/release/orchestrator task create --name "test" --goal "goal" --detach
-./target/release/orchestrator task list -o json
-./target/release/orchestrator task info <task_id>
-./target/release/orchestrator task start <task_id> --detach
-./target/release/orchestrator task pause <task_id>
-./target/release/orchestrator task resume <task_id>
-./target/release/orchestrator task logs <task_id> --tail 50
-./target/release/orchestrator task logs <task_id> --follow
-./target/release/orchestrator task delete <task_id> --force
-./target/release/orchestrator task retry <item_id> --force
+orchestrator task create --name X --goal Y [--project <id>] [--workflow Z] [--detach]
+orchestrator task list [-o json] [--project <id>] [--status <s>]
+orchestrator task info <id> [-o json]
+orchestrator task start <id> [--detach]
+orchestrator task pause <id>
+orchestrator task resume <id> [--detach]
+orchestrator task logs <id> [--tail N] [--follow]
+orchestrator task watch <id>
+orchestrator task trace <id> [--verbose]
+orchestrator task retry <item_id> [--detach] [--force]
+orchestrator task delete <id> --force
 
-# Store
-./target/release/orchestrator store put <store> <key> <value>
-./target/release/orchestrator store get <store> <key>
-./target/release/orchestrator store list <store> -o json
-./target/release/orchestrator store delete <store> <key>
-./target/release/orchestrator store prune <store>
+# Project isolation
+orchestrator project reset <id> --force [--include-config]
+
+# Store (--project for project scope)
+orchestrator store put <store> <key> <value> [--project <id>]
+orchestrator store get <store> <key> [--project <id>]
+orchestrator store list <store> [-o json] [--project <id>]
+orchestrator store delete <store> <key> [--project <id>]
+orchestrator store prune <store> [--project <id>]
 
 # System
-./target/release/orchestrator version
-./target/release/orchestrator debug --component config
-./target/release/orchestrator check -o json
+orchestrator version
+orchestrator debug [--component config]
+orchestrator check [-o json] [--workflow <w>]
+orchestrator init [<root>]
+orchestrator db reset --force [--include-history] [--include-config]
+orchestrator manifest validate -f <file>
 ```
 
 ## Structured Agent Output

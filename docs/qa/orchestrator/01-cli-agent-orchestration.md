@@ -54,7 +54,7 @@ agents:
    orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml
    orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply --project "${QA_PROJECT}" --force
+   orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml --project "${QA_PROJECT}"
    ```
 
 ### Goal
@@ -95,7 +95,7 @@ Validate task creation and execution with mock bash agent completes successfully
 
 ### Preconditions
 
-- Project scaffold is freshly recreated before running this scenario: `project reset` + `rm -rf "workspace/${QA_PROJECT}"` + `apply --project --force`
+- Project scaffold is freshly recreated before running this scenario: `project reset` + `rm -rf "workspace/${QA_PROJECT}"` + `apply -f <fixture> --project`
 - At least one task exists in the system
 
 ### Goal

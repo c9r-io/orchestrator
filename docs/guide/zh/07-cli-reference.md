@@ -4,28 +4,22 @@ Agent Orchestrator CLI 全部命令速查。
 
 ## 入口
 
-| 模式 | 命令 | 说明 |
-|------|------|------|
-| 单体 | `orchestrator <command>` | 传统单进程 CLI |
-| C/S 守护进程 | `./target/release/orchestratord [flags]` | gRPC 服务端 + 内嵌工作器 |
-| C/S 客户端 | `./target/release/orchestrator <command>` | 轻量 gRPC 客户端 |
+| 二进制 | 说明 |
+|--------|------|
+| `orchestratord` | gRPC 守护进程 — 服务端 + 内嵌工作器 |
+| `orchestrator` | CLI 客户端 — 通过 Unix 套接字的轻量 gRPC 调用 |
 
-**单体模式**在单进程中运行一切。**C/S 模式**将守护进程（状态、数据库、工作器）与 CLI 客户端（通过 Unix 套接字的 gRPC 调用）分离。
+守护进程持有所有状态（引擎、数据库、任务队列）。CLI 是一个轻量级 RPC 客户端。
 
 ## 全局选项
 
 | 标志 | 说明 |
 |------|------|
 | `-v, --verbose` | 启用详细输出 |
-| `--log-level <LEVEL>` | 覆盖日志级别：`error`、`warn`、`info`、`debug`、`trace` |
-| `--log-format <FORMAT>` | 控制台日志格式：`pretty`、`json` |
-| `--unsafe` | 绕过所有 `--force` 门控并将运行器策略覆盖为 Unsafe |
 | `-h, --help` | 打印帮助 |
 | `-V, --version` | 打印版本 |
 
 ## 命令别名
-
-多个命令提供简短别名：
 
 | 命令 | 别名 |
 |------|------|
@@ -38,12 +32,10 @@ Agent Orchestrator CLI 全部命令速查。
 | `task create` | `task new` |
 | `task info` | `task get` |
 | `task logs` | `task log` |
-| `workspace` | `ws` |
-| `manifest` | `m` |
-| `edit` | `e` |
-| `completion` | `comp` |
-| `config` | `cfg` |
+| `task delete` | `task rm` |
+| `project` | `proj` |
 | `check` | `ck` |
+| `debug` | `dbg` |
 | `store list` | `store ls` |
 
 ## 初始化与配置
@@ -97,8 +89,8 @@ orchestrator get workflows
 orchestrator get agents -o json
 orchestrator get agents -o yaml
 
-# 标签选择器
-orchestrator get workspaces -l env=dev,team=platform
+# 项目作用域查询
+orchestrator get agents --project my-project
 ```
 
 ### describe
@@ -106,9 +98,11 @@ orchestrator get workspaces -l env=dev,team=platform
 单个资源的详细视图。
 
 ```bash
-orchestrator describe workspace default
-orchestrator describe agent coder
-orchestrator describe workflow self-bootstrap
+orchestrator describe workspace/default
+orchestrator describe agent/coder
+
+# 项目作用域
+orchestrator describe agent/my-agent --project my-project
 ```
 
 ### delete
@@ -116,27 +110,11 @@ orchestrator describe workflow self-bootstrap
 按 kind/name 删除资源。
 
 ```bash
-orchestrator delete workspace my-ws
-orchestrator delete agent old-agent
-```
+orchestrator delete workspace/my-ws --force
+orchestrator delete agent/old-agent --force
 
-## 工作区
-
-```bash
-orchestrator workspace info default          # 位置参数
-orchestrator workspace create --help
-```
-
-## 代理
-
-```bash
-orchestrator agent create --help
-```
-
-## 工作流
-
-```bash
-orchestrator workflow create --help
+# 项目作用域
+orchestrator delete agent/old --force --project my-project
 ```
 
 ## 任务生命周期
@@ -169,6 +147,7 @@ orchestrator task create \
 ```bash
 orchestrator task list
 orchestrator task list -o json
+orchestrator task list --project my-project    # 按项目筛选
 
 orchestrator task info <task_id>
 orchestrator task info <task_id> -o yaml
@@ -205,63 +184,17 @@ orchestrator task trace <task_id>
 orchestrator task retry <task_id> --item <item_id> --force
 ```
 
-### task edit
-
-向运行中任务的执行计划插入步骤。
-
-```bash
-orchestrator task edit --help
-```
-
 ### task delete
 
 ```bash
-orchestrator task delete <task_id>
+orchestrator task delete <task_id> --force
 ```
 
-### task worker（单体模式）
-
-处理分离任务的后台工作器（仅限单体模式）。
+## 清单
 
 ```bash
-orchestrator task worker start
-orchestrator task worker start --poll-ms 500 --workers 3
-orchestrator task worker stop
-orchestrator task worker status
-```
-
-> **C/S 模式**：工作器内嵌于守护进程。使用 `orchestratord --workers N` 替代，无需单独的 worker 命令。
-
-### task session
-
-附加任务执行的会话管理。
-
-```bash
-orchestrator task session list
-orchestrator task session info <session_id>
-orchestrator task session close <session_id>
-```
-
-## Exec
-
-在任务步骤上下文中执行命令。
-
-```bash
-orchestrator exec --help
-
-# 交互模式
-orchestrator exec -it <task_id> <step_id>
-```
-
-## 清单与编辑
-
-```bash
-# 导出所有配置为 YAML
-orchestrator manifest export
-
-# 交互式编辑资源（打开 $EDITOR）
-orchestrator edit workspace default
-orchestrator edit workflow self-bootstrap
+# 验证清单文件
+orchestrator manifest validate -f manifest.yaml
 ```
 
 ## 数据库
@@ -276,12 +209,20 @@ orchestrator db reset --force --include-config
 
 ## 项目管理
 
+项目隔离是原生功能 — 在 `apply`、`get`、`describe`、`delete`、`task create`、`task list` 和 `store` 命令上使用 `--project`。
+
 ```bash
-# 重置项目（隔离的 —— 不影响其他项目）
+# 将资源应用到项目作用域
+orchestrator apply -f manifest.yaml --project my-project
+
+# 查询项目作用域资源
+orchestrator get agents --project my-project
+
+# 重置项目的任务数据（任务、项目、运行、事件）
 orchestrator project reset <project> --force
 
-# QA 诊断 —— 验证并发保护措施
-orchestrator qa doctor
+# 重置并从配置中移除项目条目
+orchestrator project reset <project> --force --include-config
 ```
 
 ## 持久化存储
@@ -292,32 +233,20 @@ orchestrator store put <store_name> <key> <value>
 orchestrator store delete <store_name> <key>
 orchestrator store list <store_name>
 orchestrator store prune <store_name>
+
+# 项目作用域存储
+orchestrator store get <store_name> <key> --project my-project
+orchestrator store put <store_name> <key> <value> --project my-project
 ```
 
-## 配置生命周期
+## 调试与系统
 
 ```bash
-# 显示自修复审计日志
-orchestrator config heal-log
-
-# 回填旧事件中缺失的 step_scope
-orchestrator config backfill-events --force
-```
-
-## 调试与验证
-
-```bash
-orchestrator debug           # 检查内部状态
-orchestrator verify          # 运行验证检查
-orchestrator version         # 构建版本 + git 哈希
-```
-
-## Shell 补全
-
-```bash
-# 生成补全脚本（bash/zsh/fish）
-orchestrator completion bash > ~/.bash_completion.d/orchestrator
-orchestrator completion zsh > ~/.zfunc/_orchestrator
+orchestrator debug                   # 检查内部状态
+orchestrator debug --component config  # 显示活跃配置
+orchestrator version                 # 构建版本 + git 哈希
+orchestrator check                   # 预检验证
+orchestrator check -o json           # 结构化检查输出
 ```
 
 ## 输出格式
@@ -364,32 +293,45 @@ orchestrator completion zsh > ~/.zfunc/_orchestrator
 
 ### C/S CLI 命令列表
 
-以下命令通过 Unix 套接字连接守护进程：
+所有命令通过 Unix 套接字连接守护进程：
 
 ```bash
-# 资源管理
-./target/release/orchestrator apply -f manifest.yaml
-./target/release/orchestrator get workspaces -o json
-./target/release/orchestrator describe workspace/default -o yaml
-./target/release/orchestrator delete workspace/old --force
+# 资源管理（--project 用于项目作用域）
+orchestrator apply -f manifest.yaml [--project <id>] [--dry-run]
+orchestrator get <resource> [-o json|yaml] [--project <id>]
+orchestrator describe <kind/name> [--project <id>]
+orchestrator delete <kind/name> --force [--project <id>]
 
 # 任务生命周期
-./target/release/orchestrator task create --name "test" --goal "goal" --detach
-./target/release/orchestrator task list -o json
-./target/release/orchestrator task info <task_id>
-./target/release/orchestrator task start <task_id> --detach
-./target/release/orchestrator task pause <task_id>
-./target/release/orchestrator task logs <task_id> --tail 50
+orchestrator task create --name X --goal Y [--project <id>] [--workflow Z] [--detach]
+orchestrator task list [-o json] [--project <id>] [--status <s>]
+orchestrator task info <id> [-o json]
+orchestrator task start <id> [--detach]
+orchestrator task pause <id>
+orchestrator task resume <id> [--detach]
+orchestrator task logs <id> [--tail N] [--follow]
+orchestrator task watch <id>
+orchestrator task trace <id> [--verbose]
+orchestrator task retry <item_id> [--detach] [--force]
+orchestrator task delete <id> --force
 
-# 持久化存储
-./target/release/orchestrator store put <store> <key> <value>
-./target/release/orchestrator store get <store> <key>
-./target/release/orchestrator store list <store> -o json
+# 项目隔离
+orchestrator project reset <id> --force [--include-config]
+
+# 存储（--project 用于项目作用域）
+orchestrator store put <store> <key> <value> [--project <id>]
+orchestrator store get <store> <key> [--project <id>]
+orchestrator store list <store> [-o json] [--project <id>]
+orchestrator store delete <store> <key> [--project <id>]
+orchestrator store prune <store> [--project <id>]
 
 # 系统
-./target/release/orchestrator version
-./target/release/orchestrator debug --component config
-./target/release/orchestrator check -o json
+orchestrator version
+orchestrator debug [--component config]
+orchestrator check [-o json] [--workflow <w>]
+orchestrator init [<root>]
+orchestrator db reset --force [--include-history] [--include-config]
+orchestrator manifest validate -f <file>
 ```
 
 ## 结构化代理输出

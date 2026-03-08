@@ -72,7 +72,7 @@ Verify that plan and implement steps execute exactly once per cycle, regardless 
    orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml
    orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply --project "${QA_PROJECT}" --force
+   orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml --project "${QA_PROJECT}"
    ```
 
 2. Create a task targeting multiple QA files:

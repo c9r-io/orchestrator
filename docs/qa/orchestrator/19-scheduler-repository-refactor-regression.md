@@ -66,7 +66,7 @@ Ensure summary timestamps are sourced from `tasks.created_at` and `tasks.updated
    orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml
    orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply --project "${QA_PROJECT}" --force
+   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
    ```
 2. Create task without auto-start:
    ```bash

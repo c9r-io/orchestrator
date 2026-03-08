@@ -112,7 +112,7 @@ pub fn reset_db_by_path(db_path: &Path, include_history: bool, include_config: b
     if active_count > 0 {
         anyhow::bail!(
             "db reset blocked: {} active task(s) with status running/restart_pending. \
-             Use `qa project reset <project> --force` for project-scoped cleanup instead.",
+             Use `project reset <project> --force` for project-scoped cleanup instead.",
             active_count
         );
     }

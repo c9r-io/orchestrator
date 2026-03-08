@@ -39,7 +39,7 @@ Entry point: `orchestrator <command>`
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
    orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply --project "${QA_PROJECT}" --force
+   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
    orchestrator init
    ```
 
@@ -73,7 +73,7 @@ Entry point: `orchestrator <command>`
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
    orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply --project "${QA_PROJECT}" --force
+   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
    orchestrator init
    orchestrator workspace list
    ```

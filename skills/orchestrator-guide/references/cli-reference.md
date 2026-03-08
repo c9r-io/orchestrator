@@ -32,12 +32,13 @@
 | task | t |
 | task list | task ls |
 | task create | task new |
-| workspace | ws |
-| manifest | m |
-| edit | e |
-| config | cfg |
+| task info | task get |
+| task logs | task log |
+| task delete | task rm |
+| project | proj |
 | check | ck |
-| daemon | d |
+| debug | dbg |
+| store list | store ls |
 
 ## Daemon Lifecycle
 
@@ -79,11 +80,11 @@ cat manifest.yaml | orchestrator manifest validate -f -
 orchestrator get workspaces
 orchestrator get agents -o json
 orchestrator get workflows -o yaml
-orchestrator get workspaces -l env=dev
-orchestrator describe workspace default
-orchestrator delete agent old-agent
-orchestrator manifest export
-orchestrator edit workspace default
+orchestrator get agents --project my-project   # project-scoped
+orchestrator describe workspace/default
+orchestrator describe agent/coder --project my-project
+orchestrator delete agent/old-agent --force
+orchestrator delete agent/old --force --project my-project
 orchestrator check
 ```
 
@@ -103,21 +104,18 @@ orchestrator task start <id>
 orchestrator task start <id> --detach
 orchestrator task pause <id>
 orchestrator task resume <id>
-orchestrator task retry <id> --item <item_id> --force
+orchestrator task retry <item_id> --force
 
 # Inspect
 orchestrator task list -o json
+orchestrator task list --project my-project    # filter by project
 orchestrator task info <id> -o yaml
 orchestrator task logs <id>
 orchestrator task watch <id>
 orchestrator task trace <id>
 
-# Other
-orchestrator task delete <id>
-orchestrator task edit --help
-orchestrator task worker start
-orchestrator task session list
-orchestrator exec -it <task_id> <step_id>
+# Delete
+orchestrator task delete <id> --force
 ```
 
 ## Persistent Store
@@ -128,27 +126,31 @@ orchestrator store get <store> <key>
 orchestrator store list <store>
 orchestrator store delete <store> <key>
 orchestrator store prune <store>
+
+# Project-scoped store
+orchestrator store get <store> <key> --project my-project
+orchestrator store put <store> <key> <value> --project my-project
 ```
 
-## QA & Database
+## Project & Database
 
 ```bash
 # Project-scoped reset (safe, isolated)
 orchestrator project reset <project> --force
-orchestrator qa doctor
+orchestrator project reset <project> --force --include-config
 
 # Database reset (DESTRUCTIVE)
 orchestrator db reset --force
 orchestrator db reset --force --include-config
 ```
 
-## Other Commands
+## System Commands
 
 ```bash
 orchestrator debug
-orchestrator verify
+orchestrator debug --component config
 orchestrator version
-orchestrator config heal-log
-orchestrator config backfill-events --force
-orchestrator completion bash > ~/.bash_completion.d/orchestrator
+orchestrator check
+orchestrator check -o json
+orchestrator manifest validate -f manifest.yaml
 ```

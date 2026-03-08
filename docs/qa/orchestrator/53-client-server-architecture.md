@@ -157,7 +157,7 @@ Verify CLI client connects to daemon over UDS and basic RPC round-trips work.
 ### Preconditions
 - Daemon running with at least 1 embedded worker (`--workers 1`).
 - Config applied with a valid workspace and workflow.
-- A QA project created for isolation: `./target/release/orchestrator apply --project cs-qa --force`
+- A QA project created for isolation: `./target/release/orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project cs-qa`
 
 ### Goal
 Verify task lifecycle (create, list, info, start, pause, delete) works through gRPC.
@@ -223,7 +223,7 @@ SELECT id, status FROM tasks WHERE id = '{task_id}';
 
 ### Preconditions
 - Daemon running with multiple workers (`--workers 3`).
-- A QA project created for isolation: `./target/release/orchestrator apply --project cs-qa --force`
+- A QA project created for isolation: `./target/release/orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project cs-qa`
 
 ### Goal
 Verify embedded daemon workers consume pending tasks concurrently and atomically.

@@ -90,7 +90,7 @@ Ensure run-phase command execution is denied by runner policy before process spa
    QA_PROJECT="qa-runner-deny"
    orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply --project "${QA_PROJECT}" --force
+   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
    cat > /tmp/runner-policy-deny.yaml << 'YAML'
    runner:
      policy: allowlist

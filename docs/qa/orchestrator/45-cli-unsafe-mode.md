@@ -51,7 +51,7 @@ Verify `--unsafe` bypasses the `--force` gate on a project-scoped destructive co
    QA_PROJECT="qa-unsafe-force-$(date +%s)"
    orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply --project "${QA_PROJECT}" --force
+   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
    ```
 
 2. Run a force-gated command (`project reset`) with `--unsafe` but without `--force`:
@@ -84,7 +84,7 @@ Verify `--unsafe` overrides the manifest's `policy: allowlist` to `Unsafe` at ru
    QA_PROJECT="qa-unsafe-override"
    orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply --project "${QA_PROJECT}" --force
+   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
    cat > /tmp/runner-allowlist-strict.yaml << 'YAML'
    runner:
      policy: allowlist

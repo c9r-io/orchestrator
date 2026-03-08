@@ -37,7 +37,7 @@ QA_PROJECT="qa-cycle2-${USER}-$(date +%Y%m%d%H%M%S)"
 orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml
 orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
-orchestrator apply --project "${QA_PROJECT}" --force
+orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
 ```
 
 ---

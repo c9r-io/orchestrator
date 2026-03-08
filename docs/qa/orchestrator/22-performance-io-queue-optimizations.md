@@ -35,7 +35,7 @@ Entry point: `orchestrator`
    orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml
    orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply --project "${QA_PROJECT}" --force
+   orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml --project "${QA_PROJECT}"
    TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "single-persist" --goal "command run payload completeness" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    orchestrator task start "${TASK_ID}" || true
    ```

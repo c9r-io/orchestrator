@@ -38,6 +38,8 @@ orchestrator daemon restart          # stop + start
 4. `orchestrator task create --name X --goal Y --workflow Z` — create and run a task
 5. `orchestrator task info <id>` / `task logs <id>` — inspect results
 
+Use `--project <id>` on `apply`, `get`, `describe`, `delete`, `task create/list`, and `store` to scope operations to a project. Use `orchestrator project reset <id> --force` to clean up a project's task data.
+
 ## Resource Kinds
 
 All resources use `apiVersion: orchestrator.dev/v2` with `metadata.name` and `spec`.

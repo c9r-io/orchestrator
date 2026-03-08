@@ -56,7 +56,7 @@ bold "[Setup] Applying self-bootstrap-test.yaml..."
 $ORCH apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml > /dev/null 2>&1
 $ORCH project reset "${QA_PROJECT}" --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
-$ORCH apply --project "${QA_PROJECT}" --force > /dev/null 2>&1
+$ORCH apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml --project "${QA_PROJECT}" > /dev/null 2>&1
 echo ""
 
 # ============================================================
@@ -248,7 +248,7 @@ bold "[Reset] Re-applying test fixture after S5..."
 $ORCH project reset "${QA_PROJECT}" --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
 $ORCH apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml > /dev/null 2>&1
-$ORCH apply --project "${QA_PROJECT}" --force > /dev/null 2>&1
+$ORCH apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml --project "${QA_PROJECT}" > /dev/null 2>&1
 echo ""
 
 # ============================================================
