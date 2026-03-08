@@ -2,7 +2,7 @@
 
 Date baseline: 2026-02-27
 Repository: `/Volumes/Yotta/ai_native_sdlc`
-Entry CLI: `./scripts/run-cli.sh`
+Entry CLI: `orchestrator`
 
 This runbook is a **high-cost, high-confidence** extension of
 `docs/report/self-bootstrap-survival-smoke-runbook.md`.
@@ -84,7 +84,7 @@ cd /Volumes/Yotta/ai_native_sdlc
 ### 4.1 Build And Baseline
 
 ```bash
-cd core && cargo build --release && cargo check && cd ..
+cargo build --release -p orchestratord -p orchestrator-cli && cargo check -p agent-orchestrator
 ```
 
 Expected:
@@ -95,15 +95,15 @@ Expected:
 
 ```bash
 rm -f data/agent_orchestrator.db config/default.yaml
-./scripts/run-cli.sh init -f
-./scripts/run-cli.sh apply -f docs/workflow/self-bootstrap.yaml
+orchestrator init -f
+orchestrator apply -f docs/workflow/self-bootstrap.yaml
 ```
 
 ### 4.3 Create Dedicated QA Project
 
 ```bash
 QA_PROJECT="qa-llm-selfbreak-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/run-cli.sh qa project create "${QA_PROJECT}" --from-workspace self --force
+orchestrator qa project create "${QA_PROJECT}" --from-workspace self --force
 ```
 
 ---
@@ -171,21 +171,21 @@ spec:
     auto_rollback: true
 YAML
 
-./scripts/run-cli.sh apply -f /tmp/smoke-llm-selfbreak.yaml
+orchestrator apply -f /tmp/smoke-llm-selfbreak.yaml
 ```
 
 ### 5.2 Create And Start The Destructive Validation Task
 
 ```bash
-./scripts/run-cli.sh task create --project "${QA_PROJECT}" \
+orchestrator task create --project "${QA_PROJECT}" \
   -n "llm-selfbreak-$(date +%s)" \
   -w self -W smoke-llm-selfbreak \
   --no-start \
   -g "LLM self-modify smoke: intentionally append compile-breaking line and let self_test catch it" \
   -t core/src/lib.rs
 
-TASK_ID=$(./scripts/run-cli.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
-./scripts/run-cli.sh task start "$TASK_ID"
+TASK_ID=$(orchestrator task list -o json | jq -r 'sort_by(.created_at) | last | .id')
+orchestrator task start "$TASK_ID"
 ```
 
 ### 5.3 Verify The Real LLM Agent Performed The Modification
@@ -258,9 +258,9 @@ Expected:
 ### 5.7 Remove Temporary Resources
 
 ```bash
-./scripts/run-cli.sh task delete "$TASK_ID" -f
-./scripts/run-cli.sh delete workflow/smoke-llm-selfbreak -f
-./scripts/run-cli.sh delete agent/smoke-llm-breaker -f
+orchestrator task delete "$TASK_ID" -f
+orchestrator delete workflow/smoke-llm-selfbreak -f
+orchestrator delete agent/smoke-llm-breaker -f
 rm -f /tmp/smoke-llm-selfbreak.yaml
 ```
 

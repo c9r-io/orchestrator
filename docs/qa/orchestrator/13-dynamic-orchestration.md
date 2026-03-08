@@ -77,7 +77,7 @@ N/A - Unit test verification
 
 3. Check DynamicStepConfig in config:
    ```bash
-   ./scripts/run-cli.sh manifest export -f /tmp/exported-config.yaml
+   orchestrator manifest export -f /tmp/exported-config.yaml
    grep -A 10 "dynamic_steps:" /tmp/exported-config.yaml
    ```
 
@@ -171,7 +171,7 @@ N/A - Unit test verification
 - Workflow config supports `adaptive:` block
 - Adaptive planner agent uses capability `adaptive_plan`
 - Deterministic fixture available: `fixtures/manifests/bundles/adaptive-runtime.yaml`
-- Database already initialized: `test -f data/agent_orchestrator.db || ./scripts/run-cli.sh init`
+- Database already initialized: `test -f data/agent_orchestrator.db || orchestrator init`
 
 ### Steps
 
@@ -193,14 +193,14 @@ N/A - Unit test verification
 3. Reset an isolated QA project and apply the adaptive fixture:
    ```bash
    QA_PROJECT=qa-adaptive-runtime
-   ./scripts/run-cli.sh qa project reset "$QA_PROJECT" --force
-   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/adaptive-runtime.yaml --project "$QA_PROJECT"
+   orchestrator qa project reset "$QA_PROJECT" --force
+   orchestrator apply -f fixtures/manifests/bundles/adaptive-runtime.yaml --project "$QA_PROJECT"
    ```
 
 4. Execute the success-path adaptive workflow inline.
    Run tasks sequentially; do not launch two `--attach` sessions in parallel against the same SQLite file.
    ```bash
-   ./scripts/run-cli.sh task create \
+   orchestrator task create \
      -n adaptive-success \
      -g "adaptive runtime success verification" \
      -p "$QA_PROJECT" \
@@ -211,7 +211,7 @@ N/A - Unit test verification
 
 5. Execute the fallback-path adaptive workflow inline:
    ```bash
-   ./scripts/run-cli.sh task create \
+   orchestrator task create \
      -n adaptive-fallback \
      -g "adaptive runtime fallback verification" \
      -p "$QA_PROJECT" \
@@ -222,7 +222,7 @@ N/A - Unit test verification
 
 6. Check workflow export contains adaptive configuration:
    ```bash
-   ./scripts/run-cli.sh manifest export -f /tmp/exported-config.yaml
+   orchestrator manifest export -f /tmp/exported-config.yaml
    grep -A 8 "adaptive:" /tmp/exported-config.yaml || true
    ```
 
@@ -285,7 +285,7 @@ N/A - Unit test verification
 Reset the isolated QA project when finished:
 ```bash
 QA_PROJECT=qa-adaptive-runtime
-./scripts/run-cli.sh qa project reset "$QA_PROJECT" --force
+orchestrator qa project reset "$QA_PROJECT" --force
 ```
 
 ---

@@ -2,7 +2,7 @@
 
 Date baseline: 2026-02-26  
 Repository: `/Volumes/Yotta/ai_native_sdlc`  
-Entry CLI: `./scripts/run-cli.sh`
+Entry CLI: `orchestrator`
 
 This document records a reproducible smoke process for orchestrator self-bootstrap and can be reused in future sessions.
 
@@ -33,18 +33,18 @@ cd /Volumes/Yotta/ai_native_sdlc
 Ensure runtime is clean:
 
 ```bash
-./scripts/run-cli.sh db reset -f --include-config --include-history
-./scripts/run-cli.sh init -f
+orchestrator db reset -f --include-config --include-history
+orchestrator init -f
 ```
 
 Apply self-bootstrap resources:
 
 ```bash
-./scripts/run-cli.sh manifest validate -f docs/workflow/self-bootstrap.yaml
-./scripts/run-cli.sh apply -f docs/workflow/self-bootstrap.yaml
-./scripts/run-cli.sh get workflow
-./scripts/run-cli.sh get agent
-./scripts/run-cli.sh get workspace
+orchestrator manifest validate -f docs/workflow/self-bootstrap.yaml
+orchestrator apply -f docs/workflow/self-bootstrap.yaml
+orchestrator get workflow
+orchestrator get agent
+orchestrator get workspace
 ```
 
 Expected key resources:
@@ -96,8 +96,8 @@ spec:
     stop_when_no_unresolved: true
 YAML
 
-./scripts/run-cli.sh manifest validate -f /tmp/self-bootstrap-smoke.yaml
-./scripts/run-cli.sh apply -f /tmp/self-bootstrap-smoke.yaml
+orchestrator manifest validate -f /tmp/self-bootstrap-smoke.yaml
+orchestrator apply -f /tmp/self-bootstrap-smoke.yaml
 ```
 
 ---
@@ -107,7 +107,7 @@ YAML
 Create task (do not auto-start):
 
 ```bash
-./scripts/run-cli.sh task create \
+orchestrator task create \
   -n self-bootstrap-smoke-final \
   -w self \
   -W self-bootstrap-smoke \
@@ -119,14 +119,14 @@ Create task (do not auto-start):
 Start task:
 
 ```bash
-./scripts/run-cli.sh task start <task_id>
+orchestrator task start <task_id>
 ```
 
 Observe:
 
 ```bash
-./scripts/run-cli.sh task info <task_id> -o json
-./scripts/run-cli.sh task logs <task_id> --tail 50
+orchestrator task info <task_id> -o json
+orchestrator task logs <task_id> --tail 50
 ```
 
 ---
@@ -234,12 +234,12 @@ Self-bootstrap model/runtime config:
 Delete smoke task:
 
 ```bash
-./scripts/run-cli.sh task delete <task_id> -f
+orchestrator task delete <task_id> -f
 ```
 
 Optional hard reset:
 
 ```bash
-./scripts/run-cli.sh db reset -f --include-config --include-history
+orchestrator db reset -f --include-config --include-history
 ```
 

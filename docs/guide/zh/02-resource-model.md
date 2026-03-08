@@ -164,43 +164,43 @@ spec:
 
 ```bash
 # 从文件
-./scripts/run-cli.sh apply -f manifest.yaml
+orchestrator apply -f manifest.yaml
 
 # 从标准输入
-cat manifest.yaml | ./scripts/run-cli.sh apply -f -
+cat manifest.yaml | orchestrator apply -f -
 
 # 试运行（仅验证不写入）
-./scripts/run-cli.sh apply -f manifest.yaml --dry-run
+orchestrator apply -f manifest.yaml --dry-run
 ```
 
 ### 查询
 
 ```bash
 # 列出资源
-./scripts/run-cli.sh get workspaces
-./scripts/run-cli.sh get agents
-./scripts/run-cli.sh get workflows
+orchestrator get workspaces
+orchestrator get agents
+orchestrator get workflows
 
 # 详情视图
-./scripts/run-cli.sh describe workspace default
-./scripts/run-cli.sh workspace info default
+orchestrator describe workspace default
+orchestrator workspace info default
 
 # 输出格式
-./scripts/run-cli.sh get agents -o json
-./scripts/run-cli.sh get agents -o yaml
+orchestrator get agents -o json
+orchestrator get agents -o yaml
 
 # 标签选择器
-./scripts/run-cli.sh get workspaces -l env=dev
+orchestrator get workspaces -l env=dev
 ```
 
 ### 导出
 
 ```bash
 # 导出所有配置为 YAML
-./scripts/run-cli.sh manifest export
+orchestrator manifest export
 
 # 交互式编辑
-./scripts/run-cli.sh edit workspace default
+orchestrator edit workspace default
 ```
 
 ## 多文档清单
@@ -245,7 +245,7 @@ spec:
 然后一次性应用：
 
 ```bash
-./scripts/run-cli.sh apply -f everything-in-one.yaml
+orchestrator apply -f everything-in-one.yaml
 ```
 
 ## 下一步

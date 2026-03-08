@@ -16,7 +16,7 @@ This document focuses on interaction simulation approaches for `exec -it`:
 - non-tty guard behavior for `-it`
 - reusable automation script under `docs/qa/script/`
 
-Entry point: `./scripts/run-cli.sh`
+Entry point: `orchestrator`
 
 ---
 
@@ -31,8 +31,8 @@ Entry point: `./scripts/run-cli.sh`
 
 1. Build and initialize:
    ```bash
-   (cd core && cargo build --release)
-   ./scripts/run-cli.sh init --force
+   cargo build --release -p orchestratord -p orchestrator-cli
+   orchestrator init --force
    ```
 2. Execute reusable script setup:
    ```bash
@@ -65,7 +65,7 @@ WHERE workflow_id = 'exec_interactive_flow';
 1. Resolve `task_id` and `plan step id` from latest script output.
 2. Run:
    ```bash
-   printf 'sim-tty-input\n' | ./scripts/run-cli.sh exec -it task/{task_id}/step/{plan_step_id} -- cat
+   printf 'sim-tty-input\n' | orchestrator exec -it task/{task_id}/step/{plan_step_id} -- cat
    ```
 
 ### Expected
@@ -93,7 +93,7 @@ WHERE id = '{task_id}';
 
 1. Run:
    ```bash
-   cat <<'EOF' | ./scripts/run-cli.sh exec -it task/{task_id}/step/{plan_step_id} -- /bin/bash
+   cat <<'EOF' | orchestrator exec -it task/{task_id}/step/{plan_step_id} -- /bin/bash
    echo SIM-HEREDOC
    exit
    EOF
@@ -125,7 +125,7 @@ WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
 
 1. Run:
    ```bash
-   ./scripts/run-cli.sh exec -it task/{task_id}/step/qa -- cat
+   orchestrator exec -it task/{task_id}/step/qa -- cat
    ```
 
 ### Expected

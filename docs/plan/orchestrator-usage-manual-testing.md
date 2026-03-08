@@ -2,11 +2,7 @@
 
 This document is a practical, copy-paste oriented guide for manually testing the orchestrator from CLI.
 
-Entry point:
-
-```bash
-./scripts/run-cli.sh
-```
+Entry point: `orchestrator` (CLI client) + `orchestratord` (daemon).
 
 ---
 
@@ -16,13 +12,21 @@ Run from repository root:
 
 ```bash
 cd /Volumes/Yotta/ai_native_sdlc
+cargo build --release -p orchestratord -p orchestrator-cli
+```
+
+Start the daemon:
+
+```bash
+orchestrator daemon start
+orchestrator daemon status
 ```
 
 Verify CLI surface:
 
 ```bash
-./scripts/run-cli.sh --help
-./scripts/run-cli.sh task --help
+orchestrator --help
+orchestrator task --help
 ```
 
 ---
@@ -30,8 +34,8 @@ Verify CLI surface:
 ## 2. Clean Runtime State
 
 ```bash
-./scripts/run-cli.sh db reset -f --include-config --include-history
-./scripts/run-cli.sh init -f
+orchestrator db reset -f --include-config --include-history
+orchestrator init -f
 ```
 
 Runtime data locations:
@@ -43,11 +47,11 @@ Runtime data locations:
 ## 3. Apply Self-Bootstrap Workflow
 
 ```bash
-./scripts/run-cli.sh manifest validate -f docs/workflow/self-bootstrap.yaml
-./scripts/run-cli.sh apply -f docs/workflow/self-bootstrap.yaml
-./scripts/run-cli.sh get workflow
-./scripts/run-cli.sh get agent
-./scripts/run-cli.sh get workspace
+orchestrator manifest validate -f docs/workflow/self-bootstrap.yaml
+orchestrator apply -f docs/workflow/self-bootstrap.yaml
+orchestrator get workflow
+orchestrator get agent
+orchestrator get workspace
 ```
 
 Expected:
@@ -99,8 +103,8 @@ spec:
     stop_when_no_unresolved: true
 YAML
 
-./scripts/run-cli.sh manifest validate -f /tmp/self-bootstrap-smoke.yaml
-./scripts/run-cli.sh apply -f /tmp/self-bootstrap-smoke.yaml
+orchestrator manifest validate -f /tmp/self-bootstrap-smoke.yaml
+orchestrator apply -f /tmp/self-bootstrap-smoke.yaml
 ```
 
 ---
@@ -115,7 +119,7 @@ Important:
 Create task without auto start:
 
 ```bash
-./scripts/run-cli.sh task create \
+orchestrator task create \
   -n self-bootstrap-manual \
   -w self \
   -W self-bootstrap-smoke \
@@ -127,20 +131,20 @@ Create task without auto start:
 Start task:
 
 ```bash
-./scripts/run-cli.sh task start <task_id>
+orchestrator task start <task_id>
 ```
 
 Watch summary:
 
 ```bash
-./scripts/run-cli.sh task list -o json
-./scripts/run-cli.sh task info <task_id> -o json
+orchestrator task list -o json
+orchestrator task info <task_id> -o json
 ```
 
 Watch logs:
 
 ```bash
-./scripts/run-cli.sh task logs <task_id> --tail 50
+orchestrator task logs <task_id> --tail 50
 ```
 
 ---
@@ -236,11 +240,11 @@ LIMIT 1;"
 Delete a task:
 
 ```bash
-./scripts/run-cli.sh task delete <task_id> -f
+orchestrator task delete <task_id> -f
 ```
 
 Reset DB/config:
 
 ```bash
-./scripts/run-cli.sh db reset -f --include-config --include-history
+orchestrator db reset -f --include-config --include-history
 ```

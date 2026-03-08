@@ -12,7 +12,7 @@
 The `self-bootstrap` workflow in `fixtures/manifests/bundles/self-bootstrap-mock.yaml` runs in fixed two-cycle mode:
 
 ```text
-Cycle 1: plan -> qa_doc_gen -> implement -> self_test -> self_restart (rebuild + exit 75 → relaunch)
+Cycle 1: plan -> qa_doc_gen -> implement -> self_test -> self_restart (rebuild + exec() hot reload)
 Cycle 2: implement -> self_test -> [self_restart skipped: repeatable=false] -> qa_testing -> ticket_fix(if tickets) -> align_tests -> doc_governance
 ```
 
@@ -30,15 +30,14 @@ Reusable automation:
 ### Common Preconditions
 
 ```bash
-cd core && cargo build --release
-cd ..
-test -f data/agent_orchestrator.db || ./scripts/run-cli.sh init
+cargo build --release -p orchestratord -p orchestrator-cli
+test -f data/agent_orchestrator.db || orchestrator init
 
 QA_PROJECT="qa-cycle2-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/run-cli.sh apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml
-./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml
+orchestrator qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
-./scripts/run-cli.sh qa project create "${QA_PROJECT}" --force
+orchestrator qa project create "${QA_PROJECT}" --force
 ```
 
 ---
@@ -51,12 +50,12 @@ rm -rf "workspace/${QA_PROJECT}"
 ### Steps
 1. Create and start a `self-bootstrap` task:
    ```bash
-   TASK_ID=$(./scripts/run-cli.sh task create --project "${QA_PROJECT}" --workflow self-bootstrap --target-file docs/qa/self-bootstrap/04-cycle2-validation-and-runtime-timestamps.md --goal "verify cycle2 validation chain" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/run-cli.sh task start "${TASK_ID}"
+   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --workflow self-bootstrap --target-file docs/qa/self-bootstrap/04-cycle2-validation-and-runtime-timestamps.md --goal "verify cycle2 validation chain" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   orchestrator task start "${TASK_ID}"
    ```
 2. Confirm the task reaches a terminal state:
    ```bash
-   ./scripts/run-cli.sh task info "${TASK_ID}" -o json | jq '.task.status'
+   orchestrator task info "${TASK_ID}" -o json | jq '.task.status'
    ```
 3. Query persisted events for the final-cycle validation chain:
    ```bash
@@ -106,7 +105,7 @@ WHERE task_id = '{task_id}'
 ### Steps
 1. Inspect task-level timestamps:
    ```bash
-   ./scripts/run-cli.sh task info "${TASK_ID}" -o json | jq '{task: .task | {status, started_at, completed_at}, items: [.items[] | {id, status, started_at, completed_at}]}'
+   orchestrator task info "${TASK_ID}" -o json | jq '{task: .task | {status, started_at, completed_at}, items: [.items[] | {id, status, started_at, completed_at}]}'
    ```
 2. Query SQLite directly for the same fields:
    ```bash

@@ -9,7 +9,12 @@
 
 ## Background
 
-The `self_restart` step extends the self-bootstrap survival mechanism with a 5th layer: after `self_test` passes, the orchestrator rebuilds its own binary, verifies it, snapshots `.stable`, sets the task to `restart_pending`, and exits with code 75. The daemon's foreground mode (`orchestrator daemon start -f`) detects exit 75 and relaunches the new binary, which auto-claims the `restart_pending` task and resumes the loop.
+The `self_restart` step extends the self-bootstrap survival mechanism with a 5th layer: after `self_test` passes, the orchestrator rebuilds its own binary (`cargo build --release -p orchestratord`), verifies it (`--help`), snapshots `.stable`, and sets the task to `restart_pending`. The daemon then restarts using one of two paths:
+
+- **Primary (daemon mode)**: The worker signals `RestartRequestedError`, the daemon drains workers (30s timeout), then calls `exec()` to replace itself in-place (preserving PID and connections).
+- **Fallback (CLI foreground mode)**: If exec fails, or when using `orchestrator daemon start -f`, the process exits with code 75 and the CLI restart loop relaunches the new binary.
+
+In both paths, the new process auto-claims the `restart_pending` task and resumes the loop.
 
 Key functions:
 - `execute_self_restart_step()` in `core/src/scheduler/safety.rs`

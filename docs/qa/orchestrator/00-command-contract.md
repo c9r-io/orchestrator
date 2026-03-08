@@ -14,7 +14,7 @@ All files under `docs/qa/orchestrator/` must align with this contract.
 
 Runtime state source of truth is SQLite. YAML is used as import/export/edit artifact when needed.
 
-Entry point: `./scripts/run-cli.sh <command>` (auto-builds + calls CLI client) or `./target/release/orchestrator <command>`.
+Entry point: `orchestrator <command>` (auto-builds + calls CLI client) or `./target/release/orchestrator <command>`.
 
 Daemon lifecycle:
 - Start: `orchestrator daemon start -f` (foreground with restart loop) or `orchestrator daemon start` (background)
@@ -33,7 +33,7 @@ Daemon lifecycle:
 
 1. Show help:
    ```bash
-   ./scripts/run-cli.sh --help
+   orchestrator --help
    ```
 
 2. Confirm top-level commands exist:
@@ -88,42 +88,42 @@ Daemon lifecycle:
 
 1. Apply manifest environment (if not already done):
    ```bash
-   ./scripts/run-cli.sh init
-   ./scripts/run-cli.sh apply -f <manifest.yaml>
+   orchestrator init
+   orchestrator apply -f <manifest.yaml>
    ```
 
 2. (Recommended for isolated QA reruns) Reset only the scenario project:
    ```bash
-   ./scripts/run-cli.sh qa project reset <qa-project-id> --keep-config --force
+   orchestrator qa project reset <qa-project-id> --keep-config --force
    ```
 
 3. Validate workspace info positional argument:
    ```bash
-   ./scripts/run-cli.sh workspace info default
+   orchestrator workspace info default
    ```
 
 4. Validate output format flags:
    ```bash
-   ./scripts/run-cli.sh task list -o json
-   ./scripts/run-cli.sh task info {task_id} -o yaml
-   ./scripts/run-cli.sh get workspaces -o yaml
+   orchestrator task list -o json
+   orchestrator task info {task_id} -o yaml
+   orchestrator get workspaces -o yaml
    ```
 
 5. Validate task create does not depend on `--format`:
    ```bash
-   ./scripts/run-cli.sh task create --project <qa-project-id> --name "contract-check" --goal "check" --no-start
+   orchestrator task create --project <qa-project-id> --name "contract-check" --goal "check" --no-start
    ```
 
 6. Validate new scheduling flags and worker commands:
    ```bash
-   ./scripts/run-cli.sh task create --help | rg -- "--detach"
-   ./scripts/run-cli.sh task start --help | rg -- "--detach"
-   ./scripts/run-cli.sh task worker --help
+   orchestrator task create --help | rg -- "--detach"
+   orchestrator task start --help | rg -- "--detach"
+   orchestrator task worker --help
    ```
 7. Validate task edit and exec command families:
    ```bash
-   ./scripts/run-cli.sh task edit --help
-   ./scripts/run-cli.sh exec --help
+   orchestrator task edit --help
+   orchestrator exec --help
    ```
 
 ### Expected Result
@@ -146,26 +146,26 @@ Daemon lifecycle:
 
 1. Validate list-style get:
    ```bash
-   ./scripts/run-cli.sh get workspaces
-   ./scripts/run-cli.sh get agents
-   ./scripts/run-cli.sh get workflows
+   orchestrator get workspaces
+   orchestrator get agents
+   orchestrator get workflows
    ```
 
 2. Validate label selector syntax:
    ```bash
-   ./scripts/run-cli.sh get workspaces -l env=dev
+   orchestrator get workspaces -l env=dev
    ```
 
 3. Validate stdin apply contract:
    ```bash
-   cat fixtures/manifests/bundles/output-formats.yaml | ./scripts/run-cli.sh apply -f -
+   cat fixtures/manifests/bundles/output-formats.yaml | orchestrator apply -f -
    ```
 
 4. Validate create command surfaces:
    ```bash
-   ./scripts/run-cli.sh workspace create --help
-   ./scripts/run-cli.sh agent create --help
-   ./scripts/run-cli.sh workflow create --help
+   orchestrator workspace create --help
+   orchestrator agent create --help
+   orchestrator workflow create --help
    ```
 
 ### Expected Result

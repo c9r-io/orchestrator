@@ -2,7 +2,7 @@
 
 Date baseline: 2026-02-27
 Repository: `/Volumes/Yotta/ai_native_sdlc`
-Entry CLI: `./scripts/run-cli.sh`
+Entry CLI: `orchestrator`
 
 This runbook is a **high-cost, high-confidence** validation of the orchestrator's
 **real self-repair loop**.
@@ -93,7 +93,7 @@ cd /Volumes/Yotta/ai_native_sdlc
 ### 4.1 Baseline Build
 
 ```bash
-cd core && cargo build --release && cargo check && cd ..
+cargo build --release -p orchestratord -p orchestrator-cli && cargo check -p agent-orchestrator
 ```
 
 Expected:
@@ -105,15 +105,15 @@ Expected:
 
 ```bash
 rm -f data/agent_orchestrator.db config/default.yaml
-./scripts/run-cli.sh init -f
-./scripts/run-cli.sh apply -f docs/workflow/self-bootstrap.yaml
+orchestrator init -f
+orchestrator apply -f docs/workflow/self-bootstrap.yaml
 ```
 
 ### 4.3 Dedicated QA Project
 
 ```bash
 QA_PROJECT="qa-llm-selfrepair-${USER}-$(date +%Y%m%d%H%M%S)"
-./scripts/run-cli.sh qa project create "${QA_PROJECT}" --from-workspace self --force
+orchestrator qa project create "${QA_PROJECT}" --from-workspace self --force
 ```
 
 ---
@@ -225,7 +225,7 @@ spec:
     auto_rollback: true
 YAML
 
-./scripts/run-cli.sh apply -f /tmp/smoke-llm-selfrepair.yaml
+orchestrator apply -f /tmp/smoke-llm-selfrepair.yaml
 ```
 
 Expected:
@@ -239,15 +239,15 @@ Expected:
 ## 7. Execute The Self-Repair Validation
 
 ```bash
-./scripts/run-cli.sh task create --project "${QA_PROJECT}" \
+orchestrator task create --project "${QA_PROJECT}" \
   -n "llm-selfrepair-$(date +%s)" \
   -w self -W smoke-llm-selfrepair \
   --no-start \
   -g "LLM self-repair smoke: break core/src/lib.rs, fail self_test, repair, then pass self_test" \
   -t core/src/lib.rs
 
-TASK_ID=$(./scripts/run-cli.sh task list -o json | jq -r 'sort_by(.created_at) | last | .id')
-./scripts/run-cli.sh task start "$TASK_ID"
+TASK_ID=$(orchestrator task list -o json | jq -r 'sort_by(.created_at) | last | .id')
+orchestrator task start "$TASK_ID"
 ```
 
 If the task takes too long in your environment, allow up to 5 minutes before
@@ -368,10 +368,10 @@ Expected:
 ## 13. Cleanup
 
 ```bash
-./scripts/run-cli.sh task delete "$TASK_ID" -f
-./scripts/run-cli.sh delete workflow/smoke-llm-selfrepair -f
-./scripts/run-cli.sh delete agent/smoke-breaker -f
-./scripts/run-cli.sh delete agent/smoke-llm-repairer -f
+orchestrator task delete "$TASK_ID" -f
+orchestrator delete workflow/smoke-llm-selfrepair -f
+orchestrator delete agent/smoke-breaker -f
+orchestrator delete agent/smoke-llm-repairer -f
 rm -f /tmp/smoke-llm-selfrepair.yaml
 ```
 

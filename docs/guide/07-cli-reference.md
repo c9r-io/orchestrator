@@ -6,7 +6,7 @@ Quick-reference for all Agent Orchestrator CLI commands.
 
 | Mode | Command | Description |
 |------|---------|-------------|
-| Standalone | `./scripts/run-cli.sh <command>` | Legacy monolithic CLI |
+| Standalone | `orchestrator <command>` | Legacy monolithic CLI |
 | C/S Daemon | `./target/release/orchestratord [flags]` | gRPC server + embedded workers |
 | C/S Client | `./target/release/orchestrator <command>` | Lightweight gRPC client |
 
@@ -53,7 +53,7 @@ Several commands have short aliases for convenience:
 Create runtime directories and SQLite schema.
 
 ```bash
-./scripts/run-cli.sh init
+orchestrator init
 ```
 
 ### apply
@@ -62,16 +62,16 @@ Load resources from a YAML manifest into the database.
 
 ```bash
 # From file
-./scripts/run-cli.sh apply -f manifest.yaml
+orchestrator apply -f manifest.yaml
 
 # From stdin
-cat manifest.yaml | ./scripts/run-cli.sh apply -f -
+cat manifest.yaml | orchestrator apply -f -
 
 # Dry-run (validate only)
-./scripts/run-cli.sh apply -f manifest.yaml --dry-run
+orchestrator apply -f manifest.yaml --dry-run
 
 # Project-scoped apply
-./scripts/run-cli.sh apply -f manifest.yaml --project my-project
+orchestrator apply -f manifest.yaml --project my-project
 ```
 
 ### check
@@ -79,7 +79,7 @@ cat manifest.yaml | ./scripts/run-cli.sh apply -f -
 Preflight validation: cross-reference agents, workflows, and templates.
 
 ```bash
-./scripts/run-cli.sh check
+orchestrator check
 ```
 
 ## Resource Queries
@@ -89,16 +89,16 @@ Preflight validation: cross-reference agents, workflows, and templates.
 List resources (kubectl-style).
 
 ```bash
-./scripts/run-cli.sh get workspaces
-./scripts/run-cli.sh get agents
-./scripts/run-cli.sh get workflows
+orchestrator get workspaces
+orchestrator get agents
+orchestrator get workflows
 
 # Output format
-./scripts/run-cli.sh get agents -o json
-./scripts/run-cli.sh get agents -o yaml
+orchestrator get agents -o json
+orchestrator get agents -o yaml
 
 # Label selector
-./scripts/run-cli.sh get workspaces -l env=dev,team=platform
+orchestrator get workspaces -l env=dev,team=platform
 ```
 
 ### describe
@@ -106,9 +106,9 @@ List resources (kubectl-style).
 Detailed view of a single resource.
 
 ```bash
-./scripts/run-cli.sh describe workspace default
-./scripts/run-cli.sh describe agent coder
-./scripts/run-cli.sh describe workflow self-bootstrap
+orchestrator describe workspace default
+orchestrator describe agent coder
+orchestrator describe workflow self-bootstrap
 ```
 
 ### delete
@@ -116,27 +116,27 @@ Detailed view of a single resource.
 Delete a resource by kind/name.
 
 ```bash
-./scripts/run-cli.sh delete workspace my-ws
-./scripts/run-cli.sh delete agent old-agent
+orchestrator delete workspace my-ws
+orchestrator delete agent old-agent
 ```
 
 ## Workspace
 
 ```bash
-./scripts/run-cli.sh workspace info default          # positional arg
-./scripts/run-cli.sh workspace create --help
+orchestrator workspace info default          # positional arg
+orchestrator workspace create --help
 ```
 
 ## Agent
 
 ```bash
-./scripts/run-cli.sh agent create --help
+orchestrator agent create --help
 ```
 
 ## Workflow
 
 ```bash
-./scripts/run-cli.sh workflow create --help
+orchestrator workflow create --help
 ```
 
 ## Task Lifecycle
@@ -144,7 +144,7 @@ Delete a resource by kind/name.
 ### task create
 
 ```bash
-./scripts/run-cli.sh task create \
+orchestrator task create \
   --name "my-task" \
   --goal "Implement feature X" \
   --workflow self-bootstrap \
@@ -167,34 +167,34 @@ Delete a resource by kind/name.
 ### task list / info
 
 ```bash
-./scripts/run-cli.sh task list
-./scripts/run-cli.sh task list -o json
+orchestrator task list
+orchestrator task list -o json
 
-./scripts/run-cli.sh task info <task_id>
-./scripts/run-cli.sh task info <task_id> -o yaml
+orchestrator task info <task_id>
+orchestrator task info <task_id> -o yaml
 ```
 
 ### task start / pause / resume
 
 ```bash
-./scripts/run-cli.sh task start <task_id>
-./scripts/run-cli.sh task start <task_id> --detach
+orchestrator task start <task_id>
+orchestrator task start <task_id> --detach
 
-./scripts/run-cli.sh task pause <task_id>
-./scripts/run-cli.sh task resume <task_id>
+orchestrator task pause <task_id>
+orchestrator task resume <task_id>
 ```
 
 ### task logs / watch / trace
 
 ```bash
 # View execution logs
-./scripts/run-cli.sh task logs <task_id>
+orchestrator task logs <task_id>
 
 # Live watch (auto-refreshing status panel)
-./scripts/run-cli.sh task watch <task_id>
+orchestrator task watch <task_id>
 
 # Execution trace with anomaly detection
-./scripts/run-cli.sh task trace <task_id>
+orchestrator task trace <task_id>
 ```
 
 ### task retry
@@ -202,7 +202,7 @@ Delete a resource by kind/name.
 Retry a failed task item.
 
 ```bash
-./scripts/run-cli.sh task retry <task_id> --item <item_id> --force
+orchestrator task retry <task_id> --item <item_id> --force
 ```
 
 ### task edit
@@ -210,13 +210,13 @@ Retry a failed task item.
 Insert a step into a running task's execution plan.
 
 ```bash
-./scripts/run-cli.sh task edit --help
+orchestrator task edit --help
 ```
 
 ### task delete
 
 ```bash
-./scripts/run-cli.sh task delete <task_id>
+orchestrator task delete <task_id>
 ```
 
 ### task worker (standalone mode)
@@ -224,10 +224,10 @@ Insert a step into a running task's execution plan.
 Background worker for processing detached tasks (standalone mode only).
 
 ```bash
-./scripts/run-cli.sh task worker start
-./scripts/run-cli.sh task worker start --poll-ms 500 --workers 3
-./scripts/run-cli.sh task worker stop
-./scripts/run-cli.sh task worker status
+orchestrator task worker start
+orchestrator task worker start --poll-ms 500 --workers 3
+orchestrator task worker stop
+orchestrator task worker status
 ```
 
 > **C/S mode**: Workers are embedded in the daemon. Use `orchestratord --workers N` instead. No separate worker command is needed.
@@ -237,9 +237,9 @@ Background worker for processing detached tasks (standalone mode only).
 Session management for attached task execution.
 
 ```bash
-./scripts/run-cli.sh task session list
-./scripts/run-cli.sh task session info <session_id>
-./scripts/run-cli.sh task session close <session_id>
+orchestrator task session list
+orchestrator task session info <session_id>
+orchestrator task session close <session_id>
 ```
 
 ## Exec
@@ -247,29 +247,29 @@ Session management for attached task execution.
 Execute a command in a task step context.
 
 ```bash
-./scripts/run-cli.sh exec --help
+orchestrator exec --help
 
 # Interactive mode
-./scripts/run-cli.sh exec -it <task_id> <step_id>
+orchestrator exec -it <task_id> <step_id>
 ```
 
 ## Manifest & Edit
 
 ```bash
 # Export all config as YAML
-./scripts/run-cli.sh manifest export
+orchestrator manifest export
 
 # Edit a resource interactively (opens $EDITOR)
-./scripts/run-cli.sh edit workspace default
-./scripts/run-cli.sh edit workflow self-bootstrap
+orchestrator edit workspace default
+orchestrator edit workflow self-bootstrap
 ```
 
 ## Database
 
 ```bash
 # Reset database (destructive — requires --force)
-./scripts/run-cli.sh db reset --force
-./scripts/run-cli.sh db reset --force --include-config
+orchestrator db reset --force
+orchestrator db reset --force --include-config
 ```
 
 **Warning**: `db reset` is destructive. Use `qa project reset` for isolated cleanup.
@@ -278,49 +278,49 @@ Execute a command in a task step context.
 
 ```bash
 # Reset a project (isolated — does not affect other projects)
-./scripts/run-cli.sh qa project reset <project> --keep-config --force
+orchestrator qa project reset <project> --keep-config --force
 
 # Create a fresh project scaffold
-./scripts/run-cli.sh qa project create <project> --force
+orchestrator qa project create <project> --force
 
 # QA doctor — validate concurrency guardrails
-./scripts/run-cli.sh qa doctor
+orchestrator qa doctor
 ```
 
 ## Persistent Store
 
 ```bash
-./scripts/run-cli.sh store get <store_name> <key>
-./scripts/run-cli.sh store put <store_name> <key> <value>
-./scripts/run-cli.sh store delete <store_name> <key>
-./scripts/run-cli.sh store list <store_name>
-./scripts/run-cli.sh store prune <store_name>
+orchestrator store get <store_name> <key>
+orchestrator store put <store_name> <key> <value>
+orchestrator store delete <store_name> <key>
+orchestrator store list <store_name>
+orchestrator store prune <store_name>
 ```
 
 ## Config Lifecycle
 
 ```bash
 # Show self-heal audit log
-./scripts/run-cli.sh config heal-log
+orchestrator config heal-log
 
 # Backfill missing step_scope in legacy events
-./scripts/run-cli.sh config backfill-events --force
+orchestrator config backfill-events --force
 ```
 
 ## Debug & Verify
 
 ```bash
-./scripts/run-cli.sh debug           # inspect internal state
-./scripts/run-cli.sh verify          # run verification checks
-./scripts/run-cli.sh version         # build version + git hash
+orchestrator debug           # inspect internal state
+orchestrator verify          # run verification checks
+orchestrator version         # build version + git hash
 ```
 
 ## Shell Completion
 
 ```bash
 # Generate completions (bash/zsh/fish)
-./scripts/run-cli.sh completion bash > ~/.bash_completion.d/orchestrator
-./scripts/run-cli.sh completion zsh > ~/.zfunc/_orchestrator
+orchestrator completion bash > ~/.bash_completion.d/orchestrator
+orchestrator completion zsh > ~/.zfunc/_orchestrator
 ```
 
 ## Output Formats

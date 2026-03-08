@@ -72,8 +72,7 @@ workflows:
 
 ### Execution Modes
 
-- **Standalone**: `./scripts/run-cli.sh` — single-process CLI
-- **Client/Server**: `orchestratord` (daemon) + `orchestrator` (client) — daemon holds state, CLI communicates via gRPC
+- **Client/Server**: `orchestratord` (daemon) + `orchestrator` (CLI client) — daemon holds state, CLI communicates via gRPC over UDS
 
 ---
 

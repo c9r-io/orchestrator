@@ -19,7 +19,7 @@ The self_test step is a builtin step type that validates code compiles and tests
 
 1. **cargo check**: Validates code compiles
 2. **cargo test --lib**: Runs unit tests (skips `self_test_survives_smoke_test` to avoid recursion)
-3. **manifest validate**: Optional - validates workflow YAML if run-cli.sh exists
+3. **manifest validate**: Optional - validates workflow YAML if the orchestrator binary exists
 
 ### Pipeline Variables Set
 

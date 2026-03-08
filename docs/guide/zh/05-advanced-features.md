@@ -67,20 +67,20 @@ spec:
 
 ```bash
 # 应用 CRD + 实例
-./scripts/run-cli.sh apply -f crd-manifest.yaml
+orchestrator apply -f crd-manifest.yaml
 
 # 列出实例
-./scripts/run-cli.sh get promptlibraries
-./scripts/run-cli.sh get pl                    # 使用短名称
+orchestrator get promptlibraries
+orchestrator get pl                    # 使用短名称
 
 # 详情
-./scripts/run-cli.sh describe promptlibrary qa-prompts
+orchestrator describe promptlibrary qa-prompts
 
 # 删除
-./scripts/run-cli.sh delete promptlibrary qa-prompts
+orchestrator delete promptlibrary qa-prompts
 
 # 导出
-./scripts/run-cli.sh manifest export           # 包含 CRD 资源
+orchestrator manifest export           # 包含 CRD 资源
 ```
 
 ### CRD 验证
@@ -142,16 +142,16 @@ steps:
 
 ```bash
 # 写入值
-./scripts/run-cli.sh store put context my_key "my_value"
+orchestrator store put context my_key "my_value"
 
 # 读取值
-./scripts/run-cli.sh store get context my_key
+orchestrator store get context my_key
 
 # 列出键
-./scripts/run-cli.sh store list context
+orchestrator store list context
 
 # 删除键
-./scripts/run-cli.sh store delete context my_key
+orchestrator store delete context my_key
 ```
 
 ## 任务派生（WP02）

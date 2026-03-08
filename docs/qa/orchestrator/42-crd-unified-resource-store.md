@@ -24,10 +24,10 @@ These were unified into a **single ResourceStore** that acts as the write point 
 - `resource/mod.rs` — `apply_to_store()`, `delete_from_store()`, `metadata_from_store()`
 
 **Entry points**:
-- `./scripts/run-cli.sh apply -f <manifest.yaml>` — resources flow through ResourceStore
-- `./scripts/run-cli.sh get <kind>/<name> -o yaml` — reads from legacy fields (projection cache)
-- `./scripts/run-cli.sh delete <kind>/<name>` — removes from both store and legacy
-- `./scripts/run-cli.sh manifest export -o yaml` — exports from legacy fields
+- `orchestrator apply -f <manifest.yaml>` — resources flow through ResourceStore
+- `orchestrator get <kind>/<name> -o yaml` — reads from legacy fields (projection cache)
+- `orchestrator delete <kind>/<name>` — removes from both store and legacy
+- `orchestrator manifest export -o yaml` — exports from legacy fields
 
 ---
 
@@ -44,12 +44,12 @@ Verify that `normalize_config` ensures all 9 builtin CRD definitions exist with 
 
 1. Initialize the orchestrator:
    ```bash
-   ./scripts/run-cli.sh init
+   orchestrator init
    ```
 
 2. Apply a simple agent to populate legacy fields:
    ```bash
-   cat <<'EOF' | ./scripts/run-cli.sh apply -f -
+   cat <<'EOF' | orchestrator apply -f -
    apiVersion: orchestrator.dev/v2
    kind: Agent
    metadata:
@@ -61,7 +61,7 @@ Verify that `normalize_config` ensures all 9 builtin CRD definitions exist with 
 
 3. Verify the agent exists:
    ```bash
-   ./scripts/run-cli.sh get agent/test-bootstrap-agent -o yaml
+   orchestrator get agent/test-bootstrap-agent -o yaml
    ```
 
 4. Verify via unit tests that all 9 builtin CRDs are registered:

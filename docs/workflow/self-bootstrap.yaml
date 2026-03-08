@@ -369,7 +369,7 @@ spec:
       builtin: loop_guard
 
   # 2-cycle strategy:
-  #   Cycle 1 — production:  plan → qa_doc_gen → implement → self_test → self_restart (rebuild + exit 75 → relaunch)
+  #   Cycle 1 — production:  plan → qa_doc_gen → implement → self_test → self_restart (rebuild + exec() hot reload)
   #   Cycle 2 — validation:  implement → self_test → [self_restart skipped: repeatable=false] → qa_testing → ticket_fix → align_tests → doc_governance
   loop:
     mode: fixed

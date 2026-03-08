@@ -32,7 +32,7 @@
 ### 单体模式（传统）
 
 ```bash
-./scripts/run-cli.sh <command>
+orchestrator <command>
 ```
 
 ### 客户端/服务端模式（推荐）

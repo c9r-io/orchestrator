@@ -11,7 +11,7 @@
 
 测试 `manifest validate` 命令和配置错误检测。
 
-Entry point: `./scripts/run-cli.sh <command>`
+Entry point: `orchestrator <command>`
 
 ---
 
@@ -65,7 +65,7 @@ Entry point: `./scripts/run-cli.sh <command>`
 
 2. 验证配置:
    ```bash
-   ./scripts/run-cli.sh manifest validate -f /tmp/valid-config.yaml
+   orchestrator manifest validate -f /tmp/valid-config.yaml
    ```
 
 ### Expected
@@ -125,7 +125,7 @@ Entry point: `./scripts/run-cli.sh <command>`
 
 2. 验证配置:
    ```bash
-   ./scripts/run-cli.sh manifest validate -f /tmp/invalid-ws.yaml
+   orchestrator manifest validate -f /tmp/invalid-ws.yaml
    ```
 
 ### Expected
@@ -184,7 +184,7 @@ Entry point: `./scripts/run-cli.sh <command>`
 
 2. 验证配置:
    ```bash
-   ./scripts/run-cli.sh manifest validate -f /tmp/invalid-workflow.yaml
+   orchestrator manifest validate -f /tmp/invalid-workflow.yaml
    ```
 
 ### Expected
@@ -209,9 +209,9 @@ Entry point: `./scripts/run-cli.sh <command>`
 
 1. **Recreate an isolated QA scaffold** (critical — residual agents already in active config can cause a false pass):
    ```bash
-   ./scripts/run-cli.sh init --force
+   orchestrator init --force
    QA_PROJECT="qa-validate-${USER}-$(date +%Y%m%d%H%M%S)"
-   ./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   orchestrator qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
    ```
 
@@ -253,7 +253,7 @@ Entry point: `./scripts/run-cli.sh <command>`
 
 3. 验证配置:
    ```bash
-   ./scripts/run-cli.sh manifest validate -f /tmp/invalid-template.yaml
+   orchestrator manifest validate -f /tmp/invalid-template.yaml
    ```
 
 ### Expected

@@ -9,8 +9,8 @@ kubectl-style fixtures for `orchestrator apply -f`.
 ## Usage
 
 ```bash
-./scripts/run-cli.sh init
-./scripts/run-cli.sh apply -f fixtures/manifests/bundles/output-formats.yaml
+orchestrator init
+orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml
 ```
 
 These fixtures replace legacy flat-config bootstrap flows.
@@ -27,7 +27,7 @@ These fixtures replace legacy flat-config bootstrap flows.
 For Phase 2 CLI regression work, use the dedicated probe bundle:
 
 ```bash
-./scripts/run-cli.sh apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
+orchestrator apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
 ```
 
 It provides fixed workspaces and workflows for:
@@ -42,7 +42,7 @@ It provides fixed workspaces and workflows for:
 For self-referential runtime diagnostics, use the dedicated probe bundle:
 
 ```bash
-./scripts/run-cli.sh apply -f fixtures/manifests/bundles/self-referential-probe-fixtures.yaml
+orchestrator apply -f fixtures/manifests/bundles/self-referential-probe-fixtures.yaml
 ```
 
 It provides a self-referential workspace plus official probe workflows for:

@@ -137,7 +137,7 @@ Verify that `task trace --verbose` appends an explanatory annotation when scope 
 
 1. If a legacy task exists:
    ```bash
-   ./scripts/run-cli.sh task trace {task_id} --verbose
+   orchestrator task trace {task_id} --verbose
    ```
 
 2. If no legacy task exists, verify via unit test:
@@ -167,17 +167,17 @@ Verify `config backfill-events` provides a manual entry point for event backfill
 
 1. Run backfill without `--force` (safety gate):
    ```bash
-   ./scripts/run-cli.sh config backfill-events 2>&1; echo "exit=$?"
+   orchestrator config backfill-events 2>&1; echo "exit=$?"
    ```
 
 2. Run backfill with `--force`:
    ```bash
-   ./scripts/run-cli.sh config backfill-events --force
+   orchestrator config backfill-events --force
    ```
 
 3. Run again to confirm idempotency:
    ```bash
-   ./scripts/run-cli.sh config backfill-events --force
+   orchestrator config backfill-events --force
    ```
 
 ### Expected

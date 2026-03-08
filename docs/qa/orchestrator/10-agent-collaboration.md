@@ -17,13 +17,13 @@ This document validates collaboration-related behavior after scheduler mainline 
 - template placeholders in scheduler execution path
 - structured prehook context fields availability
 
-Entry point: `./scripts/run-cli.sh`
+Entry point: `orchestrator`
 
 ### Environment Isolation Setup
 
 ```bash
-./scripts/run-cli.sh qa project reset qa-collab --force
-./scripts/run-cli.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml --project qa-collab
+orchestrator qa project reset qa-collab --force
+orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project qa-collab
 ```
 
 > **Note**: Use `qa project reset` + `apply --project` to isolate fixture agents
@@ -44,13 +44,13 @@ Verify scheduler stores structured run payload and validation status.
 ### Steps
 1. Execute a task:
    ```bash
-   TASK_ID=$(./scripts/run-cli.sh task create \
+   TASK_ID=$(orchestrator task create \
      --project qa-collab \
      --name "agentoutput-mainline" \
      --goal "structured output" \
      --workspace default \
      --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/run-cli.sh task start "${TASK_ID}" || true
+   orchestrator task start "${TASK_ID}" || true
    ```
 2. Inspect command run structured fields:
    ```bash
@@ -89,21 +89,21 @@ Verify non-JSON output is rejected for strict phases.
 ### Steps
 1. Reset and apply into project scope (two fixtures — base workspace + plain-text agent):
    ```bash
-   ./scripts/run-cli.sh qa project reset qa-strict --force
-   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/echo-workflow.yaml --project qa-strict
-   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/plain-text-agent.yaml --project qa-strict
+   orchestrator qa project reset qa-strict --force
+   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project qa-strict
+   orchestrator apply -f fixtures/manifests/bundles/plain-text-agent.yaml --project qa-strict
    ```
 
 2. Create and run task:
    ```bash
-   TASK_ID=$(./scripts/run-cli.sh task create \
+   TASK_ID=$(orchestrator task create \
      --project qa-strict \
      --name "strict-validation-test" \
      --goal "Test strict phase validation" \
      --workspace default \
      --workflow plain_text_test \
      --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/run-cli.sh task start "${TASK_ID}"
+   orchestrator task start "${TASK_ID}"
    ```
 
 3. Query validation failure events:
@@ -163,7 +163,7 @@ Verify phase result publication is observable through persisted events.
    ```
 3. Check debug component output:
    ```bash
-   ./scripts/run-cli.sh debug --component messagebus
+   orchestrator debug --component messagebus
    ```
 
 ### Expected

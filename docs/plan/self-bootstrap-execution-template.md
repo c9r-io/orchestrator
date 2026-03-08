@@ -51,10 +51,11 @@ plan -> qa_doc_gen -> implement -> self_test -> self_restart -> qa_testing -> ti
 ```
 
 > **`self_restart` step**: After `self_test` passes, `self_restart` rebuilds the release binary
-> (`cargo build --release`), verifies it (`--help`), snapshots `.stable`, sets the task to
-> `restart_pending`, and exits with code 75. The daemon detects
-> exit 75 and relaunches the new binary. The new process auto-resumes the `restart_pending`
-> task and continues into Cycle 2. This step has `repeatable: false`, so it only runs in Cycle 1.
+> (`cargo build --release -p orchestratord`), verifies it (`--help`), snapshots `.stable`, sets the task to
+> `restart_pending`, and signals a restart via `RestartRequestedError`. The daemon drains workers
+> (30s timeout), then uses `exec()` to replace itself with the new binary in-place (preserving PID).
+> The new process auto-resumes the `restart_pending` task and continues into Cycle 2.
+> This step has `repeatable: false`, so it only runs in Cycle 1.
 > Build failure is non-fatal (`on_failure: continue`) — the loop continues with the old binary.
 
 人工职责只有两类：
@@ -71,22 +72,26 @@ plan -> qa_doc_gen -> implement -> self_test -> self_restart -> qa_testing -> ti
 ```bash
 cd /Volumes/Yotta/ai_native_sdlc
 
-cd core && cargo build --release && cd ..
+cargo build --release -p orchestratord -p orchestrator-cli
 
-./scripts/run-cli.sh db reset -f --include-config --include-history
-./scripts/run-cli.sh init -f
-./scripts/run-cli.sh apply -f docs/workflow/claude-secret.yaml
-./scripts/run-cli.sh apply -f docs/workflow/minimax-secret.yaml
+# 启动 daemon（如未运行）
+orchestrator daemon start
+orchestrator daemon status
+
+orchestrator db reset -f --include-config --include-history
+orchestrator init -f
+orchestrator apply -f docs/workflow/claude-secret.yaml
+orchestrator apply -f docs/workflow/minimax-secret.yaml
 # 如需使用 Claude 原生 API，注释上行即可（claude-* 的模型配置将生效）
-./scripts/run-cli.sh apply -f docs/workflow/self-bootstrap.yaml
+orchestrator apply -f docs/workflow/self-bootstrap.yaml
 ```
 
 ### 3.2 验证资源已加载
 
 ```bash
-./scripts/run-cli.sh get workspace
-./scripts/run-cli.sh get workflow
-./scripts/run-cli.sh get agent
+orchestrator get workspace
+orchestrator get workflow
+orchestrator get agent
 ```
 
 预期至少可见：
@@ -105,7 +110,7 @@ cd core && cargo build --release && cd ..
 #### 选项 A：指定目标文件
 
 ```bash
-./scripts/run-cli.sh task create \
+orchestrator task create \
   -n "<任务名>" \
   -w self -W self-bootstrap \
   --no-start \
@@ -117,7 +122,7 @@ cd core && cargo build --release && cd ..
 #### 选项 B：全量扫描
 
 ```bash
-./scripts/run-cli.sh task create \
+orchestrator task create \
   -n "<任务名>" \
   -w self -W self-bootstrap \
   --no-start \
@@ -127,7 +132,7 @@ cd core && cargo build --release && cd ..
 记录返回的 `<task_id>`，然后启动：
 
 ```bash
-./scripts/run-cli.sh task start <task_id>
+orchestrator task start <task_id>
 ```
 
 ---
@@ -139,9 +144,9 @@ cd core && cargo build --release && cd ..
 ### 4.1 状态监控
 
 ```bash
-./scripts/run-cli.sh task list
-./scripts/run-cli.sh task info <task_id> -o json
-./scripts/run-cli.sh task trace <task_id>
+orchestrator task list
+orchestrator task info <task_id> -o json
+orchestrator task trace <task_id>
 ```
 
 重点观察：
@@ -155,8 +160,8 @@ cd core && cargo build --release && cd ..
 ### 4.2 日志监控
 
 ```bash
-./scripts/run-cli.sh task logs --tail 100 <task_id>
-./scripts/run-cli.sh task logs --tail 200 <task_id>
+orchestrator task logs --tail 100 <task_id>
+orchestrator task logs --tail 200 <task_id>
 ```
 
 重点观察：
@@ -185,8 +190,8 @@ git diff --stat
 当需要更细粒度观察时，人工可以补充使用：
 
 ```bash
-./scripts/run-cli.sh task trace <task_id> --json
-./scripts/run-cli.sh task watch <task_id>
+orchestrator task trace <task_id> --json
+orchestrator task watch <task_id>
 sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id = '<task_id>' ORDER BY id DESC LIMIT 20;"
 ```
 
@@ -227,11 +232,11 @@ sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events 
 确认执行证据表明：
 
 1. `self_restart` 在 Cycle 1 的 `self_test` 之后执行
-2. 进程以 exit code 75 退出，daemon 自动重启 (exec)
+2. daemon 通过 exec() 热重载新二进制（保持 PID 不变）
 3. 新进程成功接管 `restart_pending` 任务并进入 Cycle 2
 4. 如果 build 失败，任务正常继续（`on_failure: continue`），不影响后续步骤
 
-监控 exit 75 重启：
+监控 self_restart 热重载：
 ```bash
 # 查看 self_restart 相关事件
 sqlite3 data/agent_orchestrator.db "SELECT payload_json FROM events WHERE task_id = '<task_id>' AND event_type LIKE 'self_restart%' ORDER BY id DESC LIMIT 10;"
@@ -280,8 +285,8 @@ Cycle 2 中重点观察：
 建议记录方式：
 
 ```bash
-./scripts/run-cli.sh task info <task_id> -o json
-./scripts/run-cli.sh task logs --tail 200 <task_id>
+orchestrator task info <task_id> -o json
+orchestrator task logs --tail 200 <task_id>
 git diff --stat
 ```
 

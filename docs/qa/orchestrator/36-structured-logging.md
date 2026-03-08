@@ -16,7 +16,7 @@ This document validates the structured logging bootstrap introduced for the Rust
 - default rolling file logs under `data/logs/system`
 - preservation of human-readable command results on stdout
 
-Entry point: `./scripts/run-cli.sh`
+Entry point: `orchestrator`
 
 ---
 
@@ -34,11 +34,11 @@ Ensure the latest binary is built before QA execution and exposes the new global
 
 1. Build the release binary:
    ```bash
-   cd core && cargo build --release
+   cargo build --release -p orchestratord -p orchestrator-cli
    ```
 2. Verify the new flags appear in help:
    ```bash
-   ./scripts/run-cli.sh --help | rg -- "--log-level|--log-format"
+   orchestrator --help | rg -- "--log-level|--log-format"
    ```
 
 ### Expected
@@ -62,7 +62,7 @@ Ensure preflight command results remain on stdout even when structured logging i
 
 1. Capture stdout and stderr separately:
    ```bash
-   ./scripts/run-cli.sh init > /tmp/orch-init-stdout.txt 2> /tmp/orch-init-stderr.txt
+   orchestrator init > /tmp/orch-init-stdout.txt 2> /tmp/orch-init-stderr.txt
    ```
 2. Inspect captured output:
    ```bash
@@ -91,7 +91,7 @@ Ensure `--log-format json` switches console logging to JSON on stderr.
 
 1. Run `init` with JSON console logging:
    ```bash
-   ./scripts/run-cli.sh --log-format json init > /tmp/orch-json-stdout.txt 2> /tmp/orch-json-stderr.txt
+   orchestrator --log-format json init > /tmp/orch-json-stdout.txt 2> /tmp/orch-json-stderr.txt
    ```
 2. Inspect stderr:
    ```bash

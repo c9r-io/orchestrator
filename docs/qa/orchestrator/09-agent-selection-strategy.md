@@ -16,7 +16,7 @@ health degradation after failures, manual retry, and load balancing.
 Each scenario uses a dedicated fixture with concrete agents, so assertions are
 grounded in real execution output rather than conceptual descriptions.
 
-Entry point: `./scripts/run-cli.sh <command>`
+Entry point: `orchestrator <command>`
 
 ---
 
@@ -46,25 +46,25 @@ lower-cost agent is selected more frequently by the scoring algorithm.
 
 1. Reset and apply into project scope:
    ```bash
-   ./scripts/run-cli.sh qa project reset qa-cost --force
-   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml --project qa-cost
+   orchestrator qa project reset qa-cost --force
+   orchestrator apply -f fixtures/manifests/bundles/selection-perf-test.yaml --project qa-cost
    ```
 
 2. Create and run task:
    ```bash
-   TASK_ID=$(./scripts/run-cli.sh task create \
+   TASK_ID=$(orchestrator task create \
      --project qa-cost \
      --name "cost-scoring-test" \
      --goal "Test cost-based scoring" \
      --workspace default \
      --workflow selection_test \
      --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/run-cli.sh task start "${TASK_ID}"
+   orchestrator task start "${TASK_ID}"
    ```
 
 3. Inspect logs to count agent selection:
    ```bash
-   ./scripts/run-cli.sh task logs "${TASK_ID}"
+   orchestrator task logs "${TASK_ID}"
    # Count occurrences of structured output markers "fast-qa" vs "quality-qa"
    ```
 
@@ -81,7 +81,7 @@ lower-cost agent is selected more frequently by the scoring algorithm.
 
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
-| Only one agent selected across all runs | Project-scoped `apply` may have failed to register one agent, or the agent lacks the required capability | Run `./scripts/run-cli.sh describe agent/fast_agent --project qa-cost` and `describe agent/quality_agent --project qa-cost` to verify both agents exist with correct capabilities |
+| Only one agent selected across all runs | Project-scoped `apply` may have failed to register one agent, or the agent lacks the required capability | Run `orchestrator describe agent/fast_agent --project qa-cost` and `describe agent/quality_agent --project qa-cost` to verify both agents exist with correct capabilities |
 | Selection distribution is heavily skewed | With only 2 agents in the top-3 pool, randomization should give ~50/50; extreme skew indicates only 1 agent was available | Check `resolve_effective_agents` returns both agents for the project |
 
 ---
@@ -109,20 +109,20 @@ both used successfully.
 
 1. Reset and apply into project scope:
    ```bash
-   ./scripts/run-cli.sh qa project reset qa-quality --force
-   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/selection-quality-test.yaml --project qa-quality
+   orchestrator qa project reset qa-quality --force
+   orchestrator apply -f fixtures/manifests/bundles/selection-quality-test.yaml --project qa-quality
    ```
 
 2. Create and run task:
    ```bash
-   TASK_ID=$(./scripts/run-cli.sh task create \
+   TASK_ID=$(orchestrator task create \
      --project qa-quality \
      --name "quality-scoring-test" \
      --goal "Test quality-based scoring" \
      --workspace default \
      --workflow quality_selection_test \
      --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/run-cli.sh task start "${TASK_ID}"
+   orchestrator task start "${TASK_ID}"
    ```
 
 3. Inspect agent selection via DB (more reliable than logs for verifying
@@ -136,7 +136,7 @@ both used successfully.
 
 4. Optionally inspect logs:
    ```bash
-   ./scripts/run-cli.sh task logs "${TASK_ID}"
+   orchestrator task logs "${TASK_ID}"
    ```
 
 ### Expected
@@ -170,20 +170,20 @@ and the healthy agent handles an increasing share of work across cycles.
 
 1. Reset and apply into project scope:
    ```bash
-   ./scripts/run-cli.sh qa project reset qa-health --force
-   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/mixed-health.yaml --project qa-health
+   orchestrator qa project reset qa-health --force
+   orchestrator apply -f fixtures/manifests/bundles/mixed-health.yaml --project qa-health
    ```
 
 2. Create and run task:
    ```bash
-   TASK_ID=$(./scripts/run-cli.sh task create \
+   TASK_ID=$(orchestrator task create \
      --project qa-health \
      --name "health-degradation-test" \
      --goal "Test health degradation" \
      --workspace default \
      --workflow health_test \
      --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/run-cli.sh task start "${TASK_ID}"
+   orchestrator task start "${TASK_ID}"
    ```
 
 3. Verify agent selection via DB (`task logs` does not show output from
@@ -198,7 +198,7 @@ and the healthy agent handles an increasing share of work across cycles.
 
 4. Optionally check logs (only successful runs appear here):
    ```bash
-   ./scripts/run-cli.sh task logs "${TASK_ID}"
+   orchestrator task logs "${TASK_ID}"
    ```
 
 ### Expected
@@ -232,7 +232,7 @@ Validate that `task retry` resets a failed item to pending and re-queues it.
 
 1. Use a completed task with failed items (e.g. from Scenario 3):
    ```bash
-   ./scripts/run-cli.sh task info {task_id}
+   orchestrator task info {task_id}
    ```
 
 2. Pick an unresolved/failed item and verify its current status:
@@ -243,7 +243,7 @@ Validate that `task retry` resets a failed item to pending and re-queues it.
 
 3. Retry with `--detach` to verify the reset separately from re-execution:
    ```bash
-   ./scripts/run-cli.sh task retry {task_item_id} --detach
+   orchestrator task retry {task_item_id} --detach
    ```
 
 4. Immediately check item status (before task loop runs):
@@ -284,25 +284,25 @@ Validate that agent load tracking influences selection during execution.
 
 1. Reset and apply into project scope:
    ```bash
-   ./scripts/run-cli.sh qa project reset qa-load --force
-   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/selection-perf-test.yaml --project qa-load
+   orchestrator qa project reset qa-load --force
+   orchestrator apply -f fixtures/manifests/bundles/selection-perf-test.yaml --project qa-load
    ```
 
 2. Create and run task:
    ```bash
-   TASK_ID=$(./scripts/run-cli.sh task create \
+   TASK_ID=$(orchestrator task create \
      --project qa-load \
      --name "load-balance-test" \
      --goal "Test load balancing" \
      --workspace default \
      --workflow selection_test \
      --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/run-cli.sh task start "${TASK_ID}"
+   orchestrator task start "${TASK_ID}"
    ```
 
 3. Inspect distribution:
    ```bash
-   ./scripts/run-cli.sh task logs "${TASK_ID}"
+   orchestrator task logs "${TASK_ID}"
    ```
 
 ### Expected

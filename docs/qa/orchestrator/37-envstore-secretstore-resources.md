@@ -18,7 +18,7 @@ Both resources use the standard `apply` / `manifest export` / `delete` CLI comma
 ## Scenario 1: Apply EnvStore and SecretStore via Multi-Document YAML
 
 ### Preconditions
-- Orchestrator binary is built and accessible via `./scripts/run-cli.sh`
+- Orchestrator binary is built and accessible via `orchestrator`
 - A clean project environment exists
 
 ### Goal
@@ -44,8 +44,8 @@ Verify that both EnvStore and SecretStore resources can be applied from a single
      data:
        OPENAI_API_KEY: "sk-test-key-123"
    ```
-2. Run `./scripts/run-cli.sh apply -f test-env-stores.yaml`
-3. Run `./scripts/run-cli.sh manifest export`
+2. Run `orchestrator apply -f test-env-stores.yaml`
+3. Run `orchestrator manifest export`
 
 ### Expected
 - Apply outputs `Created` for both `shared-config` and `api-keys`
@@ -70,7 +70,7 @@ Verify that both EnvStore and SecretStore resources can be applied from a single
 Verify that re-applying the same manifest produces `Unchanged` status for both resources (idempotent apply).
 
 ### Steps
-1. Run `./scripts/run-cli.sh apply -f test-env-stores.yaml` again (same file from Scenario 1)
+1. Run `orchestrator apply -f test-env-stores.yaml` again (same file from Scenario 1)
 
 ### Expected
 - Output shows `Unchanged` for `shared-config`
@@ -88,11 +88,11 @@ Verify that re-applying the same manifest produces `Unchanged` status for both r
 Verify that delete works with all supported kind aliases, and that deleting one kind does not affect the other.
 
 ### Steps
-1. Run `./scripts/run-cli.sh delete env-store shared-config`
-2. Run `./scripts/run-cli.sh manifest export` — verify `shared-config` is absent
+1. Run `orchestrator delete env-store shared-config`
+2. Run `orchestrator manifest export` — verify `shared-config` is absent
 3. Re-apply `shared-config` from Scenario 1 YAML
-4. Run `./scripts/run-cli.sh delete secret-store api-keys`
-5. Run `./scripts/run-cli.sh manifest export` — verify `api-keys` is absent, `shared-config` still present
+4. Run `orchestrator delete secret-store api-keys`
+5. Run `orchestrator manifest export` — verify `api-keys` is absent, `shared-config` still present
 
 ### Expected
 - Step 1: delete returns success
@@ -121,7 +121,7 @@ Verify that applying an EnvStore or SecretStore with an empty name produces a va
      data:
        KEY: "value"
    ```
-2. Run `./scripts/run-cli.sh apply -f bad-env-store.yaml`
+2. Run `orchestrator apply -f bad-env-store.yaml`
 
 ### Expected
 - Apply fails with an error message containing "name" or "empty"

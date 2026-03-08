@@ -14,7 +14,7 @@ This document covers the compatibility-focused policy checks split from `docs/qa
 - Explicit `unsafe` mode must continue to work when intentionally selected
 - Legacy `policy: legacy` manifests must remain backward-compatible and normalize to `unsafe`
 
-Entry point: `./scripts/run-cli.sh`
+Entry point: `orchestrator`
 
 ---
 
@@ -34,9 +34,9 @@ Ensure that explicitly setting `policy: unsafe` is accepted, applied, and the ta
 1. Apply config with explicit unsafe policy:
    ```bash
    QA_PROJECT="qa-unsafe-explicit"
-   ./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   orchestrator qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/run-cli.sh qa project create "${QA_PROJECT}" --force
+   orchestrator qa project create "${QA_PROJECT}" --force
    cat > /tmp/runner-unsafe-explicit.yaml << 'YAML'
    runner:
      policy: unsafe
@@ -74,18 +74,18 @@ Ensure that explicitly setting `policy: unsafe` is accepted, applied, and the ta
        finalize:
          rules: []
    YAML
-   ./scripts/run-cli.sh apply --project "${QA_PROJECT}" -f /tmp/runner-unsafe-explicit.yaml
+   orchestrator apply --project "${QA_PROJECT}" -f /tmp/runner-unsafe-explicit.yaml
    ```
 2. Verify policy applied:
    ```bash
-   ./scripts/run-cli.sh manifest export -f /tmp/unsafe-export.yaml
+   orchestrator manifest export -f /tmp/unsafe-export.yaml
    cat /tmp/unsafe-export.yaml | grep 'policy:'
    ```
 3. Create and run task:
    ```bash
-   TASK_ID=$(./scripts/run-cli.sh task create --project "${QA_PROJECT}" --name "unsafe-mode-test" --goal "unsafe mode" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/run-cli.sh task start "${TASK_ID}" || true
-   ./scripts/run-cli.sh task info "${TASK_ID}" -o json
+   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "unsafe-mode-test" --goal "unsafe mode" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   orchestrator task start "${TASK_ID}" || true
+   orchestrator task info "${TASK_ID}" -o json
    ```
 
 ### Expected
@@ -111,9 +111,9 @@ Ensure that `policy: legacy` in YAML manifests is accepted as a backward-compati
 1. Apply config using the legacy alias:
    ```bash
    QA_PROJECT="qa-legacy-alias"
-   ./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   orchestrator qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/run-cli.sh qa project create "${QA_PROJECT}" --force
+   orchestrator qa project create "${QA_PROJECT}" --force
    cat > /tmp/runner-legacy-alias.yaml << 'YAML'
    runner:
      policy: legacy
@@ -151,11 +151,11 @@ Ensure that `policy: legacy` in YAML manifests is accepted as a backward-compati
        finalize:
          rules: []
    YAML
-   ./scripts/run-cli.sh apply --project "${QA_PROJECT}" -f /tmp/runner-legacy-alias.yaml
+   orchestrator apply --project "${QA_PROJECT}" -f /tmp/runner-legacy-alias.yaml
    ```
 2. Verify the policy is normalized to `unsafe` on re-export:
    ```bash
-   ./scripts/run-cli.sh manifest export -f /tmp/legacy-alias-export.yaml
+   orchestrator manifest export -f /tmp/legacy-alias-export.yaml
    cat /tmp/legacy-alias-export.yaml | grep 'policy:'
    ```
 

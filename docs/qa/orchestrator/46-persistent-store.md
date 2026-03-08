@@ -15,7 +15,7 @@ WP01 adds a **Persistent Store** for cross-task workflow memory. The architectur
 - **WorkflowStore** CRD (10th builtin kind): defines WHAT store to use — references a provider, optional schema validation, and retention policy.
 - **Store entries**: actual data, managed by the provider backend (SQLite table `workflow_store_entries` for the `local` provider).
 
-CLI surface: `./scripts/run-cli.sh store get|put|delete|list|prune`.
+CLI surface: `orchestrator store get|put|delete|list|prune`.
 
 ---
 
@@ -40,8 +40,8 @@ CREATE TABLE workflow_store_entries (
 ## Scenario 1: Store Put / Get / Delete via CLI (Local Backend)
 
 ### Preconditions
-- Orchestrator binary is built and accessible via `./scripts/run-cli.sh`
-- Database initialized (`./scripts/run-cli.sh init`)
+- Orchestrator binary is built and accessible via `orchestrator`
+- Database initialized (`orchestrator init`)
 
 ### Goal
 Verify basic CRUD operations against the default `local` (SQLite) backend without declaring a WorkflowStore CRD (auto-provisioning with defaults).
@@ -49,27 +49,27 @@ Verify basic CRUD operations against the default `local` (SQLite) backend withou
 ### Steps
 1. Put a JSON value:
    ```bash
-   ./scripts/run-cli.sh store put metrics bench_001 '{"test_count": 1334, "pass_rate": 0.98}'
+   orchestrator store put metrics bench_001 '{"test_count": 1334, "pass_rate": 0.98}'
    ```
 2. Get the value back:
    ```bash
-   ./scripts/run-cli.sh store get metrics bench_001
+   orchestrator store get metrics bench_001
    ```
 3. Put a second entry:
    ```bash
-   ./scripts/run-cli.sh store put metrics bench_002 '{"test_count": 1400, "pass_rate": 0.99}'
+   orchestrator store put metrics bench_002 '{"test_count": 1400, "pass_rate": 0.99}'
    ```
 4. List all entries in the store:
    ```bash
-   ./scripts/run-cli.sh store list metrics
+   orchestrator store list metrics
    ```
 5. Delete the first entry:
    ```bash
-   ./scripts/run-cli.sh store delete metrics bench_001
+   orchestrator store delete metrics bench_001
    ```
 6. Verify deletion:
    ```bash
-   ./scripts/run-cli.sh store get metrics bench_001
+   orchestrator store get metrics bench_001
    ```
 
 ### Expected
@@ -126,23 +126,23 @@ Verify that a WorkflowStore CRD can be applied, and that its schema is enforced 
    ```
 2. Apply the manifest:
    ```bash
-   ./scripts/run-cli.sh apply -f test-store.yaml
+   orchestrator apply -f test-store.yaml
    ```
 3. Verify the CRD appears:
    ```bash
-   ./scripts/run-cli.sh get workflowstores
+   orchestrator get workflowstores
    ```
 4. Put a valid value:
    ```bash
-   ./scripts/run-cli.sh store put validated-metrics run_001 '{"test_count": 50, "pass_rate": 0.95}'
+   orchestrator store put validated-metrics run_001 '{"test_count": 50, "pass_rate": 0.95}'
    ```
 5. Put an invalid value (negative test_count violates `minimum: 0`):
    ```bash
-   ./scripts/run-cli.sh store put validated-metrics run_002 '{"test_count": -1, "pass_rate": 0.5}'
+   orchestrator store put validated-metrics run_002 '{"test_count": -1, "pass_rate": 0.5}'
    ```
 6. Put an invalid type (string instead of object):
    ```bash
-   ./scripts/run-cli.sh store put validated-metrics run_003 '"not an object"'
+   orchestrator store put validated-metrics run_003 '"not an object"'
    ```
 
 ### Expected
@@ -186,28 +186,28 @@ Verify that a user-defined StoreBackendProvider CRD can be applied and that the 
    ```
 2. Apply the manifest:
    ```bash
-   ./scripts/run-cli.sh apply -f test-command-provider.yaml
+   orchestrator apply -f test-command-provider.yaml
    ```
 3. Verify both CRDs appear:
    ```bash
-   ./scripts/run-cli.sh get storebackendproviders
-   ./scripts/run-cli.sh get workflowstores
+   orchestrator get storebackendproviders
+   orchestrator get workflowstores
    ```
 4. Put a value via command adapter:
    ```bash
-   ./scripts/run-cli.sh store put mock-store key1 '{"data": "hello"}'
+   orchestrator store put mock-store key1 '{"data": "hello"}'
    ```
 5. Get the value back:
    ```bash
-   ./scripts/run-cli.sh store get mock-store key1
+   orchestrator store get mock-store key1
    ```
 6. Delete the value:
    ```bash
-   ./scripts/run-cli.sh store delete mock-store key1
+   orchestrator store delete mock-store key1
    ```
 7. Verify deletion:
    ```bash
-   ./scripts/run-cli.sh store get mock-store key1
+   orchestrator store get mock-store key1
    ```
 
 ### Expected
@@ -230,29 +230,29 @@ Verify list command output formats (table, JSON, YAML), upsert semantics on dupl
 ### Steps
 1. Put entries in two different projects:
    ```bash
-   ./scripts/run-cli.sh store put shared k1 '{"v": 1}' --project proj-a
-   ./scripts/run-cli.sh store put shared k2 '{"v": 2}' --project proj-a
-   ./scripts/run-cli.sh store put shared k1 '{"v": 99}' --project proj-b
+   orchestrator store put shared k1 '{"v": 1}' --project proj-a
+   orchestrator store put shared k2 '{"v": 2}' --project proj-a
+   orchestrator store put shared k1 '{"v": 99}' --project proj-b
    ```
 2. List entries for `proj-a`:
    ```bash
-   ./scripts/run-cli.sh store list shared --project proj-a
+   orchestrator store list shared --project proj-a
    ```
 3. List entries for `proj-b` in JSON format:
    ```bash
-   ./scripts/run-cli.sh store list shared --project proj-b -o json
+   orchestrator store list shared --project proj-b -o json
    ```
 4. Upsert: overwrite `k1` in `proj-a`:
    ```bash
-   ./scripts/run-cli.sh store put shared k1 '{"v": 100}' --project proj-a
+   orchestrator store put shared k1 '{"v": 100}' --project proj-a
    ```
 5. Verify upsert:
    ```bash
-   ./scripts/run-cli.sh store get shared k1 --project proj-a
+   orchestrator store get shared k1 --project proj-a
    ```
 6. Verify `proj-b` is unaffected:
    ```bash
-   ./scripts/run-cli.sh store get shared k1 --project proj-b
+   orchestrator store get shared k1 --project proj-b
    ```
 
 ### Expected
@@ -289,17 +289,17 @@ Verify that the two new builtin CRDs (WorkflowStore, StoreBackendProvider) are r
    ```
 2. Verify short names work for list queries:
    ```bash
-   ./scripts/run-cli.sh get wfs
-   ./scripts/run-cli.sh get sbp
+   orchestrator get wfs
+   orchestrator get sbp
    ```
 3. Verify the `store` CLI help surface:
    ```bash
-   ./scripts/run-cli.sh store --help
+   orchestrator store --help
    ```
 4. Verify both new kinds can be applied and listed:
    ```bash
-   ./scripts/run-cli.sh get workflowstores
-   ./scripts/run-cli.sh get storebackendproviders
+   orchestrator get workflowstores
+   orchestrator get storebackendproviders
    ```
 
 ### Expected

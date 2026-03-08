@@ -164,43 +164,43 @@ Workflow configuration is detailed in [Chapter 03](03-workflow-configuration.md)
 
 ```bash
 # From file
-./scripts/run-cli.sh apply -f manifest.yaml
+orchestrator apply -f manifest.yaml
 
 # From stdin
-cat manifest.yaml | ./scripts/run-cli.sh apply -f -
+cat manifest.yaml | orchestrator apply -f -
 
 # Dry-run (validate without writing)
-./scripts/run-cli.sh apply -f manifest.yaml --dry-run
+orchestrator apply -f manifest.yaml --dry-run
 ```
 
 ### Query
 
 ```bash
 # List resources
-./scripts/run-cli.sh get workspaces
-./scripts/run-cli.sh get agents
-./scripts/run-cli.sh get workflows
+orchestrator get workspaces
+orchestrator get agents
+orchestrator get workflows
 
 # Detail view
-./scripts/run-cli.sh describe workspace default
-./scripts/run-cli.sh workspace info default
+orchestrator describe workspace default
+orchestrator workspace info default
 
 # Output formats
-./scripts/run-cli.sh get agents -o json
-./scripts/run-cli.sh get agents -o yaml
+orchestrator get agents -o json
+orchestrator get agents -o yaml
 
 # Label selector
-./scripts/run-cli.sh get workspaces -l env=dev
+orchestrator get workspaces -l env=dev
 ```
 
 ### Export
 
 ```bash
 # Export all config as YAML
-./scripts/run-cli.sh manifest export
+orchestrator manifest export
 
 # Edit interactively
-./scripts/run-cli.sh edit workspace default
+orchestrator edit workspace default
 ```
 
 ## Multi-Document Manifests
@@ -245,7 +245,7 @@ spec:
 Then apply it all at once:
 
 ```bash
-./scripts/run-cli.sh apply -f everything-in-one.yaml
+orchestrator apply -f everything-in-one.yaml
 ```
 
 ## Next Steps

@@ -75,18 +75,18 @@ Verify `config heal-log` renders a human-readable table grouped by version.
 
 1. If no self-heal events exist, trigger one by seeding a drifted config:
    ```bash
-   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
+   orchestrator apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
    ```
    Then manually introduce a `required_capability` on a builtin step in the DB and restart.
 
 2. Run heal-log:
    ```bash
-   ./scripts/run-cli.sh config heal-log
+   orchestrator config heal-log
    ```
 
 3. Run with limit:
    ```bash
-   ./scripts/run-cli.sh config heal-log --limit 5
+   orchestrator config heal-log --limit 5
    ```
 
 ### Expected
@@ -112,12 +112,12 @@ Verify `config heal-log --json` produces valid, structured JSON.
 
 1. Run heal-log with JSON:
    ```bash
-   ./scripts/run-cli.sh config heal-log --json
+   orchestrator config heal-log --json
    ```
 
 2. Validate JSON structure:
    ```bash
-   ./scripts/run-cli.sh config heal-log --json | jq '.[0] | keys'
+   orchestrator config heal-log --json | jq '.[0] | keys'
    ```
 
 ### Expected

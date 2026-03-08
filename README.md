@@ -19,17 +19,14 @@ The orchestrator combines workflow engines with agent coordination to enable:
 
 ## Architecture
 
-The orchestrator supports **standalone** (monolithic CLI) and **client/server** (daemon + gRPC client) modes:
+The orchestrator uses a **client/server** architecture (daemon + gRPC client):
 
 ```
-Standalone:   run-cli.sh ──> [Engine + DB + Workers] (single process)
-
-Client/Server:
-  orchestrator (CLI) ──gRPC/UDS──> orchestratord (daemon)
-                                      ├── gRPC server (tonic)
-                                      ├── Embedded workers (N configurable)
-                                      ├── Engine + DB
-                                      └── Lifecycle (PID, socket, signals)
+orchestrator (CLI) ──gRPC/UDS──> orchestratord (daemon)
+                                    ├── gRPC server (tonic)
+                                    ├── Embedded workers (N configurable)
+                                    ├── Engine + DB
+                                    └── Lifecycle (PID, socket, signals)
 ```
 
 ### Internal Components
@@ -167,29 +164,19 @@ workflows:
 
 ## CLI Commands
 
-### Standalone Mode
-
 ```bash
-./scripts/run-cli.sh init
-./scripts/run-cli.sh apply -f manifest.yaml
-./scripts/run-cli.sh task create --goal "QA run"
-./scripts/run-cli.sh task start <task_id>
-```
+# Start daemon
+orchestrator daemon start
+orchestrator daemon status
 
-### Client/Server Mode
-
-```bash
-# Start daemon with embedded workers
-./target/release/orchestratord --foreground --workers 2
-
-# CLI client (connects to daemon via Unix socket)
-./target/release/orchestrator apply -f manifest.yaml
-./target/release/orchestrator task create --goal "QA run" --detach
-./target/release/orchestrator task list
-./target/release/orchestrator task logs <task_id>
-./target/release/orchestrator get workspaces -o json
-./target/release/orchestrator store put mystore key '{"value":1}'
-./target/release/orchestrator daemon status
+# Core workflow
+orchestrator init
+orchestrator apply -f manifest.yaml
+orchestrator task create --goal "QA run" --detach
+orchestrator task list
+orchestrator task logs <task_id>
+orchestrator get workspaces -o json
+orchestrator store put mystore key '{"value":1}'
 ```
 
 ## Project Structure
@@ -299,24 +286,12 @@ See [SKILLS.md](./SKILLS.md) for the complete list of available skills and how t
 cargo build --workspace --release
 ```
 
-### Standalone Mode
-
 ```bash
-./scripts/run-cli.sh init
-./scripts/run-cli.sh apply -f fixtures/capability-test.yaml
-./scripts/run-cli.sh task create --goal "My first QA run"
-```
-
-### Client/Server Mode
-
-```bash
-# Start daemon
-./target/release/orchestratord --foreground --workers 1
-
-# In another terminal
-./target/release/orchestrator apply -f fixtures/capability-test.yaml
-./target/release/orchestrator task create --goal "My first QA run" --detach
-./target/release/orchestrator task list
+orchestrator daemon start
+orchestrator init
+orchestrator apply -f fixtures/capability-test.yaml
+orchestrator task create --goal "My first QA run" --detach
+orchestrator task list
 ```
 
 ## Documentation

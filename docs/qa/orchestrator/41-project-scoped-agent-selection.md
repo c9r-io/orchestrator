@@ -20,16 +20,16 @@ to global agents.
 Key CLI workflow:
 ```bash
 # Reset project state (task data + config + auto-tickets)
-./scripts/run-cli.sh qa project reset <project> --force
+orchestrator qa project reset <project> --force
 
 # Deploy resources into project scope
-./scripts/run-cli.sh apply -f <fixture> --project <project>
+orchestrator apply -f <fixture> --project <project>
 
 # Create task in project (agent selection uses project-scoped agents)
-./scripts/run-cli.sh task create --project <project> ...
+orchestrator task create --project <project> ...
 ```
 
-Entry point: `./scripts/run-cli.sh <command>`
+Entry point: `orchestrator <command>`
 
 ---
 
@@ -48,13 +48,13 @@ into the project config scope, not into the global config.
 
 1. Reset and apply into project scope:
    ```bash
-   ./scripts/run-cli.sh qa project reset qa-scope --force
-   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-scope
+   orchestrator qa project reset qa-scope --force
+   orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-scope
    ```
 
 2. Inspect global vs project config:
    ```bash
-   ./scripts/run-cli.sh manifest export | python3 -c "
+   orchestrator manifest export | python3 -c "
    import sys, yaml
    cfg = yaml.safe_load(sys.stdin)
    global_agents = list(cfg.get('agents', {}).keys())
@@ -87,20 +87,20 @@ for selection, even when global agents have the same capability.
 
 1. Reset and apply into project scope:
    ```bash
-   ./scripts/run-cli.sh qa project reset qa-iso --force
-   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-iso
+   orchestrator qa project reset qa-iso --force
+   orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-iso
    ```
 
 2. Create and run task in project:
    ```bash
-   TASK_ID=$(./scripts/run-cli.sh task create \
+   TASK_ID=$(orchestrator task create \
      --project qa-iso \
      --name "isolation-test" \
      --goal "Verify only project agents selected" \
      --workspace default \
      --workflow multi_agent_qa \
      --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/run-cli.sh task start "${TASK_ID}"
+   orchestrator task start "${TASK_ID}"
    ```
 
 3. Query agent selection via DB:
@@ -134,13 +134,13 @@ falls back to global agents.
 
 1. Reset and apply (project agents only have `qa` capability):
    ```bash
-   ./scripts/run-cli.sh qa project reset qa-fallback --force
-   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-fallback
+   orchestrator qa project reset qa-fallback --force
+   orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-fallback
    ```
 
 2. Inspect project agents capabilities:
    ```bash
-   ./scripts/run-cli.sh manifest export | python3 -c "
+   orchestrator manifest export | python3 -c "
    import sys, yaml
    cfg = yaml.safe_load(sys.stdin)
    proj = cfg.get('projects', {}).get('qa-fallback', {})
@@ -175,13 +175,13 @@ project workspace ticket directories.
 
 1. Set up project with ticket files:
    ```bash
-   ./scripts/run-cli.sh qa project reset qa-tickets --force
-   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-tickets
+   orchestrator qa project reset qa-tickets --force
+   orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-tickets
    ```
 
 2. Create some auto-ticket files manually (simulating previous run):
    ```bash
-   TICKET_DIR=$(./scripts/run-cli.sh manifest export | python3 -c "
+   TICKET_DIR=$(orchestrator manifest export | python3 -c "
    import sys, yaml
    cfg = yaml.safe_load(sys.stdin)
    ws = cfg.get('projects', {}).get('qa-tickets', {}).get('workspaces', {})
@@ -197,7 +197,7 @@ project workspace ticket directories.
 
 3. Reset project:
    ```bash
-   ./scripts/run-cli.sh qa project reset qa-tickets --force
+   orchestrator qa project reset qa-tickets --force
    ```
 
 4. Verify tickets cleaned:
@@ -229,13 +229,13 @@ global agents, not project-scoped agents.
 
 1. Ensure project agents exist:
    ```bash
-   ./scripts/run-cli.sh qa project reset qa-global --force
-   ./scripts/run-cli.sh apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-global
+   orchestrator qa project reset qa-global --force
+   orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-global
    ```
 
 2. Create task WITHOUT `--project`:
    ```bash
-   TASK_ID=$(./scripts/run-cli.sh task create \
+   TASK_ID=$(orchestrator task create \
      --project default \
      --name "global-agent-test" \
      --goal "Verify global agents used" \

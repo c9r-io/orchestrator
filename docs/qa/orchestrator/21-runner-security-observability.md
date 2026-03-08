@@ -19,7 +19,7 @@ This document validates the runner boundary and observability coverage from the 
 
 Default-policy initialization and backward-compatibility checks are covered in `docs/qa/orchestrator/31-runner-policy-defaults-compatibility.md`.
 
-Entry point: `./scripts/run-cli.sh`
+Entry point: `orchestrator`
 
 ---
 
@@ -56,7 +56,7 @@ Ensure `policy=allowlist` is rejected when `allowed_shells` or `allowed_shell_ar
    ```
 2. Validate config:
    ```bash
-   ./scripts/run-cli.sh manifest validate -f /tmp/runner-allowlist-invalid.yaml
+   orchestrator manifest validate -f /tmp/runner-allowlist-invalid.yaml
    ```
 
 ### Expected
@@ -88,9 +88,9 @@ Ensure run-phase command execution is denied by runner policy before process spa
 1. Prepare isolated project and apply policy config:
    ```bash
    QA_PROJECT="qa-runner-deny"
-   ./scripts/run-cli.sh qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
+   orchestrator qa project reset "${QA_PROJECT}" --keep-config --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   ./scripts/run-cli.sh qa project create "${QA_PROJECT}" --force
+   orchestrator qa project create "${QA_PROJECT}" --force
    cat > /tmp/runner-policy-deny.yaml << 'YAML'
    runner:
      policy: allowlist
@@ -131,16 +131,16 @@ Ensure run-phase command execution is denied by runner policy before process spa
        finalize:
          rules: []
    YAML
-   ./scripts/run-cli.sh apply --project "${QA_PROJECT}" -f /tmp/runner-policy-deny.yaml
+   orchestrator apply --project "${QA_PROJECT}" -f /tmp/runner-policy-deny.yaml
    ```
 2. Create and start task:
    ```bash
-   TASK_ID=$(./scripts/run-cli.sh task create --project "${QA_PROJECT}" --name "runner-policy-deny" --goal "policy deny" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/run-cli.sh task start "${TASK_ID}" || true
+   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "runner-policy-deny" --goal "policy deny" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   orchestrator task start "${TASK_ID}" || true
    ```
 3. Inspect result:
    ```bash
-   ./scripts/run-cli.sh task info "${TASK_ID}" -o json
+   orchestrator task info "${TASK_ID}" -o json
    ```
 
 ### Expected
@@ -177,7 +177,7 @@ Ensure sensitive token is redacted in persisted structured output and in `task l
    resume:
      auto: false
    YAML
-   ./scripts/run-cli.sh apply -f /tmp/runner-redaction-config.yaml
+   orchestrator apply -f /tmp/runner-redaction-config.yaml
 
    # Apply CRD resources
    cat > /tmp/runner-redaction-resources.yaml << 'YAML'
@@ -212,14 +212,14 @@ Ensure sensitive token is redacted in persisted structured output and in `task l
      finalize:
        rules: []
    YAML
-   ./scripts/run-cli.sh apply -f /tmp/runner-redaction-resources.yaml
+   orchestrator apply -f /tmp/runner-redaction-resources.yaml
 
-   TASK_ID=$(./scripts/run-cli.sh task create --project default --name "runner-redaction" --goal "redaction" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/run-cli.sh task start "${TASK_ID}" || true
+   TASK_ID=$(orchestrator task create --project default --name "runner-redaction" --goal "redaction" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   orchestrator task start "${TASK_ID}" || true
    ```
 2. Verify redaction in logs and DB:
    ```bash
-   ./scripts/run-cli.sh task logs "${TASK_ID}" | rg "SECRET_TOKEN_ABC|REDACTED" -n
+   orchestrator task logs "${TASK_ID}" | rg "SECRET_TOKEN_ABC|REDACTED" -n
    sqlite3 data/agent_orchestrator.db "SELECT output_json FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='${TASK_ID}') ORDER BY started_at DESC LIMIT 1;"
    ```
 
@@ -255,8 +255,8 @@ Ensure scheduler terminal path persists execution metrics.
 
 1. Create and run task:
    ```bash
-   TASK_ID=$(./scripts/run-cli.sh task create --project default --name "metrics-persist" --goal "metrics persist" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   ./scripts/run-cli.sh task start "${TASK_ID}" || true
+   TASK_ID=$(orchestrator task create --project default --name "metrics-persist" --goal "metrics persist" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   orchestrator task start "${TASK_ID}" || true
    ```
 2. Query metrics table:
    ```bash
@@ -294,11 +294,11 @@ Ensure `qa doctor` exposes new metrics fields in JSON and table outputs.
 
 1. Run doctor in JSON mode:
    ```bash
-   ./scripts/run-cli.sh qa doctor -o json
+   orchestrator qa doctor -o json
    ```
 2. Run doctor in table mode:
    ```bash
-   ./scripts/run-cli.sh qa doctor
+   orchestrator qa doctor
    ```
 
 ### Expected
