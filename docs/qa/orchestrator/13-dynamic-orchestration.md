@@ -170,6 +170,8 @@ N/A - Unit test verification
 - Adaptive planner implementation present in `core/src/dynamic_orchestration/adaptive.rs`
 - Workflow config supports `adaptive:` block
 - Adaptive planner agent uses capability `adaptive_plan`
+- Deterministic fixture available: `fixtures/manifests/bundles/adaptive-runtime.yaml`
+- Database already initialized: `test -f data/agent_orchestrator.db || ./scripts/orchestrator.sh init`
 
 ### Steps
 
@@ -188,18 +190,48 @@ N/A - Unit test verification
    test dynamic_orchestration::adaptive::tests::test_adaptive_planner_rejects_missing_planner_agent ... ok
    ```
 
-3. Check workflow export contains adaptive configuration:
+3. Reset an isolated QA project and apply the adaptive fixture:
+   ```bash
+   QA_PROJECT=qa-adaptive-runtime
+   ./scripts/orchestrator.sh qa project reset "$QA_PROJECT" --force
+   ./scripts/orchestrator.sh apply -f fixtures/manifests/bundles/adaptive-runtime.yaml --project "$QA_PROJECT"
+   ```
+
+4. Execute the success-path adaptive workflow inline.
+   Run tasks sequentially; do not launch two `--attach` sessions in parallel against the same SQLite file.
+   ```bash
+   ./scripts/orchestrator.sh task create \
+     -n adaptive-success \
+     -g "adaptive runtime success verification" \
+     -p "$QA_PROJECT" \
+     -w adaptive_ws \
+     -W adaptive_success \
+     --attach
+   ```
+
+5. Execute the fallback-path adaptive workflow inline:
+   ```bash
+   ./scripts/orchestrator.sh task create \
+     -n adaptive-fallback \
+     -g "adaptive runtime fallback verification" \
+     -p "$QA_PROJECT" \
+     -w adaptive_ws \
+     -W adaptive_fallback \
+     --attach
+   ```
+
+6. Check workflow export contains adaptive configuration:
    ```bash
    ./scripts/orchestrator.sh manifest export -f /tmp/exported-config.yaml
    grep -A 8 "adaptive:" /tmp/exported-config.yaml || true
    ```
 
-4. Check runtime event names for adaptive orchestration:
+7. Check runtime event names for adaptive orchestration:
    ```bash
    rg -n "adaptive_plan_requested|adaptive_plan_succeeded|adaptive_plan_failed|adaptive_plan_fallback_used" core/src/scheduler/item_executor/dispatch.rs
    ```
 
-5. Check validation logic for planner agent capability:
+8. Check validation logic for planner agent capability:
    ```bash
    rg -n "adaptive_plan" core/src/config_load/validate.rs
    ```
@@ -212,6 +244,8 @@ N/A - Unit test verification
 - Invalid JSON or invalid DAG can trigger deterministic fallback when `fallback_mode=soft_fallback`
 - Missing `planner_agent` or planner agents without capability `adaptive_plan` are rejected by workflow validation
 - Runtime emits `adaptive_plan_requested`, `adaptive_plan_succeeded`, `adaptive_plan_failed`, and `adaptive_plan_fallback_used` events
+- The `adaptive_success` fixture produces at least one `adaptive_plan_succeeded` event
+- The `adaptive_fallback` fixture produces at least one `adaptive_plan_fallback_used` event
 - Strict JSON validation applies to phase `adaptive_plan`
 
 ### DB Checks
@@ -219,9 +253,11 @@ N/A - Unit test verification
 1. Create a task that uses an adaptive-enabled workflow and inspect the events table:
    ```bash
    sqlite3 data/agent_orchestrator.db "
-   SELECT event_type, payload_json
-   FROM events
-   WHERE event_type LIKE 'adaptive_plan_%'
+   SELECT e.event_type, e.payload_json
+   FROM events e
+   JOIN tasks t ON t.id = e.task_id
+   WHERE t.name IN ('adaptive-success', 'adaptive-fallback')
+     AND e.event_type LIKE 'adaptive_plan_%'
    ORDER BY id DESC
    LIMIT 20;
    "
@@ -238,11 +274,19 @@ N/A - Unit test verification
    - `node_count`
    - `edge_count`
 
+### Troubleshooting
+
+- If `sqlite3` returns `database is locked`, wait for the attached task command to exit and retry the query once.
+
 ---
 
 ## Cleanup
 
-All tests are unit tests, no cleanup required.
+Reset the isolated QA project when finished:
+```bash
+QA_PROJECT=qa-adaptive-runtime
+./scripts/orchestrator.sh qa project reset "$QA_PROJECT" --force
+```
 
 ---
 

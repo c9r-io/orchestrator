@@ -761,6 +761,53 @@ fn build_segments_empty_when_no_steps() {
 }
 
 #[test]
+fn last_item_segment_detected_when_no_later_item_segments_exist() {
+    let segments = vec![
+        ScopeSegment {
+            scope: StepScope::Task,
+            step_ids: std::collections::HashSet::from(["plan".to_string()]),
+            max_parallel: 1,
+        },
+        ScopeSegment {
+            scope: StepScope::Item,
+            step_ids: std::collections::HashSet::from(["qa".to_string()]),
+            max_parallel: 1,
+        },
+        ScopeSegment {
+            scope: StepScope::Task,
+            step_ids: std::collections::HashSet::from(["summarize".to_string()]),
+            max_parallel: 1,
+        },
+    ];
+
+    assert!(is_last_item_segment(1, &segments));
+}
+
+#[test]
+fn last_item_segment_rejects_item_segment_with_later_item_work_remaining() {
+    let segments = vec![
+        ScopeSegment {
+            scope: StepScope::Item,
+            step_ids: std::collections::HashSet::from(["qa".to_string()]),
+            max_parallel: 1,
+        },
+        ScopeSegment {
+            scope: StepScope::Task,
+            step_ids: std::collections::HashSet::from(["plan".to_string()]),
+            max_parallel: 1,
+        },
+        ScopeSegment {
+            scope: StepScope::Item,
+            step_ids: std::collections::HashSet::from(["fix".to_string()]),
+            max_parallel: 1,
+        },
+    ];
+
+    assert!(!is_last_item_segment(0, &segments));
+    assert!(is_last_item_segment(2, &segments));
+}
+
+#[test]
 fn propagate_task_segment_terminal_state_no_execution_failed_flag() {
     let items = vec![crate::dto::TaskItemRow {
         id: "item-1".to_string(),

@@ -98,6 +98,7 @@ pub(super) async fn execute_task_segment(
             task_ctx,
             runtime,
             step_filter: Some(&segment.step_ids),
+            run_dynamic_steps: false,
         },
         &mut task_acc,
     )
@@ -223,11 +224,14 @@ pub(super) async fn execute_item_segment(
     task_ctx: &crate::config::TaskRuntimeContext,
     runtime: &RunningTask,
     segment: &ScopeSegment,
+    segment_idx: usize,
+    segments: &[ScopeSegment],
     items: &[crate::dto::TaskItemRow],
     item_state: &mut HashMap<String, StepExecutionAccumulator>,
     task_item_paths: &[String],
 ) -> Result<()> {
     let max_par = segment.max_parallel;
+    let run_dynamic_steps = is_last_item_segment(segment_idx, segments);
     if max_par <= 1 {
         // === Sequential path ===
         for item in items {
@@ -243,6 +247,7 @@ pub(super) async fn execute_item_segment(
                     task_ctx,
                     runtime,
                     step_filter: Some(&segment.step_ids),
+                    run_dynamic_steps,
                 },
                 acc,
             )
@@ -286,6 +291,7 @@ pub(super) async fn execute_item_segment(
                         task_ctx: ctx,
                         runtime: item_runtime,
                         step_filter: Some(filter),
+                        run_dynamic_steps,
                     },
                     &mut acc,
                 )
@@ -321,6 +327,13 @@ pub(super) async fn execute_item_segment(
     }
 
     Ok(())
+}
+
+pub(super) fn is_last_item_segment(segment_idx: usize, segments: &[ScopeSegment]) -> bool {
+    !segments
+        .iter()
+        .skip(segment_idx + 1)
+        .any(|segment| segment.scope == StepScope::Item)
 }
 
 /// Check if next segment is a task-scoped item_select step, and if so, run selection.

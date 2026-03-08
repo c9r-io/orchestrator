@@ -371,6 +371,8 @@ async fn execute_cycle_segments(
                         task_ctx,
                         runtime,
                         seg,
+                        segment_idx,
+                        &segments,
                         &items,
                         &mut item_state,
                         &task_item_paths,

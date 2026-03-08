@@ -1,0 +1,83 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: adaptive_ws
+spec:
+  root_path: "."
+  qa_targets:
+    - fixtures/qa-adaptive-test
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: adaptive_planner_success
+spec:
+  capabilities:
+    - adaptive_plan
+  command: >-
+    printf '%s'
+    '{"entry":"fix_dynamic","nodes":{"fix_dynamic":{"id":"fix_dynamic","step_type":"fix","repeatable":true}},"edges":[]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: adaptive_planner_invalid
+spec:
+  capabilities:
+    - adaptive_plan
+  command: "printf '%s' 'not-json'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: adaptive_qa
+spec:
+  capabilities:
+    - qa
+  command: >-
+    printf '%s'
+    '{"confidence":0.92,"quality_score":0.88,"artifacts":[{"kind":"analysis","findings":[{"title":"adaptive-qa-pass","description":"qa succeeded for adaptive runtime fixture","severity":"info"}]}]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: adaptive_fix
+spec:
+  capabilities:
+    - fix
+  command: >-
+    printf '%s'
+    '{"confidence":0.87,"quality_score":0.82,"artifacts":[{"kind":"code_change","files":["fixtures/qa-adaptive-test/mock.patch"]}]}'
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: adaptive_success
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  adaptive:
+    enabled: true
+    planner_agent: adaptive_planner_success
+    fallback_mode: soft_fallback
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: adaptive_fallback
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  adaptive:
+    enabled: true
+    planner_agent: adaptive_planner_invalid
+    fallback_mode: soft_fallback
+  loop:
+    mode: once

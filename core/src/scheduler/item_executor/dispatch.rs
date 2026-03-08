@@ -36,6 +36,7 @@ pub struct ProcessItemRequest<'a> {
     pub task_ctx: &'a TaskRuntimeContext,
     pub runtime: &'a RunningTask,
     pub step_filter: Option<&'a HashSet<String>>,
+    pub run_dynamic_steps: bool,
 }
 
 /// Owned variant of ProcessItemRequest for tokio::spawn (requires 'static).
@@ -46,6 +47,7 @@ pub struct OwnedProcessItemRequest {
     pub task_ctx: Arc<TaskRuntimeContext>,
     pub runtime: RunningTask,
     pub step_filter: Option<Arc<HashSet<String>>>,
+    pub run_dynamic_steps: bool,
 }
 
 /// Entry point for parallel item execution. Borrows from owned fields
@@ -64,6 +66,7 @@ pub async fn process_item_filtered_owned(
             task_ctx: &request.task_ctx,
             runtime: &request.runtime,
             step_filter: request.step_filter.as_deref(),
+            run_dynamic_steps: request.run_dynamic_steps,
         },
         acc,
     )
@@ -88,6 +91,7 @@ pub async fn process_item(
             task_ctx,
             runtime,
             step_filter: None,
+            run_dynamic_steps: true,
         },
         &mut acc,
     )
@@ -115,6 +119,7 @@ pub async fn process_item_filtered(
         task_ctx,
         runtime,
         step_filter,
+        run_dynamic_steps,
     } = request;
     let item_id = item.id.as_str();
     let should_run_step =
@@ -261,8 +266,9 @@ pub async fn process_item_filtered(
         }
     }
 
-    // Dynamic steps (only in full/legacy mode, not in segment-filtered mode)
-    execute_dynamic_steps(state, task_id, item, task_ctx, runtime, step_filter, acc).await?;
+    if run_dynamic_steps {
+        execute_dynamic_steps(state, task_id, item, task_ctx, runtime, acc).await?;
+    }
 
     Ok(())
 }
@@ -773,13 +779,8 @@ async fn execute_dynamic_steps(
     item: &crate::dto::TaskItemRow,
     task_ctx: &TaskRuntimeContext,
     runtime: &RunningTask,
-    step_filter: Option<&HashSet<String>>,
     acc: &mut StepExecutionAccumulator,
 ) -> Result<()> {
-    if step_filter.is_some() {
-        return Ok(());
-    }
-
     if let Some(adaptive_config) = task_ctx.adaptive.clone().filter(|cfg| cfg.enabled) {
         let history = build_adaptive_history(task_id, item.id.as_str(), task_ctx, acc);
         let mut planner = AdaptivePlanner::new(adaptive_config.clone());
