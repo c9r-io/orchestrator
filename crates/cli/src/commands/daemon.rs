@@ -1,5 +1,5 @@
-use anyhow::{Context, Result};
 use crate::DaemonCommands;
+use anyhow::{Context, Result};
 
 pub async fn run(cmd: DaemonCommands) -> Result<()> {
     match cmd {
@@ -24,7 +24,9 @@ pub async fn run(cmd: DaemonCommands) -> Result<()> {
                 let status = std::process::Command::new(&daemon_binary)
                     .args(&args)
                     .status()
-                    .with_context(|| format!("failed to start daemon: {}", daemon_binary.display()))?;
+                    .with_context(|| {
+                        format!("failed to start daemon: {}", daemon_binary.display())
+                    })?;
                 std::process::exit(status.code().unwrap_or(1));
             } else {
                 // Daemonize — spawn and detach
@@ -34,7 +36,9 @@ pub async fn run(cmd: DaemonCommands) -> Result<()> {
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
                     .spawn()
-                    .with_context(|| format!("failed to spawn daemon: {}", daemon_binary.display()))?;
+                    .with_context(|| {
+                        format!("failed to spawn daemon: {}", daemon_binary.display())
+                    })?;
                 println!("Daemon started (pid: {})", child.id());
             }
             Ok(())
@@ -136,7 +140,9 @@ fn find_daemon_binary() -> Result<std::path::PathBuf> {
 fn detect_app_root() -> std::path::PathBuf {
     std::env::var("ORCHESTRATOR_ROOT")
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")))
+        .unwrap_or_else(|_| {
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+        })
 }
 
 fn read_pid(path: &std::path::Path) -> Option<u32> {

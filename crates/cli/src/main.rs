@@ -298,12 +298,8 @@ fn main() -> Result<()> {
 
     rt.block_on(async move {
         match cli.command {
-            Commands::Version => {
-                commands::version::run().await
-            }
-            Commands::Daemon(cmd) => {
-                commands::daemon::run(cmd).await
-            }
+            Commands::Version => commands::version::run().await,
+            Commands::Daemon(cmd) => commands::daemon::run(cmd).await,
             _ => {
                 let mut client = client::connect().await?;
                 commands::dispatch(&mut client, cli.command).await

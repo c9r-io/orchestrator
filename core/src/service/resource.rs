@@ -18,8 +18,8 @@ pub fn apply_manifests(
     project: Option<&str>,
 ) -> Result<orchestrator_proto::ApplyResponse> {
     let db_path = &state.db_path;
-    let manifests = parse_manifests_from_yaml(content)
-        .map_err(|e| anyhow::anyhow!("parse error: {}", e))?;
+    let manifests =
+        parse_manifests_from_yaml(content).map_err(|e| anyhow::anyhow!("parse error: {}", e))?;
 
     let mut merged_config = load_raw_config_from_db(db_path)?
         .map(|(cfg, _, _)| cfg)
@@ -87,7 +87,12 @@ pub fn apply_manifests(
                         });
                     }
                     Err(error) => {
-                        errors.push(format!("document {} (CRD {}): {}", index + 1, crd_name, error));
+                        errors.push(format!(
+                            "document {} (CRD {}): {}",
+                            index + 1,
+                            crd_name,
+                            error
+                        ));
                     }
                 }
             }
@@ -110,7 +115,13 @@ pub fn apply_manifests(
                         });
                     }
                     Err(error) => {
-                        errors.push(format!("document {} ({}/{}): {}", index + 1, cr_kind, cr_name, error));
+                        errors.push(format!(
+                            "document {} ({}/{}): {}",
+                            index + 1,
+                            cr_kind,
+                            cr_name,
+                            error
+                        ));
                     }
                 }
             }

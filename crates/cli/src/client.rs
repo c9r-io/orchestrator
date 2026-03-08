@@ -12,7 +12,9 @@ fn discover_socket_path() -> std::path::PathBuf {
     // Default: look in the app root's data directory
     let app_root = std::env::var("ORCHESTRATOR_ROOT")
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
+        .unwrap_or_else(|_| {
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+        });
 
     app_root.join("data/orchestrator.sock")
 }

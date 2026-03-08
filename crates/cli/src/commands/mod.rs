@@ -23,8 +23,9 @@ pub async fn dispatch(
                 std::io::stdin().read_to_string(&mut buf)?;
                 buf
             } else {
-                std::fs::read_to_string(&file)
-                    .map_err(|e| anyhow::anyhow!("failed to read manifest file '{}': {}", file, e))?
+                std::fs::read_to_string(&file).map_err(|e| {
+                    anyhow::anyhow!("failed to read manifest file '{}': {}", file, e)
+                })?
             };
 
             let resp = client

@@ -1,5 +1,5 @@
 use crate::OutputFormat;
-use orchestrator_proto::{TaskSummary, TaskInfoResponse};
+use orchestrator_proto::{TaskInfoResponse, TaskSummary};
 
 pub fn print_task_list(tasks: &[TaskSummary], format: OutputFormat) {
     match format {
@@ -18,7 +18,10 @@ pub fn print_task_list(tasks: &[TaskSummary], format: OutputFormat) {
                     })
                 })
                 .collect();
-            println!("{}", serde_json::to_string_pretty(&json).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json).unwrap_or_default()
+            );
         }
         OutputFormat::Yaml => {
             let yaml: Vec<serde_json::Value> = tasks
@@ -80,7 +83,10 @@ pub fn print_task_detail(resp: &TaskInfoResponse, format: OutputFormat) {
                 "runs": resp.runs.len(),
                 "events": resp.events.len(),
             });
-            println!("{}", serde_json::to_string_pretty(&json).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json).unwrap_or_default()
+            );
         }
         OutputFormat::Yaml => {
             let json = serde_json::json!({

@@ -97,8 +97,7 @@ fn main() -> Result<()> {
 
             // Remove stale socket
             let _ = std::fs::remove_file(&socket_path);
-            let uds = UnixListener::bind(&socket_path)
-                .context("failed to bind UDS")?;
+            let uds = UnixListener::bind(&socket_path).context("failed to bind UDS")?;
             let uds_stream = tokio_stream::wrappers::UnixListenerStream::new(uds);
 
             info!(socket = %socket_path.display(), "listening on UDS");

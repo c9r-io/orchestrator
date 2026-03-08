@@ -28,9 +28,7 @@ pub fn debug_info(state: &InnerState, component: Option<&str>) -> Result<String>
 }
 
 /// Get worker status.
-pub async fn worker_status(
-    state: &InnerState,
-) -> Result<orchestrator_proto::WorkerStatusResponse> {
+pub async fn worker_status(state: &InnerState) -> Result<orchestrator_proto::WorkerStatusResponse> {
     let pending = pending_task_count(state).await?;
     let stop_signal = worker_stop_signal_path(state).exists();
 

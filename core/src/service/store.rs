@@ -40,12 +40,7 @@ pub async fn store_put(
     Ok(())
 }
 
-pub async fn store_delete(
-    state: &InnerState,
-    store: &str,
-    key: &str,
-    project: &str,
-) -> Result<()> {
+pub async fn store_delete(state: &InnerState, store: &str, key: &str, project: &str) -> Result<()> {
     let op = StoreOp::Delete {
         store_name: store.to_string(),
         project_id: project.to_string(),

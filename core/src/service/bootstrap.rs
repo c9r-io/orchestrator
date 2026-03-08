@@ -120,11 +120,10 @@ fn build_managed_state(
     let session_store = Arc::new(crate::session_store::AsyncSessionStore::new(
         async_database.clone(),
     ));
-    let task_repo = Arc::new(
-        crate::task_repository::AsyncSqliteTaskRepository::new(async_database.clone()),
-    );
-    let store_manager =
-        crate::store::StoreManager::new(async_database.clone(), app_root.clone());
+    let task_repo = Arc::new(crate::task_repository::AsyncSqliteTaskRepository::new(
+        async_database.clone(),
+    ));
+    let store_manager = crate::store::StoreManager::new(async_database.clone(), app_root.clone());
 
     Ok(ManagedState {
         inner: Arc::new(InnerState {

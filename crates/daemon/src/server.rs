@@ -251,8 +251,7 @@ impl OrchestratorService for OrchestratorServer {
 
     // ─── Task streaming ───────────────────────────────────────
 
-    type TaskLogsStream =
-        tokio_stream::wrappers::ReceiverStream<Result<TaskLogChunk, Status>>;
+    type TaskLogsStream = tokio_stream::wrappers::ReceiverStream<Result<TaskLogChunk, Status>>;
 
     async fn task_logs(
         &self,
@@ -281,11 +280,12 @@ impl OrchestratorService for OrchestratorServer {
             let _ = tx.send(Ok(proto)).await;
         }
 
-        Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(rx)))
+        Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
+            rx,
+        )))
     }
 
-    type TaskFollowStream =
-        tokio_stream::wrappers::ReceiverStream<Result<TaskLogLine, Status>>;
+    type TaskFollowStream = tokio_stream::wrappers::ReceiverStream<Result<TaskLogLine, Status>>;
 
     async fn task_follow(
         &self,
@@ -308,12 +308,17 @@ impl OrchestratorService for OrchestratorServer {
                         .await;
                 }
             };
-            let _ =
-                agent_orchestrator::service::task::follow_task_logs_stream(&state, &req.task_id, send_fn)
-                    .await;
+            let _ = agent_orchestrator::service::task::follow_task_logs_stream(
+                &state,
+                &req.task_id,
+                send_fn,
+            )
+            .await;
         });
 
-        Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(rx)))
+        Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
+            rx,
+        )))
     }
 
     type TaskWatchStream =
@@ -345,10 +350,7 @@ impl OrchestratorService for OrchestratorServer {
         Ok(Response::new(result))
     }
 
-    async fn get(
-        &self,
-        request: Request<GetRequest>,
-    ) -> Result<Response<GetResponse>, Status> {
+    async fn get(&self, request: Request<GetRequest>) -> Result<Response<GetResponse>, Status> {
         let req = request.into_inner();
         let content = agent_orchestrator::service::resource::get_resource(
             &self.state,
@@ -387,8 +389,12 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<DeleteRequest>,
     ) -> Result<Response<DeleteResponse>, Status> {
         let req = request.into_inner();
-        agent_orchestrator::service::resource::delete_resource(&self.state, &req.resource, req.force)
-            .map_err(|e| Status::internal(format!("{e}")))?;
+        agent_orchestrator::service::resource::delete_resource(
+            &self.state,
+            &req.resource,
+            req.force,
+        )
+        .map_err(|e| Status::internal(format!("{e}")))?;
         Ok(Response::new(DeleteResponse {
             message: format!("{} deleted", req.resource),
         }))
@@ -401,10 +407,14 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<StoreGetRequest>,
     ) -> Result<Response<StoreGetResponse>, Status> {
         let req = request.into_inner();
-        let result =
-            agent_orchestrator::service::store::store_get(&self.state, &req.store, &req.key, &req.project)
-                .await
-                .map_err(|e| Status::internal(format!("{e}")))?;
+        let result = agent_orchestrator::service::store::store_get(
+            &self.state,
+            &req.store,
+            &req.key,
+            &req.project,
+        )
+        .await
+        .map_err(|e| Status::internal(format!("{e}")))?;
 
         Ok(Response::new(StoreGetResponse {
             value_json: result.clone(),
@@ -438,9 +448,14 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<StoreDeleteRequest>,
     ) -> Result<Response<StoreDeleteResponse>, Status> {
         let req = request.into_inner();
-        agent_orchestrator::service::store::store_delete(&self.state, &req.store, &req.key, &req.project)
-            .await
-            .map_err(|e| Status::internal(format!("{e}")))?;
+        agent_orchestrator::service::store::store_delete(
+            &self.state,
+            &req.store,
+            &req.key,
+            &req.project,
+        )
+        .await
+        .map_err(|e| Status::internal(format!("{e}")))?;
 
         Ok(Response::new(StoreDeleteResponse {
             message: format!("deleted key '{}' from '{}'", req.key, req.store),
@@ -481,10 +496,7 @@ impl OrchestratorService for OrchestratorServer {
 
     // ─── System ───────────────────────────────────────────────
 
-    async fn ping(
-        &self,
-        _request: Request<PingRequest>,
-    ) -> Result<Response<PingResponse>, Status> {
+    async fn ping(&self, _request: Request<PingRequest>) -> Result<Response<PingResponse>, Status> {
         Ok(Response::new(PingResponse {
             version: env!("CARGO_PKG_VERSION").to_string(),
             git_hash: env!("BUILD_GIT_HASH").to_string(),
