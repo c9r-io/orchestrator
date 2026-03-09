@@ -424,6 +424,7 @@ message DbResetResponse {
 
 message ManifestValidateRequest {
   string content = 1;
+  optional string project_id = 2;
 }
 
 message ManifestValidateResponse {

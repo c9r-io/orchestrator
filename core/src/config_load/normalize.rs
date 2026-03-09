@@ -166,6 +166,19 @@ pub(crate) fn normalize_step_execution_mode_recursive(step: &mut WorkflowStepCon
 }
 
 pub(crate) fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorConfig {
+    // Ensure the built-in "default" project always exists (like k8s default
+    // namespace). It starts empty — users can populate it via
+    // `orchestrator apply --project default`.
+    config
+        .projects
+        .entry("default".to_string())
+        .or_insert_with(|| crate::config::ProjectConfig {
+            description: Some("Built-in default project".to_string()),
+            workspaces: Default::default(),
+            agents: Default::default(),
+            workflows: Default::default(),
+        });
+
     for workflow in config.workflows.values_mut() {
         normalize_workflow_config(workflow);
     }

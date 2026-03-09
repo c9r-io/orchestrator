@@ -180,7 +180,7 @@ pub async fn dispatch(
         Commands::Manifest(cmd) => {
             use crate::ManifestCommands;
             match cmd {
-                ManifestCommands::Validate { file } => {
+                ManifestCommands::Validate { file, project } => {
                     let content = if file == "-" {
                         use std::io::Read;
                         let mut buf = String::new();
@@ -193,7 +193,10 @@ pub async fn dispatch(
                     };
 
                     let resp = client
-                        .manifest_validate(orchestrator_proto::ManifestValidateRequest { content })
+                        .manifest_validate(orchestrator_proto::ManifestValidateRequest {
+                            content,
+                            project_id: project,
+                        })
                         .await?
                         .into_inner();
                     println!("{}", resp.message);

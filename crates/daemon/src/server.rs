@@ -678,8 +678,12 @@ impl OrchestratorService for OrchestratorServer {
     ) -> Result<Response<ManifestValidateResponse>, Status> {
         let req = request.into_inner();
         let (valid, errors, message) =
-            agent_orchestrator::service::system::validate_manifests(&self.state, &req.content, None)
-                .map_err(|e| Status::internal(format!("{e}")))?;
+            agent_orchestrator::service::system::validate_manifests(
+                &self.state,
+                &req.content,
+                req.project_id.as_deref(),
+            )
+            .map_err(|e| Status::internal(format!("{e}")))?;
         Ok(Response::new(ManifestValidateResponse {
             valid,
             errors,

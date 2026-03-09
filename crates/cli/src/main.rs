@@ -150,6 +150,10 @@ pub enum ManifestCommands {
     Validate {
         #[arg(short = 'f', long = "file")]
         file: String,
+
+        /// Validate in the context of a specific project
+        #[arg(long)]
+        project: Option<String>,
     },
 
     /// Export all resources as manifest documents
