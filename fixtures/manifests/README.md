@@ -10,7 +10,7 @@ kubectl-style fixtures for `orchestrator apply -f`.
 
 ```bash
 orchestrator init
-orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml
+orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml --project qa-demo
 ```
 
 These fixtures replace legacy flat-config bootstrap flows.
@@ -27,7 +27,7 @@ These fixtures replace legacy flat-config bootstrap flows.
 For Phase 2 CLI regression work, use the dedicated probe bundle:
 
 ```bash
-orchestrator apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
+orchestrator apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml --project qa-probe
 ```
 
 It provides fixed workspaces and workflows for:

@@ -44,10 +44,10 @@ BINARY="$(qa_binary_path)"
 qa_require_binary
 cd "$REPO_ROOT"
 
-qa_info "Applying fixture for throughput baseline..."
-qa_apply_fixture_additive "fixtures/manifests/bundles/output-formats.yaml"
 qa_resolve_project "qa-throughput"
+qa_info "Applying fixture for throughput baseline..."
 qa_recreate_project "qa_only"
+qa_apply_fixture_additive "fixtures/manifests/bundles/output-formats.yaml"
 
 qa_info "Enqueuing detached tasks: $TASKS"
 for i in $(seq 1 "$TASKS"); do

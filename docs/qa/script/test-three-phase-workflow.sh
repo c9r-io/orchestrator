@@ -15,10 +15,10 @@ BINARY="$(qa_binary_path)"
 qa_require_binary
 cd "$REPO_ROOT"
 
-qa_info "Ensuring config is applied from manifest..."
-qa_apply_fixture_additive "fixtures/manifests/bundles/three-phase-forced.yaml"
 qa_resolve_project "qa-three-phase"
+qa_info "Ensuring config is applied from manifest..."
 qa_recreate_project "qa_fix_retest_forced"
+qa_apply_fixture_additive "fixtures/manifests/bundles/three-phase-forced.yaml"
 
 qa_info "========================================"
 qa_info "TEST: Three-Phase Workflow (QA + Fix + Retest)"

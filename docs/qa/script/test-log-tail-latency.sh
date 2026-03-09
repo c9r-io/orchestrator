@@ -46,10 +46,10 @@ ms_now() {
   perl -MTime::HiRes=time -e 'printf("%.0f\n",time()*1000)'
 }
 
-qa_info "Applying fixture for log tail latency baseline..."
-qa_apply_fixture_additive "fixtures/manifests/bundles/output-formats.yaml"
 qa_resolve_project "qa-logtail"
+qa_info "Applying fixture for log tail latency baseline..."
 qa_recreate_project "qa_only"
+qa_apply_fixture_additive "fixtures/manifests/bundles/output-formats.yaml"
 
 TASK_ID="$("$BINARY" task create \
   --project "$QA_PROJECT" \

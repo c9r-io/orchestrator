@@ -97,8 +97,12 @@ qa_apply_fixture_additive() {
   local manifest="$1"
   local bin
   bin="$(qa_binary_path)"
+  if [[ -z "${QA_PROJECT:-}" ]]; then
+    qa_error "QA_PROJECT must be resolved before applying fixture: $manifest"
+    exit 2
+  fi
   "$bin" init --force >/dev/null 2>&1 || true
-  "$bin" apply -f "$manifest" >/dev/null 2>&1 || {
+  "$bin" apply -f "$manifest" --project "$QA_PROJECT" >/dev/null 2>&1 || {
     qa_error "Failed to apply config manifest: $manifest"
     exit 2
   }

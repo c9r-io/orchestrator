@@ -53,7 +53,6 @@ QA_PROJECT="qa-bootstrap-$(whoami)-$(date +%Y%m%d%H%M%S)"
 $ORCH init --force > /dev/null 2>&1 || true
 
 bold "[Setup] Applying self-bootstrap-test.yaml..."
-$ORCH apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml > /dev/null 2>&1
 $ORCH project reset "${QA_PROJECT}" --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
 $ORCH apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml --project "${QA_PROJECT}" > /dev/null 2>&1
@@ -221,19 +220,19 @@ echo ""
 bold "Scenario 5: Self-Bootstrap Manifest Applies Successfully"
 bold "--------------------------------------------------------------"
 
-S5_DRYRUN=$($ORCH apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --dry-run 2>&1) || true
-S5_APPLY=$($ORCH apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml 2>&1) || true
+S5_DRYRUN=$($ORCH apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}" --dry-run 2>&1) || true
+S5_APPLY=$($ORCH apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}" 2>&1) || true
 
 echo "  Dry-run output: $(echo "$S5_DRYRUN" | head -5)"
 
 # Check resources exist
-S5_WS=$($ORCH get workspaces 2>&1 | grep -c "self" || true)
-S5_AGENTS=$($ORCH get agents 2>&1)
+S5_WS=$($ORCH get workspaces --project "${QA_PROJECT}" 2>&1 | grep -c "self" || true)
+S5_AGENTS=$($ORCH get agents --project "${QA_PROJECT}" 2>&1)
 S5_ARCHITECT=$(echo "$S5_AGENTS" | grep -c "architect" || true)
 S5_CODER=$(echo "$S5_AGENTS" | grep -c "coder" || true)
 S5_TESTER=$(echo "$S5_AGENTS" | grep -c "tester" || true)
 S5_REVIEWER=$(echo "$S5_AGENTS" | grep -c "reviewer" || true)
-S5_WF=$($ORCH get workflows 2>&1 | grep -c "self-bootstrap" || true)
+S5_WF=$($ORCH get workflows --project "${QA_PROJECT}" 2>&1 | grep -c "self-bootstrap" || true)
 
 echo "  Workspace 'self': ${S5_WS}, agents: architect=${S5_ARCHITECT} coder=${S5_CODER} tester=${S5_TESTER} reviewer=${S5_REVIEWER}, workflow: ${S5_WF}"
 
@@ -247,7 +246,6 @@ fi
 bold "[Reset] Re-applying test fixture after S5..."
 $ORCH project reset "${QA_PROJECT}" --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
-$ORCH apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml > /dev/null 2>&1
 $ORCH apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml --project "${QA_PROJECT}" > /dev/null 2>&1
 echo ""
 

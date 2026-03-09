@@ -15,10 +15,10 @@ BINARY="$(qa_binary_path)"
 qa_require_binary
 cd "$REPO_ROOT"
 
-qa_info "Ensuring config is applied from manifest..."
-qa_apply_fixture_additive "fixtures/manifests/bundles/retry-workflow.yaml"
 qa_resolve_project "qa-retry"
+qa_info "Ensuring config is applied from manifest..."
 qa_recreate_project "qa_only_fail"
+qa_apply_fixture_additive "fixtures/manifests/bundles/retry-workflow.yaml"
 
 qa_info "========================================"
 qa_info "TEST: Task Retry"

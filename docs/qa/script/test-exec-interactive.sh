@@ -62,10 +62,9 @@ spec:
     rules: []
 YAML
 
-qa_apply_fixture_additive "$MANIFEST"
-
 qa_resolve_project "qa-exec-interactive"
 qa_recreate_project "exec_interactive_flow"
+qa_apply_fixture_additive "$MANIFEST"
 
 TASK_OUTPUT="$("$BINARY" task create --project "$QA_PROJECT" --workspace "$QA_WORKSPACE" --workflow exec_interactive_flow --name "exec-interactive-$(date +%s)" --goal "simulate interactive exec" --no-start 2>&1)"
 TASK_ID="$(qa_extract_task_id "$TASK_OUTPUT")"
