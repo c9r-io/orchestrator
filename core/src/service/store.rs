@@ -117,3 +117,108 @@ async fn execute_store_op(state: &InnerState, op: StoreOp) -> Result<StoreOpResu
     };
     state.store_manager.execute(&custom_resources, op).await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::service::resource::apply_manifests;
+    use crate::test_utils::TestState;
+
+    fn workflow_store_manifest(name: &str, max_entries: u64) -> String {
+        format!(
+            "apiVersion: orchestrator.dev/v2\nkind: WorkflowStore\nmetadata:\n  name: {name}\nspec:\n  provider: local\n  retention:\n    max_entries: {max_entries}\n"
+        )
+    }
+
+    #[tokio::test]
+    async fn store_put_get_list_delete_round_trip() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        store_put(
+            &state,
+            "memories",
+            "alpha",
+            r#"{"score":1,"name":"first"}"#,
+            crate::config::DEFAULT_PROJECT_ID,
+            "task-1",
+        )
+        .await
+        .expect("store put");
+
+        let loaded = store_get(
+            &state,
+            "memories",
+            "alpha",
+            crate::config::DEFAULT_PROJECT_ID,
+        )
+        .await
+        .expect("store get");
+        assert!(loaded.expect("stored value").contains("\"score\": 1"));
+
+        let entries = store_list(&state, "memories", crate::config::DEFAULT_PROJECT_ID, 10, 0)
+            .await
+            .expect("store list");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].key, "alpha");
+
+        store_delete(&state, "memories", "alpha", crate::config::DEFAULT_PROJECT_ID)
+            .await
+            .expect("store delete");
+        let missing = store_get(
+            &state,
+            "memories",
+            "alpha",
+            crate::config::DEFAULT_PROJECT_ID,
+        )
+        .await
+        .expect("store get after delete");
+        assert!(missing.is_none());
+    }
+
+    #[tokio::test]
+    async fn store_prune_uses_workflow_store_retention() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        apply_manifests(
+            &state,
+            &workflow_store_manifest("ranked", 1),
+            false,
+            Some(crate::config::DEFAULT_PROJECT_ID),
+            false,
+        )
+        .expect("apply workflow store");
+
+        store_put(
+            &state,
+            "ranked",
+            "first",
+            r#"{"rank":1}"#,
+            crate::config::DEFAULT_PROJECT_ID,
+            "task-1",
+        )
+        .await
+        .expect("put first");
+        tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+        store_put(
+            &state,
+            "ranked",
+            "second",
+            r#"{"rank":2}"#,
+            crate::config::DEFAULT_PROJECT_ID,
+            "task-2",
+        )
+        .await
+        .expect("put second");
+
+        store_prune(&state, "ranked", crate::config::DEFAULT_PROJECT_ID)
+            .await
+            .expect("prune ranked store");
+
+        let entries = store_list(&state, "ranked", crate::config::DEFAULT_PROJECT_ID, 10, 0)
+            .await
+            .expect("list ranked store");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].key, "second");
+    }
+}

@@ -201,3 +201,141 @@ fn initialize_runtime(app_root: &Path) -> Result<(std::path::PathBuf, std::path:
     init_schema(&db_path)?;
     Ok((db_path, logs_dir))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dto::CreateTaskPayload;
+    use crate::task_ops::create_task_impl;
+    use crate::test_utils::TestState;
+
+    #[test]
+    fn initialize_runtime_creates_logs_dir_and_database() {
+        let temp = tempfile::tempdir().expect("create tempdir");
+        let (db_path, logs_dir) = initialize_runtime(temp.path()).expect("initialize runtime");
+
+        assert!(db_path.exists());
+        assert!(logs_dir.exists());
+    }
+
+    #[test]
+    fn placeholder_active_config_keeps_config_but_clears_resolved_views() {
+        let config = crate::config::OrchestratorConfig::default();
+        let placeholder = placeholder_active_config(config.clone());
+
+        assert_eq!(placeholder.config.projects.len(), config.projects.len());
+        assert!(placeholder.projects.is_empty());
+        assert!(placeholder.workspaces.is_empty());
+    }
+
+    #[test]
+    fn build_managed_state_populates_expected_subsystems() {
+        let mut fixture = TestState::new();
+        let seeded = fixture.build();
+        let managed = build_managed_state(
+            seeded.app_root.clone(),
+            seeded.db_path.clone(),
+            seeded.logs_dir.clone(),
+            true,
+            seeded.async_database.clone(),
+            crate::config_load::read_active_config(&seeded)
+                .expect("read active config")
+                .clone(),
+            Some("config-error".to_string()),
+            None,
+        )
+        .expect("build managed state");
+
+        assert!(managed.inner.unsafe_mode);
+        assert_eq!(managed.inner.app_root, seeded.app_root);
+        assert!(managed
+            .inner
+            .active_config_error
+            .read()
+            .expect("read config error")
+            .as_deref()
+            == Some("config-error"));
+    }
+
+    #[test]
+    fn backfill_default_scope_data_updates_blank_task_and_command_run_fields() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/bootstrap-backfill.md");
+        std::fs::write(&qa_file, "# bootstrap backfill\n").expect("seed qa file");
+        let created = create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
+
+        let conn = crate::db::open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET workspace_id = '', workflow_id = '', workspace_root = '', qa_targets_json = '[]', ticket_dir = '' WHERE id = ?1",
+            rusqlite::params![created.id],
+        )
+        .expect("blank task fields");
+        let item_id: String = conn
+            .query_row(
+                "SELECT id FROM task_items WHERE task_id = ?1 LIMIT 1",
+                rusqlite::params![created.id],
+                |row| row.get(0),
+            )
+            .expect("load item id");
+        tokio::runtime::Runtime::new()
+            .expect("create runtime")
+            .block_on(state.task_repo.insert_command_run(crate::task_repository::NewCommandRun {
+                id: "bootstrap-run".to_string(),
+                task_item_id: item_id,
+                phase: "qa".to_string(),
+                command: "echo bootstrap".to_string(),
+                cwd: state.app_root.display().to_string(),
+                workspace_id: "".to_string(),
+                agent_id: "echo".to_string(),
+                exit_code: 0,
+                stdout_path: state.app_root.join("logs/bootstrap-stdout.log").display().to_string(),
+                stderr_path: state.app_root.join("logs/bootstrap-stderr.log").display().to_string(),
+                started_at: crate::config_load::now_ts(),
+                ended_at: crate::config_load::now_ts(),
+                interrupted: 0,
+                output_json: "{}".to_string(),
+                artifacts_json: "[]".to_string(),
+                confidence: Some(1.0),
+                quality_score: Some(1.0),
+                validation_status: "passed".to_string(),
+                session_id: None,
+                machine_output_source: "stdout".to_string(),
+                output_json_path: None,
+            }))
+            .expect("insert command run");
+
+        let active = crate::config_load::read_active_config(&state).expect("read active config");
+        let workspace = active
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .and_then(|project| project.workspaces.get("default"))
+            .expect("default workspace");
+        backfill_default_scope_data(&state.db_path, "default", "basic", workspace)
+            .expect("backfill default scope");
+
+        let task_row: (String, String, String, String, String) = conn
+            .query_row(
+                "SELECT workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir FROM tasks WHERE id = ?1",
+                rusqlite::params![created.id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            )
+            .expect("load backfilled task");
+        assert_eq!(task_row.0, "default");
+        assert_eq!(task_row.1, "basic");
+        assert!(!task_row.2.is_empty());
+        assert!(task_row.3.contains("docs/qa"));
+        assert_eq!(task_row.4, "docs/ticket");
+
+        let workspace_id: String = conn
+            .query_row(
+                "SELECT workspace_id FROM command_runs WHERE id = 'bootstrap-run'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("load command run workspace");
+        assert_eq!(workspace_id, "default");
+    }
+}

@@ -201,3 +201,223 @@ pub async fn get_task_trace(
         full_trace: Some(full_trace),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::events::insert_event;
+    use crate::task_repository::NewCommandRun;
+    use crate::task_ops::create_task_impl;
+    use crate::test_utils::TestState;
+
+    fn seed_log_files(state: &InnerState, name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+        let dir = state.app_root.join("logs").join(name);
+        std::fs::create_dir_all(&dir).expect("create log dir");
+        let stdout_path = dir.join("stdout.log");
+        let stderr_path = dir.join("stderr.log");
+        (stdout_path, stderr_path)
+    }
+
+    fn seed_task(fixture: &mut TestState) -> (Arc<InnerState>, String) {
+        let state = fixture.build();
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/service-task-fixture.md");
+        std::fs::write(&qa_file, "# service task fixture\n").expect("seed qa file");
+        let created = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("service-task-fixture".to_string()),
+                goal: Some("service-task-goal".to_string()),
+                ..CreateTaskPayload::default()
+            },
+        )
+        .expect("create fixture task");
+        (state, created.id)
+    }
+
+    fn get_item_id(state: &InnerState, task_id: &str) -> String {
+        let conn = crate::db::open_conn(&state.db_path).expect("open sqlite");
+        conn.query_row(
+            "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
+            rusqlite::params![task_id],
+            |row| row.get(0),
+        )
+        .expect("load task item id")
+    }
+
+    #[tokio::test]
+    async fn create_task_and_query_wrappers_round_trip() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/service-task.md");
+        std::fs::write(&qa_file, "# service task\n").expect("seed qa file");
+
+        let created = create_task(
+            &state,
+            CreateTaskPayload {
+                name: Some("service-task".to_string()),
+                goal: Some("service goal".to_string()),
+                ..CreateTaskPayload::default()
+            },
+        )
+        .expect("create task through service");
+
+        let resolved = resolve_id(&state, &created.id[..8])
+            .await
+            .expect("resolve task prefix");
+        assert_eq!(resolved, created.id);
+
+        let summary = load_summary(&state, &created.id)
+            .await
+            .expect("load summary");
+        assert_eq!(summary.name, "service-task");
+
+        let tasks = list_tasks(&state).await.expect("list tasks");
+        assert_eq!(tasks.len(), 1);
+
+        let detail = get_task_detail(&state, &created.id)
+            .await
+            .expect("get detail");
+        assert_eq!(detail.task.goal, "service goal");
+        assert!(!detail.items.is_empty());
+    }
+
+    #[tokio::test]
+    async fn resolve_start_id_supports_explicit_latest_and_error() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+
+        let explicit = resolve_start_id(&state, Some(&task_id), false)
+            .await
+            .expect("resolve explicit task");
+        assert_eq!(explicit, task_id);
+
+        let latest = resolve_start_id(&state, None, true)
+            .await
+            .expect("resolve latest task");
+        assert_eq!(latest, task_id);
+
+        let err = resolve_start_id(&state, None, false)
+            .await
+            .expect_err("missing args should fail");
+        assert!(err.to_string().contains("task_id or --latest required"));
+    }
+
+    #[tokio::test]
+    async fn get_task_logs_reads_existing_command_output() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let item_id = get_item_id(&state, &task_id);
+        let (stdout_path, stderr_path) = seed_log_files(&state, "task-service-logs");
+        std::fs::write(&stdout_path, "first line\nsecond line\n").expect("write stdout");
+        std::fs::write(&stderr_path, "warn line\n").expect("write stderr");
+
+        state
+            .task_repo
+            .insert_command_run(NewCommandRun {
+                id: "run-task-service".to_string(),
+                task_item_id: item_id,
+                phase: "qa".to_string(),
+                command: "echo hi".to_string(),
+                cwd: state.app_root.display().to_string(),
+                workspace_id: "default".to_string(),
+                agent_id: "echo".to_string(),
+                exit_code: 0,
+                stdout_path: stdout_path.display().to_string(),
+                stderr_path: stderr_path.display().to_string(),
+                started_at: crate::config_load::now_ts(),
+                ended_at: crate::config_load::now_ts(),
+                interrupted: 0,
+                output_json: "{}".to_string(),
+                artifacts_json: "[]".to_string(),
+                confidence: Some(1.0),
+                quality_score: Some(1.0),
+                validation_status: "passed".to_string(),
+                session_id: None,
+                machine_output_source: "stdout".to_string(),
+                output_json_path: None,
+            })
+            .await
+            .expect("insert command run");
+
+        let chunks = get_task_logs(&state, &task_id[..8], 50, true)
+            .await
+            .expect("stream task logs");
+        assert_eq!(chunks.len(), 1);
+        assert!(chunks[0].content.contains("first line"));
+        assert!(chunks[0].content.contains("warn line"));
+    }
+
+    #[tokio::test]
+    async fn retry_task_item_resets_item_and_delete_task_removes_parent() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let item_id = get_item_id(&state, &task_id);
+
+        let conn = crate::db::open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE task_items SET status = 'failed', fix_required = 1, fixed = 1, last_error = 'boom' WHERE id = ?1",
+            rusqlite::params![item_id],
+        )
+        .expect("seed failed item");
+
+        let parent_id = retry_task_item(&state, &item_id).expect("retry task item");
+        assert_eq!(parent_id, task_id);
+
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM task_items WHERE id = ?1",
+                rusqlite::params![item_id],
+                |row| row.get(0),
+            )
+            .expect("reload status");
+        assert_eq!(status, "pending");
+
+        delete_task(state.clone(), &task_id)
+            .await
+            .expect("delete task");
+        let remaining = list_tasks(&state).await.expect("list after delete");
+        assert!(remaining.is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_task_trace_filters_non_verbose_events() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let item_id = get_item_id(&state, &task_id);
+
+        insert_event(
+            &state,
+            &task_id,
+            Some(&item_id),
+            "step_started",
+            serde_json::json!({"step":"qa"}),
+        )
+        .await
+        .expect("insert visible event");
+        insert_event(
+            &state,
+            &task_id,
+            Some(&item_id),
+            "heartbeat",
+            serde_json::json!({"step":"qa"}),
+        )
+        .await
+        .expect("insert hidden event");
+
+        let terse = get_task_trace(&state, &task_id, false)
+            .await
+            .expect("get terse trace");
+        assert_eq!(terse.entries.len(), 1);
+        assert_eq!(terse.entries[0].event_type, "step_started");
+        assert!(terse.full_trace.is_some());
+
+        let verbose = get_task_trace(&state, &task_id, true)
+            .await
+            .expect("get verbose trace");
+        assert_eq!(verbose.entries.len(), 2);
+    }
+}

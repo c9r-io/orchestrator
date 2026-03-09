@@ -217,3 +217,134 @@ pub fn run_check(
     let exit_code = if report.summary.errors > 0 { 1 } else { 0 };
     Ok((content, exit_code))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::service::resource::apply_manifests;
+    use crate::task_ops::create_task_impl;
+    use crate::test_utils::TestState;
+
+    fn workflow_manifest(name: &str) -> String {
+        format!(
+            "apiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: {name}\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo ok\"\n  loop:\n    mode: once\n"
+        )
+    }
+
+    #[test]
+    fn debug_info_covers_known_and_unknown_components() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let state_info = debug_info(&state, None).expect("default debug info");
+        assert!(state_info.contains("Available: state, config, messagebus"));
+
+        let config_info = debug_info(&state, Some("config")).expect("config debug info");
+        assert!(config_info.contains("Active Configuration"));
+
+        let messagebus_info =
+            debug_info(&state, Some("messagebus")).expect("messagebus debug info");
+        assert!(messagebus_info.contains("MessageBus"));
+
+        let unknown = debug_info(&state, Some("bogus")).expect("unknown component");
+        assert!(unknown.contains("Unknown debug component"));
+    }
+
+    #[tokio::test]
+    async fn worker_status_reports_pending_tasks_and_stop_signal() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/system-worker.md");
+        std::fs::write(&qa_file, "# worker\n").expect("seed qa file");
+        create_task_impl(&state, crate::dto::CreateTaskPayload::default()).expect("create task");
+
+        let status = worker_status(&state).await.expect("worker status");
+        assert_eq!(status.pending_tasks, 1);
+        assert!(!status.stop_signal);
+
+        std::fs::write(worker_stop_signal_path(&state), "stop").expect("seed stop signal");
+        let stopped = worker_status(&state).await.expect("worker status with stop");
+        assert!(stopped.stop_signal);
+    }
+
+    #[test]
+    fn run_init_creates_requested_directory_and_reports_paths() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let message = run_init(&state, Some("workspace/new-root")).expect("run init");
+        assert!(message.contains("Orchestrator initialized at"));
+        assert!(state.app_root.join("workspace/new-root").exists());
+    }
+
+    #[test]
+    fn run_db_reset_requires_force_and_clears_in_memory_config_when_requested() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let err = run_db_reset(&state, false, false, false).expect_err("force is required");
+        assert!(err.to_string().contains("Use --force"));
+
+        let message = run_db_reset(&state, true, false, true).expect("reset with config");
+        assert!(message.contains("All config versions deleted"));
+        assert!(state
+            .active_config
+            .read()
+            .expect("read active config")
+            .projects
+            .is_empty());
+    }
+
+    #[test]
+    fn validate_manifests_handles_parse_valid_and_invalid_config() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let parse_result = validate_manifests(&state, "not: [yaml", None).expect("parse result");
+        assert!(!parse_result.0);
+        assert_eq!(parse_result.2, "Parse error");
+
+        let valid = validate_manifests(&state, &workflow_manifest("validated"), None)
+            .expect("valid manifest");
+        assert!(valid.0);
+        assert_eq!(valid.2, "Manifest is valid");
+
+        let invalid = validate_manifests(
+            &state,
+            "apiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: broken\nspec:\n  steps: []\n  loop:\n    mode: once\n",
+            None,
+        )
+        .expect("invalid manifest");
+        assert!(!invalid.0);
+        assert_eq!(invalid.2, "Validation failed");
+        assert!(!invalid.1.is_empty());
+    }
+
+    #[test]
+    fn run_check_supports_text_json_and_yaml_outputs() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        apply_manifests(
+            &state,
+            &workflow_manifest("checkable"),
+            false,
+            Some(crate::config::DEFAULT_PROJECT_ID),
+            false,
+        )
+        .expect("apply workflow manifest");
+
+        let (text, text_exit) = run_check(&state, None, "text", None).expect("text check");
+        assert!(text.contains("orchestrator check"));
+        assert_eq!(text_exit, 0);
+
+        let (json, json_exit) = run_check(&state, None, "json", None).expect("json check");
+        assert!(json.contains("\"summary\""));
+        assert_eq!(json_exit, 0);
+
+        let (yaml, yaml_exit) = run_check(&state, None, "yaml", None).expect("yaml check");
+        assert!(yaml.contains("summary:"));
+        assert_eq!(yaml_exit, 0);
+    }
+}

@@ -181,6 +181,58 @@ fn truncate_goal(goal: &str, max_len: usize) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{SpawnInherit, SpawnMapping};
+    use crate::db::open_conn;
+    use crate::test_utils::TestState;
+    use rusqlite::params;
+
+    fn test_context<'a>(
+        state: &'a InnerState,
+        pipeline_vars: &'a HashMap<String, String>,
+        parent_workspace_id: &'a str,
+        parent_spawn_depth: i64,
+    ) -> SpawnContext<'a> {
+        SpawnContext {
+            state,
+            parent_task_id: "parent-task-123",
+            parent_project_id: crate::config::DEFAULT_PROJECT_ID,
+            parent_workspace_id,
+            parent_workflow_id: "basic",
+            parent_spawn_depth,
+            pipeline_vars,
+        }
+    }
+
+    fn load_spawned_task(
+        state: &InnerState,
+        task_id: &str,
+    ) -> (String, String, String, String, String, String, i64) {
+        let conn = open_conn(&state.db_path).expect("open spawn task database");
+        conn.query_row(
+            "SELECT name, goal, project_id, workspace_id, workflow_id, spawn_reason, spawn_depth FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                ))
+            },
+        )
+        .expect("load spawned task row")
+    }
+
+    fn seed_default_qa_file(state: &InnerState, name: &str) {
+        let qa_path = state
+            .app_root
+            .join("workspace/default/docs/qa")
+            .join(format!("{name}.md"));
+        std::fs::write(qa_path, "# spawn coverage\n").expect("seed default QA file");
+    }
 
     #[test]
     fn test_resolve_template() {
@@ -220,5 +272,143 @@ mod tests {
     fn test_truncate_goal() {
         assert_eq!(truncate_goal("short", 10), "short");
         assert_eq!(truncate_goal("a longer goal text", 10), "a longer g");
+    }
+
+    #[test]
+    fn execute_spawn_task_creates_child_task_and_increments_depth() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        seed_default_qa_file(&state, "spawn-single");
+        let mut pipeline_vars = HashMap::new();
+        pipeline_vars.insert("area".to_string(), "authentication".to_string());
+        let ctx = test_context(&state, &pipeline_vars, "default", 2);
+
+        let task_id = execute_spawn_task(
+            &ctx,
+            &SpawnTaskAction {
+                goal: "fix {area} defects".to_string(),
+                workflow: None,
+                inherit: SpawnInherit::default(),
+            },
+        )
+        .expect("spawn single child task");
+
+        let (name, goal, project_id, workspace_id, workflow_id, spawn_reason, spawn_depth) =
+            load_spawned_task(&state, &task_id);
+        assert_eq!(name, "spawn:fix authentication defects");
+        assert_eq!(goal, "fix authentication defects");
+        assert_eq!(project_id, crate::config::DEFAULT_PROJECT_ID);
+        assert_eq!(workspace_id, "default");
+        assert_eq!(workflow_id, "basic");
+        assert_eq!(spawn_reason, "spawn_task");
+        assert_eq!(spawn_depth, 3);
+    }
+
+    #[test]
+    fn execute_spawn_task_without_workspace_inheritance_uses_default_workspace() {
+        let mut fixture = TestState::new().with_workspace("secondary", "workspace/secondary");
+        let state = fixture.build();
+        seed_default_qa_file(&state, "spawn-no-inherit");
+        let pipeline_vars = HashMap::new();
+        let ctx = test_context(&state, &pipeline_vars, "secondary", 0);
+
+        let task_id = execute_spawn_task(
+            &ctx,
+            &SpawnTaskAction {
+                goal: "independent child".to_string(),
+                workflow: None,
+                inherit: SpawnInherit {
+                    workspace: false,
+                    project: true,
+                    target_files: false,
+                },
+            },
+        )
+        .expect("spawn child without workspace inheritance");
+
+        let (_, _, _, workspace_id, _, _, _) = load_spawned_task(&state, &task_id);
+        assert_eq!(workspace_id, "default");
+    }
+
+    #[test]
+    fn execute_spawn_tasks_creates_batch_children_skips_missing_goal_and_honors_limit() {
+        let mut fixture = TestState::new().with_workspace("secondary", "workspace/secondary");
+        let state = fixture.build();
+        seed_default_qa_file(&state, "spawn-batch");
+        let mut pipeline_vars = HashMap::new();
+        pipeline_vars.insert(
+            "analysis".to_string(),
+            serde_json::json!({
+                "tasks": [
+                    { "goal": "first child", "name": "First custom", "workflow": "basic" },
+                    { "name": "Missing goal" },
+                    { "goal": "second child", "name": "Second custom", "workflow": "basic" }
+                ]
+            })
+            .to_string(),
+        );
+        let ctx = test_context(&state, &pipeline_vars, "secondary", 4);
+
+        let task_ids = execute_spawn_tasks(
+            &ctx,
+            &SpawnTasksAction {
+                from_var: "analysis".to_string(),
+                json_path: "$.tasks".to_string(),
+                mapping: SpawnMapping {
+                    goal: "$.goal".to_string(),
+                    workflow: Some("$.workflow".to_string()),
+                    name: Some("$.name".to_string()),
+                },
+                inherit: SpawnInherit {
+                    workspace: false,
+                    project: true,
+                    target_files: false,
+                },
+                max_tasks: 2,
+                queue: true,
+            },
+        )
+        .expect("spawn child tasks from pipeline var");
+
+        assert_eq!(task_ids.len(), 1);
+
+        let (name, goal, _, workspace_id, workflow_id, spawn_reason, spawn_depth) =
+            load_spawned_task(&state, &task_ids[0]);
+        assert_eq!(name, "First custom");
+        assert_eq!(goal, "first child");
+        assert_eq!(workspace_id, "default");
+        assert_eq!(workflow_id, "basic");
+        assert_eq!(spawn_reason, "spawn_tasks");
+        assert_eq!(spawn_depth, 5);
+    }
+
+    #[test]
+    fn execute_spawn_tasks_errors_when_source_variable_is_missing() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let pipeline_vars = HashMap::new();
+        let ctx = test_context(&state, &pipeline_vars, "default", 0);
+
+        let err = execute_spawn_tasks(
+            &ctx,
+            &SpawnTasksAction {
+                from_var: "missing".to_string(),
+                json_path: "$.tasks".to_string(),
+                mapping: SpawnMapping {
+                    goal: "$.goal".to_string(),
+                    workflow: None,
+                    name: None,
+                },
+                inherit: SpawnInherit::default(),
+                max_tasks: 5,
+                queue: true,
+            },
+        )
+        .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("pipeline variable 'missing' not found for spawn_tasks")
+        );
     }
 }
