@@ -798,6 +798,15 @@ mod tests {
         assert!(message.contains("workflow/delete-me"));
         assert!(message.contains("blocking tasks:"));
         assert!(message.contains("rerun without --prune"));
+
+        let active = read_active_config(&state).expect("read active config after blocked prune");
+        let project = active
+            .config
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project");
+        assert!(project.workflows.contains_key("delete-me"));
+        assert!(project.workflows.contains_key("keep-me"));
     }
 
     #[test]
