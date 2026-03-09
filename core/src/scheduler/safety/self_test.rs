@@ -9,6 +9,7 @@ pub async fn execute_self_test_step(
     state: &InnerState,
     task_id: &str,
     item_id: &str,
+    project_id: Option<&str>,
 ) -> Result<i64> {
     let cargo_bin = std::env::var("ORCH_SELF_TEST_CARGO").unwrap_or_else(|_| "cargo".to_string());
 
@@ -96,7 +97,7 @@ pub async fn execute_self_test_step(
     let manifest_path = workspace_root.join("docs/workflow/self-bootstrap.yaml");
     if manifest_path.exists() {
         let validate_passed = match std::fs::read_to_string(&manifest_path) {
-            Ok(content) => match crate::service::system::validate_manifests(state, &content) {
+            Ok(content) => match crate::service::system::validate_manifests(state, &content, project_id) {
                 Ok((valid, errors, _msg)) => {
                     if !valid {
                         for err in &errors {

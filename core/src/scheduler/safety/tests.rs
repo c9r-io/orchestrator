@@ -366,7 +366,7 @@ async fn test_execute_self_test_step_returns_nonzero_when_cargo_check_fails() {
     std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
     std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
 
-    let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1")
+    let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1", None)
         .await
         .expect("self test should return exit code");
 
@@ -399,7 +399,7 @@ async fn test_execute_self_test_step_success_with_manifest_validate() {
 
     // Self-test now uses direct library call for manifest validation,
     // so we skip that phase here (no manifest file = no validation).
-    let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1")
+    let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1", None)
         .await
         .expect("self test should succeed");
 
@@ -707,7 +707,7 @@ async fn test_execute_self_test_step_cargo_test_fails() {
     std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
     std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
 
-    let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1")
+    let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1", None)
         .await
         .expect("self test should return exit code");
 
@@ -746,7 +746,7 @@ async fn test_execute_self_test_step_no_manifest_script() {
     std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
     std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
 
-    let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1")
+    let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1", None)
         .await
         .expect("self test should return exit code");
 
@@ -1271,7 +1271,7 @@ async fn test_execute_self_test_step_manifest_validate_fails() {
     std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
     std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
 
-    let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1")
+    let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1", None)
         .await
         .expect("self test should return exit code");
 

@@ -310,8 +310,13 @@ async fn execute_builtin_step_dispatch(
     match effective_execution {
         ExecutionMode::Builtin { name } if name == "self_test" => {
             // Self-test uses a specialized builtin
+            let project_opt = if task_ctx.project_id.is_empty() {
+                None
+            } else {
+                Some(task_ctx.project_id.as_str())
+            };
             let exit_code =
-                execute_self_test_step(&task_ctx.workspace_root, state, task_id, item_id)
+                execute_self_test_step(&task_ctx.workspace_root, state, task_id, item_id, project_opt)
                     .await
                     .unwrap_or(1);
             let passed = exit_code == 0;

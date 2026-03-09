@@ -101,9 +101,15 @@ pub fn run_db_reset(
 }
 
 /// Validate manifest YAML content. Returns (valid, errors, message).
+///
+/// When `project_id` is `Some`, manifest resources (Agent, Workflow, Workspace)
+/// are applied into the project scope instead of global config, matching the
+/// behavior of `orchestrator apply --project`. This prevents false negatives
+/// when validating project-only deployments that have no global defaults.
 pub fn validate_manifests(
     state: &InnerState,
     content: &str,
+    project_id: Option<&str>,
 ) -> Result<(bool, Vec<String>, String)> {
     use crate::crd::{self, ParsedManifest};
     use crate::resource::{dispatch_resource, kind_as_str, Resource};
@@ -141,7 +147,13 @@ pub fn validate_manifests(
                     ));
                     continue;
                 }
-                let _ = registered.apply(&mut merged_config);
+                // Apply into project scope when project_id is provided,
+                // mirroring `orchestrator apply --project` behavior.
+                if let Some(pid) = project_id {
+                    let _ = crate::resource::apply_to_project(&registered, &mut merged_config, pid);
+                } else {
+                    let _ = registered.apply(&mut merged_config);
+                }
             }
             ParsedManifest::Crd(crd_manifest) => {
                 if let Err(error) = crd::apply_crd(&mut merged_config, crd_manifest) {
