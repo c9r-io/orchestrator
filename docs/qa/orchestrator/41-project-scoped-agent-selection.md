@@ -11,11 +11,12 @@
 
 Agent selection must be isolated per project: only agents deployed into a
 project scope should participate in selection for that project's tasks. This
-prevents QA fixture agents from interfering with bootstrap agents and vice versa.
+prevents QA fixture agents from interfering with resources belonging to other
+projects.
 
 Agent selection is strictly project-isolated: only agents deployed into a
 project scope participate in selection for that project's tasks. There is no
-fallback to global agents — if the project lacks an agent with the required
+cross-project fallback — if the project lacks an agent with the required
 capability, the task fails with a clear error.
 
 Key CLI workflow:
@@ -43,7 +44,7 @@ Entry point: `orchestrator <command>`
 ### Goal
 
 Validate that `apply -f --project` deploys agents, workflows, and workspaces
-into the project config scope, not into the global config.
+into the project config scope, not into any top-level global map.
 
 ### Steps
 
@@ -53,14 +54,12 @@ into the project config scope, not into the global config.
    orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-scope
    ```
 
-2. Inspect global vs project config:
+2. Inspect manifest export for project-scoped placement:
    ```bash
    orchestrator manifest export | python3 -c "
    import sys, yaml
    cfg = yaml.safe_load(sys.stdin)
-   global_agents = list(cfg.get('agents', {}).keys())
    proj_agents = list(cfg.get('projects', {}).get('qa-scope', {}).get('agents', {}).keys())
-   print('global_agents:', global_agents)
    print('project_agents:', proj_agents)
    "
    ```
@@ -68,7 +67,7 @@ into the project config scope, not into the global config.
 ### Expected
 
 - `mock_echo_alpha` and `mock_echo_beta` appear in `projects.qa-scope.agents`
-- Neither appears in global `agents` (unless they were already there from bootstrap)
+- No top-level `agents` map is required for these resources
 - CLI output shows `(project: qa-scope)` suffix for each applied resource
 
 ---
@@ -82,7 +81,7 @@ into the project config scope, not into the global config.
 ### Goal
 
 Validate that tasks created with `--project` use only project-scoped agents
-for selection, even when global agents have the same capability.
+for selection, even when another project has agents with the same capability.
 
 ### Steps
 
@@ -114,7 +113,7 @@ for selection, even when global agents have the same capability.
 ### Expected
 
 - Only `mock_echo_alpha` and/or `mock_echo_beta` appear in `command_runs`
-- No global/bootstrap agents (e.g. `probe_fallback`, `env-agent`) are selected
+- No agents from other projects are selected
 - Task status: `completed`
 
 ---
@@ -124,12 +123,12 @@ for selection, even when global agents have the same capability.
 ### Preconditions
 
 - Reset previous QA state.
-- Global config has agents with `fix` capability (from bootstrap).
+- Another project may contain agents with `fix` capability.
 
 ### Goal
 
 Validate that when a project's agents lack a required capability, the task
-fails with a clear error instead of silently falling back to global agents.
+fails with a clear error instead of silently falling back to another project.
 
 ### Steps
 
@@ -158,7 +157,7 @@ fails with a clear error instead of silently falling back to global agents.
 ### Expected
 
 - Task creation or execution fails with a clear error about missing `fix` capability.
-- No global agents are selected — strict project isolation is enforced.
+- No agents from other projects are selected — strict project isolation is enforced.
 - Exit code is non-zero.
 
 ---

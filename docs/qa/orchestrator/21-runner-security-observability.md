@@ -90,8 +90,12 @@ Ensure run-phase command execution is denied by runner policy before process spa
    QA_PROJECT="qa-runner-deny"
    orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
    cat > /tmp/runner-policy-deny.yaml << 'YAML'
+   apiVersion: orchestrator.dev/v2
+   kind: RuntimePolicy
+   metadata:
+     name: runtime
+   spec:
    runner:
      policy: allowlist
      executor: shell
@@ -100,37 +104,10 @@ Ensure run-phase command execution is denied by runner policy before process spa
      allowed_shells: [/bin/bash]
      allowed_shell_args: [-lc]
      redaction_patterns: [SECRET_TOKEN_ABC]
-   resume:
-     auto: false
-   defaults:
-     workspace: default
-     workflow: qa_only
-   workspaces:
-     default:
-       root_path: .
-       qa_targets: [docs/qa]
-       ticket_dir: fixtures/ticket
-   agents:
-     mock:
-       metadata:
-         name: mock
-       capabilities: [qa]
-       templates:
-         qa: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[]}'"
-   workflows:
-     qa_only:
-       steps:
-         - id: qa
-           required_capability: qa
-           enabled: true
-       loop:
-         mode: once
-         guard:
-           enabled: false
-           stop_when_no_unresolved: true
-       finalize:
-         rules: []
+    resume:
+      auto: false
    YAML
+   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
    orchestrator apply --project "${QA_PROJECT}" -f /tmp/runner-policy-deny.yaml
    ```
 2. Create and start task:
@@ -166,20 +143,27 @@ Ensure sensitive token is redacted in persisted structured output and in `task l
 
 1. Apply redaction-enabled config and run task:
    ```bash
-   # Apply runner config with redaction patterns
    cat > /tmp/runner-redaction-config.yaml << 'YAML'
-   runner:
-     policy: unsafe
-     executor: shell
-     shell: /bin/bash
-     shell_arg: -lc
-     redaction_patterns: [SECRET_TOKEN_ABC]
-   resume:
-     auto: false
+   apiVersion: orchestrator.dev/v2
+   kind: RuntimePolicy
+   metadata:
+     name: runtime
+   spec:
+     runner:
+       policy: unsafe
+       executor: shell
+       shell: /bin/bash
+       shell_arg: -lc
+       redaction_patterns: [SECRET_TOKEN_ABC]
+     resume:
+       auto: false
    YAML
+   QA_PROJECT="runner-redaction"
+   orchestrator project reset "${QA_PROJECT}" --force --include-config 2>/dev/null || true
+   rm -rf "workspace/${QA_PROJECT}"
    orchestrator apply -f /tmp/runner-redaction-config.yaml
+   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
 
-   # Apply CRD resources
    cat > /tmp/runner-redaction-resources.yaml << 'YAML'
    apiVersion: orchestrator.dev/v2
    kind: Workspace
@@ -212,9 +196,9 @@ Ensure sensitive token is redacted in persisted structured output and in `task l
      finalize:
        rules: []
    YAML
-   orchestrator apply -f /tmp/runner-redaction-resources.yaml
+   orchestrator apply --project "${QA_PROJECT}" -f /tmp/runner-redaction-resources.yaml
 
-   TASK_ID=$(orchestrator task create --project default --name "runner-redaction" --goal "redaction" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "runner-redaction" --goal "redaction" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    orchestrator task start "${TASK_ID}" || true
    ```
 2. Verify redaction in logs and DB:

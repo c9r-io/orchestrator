@@ -33,9 +33,6 @@ Workflow: `fixtures/manifests/bundles/self-bootstrap-mock.yaml`
 ```bash
 rm -f fixtures/ticket/auto_*.md
 
-# A global base config must exist first (provides defaults)
-orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml
-
 QA_PROJECT="qa-survival"
 orchestrator project reset "${QA_PROJECT}" --force --include-config
 orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
@@ -47,10 +44,9 @@ orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --proj
 |---------|-----------|-----|
 | `binary_snapshot_created` event never emitted | `self_referential` resolved to `false` at runtime because the applied manifest does not set `self_referential: true` | Use `apply -f <manifest> --project` with a manifest that sets `self_referential: true` on the workspace |
 | `snapshot_binary` logs warning "release binary not found" | Binary not built | Run `cargo build --release -p orchestratord` before testing |
-| "no agent supports capability" on task create | Project-scoped agents not checked during validation | Fixed: `build_execution_plan_for_project` merges project + global agents |
-| Task uses global workspace instead of project workspace | No `--workspace` flag and global default doesn't match project | Fixed: auto-resolves to project's single workspace when not specified |
-| "EMPTY_WORKFLOWS" error with project-only config | Global workflow check didn't account for project-scoped workflows | Fixed: validation now checks `has_project_workflows` |
-| "defaults.workflow does not exist" with project-only config | A global base config with at least one workflow/workspace/agent must exist before applying project-scoped resources | Apply `echo-workflow.yaml` (or any base fixture) first |
+| "no agent supports capability" on task create | The selected project does not contain an agent with the required capability | Re-apply the self-bootstrap fixture into the target project and recreate the task in that same project |
+| Task creation fails with `project '...' not found` | The target project was not created before task execution | Run `orchestrator project reset <project> --force --include-config` and `orchestrator apply -f <fixture> --project <project>` first |
+| Task uses the wrong workspace | Task created under the wrong project or with an explicit workspace that does not belong to the project | Create the task with `--project "${QA_PROJECT}"` and use a workspace defined inside that project |
 | `orchestratord` appears to hang after self-restart | **Not a hang.** The `self_restart` step triggers `exec()` self-replacement; the daemon replaces itself in-place and resumes the task in cycle 2. The `self_restart` step has `repeatable: false` so it is skipped on cycle 2, and the process exits normally. Total wall time ≈ 2× a single cycle. | Wait for the full run to complete. If testing restart behavior specifically, check the daemon logs for the `exec()` self-replacement event and verify cycle 2 completes with exit 0. |
 
 ---

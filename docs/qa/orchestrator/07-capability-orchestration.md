@@ -23,9 +23,9 @@ Entry point: `orchestrator <command>`
 ### Preconditions
 
 - Reset previous QA state — use `project reset` to clear task data and
-  project config (including auto-generated tickets) without destroying global state.
+  project config (including auto-generated tickets) without affecting other QA projects.
 - Apply fixture into project scope — use `--project` to isolate fixture agents
-  from global/bootstrap agents.
+  from resources belonging to other projects.
 
 ### Goal
 
@@ -86,7 +86,7 @@ to the fix-capable agent when capabilities are disjoint.
 ### Preconditions
 
 - Reset previous QA state — use `project reset` to clear task data, config,
-  and auto-generated tickets without destroying global state.
+  and auto-generated tickets without affecting other QA projects.
 - Apply fixture into project scope — use `--project` to ensure only fixture
   agents participate in selection.
 
@@ -142,7 +142,7 @@ distributes work across them and each agent uses its own correct template.
 
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
-| Other agents selected (e.g. `probe_fallback`, `env-agent`) | Fixture not applied with `--project`; agents from wrong project participate | Use `apply -f ... --project <name>` to scope agents |
+| Other agents selected (e.g. agents from another QA fixture project) | Fixture not applied with `--project`, or task created under the wrong project | Re-apply with `--project <name>` and recreate the task in that same project |
 | Items marked `unresolved` despite agents exiting 0 | Auto-ticket files in `fixtures/ticket/` from a prior run | Use `project reset <name> --force --include-config` to clean tickets |
 
 ---

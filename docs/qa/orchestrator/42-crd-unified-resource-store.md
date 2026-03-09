@@ -13,13 +13,13 @@ The orchestrator previously maintained two parallel resource pipelines:
 - **Builtin pipeline**: YAML → `OrchestratorResource` (strongly-typed `ResourceSpec` enum) → 9 independent `HashMap` fields
 - **CRD pipeline**: YAML → `CustomResourceManifest` (`serde_json::Value`) → schema/CEL validation → single `custom_resources` HashMap
 
-These were unified into a **single ResourceStore** that acts as the write point for all resources (builtin + user-defined CRDs). The 9 builtin types (Agent, Workflow, Workspace, Project, Defaults, RuntimePolicy, StepTemplate, EnvStore, SecretStore) are now registered as builtin CRDs with `builtin: true`. Legacy config fields (`config.agents`, `config.workflows`, etc.) are maintained as **projection caches** via targeted writeback, so all ~150 downstream read sites require zero changes.
+These were unified into a **single ResourceStore** that acts as the write point for all resources (builtin + user-defined CRDs). Builtin resource instances such as Agent, Workflow, Workspace, Project, RuntimePolicy, StepTemplate, EnvStore, and SecretStore are stored in the ResourceStore and projected back into the in-memory config snapshot. Project-scoped resources are written under `projects.<id>.*` and stored with namespaced keys in the ResourceStore.
 
 **Key components**:
-- `crd/store.rs` — `ResourceStore`: unified HashMap keyed by `"{Kind}/{name}"`
+- `crd/store.rs` — `ResourceStore`: unified HashMap keyed by `"{Kind}/{project}/{name}"` for project-scoped resources
 - `crd/projection.rs` — `CrdProjectable` trait: round-trip typed config ↔ `serde_json::Value`
 - `crd/writeback.rs` — `write_back_single()`, `remove_from_legacy()`, `seed_store_from_legacy()`, `sync_legacy_to_store()`
-- `crd/builtin_defs.rs` — `builtin_crd_definitions()`: 9 builtin CRD definitions
+- `crd/builtin_defs.rs` — builtin CRD definitions for supported builtin resource kinds
 - `config_load/normalize.rs` — `normalize_config()`: ensures builtin CRDs exist, rebuilds store from legacy fields
 - `resource/mod.rs` — `apply_to_store()`, `delete_from_store()`, `metadata_from_store()`
 
@@ -38,7 +38,7 @@ These were unified into a **single ResourceStore** that acts as the write point 
 - A fresh or existing config database
 
 ### Goal
-Verify that `normalize_config` ensures all 9 builtin CRD definitions exist with `builtin: true`, and that the ResourceStore is populated from legacy config fields.
+Verify that `normalize_config` ensures builtin CRD definitions exist and that the ResourceStore is populated from the normalized project-scoped config snapshot.
 
 ### Steps
 
@@ -77,9 +77,8 @@ Verify that `normalize_config` ensures all 9 builtin CRD definitions exist with 
 ### Expected
 - `init` succeeds with exit code 0
 - Agent is created and retrievable
-- Unit test confirms 9 builtin CRDs: Agent, Workflow, Workspace, Project, Defaults, RuntimePolicy, StepTemplate, EnvStore, SecretStore
-- All builtin CRDs have `builtin: true`
-- ResourceStore contains entries matching legacy fields after normalization
+- Builtin CRD definitions are present after normalization
+- ResourceStore contains entries matching the project-scoped config snapshot after normalization
 
 ---
 
@@ -89,7 +88,7 @@ Verify that `normalize_config` ensures all 9 builtin CRD definitions exist with 
 - Orchestrator binary is built
 
 ### Goal
-Verify that each of the 9 builtin config types can be converted to a CRD spec (`to_cr_spec`) and back (`from_cr_spec`) without data loss.
+Verify that builtin config types can be converted to a CRD spec (`to_cr_spec`) and back (`from_cr_spec`) without data loss.
 
 ### Steps
 
@@ -101,7 +100,6 @@ Verify that each of the 9 builtin config types can be converted to a CRD spec (`
 2. Verify the following round-trip tests pass:
    - `agent_config_round_trip` — command + capabilities preserved
    - `workspace_config_round_trip` — root_path + qa_targets preserved
-   - `defaults_config_round_trip` — project/workspace/workflow preserved
    - `step_template_config_round_trip` — prompt + description preserved
    - `env_store_config_round_trip` — data map + sensitive=false preserved
    - `secret_store_projection_round_trip` — data map + sensitive=true preserved
@@ -128,7 +126,7 @@ Verify that each of the 9 builtin config types can be converted to a CRD spec (`
 - Orchestrator binary is built
 
 ### Goal
-Verify that `write_back_single` updates exactly one entry in the legacy field without affecting others, and `remove_from_legacy` removes exactly one entry.
+Verify that `write_back_single` updates exactly one projected entry in the config snapshot without affecting others, and `remove_from_legacy` removes exactly one projected entry.
 
 ### Steps
 
@@ -138,9 +136,9 @@ Verify that `write_back_single` updates exactly one entry in the legacy field wi
    ```
 
 2. Verify targeted writeback for each kind:
-   - `write_back_single_agent` — updates `config.agents["name"]`
-   - `write_back_single_workflow` — updates `config.workflows["name"]`
-   - `write_back_single_workspace` — updates `config.workspaces["name"]`
+   - `write_back_single_agent` — updates `config.projects[project].agents["name"]`
+   - `write_back_single_workflow` — updates `config.projects[project].workflows["name"]`
+   - `write_back_single_workspace` — updates `config.projects[project].workspaces["name"]`
    - `write_back_single_project` — updates `config.projects["name"]`, preserves sub-resources
    - `write_back_single_defaults` — updates `config.defaults` singleton
    - `write_back_single_runtime_policy` — updates `config.runner` + `config.resume`
@@ -149,9 +147,9 @@ Verify that `write_back_single` updates exactly one entry in the legacy field wi
    - `write_back_single_secret_store` — updates `config.env_stores["name"]` with sensitive=true
 
 3. Verify removal for map-based kinds:
-   - `remove_from_legacy_agent` — removes from `config.agents`
-   - `remove_from_legacy_workflow` — removes from `config.workflows`
-   - `remove_from_legacy_workspace` — removes from `config.workspaces`
+   - `remove_from_legacy_agent` — removes from `config.projects[project].agents`
+   - `remove_from_legacy_workflow` — removes from `config.projects[project].workflows`
+   - `remove_from_legacy_workspace` — removes from `config.projects[project].workspaces`
    - `remove_from_legacy_project` — removes from `config.projects`
    - `remove_from_legacy_step_template` — removes from `config.step_templates`
    - `remove_from_legacy_env_store` — removes from `config.env_stores`
@@ -199,7 +197,7 @@ Verify the unified apply/delete pipeline through ResourceStore with correct chan
    - `delete_from_store_seeds_from_legacy_and_removes` — legacy-only resource can be deleted via store
    - `delete_from_store_returns_false_for_missing` — deleting non-existent resource returns false
 
-4. Verify metadata reads from store:
+4. Verify metadata reads from the namespaced store:
    ```bash
    cargo test --lib "resource::tests::metadata_from_store"
    ```
@@ -211,7 +209,7 @@ Verify the unified apply/delete pipeline through ResourceStore with correct chan
 - Change detection correctly distinguishes Created / Unchanged / Configured
 - Legacy seeding ensures correct detection when store is empty but legacy has data
 - Delete synchronizes both store and legacy fields
-- Metadata reads from ResourceStore (not deprecated resource_meta)
+- Metadata reads from ResourceStore using project-scoped keys when applicable
 
 ---
 

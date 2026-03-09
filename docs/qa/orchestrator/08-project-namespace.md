@@ -16,11 +16,6 @@ Entry point: `orchestrator <command>` (CLI)
 ### Config Model
 
 ```yaml
-defaults:
-  project: default
-  workspace: default
-  workflow: qa_only
-
 projects:
   my-project:
     description: "My AI Project"
@@ -41,8 +36,8 @@ projects:
 
 Resource resolution:
 - All resources are **project-scoped** — `--project` resolves against `config.projects[<name>]` only.
-- There is **no fallback** to global config. If the project doesn't exist in `config.projects`, the command fails with `"project not found"`.
-- The `defaults.project` field names the default project but does **not** create an implicit entry; it must be explicitly created via `apply --project <name>`.
+- There is **no fallback** to top-level global config. If the project doesn't exist in `config.projects`, the command fails with `"project not found"`.
+- The built-in `default` project is only an identifier convention; the project entry must still exist in `config.projects` before project-scoped commands succeed.
 
 ---
 
@@ -89,36 +84,36 @@ Validate task creation with explicit project specification stores project_id in 
 
 ---
 
-## Scenario 2: Project Fallback - Global Workflow
+## Scenario 2: Explicit Workflow Resolution Inside a Project
 
 ### Preconditions
 
-- At least one workflow exists in the global config
-- `defaults.workflow` is set (auto-filled to `qa_only` if present, or the first workflow alphabetically)
-- Default project exists without custom workflows
+- A project exists in `config.projects`
+- The project defines at least one workflow
 - Use `orchestrator` CLI for all commands
 
 ### Goal
 
-Validate that when project doesn't define a workflow, the `defaults.workflow` from the global config is used.
+Validate that task creation resolves workflows from the selected project scope.
 
 ### Steps
 
-1. Check current default workflow:
+1. Check project workflows:
    ```bash
-   orchestrator manifest export | grep 'workflow:'
+   orchestrator get workflows --project default
    ```
 
-2. Create task without explicit workflow (should use default):
+2. Create task with explicit workflow in that project:
    ```bash
    orchestrator task create \
      --name "test-fallback-workflow" \
-     --goal "Test fallback" \
+     --goal "Test project workflow resolution" \
      --project default \
+     --workflow qa_only \
      --no-start
    ```
 
-3. Verify task uses the default workflow:
+3. Verify task uses the selected project workflow:
    ```bash
    sqlite3 data/agent_orchestrator.db "SELECT workflow_id FROM tasks WHERE name = 'test-fallback-workflow';"
    ```
@@ -126,7 +121,7 @@ Validate that when project doesn't define a workflow, the `defaults.workflow` fr
 ### Expected
 
 - Task created successfully
-- workflow_id matches the value shown in `defaults.workflow` (typically `qa_only`)
+- workflow_id matches the workflow selected in the project-scoped command (for example `qa_only`)
 
 ---
 
@@ -164,6 +159,7 @@ Validate workspace resolution within an explicitly-created project context, and 
      --name "test-project-workspace-resolution" \
      --goal "verify project workspace resolution" \
      --project ws-test \
+     --workflow qa_only \
      --no-start
    ```
 
@@ -232,7 +228,7 @@ Validate that project resources are isolated from each other.
 
 ### Steps
 
-1. Validate the two-projects fixture (projects define their own workspaces and agents; global workspaces/agents are empty):
+1. Validate the two-projects fixture (projects define their own workspaces and agents as separate project-scoped groups):
    ```bash
    orchestrator manifest validate -f fixtures/manifests/bundles/two-projects.yaml
    ```
@@ -246,25 +242,25 @@ Validate that project resources are isolated from each other.
 
 ---
 
-## General Scenario: Config Defaults Project Field
+## General Scenario: Explicit Project Entry Exists
 
 ### Goal
 
-Validate that defaults.project is required and defaults to "default".
+Validate that project-scoped commands operate against an explicit project entry.
 
 ### Steps
 
 1. Check current config:
    ```bash
-   ./target/release/orchestrator manifest export | grep -A5 "defaults:"
+   ./target/release/orchestrator manifest export | grep -A8 "^projects:"
    ```
 
-2. Verify project field exists in defaults
+2. Verify the target project exists under `projects:`
 
 ### Expected
 
-- defaults.project field is present
-- Default value is "default"
+- The exported manifest contains a concrete project entry under `projects:`
+- Project-scoped commands should target that explicit project entry
 
 ---
 
