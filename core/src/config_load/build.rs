@@ -15,6 +15,13 @@ use super::{
     validate_workflow_config_with_agents, ConfigSelfHealReport,
 };
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceRemoval {
+    pub kind: String,
+    pub project_id: String,
+    pub name: String,
+}
+
 pub fn build_active_config(app_root: &Path, config: OrchestratorConfig) -> Result<ActiveConfig> {
     let config = normalize_config(config);
     let workspaces = resolve_and_validate_workspaces(app_root, &config)?;
@@ -179,6 +186,7 @@ pub fn enforce_deletion_guards(
     previous: &OrchestratorConfig,
     candidate: &OrchestratorConfig,
 ) -> Result<()> {
+    let mut removals = Vec::new();
     // Check all projects for removed workspaces/workflows that still have tasks.
     for (project_id, prev_project) in &previous.projects {
         let candidate_project = candidate.projects.get(project_id);
@@ -192,22 +200,11 @@ pub fn enforce_deletion_guards(
             .cloned()
             .collect();
         for workspace_id in removed_workspaces {
-            let task_count =
-                count_non_terminal_tasks_by_workspace(conn, project_id, &workspace_id)?;
-            if task_count > 0 {
-                let blockers =
-                    list_non_terminal_tasks_by_workspace(conn, project_id, &workspace_id, 5)?;
-                anyhow::bail!(
-                    "{}",
-                    format_blocking_delete_error(
-                        "workspace",
-                        &workspace_id,
-                        project_id,
-                        task_count,
-                        &blockers
-                    )
-                );
-            }
+            removals.push(ResourceRemoval {
+                kind: "Workspace".to_string(),
+                project_id: project_id.clone(),
+                name: workspace_id,
+            });
         }
 
         let removed_workflows: Vec<String> = prev_project
@@ -220,25 +217,76 @@ pub fn enforce_deletion_guards(
             .cloned()
             .collect();
         for workflow_id in removed_workflows {
-            let task_count =
-                count_non_terminal_tasks_by_workflow(conn, project_id, &workflow_id)?;
-            if task_count > 0 {
-                let blockers =
-                    list_non_terminal_tasks_by_workflow(conn, project_id, &workflow_id, 5)?;
-                anyhow::bail!(
-                    "{}",
-                    format_blocking_delete_error(
-                        "workflow",
-                        &workflow_id,
-                        project_id,
-                        task_count,
-                        &blockers
-                    )
-                );
-            }
+            removals.push(ResourceRemoval {
+                kind: "Workflow".to_string(),
+                project_id: project_id.clone(),
+                name: workflow_id,
+            });
         }
     }
 
+    enforce_deletion_guards_for_removals(conn, &removals)
+}
+
+pub fn enforce_deletion_guards_for_removals(
+    conn: &rusqlite::Connection,
+    removals: &[ResourceRemoval],
+) -> Result<()> {
+    for removal in removals {
+        match removal.kind.as_str() {
+            "Workspace" => {
+                let task_count = count_non_terminal_tasks_by_workspace(
+                    conn,
+                    &removal.project_id,
+                    &removal.name,
+                )?;
+                if task_count > 0 {
+                    let blockers = list_non_terminal_tasks_by_workspace(
+                        conn,
+                        &removal.project_id,
+                        &removal.name,
+                        5,
+                    )?;
+                    anyhow::bail!(
+                        "{}",
+                        format_blocking_delete_error(
+                            "workspace",
+                            &removal.name,
+                            &removal.project_id,
+                            task_count,
+                            &blockers
+                        )
+                    );
+                }
+            }
+            "Workflow" => {
+                let task_count = count_non_terminal_tasks_by_workflow(
+                    conn,
+                    &removal.project_id,
+                    &removal.name,
+                )?;
+                if task_count > 0 {
+                    let blockers = list_non_terminal_tasks_by_workflow(
+                        conn,
+                        &removal.project_id,
+                        &removal.name,
+                        5,
+                    )?;
+                    anyhow::bail!(
+                        "{}",
+                        format_blocking_delete_error(
+                            "workflow",
+                            &removal.name,
+                            &removal.project_id,
+                            task_count,
+                            &blockers
+                        )
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
     Ok(())
 }
 

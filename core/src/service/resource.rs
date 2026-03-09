@@ -1,6 +1,6 @@
 use crate::config_load::{
-    enforce_deletion_guards, load_config, persist_config_and_reload, persist_config_for_delete,
-    read_active_config, PendingResourceDeletion,
+    load_config, persist_config_and_reload, persist_config_for_delete, read_active_config,
+    ResourceRemoval,
 };
 use crate::crd::{self, ParsedManifest};
 use crate::resource::{
@@ -137,7 +137,12 @@ pub fn apply_manifests(
     }
 
     let deleted_resources = if errors.is_empty() && prune {
-        plan_prune_for_project(&current_config, &mut merged_config, cli_project, &prunable_manifest_names)?
+        plan_prune_for_project(
+            &current_config,
+            &mut merged_config,
+            cli_project,
+            &prunable_manifest_names,
+        )?
     } else {
         Vec::new()
     };
@@ -147,13 +152,8 @@ pub fn apply_manifests(
             kind: deletion.kind.to_lowercase(),
             name: deletion.name.clone(),
             action: "deleted".to_string(),
-            project_scope: Some(deletion.project.clone()),
+            project_scope: Some(deletion.project_id.clone()),
         });
-    }
-
-    if errors.is_empty() && !deleted_resources.is_empty() {
-        let conn = crate::db::open_conn(&state.db_path)?;
-        enforce_deletion_guards(&conn, &current_config, &merged_config)?;
     }
 
     let config_version = if !dry_run && !results.is_empty() && errors.is_empty() {
@@ -424,9 +424,9 @@ pub fn delete_resource(
     if !deleted {
         anyhow::bail!("{}/{} not found in project '{}'", kind, name, project_id);
     }
-    let deleted_resources = vec![PendingResourceDeletion {
+    let deleted_resources = vec![ResourceRemoval {
         kind: canonical_kind.to_string(),
-        project: project_id.to_string(),
+        project_id: project_id.to_string(),
         name: name.to_string(),
     }];
     persist_config_for_delete(state, config, "daemon-delete", &deleted_resources)?;
@@ -490,7 +490,7 @@ fn plan_prune_for_project(
     candidate: &mut crate::config::OrchestratorConfig,
     project_id: &str,
     manifest_names: &HashMap<&'static str, HashSet<String>>,
-) -> Result<Vec<PendingResourceDeletion>> {
+) -> Result<Vec<ResourceRemoval>> {
     let Some(previous_project) = previous.projects.get(project_id) else {
         return Ok(Vec::new());
     };
@@ -498,7 +498,7 @@ fn plan_prune_for_project(
         return Ok(Vec::new());
     };
 
-    let mut deletions = Vec::new();
+    let mut deletions: Vec<ResourceRemoval> = Vec::new();
     for (kind, declared_names) in manifest_names {
         match *kind {
             "Agent" => prune_map_entries(&mut candidate_project.agents, declared_names, kind, project_id, &mut deletions),
@@ -520,9 +520,9 @@ fn plan_prune_for_project(
                     .collect();
                 for name in existing_names {
                     candidate_project.env_stores.remove(&name);
-                    deletions.push(PendingResourceDeletion {
+                    deletions.push(ResourceRemoval {
                         kind: (*kind).to_string(),
-                        project: project_id.to_string(),
+                        project_id: project_id.to_string(),
                         name,
                     });
                 }
@@ -538,7 +538,7 @@ fn prune_map_entries<T>(
     declared_names: &HashSet<String>,
     kind: &str,
     project_id: &str,
-    deletions: &mut Vec<PendingResourceDeletion>,
+    deletions: &mut Vec<ResourceRemoval>,
 ) {
     let existing_names: Vec<String> = map
         .keys()
@@ -547,9 +547,9 @@ fn prune_map_entries<T>(
         .collect();
     for name in existing_names {
         map.remove(&name);
-        deletions.push(PendingResourceDeletion {
+        deletions.push(ResourceRemoval {
             kind: kind.to_string(),
-            project: project_id.to_string(),
+            project_id: project_id.to_string(),
             name,
         });
     }
@@ -623,6 +623,16 @@ mod tests {
         format!(
             "apiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: {name}\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"{command}\"\n  loop:\n    mode: once\n"
         )
+    }
+
+    fn project_bundle_manifest(delete_workflow_name: &str) -> String {
+        format!(
+            "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: shared-ws\nspec:\n  root_path: \"workspace/default\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Agent\nmetadata:\n  name: shared-agent\nspec:\n  capabilities:\n    - implement\n  command: \"echo '{{\\\"confidence\\\":1.0,\\\"quality_score\\\":1.0,\\\"artifacts\\\":[]}}'\"\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: keep-me\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo keep\"\n  loop:\n    mode: once\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: {delete_workflow_name}\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo delete\"\n  loop:\n    mode: once\n"
+        )
+    }
+
+    fn project_subset_manifest() -> String {
+        "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: shared-ws\nspec:\n  root_path: \"workspace/default\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Agent\nmetadata:\n  name: shared-agent\nspec:\n  capabilities:\n    - implement\n  command: \"echo '{\\\"confidence\\\":1.0,\\\"quality_score\\\":1.0,\\\"artifacts\\\":[]}'\"\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: keep-me\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo keep\"\n  loop:\n    mode: once\n".to_string()
     }
 
     #[test]
@@ -731,5 +741,66 @@ mod tests {
         assert!(message.contains("workflow/delete-me"));
         assert!(message.contains("blocking tasks:"));
         assert!(message.contains("rerun without --prune"));
+    }
+
+    #[test]
+    fn apply_without_prune_preserves_same_named_resources_across_projects() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let bundle = project_bundle_manifest("delete-me");
+        apply_manifests(&state, &bundle, false, Some("alpha"), false).expect("seed alpha");
+        apply_manifests(&state, &bundle, false, Some("beta"), false).expect("seed beta");
+
+        apply_manifests(
+            &state,
+            &workflow_manifest("keep-me", "echo updated"),
+            false,
+            Some("alpha"),
+            false,
+        )
+        .expect("apply workflow-only manifest without prune");
+
+        let active = read_active_config(&state).expect("read active config");
+        let alpha = active.config.projects.get("alpha").expect("alpha project");
+        let beta = active.config.projects.get("beta").expect("beta project");
+        assert!(alpha.workspaces.contains_key("shared-ws"));
+        assert!(alpha.workflows.contains_key("delete-me"));
+        assert!(beta.workspaces.contains_key("shared-ws"));
+        assert!(beta.workflows.contains_key("delete-me"));
+    }
+
+    #[test]
+    fn apply_prune_isolated_to_target_project_with_same_named_resources() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let qa_file = state.app_root.join("workspace/default/docs/qa/cross-project.md");
+        std::fs::write(&qa_file, "# cross project\n").expect("seed qa file");
+
+        let bundle = project_bundle_manifest("delete-me");
+        apply_manifests(&state, &bundle, false, Some("alpha"), false).expect("seed alpha");
+        apply_manifests(&state, &bundle, false, Some("beta"), false).expect("seed beta");
+
+        create_task_impl(
+            &state,
+            CreateTaskPayload {
+                project_id: Some("alpha".to_string()),
+                workspace_id: Some("shared-ws".to_string()),
+                workflow_id: Some("delete-me".to_string()),
+                ..CreateTaskPayload::default()
+            },
+        )
+        .expect("create alpha blocker");
+
+        apply_manifests(&state, &project_subset_manifest(), false, Some("beta"), true)
+            .expect("beta prune should ignore alpha blocker");
+
+        let active = read_active_config(&state).expect("read active config");
+        let alpha = active.config.projects.get("alpha").expect("alpha project");
+        let beta = active.config.projects.get("beta").expect("beta project");
+        assert!(alpha.workflows.contains_key("delete-me"));
+        assert!(!beta.workflows.contains_key("delete-me"));
+        assert!(beta.workflows.contains_key("keep-me"));
     }
 }

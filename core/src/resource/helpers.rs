@@ -168,7 +168,7 @@ pub(crate) fn apply_to_store(
     };
     let result = config.resource_store.put(cr);
     // Targeted reconciliation: only update the specific entry, not the whole map
-    crate::crd::writeback::reconcile_single_resource(config, kind, name);
+    crate::crd::writeback::reconcile_single_resource(config, kind, Some(project_id), name);
     result
 }
 
@@ -193,7 +193,7 @@ pub(crate) fn delete_from_store(config: &mut OrchestratorConfig, kind: &str, nam
         .remove_first_by_kind_name(kind, name)
         .is_some();
     if removed {
-        crate::crd::writeback::remove_from_config_snapshot(config, kind, name);
+        crate::crd::writeback::remove_from_config_snapshot(config, kind, None, name);
     }
     removed
 }
@@ -222,7 +222,7 @@ pub(crate) fn delete_from_store_project(
         .remove_namespaced(kind, &project_id, name)
         .is_some();
     if removed {
-        crate::crd::writeback::remove_from_config_snapshot(config, kind, name);
+        crate::crd::writeback::remove_from_config_snapshot(config, kind, Some(&project_id), name);
     }
     removed
 }

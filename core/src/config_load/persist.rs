@@ -8,8 +8,8 @@ use rusqlite::{params, OptionalExtension, Transaction};
 use std::path::Path;
 
 use super::{
-    build_active_config, build_active_config_for_project, enforce_deletion_guards,
-    normalize_config, now_ts, read_active_config, validate_agent_env_store_refs,
+    build_active_config, build_active_config_for_project, enforce_deletion_guards_for_removals,
+    normalize_config, now_ts, validate_agent_env_store_refs, ResourceRemoval,
 };
 
 /// Legacy deserialization struct for reading old DB blobs that contain
@@ -136,13 +136,6 @@ pub struct HealLogEntry {
     pub rule: String,
     pub detail: String,
     pub created_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PendingResourceDeletion {
-    pub kind: String,
-    pub project: String,
-    pub name: String,
 }
 
 /// Query the latest heal summary for a given config version.
@@ -470,14 +463,19 @@ pub fn load_config_from_resources_table(
     crate::crd::writeback::reconcile_all_builtins(&mut config);
     let project_kinds = ["Agent", "Workflow", "Workspace", "StepTemplate", "EnvStore", "SecretStore"];
     for kind in &project_kinds {
-        let names: Vec<String> = config
+        let resources: Vec<(Option<String>, String)> = config
             .resource_store
             .list_by_kind(kind)
             .iter()
-            .map(|cr| cr.metadata.name.clone())
+            .map(|cr| (cr.metadata.project.clone(), cr.metadata.name.clone()))
             .collect();
-        for name in names {
-            crate::crd::writeback::reconcile_single_resource(&mut config, kind, &name);
+        for (project, name) in resources {
+            crate::crd::writeback::reconcile_single_resource(
+                &mut config,
+                kind,
+                project.as_deref(),
+                &name,
+            );
         }
     }
     let version = query_max_resource_version(db_path)?;
@@ -518,7 +516,7 @@ pub fn persist_config_and_reload(
     _yaml: String,
     author: &str,
     target_project: Option<&str>,
-    deleted_resources: &[PendingResourceDeletion],
+    deleted_resources: &[ResourceRemoval],
 ) -> Result<ConfigOverview> {
     let candidate = match target_project {
         Some(project) => {
@@ -529,19 +527,14 @@ pub fn persist_config_and_reload(
     let normalized = candidate.config.clone();
     let (yaml, json_raw) = serialize_config_snapshot(&normalized)?;
 
-    let previous_config = {
-        let active = read_active_config(state)?;
-        active.config.clone()
-    };
-
     let conn = open_conn(&state.db_path)?;
     let tx = conn.unchecked_transaction()?;
-    enforce_deletion_guards(&tx, &previous_config, &normalized)?;
+    enforce_deletion_guards_for_removals(&tx, deleted_resources)?;
     for deletion in deleted_resources {
         let _ = delete_resource_row(
             &tx,
             &deletion.kind,
-            &deletion.project,
+            &deletion.project_id,
             &deletion.name,
             author,
         )?;
@@ -583,24 +576,19 @@ pub fn persist_config_for_delete(
     state: &crate::state::InnerState,
     config: OrchestratorConfig,
     author: &str,
-    deleted_resources: &[PendingResourceDeletion],
+    deleted_resources: &[ResourceRemoval],
 ) -> Result<ConfigOverview> {
     let normalized = normalize_config(config);
     let (yaml, json_raw) = serialize_config_snapshot(&normalized)?;
 
-    let previous_config = {
-        let active = read_active_config(state)?;
-        active.config.clone()
-    };
-
     let conn = open_conn(&state.db_path)?;
     let tx = conn.unchecked_transaction()?;
-    enforce_deletion_guards(&tx, &previous_config, &normalized)?;
+    enforce_deletion_guards_for_removals(&tx, deleted_resources)?;
     for deletion in deleted_resources {
         let _ = delete_resource_row(
             &tx,
             &deletion.kind,
-            &deletion.project,
+            &deletion.project_id,
             &deletion.name,
             author,
         )?;
@@ -642,6 +630,7 @@ mod tests {
     use super::*;
     use crate::config_load::tests::make_test_db;
     use crate::config_load::{ConfigSelfHealChange, ConfigSelfHealRule};
+    use std::collections::HashMap;
 
     fn seed_heal_log(db_path: &Path, version: i64) {
         let conn = open_conn(db_path).expect("open test db");
@@ -740,5 +729,63 @@ mod tests {
         for entry in &entries {
             assert_eq!(entry.original_error, "builtin/capability conflict");
         }
+    }
+
+    #[test]
+    fn load_config_from_resources_table_preserves_same_named_project_resources() {
+        let (_temp_dir, db_path) = make_test_db();
+        let mut config = crate::config_load::tests::make_config_with_default_project();
+
+        for project_id in ["alpha", "beta"] {
+            config.projects.insert(
+                project_id.to_string(),
+                crate::config::ProjectConfig {
+                    description: Some(format!("{project_id} project")),
+                    workspaces: HashMap::from([(
+                        "shared-ws".to_string(),
+                        crate::config::WorkspaceConfig {
+                            root_path: ".".to_string(),
+                            qa_targets: vec!["docs/qa".to_string()],
+                            ticket_dir: "docs/ticket".to_string(),
+                            self_referential: false,
+                        },
+                    )]),
+                    agents: HashMap::from([(
+                        "shared-agent".to_string(),
+                        crate::config::AgentConfig {
+                            capabilities: vec!["implement".to_string()],
+                            command: "echo hi".to_string(),
+                            ..Default::default()
+                        },
+                    )]),
+                    workflows: HashMap::from([(
+                        "shared-wf".to_string(),
+                        crate::config_load::tests::make_workflow(vec![
+                            crate::config_load::tests::make_command_step(
+                                "implement",
+                                "echo shared",
+                            ),
+                        ]),
+                    )]),
+                    step_templates: HashMap::new(),
+                    env_stores: HashMap::new(),
+                },
+            );
+        }
+
+        persist_raw_config(&db_path, config, "test-seed").expect("persist config");
+        let loaded = load_config(&db_path)
+            .expect("load config")
+            .expect("config should exist")
+            .0;
+
+        let alpha = loaded.projects.get("alpha").expect("alpha project");
+        let beta = loaded.projects.get("beta").expect("beta project");
+        assert!(alpha.workspaces.contains_key("shared-ws"));
+        assert!(beta.workspaces.contains_key("shared-ws"));
+        assert!(alpha.agents.contains_key("shared-agent"));
+        assert!(beta.agents.contains_key("shared-agent"));
+        assert!(alpha.workflows.contains_key("shared-wf"));
+        assert!(beta.workflows.contains_key("shared-wf"));
     }
 }

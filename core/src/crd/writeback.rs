@@ -144,26 +144,22 @@ pub fn seed_store_from_config_snapshot(
     }
 }
 
-pub fn reconcile_single_resource(config: &mut OrchestratorConfig, kind: &str, name: &str) {
+pub fn reconcile_single_resource(
+    config: &mut OrchestratorConfig,
+    kind: &str,
+    project: Option<&str>,
+    name: &str,
+) {
     use crate::config::{
         AgentConfig, ProjectConfig, StepTemplateConfig, WorkflowConfig, WorkspaceConfig,
     };
     use crate::crd::store::is_project_scoped;
 
-    // For project-scoped kinds, search all projects in the store.
-    // For cluster-scoped kinds, look in _system.
     let cr = if is_project_scoped(kind) {
-        config
-            .resource_store
-            .list_by_kind(kind)
-            .into_iter()
-            .find(|cr| cr.metadata.name == name)
-            .cloned()
+        let project_id = project.unwrap_or(crate::config::DEFAULT_PROJECT_ID);
+        config.resource_store.get_namespaced(kind, project_id, name).cloned()
     } else {
-        config
-            .resource_store
-            .get(kind, name)
-            .cloned()
+        config.resource_store.get(kind, name).cloned()
     };
     let Some(cr) = cr else {
         return;
@@ -234,26 +230,49 @@ pub fn reconcile_single_resource(config: &mut OrchestratorConfig, kind: &str, na
     }
 }
 
-pub fn remove_from_config_snapshot(config: &mut OrchestratorConfig, kind: &str, name: &str) {
+pub fn remove_from_config_snapshot(
+    config: &mut OrchestratorConfig,
+    kind: &str,
+    project: Option<&str>,
+    name: &str,
+) {
     match kind {
         "Agent" => {
-            for project in config.projects.values_mut() {
-                if project.agents.remove(name).is_some() {
-                    return;
+            if let Some(project_id) = project {
+                if let Some(project) = config.projects.get_mut(project_id) {
+                    project.agents.remove(name);
+                }
+            } else {
+                for project in config.projects.values_mut() {
+                    if project.agents.remove(name).is_some() {
+                        return;
+                    }
                 }
             }
         }
         "Workflow" => {
-            for project in config.projects.values_mut() {
-                if project.workflows.remove(name).is_some() {
-                    return;
+            if let Some(project_id) = project {
+                if let Some(project) = config.projects.get_mut(project_id) {
+                    project.workflows.remove(name);
+                }
+            } else {
+                for project in config.projects.values_mut() {
+                    if project.workflows.remove(name).is_some() {
+                        return;
+                    }
                 }
             }
         }
         "Workspace" => {
-            for project in config.projects.values_mut() {
-                if project.workspaces.remove(name).is_some() {
-                    return;
+            if let Some(project_id) = project {
+                if let Some(project) = config.projects.get_mut(project_id) {
+                    project.workspaces.remove(name);
+                }
+            } else {
+                for project in config.projects.values_mut() {
+                    if project.workspaces.remove(name).is_some() {
+                        return;
+                    }
                 }
             }
         }
@@ -261,16 +280,28 @@ pub fn remove_from_config_snapshot(config: &mut OrchestratorConfig, kind: &str, 
             config.projects.remove(name);
         }
         "StepTemplate" => {
-            for project in config.projects.values_mut() {
-                if project.step_templates.remove(name).is_some() {
-                    return;
+            if let Some(project_id) = project {
+                if let Some(project) = config.projects.get_mut(project_id) {
+                    project.step_templates.remove(name);
+                }
+            } else {
+                for project in config.projects.values_mut() {
+                    if project.step_templates.remove(name).is_some() {
+                        return;
+                    }
                 }
             }
         }
         "EnvStore" | "SecretStore" => {
-            for project in config.projects.values_mut() {
-                if project.env_stores.remove(name).is_some() {
-                    return;
+            if let Some(project_id) = project {
+                if let Some(project) = config.projects.get_mut(project_id) {
+                    project.env_stores.remove(name);
+                }
+            } else {
+                for project in config.projects.values_mut() {
+                    if project.env_stores.remove(name).is_some() {
+                        return;
+                    }
                 }
             }
         }
