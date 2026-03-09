@@ -209,12 +209,19 @@ Project isolation is native — use `--project` on `apply`, `get`, `describe`, `
 # Apply resources to a project scope
 orchestrator apply -f manifest.yaml --project my-project
 
+# Explicitly prune resources omitted from the manifest
+orchestrator apply -f manifest.yaml --project my-project --prune
+
 # Query project-scoped resources
 orchestrator get agents --project my-project
 
 # Delete a project and all its data (tasks, items, runs, events, config)
 orchestrator delete project/<project> --force
 ```
+
+Default `apply` is merge-only: resources omitted from the manifest are preserved.
+Use `--prune` only when you want omitted resources of the same applied kinds to be deleted
+within the target project.
 
 ## Persistent Store
 

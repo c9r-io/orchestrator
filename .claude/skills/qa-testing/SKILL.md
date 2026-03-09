@@ -249,7 +249,7 @@ orchestrator apply -f fixtures/manifests/bundles/<relevant>.yaml --project <proj
 
 ### 4. `init` vs `delete project/` vs `apply --project`
 
-- `init` creates the DB schema and a minimal default config. It does **not** load fixture data.
+- `init` creates the DB schema and runtime directories only. It does **not** load config or fixture data.
 - `delete project/<project> --force` deletes task data, auto-tickets, and the project config entry.
 - `apply -f <fixture> --project <project>` deploys agents/workflows/workspaces into the project scope. Only project-scoped agents participate in selection for that project's tasks.
 - Most QA scenarios should use `delete project/<project> --force` + `apply --project` instead of `init` + `config bootstrap`.
@@ -312,10 +312,7 @@ orchestrator init --root /path/to/project
 
 **CRITICAL**: Do NOT use `rm -f data/agent_orchestrator.db` for QA resets. This destroys all state including bootstrap config, in-flight tasks, and event history. Use `delete project/<project> --force` for per-project isolation.
 
-This creates:
-- 1 workspace (`default`)
-- 1 agent (`echo`) with qa capability
-- 1 workflow (`basic`) with qa step
+After `init`, the runtime is still effectively empty until you `apply -f <fixture>`.
 
 ### When CLI fails immediately with config errors:
 

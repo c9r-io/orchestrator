@@ -59,7 +59,7 @@ orchestrator (CLI)  ──gRPC/UDS──>  orchestratord (daemon)
 ## Scenario 1: Daemon Startup and Shutdown
 
 ### Preconditions
-- Workspace initialized with `init` and `apply -f <manifest>` via legacy CLI.
+- Workspace initialized with `init` and `apply -f <manifest>` via the current CLI.
 - No other daemon instance running.
 
 ### Goal
@@ -106,7 +106,7 @@ Verify daemon starts on UDS, creates PID/socket files, and shuts down cleanly on
 
 ### Preconditions
 - Daemon is running (foreground or background).
-- Config applied via legacy CLI or previous daemon session.
+- Config applied via the current CLI or previous daemon session.
 
 ### Goal
 Verify CLI client connects to daemon over UDS and basic RPC round-trips work.
@@ -144,7 +144,7 @@ Verify CLI client connects to daemon over UDS and basic RPC round-trips work.
 
 ### Expected
 - `version` shows client version and daemon version (from Ping RPC).
-- `get workspaces/agents/workflows` returns the same data as legacy CLI.
+- `get workspaces/agents/workflows` returns the same data across repeated CLI/daemon sessions.
 - `debug --component config` returns active configuration YAML.
 - `check` returns preflight validation results.
 - All commands complete without connection errors.

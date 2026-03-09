@@ -209,12 +209,18 @@ orchestrator manifest validate -f manifest.yaml
 # 将资源应用到项目作用域
 orchestrator apply -f manifest.yaml --project my-project
 
+# 显式清理 manifest 中未声明的同类资源
+orchestrator apply -f manifest.yaml --project my-project --prune
+
 # 查询项目作用域资源
 orchestrator get agents --project my-project
 
 # 删除项目及其所有数据（任务、项目、运行、事件、配置）
 orchestrator delete project/<project> --force
 ```
+
+默认 `apply` 是 merge-only 语义：manifest 中缺失的资源会被保留。
+只有在你明确希望删除目标项目中、同类但未在本次 manifest 中声明的资源时，才使用 `--prune`。
 
 ## 持久化存储
 
