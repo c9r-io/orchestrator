@@ -166,8 +166,7 @@ workflows:
 
 ```bash
 # Start daemon
-orchestrator daemon start
-orchestrator daemon status
+orchestratord --foreground --workers 2
 
 # Core workflow
 orchestrator init
@@ -287,7 +286,7 @@ cargo build --workspace --release
 ```
 
 ```bash
-orchestrator daemon start
+orchestratord --foreground --workers 2 &
 orchestrator init
 orchestrator apply -f fixtures/capability-test.yaml
 orchestrator task create --goal "My first QA run" --detach

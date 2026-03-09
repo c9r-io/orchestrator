@@ -24,8 +24,8 @@ cargo build -p agent-orchestrator --release
 ## Run
 
 ```bash
-# Start daemon (foreground with built-in restart loop)
-orchestrator daemon start -f --workers 2
+# Start daemon (foreground)
+orchestratord --foreground --workers 2
 
 # Use CLI client (with daemon running)
 orchestrator <command>

@@ -74,9 +74,9 @@ prehook:
 
 ### Layer 4: Watchdog
 
-The `orchestrator daemon start -f` command runs the daemon in the foreground with a built-in restart loop. If the orchestrator process crashes consecutively (exit code != 0 and != 75), the watchdog restores the `.stable` binary snapshot and restarts.
+The daemon (`orchestratord --foreground`) handles self-restart via `exec()` self-replacement. When the `self_restart` builtin step rebuilds the binary, it calls `exec()` to replace the running process in-place (preserving PID). If `exec()` fails, the process exits with code 75, which external supervisors (systemd, Docker restart policy) can use to relaunch.
 
-Exit code 75 is the self-restart signal: the `self_restart` builtin step rebuilds the binary and exits with code 75, telling the restart loop to relaunch with the new binary.
+Exit code 75 is the self-restart signal: the `self_restart` builtin step rebuilds the binary, verifies it, snapshots `.stable`, and triggers the restart.
 
 ## Self-Restart Flow
 

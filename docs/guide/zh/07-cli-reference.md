@@ -282,13 +282,12 @@ orchestrator check -o json           # 结构化检查输出
 | `--bind <addr>` | TCP 绑定地址（默认：Unix 套接字） |
 | `--workers <N>` | 后台工作器数量（默认：1） |
 
-### 守护进程管理（通过 CLI 客户端）
+### 守护进程管理
 
 ```bash
-./target/release/orchestrator daemon start     # 后台启动守护进程
-./target/release/orchestrator daemon status     # 检查是否运行
-./target/release/orchestrator daemon stop       # 优雅关闭
-./target/release/orchestrator daemon restart    # 停止 + 启动
+./target/release/orchestratord --foreground --workers 2   # 前台运行（推荐）
+nohup ./target/release/orchestratord --foreground &       # 后台运行
+kill $(cat data/daemon.pid)                               # 优雅关闭（SIGTERM）
 ```
 
 ### C/S CLI 命令列表

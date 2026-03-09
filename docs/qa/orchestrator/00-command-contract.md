@@ -17,9 +17,9 @@ Runtime state source of truth is SQLite. YAML is used as import/export/edit arti
 Entry point: `orchestrator <command>` (auto-builds + calls CLI client) or `./target/release/orchestrator <command>`.
 
 Daemon lifecycle:
-- Start: `orchestrator daemon start -f` (foreground with restart loop) or `orchestrator daemon start` (background)
-- Stop/status/restart: `orchestrator daemon stop|status|restart`
-- Direct: `./target/release/orchestratord [--foreground] [--bind addr] [--workers N]`
+- Start: `./target/release/orchestratord --foreground --workers 2` (foreground, recommended)
+- Background: `nohup ./target/release/orchestratord --foreground --workers 2 &`
+- Stop: `kill $(cat data/daemon.pid)` (graceful SIGTERM)
 
 ---
 

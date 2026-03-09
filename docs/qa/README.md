@@ -12,8 +12,8 @@ This directory contains reproducible, verifiable QA test documents.
 
 - Canonical CLI contract: `docs/qa/orchestrator/00-command-contract.md`
 - Preferred entry point: `orchestrator <command>` (auto-builds + calls CLI client)
-- Daemon: `orchestrator daemon start -f` (foreground) or `orchestrator daemon start` (background)
-- Direct binary: `./target/release/orchestrator <command>` (C/S client)
+- Daemon: `./target/release/orchestratord --foreground --workers 2`
+- CLI client: `./target/release/orchestrator <command>`
 - Repository root is the default execution directory for all QA steps.
 
 ## Document Rules (Strict)

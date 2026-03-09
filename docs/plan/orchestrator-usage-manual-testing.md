@@ -18,8 +18,7 @@ cargo build --release -p orchestratord -p orchestrator-cli
 Start the daemon:
 
 ```bash
-orchestrator daemon start
-orchestrator daemon status
+orchestratord --foreground --workers 2
 ```
 
 Verify CLI surface:

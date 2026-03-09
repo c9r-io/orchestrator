@@ -51,8 +51,7 @@ orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --proj
 | Task uses global workspace instead of project workspace | No `--workspace` flag and global default doesn't match project | Fixed: auto-resolves to project's single workspace when not specified |
 | "EMPTY_WORKFLOWS" error with project-only config | Global workflow check didn't account for project-scoped workflows | Fixed: validation now checks `has_project_workflows` |
 | "defaults.workflow does not exist" with project-only config | A global base config with at least one workflow/workspace/agent must exist before applying project-scoped resources | Apply `echo-workflow.yaml` (or any base fixture) first |
-| `orchestrator daemon start -f` appears to hang after `[orchestrator] restart requested (exit 75)` | **Not a hang.** The `self_restart` step triggers exit 75; the daemon's built-in restart loop relaunches the process which resumes the task in cycle 2. The `self_restart` step has `repeatable: false` so it is skipped on cycle 2, and the process exits normally. Total wall time ≈ 2× a single cycle. | Wait for the full run to complete. If testing restart behavior specifically, call the binary directly (bypassing the restart loop) and verify exit code 75 on cycle 1, then re-run `task start <TASK_ID>` to observe cycle 2 completing with exit 0. |
-| `task create` via `orchestrator daemon start -f` creates duplicate tasks | The restart loop passes original args on restart, so `task create` re-runs after exit 75, creating a second task | Use `task create` via the binary directly (`target/release/orchestratord task create ...`), then start with `orchestrator daemon start -f task start <TASK_ID>`, or use `task create` + separate `task start` calls |
+| `orchestratord` appears to hang after self-restart | **Not a hang.** The `self_restart` step triggers `exec()` self-replacement; the daemon replaces itself in-place and resumes the task in cycle 2. The `self_restart` step has `repeatable: false` so it is skipped on cycle 2, and the process exits normally. Total wall time ≈ 2× a single cycle. | Wait for the full run to complete. If testing restart behavior specifically, check the daemon logs for the `exec()` self-replacement event and verify cycle 2 completes with exit 0. |
 
 ---
 
@@ -80,12 +79,12 @@ Verify that a `.stable` binary copy is created at the start of each cycle when b
    # If still pending, start it via the daemon which handles the restart loop:
    [ -z "$TASK_ID" ] && TASK_ID=$($BINARY task list -s pending -o json 2>/dev/null | jq -r '.[0].id')
    ```
-3. Start (or resume) the task — `orchestrator daemon start -f` handles exit-75 restart automatically:
+3. Start (or resume) the task via the daemon (which handles restart via `exec()` self-replacement):
    ```bash
-   orchestrator daemon start -f task start "${TASK_ID}"
+   orchestrator task start "${TASK_ID}"
    ```
-   > **Note**: The process will exit 75 once (cycle 1 `self_restart`), relaunch,
-   > then complete normally on cycle 2 (`self_restart` skipped via `repeatable: false`).
+   > **Note**: On cycle 1, `self_restart` triggers `exec()` to replace the daemon in-place.
+   > Cycle 2 completes normally (`self_restart` skipped via `repeatable: false`).
    > This is expected behavior, not a hang. Total wall time ≈ 2× a single cycle.
 4. Wait for the first cycle to begin (checkpoint_created event).
 5. Query events for `binary_snapshot_created`.

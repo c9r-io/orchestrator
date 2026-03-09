@@ -60,7 +60,7 @@ Layer 1: Builtin Step          Layer 2: Process Wrapper       Layer 3: Task Resu
 - **Option B: Signal-based (SIGHUP)** — More complex, requires signal handler in async runtime, harder to test
 - **Option C: exec() self-replace** — Loses parent supervision, no wrapper to detect crashes
 
-Why we chose A: Simplest to implement, test, and debug. Each layer is independently verifiable. The daemon's foreground mode (`orchestrator daemon start -f`) has a built-in restart loop.
+Why we chose A: Simplest to implement, test, and debug. Each layer is independently verifiable. The daemon uses `exec()` self-replacement as the primary restart path, with exit code 75 as the fallback signal for external supervisors.
 
 ## Risks And Mitigations
 
@@ -108,6 +108,6 @@ Why we chose A: Simplest to implement, test, and debug. Each layer is independen
 
 - `self_restart` step builds, verifies, snapshots, and exits 75 when build succeeds
 - Build failure returns non-zero (not 75), task continues normally
-- `orchestrator daemon start -f` relaunches binary on exit 75
+- `orchestratord` uses `exec()` self-replacement; exits 75 as fallback for external supervisors
 - New binary auto-claims `restart_pending` task and resumes at next cycle
 - Item statuses are preserved across the restart boundary

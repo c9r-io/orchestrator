@@ -12,7 +12,7 @@
 The `self_restart` step extends the self-bootstrap survival mechanism with a 5th layer: after `self_test` passes, the orchestrator rebuilds its own binary (`cargo build --release -p orchestratord`), verifies it (`--help`), snapshots `.stable`, and sets the task to `restart_pending`. The daemon then restarts using one of two paths:
 
 - **Primary (daemon mode)**: The worker signals `RestartRequestedError`, the daemon drains workers (30s timeout), then calls `exec()` to replace itself in-place (preserving PID and connections).
-- **Fallback (CLI foreground mode)**: If exec fails, or when using `orchestrator daemon start -f`, the process exits with code 75 and the CLI restart loop relaunches the new binary.
+- **Fallback**: If exec fails, the process exits with code 75. External supervisors (systemd, Docker restart policy) can use this exit code to relaunch the binary.
 
 In both paths, the new process auto-claims the `restart_pending` task and resumes the loop.
 
@@ -21,7 +21,7 @@ Key functions:
 - `EXIT_RESTART = 75` constant
 - `prepare_task_for_start_batch()` restart_pending branch in `core/src/task_repository/state.rs`
 - `claim_next_pending_task()` priority SQL in `core/src/scheduler_service.rs`
-- Restart loop in `orchestrator daemon start -f`
+- `exec()` self-replacement in `orchestratord` (primary restart path)
 
 Workflow: `fixtures/manifests/bundles/self-bootstrap-mock.yaml`
 
@@ -166,13 +166,13 @@ LIMIT 1;
 
 ### Preconditions
 - Repository checked out at `/Volumes/Yotta/ai_native_sdlc`
-- `orchestrator daemon start -f` is available (built-in restart loop with exit code 75 handling)
+- `orchestratord` binary is available with `exec()` self-replacement support (exit code 75 fallback)
 
 ### Goal
-Verify that (a) the daemon's foreground mode contains the restart-aware loop detecting exit code 75, (b) `self_restart` is registered as a known builtin step, and (c) the `self-bootstrap.yaml` workflow includes the `self_restart` step in the correct position.
+Verify that (a) the daemon handles restart via `exec()` self-replacement (with exit code 75 fallback), (b) `self_restart` is registered as a known builtin step, and (c) the `self-bootstrap.yaml` workflow includes the `self_restart` step in the correct position.
 
 ### Steps
-1. Verify the daemon handles exit code 75 restart loop (built into the binary).
+1. Verify the daemon handles restart via `exec()` self-replacement (built into `orchestratord`).
 2. Verify self_restart is registered as a known step and builtin:
    ```bash
    cd /Volumes/Yotta/ai_native_sdlc/core

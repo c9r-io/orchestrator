@@ -46,10 +46,8 @@ The orchestrator supports a C/S architecture where a long-running daemon holds a
 # Use CLI client (connects to daemon via Unix socket)
 ./target/release/orchestrator <command>
 
-# Or manage daemon lifecycle via CLI
-./target/release/orchestrator daemon start
-./target/release/orchestrator daemon status
-./target/release/orchestrator daemon stop
+# Stop daemon
+kill $(cat data/daemon.pid)
 ```
 
 See [07 - CLI Reference](07-cli-reference.md) for the complete C/S command surface.

@@ -286,14 +286,12 @@ Files created:
 - PID: `data/daemon.pid`
 - Socket: `data/orchestrator.sock`
 
-### daemon management (via CLI client)
+### daemon management
 
 ```bash
-./target/release/orchestrator daemon start              # start daemon in background
-./target/release/orchestrator daemon start --foreground  # foreground mode
-./target/release/orchestrator daemon status              # check if running
-./target/release/orchestrator daemon stop                # graceful shutdown
-./target/release/orchestrator daemon restart             # stop + start
+./target/release/orchestratord --foreground --workers 2   # foreground (recommended)
+nohup ./target/release/orchestratord --foreground &       # background via nohup
+kill $(cat data/daemon.pid)                               # graceful SIGTERM
 ```
 
 ### C/S CLI command surface

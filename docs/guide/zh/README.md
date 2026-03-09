@@ -46,10 +46,8 @@ orchestrator <command>
 # 使用 CLI 客户端（通过 Unix 套接字连接守护进程）
 ./target/release/orchestrator <command>
 
-# 或通过 CLI 管理守护进程生命周期
-./target/release/orchestrator daemon start
-./target/release/orchestrator daemon status
-./target/release/orchestrator daemon stop
+# 停止守护进程
+kill $(cat data/daemon.pid)
 ```
 
 参见 [07 - CLI 参考](07-cli-reference.md) 获取完整 C/S 命令列表。
