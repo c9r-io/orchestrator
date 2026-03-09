@@ -401,9 +401,33 @@ fn format_output<T: serde::Serialize>(value: &T, format: &str) -> Result<String>
 }
 
 fn autofill_defaults_for_manifest_mode(config: &mut crate::config::OrchestratorConfig) {
+    // When all resources live inside projects (no global workspaces/workflows),
+    // skip autofilling global defaults — they are irrelevant and would fail
+    // validation since there are no global resources to reference.
+    let has_project_workspaces = config.projects.values().any(|p| !p.workspaces.is_empty());
+    let has_project_workflows = config.projects.values().any(|p| !p.workflows.is_empty());
+    let all_project_scoped = config.workspaces.is_empty()
+        && config.workflows.is_empty()
+        && has_project_workspaces
+        && has_project_workflows;
+
     if config.defaults.project.trim().is_empty() {
-        config.defaults.project = "default".to_string();
+        // If there is exactly one project, use it as default
+        if config.projects.len() == 1 {
+            if let Some(pid) = config.projects.keys().next() {
+                config.defaults.project = pid.clone();
+            }
+        } else {
+            config.defaults.project = "default".to_string();
+        }
     }
+
+    if all_project_scoped {
+        // Leave workspace/workflow defaults empty — task create resolves
+        // them from the project scope via --project.
+        return;
+    }
+
     if config.defaults.workspace.trim().is_empty() {
         if config.workspaces.contains_key("default") {
             config.defaults.workspace = "default".to_string();

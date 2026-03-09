@@ -6,7 +6,7 @@
 use crate::anomaly::Severity;
 use crate::config::{
     is_known_builtin_step_name, resolve_step_semantic_kind, ActiveConfig, ExecutionMode,
-    OrchestratorConfig, PromptDelivery, StepSemanticKind, WorkflowStepConfig,
+    PromptDelivery, StepSemanticKind, WorkflowStepConfig,
 };
 use crate::scheduler::trace::find_template_vars;
 use serde::Serialize;
@@ -60,24 +60,48 @@ pub struct CheckSummary {
 
 /// Run all preflight checks against the loaded configuration.
 /// `workflow_filter`: if Some, only check steps in that workflow.
+/// `project_id`: if Some, check project-scoped resources instead of global.
 pub fn run_checks(
     config: &ActiveConfig,
     app_root: &Path,
     workflow_filter: Option<&str>,
+    project_id: Option<&str>,
 ) -> CheckReport {
     let oc = &config.config;
     let mut checks = Vec::new();
 
-    check_workspace_roots(oc, app_root, &mut checks);
-    check_qa_targets(oc, app_root, &mut checks);
-    check_capability_coverage(oc, workflow_filter, &mut checks);
-    check_prompt_delivery(oc, &mut checks);
-    check_capability_templates(oc, &mut checks);
-    check_builtin_names(oc, workflow_filter, &mut checks);
-    check_pipe_to_refs(oc, workflow_filter, &mut checks);
-    check_template_vars(oc, workflow_filter, &mut checks);
-    check_empty_workflows(oc, workflow_filter, &mut checks);
+    // Resolve the effective resource sets: project-scoped or global.
+    let (workspaces, agents, workflows) = if let Some(pid) = project_id {
+        if let Some(project) = oc.projects.get(pid) {
+            (&project.workspaces, &project.agents, &project.workflows)
+        } else {
+            checks.push(CheckResult {
+                rule: "project_not_found".into(),
+                severity: Severity::Error,
+                passed: false,
+                message: format!("project \"{pid}\" not found in config"),
+                context: None,
+            });
+            return build_report(checks);
+        }
+    } else {
+        (&oc.workspaces, &oc.agents, &oc.workflows)
+    };
 
+    check_workspace_roots(workspaces, app_root, &mut checks);
+    check_qa_targets(workspaces, app_root, &mut checks);
+    check_capability_coverage(agents, workflows, workflow_filter, &mut checks);
+    check_prompt_delivery(agents, &mut checks);
+    check_capability_templates(agents, &mut checks);
+    check_builtin_names(workflows, workflow_filter, &mut checks);
+    check_pipe_to_refs(workflows, workflow_filter, &mut checks);
+    check_template_vars(&oc.step_templates, workflows, workflow_filter, &mut checks);
+    check_empty_workflows(workflows, workflow_filter, &mut checks);
+
+    build_report(checks)
+}
+
+fn build_report(checks: Vec<CheckResult>) -> CheckReport {
     let total = checks.len() as u32;
     let passed = checks.iter().filter(|c| c.passed).count() as u32;
     let errors = checks
@@ -102,8 +126,12 @@ pub fn run_checks(
 
 // ── Individual checks ───────────────────────────────────────────────
 
-fn check_workspace_roots(oc: &OrchestratorConfig, app_root: &Path, out: &mut Vec<CheckResult>) {
-    for (ws_id, ws) in &oc.workspaces {
+fn check_workspace_roots(
+    workspaces: &std::collections::HashMap<String, crate::config::WorkspaceConfig>,
+    app_root: &Path,
+    out: &mut Vec<CheckResult>,
+) {
+    for (ws_id, ws) in workspaces {
         let full = app_root.join(&ws.root_path);
         let exists = full.exists();
         out.push(CheckResult {
@@ -123,8 +151,12 @@ fn check_workspace_roots(oc: &OrchestratorConfig, app_root: &Path, out: &mut Vec
     }
 }
 
-fn check_qa_targets(oc: &OrchestratorConfig, app_root: &Path, out: &mut Vec<CheckResult>) {
-    for (ws_id, ws) in &oc.workspaces {
+fn check_qa_targets(
+    workspaces: &std::collections::HashMap<String, crate::config::WorkspaceConfig>,
+    app_root: &Path,
+    out: &mut Vec<CheckResult>,
+) {
+    for (ws_id, ws) in workspaces {
         let ws_root = app_root.join(&ws.root_path);
         for target in &ws.qa_targets {
             let full = ws_root.join(target);
@@ -145,17 +177,17 @@ fn check_qa_targets(oc: &OrchestratorConfig, app_root: &Path, out: &mut Vec<Chec
 }
 
 fn check_capability_coverage(
-    oc: &OrchestratorConfig,
+    agents: &std::collections::HashMap<String, crate::config::AgentConfig>,
+    workflows: &std::collections::HashMap<String, crate::config::WorkflowConfig>,
     workflow_filter: Option<&str>,
     out: &mut Vec<CheckResult>,
 ) {
-    let all_caps: HashSet<&str> = oc
-        .agents
+    let all_caps: HashSet<&str> = agents
         .values()
         .flat_map(|a| a.capabilities.iter().map(|s| s.as_str()))
         .collect();
 
-    for (wf_id, wf) in &oc.workflows {
+    for (wf_id, wf) in workflows {
         if let Some(filter) = workflow_filter {
             if wf_id != filter {
                 continue;
@@ -203,8 +235,11 @@ fn check_steps_capability(
     }
 }
 
-fn check_prompt_delivery(oc: &OrchestratorConfig, out: &mut Vec<CheckResult>) {
-    for (agent_id, agent) in &oc.agents {
+fn check_prompt_delivery(
+    agents: &std::collections::HashMap<String, crate::config::AgentConfig>,
+    out: &mut Vec<CheckResult>,
+) {
+    for (agent_id, agent) in agents {
         let delivery = agent.prompt_delivery;
         let cmd = &agent.command;
 
@@ -247,8 +282,11 @@ fn check_prompt_delivery(oc: &OrchestratorConfig, out: &mut Vec<CheckResult>) {
     }
 }
 
-fn check_capability_templates(oc: &OrchestratorConfig, out: &mut Vec<CheckResult>) {
-    for (agent_id, agent) in &oc.agents {
+fn check_capability_templates(
+    agents: &std::collections::HashMap<String, crate::config::AgentConfig>,
+    out: &mut Vec<CheckResult>,
+) {
+    for (agent_id, agent) in agents {
         let has_command = !agent.command.is_empty();
         out.push(CheckResult {
             rule: "agent_has_command".into(),
@@ -265,11 +303,11 @@ fn check_capability_templates(oc: &OrchestratorConfig, out: &mut Vec<CheckResult
 }
 
 fn check_builtin_names(
-    oc: &OrchestratorConfig,
+    workflows: &std::collections::HashMap<String, crate::config::WorkflowConfig>,
     workflow_filter: Option<&str>,
     out: &mut Vec<CheckResult>,
 ) {
-    for (wf_id, wf) in &oc.workflows {
+    for (wf_id, wf) in workflows {
         if let Some(filter) = workflow_filter {
             if wf_id != filter {
                 continue;
@@ -369,11 +407,11 @@ fn check_steps_builtin(steps: &[WorkflowStepConfig], wf_id: &str, out: &mut Vec<
 }
 
 fn check_pipe_to_refs(
-    oc: &OrchestratorConfig,
+    workflows: &std::collections::HashMap<String, crate::config::WorkflowConfig>,
     workflow_filter: Option<&str>,
     out: &mut Vec<CheckResult>,
 ) {
-    for (wf_id, wf) in &oc.workflows {
+    for (wf_id, wf) in workflows {
         if let Some(filter) = workflow_filter {
             if wf_id != filter {
                 continue;
@@ -432,14 +470,15 @@ fn check_steps_pipe_to(
 }
 
 fn check_template_vars(
-    oc: &OrchestratorConfig,
+    step_templates: &std::collections::HashMap<String, crate::config::StepTemplateConfig>,
+    workflows: &std::collections::HashMap<String, crate::config::WorkflowConfig>,
     workflow_filter: Option<&str>,
     out: &mut Vec<CheckResult>,
 ) {
     let sys_vars: HashSet<&str> = KNOWN_SYSTEM_VARS.iter().copied().collect();
 
     // Collect pipeline-derived vars per workflow
-    for (wf_id, wf) in &oc.workflows {
+    for (wf_id, wf) in workflows {
         if let Some(filter) = workflow_filter {
             if wf_id != filter {
                 continue;
@@ -456,7 +495,7 @@ fn check_template_vars(
         }
 
         // Check each step template for unknown vars
-        for (tmpl_name, tmpl_config) in &oc.step_templates {
+        for (tmpl_name, tmpl_config) in step_templates {
             for var_with_braces in find_template_vars(&tmpl_config.prompt) {
                 // strip braces: {foo} -> foo
                 let var = &var_with_braces[1..var_with_braces.len() - 1];
@@ -482,11 +521,11 @@ fn check_template_vars(
 }
 
 fn check_empty_workflows(
-    oc: &OrchestratorConfig,
+    workflows: &std::collections::HashMap<String, crate::config::WorkflowConfig>,
     workflow_filter: Option<&str>,
     out: &mut Vec<CheckResult>,
 ) {
-    for (wf_id, wf) in &oc.workflows {
+    for (wf_id, wf) in workflows {
         if let Some(filter) = workflow_filter {
             if wf_id != filter {
                 continue;
@@ -664,7 +703,7 @@ mod tests {
         let app_root = tmp.path();
         make_temp_ws(app_root);
 
-        let report = run_checks(&cfg, app_root, None);
+        let report = run_checks(&cfg, app_root, None, None);
         let errors: Vec<_> = report
             .checks
             .iter()
@@ -679,7 +718,7 @@ mod tests {
         let cfg = base_config();
         let tmp = tempfile::tempdir().expect("create temp dir");
         // Do NOT create ws dir
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
         let found = report
             .checks
             .iter()
@@ -695,7 +734,7 @@ mod tests {
         // Create ws root but not docs/qa
         std::fs::create_dir_all(tmp.path().join("ws")).expect("create ws dir");
 
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
         let found = report
             .checks
             .iter()
@@ -740,7 +779,7 @@ mod tests {
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
         let found = report
             .checks
             .iter()
@@ -760,7 +799,7 @@ mod tests {
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
         let found = report
             .checks
             .iter()
@@ -803,7 +842,7 @@ mod tests {
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
         let found = report
             .checks
             .iter()
@@ -846,7 +885,7 @@ mod tests {
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
         let found = report
             .checks
             .iter()
@@ -869,7 +908,7 @@ mod tests {
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
         let found = report
             .checks
             .iter()
@@ -916,7 +955,7 @@ mod tests {
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
         let found = report
             .checks
             .iter()
@@ -936,7 +975,7 @@ mod tests {
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
         let found = report
             .checks
             .iter()
@@ -957,7 +996,7 @@ mod tests {
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
         let found = report
             .checks
             .iter()
@@ -970,7 +1009,7 @@ mod tests {
         let cfg = base_config();
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
         // {task_id} and {diff} are system vars — should not trigger warning
         let bad = report
             .checks
@@ -993,7 +1032,7 @@ mod tests {
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
         let bad = report.checks.iter().any(|c| {
             c.rule == "template_unknown_var" && !c.passed && c.message.contains("plan_output")
         });
@@ -1047,7 +1086,7 @@ mod tests {
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
         let found = report
             .checks
             .iter()
@@ -1114,7 +1153,7 @@ mod tests {
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
         let found = report
             .checks
             .iter()
@@ -1127,7 +1166,7 @@ mod tests {
         let cfg = base_config();
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
 
         let json = serde_json::to_string(&report).expect("serialize");
         let _: serde_json::Value = serde_json::from_str(&json).expect("deserialize");
@@ -1146,7 +1185,7 @@ mod tests {
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
         let found = report
             .checks
             .iter()
@@ -1167,7 +1206,7 @@ mod tests {
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
         let found = report
             .checks
             .iter()
@@ -1180,7 +1219,7 @@ mod tests {
         let cfg = base_config();
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
-        let report = run_checks(&cfg, tmp.path(), None);
+        let report = run_checks(&cfg, tmp.path(), None, None);
         let found = report
             .checks
             .iter()

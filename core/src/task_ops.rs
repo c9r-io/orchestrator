@@ -119,24 +119,32 @@ pub fn create_task_impl(
         .unwrap_or_else(|| active.default_project_id.clone());
 
     let workspace_id = payload.workspace_id.clone().unwrap_or_else(|| {
-        // If project has workspaces and the global default isn't in the project,
-        // fall back to the project's first (or only) workspace.
+        // For project-scoped tasks, resolve workspace entirely from the project.
+        // Never fall back to global defaults — the project is the authority.
         if !project_id.is_empty() {
             if let Some(project) = active.projects.get(&project_id) {
-                if !project.workspaces.is_empty()
-                    && !project
-                        .workspaces
-                        .contains_key(&active.default_workspace_id)
+                // If global default exists in this project, use it
+                if project
+                    .workspaces
+                    .contains_key(&active.default_workspace_id)
                 {
-                    if project.workspaces.len() == 1 {
-                        if let Some(k) = project.workspaces.keys().next() {
-                            return k.clone();
-                        }
+                    return active.default_workspace_id.clone();
+                }
+                // Single workspace — unambiguous
+                if project.workspaces.len() == 1 {
+                    if let Some(k) = project.workspaces.keys().next() {
+                        return k.clone();
                     }
-                    // If "default" exists in project, use that
-                    if project.workspaces.contains_key("default") {
-                        return "default".to_string();
-                    }
+                }
+                // Convention: use "default" if present
+                if project.workspaces.contains_key("default") {
+                    return "default".to_string();
+                }
+                // Multiple workspaces, none named "default" — pick first
+                // alphabetically (deterministic). Caller should specify
+                // --workspace explicitly in this case.
+                if let Some(k) = project.workspaces.keys().min() {
+                    return k.clone();
                 }
             }
         }

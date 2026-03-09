@@ -129,11 +129,16 @@ pub async fn dispatch(
             Ok(())
         }
 
-        Commands::Check { workflow, output } => {
+        Commands::Check {
+            workflow,
+            output,
+            project,
+        } => {
             let resp = client
                 .check(orchestrator_proto::CheckRequest {
                     workflow,
                     output_format: format_to_string(output),
+                    project_id: project,
                 })
                 .await?
                 .into_inner();

@@ -101,6 +101,10 @@ pub enum Commands {
 
         #[arg(short, long, default_value = "table")]
         output: OutputFormat,
+
+        /// Scope checks to a specific project
+        #[arg(long)]
+        project: Option<String>,
     },
 
     /// Initialize orchestrator runtime

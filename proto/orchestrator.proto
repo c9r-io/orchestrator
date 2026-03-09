@@ -393,6 +393,7 @@ message WorkerStatusResponse {
 message CheckRequest {
   optional string workflow = 1;
   string output_format = 2;
+  optional string project_id = 3;
 }
 
 message CheckResponse {

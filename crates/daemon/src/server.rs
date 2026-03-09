@@ -638,6 +638,7 @@ impl OrchestratorService for OrchestratorServer {
             &self.state,
             req.workflow.as_deref(),
             &req.output_format,
+            req.project_id.as_deref(),
         )
         .map_err(|e| Status::internal(format!("{e}")))?;
 

@@ -184,13 +184,15 @@ pub fn validate_manifests(
 }
 
 /// Run preflight checks. Returns (content, exit_code).
+/// When `project_id` is Some, checks are scoped to that project's resources.
 pub fn run_check(
     state: &InnerState,
     workflow: Option<&str>,
     output_format: &str,
+    project_id: Option<&str>,
 ) -> Result<(String, i32)> {
     let active = read_active_config(state)?;
-    let report = run_checks(&active, &state.app_root, workflow);
+    let report = run_checks(&active, &state.app_root, workflow, project_id);
 
     let content = match output_format {
         "json" => serde_json::to_string_pretty(&report)?,
