@@ -50,16 +50,16 @@ impl Resource for AgentResource {
         )
     }
 
-    fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
-        config.default_project()?.agents.get(name).map(|agent| Self {
-            metadata: super::metadata_from_store(config, "Agent", name),
+    fn get_from_project(config: &OrchestratorConfig, name: &str, project_id: Option<&str>) -> Option<Self> {
+        config.project(project_id)?.agents.get(name).map(|agent| Self {
+            metadata: super::metadata_from_store(config, "Agent", name, project_id),
             spec: agent_config_to_spec(agent),
         })
     }
 
-    fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
+    fn delete_from_project(config: &mut OrchestratorConfig, name: &str, project_id: Option<&str>) -> bool {
         config
-            .project_mut(None)
+            .project_mut(project_id)
             .map(|project| project.agents.remove(name).is_some())
             .unwrap_or(false)
     }

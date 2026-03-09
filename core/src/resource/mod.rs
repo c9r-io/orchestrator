@@ -69,6 +69,30 @@ pub trait Resource: Sized {
     fn validate(&self) -> Result<()>;
     fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult>;
     fn to_yaml(&self) -> Result<String>;
-    fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self>;
-    fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool;
+
+    /// Project-scoped resource lookup. `project_id` of `None` defaults to the
+    /// default project (via `OrchestratorConfig::effective_project_id`).
+    fn get_from_project(
+        config: &OrchestratorConfig,
+        name: &str,
+        project_id: Option<&str>,
+    ) -> Option<Self>;
+
+    /// Project-scoped resource deletion. `project_id` of `None` defaults to
+    /// the default project.
+    fn delete_from_project(
+        config: &mut OrchestratorConfig,
+        name: &str,
+        project_id: Option<&str>,
+    ) -> bool;
+
+    /// Convenience: lookup in the default project.
+    fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
+        Self::get_from_project(config, name, None)
+    }
+
+    /// Convenience: delete from the default project.
+    fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
+        Self::delete_from_project(config, name, None)
+    }
 }

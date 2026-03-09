@@ -41,10 +41,12 @@ pub fn metadata_from_store(
     config: &OrchestratorConfig,
     kind: &str,
     name: &str,
+    project_id: Option<&str>,
 ) -> ResourceMetadata {
+    let pid = config.effective_project_id(project_id);
     match config
         .resource_store
-        .get_namespaced(kind, crate::config::DEFAULT_PROJECT_ID, name)
+        .get_namespaced(kind, pid, name)
         .or_else(|| config.resource_store.get(kind, name))
     {
         Some(cr) => cr.metadata.clone(),
@@ -149,11 +151,11 @@ pub(crate) fn apply_to_store(
 /// Delete a builtin resource from the unified ResourceStore, then remove
 /// the single affected entry from the in-memory config snapshot.
 pub(crate) fn delete_from_store(config: &mut OrchestratorConfig, kind: &str, name: &str) -> bool {
-    // If the store doesn't have this entry yet but the config snapshot does,
-    // remove the reconciled project-scoped entry directly.
+    // Try to remove from all projects in the resource store, falling back to
+    // un-namespaced lookup.
     let removed = config
         .resource_store
-        .remove_namespaced(kind, crate::config::DEFAULT_PROJECT_ID, name)
+        .remove_by_kind_name_any_project(kind, name)
         .or_else(|| config.resource_store.remove(kind, name))
         .is_some();
     if removed {

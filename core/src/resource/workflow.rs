@@ -75,16 +75,16 @@ impl Resource for WorkflowResource {
         )
     }
 
-    fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
-        config.default_project()?.workflows.get(name).map(|workflow| Self {
-            metadata: super::metadata_from_store(config, "Workflow", name),
+    fn get_from_project(config: &OrchestratorConfig, name: &str, project_id: Option<&str>) -> Option<Self> {
+        config.project(project_id)?.workflows.get(name).map(|workflow| Self {
+            metadata: super::metadata_from_store(config, "Workflow", name, project_id),
             spec: workflow_config_to_spec(workflow),
         })
     }
 
-    fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
+    fn delete_from_project(config: &mut OrchestratorConfig, name: &str, project_id: Option<&str>) -> bool {
         config
-            .project_mut(None)
+            .project_mut(project_id)
             .map(|project| project.workflows.remove(name).is_some())
             .unwrap_or(false)
     }

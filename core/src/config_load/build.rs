@@ -154,45 +154,47 @@ pub fn enforce_deletion_guards(
     previous: &OrchestratorConfig,
     candidate: &OrchestratorConfig,
 ) -> Result<()> {
-    let previous_project = previous.default_project();
-    let candidate_project = candidate.default_project();
-    let removed_workspaces: Vec<String> = previous_project
-        .into_iter()
-        .flat_map(|project| project.workspaces.keys())
-        .filter(|id| {
-            candidate_project
-                .is_none_or(|project| !project.workspaces.contains_key(*id))
-        })
-        .cloned()
-        .collect();
-    for workspace_id in removed_workspaces {
-        let task_count = count_tasks_by_workspace(conn, &workspace_id)?;
-        if task_count > 0 {
-            anyhow::bail!(
-                "cannot delete workspace '{}' because {} tasks reference it",
-                workspace_id,
-                task_count
-            );
+    // Check all projects for removed workspaces/workflows that still have tasks.
+    for (project_id, prev_project) in &previous.projects {
+        let candidate_project = candidate.projects.get(project_id);
+        let removed_workspaces: Vec<String> = prev_project
+            .workspaces
+            .keys()
+            .filter(|id| {
+                candidate_project
+                    .is_none_or(|p| !p.workspaces.contains_key(*id))
+            })
+            .cloned()
+            .collect();
+        for workspace_id in removed_workspaces {
+            let task_count = count_tasks_by_workspace(conn, &workspace_id)?;
+            if task_count > 0 {
+                anyhow::bail!(
+                    "cannot delete workspace '{}' because {} tasks reference it",
+                    workspace_id,
+                    task_count
+                );
+            }
         }
-    }
 
-    let removed_workflows: Vec<String> = previous_project
-        .into_iter()
-        .flat_map(|project| project.workflows.keys())
-        .filter(|id| {
-            candidate_project
-                .is_none_or(|project| !project.workflows.contains_key(*id))
-        })
-        .cloned()
-        .collect();
-    for workflow_id in removed_workflows {
-        let task_count = count_tasks_by_workflow(conn, &workflow_id)?;
-        if task_count > 0 {
-            anyhow::bail!(
-                "cannot delete workflow '{}' because {} tasks reference it",
-                workflow_id,
-                task_count
-            );
+        let removed_workflows: Vec<String> = prev_project
+            .workflows
+            .keys()
+            .filter(|id| {
+                candidate_project
+                    .is_none_or(|p| !p.workflows.contains_key(*id))
+            })
+            .cloned()
+            .collect();
+        for workflow_id in removed_workflows {
+            let task_count = count_tasks_by_workflow(conn, &workflow_id)?;
+            if task_count > 0 {
+                anyhow::bail!(
+                    "cannot delete workflow '{}' because {} tasks reference it",
+                    workflow_id,
+                    task_count
+                );
+            }
         }
     }
 

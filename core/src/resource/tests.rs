@@ -619,7 +619,7 @@ mod cases {
         );
         apply_to_store(&mut config, "Workspace", "ws-meta", &meta, ws.to_cr_spec());
 
-        let loaded = metadata_from_store(&config, "Workspace", "ws-meta");
+        let loaded = metadata_from_store(&config, "Workspace", "ws-meta", None);
         assert_eq!(loaded.labels.as_ref().unwrap().get("env").unwrap(), "prod");
         assert_eq!(
             loaded.annotations.as_ref().unwrap().get("note").unwrap(),
@@ -630,7 +630,7 @@ mod cases {
     #[test]
     fn metadata_from_store_falls_back_to_name_only() {
         let config = OrchestratorConfig::default();
-        let meta = metadata_from_store(&config, "Workspace", "missing");
+        let meta = metadata_from_store(&config, "Workspace", "missing", None);
         assert_eq!(meta.name, "missing");
         assert!(meta.labels.is_none());
         assert!(meta.annotations.is_none());

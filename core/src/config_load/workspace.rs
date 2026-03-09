@@ -26,12 +26,22 @@ pub fn resolve_and_validate_workspaces(
     app_root: &Path,
     config: &OrchestratorConfig,
 ) -> Result<HashMap<String, ResolvedWorkspace>> {
+    resolve_and_validate_workspaces_for_project(app_root, config, crate::config::DEFAULT_PROJECT_ID)
+}
+
+/// Validate and resolve workspaces, agents, and workflows for a specific
+/// project. Returns the resolved workspace map for that project.
+pub fn resolve_and_validate_workspaces_for_project(
+    app_root: &Path,
+    config: &OrchestratorConfig,
+    project_id: &str,
+) -> Result<HashMap<String, ResolvedWorkspace>> {
     let mut resolved = HashMap::new();
-    let default_project = config
+    let project = config
         .projects
-        .get(crate::config::DEFAULT_PROJECT_ID)
-        .ok_or_else(|| anyhow::anyhow!("default project '{}' does not exist", crate::config::DEFAULT_PROJECT_ID))?;
-    for (id, entry) in &default_project.workspaces {
+        .get(project_id)
+        .ok_or_else(|| anyhow::anyhow!("project '{}' does not exist", project_id))?;
+    for (id, entry) in &project.workspaces {
         if id.trim().is_empty() {
             anyhow::bail!("[INVALID_WORKSPACE] workspace id cannot be empty\n  category: validation\n  suggested_fix: provide a non-empty workspace name");
         }
@@ -80,13 +90,13 @@ pub fn resolve_and_validate_workspaces(
         );
     }
 
-    let default_agents: HashMap<String, &crate::config::AgentConfig> = default_project
+    let project_agents: HashMap<String, &crate::config::AgentConfig> = project
         .agents
         .iter()
         .map(|(k, v)| (k.clone(), v))
         .collect();
-    for (workflow_id, workflow) in &default_project.workflows {
-        validate_workflow_config_with_agents(&default_agents, workflow, workflow_id)?;
+    for (workflow_id, workflow) in &project.workflows {
+        validate_workflow_config_with_agents(&project_agents, workflow, workflow_id)?;
     }
 
     Ok(resolved)

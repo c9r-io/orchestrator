@@ -12,10 +12,23 @@ pub fn validate_workflow_config(
     workflow: &WorkflowConfig,
     workflow_id: &str,
 ) -> Result<()> {
+    validate_workflow_config_for_project(config, workflow, workflow_id, None)
+}
+
+/// Project-scoped workflow validation. `project_id` of `None` defaults to the
+/// default project.
+pub fn validate_workflow_config_for_project(
+    config: &OrchestratorConfig,
+    workflow: &WorkflowConfig,
+    workflow_id: &str,
+    project_id: Option<&str>,
+) -> Result<()> {
+    let pid = config.effective_project_id(project_id);
     let project_agents = config
-        .default_project()
+        .projects
+        .get(pid)
         .map(|project| &project.agents)
-        .ok_or_else(|| anyhow::anyhow!("default project not found"))?;
+        .ok_or_else(|| anyhow::anyhow!("project '{}' not found", pid))?;
     if workflow.steps.is_empty() {
         anyhow::bail!("workflow '{}' must define at least one step", workflow_id);
     }

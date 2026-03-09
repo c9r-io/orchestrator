@@ -48,16 +48,16 @@ impl Resource for WorkspaceResource {
         )
     }
 
-    fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
-        config.default_project()?.workspaces.get(name).map(|workspace| Self {
-            metadata: super::metadata_from_store(config, "Workspace", name),
+    fn get_from_project(config: &OrchestratorConfig, name: &str, project_id: Option<&str>) -> Option<Self> {
+        config.project(project_id)?.workspaces.get(name).map(|workspace| Self {
+            metadata: super::metadata_from_store(config, "Workspace", name, project_id),
             spec: workspace_config_to_spec(workspace),
         })
     }
 
-    fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
+    fn delete_from_project(config: &mut OrchestratorConfig, name: &str, project_id: Option<&str>) -> bool {
         config
-            .project_mut(None)
+            .project_mut(project_id)
             .map(|project| project.workspaces.remove(name).is_some())
             .unwrap_or(false)
     }

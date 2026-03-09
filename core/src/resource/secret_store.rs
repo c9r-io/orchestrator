@@ -45,8 +45,8 @@ impl Resource for SecretStoreResource {
         )
     }
 
-    fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
-        config.default_project()?.env_stores.get(name).and_then(|store| {
+    fn get_from_project(config: &OrchestratorConfig, name: &str, project_id: Option<&str>) -> Option<Self> {
+        config.project(project_id)?.env_stores.get(name).and_then(|store| {
             if store.sensitive {
                 Some(Self {
                     metadata: super::metadata_with_name(name),
@@ -60,9 +60,9 @@ impl Resource for SecretStoreResource {
         })
     }
 
-    fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
+    fn delete_from_project(config: &mut OrchestratorConfig, name: &str, project_id: Option<&str>) -> bool {
         config
-            .project_mut(None)
+            .project_mut(project_id)
             .map(|project| {
                 matches!(project.env_stores.get(name), Some(store) if store.sensitive)
                     && project.env_stores.remove(name).is_some()

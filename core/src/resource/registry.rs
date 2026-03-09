@@ -159,57 +159,57 @@ impl Resource for RegisteredResource {
         }
     }
 
-    fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
-        if let Some(workspace) = WorkspaceResource::get_from(config, name) {
+    fn get_from_project(config: &OrchestratorConfig, name: &str, project_id: Option<&str>) -> Option<Self> {
+        if let Some(workspace) = WorkspaceResource::get_from_project(config, name, project_id) {
             return Some(Self::Workspace(workspace));
         }
-        if let Some(agent) = AgentResource::get_from(config, name) {
+        if let Some(agent) = AgentResource::get_from_project(config, name, project_id) {
             return Some(Self::Agent(Box::new(agent)));
         }
-        if let Some(workflow) = WorkflowResource::get_from(config, name) {
+        if let Some(workflow) = WorkflowResource::get_from_project(config, name, project_id) {
             return Some(Self::Workflow(workflow));
         }
-        if let Some(project) = ProjectResource::get_from(config, name) {
+        if let Some(project) = ProjectResource::get_from_project(config, name, project_id) {
             return Some(Self::Project(project));
         }
-        if let Some(step_template) = StepTemplateResource::get_from(config, name) {
+        if let Some(step_template) = StepTemplateResource::get_from_project(config, name, project_id) {
             return Some(Self::StepTemplate(step_template));
         }
         if name == "runtime" {
-            if let Some(runtime_policy) = RuntimePolicyResource::get_from(config, name) {
+            if let Some(runtime_policy) = RuntimePolicyResource::get_from_project(config, name, project_id) {
                 return Some(Self::RuntimePolicy(runtime_policy));
             }
         }
-        if let Some(env_store) = EnvStoreResource::get_from(config, name) {
+        if let Some(env_store) = EnvStoreResource::get_from_project(config, name, project_id) {
             return Some(Self::EnvStore(env_store));
         }
-        if let Some(secret_store) = SecretStoreResource::get_from(config, name) {
+        if let Some(secret_store) = SecretStoreResource::get_from_project(config, name, project_id) {
             return Some(Self::SecretStore(secret_store));
         }
         None
     }
 
-    fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
+    fn delete_from_project(config: &mut OrchestratorConfig, name: &str, project_id: Option<&str>) -> bool {
         // Try each builtin kind in turn
-        if WorkspaceResource::delete_from(config, name) {
+        if WorkspaceResource::delete_from_project(config, name, project_id) {
             return true;
         }
-        if AgentResource::delete_from(config, name) {
+        if AgentResource::delete_from_project(config, name, project_id) {
             return true;
         }
-        if WorkflowResource::delete_from(config, name) {
+        if WorkflowResource::delete_from_project(config, name, project_id) {
             return true;
         }
-        if ProjectResource::delete_from(config, name) {
+        if ProjectResource::delete_from_project(config, name, project_id) {
             return true;
         }
-        if StepTemplateResource::delete_from(config, name) {
+        if StepTemplateResource::delete_from_project(config, name, project_id) {
             return true;
         }
-        if EnvStoreResource::delete_from(config, name) {
+        if EnvStoreResource::delete_from_project(config, name, project_id) {
             return true;
         }
-        if SecretStoreResource::delete_from(config, name) {
+        if SecretStoreResource::delete_from_project(config, name, project_id) {
             return true;
         }
         false

@@ -87,6 +87,30 @@ impl ResourceStore {
         removed
     }
 
+    /// Remove a resource by kind and name from any project namespace.
+    /// Scans all entries of the form `kind/*/name`.
+    pub fn remove_by_kind_name_any_project(
+        &mut self,
+        kind: &str,
+        name: &str,
+    ) -> Option<CustomResource> {
+        let suffix = format!("/{}", name);
+        let prefix = format!("{}/", kind);
+        let key = self
+            .resources
+            .keys()
+            .find(|k| k.starts_with(&prefix) && k.ends_with(&suffix) && k.matches('/').count() == 2)
+            .cloned();
+        if let Some(key) = key {
+            let removed = self.resources.remove(&key);
+            if removed.is_some() {
+                self.generation += 1;
+            }
+            return removed;
+        }
+        None
+    }
+
     pub fn remove_namespaced(
         &mut self,
         kind: &str,

@@ -52,61 +52,76 @@ pub fn seed_store_from_config_snapshot(
         }
     };
 
-    let Some(project) = config.default_project() else {
-        return;
-    };
-
+    // Search all projects for the named resource (project-scoped kinds).
     match kind {
         "Agent" => {
-            if let Some(v) = project.agents.get(name) {
-                config.resource_store.put(make_cr(
-                    Some(crate::config::DEFAULT_PROJECT_ID.to_string()),
-                    v.to_cr_spec(),
-                ));
+            for (pid, project) in &config.projects {
+                if let Some(v) = project.agents.get(name) {
+                    config.resource_store.put(make_cr(
+                        Some(pid.clone()),
+                        v.to_cr_spec(),
+                    ));
+                    return;
+                }
             }
         }
         "Workflow" => {
-            if let Some(v) = project.workflows.get(name) {
-                config.resource_store.put(make_cr(
-                    Some(crate::config::DEFAULT_PROJECT_ID.to_string()),
-                    v.to_cr_spec(),
-                ));
+            for (pid, project) in &config.projects {
+                if let Some(v) = project.workflows.get(name) {
+                    config.resource_store.put(make_cr(
+                        Some(pid.clone()),
+                        v.to_cr_spec(),
+                    ));
+                    return;
+                }
             }
         }
         "Workspace" => {
-            if let Some(v) = project.workspaces.get(name) {
-                config.resource_store.put(make_cr(
-                    Some(crate::config::DEFAULT_PROJECT_ID.to_string()),
-                    v.to_cr_spec(),
-                ));
+            for (pid, project) in &config.projects {
+                if let Some(v) = project.workspaces.get(name) {
+                    config.resource_store.put(make_cr(
+                        Some(pid.clone()),
+                        v.to_cr_spec(),
+                    ));
+                    return;
+                }
             }
         }
         "StepTemplate" => {
-            if let Some(v) = project.step_templates.get(name) {
-                config.resource_store.put(make_cr(
-                    Some(crate::config::DEFAULT_PROJECT_ID.to_string()),
-                    v.to_cr_spec(),
-                ));
+            for (pid, project) in &config.projects {
+                if let Some(v) = project.step_templates.get(name) {
+                    config.resource_store.put(make_cr(
+                        Some(pid.clone()),
+                        v.to_cr_spec(),
+                    ));
+                    return;
+                }
             }
         }
         "EnvStore" => {
-            if let Some(v) = project.env_stores.get(name) {
-                if !v.sensitive {
-                    config.resource_store.put(make_cr(
-                        Some(crate::config::DEFAULT_PROJECT_ID.to_string()),
-                        v.to_cr_spec(),
-                    ));
+            for (pid, project) in &config.projects {
+                if let Some(v) = project.env_stores.get(name) {
+                    if !v.sensitive {
+                        config.resource_store.put(make_cr(
+                            Some(pid.clone()),
+                            v.to_cr_spec(),
+                        ));
+                        return;
+                    }
                 }
             }
         }
         "SecretStore" => {
-            if let Some(v) = project.env_stores.get(name) {
-                if v.sensitive {
-                    let proj = SecretStoreProjection(v.clone());
-                    config.resource_store.put(make_cr(
-                        Some(crate::config::DEFAULT_PROJECT_ID.to_string()),
-                        proj.to_cr_spec(),
-                    ));
+            for (pid, project) in &config.projects {
+                if let Some(v) = project.env_stores.get(name) {
+                    if v.sensitive {
+                        let proj = SecretStoreProjection(v.clone());
+                        config.resource_store.put(make_cr(
+                            Some(pid.clone()),
+                            proj.to_cr_spec(),
+                        ));
+                        return;
+                    }
                 }
             }
         }
@@ -214,34 +229,43 @@ pub fn reconcile_single_resource(config: &mut OrchestratorConfig, kind: &str, na
 }
 
 pub fn remove_from_config_snapshot(config: &mut OrchestratorConfig, kind: &str, name: &str) {
-    let default_project = config.project_mut(None);
     match kind {
         "Agent" => {
-            if let Some(project) = default_project {
-                project.agents.remove(name);
+            for project in config.projects.values_mut() {
+                if project.agents.remove(name).is_some() {
+                    return;
+                }
             }
         }
         "Workflow" => {
-            if let Some(project) = default_project {
-                project.workflows.remove(name);
+            for project in config.projects.values_mut() {
+                if project.workflows.remove(name).is_some() {
+                    return;
+                }
             }
         }
         "Workspace" => {
-            if let Some(project) = default_project {
-                project.workspaces.remove(name);
+            for project in config.projects.values_mut() {
+                if project.workspaces.remove(name).is_some() {
+                    return;
+                }
             }
         }
         "Project" => {
             config.projects.remove(name);
         }
         "StepTemplate" => {
-            if let Some(project) = default_project {
-                project.step_templates.remove(name);
+            for project in config.projects.values_mut() {
+                if project.step_templates.remove(name).is_some() {
+                    return;
+                }
             }
         }
         "EnvStore" | "SecretStore" => {
-            if let Some(project) = default_project {
-                project.env_stores.remove(name);
+            for project in config.projects.values_mut() {
+                if project.env_stores.remove(name).is_some() {
+                    return;
+                }
             }
         }
         _ => {}
