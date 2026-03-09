@@ -460,25 +460,30 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
-        // Confirm config exists
+        // Confirm config versions exist (persist_raw_config writes to
+        // orchestrator_config_versions, not the legacy orchestrator_config blob)
         let conn = open_conn(&state.db_path).expect("open sqlite");
-        let config_before: i64 = conn
-            .query_row("SELECT COUNT(*) FROM orchestrator_config", [], |row| {
-                row.get(0)
-            })
-            .expect("count config before");
-        assert!(config_before > 0);
+        let versions_before: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM orchestrator_config_versions",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count config versions before");
+        assert!(versions_before > 0);
         drop(conn);
 
         reset_db(&state, false, true).expect("reset_db with config");
 
         let conn = open_conn(&state.db_path).expect("open sqlite");
-        let config_after: i64 = conn
-            .query_row("SELECT COUNT(*) FROM orchestrator_config", [], |row| {
-                row.get(0)
-            })
-            .expect("count config after");
-        assert_eq!(config_after, 0);
+        let versions_after: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM orchestrator_config_versions",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count config versions after");
+        assert_eq!(versions_after, 0);
     }
 
     #[test]

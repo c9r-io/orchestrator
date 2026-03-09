@@ -174,7 +174,7 @@ pub fn resolve_logging_config(
     overrides: CliLoggingOverrides,
 ) -> ResolvedLoggingConfig {
     let logging = config
-        .map(|cfg| cfg.observability.logging.clone())
+        .map(|cfg| cfg.runtime_policy().observability.logging.clone())
         .unwrap_or_default();
 
     let mut level = logging.level;
@@ -235,13 +235,10 @@ fn resolve_log_dir(app_root: &Path, logging: &LoggingConfig) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{LoggingFormat, ObservabilityConfig};
+    use crate::config::LoggingFormat;
 
     fn sample_config() -> OrchestratorConfig {
-        OrchestratorConfig {
-            observability: ObservabilityConfig::default(),
-            ..OrchestratorConfig::default()
-        }
+        OrchestratorConfig::default()
     }
 
     #[test]

@@ -113,6 +113,11 @@ pub fn all_migrations() -> Vec<Migration> {
             name: "m0010_per_resource_persistence",
             up: m0010_per_resource_persistence,
         },
+        Migration {
+            version: 11,
+            name: "m0011_finalize_resource_migration",
+            up: m0011_finalize_resource_migration,
+        },
     ]
 }
 
@@ -765,6 +770,83 @@ fn m0010_per_resource_persistence(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Safety net: ensure all resources from the orchestrator_config blob are in the
+/// resources table. Handles DBs that were written to before dual-write was active.
+fn m0011_finalize_resource_migration(conn: &Connection) -> Result<()> {
+    let row: Option<String> = conn
+        .query_row(
+            "SELECT config_json FROM orchestrator_config WHERE id = 1",
+            [],
+            |r| r.get(0),
+        )
+        .optional()
+        .context("m0011: failed to read orchestrator_config")?;
+
+    if let Some(json_raw) = row {
+        // Use LegacyOrchestratorConfig to handle old blobs with runner/resume/observability fields
+        let config_result = serde_json::from_str::<crate::config::OrchestratorConfig>(&json_raw)
+            .or_else(|_| {
+                #[derive(serde::Deserialize)]
+                struct LegacyConfig {
+                    #[serde(default)]
+                    projects: std::collections::HashMap<String, crate::config::ProjectConfig>,
+                    #[serde(default)]
+                    custom_resource_definitions: std::collections::HashMap<
+                        String,
+                        crate::crd::types::CustomResourceDefinition,
+                    >,
+                    #[serde(default)]
+                    custom_resources:
+                        std::collections::HashMap<String, crate::crd::types::CustomResource>,
+                    #[serde(default)]
+                    resource_store: crate::crd::store::ResourceStore,
+                }
+                serde_json::from_str::<LegacyConfig>(&json_raw).map(|lc| {
+                    crate::config::OrchestratorConfig {
+                        projects: lc.projects,
+                        custom_resource_definitions: lc.custom_resource_definitions,
+                        custom_resources: lc.custom_resources,
+                        resource_store: lc.resource_store,
+                    }
+                })
+            });
+
+        if let Ok(config) = config_result {
+            let config = crate::config_load::normalize_config(config);
+            let now = chrono::Utc::now().to_rfc3339();
+
+            for (key, cr) in config.resource_store.resources() {
+                let parts: Vec<&str> = key.split('/').collect();
+                let (kind, project, name) = match parts.len() {
+                    3 => (parts[0], parts[1], parts[2]),
+                    2 => (parts[0], crate::crd::store::SYSTEM_PROJECT, parts[1]),
+                    _ => continue,
+                };
+                let spec_json = serde_json::to_string(&cr.spec).unwrap_or_default();
+                let metadata_json = serde_json::to_string(&cr.metadata).unwrap_or_default();
+
+                // INSERT OR IGNORE — only insert if not already present
+                conn.execute(
+                    "INSERT OR IGNORE INTO resources (kind, project, name, api_version, spec_json, metadata_json, generation, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    rusqlite::params![
+                        kind, project, name, cr.api_version, spec_json, metadata_json,
+                        cr.generation, cr.created_at, now
+                    ],
+                )
+                .with_context(|| {
+                    format!(
+                        "m0011: failed to insert resource {}/{}/{}",
+                        kind, project, name
+                    )
+                })?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn m0009_normalize_unspecified_agent_ids(conn: &Connection) -> Result<()> {
     conn.execute(
         "UPDATE command_runs SET agent_id = 'unspecified' WHERE agent_id = ?1 OR agent_id = ''",
@@ -791,8 +873,8 @@ mod tests {
         let conn = mem_conn();
         let migrations = all_migrations();
         let applied = run_pending(&conn, &migrations).expect("run_pending");
-        assert_eq!(applied, 10);
-        assert_eq!(current_version(&conn).expect("version"), 10);
+        assert_eq!(applied, 11);
+        assert_eq!(current_version(&conn).expect("version"), 11);
     }
 
     #[test]
@@ -802,7 +884,7 @@ mod tests {
         run_pending(&conn, &migrations).expect("first run");
         let applied = run_pending(&conn, &migrations).expect("second run");
         assert_eq!(applied, 0);
-        assert_eq!(current_version(&conn).expect("version"), 10);
+        assert_eq!(current_version(&conn).expect("version"), 11);
     }
 
     #[test]
@@ -827,10 +909,10 @@ mod tests {
         assert_eq!(applied, 2);
         assert_eq!(current_version(&conn).expect("version"), 2);
 
-        // Apply all 10 — should only run 3..10
+        // Apply all 11 — should only run 3..11
         let applied = run_pending(&conn, &all).expect("full run");
-        assert_eq!(applied, 8);
-        assert_eq!(current_version(&conn).expect("version"), 10);
+        assert_eq!(applied, 9);
+        assert_eq!(current_version(&conn).expect("version"), 11);
     }
 
     #[test]
@@ -959,8 +1041,9 @@ mod tests {
     #[test]
     fn backfill_promoted_populates_from_json() {
         let conn = mem_conn();
-        // Run migrations 1-3 first
+        // Run migrations 1-3 first, then isolate m4 for testing
         let mut migs = all_migrations();
+        let _m11 = migs.pop().expect("pop m11");
         let _m10 = migs.pop().expect("pop m10");
         let _m9 = migs.pop().expect("pop m9");
         let _m8 = migs.pop().expect("pop m8");

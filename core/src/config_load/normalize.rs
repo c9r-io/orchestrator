@@ -193,14 +193,37 @@ pub(crate) fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorCo
     // Always rebuild the resource store from the normalized project-scoped
     // config snapshot. The store is a derived index that the CRD pipeline can query.
     //
-    // Preserve resource metadata (labels, annotations) from the old store
-    // before wiping — sync_config_snapshot_to_store only knows about spec data
-    // from the config snapshot, not metadata already stored in the ResourceStore.
+    // Preserve RuntimePolicy and other cluster-scoped CRs across the store rebuild,
+    // since they are not derived from the config.projects snapshot.
+    // Also preserve resource metadata (labels, annotations) from the old store.
     let old_store = std::mem::take(&mut config.resource_store);
     crate::crd::writeback::sync_config_snapshot_to_store(&mut config);
+
+    // Restore RuntimePolicy from old store, or seed defaults if absent
+    if let Some(rp_cr) = old_store.list_by_kind("RuntimePolicy").into_iter().next().cloned() {
+        config.resource_store.put(rp_cr);
+    } else {
+        // Cold start: seed a default RuntimePolicy
+        let rp = crate::crd::projection::RuntimePolicyProjection::default();
+        let now = chrono::Utc::now().to_rfc3339();
+        let cr = crate::crd::types::CustomResource {
+            kind: "RuntimePolicy".to_string(),
+            api_version: "orchestrator.dev/v2".to_string(),
+            metadata: crate::cli_types::ResourceMetadata {
+                name: "runtime".to_string(),
+                project: Some(crate::crd::store::SYSTEM_PROJECT.to_string()),
+                labels: None,
+                annotations: None,
+            },
+            spec: crate::crd::projection::CrdProjectable::to_cr_spec(&rp),
+            generation: 1,
+            created_at: now.clone(),
+            updated_at: now,
+        };
+        config.resource_store.put(cr);
+    }
+
     crate::crd::writeback::restore_metadata_from_previous_store(&mut config, &old_store);
-    // Re-key any legacy 2-segment global keys to 3-segment format
-    config.resource_store.rekey_legacy_global_resources();
 
     config
 }
@@ -1025,14 +1048,15 @@ mod tests {
             updated_at: "2026-01-01T00:00:00Z".to_string(),
         };
         config.resource_store.put(stale_cr);
-        assert!(config.resource_store.get("Agent", "stale-agent").is_some());
+        // Agent is project-scoped, so put() auto-assigns DEFAULT_PROJECT_ID
+        assert!(config.resource_store.get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "stale-agent").is_some());
 
         // Legacy does NOT have "stale-agent"
         let normalized = normalize_config(config);
         assert!(
             normalized
                 .resource_store
-                .get("Agent", "stale-agent")
+                .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "stale-agent")
                 .is_none(),
             "stale store entries should be cleared during normalize"
         );

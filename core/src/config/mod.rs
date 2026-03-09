@@ -50,23 +50,11 @@ pub const DEFAULT_PROJECT_ID: &str = "default";
 /// Main orchestrator configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrchestratorConfig {
-    /// Legacy field — use `runtime_policy().runner` for reads.
-    /// Kept for serde backward compatibility with existing DB blobs.
-    #[serde(default)]
-    pub runner: RunnerConfig,
-    /// Legacy field — use `runtime_policy().resume` for reads.
-    #[serde(default)]
-    pub resume: ResumeConfig,
-    #[serde(default)]
-    pub observability: ObservabilityConfig,
     #[serde(default)]
     pub projects: HashMap<String, ProjectConfig>,
-    /// Legacy field — metadata now lives in ResourceStore CR metadata.
-    #[serde(default)]
-    pub resource_meta: ResourceMetadataStore,
     #[serde(default)]
     pub custom_resource_definitions: HashMap<String, CustomResourceDefinition>,
-    /// Legacy field — custom resources now live in ResourceStore.
+    /// Custom resource instances (CRD-defined resources).
     #[serde(default)]
     pub custom_resources: HashMap<String, CustomResource>,
     /// Unified resource store — stores all resources (builtin + custom CRD instances).
@@ -77,11 +65,7 @@ pub struct OrchestratorConfig {
 impl Default for OrchestratorConfig {
     fn default() -> Self {
         Self {
-            runner: RunnerConfig::default(),
-            resume: ResumeConfig { auto: false },
-            observability: ObservabilityConfig::default(),
             projects: HashMap::new(),
-            resource_meta: ResourceMetadataStore::default(),
             custom_resource_definitions: HashMap::new(),
             custom_resources: HashMap::new(),
             resource_store: ResourceStore::default(),
@@ -101,15 +85,11 @@ impl OrchestratorConfig {
     }
 
     /// Access the RuntimePolicy projection from the resource store.
-    /// Falls back to constructing from the legacy top-level fields.
+    /// Returns defaults if the store has no RuntimePolicy CR (cold start).
     pub fn runtime_policy(&self) -> crate::crd::projection::RuntimePolicyProjection {
         self.resource_store
             .project_singleton::<crate::crd::projection::RuntimePolicyProjection>()
-            .unwrap_or_else(|| crate::crd::projection::RuntimePolicyProjection {
-                runner: self.runner.clone(),
-                resume: self.resume.clone(),
-                observability: self.observability.clone(),
-            })
+            .unwrap_or_default()
     }
 
     pub fn effective_project_id<'a>(&'a self, project_id: Option<&'a str>) -> &'a str {
@@ -165,24 +145,10 @@ mod tests {
     fn test_orchestrator_config_default() {
         let cfg = OrchestratorConfig::default();
         assert!(cfg.projects.is_empty());
-        assert!(!cfg.resume.auto);
-        assert_eq!(cfg.observability, ObservabilityConfig::default());
-        assert!(cfg.projects.is_empty());
-    }
-
-    #[test]
-    fn test_resource_metadata_store_default() {
-        let store = ResourceMetadataStore::default();
-        assert!(store.workspaces.is_empty());
-        assert!(store.agents.is_empty());
-        assert!(store.workflows.is_empty());
-    }
-
-    #[test]
-    fn test_resource_stored_metadata_default() {
-        let meta = ResourceStoredMetadata::default();
-        assert!(meta.labels.is_none());
-        assert!(meta.annotations.is_none());
+        // RuntimePolicy from resource store defaults
+        let rp = cfg.runtime_policy();
+        assert!(!rp.resume.auto);
+        assert_eq!(rp.observability, ObservabilityConfig::default());
     }
 
     #[test]

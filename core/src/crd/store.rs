@@ -7,6 +7,14 @@ use std::collections::HashMap;
 /// Project namespace for singleton/cluster-scoped resources (RuntimePolicy, Project, CRDs).
 pub const SYSTEM_PROJECT: &str = "_system";
 
+/// Returns true for resource kinds that must belong to a project (not `_system`).
+pub fn is_project_scoped(kind: &str) -> bool {
+    matches!(
+        kind,
+        "Agent" | "Workflow" | "Workspace" | "StepTemplate" | "EnvStore" | "SecretStore"
+    )
+}
+
 /// Unified resource store — single source of truth for all resource instances.
 ///
 /// All resources use 3-segment keys: `kind/project/name`.
@@ -56,7 +64,19 @@ impl ResourceStore {
     }
 
     /// Insert or update a resource. Returns the apply result.
-    pub fn put(&mut self, cr: CustomResource) -> ApplyResult {
+    /// For project-scoped kinds with no project, auto-assigns DEFAULT_PROJECT_ID.
+    pub fn put(&mut self, mut cr: CustomResource) -> ApplyResult {
+        // Auto-assign DEFAULT_PROJECT_ID for project-scoped kinds with no/empty project
+        if is_project_scoped(&cr.kind)
+            && cr
+                .metadata
+                .project
+                .as_deref()
+                .filter(|p| !p.trim().is_empty())
+                .is_none()
+        {
+            cr.metadata.project = Some(crate::config::DEFAULT_PROJECT_ID.to_string());
+        }
         let key = Self::storage_key(&cr.kind, &cr.metadata);
         self.generation += 1;
 
@@ -86,7 +106,7 @@ impl ResourceStore {
 
     /// Remove a resource by kind and name from any project namespace.
     /// Scans all entries of the form `kind/*/name`.
-    pub fn remove_by_kind_name_any_project(
+    pub fn remove_first_by_kind_name(
         &mut self,
         kind: &str,
         name: &str,
@@ -169,26 +189,6 @@ impl ResourceStore {
         &mut self.resources
     }
 
-    /// Re-key any legacy 2-segment global keys (`kind/name`) to 3-segment
-    /// format (`kind/_system/name`). Called during config normalization for
-    /// backward compatibility with stores serialized before the project-scoped
-    /// key migration.
-    pub fn rekey_legacy_global_resources(&mut self) {
-        let legacy_keys: Vec<(String, CustomResource)> = self
-            .resources
-            .iter()
-            .filter(|(k, _)| k.matches('/').count() == 1)
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        for (old_key, mut cr) in legacy_keys {
-            self.resources.remove(&old_key);
-            if cr.metadata.project.is_none() {
-                cr.metadata.project = Some(SYSTEM_PROJECT.to_string());
-            }
-            let new_key = Self::storage_key(&cr.kind, &cr.metadata);
-            self.resources.insert(new_key, cr);
-        }
-    }
 }
 
 #[cfg(test)]
@@ -326,16 +326,17 @@ mod tests {
     #[test]
     fn cross_kind_key_isolation() {
         // Same name under different kinds must not collide.
+        // Use non-project-scoped kinds so they go to _system.
         let mut store = ResourceStore::default();
-        store.put(make_cr("Agent", "alpha", serde_json::json!({"a": 1})));
-        store.put(make_cr("Workflow", "alpha", serde_json::json!({"w": 2})));
+        store.put(make_cr("RuntimePolicy", "alpha", serde_json::json!({"a": 1})));
+        store.put(make_cr("Project", "alpha", serde_json::json!({"w": 2})));
         assert_eq!(store.len(), 2);
-        assert_eq!(store.get("Agent", "alpha").unwrap().spec["a"], 1);
-        assert_eq!(store.get("Workflow", "alpha").unwrap().spec["w"], 2);
+        assert_eq!(store.get("RuntimePolicy", "alpha").unwrap().spec["a"], 1);
+        assert_eq!(store.get("Project", "alpha").unwrap().spec["w"], 2);
         // Removing one kind doesn't affect the other.
-        store.remove("Agent", "alpha");
-        assert!(store.get("Agent", "alpha").is_none());
-        assert!(store.get("Workflow", "alpha").is_some());
+        store.remove("RuntimePolicy", "alpha");
+        assert!(store.get("RuntimePolicy", "alpha").is_none());
+        assert!(store.get("Project", "alpha").is_some());
     }
 
     #[test]
@@ -442,6 +443,27 @@ mod tests {
         let runtime: Option<crate::crd::projection::RuntimePolicyProjection> =
             store.project_singleton();
         assert!(runtime.is_none());
+    }
+
+    #[test]
+    fn put_auto_assigns_default_project_for_project_scoped_kinds() {
+        let mut store = ResourceStore::default();
+        let cr = make_cr("Agent", "my-agent", serde_json::json!({"command": "echo test"}));
+        assert!(cr.metadata.project.is_none());
+        store.put(cr);
+        // Should be stored under DEFAULT_PROJECT_ID, not _system
+        assert!(store
+            .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "my-agent")
+            .is_some());
+        assert!(store.get("Agent", "my-agent").is_none()); // not in _system
+    }
+
+    #[test]
+    fn put_keeps_system_project_for_cluster_scoped_kinds() {
+        let mut store = ResourceStore::default();
+        let cr = make_cr("RuntimePolicy", "runtime", serde_json::json!({}));
+        store.put(cr);
+        assert!(store.get("RuntimePolicy", "runtime").is_some()); // in _system
     }
 
     #[test]

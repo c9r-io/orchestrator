@@ -1,4 +1,4 @@
-use crate::config_load::{load_raw_config_from_db, persist_config_and_reload, read_active_config};
+use crate::config_load::{load_config, persist_config_and_reload, read_active_config};
 use crate::crd::{self, ParsedManifest};
 use crate::resource::{
     apply_to_project, dispatch_resource, kind_as_str, parse_manifests_from_yaml, ApplyResult,
@@ -18,7 +18,7 @@ pub fn apply_manifests(
     let manifests =
         parse_manifests_from_yaml(content).map_err(|e| anyhow::anyhow!("parse error: {}", e))?;
 
-    let mut merged_config = load_raw_config_from_db(db_path)?
+    let mut merged_config = load_config(db_path)?
         .map(|(cfg, _, _)| cfg)
         .unwrap_or_default();
 

@@ -13,16 +13,8 @@ pub fn reconcile_builtin_kind(config: &mut OrchestratorConfig, kind: &str) {
                     .or_insert(proj);
             }
         }
-        "RuntimePolicy" => {
-            if let Some(rp) = config
-                .resource_store
-                .project_singleton::<RuntimePolicyProjection>()
-            {
-                config.runner = rp.runner;
-                config.resume = rp.resume;
-                config.observability = rp.observability;
-            }
-        }
+        // RuntimePolicy lives solely in the resource store — no legacy fields to sync.
+        "RuntimePolicy" => {}
         _ => {}
     }
 }
@@ -135,15 +127,18 @@ pub fn seed_store_from_config_snapshot(
             }
         }
         "RuntimePolicy" => {
-            let rp = RuntimePolicyProjection {
-                runner: config.runner.clone(),
-                resume: config.resume.clone(),
-                observability: config.observability.clone(),
-            };
-            config.resource_store.put(make_cr(
-                Some(crate::crd::store::SYSTEM_PROJECT.to_string()),
-                rp.to_cr_spec(),
-            ));
+            // Read existing RuntimePolicy from store, or seed defaults if absent
+            if config
+                .resource_store
+                .project_singleton::<RuntimePolicyProjection>()
+                .is_none()
+            {
+                let rp = RuntimePolicyProjection::default();
+                config.resource_store.put(make_cr(
+                    Some(crate::crd::store::SYSTEM_PROJECT.to_string()),
+                    rp.to_cr_spec(),
+                ));
+            }
         }
         _ => {}
     }
@@ -153,16 +148,23 @@ pub fn reconcile_single_resource(config: &mut OrchestratorConfig, kind: &str, na
     use crate::config::{
         AgentConfig, ProjectConfig, StepTemplateConfig, WorkflowConfig, WorkspaceConfig,
     };
+    use crate::crd::store::is_project_scoped;
 
-    let cr = config
-        .resource_store
-        .get_namespaced(kind, crate::crd::store::SYSTEM_PROJECT, name)
-        .or_else(|| {
-            config
-                .resource_store
-                .get_namespaced(kind, crate::config::DEFAULT_PROJECT_ID, name)
-        })
-        .cloned();
+    // For project-scoped kinds, search all projects in the store.
+    // For cluster-scoped kinds, look in _system.
+    let cr = if is_project_scoped(kind) {
+        config
+            .resource_store
+            .list_by_kind(kind)
+            .into_iter()
+            .find(|cr| cr.metadata.name == name)
+            .cloned()
+    } else {
+        config
+            .resource_store
+            .get(kind, name)
+            .cloned()
+    };
     let Some(cr) = cr else {
         return;
     };
@@ -202,13 +204,8 @@ pub fn reconcile_single_resource(config: &mut OrchestratorConfig, kind: &str, na
                     .or_insert(v);
             }
         }
-        "RuntimePolicy" => {
-            if let Ok(rp) = RuntimePolicyProjection::from_cr_spec(&spec) {
-                config.runner = rp.runner;
-                config.resume = rp.resume;
-                config.observability = rp.observability;
-            }
-        }
+        // RuntimePolicy lives solely in the resource store — no-op.
+        "RuntimePolicy" => {}
         "StepTemplate" => {
             if let Ok(v) = StepTemplateConfig::from_cr_spec(&spec) {
                 config
@@ -412,16 +409,6 @@ pub fn sync_config_snapshot_to_store(config: &mut OrchestratorConfig) {
         ));
     }
 
-    let rp = RuntimePolicyProjection {
-        runner: config.runner.clone(),
-        resume: config.resume.clone(),
-        observability: config.observability.clone(),
-    };
-    config.resource_store.put(make_cr(
-        "RuntimePolicy",
-        "runtime",
-        Some(crate::crd::store::SYSTEM_PROJECT.to_string()),
-        rp.to_cr_spec(),
-        &now,
-    ));
+    // RuntimePolicy is NOT seeded here — it is preserved from the old store
+    // during normalize_config, or loaded from the resources table.
 }

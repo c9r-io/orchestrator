@@ -1,12 +1,12 @@
 use crate::collab::MessageBus;
 use crate::config::{
     AgentConfig, AgentMetadata, AgentSelectionConfig, LoopMode, OrchestratorConfig, ProjectConfig,
-    PromptDelivery, ResourceMetadataStore, ResumeConfig, RunnerConfig, SafetyConfig,
+    PromptDelivery, SafetyConfig,
     StepBehavior, WorkflowConfig, WorkflowFinalizeConfig, WorkflowLoopConfig,
     WorkflowLoopGuardConfig, WorkflowStepConfig, WorkspaceConfig,
 };
 use crate::config_load::{
-    build_active_config, load_raw_config_from_db, persist_raw_config, read_active_config,
+    build_active_config, load_config, persist_raw_config, read_active_config,
 };
 use crate::db::init_schema;
 use crate::events::NoopSink;
@@ -31,13 +31,6 @@ fn backfill_default_scope_data(
 
 fn create_minimal_test_config() -> OrchestratorConfig {
     OrchestratorConfig {
-        runner: RunnerConfig {
-            shell: "/bin/bash".to_string(),
-            shell_arg: "-lc".to_string(),
-            ..RunnerConfig::default()
-        },
-        resume: ResumeConfig { auto: false },
-        observability: crate::config::ObservabilityConfig::default(),
         projects: {
             let mut projects = HashMap::new();
             projects.insert(
@@ -133,7 +126,6 @@ fn create_minimal_test_config() -> OrchestratorConfig {
             );
             projects
         },
-        resource_meta: ResourceMetadataStore::default(),
         custom_resource_definitions: HashMap::new(),
         custom_resources: HashMap::new(),
         resource_store: Default::default(),
@@ -245,8 +237,8 @@ impl TestState {
         persist_raw_config(&db_path, self.config.clone(), "test-seed")
             .expect("failed to persist test config");
 
-        let (config, _version, _updated_at) = load_raw_config_from_db(&db_path)
-            .expect("failed to load raw config from sqlite")
+        let (config, _version, _updated_at) = load_config(&db_path)
+            .expect("failed to load config from sqlite")
             .expect("missing test config in sqlite");
         let active =
             build_active_config(&self.temp_root, config).expect("failed to build active config");

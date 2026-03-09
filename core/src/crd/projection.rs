@@ -105,9 +105,11 @@ impl CrdProjectable for ProjectConfig {
 }
 
 /// Combined type for RuntimePolicy projection (runner + resume + observability).
-#[derive(Debug, Clone, Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, serde::Deserialize)]
 pub struct RuntimePolicyProjection {
+    #[serde(default)]
     pub runner: RunnerConfig,
+    #[serde(default)]
     pub resume: ResumeConfig,
     #[serde(default)]
     pub observability: crate::config::ObservabilityConfig,

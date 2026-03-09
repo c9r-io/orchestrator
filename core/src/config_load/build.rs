@@ -209,7 +209,8 @@ mod tests {
         make_builtin_step, make_command_step, make_config_with_default_project,
         make_minimal_buildable_config, make_step, make_test_db, make_workflow,
     };
-    use crate::config_load::{detect_app_root, load_raw_config_from_db, persist_raw_config};
+    use crate::config_load::{detect_app_root, persist_raw_config};
+    use crate::config_load::load_config;
     #[allow(unused_imports)]
     use std::collections::HashMap;
 
@@ -230,6 +231,10 @@ mod tests {
             .first_mut()
             .expect("missing builtin self_test step");
         step.required_capability = Some("self_test".to_string());
+        // Pass the invalid config directly to self-heal (not loaded from DB)
+        // because the CRD round-trip in load_config strips the invalid workflow
+        // during workflow_spec_to_config validation.
+        let invalid_config = config.clone();
         persist_raw_config(&db_path, config.clone(), "test-seed").expect("seed config");
 
         let direct_error = build_active_config(&app_root, config)
@@ -241,10 +246,7 @@ mod tests {
         let (active, report) = build_active_config_with_self_heal(
             &app_root,
             &db_path,
-            load_raw_config_from_db(&db_path)
-                .expect("load raw config")
-                .expect("config row")
-                .0,
+            invalid_config,
         )
         .expect("self-heal wrapper should recover");
 
@@ -277,15 +279,13 @@ mod tests {
             .first_mut()
             .expect("basic workflow should have a step")
             .required_capability = Some("self_test".to_string());
+        let invalid_config = config.clone();
         let seeded = persist_raw_config(&db_path, config, "test-seed").expect("seed config");
 
         let (_active, report) = build_active_config_with_self_heal(
             &app_root,
             &db_path,
-            load_raw_config_from_db(&db_path)
-                .expect("load raw config")
-                .expect("config row")
-                .0,
+            invalid_config,
         )
         .expect("self-heal wrapper should recover");
 
@@ -319,15 +319,13 @@ mod tests {
             .first_mut()
             .expect("basic workflow should have a step")
             .required_capability = Some("self_test".to_string());
+        let invalid_config = config.clone();
         persist_raw_config(&db_path, config, "test-seed").expect("seed config");
 
         let (_active, report) = build_active_config_with_self_heal(
             &app_root,
             &db_path,
-            load_raw_config_from_db(&db_path)
-                .expect("load raw config")
-                .expect("config row")
-                .0,
+            invalid_config,
         )
         .expect("self-heal wrapper should recover");
 

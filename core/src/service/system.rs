@@ -114,7 +114,7 @@ pub fn validate_manifests(
         Err(e) => return Ok((false, vec![e.to_string()], "Parse error".to_string())),
     };
 
-    let mut merged_config = crate::config_load::load_raw_config_from_db(&state.db_path)?
+    let mut merged_config = crate::config_load::load_config(&state.db_path)?
         .map(|(cfg, _, _)| cfg)
         .unwrap_or_default();
 

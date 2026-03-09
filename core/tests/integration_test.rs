@@ -15,13 +15,6 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
     use std::collections::HashMap;
 
     OrchestratorConfig {
-        runner: RunnerConfig {
-            shell: "/bin/bash".to_string(),
-            shell_arg: "-lc".to_string(),
-            ..RunnerConfig::default()
-        },
-        resume: ResumeConfig { auto: false },
-        observability: ObservabilityConfig::default(),
         projects: [(
             DEFAULT_PROJECT_ID.to_string(),
             ProjectConfig {
@@ -95,7 +88,6 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
             },
         )]
         .into(),
-        resource_meta: ResourceMetadataStore::default(),
         custom_resource_definitions: HashMap::new(),
         custom_resources: HashMap::new(),
         resource_store: agent_orchestrator::crd::store::ResourceStore::default(),
@@ -615,9 +607,6 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
     );
 
     OrchestratorConfig {
-        runner: RunnerConfig::default(),
-        resume: ResumeConfig { auto: false },
-        observability: ObservabilityConfig::default(),
         projects: [(
             DEFAULT_PROJECT_ID.to_string(),
             ProjectConfig {
@@ -850,7 +839,6 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
             },
         )]
         .into(),
-        resource_meta: ResourceMetadataStore::default(),
         custom_resource_definitions: HashMap::new(),
         custom_resources: HashMap::new(),
         resource_store: agent_orchestrator::crd::store::ResourceStore::default(),
