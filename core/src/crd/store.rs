@@ -4,10 +4,13 @@ use crate::resource::ApplyResult;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Project namespace for singleton/cluster-scoped resources (RuntimePolicy, Project, CRDs).
+pub const SYSTEM_PROJECT: &str = "_system";
+
 /// Unified resource store — single source of truth for all resource instances.
 ///
-/// Stores both builtin and user-defined custom resources. Builtin types are
-/// reconciled into the project-scoped config snapshot via `crd::writeback`.
+/// All resources use 3-segment keys: `kind/project/name`.
+/// Singleton/cluster-scoped resources use `_system` as their project namespace.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ResourceStore {
     #[serde(default)]
@@ -18,18 +21,17 @@ pub struct ResourceStore {
 
 impl ResourceStore {
     fn storage_key(kind: &str, metadata: &crate::cli_types::ResourceMetadata) -> String {
-        match metadata.project.as_deref() {
-            Some(project) if !project.trim().is_empty() => {
-                format!("{}/{}/{}", kind, project, metadata.name)
-            }
-            _ => format!("{}/{}", kind, metadata.name),
-        }
+        let project = metadata
+            .project
+            .as_deref()
+            .filter(|p| !p.trim().is_empty())
+            .unwrap_or(SYSTEM_PROJECT);
+        format!("{}/{}/{}", kind, project, metadata.name)
     }
 
-    /// Get a resource by kind and name.
+    /// Get a resource by kind and name (delegates to `_system` project).
     pub fn get(&self, kind: &str, name: &str) -> Option<&CustomResource> {
-        let key = format!("{}/{}", kind, name);
-        self.resources.get(&key)
+        self.get_namespaced(kind, SYSTEM_PROJECT, name)
     }
 
     /// Get a mutable reference to a resource by its storage key.
@@ -77,14 +79,9 @@ impl ResourceStore {
         }
     }
 
-    /// Remove a resource by kind and name.
+    /// Remove a resource by kind and name (delegates to `_system` project).
     pub fn remove(&mut self, kind: &str, name: &str) -> Option<CustomResource> {
-        let key = format!("{}/{}", kind, name);
-        let removed = self.resources.remove(&key);
-        if removed.is_some() {
-            self.generation += 1;
-        }
-        removed
+        self.remove_namespaced(kind, SYSTEM_PROJECT, name)
     }
 
     /// Remove a resource by kind and name from any project namespace.
@@ -165,6 +162,32 @@ impl ResourceStore {
     /// Access the underlying resource map (for iteration/serialization).
     pub fn resources(&self) -> &HashMap<String, CustomResource> {
         &self.resources
+    }
+
+    /// Mutable access to the underlying resource map.
+    pub fn resources_mut(&mut self) -> &mut HashMap<String, CustomResource> {
+        &mut self.resources
+    }
+
+    /// Re-key any legacy 2-segment global keys (`kind/name`) to 3-segment
+    /// format (`kind/_system/name`). Called during config normalization for
+    /// backward compatibility with stores serialized before the project-scoped
+    /// key migration.
+    pub fn rekey_legacy_global_resources(&mut self) {
+        let legacy_keys: Vec<(String, CustomResource)> = self
+            .resources
+            .iter()
+            .filter(|(k, _)| k.matches('/').count() == 1)
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        for (old_key, mut cr) in legacy_keys {
+            self.resources.remove(&old_key);
+            if cr.metadata.project.is_none() {
+                cr.metadata.project = Some(SYSTEM_PROJECT.to_string());
+            }
+            let new_key = Self::storage_key(&cr.kind, &cr.metadata);
+            self.resources.insert(new_key, cr);
+        }
     }
 }
 
@@ -382,6 +405,7 @@ mod tests {
         let rp = RuntimePolicyProjection {
             runner: RunnerConfig::default(),
             resume: ResumeConfig { auto: true },
+            observability: crate::config::ObservabilityConfig::default(),
         };
         store.put(make_cr("RuntimePolicy", "default", rp.to_cr_spec()));
         let projected: Option<RuntimePolicyProjection> = store.project_singleton();

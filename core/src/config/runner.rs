@@ -86,8 +86,9 @@ impl Default for RunnerConfig {
 }
 
 /// Resume behavior configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ResumeConfig {
+    #[serde(default)]
     pub auto: bool,
 }
 

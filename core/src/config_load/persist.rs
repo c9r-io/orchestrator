@@ -166,9 +166,197 @@ pub fn load_or_seed_config(db_path: &Path) -> Result<(OrchestratorConfig, String
     )
 }
 
+/// Persist a single resource to the `resources` table with version tracking.
+pub(crate) fn persist_resource(
+    tx: &Transaction<'_>,
+    cr: &crate::crd::types::CustomResource,
+    author: &str,
+) -> Result<()> {
+    let project = cr
+        .metadata
+        .project
+        .as_deref()
+        .filter(|p| !p.trim().is_empty())
+        .unwrap_or(crate::crd::store::SYSTEM_PROJECT);
+    let spec_json = serde_json::to_string(&cr.spec)?;
+    let metadata_json = serde_json::to_string(&cr.metadata)?;
+    let now = now_ts();
+
+    tx.execute(
+        "INSERT INTO resources (kind, project, name, api_version, spec_json, metadata_json, generation, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+         ON CONFLICT(kind, project, name) DO UPDATE SET
+           api_version=excluded.api_version, spec_json=excluded.spec_json,
+           metadata_json=excluded.metadata_json, generation=generation+1, updated_at=excluded.updated_at",
+        params![cr.kind, project, cr.metadata.name, cr.api_version, spec_json, metadata_json, cr.generation, cr.created_at, now],
+    )?;
+
+    let next_version: i64 = tx.query_row(
+        "SELECT COALESCE(MAX(version), 0) + 1 FROM resource_versions WHERE kind=?1 AND project=?2 AND name=?3",
+        params![cr.kind, project, cr.metadata.name],
+        |row| row.get(0),
+    )?;
+    tx.execute(
+        "INSERT INTO resource_versions (kind, project, name, spec_json, metadata_json, version, author, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![cr.kind, project, cr.metadata.name, spec_json, metadata_json, next_version, author, now],
+    )?;
+
+    Ok(())
+}
+
+/// Persist all resources from a store + CRDs in a single transaction.
+pub(crate) fn persist_all_resources(
+    tx: &Transaction<'_>,
+    store: &crate::crd::store::ResourceStore,
+    crds: &std::collections::HashMap<String, crate::crd::types::CustomResourceDefinition>,
+    author: &str,
+) -> Result<()> {
+    for (_key, cr) in store.resources() {
+        persist_resource(tx, cr, author)?;
+    }
+    let now = now_ts();
+    for (kind_name, crd) in crds {
+        let spec_json = serde_json::to_string(crd)?;
+        tx.execute(
+            "INSERT INTO resources (kind, project, name, api_version, spec_json, metadata_json, generation, created_at, updated_at)
+             VALUES ('CustomResourceDefinition', ?1, ?2, 'orchestrator.dev/v2', ?3, '{}', 1, ?4, ?5)
+             ON CONFLICT(kind, project, name) DO UPDATE SET
+               spec_json=excluded.spec_json, generation=generation+1, updated_at=excluded.updated_at",
+            params![crate::crd::store::SYSTEM_PROJECT, kind_name, spec_json, now, now],
+        )?;
+    }
+    Ok(())
+}
+
+/// Delete a single resource from the `resources` table with version tracking.
+pub fn delete_resource_row(
+    tx: &Transaction<'_>,
+    kind: &str,
+    project: &str,
+    name: &str,
+    author: &str,
+) -> Result<bool> {
+    let deleted = tx.execute(
+        "DELETE FROM resources WHERE kind=?1 AND project=?2 AND name=?3",
+        params![kind, project, name],
+    )? > 0;
+    if deleted {
+        let now = now_ts();
+        tx.execute(
+            "INSERT INTO resource_versions (kind, project, name, spec_json, metadata_json, version, author, created_at)
+             VALUES (?1, ?2, ?3, '\"deleted\"', '{}', -1, ?4, ?5)",
+            params![kind, project, name, author, now],
+        )?;
+    }
+    Ok(deleted)
+}
+
+/// Load all resources from the `resources` table into a ResourceStore + CRD map.
+pub fn load_all_resources(
+    db_path: &Path,
+) -> Result<(
+    crate::crd::store::ResourceStore,
+    std::collections::HashMap<String, crate::crd::types::CustomResourceDefinition>,
+)> {
+    let conn = open_conn(db_path)?;
+    // Check if resources table exists
+    let table_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='resources'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+    if !table_exists {
+        return Ok((
+            crate::crd::store::ResourceStore::default(),
+            std::collections::HashMap::new(),
+        ));
+    }
+
+    let mut store = crate::crd::store::ResourceStore::default();
+    let mut crds = std::collections::HashMap::new();
+
+    let mut stmt = conn.prepare(
+        "SELECT kind, project, name, api_version, spec_json, metadata_json, generation, created_at, updated_at FROM resources",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, String>(5)?,
+            row.get::<_, i64>(6)?,
+            row.get::<_, String>(7)?,
+            row.get::<_, String>(8)?,
+        ))
+    })?;
+
+    for row in rows {
+        let (kind, project, name, api_version, spec_json, metadata_json, generation, created_at, updated_at) = row?;
+
+        if kind == "CustomResourceDefinition" {
+            if let Ok(crd) = serde_json::from_str::<crate::crd::types::CustomResourceDefinition>(&spec_json) {
+                crds.insert(name, crd);
+            }
+            continue;
+        }
+
+        let spec: serde_json::Value = serde_json::from_str(&spec_json).unwrap_or_default();
+        let metadata: crate::cli_types::ResourceMetadata = serde_json::from_str(&metadata_json).unwrap_or_else(|_| {
+            crate::cli_types::ResourceMetadata {
+                name: name.clone(),
+                project: if project == crate::crd::store::SYSTEM_PROJECT { None } else { Some(project.clone()) },
+                labels: None,
+                annotations: None,
+            }
+        });
+
+        let cr = crate::crd::types::CustomResource {
+            kind,
+            api_version,
+            metadata,
+            spec,
+            generation: generation as u64,
+            created_at,
+            updated_at,
+        };
+        store.put(cr);
+    }
+
+    Ok((store, crds))
+}
+
+/// Query the maximum resource version (for compatibility with config version tracking).
+pub fn query_max_resource_version(db_path: &Path) -> Result<i64> {
+    let conn = open_conn(db_path)?;
+    let table_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='resource_versions'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+    if !table_exists {
+        return Ok(0);
+    }
+    let version: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(version), 0) FROM resource_versions WHERE version > 0",
+        [],
+        |row| row.get(0),
+    )?;
+    Ok(version)
+}
+
 pub fn load_raw_config_from_db(
     db_path: &Path,
 ) -> Result<Option<(OrchestratorConfig, i64, String)>> {
+    // Currently uses the legacy blob path for full fidelity.
+    // The per-resource `resources` table is dual-written on persist and
+    // will become the primary read path in a future phase.
     let conn = open_conn(db_path)?;
     let row: Option<(String, String, i64, String)> = conn
         .query_row(
@@ -187,6 +375,38 @@ pub fn load_raw_config_from_db(
     Ok(Some((normalize_config(config), version, updated_at)))
 }
 
+/// Load config from the per-resource `resources` table (v10+).
+/// Returns None if the table is empty or doesn't exist.
+pub fn load_config_from_resources_table(
+    db_path: &Path,
+) -> Result<Option<(OrchestratorConfig, i64, String)>> {
+    let (store, crds) = load_all_resources(db_path)?;
+    if store.is_empty() {
+        return Ok(None);
+    }
+    let mut config = OrchestratorConfig {
+        resource_store: store,
+        custom_resource_definitions: crds,
+        ..Default::default()
+    };
+    crate::crd::writeback::reconcile_all_builtins(&mut config);
+    let project_kinds = ["Agent", "Workflow", "Workspace", "StepTemplate", "EnvStore", "SecretStore"];
+    for kind in &project_kinds {
+        let names: Vec<String> = config
+            .resource_store
+            .list_by_kind(kind)
+            .iter()
+            .map(|cr| cr.metadata.name.clone())
+            .collect();
+        for name in names {
+            crate::crd::writeback::reconcile_single_resource(&mut config, kind, &name);
+        }
+    }
+    let version = query_max_resource_version(db_path)?;
+    let now = now_ts();
+    Ok(Some((normalize_config(config), version, now)))
+}
+
 pub fn persist_raw_config(
     db_path: &Path,
     config: OrchestratorConfig,
@@ -198,6 +418,12 @@ pub fn persist_raw_config(
     let conn = open_conn(db_path)?;
     let tx = conn.unchecked_transaction()?;
     let (next_version, now) = persist_config_versioned(&tx, &yaml, &json_raw, author)?;
+    let _ = persist_all_resources(
+        &tx,
+        &normalized.resource_store,
+        &normalized.custom_resource_definitions,
+        author,
+    );
     tx.commit()?;
 
     Ok(ConfigOverview {
@@ -227,6 +453,13 @@ pub fn persist_config_and_reload(
     let tx = conn.unchecked_transaction()?;
     enforce_deletion_guards(&tx, &previous_config, &normalized)?;
     let (next_version, now) = persist_config_versioned(&tx, &yaml, &json_raw, author)?;
+    // Also write per-resource rows (dual-write for v10+ compatibility)
+    let _ = persist_all_resources(
+        &tx,
+        &normalized.resource_store,
+        &normalized.custom_resource_definitions,
+        author,
+    );
     tx.commit()?;
 
     {

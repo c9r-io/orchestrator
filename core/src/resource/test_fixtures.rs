@@ -168,6 +168,7 @@ pub fn runtime_policy_manifest() -> OrchestratorResource {
                 redaction_patterns: vec![],
             },
             resume: ResumeSpec { auto: false },
+            observability: None,
         }),
     }
 }

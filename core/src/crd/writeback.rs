@@ -20,6 +20,7 @@ pub fn reconcile_builtin_kind(config: &mut OrchestratorConfig, kind: &str) {
             {
                 config.runner = rp.runner;
                 config.resume = rp.resume;
+                config.observability = rp.observability;
             }
         }
         _ => {}
@@ -127,15 +128,22 @@ pub fn seed_store_from_config_snapshot(
         }
         "Project" => {
             if let Some(v) = config.projects.get(name) {
-                config.resource_store.put(make_cr(None, v.to_cr_spec()));
+                config.resource_store.put(make_cr(
+                    Some(crate::crd::store::SYSTEM_PROJECT.to_string()),
+                    v.to_cr_spec(),
+                ));
             }
         }
         "RuntimePolicy" => {
             let rp = RuntimePolicyProjection {
                 runner: config.runner.clone(),
                 resume: config.resume.clone(),
+                observability: config.observability.clone(),
             };
-            config.resource_store.put(make_cr(None, rp.to_cr_spec()));
+            config.resource_store.put(make_cr(
+                Some(crate::crd::store::SYSTEM_PROJECT.to_string()),
+                rp.to_cr_spec(),
+            ));
         }
         _ => {}
     }
@@ -148,7 +156,7 @@ pub fn reconcile_single_resource(config: &mut OrchestratorConfig, kind: &str, na
 
     let cr = config
         .resource_store
-        .get(kind, name)
+        .get_namespaced(kind, crate::crd::store::SYSTEM_PROJECT, name)
         .or_else(|| {
             config
                 .resource_store
@@ -198,6 +206,7 @@ pub fn reconcile_single_resource(config: &mut OrchestratorConfig, kind: &str, na
             if let Ok(rp) = RuntimePolicyProjection::from_cr_spec(&spec) {
                 config.runner = rp.runner;
                 config.resume = rp.resume;
+                config.observability = rp.observability;
             }
         }
         "StepTemplate" => {
@@ -397,7 +406,7 @@ pub fn sync_config_snapshot_to_store(config: &mut OrchestratorConfig) {
         config.resource_store.put(make_cr(
             "Project",
             name,
-            None,
+            Some(crate::crd::store::SYSTEM_PROJECT.to_string()),
             project.to_cr_spec(),
             &now,
         ));
@@ -406,11 +415,12 @@ pub fn sync_config_snapshot_to_store(config: &mut OrchestratorConfig) {
     let rp = RuntimePolicyProjection {
         runner: config.runner.clone(),
         resume: config.resume.clone(),
+        observability: config.observability.clone(),
     };
     config.resource_store.put(make_cr(
         "RuntimePolicy",
         "runtime",
-        None,
+        Some(crate::crd::store::SYSTEM_PROJECT.to_string()),
         rp.to_cr_spec(),
         &now,
     ));

@@ -50,16 +50,23 @@ pub const DEFAULT_PROJECT_ID: &str = "default";
 /// Main orchestrator configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrchestratorConfig {
+    /// Legacy field — use `runtime_policy().runner` for reads.
+    /// Kept for serde backward compatibility with existing DB blobs.
+    #[serde(default)]
     pub runner: RunnerConfig,
+    /// Legacy field — use `runtime_policy().resume` for reads.
+    #[serde(default)]
     pub resume: ResumeConfig,
     #[serde(default)]
     pub observability: ObservabilityConfig,
     #[serde(default)]
     pub projects: HashMap<String, ProjectConfig>,
+    /// Legacy field — metadata now lives in ResourceStore CR metadata.
     #[serde(default)]
     pub resource_meta: ResourceMetadataStore,
     #[serde(default)]
     pub custom_resource_definitions: HashMap<String, CustomResourceDefinition>,
+    /// Legacy field — custom resources now live in ResourceStore.
     #[serde(default)]
     pub custom_resources: HashMap<String, CustomResource>,
     /// Unified resource store — stores all resources (builtin + custom CRD instances).
@@ -83,6 +90,28 @@ impl Default for OrchestratorConfig {
 }
 
 impl OrchestratorConfig {
+    /// Convenience accessor: runner config from RuntimePolicy.
+    pub fn runner(&self) -> RunnerConfig {
+        self.runtime_policy().runner
+    }
+
+    /// Convenience accessor: resume config from RuntimePolicy.
+    pub fn resume(&self) -> ResumeConfig {
+        self.runtime_policy().resume
+    }
+
+    /// Access the RuntimePolicy projection from the resource store.
+    /// Falls back to constructing from the legacy top-level fields.
+    pub fn runtime_policy(&self) -> crate::crd::projection::RuntimePolicyProjection {
+        self.resource_store
+            .project_singleton::<crate::crd::projection::RuntimePolicyProjection>()
+            .unwrap_or_else(|| crate::crd::projection::RuntimePolicyProjection {
+                runner: self.runner.clone(),
+                resume: self.resume.clone(),
+                observability: self.observability.clone(),
+            })
+    }
+
     pub fn effective_project_id<'a>(&'a self, project_id: Option<&'a str>) -> &'a str {
         project_id
             .filter(|value| !value.trim().is_empty())

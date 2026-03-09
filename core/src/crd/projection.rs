@@ -104,11 +104,13 @@ impl CrdProjectable for ProjectConfig {
     }
 }
 
-/// Combined type for RuntimePolicy projection (runner + resume).
+/// Combined type for RuntimePolicy projection (runner + resume + observability).
 #[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct RuntimePolicyProjection {
     pub runner: RunnerConfig,
     pub resume: ResumeConfig,
+    #[serde(default)]
+    pub observability: crate::config::ObservabilityConfig,
 }
 
 impl CrdProjectable for RuntimePolicyProjection {
@@ -118,11 +120,16 @@ impl CrdProjectable for RuntimePolicyProjection {
 
     fn from_cr_spec(spec: &serde_json::Value) -> Result<Self> {
         let rp_spec: RuntimePolicySpec = serde_json::from_value(spec.clone())?;
+        let observability = rp_spec
+            .observability
+            .and_then(|v| serde_json::from_value(v).ok())
+            .unwrap_or_default();
         Ok(RuntimePolicyProjection {
             runner: runner_spec_to_config(&rp_spec.runner),
             resume: ResumeConfig {
                 auto: rp_spec.resume.auto,
             },
+            observability,
         })
     }
 
@@ -132,6 +139,7 @@ impl CrdProjectable for RuntimePolicyProjection {
             resume: crate::cli_types::ResumeSpec {
                 auto: self.resume.auto,
             },
+            observability: serde_json::to_value(&self.observability).ok(),
         };
         serde_json::to_value(&spec).unwrap_or_default()
     }
@@ -305,6 +313,7 @@ mod tests {
         let config = RuntimePolicyProjection {
             runner: RunnerConfig::default(),
             resume: ResumeConfig { auto: true },
+            observability: crate::config::ObservabilityConfig::default(),
         };
         let spec = config.to_cr_spec();
         let back = RuntimePolicyProjection::from_cr_spec(&spec).expect("should deserialize");

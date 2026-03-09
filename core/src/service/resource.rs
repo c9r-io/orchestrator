@@ -316,6 +316,19 @@ pub fn delete_resource(
         anyhow::bail!("{}/{} not found in project '{}'", kind, name, project_id);
     }
 
+    // Also remove from per-resource table
+    {
+        let conn = crate::db::open_conn(&state.db_path)?;
+        let tx = conn.unchecked_transaction()?;
+        let _ = crate::config_load::delete_resource_row(
+            &tx,
+            kind,
+            project_id,
+            name,
+            "daemon-delete",
+        );
+        tx.commit()?;
+    }
     let yaml =
         serde_yml::to_string(&config).context("failed to serialize configuration after delete")?;
     persist_config_and_reload(state, config, yaml, "daemon")?;

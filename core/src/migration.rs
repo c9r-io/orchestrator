@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 
 const HISTORICAL_AGENT_PLACEHOLDER: &str = "legacy";
 
@@ -107,6 +107,11 @@ pub fn all_migrations() -> Vec<Migration> {
             version: 9,
             name: "m0009_normalize_unspecified_agent_ids",
             up: m0009_normalize_unspecified_agent_ids,
+        },
+        Migration {
+            version: 10,
+            name: "m0010_per_resource_persistence",
+            up: m0010_per_resource_persistence,
         },
     ]
 }
@@ -637,6 +642,129 @@ fn m0008_workflow_primitives(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+// ── Migration 10: Per-Resource Persistence ──
+
+fn m0010_per_resource_persistence(conn: &Connection) -> Result<()> {
+    // 1. Create the new per-resource tables
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS resources (
+            kind TEXT NOT NULL,
+            project TEXT NOT NULL,
+            name TEXT NOT NULL,
+            api_version TEXT NOT NULL,
+            spec_json TEXT NOT NULL,
+            metadata_json TEXT NOT NULL,
+            generation INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (kind, project, name)
+        );
+
+        CREATE TABLE IF NOT EXISTS resource_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind TEXT NOT NULL,
+            project TEXT NOT NULL,
+            name TEXT NOT NULL,
+            spec_json TEXT NOT NULL,
+            metadata_json TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            author TEXT NOT NULL DEFAULT 'system',
+            created_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_resources_project ON resources(project);
+        CREATE INDEX IF NOT EXISTS idx_resource_versions_lookup
+            ON resource_versions(kind, project, name, version DESC);
+        "#,
+    )
+    .context("m0010: failed to create resources tables")?;
+
+    // 2. Migrate existing data from orchestrator_config blob
+    let row: Option<String> = conn
+        .query_row(
+            "SELECT config_json FROM orchestrator_config WHERE id = 1",
+            [],
+            |r| r.get(0),
+        )
+        .optional()
+        .context("m0010: failed to read orchestrator_config")?;
+
+    if let Some(json_raw) = row {
+        if let Ok(config) = serde_json::from_str::<crate::config::OrchestratorConfig>(&json_raw) {
+            let config = crate::config_load::normalize_config(config);
+            let now = chrono::Utc::now().to_rfc3339();
+            let mut version_counter = 0i64;
+
+            for (key, cr) in config.resource_store.resources() {
+                let parts: Vec<&str> = key.split('/').collect();
+                let (kind, project, name) = match parts.len() {
+                    3 => (parts[0], parts[1], parts[2]),
+                    2 => (parts[0], crate::crd::store::SYSTEM_PROJECT, parts[1]),
+                    _ => continue,
+                };
+                let spec_json = serde_json::to_string(&cr.spec).unwrap_or_default();
+                let metadata_json = serde_json::to_string(&cr.metadata).unwrap_or_default();
+                version_counter += 1;
+
+                conn.execute(
+                    "INSERT OR REPLACE INTO resources (kind, project, name, api_version, spec_json, metadata_json, generation, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    rusqlite::params![
+                        kind,
+                        project,
+                        name,
+                        cr.api_version,
+                        spec_json,
+                        metadata_json,
+                        cr.generation,
+                        cr.created_at,
+                        now
+                    ],
+                )
+                .with_context(|| format!("m0010: failed to insert resource {}/{}/{}", kind, project, name))?;
+
+                conn.execute(
+                    "INSERT INTO resource_versions (kind, project, name, spec_json, metadata_json, version, author, created_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    rusqlite::params![
+                        kind,
+                        project,
+                        name,
+                        spec_json,
+                        metadata_json,
+                        version_counter,
+                        "migration-v10",
+                        now
+                    ],
+                )
+                .with_context(|| format!("m0010: failed to insert resource version for {}/{}/{}", kind, project, name))?;
+            }
+
+            // Also store CRD definitions
+            for (kind_name, crd) in &config.custom_resource_definitions {
+                let spec_json = serde_json::to_string(crd).unwrap_or_default();
+                let _ = version_counter; // suppress unused warning
+                conn.execute(
+                    "INSERT OR REPLACE INTO resources (kind, project, name, api_version, spec_json, metadata_json, generation, created_at, updated_at)
+                     VALUES ('CustomResourceDefinition', ?1, ?2, 'orchestrator.dev/v2', ?3, '{}', 1, ?4, ?5)",
+                    rusqlite::params![
+                        crate::crd::store::SYSTEM_PROJECT,
+                        kind_name,
+                        spec_json,
+                        now,
+                        now
+                    ],
+                )
+                .with_context(|| format!("m0010: failed to insert CRD {}", kind_name))?;
+            }
+        }
+    }
+
+    // 3. Old tables are preserved for safe rollback (not deleted)
+    Ok(())
+}
+
 fn m0009_normalize_unspecified_agent_ids(conn: &Connection) -> Result<()> {
     conn.execute(
         "UPDATE command_runs SET agent_id = 'unspecified' WHERE agent_id = ?1 OR agent_id = ''",
@@ -663,8 +791,8 @@ mod tests {
         let conn = mem_conn();
         let migrations = all_migrations();
         let applied = run_pending(&conn, &migrations).expect("run_pending");
-        assert_eq!(applied, 9);
-        assert_eq!(current_version(&conn).expect("version"), 9);
+        assert_eq!(applied, 10);
+        assert_eq!(current_version(&conn).expect("version"), 10);
     }
 
     #[test]
@@ -674,7 +802,7 @@ mod tests {
         run_pending(&conn, &migrations).expect("first run");
         let applied = run_pending(&conn, &migrations).expect("second run");
         assert_eq!(applied, 0);
-        assert_eq!(current_version(&conn).expect("version"), 9);
+        assert_eq!(current_version(&conn).expect("version"), 10);
     }
 
     #[test]
@@ -699,10 +827,10 @@ mod tests {
         assert_eq!(applied, 2);
         assert_eq!(current_version(&conn).expect("version"), 2);
 
-        // Apply all 9 — should only run 3, 4, 5, 6, 7, 8, and 9
+        // Apply all 10 — should only run 3..10
         let applied = run_pending(&conn, &all).expect("full run");
-        assert_eq!(applied, 7);
-        assert_eq!(current_version(&conn).expect("version"), 9);
+        assert_eq!(applied, 8);
+        assert_eq!(current_version(&conn).expect("version"), 10);
     }
 
     #[test]
@@ -833,6 +961,7 @@ mod tests {
         let conn = mem_conn();
         // Run migrations 1-3 first
         let mut migs = all_migrations();
+        let _m10 = migs.pop().expect("pop m10");
         let _m9 = migs.pop().expect("pop m9");
         let _m8 = migs.pop().expect("pop m8");
         let _m7 = migs.pop().expect("pop m7");
@@ -942,10 +1071,10 @@ mod tests {
         }];
 
         conn.execute(
-            "DELETE FROM schema_migrations WHERE version = 9",
+            "DELETE FROM schema_migrations WHERE version >= 9",
             [],
         )
-        .expect("clear migration 9 record");
+        .expect("clear migration 9+ records");
         run_pending(&conn, &normalize).expect("rerun m0009");
 
         let agent_id: String = conn

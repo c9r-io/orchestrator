@@ -199,6 +199,8 @@ pub(crate) fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorCo
     let old_store = std::mem::take(&mut config.resource_store);
     crate::crd::writeback::sync_config_snapshot_to_store(&mut config);
     crate::crd::writeback::restore_metadata_from_previous_store(&mut config, &old_store);
+    // Re-key any legacy 2-segment global keys to 3-segment format
+    config.resource_store.rekey_legacy_global_resources();
 
     config
 }

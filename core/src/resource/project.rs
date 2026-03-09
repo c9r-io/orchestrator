@@ -199,6 +199,7 @@ mod tests {
                     redaction_patterns: vec![],
                 },
                 resume: crate::cli_types::ResumeSpec { auto: false },
+                observability: None,
             }),
         };
         let err = dispatch_resource(resource).expect_err("operation should fail");

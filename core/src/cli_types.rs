@@ -176,11 +176,13 @@ pub struct ProjectSpec {
     pub description: Option<String>,
 }
 
-/// Runtime policy specification containing runner + resume behavior.
+/// Runtime policy specification containing runner + resume + observability behavior.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RuntimePolicySpec {
     pub runner: RunnerSpec,
     pub resume: ResumeSpec,
+    #[serde(default)]
+    pub observability: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

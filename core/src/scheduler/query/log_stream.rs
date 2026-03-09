@@ -30,7 +30,7 @@ pub async fn stream_task_logs_impl(
     let runs = state.task_repo.list_task_log_runs(&resolved_id, 14).await?;
     let redaction_patterns = {
         let active = read_loaded_config(state)?;
-        let mut patterns = active.config.runner.redaction_patterns.clone();
+        let mut patterns = active.config.runtime_policy().runner.redaction_patterns;
         if let Some(project) = active.config.projects.get(crate::config::DEFAULT_PROJECT_ID) {
             patterns.extend(collect_all_sensitive_store_values(&project.env_stores));
         }
@@ -100,7 +100,7 @@ pub async fn stream_task_logs_impl(
 pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
     let redaction_patterns = {
         let active = read_loaded_config(state)?;
-        let mut patterns = active.config.runner.redaction_patterns.clone();
+        let mut patterns = active.config.runtime_policy().runner.redaction_patterns;
         if let Some(project) = active.config.projects.get(crate::config::DEFAULT_PROJECT_ID) {
             patterns.extend(collect_all_sensitive_store_values(&project.env_stores));
         }

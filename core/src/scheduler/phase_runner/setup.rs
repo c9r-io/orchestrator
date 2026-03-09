@@ -35,7 +35,7 @@ pub(super) async fn setup_phase_execution(
 
     let (runner, mut resolved_extra_env, sensitive_values) = {
         let active = crate::config_load::read_active_config(state)?;
-        let mut runner = active.config.runner.clone();
+        let mut runner = active.config.runtime_policy().runner;
         if state.unsafe_mode {
             runner.policy = crate::config::RunnerPolicy::Unsafe;
         }

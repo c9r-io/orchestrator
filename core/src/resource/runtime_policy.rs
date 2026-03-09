@@ -49,6 +49,7 @@ impl Resource for RuntimePolicyResource {
         let rp = RuntimePolicyProjection {
             runner: incoming_runner,
             resume: incoming_resume,
+            observability: crate::config::ObservabilityConfig::default(),
         };
         let spec_value = rp.to_cr_spec();
         Ok(super::apply_to_store(
@@ -70,13 +71,15 @@ impl Resource for RuntimePolicyResource {
 
     fn get_from_project(config: &OrchestratorConfig, _name: &str, _project_id: Option<&str>) -> Option<Self> {
         // RuntimePolicy is a global singleton, not scoped to a project.
+        let rp = config.runtime_policy();
         Some(Self {
             metadata: super::metadata_with_name("runtime"),
             spec: RuntimePolicySpec {
-                runner: runner_config_to_spec(&config.runner),
+                runner: runner_config_to_spec(&rp.runner),
                 resume: ResumeSpec {
-                    auto: config.resume.auto,
+                    auto: rp.resume.auto,
                 },
+                observability: serde_json::to_value(&rp.observability).ok(),
             },
         })
     }
