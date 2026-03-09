@@ -13,7 +13,7 @@ use tokio::sync::Mutex;
 /// Initialize orchestrator state — extracted from the former binary's `init_state()`.
 /// This is the single entry point for both daemon and any future standalone usage.
 ///
-/// When called from outside an async runtime (e.g., legacy CLI `main()`), this
+/// When called from outside an async runtime (e.g., a sync CLI `main()`), this
 /// creates a temporary runtime for async DB initialization. When called from
 /// within an async runtime (e.g., daemon), use `init_state_async()` instead.
 pub fn init_state(unsafe_mode: bool) -> Result<ManagedState> {
@@ -81,19 +81,12 @@ fn build_active_config_result(
 )> {
     match build_active_config_with_self_heal(app_root, db_path, config.clone()) {
         Ok((active, report)) => {
-            // When all resources are project-scoped, default_workspace_id may be empty;
-            // skip legacy backfill in that case.
-            if !active.default_workspace_id.is_empty() {
-                let default_workspace = active
-                    .workspaces
-                    .get(&active.default_workspace_id)
-                    .context("default workspace is missing after config validation")?;
-                backfill_legacy_data(
-                    db_path,
-                    &active.default_workspace_id,
-                    &active.default_workflow_id,
-                    default_workspace,
-                )?;
+            if let Some(default_workspace) = active
+                .projects
+                .get(crate::config::DEFAULT_PROJECT_ID)
+                .and_then(|p| p.workspaces.get("default"))
+            {
+                backfill_default_scope_data(db_path, "default", "basic", default_workspace)?;
             }
             Ok((active, None, report))
         }
@@ -159,16 +152,13 @@ fn placeholder_active_config(
         config,
         workspaces: HashMap::new(),
         projects: HashMap::new(),
-        default_project_id: String::new(),
-        default_workspace_id: String::new(),
-        default_workflow_id: String::new(),
     }
 }
 
-fn backfill_legacy_data(
+fn backfill_default_scope_data(
     db_path: &Path,
-    default_workspace_id: &str,
-    default_workflow_id: &str,
+    workspace_id: &str,
+    workflow_id: &str,
     workspace: &crate::config::ResolvedWorkspace,
 ) -> Result<()> {
     let conn = crate::db::open_conn(db_path)?;
@@ -176,11 +166,11 @@ fn backfill_legacy_data(
     let qa_targets = serde_json::to_string(&workspace.qa_targets)?;
     conn.execute(
         "UPDATE tasks SET workspace_id = ?1 WHERE workspace_id = ''",
-        rusqlite::params![default_workspace_id],
+        rusqlite::params![workspace_id],
     )?;
     conn.execute(
         "UPDATE tasks SET workflow_id = ?1 WHERE workflow_id = ''",
-        rusqlite::params![default_workflow_id],
+        rusqlite::params![workflow_id],
     )?;
     conn.execute(
         "UPDATE tasks SET workspace_root = ?1 WHERE workspace_root = ''",
@@ -196,7 +186,7 @@ fn backfill_legacy_data(
     )?;
     conn.execute(
         "UPDATE command_runs SET workspace_id = ?1 WHERE workspace_id = ''",
-        rusqlite::params![default_workspace_id],
+        rusqlite::params![workspace_id],
     )?;
     drop(conn);
     Ok(())

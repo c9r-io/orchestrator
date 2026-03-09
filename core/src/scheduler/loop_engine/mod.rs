@@ -326,7 +326,7 @@ async fn execute_cycle_segments(
 
     let segments = segment::build_scope_segments(task_ctx);
     if segments.is_empty() {
-        // Fallback: no steps in execution plan, run legacy path
+        // Fallback: no steps in execution plan, run the whole-cycle path.
         for item in &items {
             process_item(state, task_id, item, &task_item_paths, task_ctx, runtime).await?;
             if runtime.stop_flag.load(Ordering::SeqCst)

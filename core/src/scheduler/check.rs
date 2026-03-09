@@ -70,22 +70,25 @@ pub fn run_checks(
     let oc = &config.config;
     let mut checks = Vec::new();
 
-    // Resolve the effective resource sets: project-scoped or global.
-    let (workspaces, agents, workflows) = if let Some(pid) = project_id {
-        if let Some(project) = oc.projects.get(pid) {
-            (&project.workspaces, &project.agents, &project.workflows)
-        } else {
-            checks.push(CheckResult {
-                rule: "project_not_found".into(),
-                severity: Severity::Error,
-                passed: false,
-                message: format!("project \"{pid}\" not found in config"),
-                context: None,
-            });
-            return build_report(checks);
-        }
+    let effective_project = project_id.unwrap_or(crate::config::DEFAULT_PROJECT_ID);
+    let (workspaces, agents, workflows, step_templates) = if let Some(project) =
+        oc.projects.get(effective_project)
+    {
+        (
+            &project.workspaces,
+            &project.agents,
+            &project.workflows,
+            &project.step_templates,
+        )
     } else {
-        (&oc.workspaces, &oc.agents, &oc.workflows)
+        checks.push(CheckResult {
+            rule: "project_not_found".into(),
+            severity: Severity::Error,
+            passed: false,
+            message: format!("project \"{effective_project}\" not found in config"),
+            context: None,
+        });
+        return build_report(checks);
     };
 
     check_workspace_roots(workspaces, app_root, &mut checks);
@@ -95,7 +98,7 @@ pub fn run_checks(
     check_capability_templates(agents, &mut checks);
     check_builtin_names(workflows, workflow_filter, &mut checks);
     check_pipe_to_refs(workflows, workflow_filter, &mut checks);
-    check_template_vars(&oc.step_templates, workflows, workflow_filter, &mut checks);
+    check_template_vars(step_templates, workflows, workflow_filter, &mut checks);
     check_empty_workflows(workflows, workflow_filter, &mut checks);
 
     build_report(checks)
@@ -677,19 +680,29 @@ mod tests {
             },
         );
 
-        ActiveConfig {
-            config: OrchestratorConfig {
+        let mut config = OrchestratorConfig::default();
+        config
+            .projects
+            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+            .or_insert(crate::config::ProjectConfig {
+                description: None,
                 workspaces,
                 agents,
                 workflows,
-                ..OrchestratorConfig::default()
-            },
+                step_templates: HashMap::new(),
+                env_stores: HashMap::new(),
+            });
+        ActiveConfig {
+            config,
             workspaces: HashMap::new(),
             projects: HashMap::new(),
-            default_project_id: String::new(),
-            default_workspace_id: "default".into(),
-            default_workflow_id: "test-wf".into(),
         }
+    }
+
+    fn default_project_mut(cfg: &mut ActiveConfig) -> &mut crate::config::ProjectConfig {
+        cfg.config
+            .project_mut(None)
+            .expect("default project should exist")
     }
 
     fn make_temp_ws(app_root: &Path) {
@@ -747,7 +760,7 @@ mod tests {
     fn capability_no_agent() {
         let mut cfg = base_config();
         // Add a step requiring a capability no agent has
-        cfg.config
+        default_project_mut(&mut cfg)
             .workflows
             .get_mut("test-wf")
             .expect("test-wf should exist")
@@ -791,7 +804,7 @@ mod tests {
     fn agent_missing_command() {
         let mut cfg = base_config();
         // Set agent command to empty string
-        cfg.config
+        default_project_mut(&mut cfg)
             .agents
             .get_mut("agent1")
             .expect("agent1 should exist")
@@ -810,7 +823,7 @@ mod tests {
     #[test]
     fn builtin_unknown() {
         let mut cfg = base_config();
-        cfg.config
+        default_project_mut(&mut cfg)
             .workflows
             .get_mut("test-wf")
             .expect("test-wf should exist")
@@ -853,7 +866,7 @@ mod tests {
     #[test]
     fn step_semantic_conflict() {
         let mut cfg = base_config();
-        cfg.config
+        default_project_mut(&mut cfg)
             .workflows
             .get_mut("test-wf")
             .expect("test-wf should exist")
@@ -896,7 +909,7 @@ mod tests {
     #[test]
     fn execution_mode_mismatch() {
         let mut cfg = base_config();
-        cfg.config
+        default_project_mut(&mut cfg)
             .workflows
             .get_mut("test-wf")
             .expect("test-wf should exist")
@@ -919,7 +932,7 @@ mod tests {
     #[test]
     fn command_steps_skip_capability_requirement() {
         let mut cfg = base_config();
-        cfg.config
+        default_project_mut(&mut cfg)
             .workflows
             .get_mut("test-wf")
             .expect("test-wf should exist")
@@ -966,7 +979,7 @@ mod tests {
     #[test]
     fn pipe_to_unknown() {
         let mut cfg = base_config();
-        cfg.config
+        default_project_mut(&mut cfg)
             .workflows
             .get_mut("test-wf")
             .expect("test-wf should exist")
@@ -986,7 +999,7 @@ mod tests {
     #[test]
     fn template_unknown_var() {
         let mut cfg = base_config();
-        cfg.config.step_templates.insert(
+        default_project_mut(&mut cfg).step_templates.insert(
             "plan".into(),
             StepTemplateConfig {
                 prompt: "echo {unknown_var}".into(),
@@ -1022,7 +1035,7 @@ mod tests {
     fn template_pipeline_var_ok() {
         let mut cfg = base_config();
         // plan_output is derived from step "plan" → should not warn
-        cfg.config.step_templates.insert(
+        default_project_mut(&mut cfg).step_templates.insert(
             "implement".into(),
             StepTemplateConfig {
                 prompt: "echo {plan_output}".into(),
@@ -1045,7 +1058,7 @@ mod tests {
     #[test]
     fn empty_workflow() {
         let mut cfg = base_config();
-        cfg.config.workflows.insert(
+        default_project_mut(&mut cfg).workflows.insert(
             "empty-wf".into(),
             WorkflowConfig {
                 steps: vec![WorkflowStepConfig {
@@ -1098,7 +1111,7 @@ mod tests {
     fn chain_steps_checked() {
         let mut cfg = base_config();
         // Add a step with a chain_step requiring unknown capability
-        cfg.config
+        default_project_mut(&mut cfg)
             .workflows
             .get_mut("test-wf")
             .expect("test-wf should exist")
@@ -1175,12 +1188,16 @@ mod tests {
     #[test]
     fn prompt_delivery_stdin_warns_on_prompt_placeholder() {
         let mut cfg = base_config();
-        cfg.config
+        default_project_mut(&mut cfg)
             .agents
             .get_mut("agent1")
             .expect("agent1")
             .prompt_delivery = PromptDelivery::Stdin;
-        cfg.config.agents.get_mut("agent1").expect("agent1").command =
+        default_project_mut(&mut cfg)
+            .agents
+            .get_mut("agent1")
+            .expect("agent1")
+            .command =
             "claude -p \"{prompt}\"".to_string();
 
         let tmp = tempfile::tempdir().expect("create temp dir");
@@ -1196,12 +1213,16 @@ mod tests {
     #[test]
     fn prompt_delivery_file_warns_missing_prompt_file_placeholder() {
         let mut cfg = base_config();
-        cfg.config
+        default_project_mut(&mut cfg)
             .agents
             .get_mut("agent1")
             .expect("agent1")
             .prompt_delivery = PromptDelivery::File;
-        cfg.config.agents.get_mut("agent1").expect("agent1").command =
+        default_project_mut(&mut cfg)
+            .agents
+            .get_mut("agent1")
+            .expect("agent1")
+            .command =
             "claude --file input.txt".to_string();
 
         let tmp = tempfile::tempdir().expect("create temp dir");

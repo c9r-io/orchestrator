@@ -74,7 +74,7 @@ pub struct AgentHealthState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SelectionStrategy {
-    /// Static cost-based sorting (legacy behavior)
+    /// Static cost-based sorting (default behavior)
     #[default]
     CostBased,
     /// Success rate weighted selection

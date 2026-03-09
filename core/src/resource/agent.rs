@@ -33,15 +33,12 @@ impl Resource for AgentResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
-        use crate::crd::projection::CrdProjectable;
         let incoming = agent_spec_to_config(&self.spec);
-        let spec_value = incoming.to_cr_spec();
-        Ok(super::apply_to_store(
-            config,
-            "Agent",
+        let project = config.ensure_project(self.metadata.project.as_deref());
+        Ok(super::helpers::apply_to_map(
+            &mut project.agents,
             self.name(),
-            &self.metadata,
-            spec_value,
+            incoming,
         ))
     }
 
@@ -54,14 +51,17 @@ impl Resource for AgentResource {
     }
 
     fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
-        config.agents.get(name).map(|agent| Self {
+        config.default_project()?.agents.get(name).map(|agent| Self {
             metadata: super::metadata_from_store(config, "Agent", name),
             spec: agent_config_to_spec(agent),
         })
     }
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
-        super::delete_from_store(config, "Agent", name)
+        config
+            .project_mut(None)
+            .map(|project| project.agents.remove(name).is_some())
+            .unwrap_or(false)
     }
 }
 
@@ -200,7 +200,7 @@ mod tests {
     #[test]
     fn agent_get_from_without_stored_metadata() {
         let mut config = make_config();
-        config.agents.insert(
+        config.ensure_project(None).agents.insert(
             "bare-ag".to_string(),
             AgentConfig {
                 metadata: AgentMetadata::default(),

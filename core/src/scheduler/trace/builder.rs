@@ -32,7 +32,7 @@ pub(super) fn split_observed_item_binding(
             None,
             task_item_id.clone(),
         ),
-        None => ("legacy".to_string(), None, task_item_id.clone()),
+        None => ("unspecified".to_string(), None, task_item_id.clone()),
     }
 }
 

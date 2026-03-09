@@ -31,15 +31,12 @@ impl Resource for WorkspaceResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
-        use crate::crd::projection::CrdProjectable;
         let incoming = workspace_spec_to_config(&self.spec);
-        let spec_value = incoming.to_cr_spec();
-        Ok(super::apply_to_store(
-            config,
-            "Workspace",
+        let project = config.ensure_project(self.metadata.project.as_deref());
+        Ok(super::helpers::apply_to_map(
+            &mut project.workspaces,
             self.name(),
-            &self.metadata,
-            spec_value,
+            incoming,
         ))
     }
 
@@ -52,14 +49,17 @@ impl Resource for WorkspaceResource {
     }
 
     fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
-        config.workspaces.get(name).map(|workspace| Self {
+        config.default_project()?.workspaces.get(name).map(|workspace| Self {
             metadata: super::metadata_from_store(config, "Workspace", name),
             spec: workspace_config_to_spec(workspace),
         })
     }
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
-        super::delete_from_store(config, "Workspace", name)
+        config
+            .project_mut(None)
+            .map(|project| project.workspaces.remove(name).is_some())
+            .unwrap_or(false)
     }
 }
 
@@ -167,7 +167,7 @@ mod tests {
     fn workspace_get_from_without_stored_metadata() {
         let mut config = make_config();
         // Insert workspace directly without resource_meta
-        config.workspaces.insert(
+        config.ensure_project(None).workspaces.insert(
             "bare-ws".to_string(),
             WorkspaceConfig {
                 root_path: "/bare".to_string(),

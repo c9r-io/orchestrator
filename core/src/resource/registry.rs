@@ -3,12 +3,12 @@ use crate::config::OrchestratorConfig;
 use anyhow::{anyhow, Result};
 
 use super::{
-    agent, defaults, env_store, project, runtime_policy, secret_store, step_template, workflow,
+    agent, env_store, project, runtime_policy, secret_store, step_template, workflow,
     workspace, ApplyResult, Resource,
 };
 use super::{
-    AgentResource, DefaultsResource, EnvStoreResource, ProjectResource, RuntimePolicyResource,
-    SecretStoreResource, StepTemplateResource, WorkflowResource, WorkspaceResource,
+    AgentResource, EnvStoreResource, ProjectResource, RuntimePolicyResource, SecretStoreResource,
+    StepTemplateResource, WorkflowResource, WorkspaceResource,
 };
 
 #[derive(Debug, Clone)]
@@ -17,7 +17,6 @@ pub enum RegisteredResource {
     Agent(Box<AgentResource>),
     Workflow(WorkflowResource),
     Project(ProjectResource),
-    Defaults(DefaultsResource),
     RuntimePolicy(RuntimePolicyResource),
     StepTemplate(StepTemplateResource),
     EnvStore(EnvStoreResource),
@@ -30,7 +29,7 @@ pub struct ResourceRegistration {
     pub build: fn(OrchestratorResource) -> Result<RegisteredResource>,
 }
 
-pub fn resource_registry() -> [ResourceRegistration; 9] {
+pub fn resource_registry() -> [ResourceRegistration; 8] {
     [
         ResourceRegistration {
             kind: ResourceKind::Workspace,
@@ -47,10 +46,6 @@ pub fn resource_registry() -> [ResourceRegistration; 9] {
         ResourceRegistration {
             kind: ResourceKind::Project,
             build: project::build_project,
-        },
-        ResourceRegistration {
-            kind: ResourceKind::Defaults,
-            build: defaults::build_defaults,
         },
         ResourceRegistration {
             kind: ResourceKind::RuntimePolicy,
@@ -79,7 +74,6 @@ impl RegisteredResource {
             Self::Agent(r) => &r.metadata,
             Self::Workflow(r) => &r.metadata,
             Self::Project(r) => &r.metadata,
-            Self::Defaults(r) => &r.metadata,
             Self::RuntimePolicy(r) => &r.metadata,
             Self::StepTemplate(r) => &r.metadata,
             Self::EnvStore(r) => &r.metadata,
@@ -106,7 +100,6 @@ impl Resource for RegisteredResource {
             Self::Agent(_) => ResourceKind::Agent,
             Self::Workflow(_) => ResourceKind::Workflow,
             Self::Project(_) => ResourceKind::Project,
-            Self::Defaults(_) => ResourceKind::Defaults,
             Self::RuntimePolicy(_) => ResourceKind::RuntimePolicy,
             Self::StepTemplate(_) => ResourceKind::StepTemplate,
             Self::EnvStore(_) => ResourceKind::EnvStore,
@@ -120,7 +113,6 @@ impl Resource for RegisteredResource {
             Self::Agent(resource) => &resource.metadata.name,
             Self::Workflow(resource) => &resource.metadata.name,
             Self::Project(resource) => &resource.metadata.name,
-            Self::Defaults(resource) => &resource.metadata.name,
             Self::RuntimePolicy(resource) => &resource.metadata.name,
             Self::StepTemplate(resource) => &resource.metadata.name,
             Self::EnvStore(resource) => &resource.metadata.name,
@@ -134,7 +126,6 @@ impl Resource for RegisteredResource {
             Self::Agent(resource) => resource.validate(),
             Self::Workflow(resource) => resource.validate(),
             Self::Project(resource) => resource.validate(),
-            Self::Defaults(resource) => resource.validate(),
             Self::RuntimePolicy(resource) => resource.validate(),
             Self::StepTemplate(resource) => resource.validate(),
             Self::EnvStore(resource) => resource.validate(),
@@ -148,7 +139,6 @@ impl Resource for RegisteredResource {
             Self::Agent(resource) => resource.apply(config),
             Self::Workflow(resource) => resource.apply(config),
             Self::Project(resource) => resource.apply(config),
-            Self::Defaults(resource) => resource.apply(config),
             Self::RuntimePolicy(resource) => resource.apply(config),
             Self::StepTemplate(resource) => resource.apply(config),
             Self::EnvStore(resource) => resource.apply(config),
@@ -162,7 +152,6 @@ impl Resource for RegisteredResource {
             Self::Agent(resource) => resource.to_yaml(),
             Self::Workflow(resource) => resource.to_yaml(),
             Self::Project(resource) => resource.to_yaml(),
-            Self::Defaults(resource) => resource.to_yaml(),
             Self::RuntimePolicy(resource) => resource.to_yaml(),
             Self::StepTemplate(resource) => resource.to_yaml(),
             Self::EnvStore(resource) => resource.to_yaml(),
@@ -185,11 +174,6 @@ impl Resource for RegisteredResource {
         }
         if let Some(step_template) = StepTemplateResource::get_from(config, name) {
             return Some(Self::StepTemplate(step_template));
-        }
-        if name == "defaults" {
-            if let Some(defaults) = DefaultsResource::get_from(config, name) {
-                return Some(Self::Defaults(defaults));
-            }
         }
         if name == "runtime" {
             if let Some(runtime_policy) = RuntimePolicyResource::get_from(config, name) {

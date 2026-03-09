@@ -1,6 +1,6 @@
 use crate::cli_types::{
-    AgentSpec, DefaultsSpec, OrchestratorResource, ProjectSpec, ResourceKind, ResourceMetadata,
-    ResourceSpec, ResumeSpec, RunnerSpec, RuntimePolicySpec, SafetySpec, StepTemplateSpec,
+    AgentSpec, OrchestratorResource, ProjectSpec, ResourceKind, ResourceMetadata, ResourceSpec,
+    ResumeSpec, RunnerSpec, RuntimePolicySpec, SafetySpec, StepTemplateSpec,
     WorkflowFinalizeRuleSpec, WorkflowFinalizeSpec, WorkflowLoopSpec, WorkflowSpec,
     WorkflowStepSpec, WorkspaceSpec,
 };
@@ -125,24 +125,6 @@ pub fn project_manifest(name: &str, description: &str) -> OrchestratorResource {
         },
         spec: ResourceSpec::Project(ProjectSpec {
             description: Some(description.to_string()),
-        }),
-    }
-}
-
-pub fn defaults_manifest(project: &str, workspace: &str, workflow: &str) -> OrchestratorResource {
-    OrchestratorResource {
-        api_version: API_VERSION.to_string(),
-        kind: ResourceKind::Defaults,
-        metadata: ResourceMetadata {
-            name: "defaults".to_string(),
-            project: None,
-            labels: None,
-            annotations: None,
-        },
-        spec: ResourceSpec::Defaults(DefaultsSpec {
-            project: project.to_string(),
-            workspace: workspace.to_string(),
-            workflow: workflow.to_string(),
         }),
     }
 }

@@ -25,7 +25,7 @@ pub fn observed_step_scope_label(scope: Option<ObservedStepScope>) -> &'static s
     match scope {
         Some(ObservedStepScope::Task) => "task",
         Some(ObservedStepScope::Item) => "item",
-        None => "legacy",
+        None => "unspecified",
     }
 }
 
@@ -391,8 +391,8 @@ mod tests {
     }
 
     #[test]
-    fn observed_step_scope_label_returns_legacy_for_none() {
-        assert_eq!(observed_step_scope_label(None), "legacy");
+    fn observed_step_scope_label_returns_unspecified_for_none() {
+        assert_eq!(observed_step_scope_label(None), "unspecified");
         assert_eq!(
             observed_step_scope_label(Some(ObservedStepScope::Task)),
             "task"

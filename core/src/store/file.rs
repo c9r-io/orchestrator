@@ -48,8 +48,8 @@ impl FileStoreBackend {
     }
 
     fn store_dir(&self, store_name: &str, project_id: &str) -> PathBuf {
-        let pid = if project_id.is_empty() {
-            "_default"
+        let pid = if project_id.trim().is_empty() {
+            crate::config::DEFAULT_PROJECT_ID
         } else {
             project_id
         };

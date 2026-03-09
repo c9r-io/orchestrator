@@ -42,7 +42,11 @@ pub fn metadata_from_store(
     kind: &str,
     name: &str,
 ) -> ResourceMetadata {
-    match config.resource_store.get(kind, name) {
+    match config
+        .resource_store
+        .get_namespaced(kind, crate::config::DEFAULT_PROJECT_ID, name)
+        .or_else(|| config.resource_store.get(kind, name))
+    {
         Some(cr) => cr.metadata.clone(),
         None => metadata_with_name(name),
     }
@@ -87,8 +91,8 @@ pub(crate) fn serializes_equal<T: Serialize>(left: &T, right: &T) -> bool {
     serde_json::to_value(left).ok() == serde_json::to_value(right).ok()
 }
 
-/// Apply a builtin resource to the unified ResourceStore, then write back
-/// the single affected entry to the legacy config field.
+/// Apply a builtin resource to the unified ResourceStore, then reconcile
+/// the single affected entry back into the in-memory config snapshot.
 pub(crate) fn apply_to_store(
     config: &mut OrchestratorConfig,
     kind: &str,
@@ -100,15 +104,29 @@ pub(crate) fn apply_to_store(
 
     let now = chrono::Utc::now().to_rfc3339();
 
-    // If the store doesn't have this entry yet but the legacy field does,
-    // seed the store from the legacy field so that put() can correctly
+    // If the store doesn't have this entry yet but the config snapshot does,
+    // seed the store from the current snapshot so that put() can correctly
     // detect Unchanged vs Configured (instead of always returning Created).
-    if config.resource_store.get(kind, name).is_none() {
-        crate::crd::writeback::seed_store_from_legacy(config, kind, name, &now);
+    let project_id = metadata
+        .project
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(crate::config::DEFAULT_PROJECT_ID);
+    if config
+        .resource_store
+        .get_namespaced(kind, project_id, name)
+        .or_else(|| config.resource_store.get(kind, name))
+        .is_none()
+    {
+        crate::crd::writeback::seed_store_from_config_snapshot(config, kind, name, &now);
     }
 
     // Preserve generation and created_at from existing CR if updating
-    let (generation, created_at) = match config.resource_store.get(kind, name) {
+    let (generation, created_at) = match config
+        .resource_store
+        .get_namespaced(kind, project_id, name)
+        .or_else(|| config.resource_store.get(kind, name))
+    {
         Some(existing) => (existing.generation + 1, existing.created_at.clone()),
         None => (1, now.clone()),
     };
@@ -123,24 +141,23 @@ pub(crate) fn apply_to_store(
         updated_at: now,
     };
     let result = config.resource_store.put(cr);
-    // Targeted writeback: only update the specific entry, not the whole map
-    crate::crd::writeback::write_back_single(config, kind, name);
+    // Targeted reconciliation: only update the specific entry, not the whole map
+    crate::crd::writeback::reconcile_single_resource(config, kind, name);
     result
 }
 
 /// Delete a builtin resource from the unified ResourceStore, then remove
-/// the single affected entry from the legacy config field.
+/// the single affected entry from the in-memory config snapshot.
 pub(crate) fn delete_from_store(config: &mut OrchestratorConfig, kind: &str, name: &str) -> bool {
-    // If the store doesn't have this entry yet but the legacy field does,
-    // seed it first so that remove() returns Some and we actually delete it.
-    if config.resource_store.get(kind, name).is_none() {
-        let now = chrono::Utc::now().to_rfc3339();
-        crate::crd::writeback::seed_store_from_legacy(config, kind, name, &now);
-    }
-
-    let removed = config.resource_store.remove(kind, name).is_some();
+    // If the store doesn't have this entry yet but the config snapshot does,
+    // remove the reconciled project-scoped entry directly.
+    let removed = config
+        .resource_store
+        .remove_namespaced(kind, crate::config::DEFAULT_PROJECT_ID, name)
+        .or_else(|| config.resource_store.remove(kind, name))
+        .is_some();
     if removed {
-        crate::crd::writeback::remove_from_legacy(config, kind, name);
+        crate::crd::writeback::remove_from_config_snapshot(config, kind, name);
     }
     removed
 }

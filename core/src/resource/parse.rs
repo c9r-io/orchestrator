@@ -7,9 +7,8 @@ use anyhow::{anyhow, Result};
 use serde::Deserialize;
 
 use super::{
-    AgentResource, DefaultsResource, EnvStoreResource, ProjectResource, Resource,
-    RuntimePolicyResource, SecretStoreResource, StepTemplateResource, WorkflowResource,
-    WorkspaceResource,
+    AgentResource, EnvStoreResource, ProjectResource, Resource, RuntimePolicyResource,
+    SecretStoreResource, StepTemplateResource, WorkflowResource, WorkspaceResource,
 };
 
 /// Parse YAML into builtin OrchestratorResource types only (backward-compatible).
@@ -76,7 +75,6 @@ pub fn delete_resource_by_kind(
         "agent" => Ok(AgentResource::delete_from(config, name)),
         "wf" | "workflow" => Ok(WorkflowResource::delete_from(config, name)),
         "project" => Ok(ProjectResource::delete_from(config, name)),
-        "defaults" => Ok(DefaultsResource::delete_from(config, name)),
         "runtimepolicy" | "runtime-policy" => Ok(RuntimePolicyResource::delete_from(config, name)),
         "steptemplate" | "step_template" | "step-template" => {
             Ok(StepTemplateResource::delete_from(config, name))
@@ -96,7 +94,7 @@ pub fn delete_resource_by_kind(
                 return crate::crd::delete_custom_resource(config, &crd_kind, name);
             }
             Err(anyhow!(
-                "unknown resource type: {} (supported: workspace, agent, workflow, project, defaults, runtimepolicy, steptemplate, envstore, secretstore, or CRD-defined types)",
+                "unknown resource type: {} (supported: workspace, agent, workflow, project, runtimepolicy, steptemplate, envstore, secretstore, or CRD-defined types)",
                 kind
             ))
         }
@@ -109,7 +107,6 @@ pub fn kind_as_str(kind: ResourceKind) -> &'static str {
         ResourceKind::Agent => "agent",
         ResourceKind::Workflow => "workflow",
         ResourceKind::Project => "project",
-        ResourceKind::Defaults => "defaults",
         ResourceKind::RuntimePolicy => "runtimepolicy",
         ResourceKind::StepTemplate => "steptemplate",
         ResourceKind::EnvStore => "envstore",
@@ -134,7 +131,6 @@ mod tests {
         assert_eq!(kind_as_str(ResourceKind::Agent), "agent");
         assert_eq!(kind_as_str(ResourceKind::Workflow), "workflow");
         assert_eq!(kind_as_str(ResourceKind::Project), "project");
-        assert_eq!(kind_as_str(ResourceKind::Defaults), "defaults");
         assert_eq!(kind_as_str(ResourceKind::RuntimePolicy), "runtimepolicy");
     }
 
@@ -196,7 +192,11 @@ spec:
         ws.apply(&mut config).expect("apply");
         assert!(delete_resource_by_kind(&mut config, "workspace", "del-ws")
             .expect("delete workspace resource"));
-        assert!(!config.workspaces.contains_key("del-ws"));
+        assert!(!config
+            .default_project()
+            .expect("default project")
+            .workspaces
+            .contains_key("del-ws"));
     }
 
     #[test]
@@ -216,7 +216,11 @@ spec:
         agent.apply(&mut config).expect("apply");
         assert!(delete_resource_by_kind(&mut config, "agent", "del-agent")
             .expect("delete agent resource"));
-        assert!(!config.agents.contains_key("del-agent"));
+        assert!(!config
+            .default_project()
+            .expect("default project")
+            .agents
+            .contains_key("del-agent"));
     }
 
     #[test]

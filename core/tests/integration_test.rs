@@ -1,4 +1,5 @@
 use agent_orchestrator::cli_types::ResourceKind;
+use agent_orchestrator::config::DEFAULT_PROJECT_ID;
 use agent_orchestrator::resource::{
     delete_resource_by_kind, dispatch_resource, kind_as_str, parse_resources_from_yaml,
     ApplyResult, Resource,
@@ -21,45 +22,35 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
         },
         resume: ResumeConfig { auto: false },
         observability: ObservabilityConfig::default(),
-        defaults: ConfigDefaults {
-            project: String::new(),
-            workspace: "default".to_string(),
-            workflow: "basic".to_string(),
-        },
-        projects: HashMap::new(),
-        workspaces: {
-            let mut ws = HashMap::new();
-            ws.insert(
-                "default".to_string(),
-                WorkspaceConfig {
-                    root_path: "workspace/default".to_string(),
-                    qa_targets: vec!["docs/qa".to_string()],
-                    ticket_dir: "docs/ticket".to_string(),
-                    self_referential: false,
-                },
-            );
-            ws
-        },
-        agents: {
-            let mut agents = HashMap::new();
-            agents.insert(
-                "echo".to_string(),
-                AgentConfig {
-                    metadata: AgentMetadata::default(),
-                    capabilities: vec!["qa".to_string()],
-                    command: "echo test".to_string(),
-                    selection: AgentSelectionConfig::default(),
-                    env: None,
-                    prompt_delivery: PromptDelivery::default(),
-                },
-            );
-            agents
-        },
-        workflows: {
-            let mut workflows = HashMap::new();
-            workflows.insert(
-                "basic".to_string(),
-                WorkflowConfig {
+        projects: [(
+            DEFAULT_PROJECT_ID.to_string(),
+            ProjectConfig {
+                description: None,
+                workspaces: [(
+                    "default".to_string(),
+                    WorkspaceConfig {
+                        root_path: "workspace/default".to_string(),
+                        qa_targets: vec!["docs/qa".to_string()],
+                        ticket_dir: "docs/ticket".to_string(),
+                        self_referential: false,
+                    },
+                )]
+                .into(),
+                agents: [(
+                    "echo".to_string(),
+                    AgentConfig {
+                        metadata: AgentMetadata::default(),
+                        capabilities: vec!["qa".to_string()],
+                        command: "echo test".to_string(),
+                        selection: AgentSelectionConfig::default(),
+                        env: None,
+                        prompt_delivery: PromptDelivery::default(),
+                    },
+                )]
+                .into(),
+                workflows: [(
+                    "basic".to_string(),
+                    WorkflowConfig {
                     steps: vec![WorkflowStepConfig {
                         id: "qa".to_string(),
                         description: None,
@@ -96,12 +87,14 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                     adaptive: None,
                     safety: agent_orchestrator::config::SafetyConfig::default(),
                     max_parallel: None,
-                },
-            );
-            workflows
-        },
-        step_templates: HashMap::new(),
-        env_stores: HashMap::new(),
+                    },
+                )]
+                .into(),
+                step_templates: HashMap::new(),
+                env_stores: HashMap::new(),
+            },
+        )]
+        .into(),
         resource_meta: ResourceMetadataStore::default(),
         custom_resource_definitions: HashMap::new(),
         custom_resources: HashMap::new(),
@@ -152,8 +145,19 @@ fn apply_creates_new_workspace_in_config() {
 
     let result = registered.apply(&mut config).expect("apply");
     assert_eq!(result, ApplyResult::Created);
-    assert!(config.workspaces.contains_key("new-ws"));
-    assert_eq!(config.workspaces["new-ws"].root_path, "workspace/new-ws");
+    assert!(config
+        .default_project()
+        .expect("default project")
+        .workspaces
+        .contains_key("new-ws"));
+    assert_eq!(
+        config
+            .default_project()
+            .expect("default project")
+            .workspaces["new-ws"]
+            .root_path,
+        "workspace/new-ws"
+    );
 }
 
 #[test]
@@ -165,14 +169,28 @@ fn apply_updates_existing_workspace() {
     let r1 = dispatch_resource(only(v1)).expect("dispatch v1");
     let result = r1.apply(&mut config).expect("apply");
     assert_eq!(result, ApplyResult::Configured);
-    assert_eq!(config.workspaces["default"].root_path, "workspace/v1");
+    assert_eq!(
+        config
+            .default_project()
+            .expect("default project")
+            .workspaces["default"]
+            .root_path,
+        "workspace/v1"
+    );
 
     let v2 =
         parse_resources_from_yaml(&workspace_yaml("default", "workspace/v2")).expect("parse v2");
     let r2 = dispatch_resource(only(v2)).expect("dispatch v2");
     let result = r2.apply(&mut config).expect("apply");
     assert_eq!(result, ApplyResult::Configured);
-    assert_eq!(config.workspaces["default"].root_path, "workspace/v2");
+    assert_eq!(
+        config
+            .default_project()
+            .expect("default project")
+            .workspaces["default"]
+            .root_path,
+        "workspace/v2"
+    );
 }
 
 #[test]
@@ -195,8 +213,16 @@ fn apply_preserves_unmentioned_resources() {
     let registered = dispatch_resource(only(resources)).expect("dispatch new workspace");
     registered.apply(&mut config).expect("apply");
 
-    assert!(config.workspaces.contains_key("default"));
-    assert!(config.workspaces.contains_key("new-ws"));
+    assert!(config
+        .default_project()
+        .expect("default project")
+        .workspaces
+        .contains_key("default"));
+    assert!(config
+        .default_project()
+        .expect("default project")
+        .workspaces
+        .contains_key("new-ws"));
 }
 
 #[test]
@@ -234,8 +260,16 @@ fn multi_document_apply_all_to_config() {
         registered.apply(&mut config).expect("apply");
     }
 
-    assert!(config.workspaces.contains_key("ws-extra"));
-    assert!(config.agents.contains_key("agent-extra"));
+    assert!(config
+        .default_project()
+        .expect("default project")
+        .workspaces
+        .contains_key("ws-extra"));
+    assert!(config
+        .default_project()
+        .expect("default project")
+        .agents
+        .contains_key("agent-extra"));
 }
 
 #[test]
@@ -301,7 +335,7 @@ spec:
 #[test]
 fn delete_removes_workspace_from_config() {
     let mut config = minimal_config();
-    config.workspaces.insert(
+    config.ensure_project(None).workspaces.insert(
         "to-delete".to_string(),
         agent_orchestrator::config::WorkspaceConfig {
             root_path: "workspace/to-delete".to_string(),
@@ -314,8 +348,16 @@ fn delete_removes_workspace_from_config() {
     let deleted =
         delete_resource_by_kind(&mut config, "workspace", "to-delete").expect("should succeed");
     assert!(deleted);
-    assert!(!config.workspaces.contains_key("to-delete"));
-    assert!(config.workspaces.contains_key("default"));
+    assert!(!config
+        .default_project()
+        .expect("default project")
+        .workspaces
+        .contains_key("to-delete"));
+    assert!(config
+        .default_project()
+        .expect("default project")
+        .workspaces
+        .contains_key("default"));
 }
 
 #[test]
@@ -351,12 +393,20 @@ fn apply_then_delete_roundtrip() {
         registered.apply(&mut config).expect("apply"),
         ApplyResult::Created
     );
-    assert!(config.agents.contains_key("temp-agent"));
+    assert!(config
+        .default_project()
+        .expect("default project")
+        .agents
+        .contains_key("temp-agent"));
 
     let deleted =
         delete_resource_by_kind(&mut config, "agent", "temp-agent").expect("delete temp agent");
     assert!(deleted);
-    assert!(!config.agents.contains_key("temp-agent"));
+    assert!(!config
+        .default_project()
+        .expect("default project")
+        .agents
+        .contains_key("temp-agent"));
 }
 
 #[test]
@@ -501,7 +551,12 @@ spec:
     let mut config = minimal_config();
     registered.apply(&mut config).expect("apply");
 
-    let ws = config.workspaces.get("self-ws").expect("workspace missing");
+    let ws = config
+        .default_project()
+        .expect("default project")
+        .workspaces
+        .get("self-ws")
+        .expect("workspace missing");
     assert!(ws.self_referential, "self_referential should be true");
 }
 
@@ -559,31 +614,24 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
         runner: RunnerConfig::default(),
         resume: ResumeConfig { auto: false },
         observability: ObservabilityConfig::default(),
-        defaults: ConfigDefaults {
-            project: String::new(),
-            workspace: "default".to_string(),
-            workflow: "bootstrap".to_string(),
-        },
-        projects: HashMap::new(),
-        workspaces: {
-            let mut ws = HashMap::new();
-            ws.insert(
-                "default".to_string(),
-                WorkspaceConfig {
-                    root_path: "workspace/default".to_string(),
-                    qa_targets: vec!["docs/qa".to_string()],
-                    ticket_dir: "docs/ticket".to_string(),
-                    self_referential: false,
-                },
-            );
-            ws
-        },
-        agents,
-        workflows: {
-            let mut workflows = HashMap::new();
-            workflows.insert(
-                "bootstrap".to_string(),
-                WorkflowConfig {
+        projects: [(
+            DEFAULT_PROJECT_ID.to_string(),
+            ProjectConfig {
+                description: None,
+                workspaces: [(
+                    "default".to_string(),
+                    WorkspaceConfig {
+                        root_path: "workspace/default".to_string(),
+                        qa_targets: vec!["docs/qa".to_string()],
+                        ticket_dir: "docs/ticket".to_string(),
+                        self_referential: false,
+                    },
+                )]
+                .into(),
+                agents,
+                workflows: [(
+                    "bootstrap".to_string(),
+                    WorkflowConfig {
                     steps: vec![
                         WorkflowStepConfig {
                             id: "plan".to_string(),
@@ -790,12 +838,14 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                     adaptive: None,
                     safety: SafetyConfig::default(),
                     max_parallel: None,
-                },
-            );
-            workflows
-        },
-        step_templates: HashMap::new(),
-        env_stores: HashMap::new(),
+                    },
+                )]
+                .into(),
+                step_templates: HashMap::new(),
+                env_stores: HashMap::new(),
+            },
+        )]
+        .into(),
         resource_meta: ResourceMetadataStore::default(),
         custom_resource_definitions: HashMap::new(),
         custom_resources: HashMap::new(),
@@ -809,6 +859,9 @@ fn multi_agent_capability_config_validates() {
 
     let config = multi_agent_config();
     let workflow = config
+        .projects
+        .get(DEFAULT_PROJECT_ID)
+        .expect("default project should exist")
         .workflows
         .get("bootstrap")
         .expect("bootstrap workflow should exist");
@@ -826,6 +879,9 @@ fn build_execution_plan_contains_all_bootstrap_steps() {
 
     let config = multi_agent_config();
     let workflow = config
+        .projects
+        .get(DEFAULT_PROJECT_ID)
+        .expect("default project should exist")
         .workflows
         .get("bootstrap")
         .expect("bootstrap workflow should exist");
@@ -979,6 +1035,8 @@ fn sdlc_full_pipeline_workflow_parses_from_fixture() {
     }
 
     let workflow = config
+        .default_project()
+        .expect("default project")
         .workflows
         .get("sdlc_full_pipeline")
         .expect("sdlc_full_pipeline workflow missing");

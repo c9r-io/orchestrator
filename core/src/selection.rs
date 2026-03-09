@@ -115,41 +115,35 @@ pub fn select_agent_by_preference(
 }
 
 /// Resolve effective agents for a task. Strict project isolation:
-/// - Project-scoped tasks use only project agents (even if empty).
-/// - Non-project tasks (empty project_id) use top-level config agents.
-/// No fallback from project scope to global agents.
+/// - Tasks always resolve inside an explicit or implicit project.
+/// - Omitting project_id means the built-in `default` project.
+/// No fallback to top-level agents.
 pub fn resolve_effective_agents<'a>(
     project_id: &str,
     config: &'a crate::config::OrchestratorConfig,
     _capability: Option<&str>,
 ) -> &'a HashMap<String, AgentConfig> {
-    if !project_id.is_empty() {
-        if let Some(project) = config.projects.get(project_id) {
-            return &project.agents;
-        }
-        // Project specified but not found — return empty set (no fallback)
-        static EMPTY: std::sync::LazyLock<HashMap<String, AgentConfig>> =
-            std::sync::LazyLock::new(HashMap::new);
-        return &EMPTY;
+    let project_id = config.effective_project_id(Some(project_id));
+    if let Some(project) = config.projects.get(project_id) {
+        return &project.agents;
     }
-    &config.agents
+    static EMPTY: std::sync::LazyLock<HashMap<String, AgentConfig>> =
+        std::sync::LazyLock::new(HashMap::new);
+    &EMPTY
 }
 
 /// Resolve an agent by ID. Strict project isolation:
-/// - Project-scoped tasks look up agents only in the project scope.
-/// - Non-project tasks look up in top-level config.
+/// - Tasks always look up agents in the effective project scope.
 pub fn resolve_agent_by_id<'a>(
     project_id: &str,
     config: &'a crate::config::OrchestratorConfig,
     agent_id: &str,
 ) -> Option<&'a AgentConfig> {
-    if !project_id.is_empty() {
-        return config
-            .projects
-            .get(project_id)
-            .and_then(|p| p.agents.get(agent_id));
-    }
-    config.agents.get(agent_id)
+    let project_id = config.effective_project_id(Some(project_id));
+    config
+        .projects
+        .get(project_id)
+        .and_then(|p| p.agents.get(agent_id))
 }
 
 #[cfg(test)]
@@ -479,11 +473,14 @@ mod tests {
     fn make_config_with_project_agents() -> crate::config::OrchestratorConfig {
         let mut config = crate::config::OrchestratorConfig::default();
 
-        // Global agents
+        let default_project = config
+            .projects
+            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+            .or_default();
         let (id_global, cfg_global) = make_test_agent("global_qa", "qa", 30);
-        config.agents.insert(id_global, cfg_global);
+        default_project.agents.insert(id_global, cfg_global);
         let (id_fix, cfg_fix) = make_test_agent("global_fix", "fix", 40);
-        config.agents.insert(id_fix, cfg_fix);
+        default_project.agents.insert(id_fix, cfg_fix);
 
         // Project agents (only qa capability)
         let mut project = crate::config::ProjectConfig {
@@ -491,6 +488,8 @@ mod tests {
             workspaces: HashMap::new(),
             agents: HashMap::new(),
             workflows: HashMap::new(),
+            step_templates: HashMap::new(),
+            env_stores: HashMap::new(),
         };
         let (id_proj, cfg_proj) = make_test_agent("proj_qa", "qa", 20);
         project.agents.insert(id_proj, cfg_proj);
@@ -537,9 +536,9 @@ mod tests {
     #[test]
     fn resolve_effective_agents_returns_empty_for_unknown_project() {
         let config = make_config_with_project_agents();
-        // Unknown project — strict isolation means empty, not fallback to top-level
+        // Unknown project stays isolated instead of borrowing resources from another scope.
         let agents = resolve_effective_agents("no-such-project", &config, Some("qa"));
-        assert!(agents.is_empty(), "unknown project must not fall back to top-level agents");
+        assert!(agents.is_empty(), "unknown project must not fall back to another scope");
     }
 
     #[test]
@@ -553,6 +552,8 @@ mod tests {
                 workspaces: HashMap::new(),
                 agents: HashMap::new(),
                 workflows: HashMap::new(),
+                step_templates: HashMap::new(),
+                env_stores: HashMap::new(),
             },
         );
         let agents = resolve_effective_agents("empty-proj", &config, Some("qa"));

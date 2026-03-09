@@ -2,8 +2,8 @@ use crate::cli_types::{OrchestratorResource, ResourceKind, ResourceSpec};
 use crate::config::OrchestratorConfig;
 
 use super::{
-    AgentResource, DefaultsResource, EnvStoreResource, ProjectResource, RegisteredResource,
-    Resource, RuntimePolicyResource, SecretStoreResource, StepTemplateResource, WorkflowResource,
+    AgentResource, EnvStoreResource, ProjectResource, RegisteredResource, Resource,
+    RuntimePolicyResource, SecretStoreResource, StepTemplateResource, WorkflowResource,
     WorkspaceResource, API_VERSION,
 };
 
@@ -11,9 +11,6 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
     let mut resources = Vec::new();
     if let Some(runtime_policy) = RuntimePolicyResource::get_from(config, "runtime") {
         resources.push(RegisteredResource::RuntimePolicy(runtime_policy));
-    }
-    if let Some(defaults) = DefaultsResource::get_from(config, "defaults") {
-        resources.push(RegisteredResource::Defaults(defaults));
     }
     for name in config.projects.keys() {
         if name.is_empty() {
@@ -23,32 +20,80 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
             resources.push(RegisteredResource::Project(project));
         }
     }
-    for name in config.workspaces.keys() {
-        if let Some(workspace) = WorkspaceResource::get_from(config, name) {
-            resources.push(RegisteredResource::Workspace(workspace));
+    for (project_id, project) in &config.projects {
+        for (name, workspace) in &project.workspaces {
+            resources.push(RegisteredResource::Workspace(WorkspaceResource {
+                metadata: crate::cli_types::ResourceMetadata {
+                    name: name.clone(),
+                    project: Some(project_id.clone()),
+                    labels: None,
+                    annotations: None,
+                },
+                spec: crate::cli_types::WorkspaceSpec {
+                    root_path: workspace.root_path.clone(),
+                    qa_targets: workspace.qa_targets.clone(),
+                    ticket_dir: workspace.ticket_dir.clone(),
+                    self_referential: workspace.self_referential,
+                },
+            }));
         }
-    }
-    for name in config.agents.keys() {
-        if let Some(agent) = AgentResource::get_from(config, name) {
-            resources.push(RegisteredResource::Agent(Box::new(agent)));
+        for (name, agent) in &project.agents {
+            resources.push(RegisteredResource::Agent(Box::new(AgentResource {
+                metadata: crate::cli_types::ResourceMetadata {
+                    name: name.clone(),
+                    project: Some(project_id.clone()),
+                    labels: None,
+                    annotations: None,
+                },
+                spec: super::agent::agent_config_to_spec(agent),
+            })));
         }
-    }
-    for name in config.workflows.keys() {
-        if let Some(workflow) = WorkflowResource::get_from(config, name) {
-            resources.push(RegisteredResource::Workflow(workflow));
+        for (name, workflow) in &project.workflows {
+            resources.push(RegisteredResource::Workflow(WorkflowResource {
+                metadata: crate::cli_types::ResourceMetadata {
+                    name: name.clone(),
+                    project: Some(project_id.clone()),
+                    labels: None,
+                    annotations: None,
+                },
+                spec: super::workflow::workflow_config_to_spec(workflow),
+            }));
         }
-    }
-    for name in config.step_templates.keys() {
-        if let Some(step_template) = StepTemplateResource::get_from(config, name) {
-            resources.push(RegisteredResource::StepTemplate(step_template));
+        for (name, template) in &project.step_templates {
+            resources.push(RegisteredResource::StepTemplate(StepTemplateResource {
+                metadata: crate::cli_types::ResourceMetadata {
+                    name: name.clone(),
+                    project: Some(project_id.clone()),
+                    labels: None,
+                    annotations: None,
+                },
+                spec: crate::cli_types::StepTemplateSpec {
+                    prompt: template.prompt.clone(),
+                    description: template.description.clone(),
+                },
+            }));
         }
-    }
-    for name in config.env_stores.keys() {
-        if let Some(env_store) = EnvStoreResource::get_from(config, name) {
-            resources.push(RegisteredResource::EnvStore(env_store));
-        }
-        if let Some(secret_store) = SecretStoreResource::get_from(config, name) {
-            resources.push(RegisteredResource::SecretStore(secret_store));
+        for (name, store) in &project.env_stores {
+            let metadata = crate::cli_types::ResourceMetadata {
+                name: name.clone(),
+                project: Some(project_id.clone()),
+                labels: None,
+                annotations: None,
+            };
+            let spec = crate::cli_types::EnvStoreSpec {
+                data: store.data.clone(),
+            };
+            if store.sensitive {
+                resources.push(RegisteredResource::SecretStore(SecretStoreResource {
+                    metadata,
+                    spec,
+                }));
+            } else {
+                resources.push(RegisteredResource::EnvStore(EnvStoreResource {
+                    metadata,
+                    spec,
+                }));
+            }
         }
     }
     resources
@@ -149,12 +194,6 @@ pub fn export_manifest_documents(config: &OrchestratorConfig) -> Vec<Orchestrato
                 metadata: item.metadata,
                 spec: ResourceSpec::Project(item.spec),
             },
-            RegisteredResource::Defaults(item) => OrchestratorResource {
-                api_version: API_VERSION.to_string(),
-                kind: ResourceKind::Defaults,
-                metadata: item.metadata,
-                spec: ResourceSpec::Defaults(item.spec),
-            },
             RegisteredResource::RuntimePolicy(item) => OrchestratorResource {
                 api_version: API_VERSION.to_string(),
                 kind: ResourceKind::RuntimePolicy,
@@ -209,14 +248,14 @@ mod tests {
         pr.apply(&mut config).expect("apply");
 
         // Add EnvStore and SecretStore
-        config.env_stores.insert(
+        config.projects.get_mut("default").unwrap().env_stores.insert(
             "shared-config".to_string(),
             crate::config::EnvStoreConfig {
                 data: [("K".to_string(), "V".to_string())].into(),
                 sensitive: false,
             },
         );
-        config.env_stores.insert(
+        config.projects.get_mut("default").unwrap().env_stores.insert(
             "api-keys".to_string(),
             crate::config::EnvStoreConfig {
                 data: [("SECRET".to_string(), "val".to_string())].into(),
@@ -227,7 +266,6 @@ mod tests {
         let resources = export_manifest_resources(&config);
         let kinds: Vec<ResourceKind> = resources.iter().map(|r| r.kind()).collect();
         assert!(kinds.contains(&ResourceKind::RuntimePolicy));
-        assert!(kinds.contains(&ResourceKind::Defaults));
         assert!(kinds.contains(&ResourceKind::Workspace));
         assert!(kinds.contains(&ResourceKind::Agent));
         assert!(kinds.contains(&ResourceKind::Workflow));
@@ -250,7 +288,6 @@ mod tests {
         }
         let doc_kinds: Vec<ResourceKind> = docs.iter().map(|d| d.kind).collect();
         assert!(doc_kinds.contains(&ResourceKind::RuntimePolicy));
-        assert!(doc_kinds.contains(&ResourceKind::Defaults));
         assert!(doc_kinds.contains(&ResourceKind::Workspace));
     }
 
@@ -386,14 +423,14 @@ mod tests {
         let pr = dispatch_resource(project_manifest("map-pr", "d")).expect("dispatch project");
         pr.apply(&mut config).expect("apply");
 
-        config.env_stores.insert(
+        config.projects.get_mut("default").unwrap().env_stores.insert(
             "test-config".to_string(),
             crate::config::EnvStoreConfig {
                 data: [("K".to_string(), "V".to_string())].into(),
                 sensitive: false,
             },
         );
-        config.env_stores.insert(
+        config.projects.get_mut("default").unwrap().env_stores.insert(
             "test-secrets".to_string(),
             crate::config::EnvStoreConfig {
                 data: [("S".to_string(), "V".to_string())].into(),
@@ -407,7 +444,6 @@ mod tests {
         assert!(kinds.contains(&ResourceKind::Agent));
         assert!(kinds.contains(&ResourceKind::Workflow));
         assert!(kinds.contains(&ResourceKind::Project));
-        assert!(kinds.contains(&ResourceKind::Defaults));
         assert!(kinds.contains(&ResourceKind::RuntimePolicy));
         assert!(kinds.contains(&ResourceKind::EnvStore));
         assert!(kinds.contains(&ResourceKind::SecretStore));
@@ -423,6 +459,8 @@ mod tests {
                 workspaces: Default::default(),
                 agents: Default::default(),
                 workflows: Default::default(),
+                step_templates: Default::default(),
+                env_stores: Default::default(),
             },
         );
 

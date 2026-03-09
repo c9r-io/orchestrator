@@ -126,18 +126,27 @@ pub(crate) mod tests {
                 ..AgentConfig::default()
             },
         );
-        OrchestratorConfig {
-            agents,
-            ..OrchestratorConfig::default()
-        }
+        let mut config = OrchestratorConfig::default();
+        config
+            .projects
+            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+            .or_default()
+            .agents = agents;
+        config
     }
 
     pub fn make_minimal_buildable_config() -> OrchestratorConfig {
         let mut config = OrchestratorConfig::default();
-        config.defaults.workspace = "default".to_string();
-        config.defaults.workflow = "basic".to_string();
-        config.agents = make_config_with_agent("qa", "echo qa").agents;
-        config.workspaces.insert(
+        let project = config
+            .projects
+            .get_mut(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project");
+        project.agents = make_config_with_agent("qa", "echo qa")
+            .projects
+            .remove(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
+            .agents;
+        project.workspaces.insert(
             "default".to_string(),
             crate::config::WorkspaceConfig {
                 root_path: ".".to_string(),
@@ -146,7 +155,7 @@ pub(crate) mod tests {
                 self_referential: false,
             },
         );
-        config.workflows.insert(
+        project.workflows.insert(
             "basic".to_string(),
             make_workflow(vec![make_builtin_step("self_test", "self_test", true)]),
         );

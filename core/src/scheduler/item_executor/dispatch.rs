@@ -310,15 +310,15 @@ async fn execute_builtin_step_dispatch(
     match effective_execution {
         ExecutionMode::Builtin { name } if name == "self_test" => {
             // Self-test uses a specialized builtin
-            let project_opt = if task_ctx.project_id.is_empty() {
-                None
-            } else {
-                Some(task_ctx.project_id.as_str())
-            };
-            let exit_code =
-                execute_self_test_step(&task_ctx.workspace_root, state, task_id, item_id, project_opt)
-                    .await
-                    .unwrap_or(1);
+            let exit_code = execute_self_test_step(
+                &task_ctx.workspace_root,
+                state,
+                task_id,
+                item_id,
+                Some(task_ctx.project_id.as_str()),
+            )
+            .await
+            .unwrap_or(1);
             let passed = exit_code == 0;
             acc.pipeline_vars
                 .vars
@@ -715,6 +715,7 @@ pub async fn execute_builtin_step(
         let resolved_prompt = step.template.as_ref().and_then(|tmpl_name| {
             let cfg = state.active_config.read().ok()?;
             cfg.config
+                .default_project()?
                 .step_templates
                 .get(tmpl_name)
                 .map(|t| t.prompt.clone())
@@ -803,7 +804,7 @@ pub(super) fn is_execution_hard_failure(result: &crate::dto::RunResult) -> bool 
 }
 
 /// Execute dynamic steps from the dynamic step pool.
-/// Only runs in full/legacy mode (not in segment-filtered mode).
+/// Only runs in full-cycle mode (not in segment-filtered mode).
 async fn execute_dynamic_steps(
     state: &Arc<InnerState>,
     task_id: &str,

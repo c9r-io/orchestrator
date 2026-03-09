@@ -45,6 +45,8 @@ use crate::crd::types::{CustomResource, CustomResourceDefinition};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+pub const DEFAULT_PROJECT_ID: &str = "default";
+
 /// Main orchestrator configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrchestratorConfig {
@@ -52,19 +54,8 @@ pub struct OrchestratorConfig {
     pub resume: ResumeConfig,
     #[serde(default)]
     pub observability: ObservabilityConfig,
-    pub defaults: ConfigDefaults,
     #[serde(default)]
     pub projects: HashMap<String, ProjectConfig>,
-    #[serde(default)]
-    pub workspaces: HashMap<String, WorkspaceConfig>,
-    #[serde(default)]
-    pub agents: HashMap<String, AgentConfig>,
-    #[serde(default)]
-    pub workflows: HashMap<String, WorkflowConfig>,
-    #[serde(default)]
-    pub step_templates: HashMap<String, StepTemplateConfig>,
-    #[serde(default)]
-    pub env_stores: HashMap<String, EnvStoreConfig>,
     #[serde(default)]
     pub resource_meta: ResourceMetadataStore,
     #[serde(default)]
@@ -82,17 +73,7 @@ impl Default for OrchestratorConfig {
             runner: RunnerConfig::default(),
             resume: ResumeConfig { auto: false },
             observability: ObservabilityConfig::default(),
-            defaults: ConfigDefaults {
-                project: String::new(),
-                workspace: String::new(),
-                workflow: String::new(),
-            },
             projects: HashMap::new(),
-            workspaces: HashMap::new(),
-            agents: HashMap::new(),
-            workflows: HashMap::new(),
-            step_templates: HashMap::new(),
-            env_stores: HashMap::new(),
             resource_meta: ResourceMetadataStore::default(),
             custom_resource_definitions: HashMap::new(),
             custom_resources: HashMap::new(),
@@ -101,17 +82,30 @@ impl Default for OrchestratorConfig {
     }
 }
 
-/// Default configuration values
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConfigDefaults {
-    #[serde(default = "default_project")]
-    pub project: String,
-    pub workspace: String,
-    pub workflow: String,
-}
+impl OrchestratorConfig {
+    pub fn effective_project_id<'a>(&'a self, project_id: Option<&'a str>) -> &'a str {
+        project_id
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(DEFAULT_PROJECT_ID)
+    }
 
-fn default_project() -> String {
-    "default".to_string()
+    pub fn project(&self, project_id: Option<&str>) -> Option<&ProjectConfig> {
+        self.projects.get(self.effective_project_id(project_id))
+    }
+
+    pub fn project_mut(&mut self, project_id: Option<&str>) -> Option<&mut ProjectConfig> {
+        let project_id = self.effective_project_id(project_id).to_string();
+        self.projects.get_mut(&project_id)
+    }
+
+    pub fn default_project(&self) -> Option<&ProjectConfig> {
+        self.project(Some(DEFAULT_PROJECT_ID))
+    }
+
+    pub fn ensure_project(&mut self, project_id: Option<&str>) -> &mut ProjectConfig {
+        let project_id = self.effective_project_id(project_id).to_string();
+        self.projects.entry(project_id).or_default()
+    }
 }
 
 /// Persisted metadata for declarative resources.
@@ -142,14 +136,9 @@ mod tests {
     fn test_orchestrator_config_default() {
         let cfg = OrchestratorConfig::default();
         assert!(cfg.projects.is_empty());
-        assert!(cfg.workspaces.is_empty());
-        assert!(cfg.agents.is_empty());
-        assert!(cfg.workflows.is_empty());
         assert!(!cfg.resume.auto);
         assert_eq!(cfg.observability, ObservabilityConfig::default());
-        assert_eq!(cfg.defaults.project, "");
-        assert_eq!(cfg.defaults.workspace, "");
-        assert_eq!(cfg.defaults.workflow, "");
+        assert!(cfg.projects.is_empty());
     }
 
     #[test]
@@ -173,12 +162,12 @@ mod tests {
         let json = serde_json::to_string(&cfg).expect("config should serialize");
         let cfg2: OrchestratorConfig =
             serde_json::from_str(&json).expect("config should deserialize");
-        assert_eq!(cfg2.defaults.project, cfg.defaults.project);
+        assert_eq!(cfg2.projects.len(), cfg.projects.len());
         assert!(cfg2.projects.is_empty());
     }
 
     #[test]
     fn test_default_project() {
-        assert_eq!(default_project(), "default");
+        assert_eq!(DEFAULT_PROJECT_ID, "default");
     }
 }

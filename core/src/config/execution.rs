@@ -168,7 +168,7 @@ pub struct TaskRuntimeContext {
     pub self_referential: bool,
     /// Consecutive failure counter for auto-rollback
     pub consecutive_failures: u32,
-    /// Project ID for project-scoped agent selection (empty = global)
+    /// Project ID for project-scoped agent selection.
     pub project_id: String,
     /// WP04: Immutable snapshot of invariants, pinned at task start
     pub pinned_invariants: Arc<Vec<InvariantConfig>>,
@@ -297,6 +297,8 @@ pub struct ResolvedProject {
     pub workspaces: HashMap<String, ResolvedWorkspace>,
     pub agents: HashMap<String, AgentConfig>,
     pub workflows: HashMap<String, WorkflowConfig>,
+    pub step_templates: HashMap<String, crate::config::StepTemplateConfig>,
+    pub env_stores: HashMap<String, crate::config::EnvStoreConfig>,
 }
 
 /// Active configuration (runtime state)
@@ -305,9 +307,6 @@ pub struct ActiveConfig {
     pub config: OrchestratorConfig,
     pub workspaces: HashMap<String, ResolvedWorkspace>,
     pub projects: HashMap<String, ResolvedProject>,
-    pub default_project_id: String,
-    pub default_workspace_id: String,
-    pub default_workflow_id: String,
 }
 
 #[cfg(test)]

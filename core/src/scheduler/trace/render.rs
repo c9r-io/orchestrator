@@ -123,8 +123,8 @@ pub fn render_trace_terminal(trace: &TaskTrace, verbose: bool) {
             );
 
             if verbose {
-                let scope_display = if step.scope == "legacy" {
-                    "scope=legacy (pre-scope event, step_scope not recorded)".to_string()
+                let scope_display = if step.scope == "unspecified" {
+                    "scope=unspecified (step_scope not recorded)".to_string()
                 } else {
                     format!("scope={}", step.scope)
                 };

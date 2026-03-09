@@ -59,7 +59,7 @@ pub fn resolve_version<'a>(
         })
 }
 
-/// Check if a kind string matches one of the 9 builtin resource kinds.
+/// Check if a kind string matches one of the builtin resource kinds.
 pub fn is_builtin_kind(kind: &str) -> bool {
     matches!(
         kind,
@@ -67,7 +67,6 @@ pub fn is_builtin_kind(kind: &str) -> bool {
             | "Agent"
             | "Workflow"
             | "Project"
-            | "Defaults"
             | "RuntimePolicy"
             | "StepTemplate"
             | "EnvStore"
@@ -90,7 +89,6 @@ pub fn is_builtin_alias(name: &str) -> bool {
             | "workflows"
             | "project"
             | "projects"
-            | "defaults"
             | "runtimepolicy"
             | "runtime-policy"
             | "steptemplate"

@@ -56,7 +56,7 @@ pub(crate) fn apply_self_heal_to_step(
                     step_id: step.id.clone(),
                     rule: ConfigSelfHealRule::DropRequiredCapabilityFromBuiltinStep,
                     detail: format!(
-                        "removed legacy required_capability '{}' from builtin '{}'",
+                        "removed deprecated required_capability '{}' from builtin '{}'",
                         required_capability, builtin
                     ),
                 });
@@ -102,10 +102,6 @@ pub(crate) fn apply_self_heal_pass(
     let mut healed = config.clone();
     let mut changes = Vec::new();
 
-    for (workflow_id, workflow) in &mut healed.workflows {
-        apply_self_heal_to_workflow(workflow_id, workflow, &mut changes)?;
-    }
-
     for (project_id, project) in &mut healed.projects {
         for (workflow_id, workflow) in &mut project.workflows {
             let scoped_workflow_id = format!("{project_id}/{workflow_id}");
@@ -130,6 +126,9 @@ mod tests {
     fn self_heal_drops_required_capability_from_known_builtin_step() {
         let mut config = make_minimal_buildable_config();
         let workflow = config
+            .projects
+            .get_mut(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
             .workflows
             .get_mut("basic")
             .expect("missing basic workflow");
@@ -145,6 +144,9 @@ mod tests {
 
         let healed_step = healed
             .0
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
             .workflows
             .get("basic")
             .and_then(|wf| wf.steps.first())
@@ -163,6 +165,9 @@ mod tests {
     fn self_heal_normalizes_execution_mode_mismatch() {
         let mut config = make_minimal_buildable_config();
         let workflow = config
+            .projects
+            .get_mut(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
             .workflows
             .get_mut("basic")
             .expect("missing basic workflow");
@@ -178,6 +183,9 @@ mod tests {
 
         let healed_step = healed
             .0
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
             .workflows
             .get("basic")
             .and_then(|wf| wf.steps.first())
@@ -204,9 +212,14 @@ mod tests {
     }
 
     #[test]
-    fn self_heal_does_not_fix_missing_workspace() {
+    fn self_heal_does_not_mutate_project_scoped_validation_errors() {
         let mut config = make_minimal_buildable_config();
-        config.defaults.workspace = "missing".to_string();
+        config
+            .projects
+            .get_mut(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project should exist")
+            .workspaces
+            .clear();
 
         let healed = apply_self_heal_pass(&config).expect("self-heal pass should run");
 

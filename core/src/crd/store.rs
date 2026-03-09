@@ -7,7 +7,7 @@ use std::collections::HashMap;
 /// Unified resource store — single source of truth for all resource instances.
 ///
 /// Stores both builtin and user-defined custom resources. Builtin types are
-/// projected back to legacy config fields via `crd::writeback::project_builtin_kind()`.
+/// reconciled into the project-scoped config snapshot via `crd::writeback`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ResourceStore {
     #[serde(default)]
@@ -17,6 +17,15 @@ pub struct ResourceStore {
 }
 
 impl ResourceStore {
+    fn storage_key(kind: &str, metadata: &crate::cli_types::ResourceMetadata) -> String {
+        match metadata.project.as_deref() {
+            Some(project) if !project.trim().is_empty() => {
+                format!("{}/{}/{}", kind, project, metadata.name)
+            }
+            _ => format!("{}/{}", kind, metadata.name),
+        }
+    }
+
     /// Get a resource by kind and name.
     pub fn get(&self, kind: &str, name: &str) -> Option<&CustomResource> {
         let key = format!("{}/{}", kind, name);
@@ -46,7 +55,7 @@ impl ResourceStore {
 
     /// Insert or update a resource. Returns the apply result.
     pub fn put(&mut self, cr: CustomResource) -> ApplyResult {
-        let key = format!("{}/{}", cr.kind, cr.metadata.name);
+        let key = Self::storage_key(&cr.kind, &cr.metadata);
         self.generation += 1;
 
         match self.resources.get(&key) {
@@ -71,6 +80,20 @@ impl ResourceStore {
     /// Remove a resource by kind and name.
     pub fn remove(&mut self, kind: &str, name: &str) -> Option<CustomResource> {
         let key = format!("{}/{}", kind, name);
+        let removed = self.resources.remove(&key);
+        if removed.is_some() {
+            self.generation += 1;
+        }
+        removed
+    }
+
+    pub fn remove_namespaced(
+        &mut self,
+        kind: &str,
+        project: &str,
+        name: &str,
+    ) -> Option<CustomResource> {
+        let key = format!("{}/{}/{}", kind, project, name);
         let removed = self.resources.remove(&key);
         if removed.is_some() {
             self.generation += 1;
@@ -327,24 +350,6 @@ mod tests {
     }
 
     #[test]
-    fn project_singleton_defaults_round_trip() {
-        use crate::config::ConfigDefaults;
-
-        let mut store = ResourceStore::default();
-        let defaults = ConfigDefaults {
-            project: "p".to_string(),
-            workspace: "w".to_string(),
-            workflow: "wf".to_string(),
-        };
-        store.put(make_cr("Defaults", "main", defaults.to_cr_spec()));
-        let projected: Option<ConfigDefaults> = store.project_singleton();
-        let d = projected.expect("should project Defaults singleton");
-        assert_eq!(d.project, "p");
-        assert_eq!(d.workspace, "w");
-        assert_eq!(d.workflow, "wf");
-    }
-
-    #[test]
     fn project_singleton_runtime_policy() {
         use crate::config::{ResumeConfig, RunnerConfig};
         use crate::crd::projection::RuntimePolicyProjection;
@@ -386,8 +391,9 @@ mod tests {
     #[test]
     fn project_singleton_returns_none_for_empty_store() {
         let store = ResourceStore::default();
-        let d: Option<crate::config::ConfigDefaults> = store.project_singleton();
-        assert!(d.is_none());
+        let runtime: Option<crate::crd::projection::RuntimePolicyProjection> =
+            store.project_singleton();
+        assert!(runtime.is_none());
     }
 
     #[test]

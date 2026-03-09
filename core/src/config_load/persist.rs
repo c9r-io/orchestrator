@@ -264,7 +264,7 @@ mod tests {
                 workflow_id: "basic".to_string(),
                 step_id: "self_test".to_string(),
                 rule: ConfigSelfHealRule::DropRequiredCapabilityFromBuiltinStep,
-                detail: "removed legacy required_capability 'self_test' from builtin 'self_test'"
+                detail: "removed deprecated required_capability 'self_test' from builtin 'self_test'"
                     .to_string(),
             },
             ConfigSelfHealChange {

@@ -19,7 +19,7 @@ pub struct OrchestratorResource {
     #[serde(rename = "apiVersion")]
     pub api_version: String,
 
-    /// Resource kind (Workspace, Agent, Workflow, Project, Defaults, RuntimePolicy)
+    /// Resource kind (Workspace, Agent, Workflow, Project, RuntimePolicy)
     pub kind: ResourceKind,
 
     /// Resource metadata (name, labels, annotations)
@@ -65,11 +65,6 @@ impl<'de> Deserialize<'de> for OrchestratorResource {
                 let s: ProjectSpec =
                     serde_yml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
                 ResourceSpec::Project(s)
-            }
-            ResourceKind::Defaults => {
-                let s: DefaultsSpec =
-                    serde_yml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
-                ResourceSpec::Defaults(s)
             }
             ResourceKind::RuntimePolicy => {
                 let s: RuntimePolicySpec =
@@ -119,7 +114,6 @@ pub enum ResourceKind {
     Agent,
     Workflow,
     Project,
-    Defaults,
     RuntimePolicy,
     StepTemplate,
     EnvStore,
@@ -163,9 +157,6 @@ pub enum ResourceSpec {
     /// Project resource spec
     Project(ProjectSpec),
 
-    /// Defaults resource spec
-    Defaults(DefaultsSpec),
-
     /// Runtime policy resource spec
     RuntimePolicy(RuntimePolicySpec),
 
@@ -183,14 +174,6 @@ pub enum ResourceSpec {
 pub struct ProjectSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-}
-
-/// Defaults resource specification.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct DefaultsSpec {
-    pub project: String,
-    pub workspace: String,
-    pub workflow: String,
 }
 
 /// Runtime policy specification containing runner + resume behavior.

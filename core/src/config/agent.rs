@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 /// - `Stdin`: prompt written to child stdin fd (zero shell risk)
 /// - `File`: prompt written to temp file, `{prompt_file}` placeholder in command (near-zero risk)
 /// - `Env`: prompt passed as `ORCH_PROMPT` env var (low risk)
-/// - `Arg`: legacy `{prompt}` substitution in shell command (requires shell_escape, default)
+/// - `Arg`: `{prompt}` substitution in shell command (requires shell_escape, default)
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PromptDelivery {

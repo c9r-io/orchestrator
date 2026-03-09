@@ -171,31 +171,34 @@ pub(crate) fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorCo
     // `orchestrator apply --project default`.
     config
         .projects
-        .entry("default".to_string())
+        .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
         .or_insert_with(|| crate::config::ProjectConfig {
             description: Some("Built-in default project".to_string()),
             workspaces: Default::default(),
             agents: Default::default(),
             workflows: Default::default(),
+            step_templates: Default::default(),
+            env_stores: Default::default(),
         });
 
-    for workflow in config.workflows.values_mut() {
-        normalize_workflow_config(workflow);
+    for project in config.projects.values_mut() {
+        for workflow in project.workflows.values_mut() {
+            normalize_workflow_config(workflow);
+        }
     }
 
     // Ensure builtin CRD definitions are registered
     ensure_builtin_crds(&mut config);
 
-    // Always rebuild the resource store from the (now-normalized) legacy fields.
-    // Legacy fields are the source of truth during normalization; the store is
-    // a derived index that the CRD pipeline can query.
+    // Always rebuild the resource store from the normalized project-scoped
+    // config snapshot. The store is a derived index that the CRD pipeline can query.
     //
     // Preserve resource metadata (labels, annotations) from the old store
-    // before wiping — sync_legacy_to_store only knows about spec data from
-    // legacy fields, not the metadata stored in the CRD resource store.
+    // before wiping — sync_config_snapshot_to_store only knows about spec data
+    // from the config snapshot, not metadata already stored in the ResourceStore.
     let old_store = std::mem::take(&mut config.resource_store);
-    crate::crd::writeback::sync_legacy_to_store(&mut config);
-    crate::crd::writeback::restore_metadata_from_old_store(&mut config, &old_store);
+    crate::crd::writeback::sync_config_snapshot_to_store(&mut config);
+    crate::crd::writeback::restore_metadata_from_previous_store(&mut config, &old_store);
 
     config
 }
@@ -767,7 +770,7 @@ mod tests {
     }
 
     #[test]
-    fn normalize_clears_qa_fix_retest_legacy_fields() {
+    fn normalize_clears_deprecated_qa_fix_retest_fields() {
         let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         workflow.qa = Some("qa_template".to_string());
         workflow.fix = Some("fix_template".to_string());
@@ -857,15 +860,21 @@ mod tests {
 
     #[test]
     fn normalize_config_normalizes_all_workflows() {
-        let mut workflows = HashMap::new();
-        workflows.insert("wf1".to_string(), make_workflow(vec![]));
-        workflows.insert("wf2".to_string(), make_workflow(vec![]));
-        let config = OrchestratorConfig {
-            workflows,
-            ..OrchestratorConfig::default()
-        };
+        let mut config = OrchestratorConfig::default();
+        let project = config
+            .projects
+            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+            .or_default();
+        project.workflows.insert("wf1".to_string(), make_workflow(vec![]));
+        project.workflows.insert("wf2".to_string(), make_workflow(vec![]));
         let normalized = normalize_config(config);
-        for wf in normalized.workflows.values() {
+        for wf in normalized
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
+            .workflows
+            .values()
+        {
             assert!(!wf.steps.is_empty(), "all workflows should be normalized");
         }
     }
@@ -923,7 +932,6 @@ mod tests {
     #[test]
     fn normalize_config_populates_builtin_crds() {
         let config = OrchestratorConfig {
-            workflows: HashMap::new(),
             ..OrchestratorConfig::default()
         };
         let normalized = normalize_config(config);
@@ -933,7 +941,6 @@ mod tests {
             "Workflow",
             "Workspace",
             "Project",
-            "Defaults",
             "RuntimePolicy",
             "StepTemplate",
             "EnvStore",
@@ -968,9 +975,14 @@ mod tests {
     }
 
     #[test]
-    fn normalize_config_rebuilds_resource_store_from_legacy() {
+    fn normalize_config_rebuilds_resource_store_from_config_snapshot() {
         let mut config = OrchestratorConfig::default();
-        config.agents.insert(
+        config
+            .projects
+            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+            .or_default()
+            .agents
+            .insert(
             "norm-ag".to_string(),
             crate::config::AgentConfig {
                 command: "echo test".to_string(),
@@ -980,15 +992,15 @@ mod tests {
         let normalized = normalize_config(config);
 
         assert!(
-            normalized.resource_store.get("Agent", "norm-ag").is_some(),
-            "store should be populated from legacy agents"
-        );
-        assert!(
             normalized
                 .resource_store
-                .get("Defaults", "defaults")
+                .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "norm-ag")
                 .is_some(),
-            "singletons should also be in the store"
+            "store should be populated from config snapshot agents"
+        );
+        assert!(
+            normalized.resource_store.get("RuntimePolicy", "runtime").is_some(),
+            "runtime policy should also be in the store"
         );
     }
 
@@ -1027,7 +1039,12 @@ mod tests {
     #[test]
     fn normalize_config_idempotent_double_call() {
         let mut config = OrchestratorConfig::default();
-        config.agents.insert(
+        config
+            .projects
+            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+            .or_default()
+            .agents
+            .insert(
             "idem-ag".to_string(),
             crate::config::AgentConfig {
                 command: "echo test".to_string(),
@@ -1037,8 +1054,16 @@ mod tests {
         let first = normalize_config(config);
         let second = normalize_config(first);
 
-        assert!(second.agents.contains_key("idem-ag"));
-        assert!(second.resource_store.get("Agent", "idem-ag").is_some());
-        assert_eq!(second.custom_resource_definitions.len(), 11);
+        assert!(second
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
+            .agents
+            .contains_key("idem-ag"));
+        assert!(second
+            .resource_store
+            .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "idem-ag")
+            .is_some());
+        assert_eq!(second.custom_resource_definitions.len(), 10);
     }
 }

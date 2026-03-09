@@ -552,7 +552,7 @@ mod tests {
     }
 
     #[test]
-    fn render_watch_frame_shows_legacy_scope_for_legacy_event() {
+    fn render_watch_frame_shows_unspecified_scope_marker_for_missing_scope_event() {
         let task = TaskSummary {
             id: "12345678-1234-1234-1234-123456789abc".to_string(),
             name: "watch".to_string(),
@@ -596,6 +596,9 @@ mod tests {
         }];
 
         let frame = render_watch_frame(&task, &events, &task.id);
-        assert!(frame.contains(" ~ "), "legacy scope should display as ~");
+        assert!(
+            frame.contains(" ~ "),
+            "unspecified scope should display as ~"
+        );
     }
 }

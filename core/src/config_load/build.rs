@@ -14,14 +14,8 @@ pub fn build_active_config(app_root: &Path, config: OrchestratorConfig) -> Resul
     let config = normalize_config(config);
     let workspaces = resolve_and_validate_workspaces(app_root, &config)?;
     let projects = resolve_and_validate_projects(app_root, &config)?;
-    for (workflow_id, workflow) in &config.workflows {
-        validate_workflow_config(&config, workflow, workflow_id)?;
-    }
     validate_agent_env_store_refs(&config)?;
     Ok(ActiveConfig {
-        default_project_id: config.defaults.project.clone(),
-        default_workspace_id: config.defaults.workspace.clone(),
-        default_workflow_id: config.defaults.workflow.clone(),
         workspaces,
         projects,
         config,
@@ -93,13 +87,11 @@ pub fn build_execution_plan_for_project(
     workflow_id: &str,
     project_id: &str,
 ) -> Result<TaskExecutionPlan> {
-    let agents: std::collections::HashMap<String, &crate::config::AgentConfig> =
-        if let Some(project) = config.projects.get(project_id) {
-            project.agents.iter().map(|(k, v)| (k.clone(), v)).collect()
-        } else {
-            // Non-project (empty project_id) — use top-level agents
-            config.agents.iter().map(|(k, v)| (k.clone(), v)).collect()
-        };
+    let agents: std::collections::HashMap<String, &crate::config::AgentConfig> = config
+        .projects
+        .get(project_id)
+        .map(|project| project.agents.iter().map(|(k, v)| (k.clone(), v)).collect())
+        .unwrap_or_default();
     validate_workflow_config_with_agents(&agents, workflow, workflow_id)?;
     build_execution_plan_inner(workflow)
 }
@@ -162,10 +154,15 @@ pub fn enforce_deletion_guards(
     previous: &OrchestratorConfig,
     candidate: &OrchestratorConfig,
 ) -> Result<()> {
-    let removed_workspaces: Vec<String> = previous
-        .workspaces
-        .keys()
-        .filter(|id| !candidate.workspaces.contains_key(*id))
+    let previous_project = previous.default_project();
+    let candidate_project = candidate.default_project();
+    let removed_workspaces: Vec<String> = previous_project
+        .into_iter()
+        .flat_map(|project| project.workspaces.keys())
+        .filter(|id| {
+            candidate_project
+                .is_none_or(|project| !project.workspaces.contains_key(*id))
+        })
         .cloned()
         .collect();
     for workspace_id in removed_workspaces {
@@ -179,10 +176,13 @@ pub fn enforce_deletion_guards(
         }
     }
 
-    let removed_workflows: Vec<String> = previous
-        .workflows
-        .keys()
-        .filter(|id| !candidate.workflows.contains_key(*id))
+    let removed_workflows: Vec<String> = previous_project
+        .into_iter()
+        .flat_map(|project| project.workflows.keys())
+        .filter(|id| {
+            candidate_project
+                .is_none_or(|project| !project.workflows.contains_key(*id))
+        })
         .cloned()
         .collect();
     for workflow_id in removed_workflows {
@@ -195,13 +195,6 @@ pub fn enforce_deletion_guards(
             );
         }
     }
-
-    let _removed_agents: Vec<String> = previous
-        .agents
-        .keys()
-        .filter(|id| !candidate.agents.contains_key(*id))
-        .cloned()
-        .collect();
 
     Ok(())
 }
@@ -224,6 +217,9 @@ mod tests {
         let (_temp_dir, db_path) = make_test_db();
         let mut config = make_minimal_buildable_config();
         let workflow = config
+            .projects
+            .get_mut(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
             .workflows
             .get_mut("basic")
             .expect("missing basic workflow");
@@ -235,7 +231,7 @@ mod tests {
         persist_raw_config(&db_path, config.clone(), "test-seed").expect("seed config");
 
         let direct_error = build_active_config(&app_root, config)
-            .expect_err("legacy drift should fail direct active config construction");
+            .expect_err("invalid config should fail direct active config construction");
         assert!(direct_error
             .to_string()
             .contains("cannot define both builtin and required_capability"));
@@ -250,7 +246,11 @@ mod tests {
         )
         .expect("self-heal wrapper should recover");
 
-        assert_eq!(active.default_workflow_id, "basic");
+        assert!(active
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .map(|p| p.workflows.contains_key("basic"))
+            .unwrap_or(false));
         let report = report.expect("expected self-heal report");
         assert!(
             !report.changes.is_empty(),
@@ -264,6 +264,9 @@ mod tests {
         let (_temp_dir, db_path) = make_test_db();
         let mut config = make_minimal_buildable_config();
         let workflow = config
+            .projects
+            .get_mut(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
             .workflows
             .get_mut("basic")
             .expect("missing basic workflow");
@@ -303,6 +306,9 @@ mod tests {
         let (_temp_dir, db_path) = make_test_db();
         let mut config = make_minimal_buildable_config();
         let workflow = config
+            .projects
+            .get_mut(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
             .workflows
             .get_mut("basic")
             .expect("missing basic workflow");
@@ -341,7 +347,20 @@ mod tests {
         let app_root = detect_app_root();
         let (_temp_dir, db_path) = make_test_db();
         let mut config = make_minimal_buildable_config();
-        config.defaults.workspace = "missing".to_string();
+        config
+            .projects
+            .get_mut(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
+            .workspaces
+            .insert(
+            "duplicate".to_string(),
+            crate::config::WorkspaceConfig {
+                root_path: ".".to_string(),
+                qa_targets: vec!["fixtures/qa-probe-targets".to_string()],
+                ticket_dir: "fixtures/ticket".to_string(),
+                self_referential: false,
+            },
+        );
         persist_raw_config(&db_path, config.clone(), "test-seed").expect("seed config");
 
         let err = build_active_config_with_self_heal(&app_root, &db_path, config)
@@ -349,7 +368,7 @@ mod tests {
 
         assert!(
             err.to_string()
-                .contains("defaults.workspace 'missing' does not exist"),
+                .contains("share the same root path"),
             "expected original error to be preserved, got: {err}"
         );
         let conn = open_conn(&db_path).expect("open sqlite connection");
@@ -508,10 +527,12 @@ mod tests {
                 self_referential: false,
             },
         );
-        let previous = OrchestratorConfig {
-            workspaces: previous_workspaces,
-            ..OrchestratorConfig::default()
-        };
+        let mut previous = OrchestratorConfig::default();
+        previous
+            .projects
+            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+            .or_default()
+            .workspaces = previous_workspaces;
         let candidate = OrchestratorConfig::default();
         let result = enforce_deletion_guards(&conn, &previous, &candidate);
         assert!(
@@ -528,10 +549,12 @@ mod tests {
         let conn = crate::db::open_conn(&db_path).expect("open db");
         let mut previous_workflows = HashMap::new();
         previous_workflows.insert("wf-to-remove".to_string(), make_workflow(vec![]));
-        let previous = OrchestratorConfig {
-            workflows: previous_workflows,
-            ..OrchestratorConfig::default()
-        };
+        let mut previous = OrchestratorConfig::default();
+        previous
+            .projects
+            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+            .or_default()
+            .workflows = previous_workflows;
         let candidate = OrchestratorConfig::default();
         let result = enforce_deletion_guards(&conn, &previous, &candidate);
         assert!(result.is_ok(), "removing unused workflow should be allowed");

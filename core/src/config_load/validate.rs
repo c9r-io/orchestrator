@@ -12,6 +12,10 @@ pub fn validate_workflow_config(
     workflow: &WorkflowConfig,
     workflow_id: &str,
 ) -> Result<()> {
+    let project_agents = config
+        .default_project()
+        .map(|project| &project.agents)
+        .ok_or_else(|| anyhow::anyhow!("default project not found"))?;
     if workflow.steps.is_empty() {
         anyhow::bail!("workflow '{}' must define at least one step", workflow_id);
     }
@@ -51,7 +55,7 @@ pub fn validate_workflow_config(
             StepSemanticKind::Builtin { .. } | StepSemanticKind::Command | StepSemanticKind::Chain
         );
         if !is_self_contained {
-            let has_agent = config.agents.values().any(|a| a.supports_capability(key));
+            let has_agent = project_agents.values().any(|a| a.supports_capability(key));
             if !has_agent {
                 anyhow::bail!(
                     "no agent supports capability for step '{}' used by workflow '{}'",
@@ -89,8 +93,7 @@ pub fn validate_workflow_config(
     if workflow.loop_policy.guard.enabled
         && !matches!(workflow.loop_policy.mode, crate::config::LoopMode::Once)
     {
-        let has_loop_guard = config
-            .agents
+        let has_loop_guard = project_agents
             .values()
             .any(|a| a.supports_capability("loop_guard"));
         if !has_loop_guard {
@@ -100,7 +103,7 @@ pub fn validate_workflow_config(
             );
         }
     }
-    validate_adaptive_workflow_config(workflow, workflow_id, &config.agents)?;
+    validate_adaptive_workflow_config(workflow, workflow_id, project_agents)?;
     Ok(())
 }
 
@@ -428,25 +431,29 @@ pub fn validate_self_referential_safety(
 /// Validates that all agent env store references (fromRef, refValue.name) point to
 /// existing entries in config.env_stores.
 pub fn validate_agent_env_store_refs(config: &OrchestratorConfig) -> Result<()> {
-    for (agent_name, agent_cfg) in &config.agents {
-        if let Some(ref entries) = agent_cfg.env {
-            for entry in entries {
-                if let Some(ref store_name) = entry.from_ref {
-                    if !config.env_stores.contains_key(store_name.as_str()) {
-                        anyhow::bail!(
-                            "agent '{}' env fromRef '{}' references unknown store",
-                            agent_name,
-                            store_name
-                        );
+    for (project_id, project) in &config.projects {
+        for (agent_name, agent_cfg) in &project.agents {
+            if let Some(ref entries) = agent_cfg.env {
+                for entry in entries {
+                    if let Some(ref store_name) = entry.from_ref {
+                        if !project.env_stores.contains_key(store_name.as_str()) {
+                            anyhow::bail!(
+                                "agent '{}'(project '{}') env fromRef '{}' references unknown store",
+                                agent_name,
+                                project_id,
+                                store_name
+                            );
+                        }
                     }
-                }
-                if let Some(ref rv) = entry.ref_value {
-                    if !config.env_stores.contains_key(&rv.name) {
-                        anyhow::bail!(
-                            "agent '{}' env refValue.name '{}' references unknown store",
-                            agent_name,
-                            rv.name
-                        );
+                    if let Some(ref rv) = entry.ref_value {
+                        if !project.env_stores.contains_key(&rv.name) {
+                            anyhow::bail!(
+                                "agent '{}'(project '{}') env refValue.name '{}' references unknown store",
+                                agent_name,
+                                project_id,
+                                rv.name
+                            );
+                        }
                     }
                 }
             }
@@ -1579,14 +1586,18 @@ mod tests {
         use crate::config::{AgentConfig, EnvStoreConfig};
 
         let mut config = OrchestratorConfig::default();
-        config.env_stores.insert(
+        let project = config
+            .projects
+            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+            .or_default();
+        project.env_stores.insert(
             "shared".to_string(),
             EnvStoreConfig {
                 data: [("K".to_string(), "V".to_string())].into(),
                 sensitive: false,
             },
         );
-        config.agents.insert(
+        project.agents.insert(
             "agent1".to_string(),
             AgentConfig {
                 env: Some(vec![
@@ -1618,7 +1629,12 @@ mod tests {
         use crate::config::AgentConfig;
 
         let mut config = OrchestratorConfig::default();
-        config.agents.insert(
+        config
+            .projects
+            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+            .or_default()
+            .agents
+            .insert(
             "bad-agent".to_string(),
             AgentConfig {
                 env: Some(vec![AgentEnvEntry {
@@ -1641,7 +1657,12 @@ mod tests {
         use crate::config::AgentConfig;
 
         let mut config = OrchestratorConfig::default();
-        config.agents.insert(
+        config
+            .projects
+            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+            .or_default()
+            .agents
+            .insert(
             "bad-agent".to_string(),
             AgentConfig {
                 env: Some(vec![AgentEnvEntry {
@@ -1666,6 +1687,9 @@ mod tests {
 
         let mut config = OrchestratorConfig::default();
         config
+            .projects
+            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+            .or_default()
             .agents
             .insert("basic-agent".to_string(), AgentConfig::default());
         assert!(validate_agent_env_store_refs(&config).is_ok());

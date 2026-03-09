@@ -39,18 +39,19 @@ pub(super) async fn setup_phase_execution(
         if state.unsafe_mode {
             runner.policy = crate::config::RunnerPolicy::Unsafe;
         }
-        let agent_cfg = if !project_id.is_empty() {
-            active.config.projects.get(project_id).and_then(|p| p.agents.get(agent_id))
-        } else {
-            active.config.agents.get(agent_id)
-        };
+        let effective_project_id = active.config.effective_project_id(Some(project_id));
+        let project_cfg = active.config.projects.get(effective_project_id);
+        let agent_cfg = project_cfg.and_then(|p| p.agents.get(agent_id));
+        let empty_env_stores = HashMap::new();
+        let env_stores = project_cfg
+            .map(|p| &p.env_stores)
+            .unwrap_or(&empty_env_stores);
         let (extra_env, sensitive) = if let Some(agent_cfg) = agent_cfg {
             if let Some(ref env_entries) = agent_cfg.env {
-                let env =
-                    crate::env_resolve::resolve_agent_env(env_entries, &active.config.env_stores)?;
+                let env = crate::env_resolve::resolve_agent_env(env_entries, env_stores)?;
                 let sens = crate::env_resolve::collect_sensitive_values(
                     env_entries,
-                    &active.config.env_stores,
+                    env_stores,
                 );
                 (env, sens)
             } else {

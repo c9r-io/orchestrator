@@ -57,16 +57,13 @@ impl Resource for WorkflowResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
-        use crate::crd::projection::CrdProjectable;
         let mut incoming = workflow_spec_to_config(&self.spec)?;
         crate::config_load::normalize_workflow_config(&mut incoming);
-        let spec_value = incoming.to_cr_spec();
-        Ok(super::apply_to_store(
-            config,
-            "Workflow",
+        let project = config.ensure_project(self.metadata.project.as_deref());
+        Ok(super::helpers::apply_to_map(
+            &mut project.workflows,
             self.name(),
-            &self.metadata,
-            spec_value,
+            incoming,
         ))
     }
 
@@ -79,14 +76,17 @@ impl Resource for WorkflowResource {
     }
 
     fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
-        config.workflows.get(name).map(|workflow| Self {
+        config.default_project()?.workflows.get(name).map(|workflow| Self {
             metadata: super::metadata_from_store(config, "Workflow", name),
             spec: workflow_config_to_spec(workflow),
         })
     }
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
-        super::delete_from_store(config, "Workflow", name)
+        config
+            .project_mut(None)
+            .map(|project| project.workflows.remove(name).is_some())
+            .unwrap_or(false)
     }
 }
 

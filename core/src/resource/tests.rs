@@ -10,8 +10,8 @@ mod cases {
     use crate::test_utils::TestState;
 
     use super::super::test_fixtures::{
-        agent_manifest, defaults_manifest, make_config, project_manifest, runtime_policy_manifest,
-        workflow_manifest, workspace_manifest,
+        agent_manifest, make_config, project_manifest, runtime_policy_manifest, workflow_manifest,
+        workspace_manifest,
     };
 
     #[test]
@@ -48,15 +48,14 @@ mod cases {
     }
 
     #[test]
-    fn resource_registry_has_nine_entries() {
+    fn resource_registry_has_eight_entries() {
         let registry = resource_registry();
-        assert_eq!(registry.len(), 9);
+        assert_eq!(registry.len(), 8);
         let kinds: Vec<ResourceKind> = registry.iter().map(|r| r.kind).collect();
         assert!(kinds.contains(&ResourceKind::Workspace));
         assert!(kinds.contains(&ResourceKind::Agent));
         assert!(kinds.contains(&ResourceKind::Workflow));
         assert!(kinds.contains(&ResourceKind::Project));
-        assert!(kinds.contains(&ResourceKind::Defaults));
         assert!(kinds.contains(&ResourceKind::RuntimePolicy));
         assert!(kinds.contains(&ResourceKind::StepTemplate));
         assert!(kinds.contains(&ResourceKind::EnvStore));
@@ -106,7 +105,11 @@ mod cases {
         let result = resource.apply(&mut config).expect("apply");
 
         assert_eq!(result, ApplyResult::Created);
-        assert!(config.workspaces.contains_key("fresh-ws"));
+        assert!(config
+            .default_project()
+            .expect("default project")
+            .workspaces
+            .contains_key("fresh-ws"));
     }
 
     #[test]
@@ -175,10 +178,6 @@ mod cases {
         assert_eq!(pr.kind(), ResourceKind::Project);
         assert_eq!(pr.name(), "rr-pr");
 
-        let df = dispatch_resource(defaults_manifest("", "", "")).expect("dispatch defaults");
-        assert_eq!(df.kind(), ResourceKind::Defaults);
-        assert_eq!(df.name(), "defaults");
-
         let rp = dispatch_resource(runtime_policy_manifest()).expect("dispatch runtime policy");
         assert_eq!(rp.kind(), ResourceKind::RuntimePolicy);
         assert_eq!(rp.name(), "runtime");
@@ -201,10 +200,6 @@ mod cases {
         let pr =
             dispatch_resource(project_manifest("v-pr", "d")).expect("dispatch validation project");
         assert!(pr.validate().is_ok());
-
-        let df =
-            dispatch_resource(defaults_manifest("", "", "")).expect("dispatch validation defaults");
-        assert!(df.validate().is_ok());
 
         let rp = dispatch_resource(runtime_policy_manifest())
             .expect("dispatch validation runtime policy");
@@ -238,12 +233,6 @@ mod cases {
             .expect("serialize project yaml")
             .contains("Project"));
 
-        let df = dispatch_resource(defaults_manifest("", "", "")).expect("dispatch yaml defaults");
-        assert!(df
-            .to_yaml()
-            .expect("serialize defaults yaml")
-            .contains("Defaults"));
-
         let rp =
             dispatch_resource(runtime_policy_manifest()).expect("dispatch yaml runtime policy");
         assert!(rp
@@ -253,15 +242,8 @@ mod cases {
     }
 
     #[test]
-    fn registered_resource_get_from_finds_defaults_and_runtime() {
+    fn registered_resource_get_from_finds_runtime() {
         let config = make_config();
-        let defaults = RegisteredResource::get_from(&config, "defaults");
-        assert!(defaults.is_some());
-        assert_eq!(
-            defaults.expect("defaults resource should exist").kind(),
-            ResourceKind::Defaults
-        );
-
         let runtime = RegisteredResource::get_from(&config, "runtime");
         assert!(runtime.is_some());
         assert_eq!(
@@ -283,7 +265,11 @@ mod cases {
             .expect("dispatch delete ws");
         ws.apply(&mut config).expect("apply");
         assert!(RegisteredResource::delete_from(&mut config, "rd-ws"));
-        assert!(!config.workspaces.contains_key("rd-ws"));
+        assert!(!config
+            .default_project()
+            .expect("default project")
+            .workspaces
+            .contains_key("rd-ws"));
     }
 
     #[test]
@@ -292,7 +278,11 @@ mod cases {
         let ag = dispatch_resource(agent_manifest("rd-ag", "cmd")).expect("dispatch delete agent");
         ag.apply(&mut config).expect("apply");
         assert!(RegisteredResource::delete_from(&mut config, "rd-ag"));
-        assert!(!config.agents.contains_key("rd-ag"));
+        assert!(!config
+            .default_project()
+            .expect("default project")
+            .agents
+            .contains_key("rd-ag"));
     }
 
     #[test]
@@ -301,7 +291,11 @@ mod cases {
         let wf = dispatch_resource(workflow_manifest("rd-wf")).expect("dispatch delete workflow");
         wf.apply(&mut config).expect("apply");
         assert!(RegisteredResource::delete_from(&mut config, "rd-wf"));
-        assert!(!config.workflows.contains_key("rd-wf"));
+        assert!(!config
+            .default_project()
+            .expect("default project")
+            .workflows
+            .contains_key("rd-wf"));
     }
 
     #[test]
@@ -412,11 +406,15 @@ mod cases {
         let meta = metadata_with_name("ws-new");
         let result = apply_to_store(&mut config, "Workspace", "ws-new", &meta, ws.to_cr_spec());
         assert_eq!(result, ApplyResult::Created);
-        assert!(config.resource_store.get("Workspace", "ws-new").is_some());
-        assert!(
-            config.workspaces.contains_key("ws-new"),
-            "legacy field updated"
-        );
+        assert!(config
+            .resource_store
+            .get_namespaced("Workspace", crate::config::DEFAULT_PROJECT_ID, "ws-new")
+            .is_some());
+        assert!(config
+            .default_project()
+            .expect("default project")
+            .workspaces
+            .contains_key("ws-new"));
     }
 
     #[test]
@@ -456,18 +454,27 @@ mod cases {
         apply_to_store(&mut config, "Workspace", "ws-chg", &meta, ws1.to_cr_spec());
         let result = apply_to_store(&mut config, "Workspace", "ws-chg", &meta, ws2.to_cr_spec());
         assert_eq!(result, ApplyResult::Configured);
-        assert_eq!(config.workspaces.get("ws-chg").unwrap().root_path, "/v2");
+        assert_eq!(
+            config
+                .default_project()
+                .expect("default project")
+                .workspaces
+                .get("ws-chg")
+                .unwrap()
+                .root_path,
+            "/v2"
+        );
     }
 
     #[test]
-    fn apply_to_store_seeds_from_legacy_for_correct_change_detection() {
+    fn apply_to_store_seeds_from_config_snapshot_for_correct_change_detection() {
         use crate::crd::projection::CrdProjectable;
         let mut config = OrchestratorConfig::default();
-        // Pre-populate legacy field without going through store
-        config.workspaces.insert(
-            "legacy-ws".to_string(),
+        // Pre-populate the config snapshot without going through the resource store.
+        config.ensure_project(None).workspaces.insert(
+            "snapshot-ws".to_string(),
             crate::config::WorkspaceConfig {
-                root_path: "/legacy".to_string(),
+                root_path: "/snapshot".to_string(),
                 qa_targets: vec![],
                 ticket_dir: "t".to_string(),
                 self_referential: false,
@@ -475,28 +482,28 @@ mod cases {
         );
         assert!(config
             .resource_store
-            .get("Workspace", "legacy-ws")
+            .get("Workspace", "snapshot-ws")
             .is_none());
 
-        // Apply the identical resource — should return Unchanged because seed detects it
+        // Apply the identical resource — should return Unchanged because reconciliation detects it.
         let ws = crate::config::WorkspaceConfig {
-            root_path: "/legacy".to_string(),
+            root_path: "/snapshot".to_string(),
             qa_targets: vec![],
             ticket_dir: "t".to_string(),
             self_referential: false,
         };
-        let meta = metadata_with_name("legacy-ws");
+        let meta = metadata_with_name("snapshot-ws");
         let result = apply_to_store(
             &mut config,
             "Workspace",
-            "legacy-ws",
+            "snapshot-ws",
             &meta,
             ws.to_cr_spec(),
         );
         assert_eq!(
             result,
             ApplyResult::Unchanged,
-            "should seed from legacy and detect no change"
+            "should seed from the config snapshot and detect no change"
         );
     }
 
@@ -536,7 +543,7 @@ mod cases {
     // ── delete_from_store ───────────────────────────────────────────
 
     #[test]
-    fn delete_from_store_removes_from_both_store_and_legacy() {
+    fn delete_from_store_removes_from_store_and_config_snapshot() {
         use crate::crd::projection::CrdProjectable;
         let mut config = OrchestratorConfig::default();
         let ws = crate::config::WorkspaceConfig {
@@ -547,20 +554,28 @@ mod cases {
         };
         let meta = metadata_with_name("ws-del");
         apply_to_store(&mut config, "Workspace", "ws-del", &meta, ws.to_cr_spec());
-        assert!(config.workspaces.contains_key("ws-del"));
+        assert!(config
+            .default_project()
+            .expect("default project")
+            .workspaces
+            .contains_key("ws-del"));
 
         let removed = delete_from_store(&mut config, "Workspace", "ws-del");
         assert!(removed);
         assert!(config.resource_store.get("Workspace", "ws-del").is_none());
-        assert!(!config.workspaces.contains_key("ws-del"));
+        assert!(!config
+            .default_project()
+            .expect("default project")
+            .workspaces
+            .contains_key("ws-del"));
     }
 
     #[test]
-    fn delete_from_store_seeds_from_legacy_and_removes() {
+    fn delete_from_store_seeds_from_config_snapshot_and_removes() {
         let mut config = OrchestratorConfig::default();
-        // Only in legacy, not in store
-        config.workspaces.insert(
-            "legacy-del".to_string(),
+        // Only in the config snapshot, not in the resource store.
+        config.ensure_project(None).workspaces.insert(
+            "snapshot-del".to_string(),
             crate::config::WorkspaceConfig {
                 root_path: "/ld".to_string(),
                 qa_targets: vec![],
@@ -568,9 +583,13 @@ mod cases {
                 self_referential: false,
             },
         );
-        let removed = delete_from_store(&mut config, "Workspace", "legacy-del");
-        assert!(removed, "should seed from legacy then remove");
-        assert!(!config.workspaces.contains_key("legacy-del"));
+        let removed = delete_from_store(&mut config, "Workspace", "snapshot-del");
+        assert!(removed, "should seed from the config snapshot then remove");
+        assert!(!config
+            .default_project()
+            .expect("default project")
+            .workspaces
+            .contains_key("snapshot-del"));
     }
 
     #[test]
@@ -621,7 +640,7 @@ mod cases {
 #[cfg(test)]
 mod apply_to_project_tests {
     use super::super::test_fixtures::{
-        agent_manifest, make_config, workflow_manifest, workspace_manifest,
+        agent_manifest, make_config, runtime_policy_manifest, workflow_manifest, workspace_manifest,
     };
     use super::super::*;
 
@@ -635,8 +654,6 @@ mod apply_to_project_tests {
         assert_eq!(result, ApplyResult::Created);
         assert!(config.projects.contains_key("my-qa"));
         assert!(config.projects["my-qa"].agents.contains_key("proj-ag"));
-        // Should NOT be in global agents
-        assert!(!config.agents.contains_key("proj-ag"));
     }
 
     #[test]
@@ -648,8 +665,6 @@ mod apply_to_project_tests {
 
         assert_eq!(result, ApplyResult::Created);
         assert!(config.projects["my-qa"].workspaces.contains_key("proj-ws"));
-        // Should NOT be in global workspaces
-        assert!(!config.workspaces.contains_key("proj-ws"));
     }
 
     #[test]
@@ -660,8 +675,6 @@ mod apply_to_project_tests {
 
         assert_eq!(result, ApplyResult::Created);
         assert!(config.projects["my-qa"].workflows.contains_key("proj-wf"));
-        // Should NOT be in global workflows
-        assert!(!config.workflows.contains_key("proj-wf"));
     }
 
     #[test]
@@ -693,18 +706,12 @@ mod apply_to_project_tests {
     }
 
     #[test]
-    fn apply_to_project_singleton_defaults_goes_to_global() {
-        use super::super::test_fixtures::defaults_manifest;
+    fn apply_to_project_routes_runtime_policy_through_generic_path() {
         let mut config = make_config();
-        let resource =
-            dispatch_resource(defaults_manifest("p", "w", "f")).expect("dispatch defaults");
-        // Singletons fall through to global apply
-        let result = apply_to_project(&resource, &mut config, "proj-singleton").expect("apply");
-        assert!(matches!(
-            result,
-            ApplyResult::Created | ApplyResult::Configured | ApplyResult::Unchanged
-        ));
-        // Defaults were applied to global config (project field updated)
-        assert_eq!(config.defaults.project, "p");
+        let resource = dispatch_resource(runtime_policy_manifest()).expect("dispatch runtime");
+
+        let result = apply_to_project(&resource, &mut config, "ignored-project").expect("apply");
+
+        assert_eq!(result, ApplyResult::Configured);
     }
 }

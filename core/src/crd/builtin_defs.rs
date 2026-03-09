@@ -3,14 +3,13 @@ use crate::crd::types::{CrdHooks, CrdVersion, CustomResourceDefinition};
 
 const BUILTIN_GROUP: &str = "orchestrator.dev";
 
-/// Returns the 11 builtin CRD definitions for the orchestrator's core resource types.
+/// Returns the builtin CRD definitions for the orchestrator's core resource types.
 pub fn builtin_crd_definitions() -> Vec<CustomResourceDefinition> {
     vec![
         agent_crd(),
         workflow_crd(),
         workspace_crd(),
         project_crd(),
-        defaults_crd(),
         runtime_policy_crd(),
         step_template_crd(),
         env_store_crd(),
@@ -104,26 +103,6 @@ fn project_crd() -> CustomResourceDefinition {
         }))],
         hooks: CrdHooks::default(),
         scope: CrdScope::Cluster,
-        builtin: true,
-    }
-}
-
-fn defaults_crd() -> CustomResourceDefinition {
-    CustomResourceDefinition {
-        kind: "Defaults".to_string(),
-        plural: "defaults".to_string(),
-        short_names: vec![],
-        group: BUILTIN_GROUP.to_string(),
-        versions: vec![builtin_version(serde_json::json!({
-            "type": "object",
-            "properties": {
-                "project": { "type": "string" },
-                "workspace": { "type": "string" },
-                "workflow": { "type": "string" }
-            }
-        }))],
-        hooks: CrdHooks::default(),
-        scope: CrdScope::Singleton,
         builtin: true,
     }
 }
@@ -261,23 +240,23 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn returns_eleven_definitions() {
+    fn returns_ten_definitions() {
         let defs = builtin_crd_definitions();
-        assert_eq!(defs.len(), 11);
+        assert_eq!(defs.len(), 10);
     }
 
     #[test]
     fn all_kinds_unique() {
         let defs = builtin_crd_definitions();
         let kinds: HashSet<&str> = defs.iter().map(|d| d.kind.as_str()).collect();
-        assert_eq!(kinds.len(), 11);
+        assert_eq!(kinds.len(), 10);
     }
 
     #[test]
     fn all_plurals_unique() {
         let defs = builtin_crd_definitions();
         let plurals: HashSet<&str> = defs.iter().map(|d| d.plural.as_str()).collect();
-        assert_eq!(plurals.len(), 11);
+        assert_eq!(plurals.len(), 10);
     }
 
     #[test]
@@ -306,7 +285,6 @@ mod tests {
         assert_eq!(map["Workflow"], CrdScope::Namespaced);
         assert_eq!(map["Workspace"], CrdScope::Namespaced);
         assert_eq!(map["Project"], CrdScope::Cluster);
-        assert_eq!(map["Defaults"], CrdScope::Singleton);
         assert_eq!(map["RuntimePolicy"], CrdScope::Singleton);
         assert_eq!(map["StepTemplate"], CrdScope::Cluster);
         assert_eq!(map["EnvStore"], CrdScope::Cluster);

@@ -28,18 +28,15 @@ impl Resource for StepTemplateResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
-        use crate::crd::projection::CrdProjectable;
         let incoming = StepTemplateConfig {
             prompt: self.spec.prompt.clone(),
             description: self.spec.description.clone(),
         };
-        let spec_value = incoming.to_cr_spec();
-        Ok(super::apply_to_store(
-            config,
-            "StepTemplate",
+        let project = config.ensure_project(self.metadata.project.as_deref());
+        Ok(super::helpers::apply_to_map(
+            &mut project.step_templates,
             self.name(),
-            &self.metadata,
-            spec_value,
+            incoming,
         ))
     }
 
@@ -52,7 +49,7 @@ impl Resource for StepTemplateResource {
     }
 
     fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
-        config.step_templates.get(name).map(|tmpl| Self {
+        config.default_project()?.step_templates.get(name).map(|tmpl| Self {
             metadata: super::metadata_with_name(name),
             spec: StepTemplateSpec {
                 prompt: tmpl.prompt.clone(),
@@ -62,7 +59,10 @@ impl Resource for StepTemplateResource {
     }
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
-        super::delete_from_store(config, "StepTemplate", name)
+        config
+            .project_mut(None)
+            .map(|project| project.step_templates.remove(name).is_some())
+            .unwrap_or(false)
     }
 }
 

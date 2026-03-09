@@ -31,9 +31,9 @@ pub async fn stream_task_logs_impl(
     let redaction_patterns = {
         let active = read_loaded_config(state)?;
         let mut patterns = active.config.runner.redaction_patterns.clone();
-        patterns.extend(collect_all_sensitive_store_values(
-            &active.config.env_stores,
-        ));
+        if let Some(project) = active.config.projects.get(crate::config::DEFAULT_PROJECT_ID) {
+            patterns.extend(collect_all_sensitive_store_values(&project.env_stores));
+        }
         patterns
     };
 
@@ -101,9 +101,9 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
     let redaction_patterns = {
         let active = read_loaded_config(state)?;
         let mut patterns = active.config.runner.redaction_patterns.clone();
-        patterns.extend(collect_all_sensitive_store_values(
-            &active.config.env_stores,
-        ));
+        if let Some(project) = active.config.projects.get(crate::config::DEFAULT_PROJECT_ID) {
+            patterns.extend(collect_all_sensitive_store_values(&project.env_stores));
+        }
         patterns
     };
 
@@ -690,7 +690,12 @@ mod tests {
                 .active_config
                 .write()
                 .expect("active_config write lock");
-            active.config.env_stores.insert(
+            active
+                .config
+                .project_mut(None)
+                .expect("default project")
+                .env_stores
+                .insert(
                 "secrets".to_string(),
                 EnvStoreConfig {
                     data: [("API_KEY".to_string(), "super-secret-value".to_string())].into(),

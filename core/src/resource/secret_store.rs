@@ -25,19 +25,15 @@ impl Resource for SecretStoreResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
-        use crate::crd::projection::{CrdProjectable, SecretStoreProjection};
         let incoming = EnvStoreConfig {
             data: self.spec.data.clone(),
             sensitive: true,
         };
-        let proj = SecretStoreProjection(incoming);
-        let spec_value = proj.to_cr_spec();
-        Ok(super::apply_to_store(
-            config,
-            "SecretStore",
+        let project = config.ensure_project(self.metadata.project.as_deref());
+        Ok(super::helpers::apply_to_map(
+            &mut project.env_stores,
             self.name(),
-            &self.metadata,
-            spec_value,
+            incoming,
         ))
     }
 
@@ -50,7 +46,7 @@ impl Resource for SecretStoreResource {
     }
 
     fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
-        config.env_stores.get(name).and_then(|store| {
+        config.default_project()?.env_stores.get(name).and_then(|store| {
             if store.sensitive {
                 Some(Self {
                     metadata: super::metadata_with_name(name),
@@ -65,11 +61,13 @@ impl Resource for SecretStoreResource {
     }
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
-        // Only delete if it's a sensitive store
-        match config.resource_store.get("SecretStore", name) {
-            Some(_) => super::delete_from_store(config, "SecretStore", name),
-            None => false,
-        }
+        config
+            .project_mut(None)
+            .map(|project| {
+                matches!(project.env_stores.get(name), Some(store) if store.sensitive)
+                    && project.env_stores.remove(name).is_some()
+            })
+            .unwrap_or(false)
     }
 }
 
@@ -121,7 +119,7 @@ mod tests {
         assert_eq!(loaded.kind(), ResourceKind::SecretStore);
 
         // Underlying config should be marked sensitive
-        assert!(config.env_stores.get("my-secrets").unwrap().sensitive);
+        assert!(config.default_project().unwrap().env_stores.get("my-secrets").unwrap().sensitive);
     }
 
     #[test]
@@ -170,7 +168,7 @@ mod tests {
     #[test]
     fn secret_store_get_from_skips_non_sensitive() {
         let mut config = make_config();
-        config.env_stores.insert(
+        config.ensure_project(None).env_stores.insert(
             "plain-env".to_string(),
             EnvStoreConfig {
                 data: [("K".to_string(), "v".to_string())].into(),

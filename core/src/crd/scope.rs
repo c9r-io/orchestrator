@@ -9,7 +9,7 @@ pub enum CrdScope {
     /// Global multi-instance (Project, StepTemplate, EnvStore, SecretStore)
     #[default]
     Cluster,
-    /// Global singleton (Defaults, RuntimePolicy)
+    /// Singleton resources such as RuntimePolicy.
     Singleton,
 }
 

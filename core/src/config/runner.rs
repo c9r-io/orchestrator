@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RunnerPolicy {
-    #[serde(alias = "legacy")]
     Unsafe,
     #[default]
     Allowlist,
@@ -145,14 +144,6 @@ mod tests {
     }
 
     #[test]
-    fn test_legacy_alias_deserializes_to_unsafe() {
-        let json = r#"{"shell":"/bin/bash","policy":"legacy"}"#;
-        let cfg: RunnerConfig =
-            serde_json::from_str(json).expect("deserialize legacy alias runner");
-        assert_eq!(cfg.policy, RunnerPolicy::Unsafe);
-    }
-
-    #[test]
     fn test_unsafe_serializes_as_unsafe() {
         let cfg = RunnerConfig {
             policy: RunnerPolicy::Unsafe,
@@ -160,6 +151,5 @@ mod tests {
         };
         let json = serde_json::to_string(&cfg).expect("serialize unsafe runner");
         assert!(json.contains(r#""policy":"unsafe""#));
-        assert!(!json.contains(r#""policy":"legacy""#));
     }
 }

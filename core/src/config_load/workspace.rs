@@ -26,22 +26,12 @@ pub fn resolve_and_validate_workspaces(
     app_root: &Path,
     config: &OrchestratorConfig,
 ) -> Result<HashMap<String, ResolvedWorkspace>> {
-    let has_project_workspaces = config.projects.values().any(|p| !p.workspaces.is_empty());
-    let has_project_agents = config.projects.values().any(|p| !p.agents.is_empty());
-
-    if config.workspaces.is_empty() && !has_project_workspaces {
-        anyhow::bail!("[EMPTY_WORKSPACES] config.workspaces cannot be empty\n  category: validation\n  suggested_fix: add at least one workspace with root_path and qa_targets");
-    }
-    if config.agents.is_empty() && !has_project_agents {
-        anyhow::bail!("[EMPTY_AGENTS] config.agents cannot be empty\n  category: validation\n  suggested_fix: add at least one agent with capabilities and templates");
-    }
-    let has_project_workflows = config.projects.values().any(|p| !p.workflows.is_empty());
-    if config.workflows.is_empty() && !has_project_workflows {
-        anyhow::bail!("[EMPTY_WORKFLOWS] config.workflows cannot be empty\n  category: validation\n  suggested_fix: add at least one workflow with steps");
-    }
-
     let mut resolved = HashMap::new();
-    for (id, entry) in &config.workspaces {
+    let default_project = config
+        .projects
+        .get(crate::config::DEFAULT_PROJECT_ID)
+        .ok_or_else(|| anyhow::anyhow!("default project '{}' does not exist", crate::config::DEFAULT_PROJECT_ID))?;
+    for (id, entry) in &default_project.workspaces {
         if id.trim().is_empty() {
             anyhow::bail!("[INVALID_WORKSPACE] workspace id cannot be empty\n  category: validation\n  suggested_fix: provide a non-empty workspace name");
         }
@@ -90,44 +80,13 @@ pub fn resolve_and_validate_workspaces(
         );
     }
 
-    // When all resources live inside projects (no global workspaces/workflows),
-    // empty defaults are acceptable — task create supplies --project explicitly.
-    let all_project_scoped = config.workspaces.is_empty()
-        && config.workflows.is_empty()
-        && has_project_workspaces
-        && has_project_workflows;
-
-    let default_ws = &config.defaults.workspace;
-    if !default_ws.is_empty() || !all_project_scoped {
-        let default_in_projects = config
-            .projects
-            .values()
-            .any(|p| p.workspaces.contains_key(default_ws));
-        if !resolved.contains_key(default_ws) && !default_in_projects {
-            anyhow::bail!("defaults.workspace '{}' does not exist", default_ws);
-        }
-    }
-    let default_wf = &config.defaults.workflow;
-    if !default_wf.is_empty() || !all_project_scoped {
-        let default_wf_in_projects = config
-            .projects
-            .values()
-            .any(|p| p.workflows.contains_key(default_wf));
-        if !config.workflows.contains_key(default_wf) && !default_wf_in_projects {
-            anyhow::bail!(
-                "defaults.workflow '{}' does not exist",
-                default_wf
-            );
-        }
-    }
-
-    // Validate top-level workflows against top-level agents only (project-scoped agents
-    // are validated separately within their respective projects).
-    let top_level_agents: HashMap<String, &crate::config::AgentConfig> =
-        config.agents.iter().map(|(k, v)| (k.clone(), v)).collect();
-
-    for (workflow_id, workflow) in &config.workflows {
-        validate_workflow_config_with_agents(&top_level_agents, workflow, workflow_id)?;
+    let default_agents: HashMap<String, &crate::config::AgentConfig> = default_project
+        .agents
+        .iter()
+        .map(|(k, v)| (k.clone(), v))
+        .collect();
+    for (workflow_id, workflow) in &default_project.workflows {
+        validate_workflow_config_with_agents(&default_agents, workflow, workflow_id)?;
     }
 
     Ok(resolved)
@@ -157,6 +116,8 @@ pub fn resolve_and_validate_projects(
                 workspaces,
                 agents: project_config.agents.clone(),
                 workflows: project_config.workflows.clone(),
+                step_templates: project_config.step_templates.clone(),
+                env_stores: project_config.env_stores.clone(),
             },
         );
     }
@@ -233,19 +194,29 @@ mod tests {
 
     #[test]
     fn resolve_and_validate_rejects_empty_agents() {
-        use crate::config::WorkspaceConfig;
-        let mut workspaces = HashMap::new();
-        workspaces.insert(
-            "ws1".to_string(),
-            WorkspaceConfig {
-                root_path: "/tmp".to_string(),
-                qa_targets: vec!["docs".to_string()],
-                ticket_dir: "tickets".to_string(),
-                self_referential: false,
-            },
-        );
+        use crate::config::{ProjectConfig, WorkspaceConfig};
         let config = OrchestratorConfig {
-            workspaces,
+            projects: [(
+                crate::config::DEFAULT_PROJECT_ID.to_string(),
+                ProjectConfig {
+                    description: None,
+                    workspaces: [(
+                        "ws1".to_string(),
+                        WorkspaceConfig {
+                            root_path: "/tmp".to_string(),
+                            qa_targets: vec!["docs".to_string()],
+                            ticket_dir: "tickets".to_string(),
+                            self_referential: false,
+                        },
+                    )]
+                    .into(),
+                    agents: HashMap::new(),
+                    workflows: HashMap::new(),
+                    step_templates: HashMap::new(),
+                    env_stores: HashMap::new(),
+                },
+            )]
+            .into(),
             ..OrchestratorConfig::default()
         };
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
@@ -258,22 +229,29 @@ mod tests {
 
     #[test]
     fn resolve_and_validate_rejects_empty_workflows() {
-        use crate::config::{AgentConfig, WorkspaceConfig};
-        let mut workspaces = HashMap::new();
-        workspaces.insert(
-            "ws1".to_string(),
-            WorkspaceConfig {
-                root_path: "/tmp".to_string(),
-                qa_targets: vec!["docs".to_string()],
-                ticket_dir: "tickets".to_string(),
-                self_referential: false,
-            },
-        );
-        let mut agents = HashMap::new();
-        agents.insert("agent1".to_string(), AgentConfig::default());
+        use crate::config::{AgentConfig, ProjectConfig, WorkspaceConfig};
         let config = OrchestratorConfig {
-            workspaces,
-            agents,
+            projects: [(
+                crate::config::DEFAULT_PROJECT_ID.to_string(),
+                ProjectConfig {
+                    description: None,
+                    workspaces: [(
+                        "ws1".to_string(),
+                        WorkspaceConfig {
+                            root_path: "/tmp".to_string(),
+                            qa_targets: vec!["docs".to_string()],
+                            ticket_dir: "tickets".to_string(),
+                            self_referential: false,
+                        },
+                    )]
+                    .into(),
+                    agents: [("agent1".to_string(), AgentConfig::default())].into(),
+                    workflows: HashMap::new(),
+                    step_templates: HashMap::new(),
+                    env_stores: HashMap::new(),
+                },
+            )]
+            .into(),
             ..OrchestratorConfig::default()
         };
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
@@ -286,33 +264,33 @@ mod tests {
 
     #[test]
     fn resolve_and_validate_rejects_empty_workspace_id() {
-        use crate::config::{AgentConfig, WorkspaceConfig};
-        let mut workspaces = HashMap::new();
-        workspaces.insert(
-            "".to_string(),
-            WorkspaceConfig {
-                root_path: "/tmp".to_string(),
-                qa_targets: vec!["docs".to_string()],
-                ticket_dir: "tickets".to_string(),
-                self_referential: false,
-            },
-        );
-        let mut agents = HashMap::new();
-        agents.insert("agent1".to_string(), AgentConfig::default());
-        let mut workflows = HashMap::new();
-        workflows.insert(
-            "wf1".to_string(),
-            make_workflow(vec![make_builtin_step("self_test", "self_test", true)]),
-        );
+        use crate::config::{AgentConfig, ProjectConfig, WorkspaceConfig};
         let config = OrchestratorConfig {
-            workspaces,
-            agents,
-            workflows,
-            defaults: crate::config::ConfigDefaults {
-                project: "default".to_string(),
-                workspace: "".to_string(),
-                workflow: "wf1".to_string(),
-            },
+            projects: [(
+                crate::config::DEFAULT_PROJECT_ID.to_string(),
+                ProjectConfig {
+                    description: None,
+                    workspaces: [(
+                        "".to_string(),
+                        WorkspaceConfig {
+                            root_path: "/tmp".to_string(),
+                            qa_targets: vec!["docs".to_string()],
+                            ticket_dir: "tickets".to_string(),
+                            self_referential: false,
+                        },
+                    )]
+                    .into(),
+                    agents: [("agent1".to_string(), AgentConfig::default())].into(),
+                    workflows: [(
+                        "wf1".to_string(),
+                        make_workflow(vec![make_builtin_step("self_test", "self_test", true)]),
+                    )]
+                    .into(),
+                    step_templates: Default::default(),
+                    env_stores: Default::default(),
+                },
+            )]
+            .into(),
             ..OrchestratorConfig::default()
         };
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
@@ -325,33 +303,33 @@ mod tests {
 
     #[test]
     fn resolve_and_validate_rejects_empty_qa_targets() {
-        use crate::config::{AgentConfig, WorkspaceConfig};
-        let mut workspaces = HashMap::new();
-        workspaces.insert(
-            "ws1".to_string(),
-            WorkspaceConfig {
-                root_path: "/tmp".to_string(),
-                qa_targets: vec![],
-                ticket_dir: "tickets".to_string(),
-                self_referential: false,
-            },
-        );
-        let mut agents = HashMap::new();
-        agents.insert("agent1".to_string(), AgentConfig::default());
-        let mut workflows = HashMap::new();
-        workflows.insert(
-            "wf1".to_string(),
-            make_workflow(vec![make_builtin_step("self_test", "self_test", true)]),
-        );
+        use crate::config::{AgentConfig, ProjectConfig, WorkspaceConfig};
         let config = OrchestratorConfig {
-            workspaces,
-            agents,
-            workflows,
-            defaults: crate::config::ConfigDefaults {
-                project: "default".to_string(),
-                workspace: "ws1".to_string(),
-                workflow: "wf1".to_string(),
-            },
+            projects: [(
+                crate::config::DEFAULT_PROJECT_ID.to_string(),
+                ProjectConfig {
+                    description: None,
+                    workspaces: [(
+                        "ws1".to_string(),
+                        WorkspaceConfig {
+                            root_path: "/tmp".to_string(),
+                            qa_targets: vec![],
+                            ticket_dir: "tickets".to_string(),
+                            self_referential: false,
+                        },
+                    )]
+                    .into(),
+                    agents: [("agent1".to_string(), AgentConfig::default())].into(),
+                    workflows: [(
+                        "wf1".to_string(),
+                        make_workflow(vec![make_builtin_step("self_test", "self_test", true)]),
+                    )]
+                    .into(),
+                    step_templates: Default::default(),
+                    env_stores: Default::default(),
+                },
+            )]
+            .into(),
             ..OrchestratorConfig::default()
         };
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
@@ -363,8 +341,8 @@ mod tests {
     }
 
     #[test]
-    fn resolve_and_validate_rejects_missing_default_workflow() {
-        use crate::config::{AgentConfig, WorkspaceConfig};
+    fn resolve_and_validate_rejects_missing_default_project_workflow() {
+        use crate::config::{AgentConfig, ProjectConfig, WorkspaceConfig};
         let ws_root = std::env::temp_dir().join(format!("test-ws-root-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&ws_root).expect("create workspace root");
         let qa_dir = ws_root.join("docs");
@@ -372,32 +350,28 @@ mod tests {
         let ticket_dir = ws_root.join("tickets");
         std::fs::create_dir_all(&ticket_dir).expect("create ticket dir");
 
-        let mut workspaces = HashMap::new();
-        workspaces.insert(
-            "ws1".to_string(),
-            WorkspaceConfig {
-                root_path: ws_root.to_string_lossy().to_string(),
-                qa_targets: vec!["docs".to_string()],
-                ticket_dir: "tickets".to_string(),
-                self_referential: false,
-            },
-        );
-        let mut agents = HashMap::new();
-        agents.insert("agent1".to_string(), AgentConfig::default());
-        let mut workflows = HashMap::new();
-        workflows.insert(
-            "wf1".to_string(),
-            make_workflow(vec![make_builtin_step("self_test", "self_test", true)]),
-        );
         let config = OrchestratorConfig {
-            workspaces,
-            agents,
-            workflows,
-            defaults: crate::config::ConfigDefaults {
-                project: "default".to_string(),
-                workspace: "ws1".to_string(),
-                workflow: "nonexistent_wf".to_string(),
-            },
+            projects: [(
+                crate::config::DEFAULT_PROJECT_ID.to_string(),
+                ProjectConfig {
+                    description: None,
+                    workspaces: [(
+                        "ws1".to_string(),
+                        WorkspaceConfig {
+                            root_path: ws_root.to_string_lossy().to_string(),
+                            qa_targets: vec!["docs".to_string()],
+                            ticket_dir: "tickets".to_string(),
+                            self_referential: false,
+                        },
+                    )]
+                    .into(),
+                    agents: [("agent1".to_string(), AgentConfig::default())].into(),
+                    workflows: Default::default(),
+                    step_templates: Default::default(),
+                    env_stores: Default::default(),
+                },
+            )]
+            .into(),
             ..OrchestratorConfig::default()
         };
         let result = resolve_and_validate_workspaces(Path::new("/"), &config);
@@ -405,7 +379,7 @@ mod tests {
         assert!(result
             .expect_err("operation should fail")
             .to_string()
-            .contains("defaults.workflow"));
+            .contains("at least one workflow"));
         std::fs::remove_dir_all(&ws_root).ok();
     }
 
@@ -440,6 +414,8 @@ mod tests {
                 workspaces: ws,
                 agents: HashMap::new(),
                 workflows: HashMap::new(),
+                step_templates: HashMap::new(),
+                env_stores: HashMap::new(),
             },
         );
         let config = OrchestratorConfig {

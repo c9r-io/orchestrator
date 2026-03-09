@@ -188,18 +188,39 @@ mod tests {
             .active_config
             .read()
             .expect("read active config")
-            .default_workflow_id
-            .clone();
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .and_then(|p| p.workflows.keys().next())
+            .cloned()
+            .unwrap_or_default();
         let mut guard = write_active_config(&state).expect("lock active config");
-        guard.default_workflow_id = format!("{}-updated", original);
+        let workflow_clone = guard
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .and_then(|p| p.workflows.get(&original))
+            .cloned()
+            .expect("default workflow should exist");
+        guard.projects
+            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+            .or_insert_with(|| crate::config::ResolvedProject {
+                workspaces: HashMap::new(),
+                agents: HashMap::new(),
+                workflows: HashMap::new(),
+                step_templates: HashMap::new(),
+                env_stores: HashMap::new(),
+            })
+            .workflows
+            .insert(format!("{}-updated", original), workflow_clone);
         drop(guard);
 
-        let updated = state
+        let updated_exists = state
             .active_config
             .read()
             .expect("re-read active config")
-            .default_workflow_id
-            .clone();
-        assert_eq!(updated, format!("{}-updated", original));
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .map(|p| p.workflows.contains_key(&format!("{}-updated", original)))
+            .unwrap_or(false);
+        assert!(updated_exists);
     }
 }

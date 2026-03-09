@@ -1,9 +1,9 @@
 use crate::collab::MessageBus;
 use crate::config::{
-    AgentConfig, AgentMetadata, AgentSelectionConfig, ConfigDefaults, LoopMode, OrchestratorConfig,
-    PromptDelivery, ResourceMetadataStore, ResumeConfig, RunnerConfig, SafetyConfig, StepBehavior,
-    WorkflowConfig, WorkflowFinalizeConfig, WorkflowLoopConfig, WorkflowLoopGuardConfig,
-    WorkflowStepConfig, WorkspaceConfig,
+    AgentConfig, AgentMetadata, AgentSelectionConfig, LoopMode, OrchestratorConfig, ProjectConfig,
+    PromptDelivery, ResourceMetadataStore, ResumeConfig, RunnerConfig, SafetyConfig,
+    StepBehavior, WorkflowConfig, WorkflowFinalizeConfig, WorkflowLoopConfig,
+    WorkflowLoopGuardConfig, WorkflowStepConfig, WorkspaceConfig,
 };
 use crate::config_load::{
     build_active_config, load_raw_config_from_db, persist_raw_config, read_active_config,
@@ -20,10 +20,10 @@ use uuid::Uuid;
 
 use crate::config::ResolvedWorkspace;
 
-fn backfill_legacy_data(
+fn backfill_default_scope_data(
     _db_path: &Path,
-    _default_workspace_id: &str,
-    _default_workflow_id: &str,
+    _workspace_id: &str,
+    _workflow_id: &str,
     _workspace: &ResolvedWorkspace,
 ) -> anyhow::Result<()> {
     Ok(())
@@ -38,97 +38,101 @@ fn create_minimal_test_config() -> OrchestratorConfig {
         },
         resume: ResumeConfig { auto: false },
         observability: crate::config::ObservabilityConfig::default(),
-        defaults: ConfigDefaults {
-            project: String::new(),
-            workspace: "default".to_string(),
-            workflow: "basic".to_string(),
-        },
-        projects: HashMap::new(),
-        workspaces: {
-            let mut ws = HashMap::new();
-            ws.insert(
-                "default".to_string(),
-                WorkspaceConfig {
-                    root_path: "workspace/default".to_string(),
-                    qa_targets: vec!["docs/qa".to_string()],
-                    ticket_dir: "docs/ticket".to_string(),
-                    self_referential: false,
-                },
-            );
-            ws
-        },
-        agents: {
-            let mut agents = HashMap::new();
-            agents.insert(
-                "echo".to_string(),
-                AgentConfig {
-                    metadata: AgentMetadata {
-                        name: "echo".to_string(),
-                        description: Some("Echo agent for testing".to_string()),
-                        version: None,
-                        cost: Some(1),
+        projects: {
+            let mut projects = HashMap::new();
+            projects.insert(
+                crate::config::DEFAULT_PROJECT_ID.to_string(),
+                ProjectConfig {
+                    description: Some("Built-in default project".to_string()),
+                    workspaces: {
+                        let mut ws = HashMap::new();
+                        ws.insert(
+                            "default".to_string(),
+                            WorkspaceConfig {
+                                root_path: "workspace/default".to_string(),
+                                qa_targets: vec!["docs/qa".to_string()],
+                                ticket_dir: "docs/ticket".to_string(),
+                                self_referential: false,
+                            },
+                        );
+                        ws
                     },
-                    capabilities: vec!["qa".to_string()],
-                    command: "echo 'qa: {rel_path}'".to_string(),
-                    selection: AgentSelectionConfig::default(),
-                    env: None,
-                    prompt_delivery: PromptDelivery::default(),
-                },
-            );
-            agents
-        },
-        workflows: {
-            let mut workflows = HashMap::new();
-            workflows.insert(
-                "basic".to_string(),
-                WorkflowConfig {
-                    steps: vec![WorkflowStepConfig {
-                        id: "qa".to_string(),
-                        description: None,
-                        builtin: None,
-                        required_capability: None,
-                        enabled: true,
-                        repeatable: false,
-                        is_guard: false,
-                        cost_preference: None,
-                        prehook: None,
-                        tty: false,
-                        template: None,
-                        outputs: Vec::new(),
-                        pipe_to: None,
-                        command: None,
-                        chain_steps: vec![],
-                        scope: None,
-                        behavior: StepBehavior::default(),
-                        max_parallel: None,
-                        timeout_secs: None,
-                        item_select_config: None,
-                        store_inputs: vec![],
-                        store_outputs: vec![],
-                    }],
-                    loop_policy: WorkflowLoopConfig {
-                        mode: LoopMode::Once,
-                        guard: WorkflowLoopGuardConfig {
-                            enabled: false,
-                            stop_when_no_unresolved: false,
-                            max_cycles: None,
-                            agent_template: None,
-                        },
+                    agents: {
+                        let mut agents = HashMap::new();
+                        agents.insert(
+                            "echo".to_string(),
+                            AgentConfig {
+                                metadata: AgentMetadata {
+                                    name: "echo".to_string(),
+                                    description: Some("Echo agent for testing".to_string()),
+                                    version: None,
+                                    cost: Some(1),
+                                },
+                                capabilities: vec!["qa".to_string()],
+                                command: "echo 'qa: {rel_path}'".to_string(),
+                                selection: AgentSelectionConfig::default(),
+                                env: None,
+                                prompt_delivery: PromptDelivery::default(),
+                            },
+                        );
+                        agents
                     },
-                    finalize: WorkflowFinalizeConfig { rules: vec![] },
-                    qa: None,
-                    fix: None,
-                    retest: None,
-                    dynamic_steps: vec![],
-                    adaptive: None,
-                    safety: SafetyConfig::default(),
-                    max_parallel: None,
+                    workflows: {
+                        let mut workflows = HashMap::new();
+                        workflows.insert(
+                            "basic".to_string(),
+                            WorkflowConfig {
+                                steps: vec![WorkflowStepConfig {
+                                    id: "qa".to_string(),
+                                    description: None,
+                                    builtin: None,
+                                    required_capability: None,
+                                    enabled: true,
+                                    repeatable: false,
+                                    is_guard: false,
+                                    cost_preference: None,
+                                    prehook: None,
+                                    tty: false,
+                                    template: None,
+                                    outputs: Vec::new(),
+                                    pipe_to: None,
+                                    command: None,
+                                    chain_steps: vec![],
+                                    scope: None,
+                                    behavior: StepBehavior::default(),
+                                    max_parallel: None,
+                                    timeout_secs: None,
+                                    item_select_config: None,
+                                    store_inputs: vec![],
+                                    store_outputs: vec![],
+                                }],
+                                loop_policy: WorkflowLoopConfig {
+                                    mode: LoopMode::Once,
+                                    guard: WorkflowLoopGuardConfig {
+                                        enabled: false,
+                                        stop_when_no_unresolved: false,
+                                        max_cycles: None,
+                                        agent_template: None,
+                                    },
+                                },
+                                finalize: WorkflowFinalizeConfig { rules: vec![] },
+                                qa: None,
+                                fix: None,
+                                retest: None,
+                                dynamic_steps: vec![],
+                                adaptive: None,
+                                safety: SafetyConfig::default(),
+                                max_parallel: None,
+                            },
+                        );
+                        workflows
+                    },
+                    step_templates: HashMap::new(),
+                    env_stores: HashMap::new(),
                 },
             );
-            workflows
+            projects
         },
-        step_templates: HashMap::new(),
-        env_stores: HashMap::new(),
         resource_meta: ResourceMetadataStore::default(),
         custom_resource_definitions: HashMap::new(),
         custom_resources: HashMap::new(),
@@ -169,7 +173,12 @@ impl TestState {
         path: impl Into<String>,
     ) -> Self {
         let workspace_id = name.into();
-        self.config.workspaces.insert(
+        self.config
+            .projects
+            .get_mut(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
+            .workspaces
+            .insert(
             workspace_id.clone(),
             WorkspaceConfig {
                 root_path: path.into(),
@@ -178,20 +187,18 @@ impl TestState {
                 self_referential: false,
             },
         );
-        if !self
-            .config
-            .workspaces
-            .contains_key(&self.config.defaults.workspace)
-        {
-            self.config.defaults.workspace = workspace_id;
-        }
         self
     }
 
     #[allow(dead_code)] // test builder helper
     pub(crate) fn with_agent(mut self, name: impl Into<String>, config: AgentConfig) -> Self {
         let agent_id = name.into();
-        self.config.agents.insert(agent_id, config);
+        self.config
+            .projects
+            .get_mut(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
+            .agents
+            .insert(agent_id, config);
         self
     }
 
@@ -201,21 +208,24 @@ impl TestState {
         name: impl Into<String>,
         config: crate::config::StepTemplateConfig,
     ) -> Self {
-        self.config.step_templates.insert(name.into(), config);
+        self.config
+            .projects
+            .get_mut(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
+            .step_templates
+            .insert(name.into(), config);
         self
     }
 
     #[allow(dead_code)] // test builder helper
     pub(crate) fn with_workflow(mut self, name: impl Into<String>, config: WorkflowConfig) -> Self {
         let workflow_id = name.into();
-        self.config.workflows.insert(workflow_id.clone(), config);
-        if !self
-            .config
+        self.config
+            .projects
+            .get_mut(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project")
             .workflows
-            .contains_key(&self.config.defaults.workflow)
-        {
-            self.config.defaults.workflow = workflow_id;
-        }
+            .insert(workflow_id.clone(), config);
         self
     }
 
@@ -242,14 +252,15 @@ impl TestState {
             build_active_config(&self.temp_root, config).expect("failed to build active config");
 
         let default_workspace = active
-            .workspaces
-            .get(&active.default_workspace_id)
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .and_then(|p| p.workspaces.get("default"))
             .expect("default workspace missing in test config");
 
-        backfill_legacy_data(
+        backfill_default_scope_data(
             &db_path,
-            &active.default_workspace_id,
-            &active.default_workflow_id,
+            "default",
+            "basic",
             default_workspace,
         )
         .expect("failed to backfill test data");
@@ -307,7 +318,12 @@ impl TestState {
     }
 
     fn ensure_workspace_dirs(&self) {
-        for workspace in self.config.workspaces.values() {
+        let project = self
+            .config
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project");
+        for workspace in project.workspaces.values() {
             let root_path = self.temp_root.join(&workspace.root_path);
             let root_result = std::fs::create_dir_all(&root_path);
             assert!(

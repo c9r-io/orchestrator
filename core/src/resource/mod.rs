@@ -7,7 +7,6 @@ pub(crate) const API_VERSION: &str = "orchestrator.dev/v2";
 // ── Submodules ────────────────────────────────────────────────────────────────
 
 pub(crate) mod agent;
-mod defaults;
 mod env_store;
 mod export;
 mod parse;
@@ -28,7 +27,6 @@ mod tests;
 // ── Re-exports (resource types from existing submodules) ──────────────────────
 
 pub use agent::AgentResource;
-pub use defaults::DefaultsResource;
 pub use env_store::EnvStoreResource;
 pub use export::{export_crd_documents, export_manifest_documents, export_manifest_resources};
 pub use parse::{

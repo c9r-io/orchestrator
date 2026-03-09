@@ -1,7 +1,6 @@
 use crate::config::{TaskExecutionPlan, TaskRuntimeContext};
 use crate::config_load::{
-    build_execution_plan, build_execution_plan_for_project, read_active_config,
-    resolve_workspace_path,
+    build_execution_plan_for_project, read_active_config, resolve_workspace_path,
 };
 use crate::events::insert_event;
 use crate::state::{task_semaphore, InnerState};
@@ -190,39 +189,29 @@ pub async fn load_task_runtime_context(
     let project_id = runtime_row.project_id;
 
     let active = read_active_config(state)?;
-    // Strict project isolation: project-scoped tasks use only project resources
-    let workflow = if !project_id.is_empty() {
-        active
-            .config
-            .projects
-            .get(&project_id)
-            .and_then(|p| p.workflows.get(&workflow_id))
-            .with_context(|| {
-                format!(
-                    "workflow not found: {} in project '{}' for task {}",
-                    workflow_id, project_id, task_id
-                )
-            })?
-    } else {
-        active
-            .config
-            .workflows
-            .get(&workflow_id)
-            .with_context(|| format!("workflow not found for task {}: {}", task_id, workflow_id))?
-    };
+    let effective_project_id = active.config.effective_project_id(Some(project_id.as_str()));
+    let workflow = active
+        .config
+        .projects
+        .get(effective_project_id)
+        .and_then(|p| p.workflows.get(&workflow_id))
+        .with_context(|| {
+            format!(
+                "workflow not found: {} in project '{}' for task {}",
+                workflow_id, effective_project_id, task_id
+            )
+        })?;
 
     let mut execution_plan = serde_json::from_str::<TaskExecutionPlan>(&execution_plan_json)
         .ok()
         .filter(|plan| !plan.steps.is_empty())
         .unwrap_or_else(|| {
-            build_execution_plan_for_project(&active.config, workflow, &workflow_id, &project_id)
-                .or_else(|e| {
-                    if project_id.is_empty() {
-                        build_execution_plan(&active.config, workflow, &workflow_id)
-                    } else {
-                        Err(e) // No fallback for project-scoped tasks
-                    }
-                })
+            build_execution_plan_for_project(
+                &active.config,
+                workflow,
+                &workflow_id,
+                effective_project_id,
+            )
                 .unwrap_or(TaskExecutionPlan {
                     steps: Vec::new(),
                     loop_policy: crate::config::WorkflowLoopConfig::default(),
@@ -261,22 +250,13 @@ pub async fn load_task_runtime_context(
     let dynamic_steps = workflow.dynamic_steps.clone();
     let adaptive = workflow.adaptive.clone();
     let safety = workflow.safety.clone();
-    let self_referential = if !project_id.is_empty() {
-        active
-            .config
-            .projects
-            .get(&project_id)
-            .and_then(|p| p.workspaces.get(&workspace_id))
-            .map(|ws| ws.self_referential)
-            .unwrap_or(false)
-    } else {
-        active
-            .config
-            .workspaces
-            .get(&workspace_id)
-            .map(|ws| ws.self_referential)
-            .unwrap_or(false)
-    };
+    let self_referential = active
+        .config
+        .projects
+        .get(effective_project_id)
+        .and_then(|p| p.workspaces.get(&workspace_id))
+        .map(|ws| ws.self_referential)
+        .unwrap_or(false);
 
     if !state.unsafe_mode
         && (self_referential
@@ -324,7 +304,7 @@ pub async fn load_task_runtime_context(
         safety,
         self_referential,
         consecutive_failures: 0,
-        project_id,
+        project_id: effective_project_id.to_string(),
         workflow_id,
         spawn_depth: runtime_row.spawn_depth,
     })
@@ -334,7 +314,7 @@ pub async fn load_task_runtime_context(
 mod tests {
     use super::*;
     use crate::config::WorkflowSafetyProfile;
-    use crate::config_load::{build_execution_plan, read_active_config};
+    use crate::config_load::read_active_config;
     use crate::db::open_conn;
     use crate::dto::CreateTaskPayload;
     use crate::task_ops::create_task_impl;
@@ -359,19 +339,32 @@ mod tests {
         (state, created.id)
     }
 
+    fn default_workflow<'a>(
+        active: &'a crate::config::ActiveConfig,
+    ) -> (&'a str, &'a crate::config::WorkflowConfig) {
+        let project = active
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project");
+        if let Some(workflow) = project.workflows.get("basic") {
+            return ("basic", workflow);
+        }
+        let workflow_id = project.workflows.keys().min().expect("default workflow");
+        (
+            workflow_id.as_str(),
+            project.workflows.get(workflow_id).expect("workflow by id"),
+        )
+    }
+
     #[tokio::test]
     async fn load_task_runtime_context_normalizes_fields() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
         let plan_json = {
             let active = read_active_config(&state).expect("read active config");
-            let workflow = active
-                .config
-                .workflows
-                .get(&active.default_workflow_id)
-                .expect("default workflow");
+            let (workflow_id, workflow) = default_workflow(&active);
             let mut plan =
-                build_execution_plan(&active.config, workflow, &active.default_workflow_id)
+                build_execution_plan_for_project(&active.config, workflow, workflow_id, crate::config::DEFAULT_PROJECT_ID)
                     .expect("build execution plan");
             plan.finalize.rules.clear();
             serde_json::to_string(&plan).expect("serialize plan")
@@ -420,9 +413,11 @@ mod tests {
 
         {
             let mut active = state.active_config.write().expect("lock active config");
-            let workflow_id = active.default_workflow_id.clone();
+            let workflow_id = "basic".to_string();
             active
-                .config
+                .projects
+                .get_mut(crate::config::DEFAULT_PROJECT_ID)
+                .expect("default project")
                 .workflows
                 .get_mut(&workflow_id)
                 .expect("default workflow")
@@ -541,13 +536,9 @@ mod tests {
         let (state, task_id) = seed_task(&mut fixture);
         let plan_json = {
             let active = read_active_config(&state).expect("read active config");
-            let workflow = active
-                .config
-                .workflows
-                .get(&active.default_workflow_id)
-                .expect("default workflow");
+            let (workflow_id, workflow) = default_workflow(&active);
             let mut plan =
-                build_execution_plan(&active.config, workflow, &active.default_workflow_id)
+                build_execution_plan_for_project(&active.config, workflow, workflow_id, crate::config::DEFAULT_PROJECT_ID)
                     .expect("build execution plan");
 
             let stale_step = plan.steps.first_mut().expect("plan has step");
@@ -637,9 +628,11 @@ mod tests {
                 .active_config
                 .write()
                 .expect("lock active config");
-            let workflow_id = active.default_workflow_id.clone();
+            let workflow_id = "basic".to_string();
             active
-                .config
+                .projects
+                .get_mut(crate::config::DEFAULT_PROJECT_ID)
+                .expect("default project")
                 .workflows
                 .get_mut(&workflow_id)
                 .expect("default workflow")

@@ -20,13 +20,11 @@ pub trait CrdProjectable: Sized + Serialize + DeserializeOwned {
 // ── Implementations for the 9 builtin config types ───────────────────────────
 
 use crate::cli_types::{
-    AgentSpec, DefaultsSpec, EnvStoreSpec, ProjectSpec, RuntimePolicySpec, StepTemplateSpec,
-    WorkspaceSpec,
+    AgentSpec, EnvStoreSpec, ProjectSpec, RuntimePolicySpec, StepTemplateSpec, WorkspaceSpec,
 };
 use crate::config::{
-    AgentConfig, ConfigDefaults, EnvStoreConfig, ProjectConfig, ResumeConfig, RunnerConfig,
-    StepTemplateConfig, StoreBackendProviderConfig, WorkflowConfig, WorkflowStoreConfig,
-    WorkspaceConfig,
+    AgentConfig, EnvStoreConfig, ProjectConfig, ResumeConfig, RunnerConfig, StepTemplateConfig,
+    StoreBackendProviderConfig, WorkflowConfig, WorkflowStoreConfig, WorkspaceConfig,
 };
 use crate::resource::agent::{agent_config_to_spec, agent_spec_to_config};
 use crate::resource::runtime_policy::{runner_config_to_spec, runner_spec_to_config};
@@ -93,36 +91,14 @@ impl CrdProjectable for ProjectConfig {
             workspaces: Default::default(),
             agents: Default::default(),
             workflows: Default::default(),
+            step_templates: Default::default(),
+            env_stores: Default::default(),
         })
     }
 
     fn to_cr_spec(&self) -> serde_json::Value {
         let spec = ProjectSpec {
             description: self.description.clone(),
-        };
-        serde_json::to_value(&spec).unwrap_or_default()
-    }
-}
-
-impl CrdProjectable for ConfigDefaults {
-    fn crd_kind() -> &'static str {
-        "Defaults"
-    }
-
-    fn from_cr_spec(spec: &serde_json::Value) -> Result<Self> {
-        let def_spec: DefaultsSpec = serde_json::from_value(spec.clone())?;
-        Ok(ConfigDefaults {
-            project: def_spec.project,
-            workspace: def_spec.workspace,
-            workflow: def_spec.workflow,
-        })
-    }
-
-    fn to_cr_spec(&self) -> serde_json::Value {
-        let spec = DefaultsSpec {
-            project: self.project.clone(),
-            workspace: self.workspace.clone(),
-            workflow: self.workflow.clone(),
         };
         serde_json::to_value(&spec).unwrap_or_default()
     }
@@ -289,18 +265,6 @@ mod tests {
     }
 
     #[test]
-    fn defaults_config_round_trip() {
-        let config = ConfigDefaults {
-            project: "proj".to_string(),
-            workspace: "ws".to_string(),
-            workflow: "wf".to_string(),
-        };
-        let spec = config.to_cr_spec();
-        let back = ConfigDefaults::from_cr_spec(&spec).expect("should deserialize");
-        assert_eq!(back.project, "proj");
-    }
-
-    #[test]
     fn step_template_config_round_trip() {
         let config = StepTemplateConfig {
             prompt: "Do qa".to_string(),
@@ -355,6 +319,8 @@ mod tests {
             workspaces: Default::default(),
             agents: Default::default(),
             workflows: Default::default(),
+            step_templates: Default::default(),
+            env_stores: Default::default(),
         };
         let spec = config.to_cr_spec();
         let back = ProjectConfig::from_cr_spec(&spec).expect("should deserialize");
@@ -499,7 +465,6 @@ mod tests {
             WorkflowConfig::crd_kind(),
             WorkspaceConfig::crd_kind(),
             ProjectConfig::crd_kind(),
-            ConfigDefaults::crd_kind(),
             RuntimePolicyProjection::crd_kind(),
             StepTemplateConfig::crd_kind(),
             EnvStoreConfig::crd_kind(),
@@ -511,7 +476,7 @@ mod tests {
         for kind in &kinds {
             assert!(set.insert(*kind), "duplicate kind: {}", kind);
         }
-        assert_eq!(set.len(), 11);
+        assert_eq!(set.len(), 10);
     }
 
     #[test]

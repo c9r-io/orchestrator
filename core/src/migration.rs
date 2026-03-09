@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use rusqlite::Connection;
 
+const HISTORICAL_AGENT_PLACEHOLDER: &str = "legacy";
+
 pub struct Migration {
     pub version: u32,
     pub name: &'static str,
@@ -69,7 +71,7 @@ pub fn all_migrations() -> Vec<Migration> {
         Migration {
             version: 2,
             name: "m0002_backfill_legacy_defaults",
-            up: m0002_backfill_legacy_defaults,
+            up: m0002_backfill_historical_defaults,
         },
         Migration {
             version: 3,
@@ -100,6 +102,11 @@ pub fn all_migrations() -> Vec<Migration> {
             version: 8,
             name: "m0008_workflow_primitives",
             up: m0008_workflow_primitives,
+        },
+        Migration {
+            version: 9,
+            name: "m0009_normalize_unspecified_agent_ids",
+            up: m0009_normalize_unspecified_agent_ids,
         },
     ]
 }
@@ -417,12 +424,12 @@ fn m0001_baseline_schema(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-// ── Migration 2: One-Time Legacy Backfills ──
+// ── Migration 2: One-Time Historical Backfills ──
 
-fn m0002_backfill_legacy_defaults(conn: &Connection) -> Result<()> {
-    // Config-independent backfill: hardcoded value
+fn m0002_backfill_historical_defaults(conn: &Connection) -> Result<()> {
+    // Config-independent backfill: assign a neutral placeholder for old empty agent IDs.
     conn.execute(
-        "UPDATE command_runs SET agent_id = 'legacy' WHERE agent_id = ''",
+        "UPDATE command_runs SET agent_id = 'unspecified' WHERE agent_id = ''",
         [],
     )
     .context("m0002: failed to backfill agent_id")?;
@@ -630,6 +637,16 @@ fn m0008_workflow_primitives(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+fn m0009_normalize_unspecified_agent_ids(conn: &Connection) -> Result<()> {
+    conn.execute(
+        "UPDATE command_runs SET agent_id = 'unspecified' WHERE agent_id = ?1 OR agent_id = ''",
+        rusqlite::params![HISTORICAL_AGENT_PLACEHOLDER],
+    )
+    .context("m0009: failed to normalize command_runs.agent_id placeholders")?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -646,8 +663,8 @@ mod tests {
         let conn = mem_conn();
         let migrations = all_migrations();
         let applied = run_pending(&conn, &migrations).expect("run_pending");
-        assert_eq!(applied, 8);
-        assert_eq!(current_version(&conn).expect("version"), 8);
+        assert_eq!(applied, 9);
+        assert_eq!(current_version(&conn).expect("version"), 9);
     }
 
     #[test]
@@ -657,7 +674,7 @@ mod tests {
         run_pending(&conn, &migrations).expect("first run");
         let applied = run_pending(&conn, &migrations).expect("second run");
         assert_eq!(applied, 0);
-        assert_eq!(current_version(&conn).expect("version"), 8);
+        assert_eq!(current_version(&conn).expect("version"), 9);
     }
 
     #[test]
@@ -682,10 +699,10 @@ mod tests {
         assert_eq!(applied, 2);
         assert_eq!(current_version(&conn).expect("version"), 2);
 
-        // Apply all 8 — should only run 3, 4, 5, 6, 7, and 8
+        // Apply all 9 — should only run 3, 4, 5, 6, 7, 8, and 9
         let applied = run_pending(&conn, &all).expect("full run");
-        assert_eq!(applied, 6);
-        assert_eq!(current_version(&conn).expect("version"), 8);
+        assert_eq!(applied, 7);
+        assert_eq!(current_version(&conn).expect("version"), 9);
     }
 
     #[test]
@@ -816,6 +833,7 @@ mod tests {
         let conn = mem_conn();
         // Run migrations 1-3 first
         let mut migs = all_migrations();
+        let _m9 = migs.pop().expect("pop m9");
         let _m8 = migs.pop().expect("pop m8");
         let _m7 = migs.pop().expect("pop m7");
         let _m6 = migs.pop().expect("pop m6");
@@ -875,5 +893,68 @@ mod tests {
             )
             .expect("query step_spawned");
         assert_eq!(step_from_phase.as_deref(), Some("implement"));
+    }
+
+    #[test]
+    fn normalize_unspecified_agent_ids_rewrites_historical_placeholder() {
+        let conn = mem_conn();
+        let migrations = all_migrations();
+        run_pending(&conn, &migrations).expect("run all");
+
+        conn.execute(
+            "INSERT INTO tasks (
+                id, name, status, goal, target_files_json, mode, workspace_id, workflow_id,
+                project_id, workspace_root, qa_targets_json, ticket_dir, created_at, updated_at
+             ) VALUES (
+                'task-1', 'test', 'running', 'goal', '[]', 'once', 'default', 'basic',
+                'default', '.', '[]', 'docs/ticket', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
+             )",
+            [],
+        )
+        .expect("insert task");
+        conn.execute(
+            "INSERT INTO task_items (
+                id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json,
+                created_at, updated_at
+             ) VALUES (
+                'item-1', 'task-1', 0, 'qa.md', 'pending', '[]', '{}',
+                '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
+             )",
+            [],
+        )
+        .expect("insert task item");
+        conn.execute(
+            "INSERT INTO command_runs (
+                id, task_item_id, phase, command, cwd, workspace_id, agent_id, project_id,
+                stdout_path, stderr_path, started_at
+             ) VALUES (
+                'run-1', 'item-1', 'qa', 'echo ok', '.', 'default', ?1, 'default',
+                '/tmp/stdout', '/tmp/stderr', '2026-01-01T00:00:00Z'
+             )",
+            rusqlite::params![HISTORICAL_AGENT_PLACEHOLDER],
+        )
+        .expect("insert command run with historical placeholder");
+
+        let normalize = vec![Migration {
+            version: 9,
+            name: "m0009_normalize_unspecified_agent_ids",
+            up: m0009_normalize_unspecified_agent_ids,
+        }];
+
+        conn.execute(
+            "DELETE FROM schema_migrations WHERE version = 9",
+            [],
+        )
+        .expect("clear migration 9 record");
+        run_pending(&conn, &normalize).expect("rerun m0009");
+
+        let agent_id: String = conn
+            .query_row(
+                "SELECT agent_id FROM command_runs WHERE id = 'run-1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query normalized agent_id");
+        assert_eq!(agent_id, "unspecified");
     }
 }

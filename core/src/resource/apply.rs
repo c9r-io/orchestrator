@@ -5,9 +5,8 @@ use super::helpers::apply_to_map;
 use super::registry::RegisteredResource;
 use super::{agent, workflow, workspace, ApplyResult, Resource};
 
-/// Apply a resource into a project scope instead of global config.
-/// Agent, Workflow, and Workspace resources are routed to `config.projects[project].<kind>`.
-/// Other resource types fall back to global apply.
+/// Apply a resource into a specific project scope.
+/// Builtin resources are routed to `config.projects[project].<kind>`.
 pub fn apply_to_project(
     resource: &RegisteredResource,
     config: &mut OrchestratorConfig,
@@ -23,6 +22,8 @@ pub fn apply_to_project(
             workspaces: Default::default(),
             agents: Default::default(),
             workflows: Default::default(),
+            step_templates: Default::default(),
+            env_stores: Default::default(),
         });
 
     match resource {
@@ -50,7 +51,39 @@ pub fn apply_to_project(
                 incoming,
             ))
         }
-        // Singletons and other types always go to global config
+        RegisteredResource::StepTemplate(template) => {
+            let incoming = crate::config::StepTemplateConfig {
+                prompt: template.spec.prompt.clone(),
+                description: template.spec.description.clone(),
+            };
+            Ok(apply_to_map(
+                &mut project_entry.step_templates,
+                template.name(),
+                incoming,
+            ))
+        }
+        RegisteredResource::EnvStore(store) => {
+            let incoming = crate::config::EnvStoreConfig {
+                data: store.spec.data.clone(),
+                sensitive: false,
+            };
+            Ok(apply_to_map(
+                &mut project_entry.env_stores,
+                store.name(),
+                incoming,
+            ))
+        }
+        RegisteredResource::SecretStore(store) => {
+            let incoming = crate::config::EnvStoreConfig {
+                data: store.spec.data.clone(),
+                sensitive: true,
+            };
+            Ok(apply_to_map(
+                &mut project_entry.env_stores,
+                store.name(),
+                incoming,
+            ))
+        }
         _ => resource.apply(config),
     }
 }

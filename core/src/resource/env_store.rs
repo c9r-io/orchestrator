@@ -25,18 +25,15 @@ impl Resource for EnvStoreResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
-        use crate::crd::projection::CrdProjectable;
         let incoming = EnvStoreConfig {
             data: self.spec.data.clone(),
             sensitive: false,
         };
-        let spec_value = incoming.to_cr_spec();
-        Ok(super::apply_to_store(
-            config,
-            "EnvStore",
+        let project = config.ensure_project(self.metadata.project.as_deref());
+        Ok(super::helpers::apply_to_map(
+            &mut project.env_stores,
             self.name(),
-            &self.metadata,
-            spec_value,
+            incoming,
         ))
     }
 
@@ -49,7 +46,7 @@ impl Resource for EnvStoreResource {
     }
 
     fn get_from(config: &OrchestratorConfig, name: &str) -> Option<Self> {
-        config.env_stores.get(name).and_then(|store| {
+        config.default_project()?.env_stores.get(name).and_then(|store| {
             if store.sensitive {
                 None // SecretStore, not EnvStore
             } else {
@@ -64,11 +61,13 @@ impl Resource for EnvStoreResource {
     }
 
     fn delete_from(config: &mut OrchestratorConfig, name: &str) -> bool {
-        // Only delete if it's a non-sensitive store
-        match config.resource_store.get("EnvStore", name) {
-            Some(_) => super::delete_from_store(config, "EnvStore", name),
-            None => false,
-        }
+        config
+            .project_mut(None)
+            .map(|project| {
+                matches!(project.env_stores.get(name), Some(store) if !store.sensitive)
+                    && project.env_stores.remove(name).is_some()
+            })
+            .unwrap_or(false)
     }
 }
 
@@ -166,7 +165,7 @@ mod tests {
     #[test]
     fn env_store_get_from_skips_sensitive() {
         let mut config = make_config();
-        config.env_stores.insert(
+        config.ensure_project(None).env_stores.insert(
             "secret-one".to_string(),
             EnvStoreConfig {
                 data: [("S".to_string(), "v".to_string())].into(),

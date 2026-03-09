@@ -78,9 +78,6 @@ pub fn run_db_reset(
                 config: Default::default(),
                 workspaces: Default::default(),
                 projects: Default::default(),
-                default_project_id: String::new(),
-                default_workspace_id: String::new(),
-                default_workflow_id: String::new(),
             };
         }
         if let Ok(mut error) = state.active_config_error.write() {
@@ -102,10 +99,8 @@ pub fn run_db_reset(
 
 /// Validate manifest YAML content. Returns (valid, errors, message).
 ///
-/// When `project_id` is `Some`, manifest resources (Agent, Workflow, Workspace)
-/// are applied into the project scope instead of global config, matching the
-/// behavior of `orchestrator apply --project`. This prevents false negatives
-/// when validating project-only deployments that have no global defaults.
+/// Validation is always project-scoped. Omitting `project_id` targets the
+/// built-in `default` project.
 pub fn validate_manifests(
     state: &InnerState,
     content: &str,
@@ -123,6 +118,7 @@ pub fn validate_manifests(
         .map(|(cfg, _, _)| cfg)
         .unwrap_or_default();
 
+    let effective_project_id = project_id.unwrap_or(crate::config::DEFAULT_PROJECT_ID);
     let mut errors = Vec::new();
     for (index, manifest) in manifests.into_iter().enumerate() {
         match manifest {
@@ -147,13 +143,11 @@ pub fn validate_manifests(
                     ));
                     continue;
                 }
-                // Apply into project scope when project_id is provided,
-                // mirroring `orchestrator apply --project` behavior.
-                if let Some(pid) = project_id {
-                    let _ = crate::resource::apply_to_project(&registered, &mut merged_config, pid);
-                } else {
-                    let _ = registered.apply(&mut merged_config);
-                }
+                let _ = crate::resource::apply_to_project(
+                    &registered,
+                    &mut merged_config,
+                    effective_project_id,
+                );
             }
             ParsedManifest::Crd(crd_manifest) => {
                 if let Err(error) = crd::apply_crd(&mut merged_config, crd_manifest) {

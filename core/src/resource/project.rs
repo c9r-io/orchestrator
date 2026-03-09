@@ -30,6 +30,8 @@ impl Resource for ProjectResource {
             workspaces: std::collections::HashMap::new(),
             agents: std::collections::HashMap::new(),
             workflows: std::collections::HashMap::new(),
+            step_templates: std::collections::HashMap::new(),
+            env_stores: std::collections::HashMap::new(),
         };
         let spec_value = incoming.to_cr_spec();
         Ok(super::apply_to_store(
@@ -174,7 +176,6 @@ mod tests {
 
     #[test]
     fn build_project_rejects_wrong_kind() {
-        use crate::cli_types::DefaultsSpec;
         let resource = OrchestratorResource {
             api_version: API_VERSION.to_string(),
             kind: ResourceKind::Project,
@@ -184,10 +185,18 @@ mod tests {
                 labels: None,
                 annotations: None,
             },
-            spec: ResourceSpec::Defaults(DefaultsSpec {
-                project: String::new(),
-                workspace: String::new(),
-                workflow: String::new(),
+            spec: ResourceSpec::RuntimePolicy(crate::cli_types::RuntimePolicySpec {
+                runner: crate::cli_types::RunnerSpec {
+                    shell: "/bin/bash".to_string(),
+                    shell_arg: "-lc".to_string(),
+                    policy: "allowlist".to_string(),
+                    executor: "shell".to_string(),
+                    allowed_shells: vec![],
+                    allowed_shell_args: vec![],
+                    env_allowlist: vec![],
+                    redaction_patterns: vec![],
+                },
+                resume: crate::cli_types::ResumeSpec { auto: false },
             }),
         };
         let err = dispatch_resource(resource).expect_err("operation should fail");

@@ -1,12 +1,11 @@
 use crate::config_load::{load_raw_config_from_db, persist_config_and_reload, read_active_config};
 use crate::crd::{self, ParsedManifest};
 use crate::resource::{
-    apply_to_project, delete_resource_by_kind, dispatch_resource, kind_as_str,
-    parse_manifests_from_yaml, ApplyResult, Resource,
+    apply_to_project, dispatch_resource, kind_as_str, parse_manifests_from_yaml, ApplyResult,
+    Resource,
 };
 use crate::state::InnerState;
 use anyhow::{Context, Result};
-use std::collections::BTreeSet;
 
 /// Apply manifest content. Returns an ApplyResponse proto.
 pub fn apply_manifests(
@@ -26,6 +25,9 @@ pub fn apply_manifests(
     let mut results = Vec::new();
     let mut errors = Vec::new();
 
+    let cli_project = project
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(crate::config::DEFAULT_PROJECT_ID);
     for (index, manifest) in manifests.into_iter().enumerate() {
         match manifest {
             ParsedManifest::Builtin(resource) => {
@@ -49,12 +51,19 @@ pub fn apply_manifests(
                     ));
                     continue;
                 }
-                let effective_project = project.or_else(|| registered.metadata_project());
-                let result = if let Some(proj) = effective_project {
-                    apply_to_project(&registered, &mut merged_config, proj)?
-                } else {
-                    registered.apply(&mut merged_config)?
-                };
+                if let Some(meta_project) = registered.metadata_project() {
+                    if meta_project != cli_project {
+                        errors.push(format!(
+                            "{} / {} project mismatch: --project={} but metadata.project={}",
+                            kind_as_str(registered.kind()),
+                            registered.name(),
+                            cli_project,
+                            meta_project
+                        ));
+                        continue;
+                    }
+                }
+                let result = apply_to_project(&registered, &mut merged_config, cli_project)?;
                 let action = match result {
                     ApplyResult::Created => "created",
                     ApplyResult::Configured => "updated",
@@ -64,7 +73,7 @@ pub fn apply_manifests(
                     kind: kind_as_str(registered.kind()).to_string(),
                     name: registered.name().to_string(),
                     action: action.to_string(),
-                    project_scope: effective_project.map(|s| s.to_string()),
+                    project_scope: Some(cli_project.to_string()),
                 });
             }
             ParsedManifest::Crd(crd_manifest) => {
@@ -153,24 +162,11 @@ pub fn get_resource(
 ) -> Result<String> {
     let active = read_active_config(state)?;
     let config = &active.config;
-    // Resolve effective config: project-scoped or global.
-    // All resources are project-scoped — no fallback to global config.
-    let effective_config;
-    let cfg = if let Some(proj) = project {
-        let proj_cfg = config
-            .projects
-            .get(proj)
-            .context(format!("project not found: {}", proj))?;
-        effective_config = crate::config::OrchestratorConfig {
-            workspaces: proj_cfg.workspaces.clone(),
-            agents: proj_cfg.agents.clone(),
-            workflows: proj_cfg.workflows.clone(),
-            ..config.clone()
-        };
-        &effective_config
-    } else {
-        config
-    };
+    let project_id = project.unwrap_or(crate::config::DEFAULT_PROJECT_ID);
+    let proj_cfg = config
+        .projects
+        .get(project_id)
+        .context(format!("project not found: {}", project_id))?;
 
     if resource.contains('/') {
         if selector.is_some() {
@@ -178,35 +174,35 @@ pub fn get_resource(
         }
         let parts: Vec<&str> = resource.splitn(2, '/').collect();
         let (kind, name) = (parts[0], parts[1]);
-        get_single_resource(cfg, kind, name, output_format)
+        get_single_resource(proj_cfg, kind, name, output_format)
     } else {
-        get_list_resource(cfg, resource, selector, output_format, &config.resource_store)
+        get_list_resource(proj_cfg, resource, selector, output_format, &config.resource_store)
     }
 }
 
 fn get_single_resource(
-    config: &crate::config::OrchestratorConfig,
+    project: &crate::config::ProjectConfig,
     kind: &str,
     name: &str,
     output_format: &str,
 ) -> Result<String> {
     match kind {
         "ws" | "workspace" => {
-            let ws = config
+            let ws = project
                 .workspaces
                 .get(name)
                 .context(format!("workspace not found: {}", name))?;
             format_output(ws, output_format)
         }
         "wf" | "workflow" => {
-            let wf = config
+            let wf = project
                 .workflows
                 .get(name)
                 .context(format!("workflow not found: {}", name))?;
             format_output(wf, output_format)
         }
         "agent" => {
-            let agent = config
+            let agent = project
                 .agents
                 .get(name)
                 .context(format!("agent not found: {}", name))?;
@@ -217,16 +213,16 @@ fn get_single_resource(
 }
 
 fn get_list_resource(
-    config: &crate::config::OrchestratorConfig,
+    project: &crate::config::ProjectConfig,
     resource_type: &str,
     selector: Option<&str>,
     output_format: &str,
     resource_store: &crate::crd::store::ResourceStore,
 ) -> Result<String> {
     let (names, crd_kind): (Vec<&String>, &str) = match resource_type {
-        "ws" | "workspace" | "workspaces" => (config.workspaces.keys().collect(), "Workspace"),
-        "agent" | "agents" => (config.agents.keys().collect(), "Agent"),
-        "wf" | "workflow" | "workflows" => (config.workflows.keys().collect(), "Workflow"),
+        "ws" | "workspace" | "workspaces" => (project.workspaces.keys().collect(), "Workspace"),
+        "agent" | "agents" => (project.agents.keys().collect(), "Agent"),
+        "wf" | "workflow" | "workflows" => (project.workflows.keys().collect(), "Workflow"),
         _ => anyhow::bail!("unknown list resource type: {}", resource_type),
     };
 
@@ -310,33 +306,14 @@ pub fn delete_resource(
         active.config.clone()
     };
 
-    if let Some(proj) = project {
-        let proj_cfg = config
-            .projects
-            .get_mut(proj)
-            .context(format!("project not found: {}", proj))?;
-        let deleted = delete_resource_from_project(proj_cfg, kind, name)?;
-        if !deleted {
-            anyhow::bail!("{}/{} not found in project '{}'", kind, name, proj);
-        }
-    } else {
-        if (kind == "ws" || kind == "workspace") && config.defaults.workspace == name {
-            anyhow::bail!(
-                "cannot delete workspace '{}': it is the current default workspace",
-                name
-            );
-        }
-        if (kind == "wf" || kind == "workflow") && config.defaults.workflow == name {
-            anyhow::bail!(
-                "cannot delete workflow '{}': it is the current default workflow",
-                name
-            );
-        }
-
-        let deleted = delete_resource_by_kind(&mut config, kind, name)?;
-        if !deleted {
-            anyhow::bail!("{}/{} not found", kind, name);
-        }
+    let project_id = project.unwrap_or(crate::config::DEFAULT_PROJECT_ID);
+    let proj_cfg = config
+        .projects
+        .get_mut(project_id)
+        .context(format!("project not found: {}", project_id))?;
+    let deleted = delete_resource_from_project(proj_cfg, kind, name)?;
+    if !deleted {
+        anyhow::bail!("{}/{} not found in project '{}'", kind, name, project_id);
     }
 
     let yaml =
@@ -354,6 +331,11 @@ fn delete_resource_from_project(
         "ws" | "workspace" => Ok(proj.workspaces.remove(name).is_some()),
         "agent" => Ok(proj.agents.remove(name).is_some()),
         "wf" | "workflow" => Ok(proj.workflows.remove(name).is_some()),
+        "steptemplate" | "step-template" | "step_template" => {
+            Ok(proj.step_templates.remove(name).is_some())
+        }
+        "envstore" | "env-store" | "env_store" | "secretstore" | "secret-store"
+        | "secret_store" => Ok(proj.env_stores.remove(name).is_some()),
         _ => anyhow::bail!("unknown resource type for project delete: {}", kind),
     }
 }
@@ -401,51 +383,15 @@ fn format_output<T: serde::Serialize>(value: &T, format: &str) -> Result<String>
 }
 
 fn autofill_defaults_for_manifest_mode(config: &mut crate::config::OrchestratorConfig) {
-    // When all resources live inside projects (no global workspaces/workflows),
-    // skip autofilling global defaults — they are irrelevant and would fail
-    // validation since there are no global resources to reference.
-    let has_project_workspaces = config.projects.values().any(|p| !p.workspaces.is_empty());
-    let has_project_workflows = config.projects.values().any(|p| !p.workflows.is_empty());
-    let all_project_scoped = config.workspaces.is_empty()
-        && config.workflows.is_empty()
-        && has_project_workspaces
-        && has_project_workflows;
-
-    if config.defaults.project.trim().is_empty() {
-        // If there is exactly one project, use it as default
-        if config.projects.len() == 1 {
-            if let Some(pid) = config.projects.keys().next() {
-                config.defaults.project = pid.clone();
-            }
-        } else {
-            config.defaults.project = "default".to_string();
-        }
-    }
-
-    if all_project_scoped {
-        // Leave workspace/workflow defaults empty — task create resolves
-        // them from the project scope via --project.
-        return;
-    }
-
-    if config.defaults.workspace.trim().is_empty() {
-        if config.workspaces.contains_key("default") {
-            config.defaults.workspace = "default".to_string();
-        } else {
-            let workspaces: BTreeSet<_> = config.workspaces.keys().cloned().collect();
-            if let Some(first) = workspaces.into_iter().next() {
-                config.defaults.workspace = first;
-            }
-        }
-    }
-    if config.defaults.workflow.trim().is_empty() {
-        if config.workflows.contains_key("qa_only") {
-            config.defaults.workflow = "qa_only".to_string();
-        } else {
-            let workflows: BTreeSet<_> = config.workflows.keys().cloned().collect();
-            if let Some(first) = workflows.into_iter().next() {
-                config.defaults.workflow = first;
-            }
-        }
-    }
+    config
+        .projects
+        .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+        .or_insert_with(|| crate::config::ProjectConfig {
+            description: Some("Built-in default project".to_string()),
+            workspaces: Default::default(),
+            agents: Default::default(),
+            workflows: Default::default(),
+            step_templates: Default::default(),
+            env_stores: Default::default(),
+        });
 }

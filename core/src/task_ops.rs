@@ -1,5 +1,5 @@
 use crate::config::LoopMode;
-use crate::config_load::{build_execution_plan, build_execution_plan_for_project};
+use crate::config_load::build_execution_plan_for_project;
 use crate::config_load::{now_ts, read_active_config};
 use crate::db::open_conn;
 use crate::dto::{CreateTaskPayload, TaskSummary, UNASSIGNED_QA_FILE_PATH};
@@ -116,90 +116,36 @@ pub fn create_task_impl(
     let project_id = payload
         .project_id
         .clone()
-        .unwrap_or_else(|| active.default_project_id.clone());
+        .unwrap_or_else(|| crate::config::DEFAULT_PROJECT_ID.to_string());
+    let project = active
+        .projects
+        .get(&project_id)
+        .with_context(|| format!("project not found: {}", project_id))?;
 
-    let workspace_id = payload.workspace_id.clone().unwrap_or_else(|| {
-        // For project-scoped tasks, resolve workspace entirely from the project.
-        // Never fall back to global defaults — the project is the authority.
-        if !project_id.is_empty() {
-            if let Some(project) = active.projects.get(&project_id) {
-                // If global default exists in this project, use it
-                if project
-                    .workspaces
-                    .contains_key(&active.default_workspace_id)
-                {
-                    return active.default_workspace_id.clone();
-                }
-                // Single workspace — unambiguous
-                if project.workspaces.len() == 1 {
-                    if let Some(k) = project.workspaces.keys().next() {
-                        return k.clone();
-                    }
-                }
-                // Convention: use "default" if present
-                if project.workspaces.contains_key("default") {
-                    return "default".to_string();
-                }
-                // Multiple workspaces, none named "default" — pick first
-                // alphabetically (deterministic). Caller should specify
-                // --workspace explicitly in this case.
-                if let Some(k) = project.workspaces.keys().min() {
-                    return k.clone();
-                }
-            }
-        }
-        active.default_workspace_id.clone()
-    });
-
-    let workspace = if !project_id.is_empty() {
-        active
-            .projects
-            .get(&project_id)
-            .and_then(|p| p.workspaces.get(&workspace_id).cloned())
-            .with_context(|| {
-                format!(
-                    "workspace not found: {} in project '{}'",
-                    workspace_id, project_id
-                )
-            })?
+    let workspace_id = if let Some(workspace_id) = payload.workspace_id.clone() {
+        workspace_id
     } else {
-        active
-            .workspaces
-            .get(&workspace_id)
-            .cloned()
-            .with_context(|| format!("workspace not found: {}", workspace_id))?
+        resolve_default_resource_id(&project.workspaces, "workspace")?
     };
+    let workspace = project
+        .workspaces
+        .get(&workspace_id)
+        .cloned()
+        .with_context(|| format!("workspace not found: {} in project '{}'", workspace_id, project_id))?;
 
-    let workflow_id = payload
-        .workflow_id
-        .clone()
-        .unwrap_or_else(|| active.default_workflow_id.clone());
-
-    let workflow = if !project_id.is_empty() {
-        active
-            .projects
-            .get(&project_id)
-            .and_then(|p| p.workflows.get(&workflow_id).cloned())
-            .with_context(|| {
-                format!(
-                    "workflow not found: {} in project '{}'",
-                    workflow_id, project_id
-                )
-            })?
+    let workflow_id = if let Some(workflow_id) = payload.workflow_id.clone() {
+        workflow_id
     } else {
-        active
-            .config
-            .workflows
-            .get(&workflow_id)
-            .cloned()
-            .with_context(|| format!("workflow not found: {}", workflow_id))?
+        resolve_default_resource_id(&project.workflows, "workflow")?
     };
+    let workflow = project
+        .workflows
+        .get(&workflow_id)
+        .cloned()
+        .with_context(|| format!("workflow not found: {} in project '{}'", workflow_id, project_id))?;
 
-    let execution_plan = if !project_id.is_empty() {
-        build_execution_plan_for_project(&active.config, &workflow, &workflow_id, &project_id)?
-    } else {
-        build_execution_plan(&active.config, &workflow, &workflow_id)?
-    };
+    let execution_plan =
+        build_execution_plan_for_project(&active.config, &workflow, &workflow_id, &project_id)?;
     let execution_plan_json =
         serde_json::to_string(&execution_plan).context("serialize execution plan")?;
     let loop_mode = match execution_plan.loop_policy.mode {
@@ -258,6 +204,26 @@ pub fn create_task_impl(
     summary.finished_items = finished;
     summary.failed_items = failed;
     Ok(summary)
+}
+
+fn resolve_default_resource_id<T>(
+    entries: &std::collections::HashMap<String, T>,
+    resource_kind: &str,
+) -> Result<String> {
+    if entries.is_empty() {
+        anyhow::bail!("project has no {}s configured", resource_kind);
+    }
+    if entries.len() == 1 {
+        return Ok(entries.keys().next().cloned().unwrap_or_default());
+    }
+    if entries.contains_key("default") {
+        return Ok("default".to_string());
+    }
+    anyhow::bail!(
+        "multiple {}s exist in project; specify --{} explicitly",
+        resource_kind,
+        resource_kind
+    )
 }
 
 pub fn reset_task_item_for_retry(
@@ -666,6 +632,8 @@ mod tests {
                     workspaces: HashMap::new(),
                     agents: HashMap::new(),
                     workflows: HashMap::new(),
+                    step_templates: HashMap::new(),
+                    env_stores: HashMap::new(),
                 },
             );
             active.projects.insert(
@@ -674,6 +642,8 @@ mod tests {
                     workspaces: HashMap::new(),
                     agents: HashMap::new(),
                     workflows: HashMap::new(),
+                    step_templates: HashMap::new(),
+                    env_stores: HashMap::new(),
                 },
             );
         }

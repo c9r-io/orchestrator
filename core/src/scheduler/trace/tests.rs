@@ -882,7 +882,7 @@ fn build_trace_marks_task_scoped_step_with_anchor_item() {
 }
 
 #[test]
-fn build_trace_marks_legacy_step_scope_as_legacy() {
+fn build_trace_marks_missing_step_scope_as_unspecified() {
     let events = vec![
         make_event(
             1,
@@ -916,7 +916,7 @@ fn build_trace_marks_legacy_step_scope_as_legacy() {
 
     let trace = build_trace("test-task", "completed", &events, &[]);
     let step = &trace.cycles[0].steps[0];
-    assert_eq!(step.scope, "legacy");
+    assert_eq!(step.scope, "unspecified");
     assert_eq!(step.item_id, None);
     assert_eq!(step.anchor_item_id.as_deref(), Some("item-1"));
 }
@@ -1174,7 +1174,7 @@ fn split_observed_item_binding_all_variants() {
     assert_eq!(anchor.as_deref(), Some("item-1"));
 
     let (scope, item_id, anchor) = split_observed_item_binding(None, &item);
-    assert_eq!(scope, "legacy");
+    assert_eq!(scope, "unspecified");
     assert!(item_id.is_none());
     assert_eq!(anchor.as_deref(), Some("item-1"));
 }
