@@ -41,36 +41,30 @@ Daemon lifecycle:
    - `apply`
    - `get`
    - `describe`
-   - `task`
-   - `workspace`
-   - `agent`
-   - `workflow`
-   - `manifest`
-   - `edit`
-   - `db`
-   - `qa`
-   - `completion`
-   - `debug`
-   - `exec`
-   - `store`
-
-3. Confirm C/S CLI (`orchestrator`) top-level commands:
-   - `daemon` (start/stop/status/restart)
-   - `apply`
-   - `get`
-   - `describe`
    - `delete`
-   - `task` (list/create/info/start/pause/resume/logs/delete/retry)
-   - `store` (get/put/delete/list/prune)
+   - `task`
+   - `store`
    - `debug`
    - `check`
+   - `manifest`
    - `version`
+
+3. Confirm `task` subcommands:
+   - `list`
+   - `create`
+   - `info`
+   - `start`
+   - `pause`
+   - `resume`
+   - `logs`
+   - `delete`
+   - `retry`
+   - `watch`
+   - `trace`
 
 ### Expected Result
 
 - Help output includes all commands above.
-- `task worker` subcommands are visible under `task --help` (standalone mode).
-- C/S CLI includes `daemon` subcommand family for lifecycle management.
 - Deprecated/removed command groups are not documented in QA steps.
 
 ---
@@ -97,9 +91,9 @@ Daemon lifecycle:
    orchestrator delete "project/<qa-project-id>" --force
    ```
 
-3. Validate workspace info positional argument:
+3. Validate workspace describe argument:
    ```bash
-   orchestrator workspace info default
+   orchestrator describe workspace default
    ```
 
 4. Validate output format flags:
@@ -114,25 +108,18 @@ Daemon lifecycle:
    orchestrator task create --project <qa-project-id> --name "contract-check" --goal "check" --no-start
    ```
 
-6. Validate new scheduling flags and worker commands:
+6. Validate new scheduling flags:
    ```bash
    orchestrator task create --help | rg -- "--detach"
    orchestrator task start --help | rg -- "--detach"
-   orchestrator task worker --help
-   ```
-7. Validate task edit and exec command families:
-   ```bash
-   orchestrator task edit --help
-   orchestrator exec --help
    ```
 
 ### Expected Result
 
-- `workspace info` accepts positional workspace id.
+- `describe workspace` accepts positional workspace name.
 - Output format flags work for commands that support `-o`.
 - `task create --format ...` is never required in QA docs.
-- `--detach` flags and `task worker` command family are part of the CLI contract.
-- `task edit` and `exec` are part of the CLI contract.
+- `--detach` flags are part of the CLI contract.
 
 ---
 
@@ -161,19 +148,11 @@ Daemon lifecycle:
    cat fixtures/manifests/bundles/output-formats.yaml | orchestrator apply -f -
    ```
 
-4. Validate create command surfaces:
-   ```bash
-   orchestrator workspace create --help
-   orchestrator agent create --help
-   orchestrator workflow create --help
-   ```
-
 ### Expected Result
 
 - `get <resource-type>` syntax works.
 - `-l key=value[,k=v]` is accepted on list get commands.
 - `apply -f -` reads from stdin.
-- `workspace/agent/workflow create` subcommands are exposed.
 
 ---
 
@@ -196,6 +175,10 @@ Daemon lifecycle:
    - `orchestrator agent health`
    - `orchestrator/config/default.yaml`
    - `config bootstrap --from`
+   - `orchestrator workspace create`
+   - `orchestrator agent create`
+   - `orchestrator workflow create`
+   - `orchestrator workspace info`
 
 ### Expected Result
 

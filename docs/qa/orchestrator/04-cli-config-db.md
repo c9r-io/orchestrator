@@ -175,7 +175,7 @@ Entry points:
    QA_PROJECT="qa-db-reset-test"
    orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}" --force
+   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
    orchestrator task create --project "${QA_PROJECT}" --name "reset-test" --goal "reset test" --no-start
    ```
 
@@ -187,12 +187,8 @@ Entry points:
 
 2. Verify task exists in project:
    ```bash
-   orchestrator task list -o json | jq '[.[] | select(.project_id == "'"${QA_PROJECT}"'")]'
-   ```
-
-   > **Note**: `task list` does not support a `--project` filter flag. Use
-   > `task list -o json | jq '[.[] | select(.project_id == "...")]'` or
-   > `sqlite3 data/agent_orchestrator.db "SELECT id, name FROM tasks WHERE project_id = '...'"`.
+   orchestrator task list --project "${QA_PROJECT}" -o json
+   ```.
 
 3. Reset the project:
    ```bash
@@ -201,7 +197,7 @@ Entry points:
 
 4. Verify task records within the project are cleared:
    ```bash
-   orchestrator task list -o json | jq '[.[] | select(.project_id == "'"${QA_PROJECT}"'")] | length'
+   orchestrator task list --project "${QA_PROJECT}" -o json | jq 'length'
    # Expected: 0
    ```
 

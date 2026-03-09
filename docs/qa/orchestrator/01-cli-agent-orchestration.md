@@ -149,12 +149,12 @@ Validate workspace listing and configuration viewing work correctly.
 
 1. List workspaces:
    ```bash
-   ./target/release/orchestrator workspace list
+   ./target/release/orchestrator get workspaces
    ```
 
 2. Get workspace details:
    ```bash
-   ./target/release/orchestrator workspace info default
+   ./target/release/orchestrator describe workspace default
    ```
 
 3. View current configuration:
@@ -217,7 +217,7 @@ Validate apply command with dry-run mode doesn't persist changes.
 
 3. Verify workspace was NOT created:
    ```bash
-   ./target/release/orchestrator workspace list
+   ./target/release/orchestrator get workspaces
    ```
 
 4. Apply without dry-run:
@@ -227,7 +227,7 @@ Validate apply command with dry-run mode doesn't persist changes.
 
 5. Verify workspace WAS created:
    ```bash
-   ./target/release/orchestrator workspace info test-workspace
+   ./target/release/orchestrator describe workspace test-workspace
    ```
 
 ### Expected

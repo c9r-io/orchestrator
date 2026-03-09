@@ -36,7 +36,7 @@ QA_PROJECT="qa-trace-$(date +%s)"
 orchestrator apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
 orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
-orchestrator apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml --project "${QA_PROJECT}" --force
+orchestrator apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml --project "${QA_PROJECT}"
 ```
 
 ---
