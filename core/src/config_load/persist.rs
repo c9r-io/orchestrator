@@ -8,8 +8,8 @@ use rusqlite::{params, OptionalExtension, Transaction};
 use std::path::Path;
 
 use super::{
-    build_active_config, enforce_deletion_guards, normalize_config, now_ts, read_active_config,
-    validate_agent_env_store_refs,
+    build_active_config, build_active_config_for_project, enforce_deletion_guards,
+    normalize_config, now_ts, read_active_config, validate_agent_env_store_refs,
 };
 
 /// Legacy deserialization struct for reading old DB blobs that contain
@@ -510,8 +510,14 @@ pub fn persist_config_and_reload(
     config: OrchestratorConfig,
     _yaml: String,
     author: &str,
+    target_project: Option<&str>,
 ) -> Result<ConfigOverview> {
-    let candidate = build_active_config(&state.app_root, config.clone())?;
+    let candidate = match target_project {
+        Some(project) => {
+            build_active_config_for_project(&state.app_root, config.clone(), project)?
+        }
+        None => build_active_config(&state.app_root, config.clone())?,
+    };
     let normalized = candidate.config.clone();
     let (yaml, json_raw) = serialize_config_snapshot(&normalized)?;
 
@@ -542,6 +548,58 @@ pub fn persist_config_and_reload(
     }
     if let Ok(mut notice) = state.active_config_notice.write() {
         *notice = None;
+    }
+
+    Ok(ConfigOverview {
+        config: normalized,
+        yaml,
+        version: next_version,
+        updated_at: now,
+    })
+}
+
+/// Persist config after a delete operation. Unlike `persist_config_and_reload`,
+/// `build_active_config` failure is non-fatal — the deletion is persisted even
+/// if another project's validation fails. `enforce_deletion_guards` still runs
+/// to protect workspace/workflow references with active tasks.
+pub fn persist_config_for_delete(
+    state: &crate::state::InnerState,
+    config: OrchestratorConfig,
+    author: &str,
+) -> Result<ConfigOverview> {
+    let normalized = normalize_config(config);
+    let (yaml, json_raw) = serialize_config_snapshot(&normalized)?;
+
+    let previous_config = {
+        let active = read_active_config(state)?;
+        active.config.clone()
+    };
+
+    let conn = open_conn(&state.db_path)?;
+    let tx = conn.unchecked_transaction()?;
+    enforce_deletion_guards(&tx, &previous_config, &normalized)?;
+    let (next_version, now) = persist_config_versioned(&tx, &yaml, &json_raw, author)?;
+    let _ = persist_all_resources(
+        &tx,
+        &normalized.resource_store,
+        &normalized.custom_resource_definitions,
+        author,
+    );
+    tx.commit()?;
+
+    // Best-effort rebuild of active config; if validation fails, still persist
+    match build_active_config(&state.app_root, normalized.clone()) {
+        Ok(candidate) => {
+            let mut active = crate::state::write_active_config(state)?;
+            *active = candidate;
+            if let Ok(mut err) = state.active_config_error.write() {
+                *err = None;
+            }
+        }
+        Err(_) => {
+            // Config is persisted but in-memory state may be stale.
+            // Next successful apply will fix it.
+        }
     }
 
     Ok(ConfigOverview {

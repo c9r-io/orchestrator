@@ -6,6 +6,24 @@ use tonic::transport::Channel;
 
 use crate::{Commands, OutputFormat};
 
+fn resolve_resource(resource: &str, name: Option<&str>) -> String {
+    match name {
+        Some(n) => format!("{}/{}", resource, n),
+        None => resource.to_string(),
+    }
+}
+
+/// Strip gRPC protocol noise from error messages for human-friendly output.
+fn format_grpc_error(e: tonic::Status) -> anyhow::Error {
+    let msg = e.message().to_string();
+    match e.code() {
+        tonic::Code::FailedPrecondition => {
+            anyhow::anyhow!("{}\nhint: check --force or resolve the precondition above", msg)
+        }
+        _ => anyhow::anyhow!("{}", msg),
+    }
+}
+
 pub async fn dispatch(
     client: &mut OrchestratorServiceClient<Channel>,
     command: Commands,
@@ -33,7 +51,8 @@ pub async fn dispatch(
                     dry_run,
                     project,
                 })
-                .await?
+                .await
+                .map_err(format_grpc_error)?
                 .into_inner();
 
             for entry in &resp.results {
@@ -65,10 +84,12 @@ pub async fn dispatch(
 
         Commands::Get {
             resource,
+            name,
             output,
             selector,
             project,
         } => {
+            let resource = resolve_resource(&resource, name.as_deref());
             let resp = client
                 .get(orchestrator_proto::GetRequest {
                     resource,
@@ -84,9 +105,11 @@ pub async fn dispatch(
 
         Commands::Describe {
             resource,
+            name,
             output,
             project,
         } => {
+            let resource = resolve_resource(&resource, name.as_deref());
             let resp = client
                 .describe(orchestrator_proto::DescribeRequest {
                     resource,
@@ -101,16 +124,21 @@ pub async fn dispatch(
 
         Commands::Delete {
             resource,
+            name,
             force,
+            dry_run,
             project,
         } => {
+            let resource = resolve_resource(&resource, name.as_deref());
             let resp = client
                 .delete(orchestrator_proto::DeleteRequest {
                     resource,
                     force,
+                    dry_run,
                     project,
                 })
-                .await?
+                .await
+                .map_err(format_grpc_error)?
                 .into_inner();
             println!("{}", resp.message);
             Ok(())
@@ -118,7 +146,6 @@ pub async fn dispatch(
 
         Commands::Task(cmd) => dispatch_task(client, cmd).await,
         Commands::Store(cmd) => dispatch_store(client, cmd).await,
-        Commands::Project(cmd) => dispatch_project(client, cmd).await,
 
         Commands::Debug { component } => {
             let resp = client
@@ -153,28 +180,6 @@ pub async fn dispatch(
                 .into_inner();
             println!("{}", resp.message);
             Ok(())
-        }
-
-        Commands::Db(cmd) => {
-            use crate::DbCommands;
-            match cmd {
-                DbCommands::Reset {
-                    force,
-                    include_history,
-                    include_config,
-                } => {
-                    let resp = client
-                        .db_reset(orchestrator_proto::DbResetRequest {
-                            force,
-                            include_history,
-                            include_config,
-                        })
-                        .await?
-                        .into_inner();
-                    println!("{}", resp.message);
-                    Ok(())
-                }
-            }
         }
 
         Commands::Manifest(cmd) => {
@@ -623,32 +628,6 @@ async fn dispatch_store(
         StoreCommands::Prune { store, project } => {
             let resp = client
                 .store_prune(orchestrator_proto::StorePruneRequest { store, project })
-                .await?
-                .into_inner();
-            println!("{}", resp.message);
-            Ok(())
-        }
-    }
-}
-
-async fn dispatch_project(
-    client: &mut OrchestratorServiceClient<Channel>,
-    cmd: crate::ProjectCommands,
-) -> Result<()> {
-    use crate::ProjectCommands;
-
-    match cmd {
-        ProjectCommands::Reset {
-            project_id,
-            force,
-            include_config,
-        } => {
-            let resp = client
-                .project_reset(orchestrator_proto::ProjectResetRequest {
-                    project_id,
-                    force,
-                    include_config,
-                })
                 .await?
                 .into_inner();
             println!("{}", resp.message);

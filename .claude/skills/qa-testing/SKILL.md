@@ -18,16 +18,16 @@ Execute scenario-based QA testing driven by `docs/qa/**/*.md` documents.
 
 2. **Initialize orchestrator if needed** — only when the database does not exist yet:
    ```bash
-   # DANGER: NEVER run `rm -f data/agent_orchestrator.db` or `db reset --include-config`
-   # during an active workflow run. Doing so destroys all in-flight task state.
+   # DANGER: NEVER run `rm -f data/agent_orchestrator.db` during an active workflow run.
+   # Doing so destroys all in-flight task state.
    # Only initialize when no database exists at all.
    test -f data/agent_orchestrator.db || orchestrator init
    ```
 
 3. **For QA scenario isolation** — use project-scoped reset instead of destroying shared state:
    ```bash
-   # Reset a specific project's QA state (task data + config + auto-tickets)
-   orchestrator project reset <project> --force
+   # Delete a project's state (task data + config + auto-tickets)
+   orchestrator delete project/<project> --force
    # Deploy fixtures into project scope (other projects untouched)
    orchestrator apply -f fixtures/manifests/bundles/<fixture>.yaml --project <project>
    ```
@@ -235,8 +235,8 @@ Item-scoped steps can run in parallel when `max_parallel > 1` is configured in t
 The correct reset sequence between batches uses **project-scoped isolation** instead of destroying the shared DB:
 
 ```bash
-# Reset project state (task data + project config + auto-tickets)
-orchestrator project reset <project> --force --include-config
+# Delete project state (task data + project config + auto-tickets)
+orchestrator delete project/<project> --force
 
 # Apply fixture into project scope (other projects untouched)
 orchestrator apply -f fixtures/manifests/bundles/<relevant>.yaml --project <project>

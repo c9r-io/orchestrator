@@ -18,8 +18,8 @@ These fixtures replace legacy flat-config bootstrap flows.
 ## Isolation Rules
 
 - Manifest fixtures are additive setup artifacts. They are not a substitute for deleting or resetting the whole orchestrator control-plane state.
-- Do not pair fixture application with `db reset --include-config` or `db reset --force --include-config` during routine QA runs.
-- Prefer isolated QA projects: reset the project-local state (`project reset`, remove `workspace/<project>`) and then apply the fixture needed by that scenario with `apply --project`.
+- Do not pair fixture application with database file deletion during routine QA runs.
+- Prefer isolated QA projects: delete the project (`orchestrator delete project/<project> --force`) and then apply the fixture needed by that scenario with `apply --project`.
 - Bundle fixtures must not be used to hijack unrelated default workspace/workflow expectations for other active runs.
 
 ## CLI Probe Fixtures

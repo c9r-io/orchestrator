@@ -6,8 +6,10 @@ use std::path::Path;
 use super::{
     apply_self_heal_pass, normalize_config, normalize_step_execution_mode_recursive,
     persist_config_versioned, persist_heal_log, resolve_and_validate_projects,
-    resolve_and_validate_workspaces, serialize_config_snapshot, validate_agent_env_store_refs,
-    validate_workflow_config, validate_workflow_config_with_agents, ConfigSelfHealReport,
+    resolve_and_validate_workspaces, resolve_and_validate_workspaces_for_project,
+    serialize_config_snapshot, validate_agent_env_store_refs,
+    validate_agent_env_store_refs_for_project, validate_workflow_config,
+    validate_workflow_config_with_agents, ConfigSelfHealReport,
 };
 
 pub fn build_active_config(app_root: &Path, config: OrchestratorConfig) -> Result<ActiveConfig> {
@@ -15,6 +17,26 @@ pub fn build_active_config(app_root: &Path, config: OrchestratorConfig) -> Resul
     let workspaces = resolve_and_validate_workspaces(app_root, &config)?;
     let projects = resolve_and_validate_projects(app_root, &config)?;
     validate_agent_env_store_refs(&config)?;
+    Ok(ActiveConfig {
+        workspaces,
+        projects,
+        config,
+    })
+}
+
+/// Build active config validating only the target project's workspaces.
+/// Other projects are included in the result but not validated, allowing
+/// apply to succeed even if another project has broken paths.
+pub fn build_active_config_for_project(
+    app_root: &Path,
+    config: OrchestratorConfig,
+    target_project: &str,
+) -> Result<ActiveConfig> {
+    let config = normalize_config(config);
+    let workspaces =
+        resolve_and_validate_workspaces_for_project(app_root, &config, target_project)?;
+    let projects = resolve_and_validate_projects(app_root, &config)?;
+    validate_agent_env_store_refs_for_project(&config, target_project)?;
     Ok(ActiveConfig {
         workspaces,
         projects,

@@ -48,7 +48,7 @@ kill <pid>                                        # graceful SIGTERM
 4. `orchestrator task create --name X --goal Y --workflow Z` — create and run (auto-enqueues to worker)
 5. `orchestrator task info <id>` / `task trace <id>` / `task logs <id>` — inspect results
 
-Use `--project <id>` on `apply`, `get`, `describe`, `delete`, `task create/list`, and `store` to scope operations to a project. Use `orchestrator project reset <id> --force` to clean up a project's task data.
+Use `--project <id>` on `apply`, `get`, `describe`, `delete`, `task create/list`, and `store` to scope operations to a project. Use `orchestrator delete project/<id> --force` to clean up a project's task data and config.
 
 ## Resource Kinds
 

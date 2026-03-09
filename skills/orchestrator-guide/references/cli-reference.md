@@ -154,16 +154,11 @@ orchestrator store get <store> <key> --project my-project
 orchestrator store put <store> <key> <value> --project my-project
 ```
 
-## Project & Database
+## Project Deletion
 
 ```bash
-# Project-scoped reset (safe, isolated)
-orchestrator project reset <project> --force
-orchestrator project reset <project> --force --include-config
-
-# Database reset (DESTRUCTIVE)
-orchestrator db reset --force
-orchestrator db reset --force --include-config
+# Delete a project and all its data (tasks, config, resources)
+orchestrator delete project/<project> --force
 ```
 
 ## System Commands

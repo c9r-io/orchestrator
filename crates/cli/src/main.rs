@@ -32,15 +32,20 @@ pub enum Commands {
         #[arg(long)]
         dry_run: bool,
 
-        #[arg(long)]
+        #[arg(short = 'p', long)]
         project: Option<String>,
     },
 
     /// Get resource(s)
     #[command(alias = "g")]
     Get {
+        /// Resource kind (e.g. "agent") or kind/name (e.g. "agent/reviewer")
         #[arg(value_name = "RESOURCE")]
         resource: String,
+
+        /// Resource name (when using space-separated syntax: "get agent reviewer")
+        #[arg(value_name = "NAME")]
+        name: Option<String>,
 
         #[arg(short, long, default_value = "table")]
         output: OutputFormat,
@@ -55,26 +60,39 @@ pub enum Commands {
     /// Describe a resource
     #[command(alias = "desc")]
     Describe {
+        /// Resource kind (e.g. "agent") or kind/name (e.g. "agent/reviewer")
         #[arg(value_name = "RESOURCE")]
         resource: String,
+
+        /// Resource name (when using space-separated syntax: "describe agent reviewer")
+        #[arg(value_name = "NAME")]
+        name: Option<String>,
 
         #[arg(short, long, default_value = "yaml")]
         output: OutputFormat,
 
-        #[arg(long)]
+        #[arg(short = 'p', long)]
         project: Option<String>,
     },
 
     /// Delete a resource
     #[command(alias = "rm")]
     Delete {
+        /// Resource kind (e.g. "agent") or kind/name (e.g. "agent/reviewer")
         #[arg(value_name = "RESOURCE")]
         resource: String,
+
+        /// Resource name (when using space-separated syntax: "delete agent reviewer")
+        #[arg(value_name = "NAME")]
+        name: Option<String>,
 
         #[arg(short, long)]
         force: bool,
 
         #[arg(long)]
+        dry_run: bool,
+
+        #[arg(short = 'p', long)]
         project: Option<String>,
     },
 
@@ -103,7 +121,7 @@ pub enum Commands {
         output: OutputFormat,
 
         /// Scope checks to a specific project
-        #[arg(long)]
+        #[arg(short = 'p', long)]
         project: Option<String>,
     },
 
@@ -113,35 +131,12 @@ pub enum Commands {
         root: Option<String>,
     },
 
-    /// Database operations
-    #[command(subcommand)]
-    Db(DbCommands),
-
     /// Manifest operations
     #[command(subcommand)]
     Manifest(ManifestCommands),
 
-    /// Project management
-    #[command(alias = "proj", subcommand)]
-    Project(ProjectCommands),
-
     /// Show version
     Version,
-}
-
-#[derive(Subcommand, Debug, Clone)]
-pub enum DbCommands {
-    /// Reset the database
-    Reset {
-        #[arg(long)]
-        force: bool,
-
-        #[arg(long)]
-        include_history: bool,
-
-        #[arg(long)]
-        include_config: bool,
-    },
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -152,7 +147,7 @@ pub enum ManifestCommands {
         file: String,
 
         /// Validate in the context of a specific project
-        #[arg(long)]
+        #[arg(short = 'p', long)]
         project: Option<String>,
     },
 
@@ -340,23 +335,6 @@ pub enum StoreCommands {
         store: String,
         #[arg(short, long, default_value = "")]
         project: String,
-    },
-}
-
-#[derive(Subcommand, Debug, Clone)]
-pub enum ProjectCommands {
-    /// Reset a project's task data (tasks, items, runs, events)
-    Reset {
-        /// Project ID to reset
-        project_id: String,
-
-        /// Confirm the reset
-        #[arg(short, long)]
-        force: bool,
-
-        /// Also remove project entry from configuration
-        #[arg(long)]
-        include_config: bool,
     },
 }
 

@@ -43,7 +43,9 @@ probe_init() {
 }
 
 probe_ensure_fixtures() {
-  "$PROBE_BINARY" init --force >/dev/null 2>&1 || true
+  "$PROBE_BINARY" init >/dev/null 2>&1 || true
+  # Reset default project task data to avoid "workspace referenced by tasks" errors
+  "$PROBE_BINARY" delete project/default --force >/dev/null 2>&1 || true
   "$PROBE_BINARY" apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml >/dev/null 2>&1 || {
     probe_error "Failed to apply cli-probe-fixtures.yaml"
     exit 2

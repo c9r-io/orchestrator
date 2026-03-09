@@ -475,6 +475,42 @@ pub fn validate_agent_env_store_refs(config: &OrchestratorConfig) -> Result<()> 
     Ok(())
 }
 
+/// Like `validate_agent_env_store_refs` but only validates agents in the given project.
+pub fn validate_agent_env_store_refs_for_project(
+    config: &OrchestratorConfig,
+    project_id: &str,
+) -> Result<()> {
+    if let Some(project) = config.projects.get(project_id) {
+        for (agent_name, agent_cfg) in &project.agents {
+            if let Some(ref entries) = agent_cfg.env {
+                for entry in entries {
+                    if let Some(ref store_name) = entry.from_ref {
+                        if !project.env_stores.contains_key(store_name.as_str()) {
+                            anyhow::bail!(
+                                "agent '{}'(project '{}') env fromRef '{}' references unknown store",
+                                agent_name,
+                                project_id,
+                                store_name
+                            );
+                        }
+                    }
+                    if let Some(ref rv) = entry.ref_value {
+                        if !project.env_stores.contains_key(&rv.name) {
+                            anyhow::bail!(
+                                "agent '{}'(project '{}') env refValue.name '{}' references unknown store",
+                                agent_name,
+                                project_id,
+                                rv.name
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn ensure_within_root(root: &Path, target: &Path, field: &str) -> Result<()> {
     let root_canon = root
         .canonicalize()

@@ -41,13 +41,10 @@ service OrchestratorService {
   rpc WorkerStatus(WorkerStatusRequest) returns (WorkerStatusResponse);
   rpc Check(CheckRequest)             returns (CheckResponse);
   rpc Init(InitRequest)               returns (InitResponse);
-  rpc DbReset(DbResetRequest)         returns (DbResetResponse);
   rpc ManifestValidate(ManifestValidateRequest) returns (ManifestValidateResponse);
   rpc ManifestExport(ManifestExportRequest) returns (ManifestExportResponse);
   rpc TaskTrace(TaskTraceRequest)     returns (TaskTraceResponse);
 
-  // Project management
-  rpc ProjectReset(ProjectResetRequest) returns (ProjectResetResponse);
 }
 
 // ─── Task messages ────────────────────────────────────────────
@@ -288,6 +285,7 @@ message DeleteRequest {
   string resource = 1;      // e.g., "workspace/old-ws"
   bool force = 2;
   optional string project = 3;
+  bool dry_run = 4;
 }
 
 message DeleteResponse {
@@ -402,23 +400,13 @@ message CheckResponse {
   int32 exit_code = 3;
 }
 
-// ─── Init / DbReset / ManifestValidate / TaskTrace ───────────
+// ─── Init / ManifestValidate / TaskTrace ─────────────────────
 
 message InitRequest {
   optional string root = 1;
 }
 
 message InitResponse {
-  string message = 1;
-}
-
-message DbResetRequest {
-  bool force = 1;
-  bool include_history = 2;
-  bool include_config = 3;
-}
-
-message DbResetResponse {
   string message = 1;
 }
 
@@ -470,19 +458,3 @@ message Anomaly {
   string escalation = 5;
 }
 
-// ─── Project management ──────────────────────────────────────
-
-message ProjectResetRequest {
-  string project_id = 1;
-  bool force = 2;
-  bool include_config = 3;  // also remove project entry from config
-}
-
-message ProjectResetResponse {
-  string message = 1;
-  uint64 tasks_deleted = 2;
-  uint64 items_deleted = 3;
-  uint64 runs_deleted = 4;
-  uint64 events_deleted = 5;
-  uint64 tickets_cleaned = 6;
-}

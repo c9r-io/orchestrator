@@ -476,14 +476,16 @@ impl OrchestratorService for OrchestratorServer {
             &req.resource,
             req.force,
             req.project.as_deref(),
+            req.dry_run,
         )
         .map_err(|e| Status::internal(format!("{e}")))?;
         let scope = req
             .project
             .map(|p| format!(" (project: {})", p))
             .unwrap_or_default();
+        let verb = if req.dry_run { "would be deleted (dry run)" } else { "deleted" };
         Ok(Response::new(DeleteResponse {
-            message: format!("{} deleted{}", req.resource, scope),
+            message: format!("{} {}{}", req.resource, verb, scope),
         }))
     }
 
@@ -657,21 +659,6 @@ impl OrchestratorService for OrchestratorServer {
         Ok(Response::new(InitResponse { message }))
     }
 
-    async fn db_reset(
-        &self,
-        request: Request<DbResetRequest>,
-    ) -> Result<Response<DbResetResponse>, Status> {
-        let req = request.into_inner();
-        let message = agent_orchestrator::service::system::run_db_reset(
-            &self.state,
-            req.force,
-            req.include_history,
-            req.include_config,
-        )
-        .map_err(|e| Status::internal(format!("{e}")))?;
-        Ok(Response::new(DbResetResponse { message }))
-    }
-
     async fn manifest_validate(
         &self,
         request: Request<ManifestValidateRequest>,
@@ -756,85 +743,6 @@ impl OrchestratorService for OrchestratorServer {
         }))
     }
 
-    // ─── Project management ──────────────────────────────────
-
-    async fn project_reset(
-        &self,
-        request: Request<ProjectResetRequest>,
-    ) -> Result<Response<ProjectResetResponse>, Status> {
-        let req = request.into_inner();
-
-        if !req.force {
-            return Err(Status::failed_precondition(
-                "use --force to confirm project reset",
-            ));
-        }
-
-        let mut stats = agent_orchestrator::db::reset_project_data(&self.state, &req.project_id)
-            .map_err(|e| Status::internal(format!("reset project data: {e}")))?;
-
-        // Clean auto-ticket files from project workspace ticket directories
-        {
-            let active = agent_orchestrator::config_load::read_active_config(&self.state)
-                .map_err(|e| Status::internal(format!("{e}")))?;
-            if let Some(project) = active.config.projects.get(&req.project_id) {
-                for ws_config in project.workspaces.values() {
-                    let ticket_path = self.state.app_root
-                        .join(&ws_config.root_path)
-                        .join(&ws_config.ticket_dir);
-                    if ticket_path.is_dir() {
-                        if let Ok(entries) = std::fs::read_dir(&ticket_path) {
-                            for entry in entries.flatten() {
-                                let name = entry.file_name();
-                                let name_str = name.to_string_lossy();
-                                if name_str.starts_with("auto_")
-                                    && name_str.ends_with(".md")
-                                    && std::fs::remove_file(entry.path()).is_ok()
-                                {
-                                    stats.tickets_cleaned += 1;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if req.include_config {
-            let mut config = {
-                let active = agent_orchestrator::config_load::read_active_config(&self.state)
-                    .map_err(|e| Status::internal(format!("{e}")))?;
-                active.config.clone()
-            };
-            config.projects.remove(&req.project_id);
-            let yaml = serde_yml::to_string(&config)
-                .map_err(|e| Status::internal(format!("serialize config: {e}")))?;
-            agent_orchestrator::config_load::persist_config_and_reload(
-                &self.state,
-                config,
-                yaml,
-                "project-reset",
-            )
-            .map_err(|e| Status::internal(format!("persist config: {e}")))?;
-        }
-
-        let mut message = format!(
-            "project '{}' reset: {} tasks, {} items, {} runs, {} events deleted",
-            req.project_id, stats.tasks, stats.task_items, stats.command_runs, stats.events
-        );
-        if stats.tickets_cleaned > 0 {
-            message.push_str(&format!(", {} tickets cleaned", stats.tickets_cleaned));
-        }
-
-        Ok(Response::new(ProjectResetResponse {
-            message,
-            tasks_deleted: stats.tasks,
-            items_deleted: stats.task_items,
-            runs_deleted: stats.command_runs,
-            events_deleted: stats.events,
-            tickets_cleaned: stats.tickets_cleaned,
-        }))
-    }
 }
 
 // ─── DTO → Proto conversions ─────────────────────────────────
