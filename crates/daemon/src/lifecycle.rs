@@ -61,5 +61,5 @@ pub async fn shutdown_signal(_state: Arc<InnerState>) {
         }
     }
 
-    // TODO: Phase 3 — pause running tasks, drain workers, close DB connections
+    // Worker draining and cleanup handled by main.rs after gRPC server stops.
 }

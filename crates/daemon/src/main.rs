@@ -44,6 +44,8 @@ fn main() -> Result<()> {
         .context("failed to build tokio runtime")?;
 
     rt.block_on(async move {
+        let startup_instant = std::time::Instant::now();
+
         let state = agent_orchestrator::service::bootstrap::init_state_async(false)
             .await
             .context("failed to initialize orchestrator state")?;
@@ -84,17 +86,24 @@ fn main() -> Result<()> {
         drop(restart_tx); // drop original sender so only workers hold it
         info!(workers = worker_count, "background workers started");
 
-        let service = server::OrchestratorServer::new(inner.clone());
+        let shutdown_notify = Arc::new(tokio::sync::Notify::new());
+
+        let service =
+            server::OrchestratorServer::new(inner.clone(), startup_instant, shutdown_notify.clone());
         let grpc_service = OrchestratorServiceServer::new(service);
 
-        // Shutdown future: listen for OS signals OR restart request from a worker
+        // Shutdown future: listen for OS signals, restart request, or RPC shutdown
         let shutdown_fut = {
             let inner2 = inner.clone();
             let mut restart_rx2 = restart_rx.clone();
+            let notify = shutdown_notify.clone();
             async move {
                 tokio::select! {
                     _ = lifecycle::shutdown_signal(inner2) => {}
                     _ = restart_rx2.changed() => {}
+                    _ = notify.notified() => {
+                        tracing::info!("shutdown triggered via RPC");
+                    }
                 }
             }
         };

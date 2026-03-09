@@ -1,18 +1,30 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use agent_orchestrator::state::InnerState;
 use orchestrator_proto::*;
+use tokio::sync::Notify;
 use tonic::{Request, Response, Status};
 
 /// gRPC service implementation — thin translation layer from gRPC requests
 /// to core service calls.
 pub struct OrchestratorServer {
     state: Arc<InnerState>,
+    startup_instant: Instant,
+    shutdown_notify: Arc<Notify>,
 }
 
 impl OrchestratorServer {
-    pub fn new(state: Arc<InnerState>) -> Self {
-        Self { state }
+    pub fn new(
+        state: Arc<InnerState>,
+        startup_instant: Instant,
+        shutdown_notify: Arc<Notify>,
+    ) -> Self {
+        Self {
+            state,
+            startup_instant,
+            shutdown_notify,
+        }
     }
 }
 
@@ -575,15 +587,17 @@ impl OrchestratorService for OrchestratorServer {
         Ok(Response::new(PingResponse {
             version: env!("CARGO_PKG_VERSION").to_string(),
             git_hash: env!("BUILD_GIT_HASH").to_string(),
-            uptime_secs: "0".to_string(), // TODO: track uptime
+            uptime_secs: self.startup_instant.elapsed().as_secs().to_string(),
         }))
     }
 
     async fn shutdown(
         &self,
-        _request: Request<ShutdownRequest>,
+        request: Request<ShutdownRequest>,
     ) -> Result<Response<ShutdownResponse>, Status> {
-        // TODO: trigger graceful shutdown via signal
+        let req = request.into_inner();
+        tracing::info!(graceful = req.graceful, "shutdown requested via RPC");
+        self.shutdown_notify.notify_one();
         Ok(Response::new(ShutdownResponse {
             message: "shutdown initiated".to_string(),
         }))
