@@ -248,13 +248,15 @@ mod tests {
 
         assert!(managed.inner.unsafe_mode);
         assert_eq!(managed.inner.app_root, seeded.app_root);
-        assert!(managed
-            .inner
-            .active_config_error
-            .read()
-            .expect("read config error")
-            .as_deref()
-            == Some("config-error"));
+        assert!(
+            managed
+                .inner
+                .active_config_error
+                .read()
+                .expect("read config error")
+                .as_deref()
+                == Some("config-error")
+        );
     }
 
     #[test]
@@ -282,29 +284,41 @@ mod tests {
             .expect("load item id");
         tokio::runtime::Runtime::new()
             .expect("create runtime")
-            .block_on(state.task_repo.insert_command_run(crate::task_repository::NewCommandRun {
-                id: "bootstrap-run".to_string(),
-                task_item_id: item_id,
-                phase: "qa".to_string(),
-                command: "echo bootstrap".to_string(),
-                cwd: state.app_root.display().to_string(),
-                workspace_id: "".to_string(),
-                agent_id: "echo".to_string(),
-                exit_code: 0,
-                stdout_path: state.app_root.join("logs/bootstrap-stdout.log").display().to_string(),
-                stderr_path: state.app_root.join("logs/bootstrap-stderr.log").display().to_string(),
-                started_at: crate::config_load::now_ts(),
-                ended_at: crate::config_load::now_ts(),
-                interrupted: 0,
-                output_json: "{}".to_string(),
-                artifacts_json: "[]".to_string(),
-                confidence: Some(1.0),
-                quality_score: Some(1.0),
-                validation_status: "passed".to_string(),
-                session_id: None,
-                machine_output_source: "stdout".to_string(),
-                output_json_path: None,
-            }))
+            .block_on(
+                state
+                    .task_repo
+                    .insert_command_run(crate::task_repository::NewCommandRun {
+                        id: "bootstrap-run".to_string(),
+                        task_item_id: item_id,
+                        phase: "qa".to_string(),
+                        command: "echo bootstrap".to_string(),
+                        cwd: state.app_root.display().to_string(),
+                        workspace_id: "".to_string(),
+                        agent_id: "echo".to_string(),
+                        exit_code: 0,
+                        stdout_path: state
+                            .app_root
+                            .join("logs/bootstrap-stdout.log")
+                            .display()
+                            .to_string(),
+                        stderr_path: state
+                            .app_root
+                            .join("logs/bootstrap-stderr.log")
+                            .display()
+                            .to_string(),
+                        started_at: crate::config_load::now_ts(),
+                        ended_at: crate::config_load::now_ts(),
+                        interrupted: 0,
+                        output_json: "{}".to_string(),
+                        artifacts_json: "[]".to_string(),
+                        confidence: Some(1.0),
+                        quality_score: Some(1.0),
+                        validation_status: "passed".to_string(),
+                        session_id: None,
+                        machine_output_source: "stdout".to_string(),
+                        output_json_path: None,
+                    }),
+            )
             .expect("insert command run");
 
         let active = crate::config_load::read_active_config(&state).expect("read active config");

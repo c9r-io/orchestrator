@@ -162,9 +162,14 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].key, "alpha");
 
-        store_delete(&state, "memories", "alpha", crate::config::DEFAULT_PROJECT_ID)
-            .await
-            .expect("store delete");
+        store_delete(
+            &state,
+            "memories",
+            "alpha",
+            crate::config::DEFAULT_PROJECT_ID,
+        )
+        .await
+        .expect("store delete");
         let missing = store_get(
             &state,
             "memories",

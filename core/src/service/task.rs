@@ -206,8 +206,8 @@ pub async fn get_task_trace(
 mod tests {
     use super::*;
     use crate::events::insert_event;
-    use crate::task_repository::NewCommandRun;
     use crate::task_ops::create_task_impl;
+    use crate::task_repository::NewCommandRun;
     use crate::test_utils::TestState;
 
     fn seed_log_files(state: &InnerState, name: &str) -> (std::path::PathBuf, std::path::PathBuf) {

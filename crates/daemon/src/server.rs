@@ -32,7 +32,9 @@ fn map_resource_error(error: anyhow::Error) -> Status {
     let message = error.to_string();
     if message.starts_with("[FAILED_PRECONDITION]") {
         return Status::failed_precondition(
-            message.trim_start_matches("[FAILED_PRECONDITION] ").to_string(),
+            message
+                .trim_start_matches("[FAILED_PRECONDITION] ")
+                .to_string(),
         );
     }
     if message.starts_with("use --force") {
@@ -497,7 +499,11 @@ impl OrchestratorService for OrchestratorServer {
             .project
             .map(|p| format!(" (project: {})", p))
             .unwrap_or_default();
-        let verb = if req.dry_run { "would be deleted (dry run)" } else { "deleted" };
+        let verb = if req.dry_run {
+            "would be deleted (dry run)"
+        } else {
+            "deleted"
+        };
         Ok(Response::new(DeleteResponse {
             message: format!("{} {}{}", req.resource, verb, scope),
         }))
@@ -678,13 +684,12 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<ManifestValidateRequest>,
     ) -> Result<Response<ManifestValidateResponse>, Status> {
         let req = request.into_inner();
-        let (valid, errors, message) =
-            agent_orchestrator::service::system::validate_manifests(
-                &self.state,
-                &req.content,
-                req.project_id.as_deref(),
-            )
-            .map_err(|e| Status::internal(format!("{e}")))?;
+        let (valid, errors, message) = agent_orchestrator::service::system::validate_manifests(
+            &self.state,
+            &req.content,
+            req.project_id.as_deref(),
+        )
+        .map_err(|e| Status::internal(format!("{e}")))?;
         Ok(Response::new(ManifestValidateResponse {
             valid,
             errors,
@@ -697,9 +702,11 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<ManifestExportRequest>,
     ) -> Result<Response<ManifestExportResponse>, Status> {
         let req = request.into_inner();
-        let content =
-            agent_orchestrator::service::resource::export_manifests(&self.state, &req.output_format)
-                .map_err(|e| Status::internal(format!("{e}")))?;
+        let content = agent_orchestrator::service::resource::export_manifests(
+            &self.state,
+            &req.output_format,
+        )
+        .map_err(|e| Status::internal(format!("{e}")))?;
         Ok(Response::new(ManifestExportResponse {
             content,
             format: req.output_format,
@@ -756,7 +763,6 @@ impl OrchestratorService for OrchestratorServer {
             trace_json,
         }))
     }
-
 }
 
 // ─── DTO → Proto conversions ─────────────────────────────────

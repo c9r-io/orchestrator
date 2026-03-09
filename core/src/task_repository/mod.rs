@@ -557,10 +557,7 @@ mod async_wrapper_tests {
             .expect("list items for cycle");
         assert!(!items.is_empty());
 
-        let status = repo
-            .load_task_status(&task_id)
-            .await
-            .expect("load status");
+        let status = repo.load_task_status(&task_id).await.expect("load status");
         assert_eq!(status.as_deref(), Some("pending"));
 
         let name = repo.load_task_name(&task_id).await.expect("load task name");
@@ -687,6 +684,8 @@ mod async_wrapper_tests {
             .await
             .expect("delete task and collect log paths");
         assert_eq!(paths.len(), 2);
-        assert!(paths.iter().any(|path| path.ends_with("async-wrapper-stdout.log")));
+        assert!(paths
+            .iter()
+            .any(|path| path.ends_with("async-wrapper-stdout.log")));
     }
 }

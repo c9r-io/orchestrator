@@ -88,8 +88,11 @@ fn main() -> Result<()> {
 
         let shutdown_notify = Arc::new(tokio::sync::Notify::new());
 
-        let service =
-            server::OrchestratorServer::new(inner.clone(), startup_instant, shutdown_notify.clone());
+        let service = server::OrchestratorServer::new(
+            inner.clone(),
+            startup_instant,
+            shutdown_notify.clone(),
+        );
         let grpc_service = OrchestratorServiceServer::new(service);
 
         // Shutdown future: listen for OS signals, restart request, or RPC shutdown

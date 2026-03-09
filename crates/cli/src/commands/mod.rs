@@ -19,7 +19,10 @@ fn format_grpc_error(e: tonic::Status) -> anyhow::Error {
     match e.code() {
         tonic::Code::FailedPrecondition => {
             if msg.starts_with("use --force") {
-                anyhow::anyhow!("{}\nhint: check --force to confirm the requested deletion", msg)
+                anyhow::anyhow!(
+                    "{}\nhint: check --force to confirm the requested deletion",
+                    msg
+                )
             } else {
                 anyhow::anyhow!("{}", msg)
             }

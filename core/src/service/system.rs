@@ -265,7 +265,9 @@ mod tests {
         assert!(!status.stop_signal);
 
         std::fs::write(worker_stop_signal_path(&state), "stop").expect("seed stop signal");
-        let stopped = worker_status(&state).await.expect("worker status with stop");
+        let stopped = worker_status(&state)
+            .await
+            .expect("worker status with stop");
         assert!(stopped.stop_signal);
     }
 
