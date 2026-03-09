@@ -22,7 +22,7 @@ Verify that binary snapshot is NOT created when `binary_snapshot: false` or when
 rm -f fixtures/ticket/auto_*.md
 orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml
 QA_PROJECT="qa-survival"
-orchestrator project reset "${QA_PROJECT}" --force --include-config
+orchestrator delete "project/${QA_PROJECT}" --force
 orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
 ```
 

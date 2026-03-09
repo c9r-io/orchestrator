@@ -106,7 +106,7 @@ orchestrator task worker status
 ```bash
 # 使用旧单体 CLI 执行 db/init/apply（这些命令直接操作本地 SQLite，不依赖 daemon）
 # 如果 daemon 已在运行，也可以用新 CLI 的 orchestrator db/init/apply
-orchestrator db reset -f --include-config --include-history
+orchestrator delete project/self-evolution --force
 orchestrator init -f
 orchestrator apply -f docs/workflow/claude-secret.yaml --project self-evolution
 orchestrator apply -f docs/workflow/minimax-secret.yaml --project self-evolution

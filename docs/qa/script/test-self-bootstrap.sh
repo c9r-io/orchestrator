@@ -53,7 +53,7 @@ QA_PROJECT="qa-bootstrap-$(whoami)-$(date +%Y%m%d%H%M%S)"
 $ORCH init --force > /dev/null 2>&1 || true
 
 bold "[Setup] Applying self-bootstrap-test.yaml..."
-$ORCH project reset "${QA_PROJECT}" --force 2>/dev/null || true
+$ORCH delete "project/${QA_PROJECT}" --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
 $ORCH apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml --project "${QA_PROJECT}" > /dev/null 2>&1
 echo ""
@@ -244,7 +244,7 @@ fi
 
 # Re-apply test fixture to reset state (S5 adds claude-code agent with multiline templates)
 bold "[Reset] Re-applying test fixture after S5..."
-$ORCH project reset "${QA_PROJECT}" --force 2>/dev/null || true
+$ORCH delete "project/${QA_PROJECT}" --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
 $ORCH apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml --project "${QA_PROJECT}" > /dev/null 2>&1
 echo ""

@@ -38,7 +38,7 @@ rm -f fixtures/ticket/auto_*.md
 # 3. Apply fixture and recreate the isolated project scaffold
 orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
+orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
 orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
 ```
@@ -51,7 +51,7 @@ preconditions section.
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
 | qa_only/loop_test tasks fail with "unresolved" items despite QA exit 0 | Stale ticket files in `fixtures/ticket/` match item QA docs; finalize rules mark items with active tickets as "unresolved" when no fix step is present | Run `rm -f fixtures/ticket/auto_*.md` before testing |
-| Task fails with unexpected agent selection (e.g., wrong agent handles qa) | Residual agents from previous test fixtures remain in active config because `apply` is additive. Agent selection uses a top-3 random pick; when agents tie on score (common with no metrics history), the wrong agent can be selected. | Re-apply the intended fixture, then recreate the isolated QA project scaffold (`project reset` + `rm -rf workspace/<project>` + `apply -f <fixture> --project`) using a fresh `QA_PROJECT` value. Agent selection now uses a stable tiebreaker (agent_id alphabetical) to reduce non-determinism. |
+| Task fails with unexpected agent selection (e.g., wrong agent handles qa) | Residual agents from previous test fixtures remain in active config because `apply` is additive. Agent selection uses a top-3 random pick; when agents tie on score (common with no metrics history), the wrong agent can be selected. | Re-apply the intended fixture, then recreate the isolated QA project scaffold (`delete project/<project> --force` + `rm -rf workspace/<project>` + `apply -f <fixture> --project`) using a fresh `QA_PROJECT` value. Agent selection now uses a stable tiebreaker (agent_id alphabetical) to reduce non-determinism. |
 
 ---
 
@@ -179,7 +179,7 @@ This scenario uses a **different fixture** with only the `mock_fail` agent:
 orchestrator apply -f fixtures/manifests/bundles/fail-workflow.yaml
 
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
+orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
 orchestrator apply -f fixtures/manifests/bundles/fail-workflow.yaml --project "${QA_PROJECT}"
 ```

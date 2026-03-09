@@ -62,7 +62,7 @@ Key commands:
 - `workspace list/info` - Workspace management
 - `manifest export/validate` - Manifest artifact operations
 - `edit export/open` - Resource editing
-- `db reset` - Database reset
+- `delete project/<name> --force` - Delete project and its resources
 - `debug --component <name>` - Runtime diagnostics
 
 ## Interfaces And Data
@@ -84,7 +84,7 @@ Commands:
   workspace list|info
   manifest export|validate
   edit export|open
-  db reset
+  delete project/<name> [--force]
   completion bash|zsh|fish|powershell
   debug [--component <name>]
 ```

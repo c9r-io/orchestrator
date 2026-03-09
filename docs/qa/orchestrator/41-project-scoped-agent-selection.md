@@ -22,7 +22,7 @@ capability, the task fails with a clear error.
 Key CLI workflow:
 ```bash
 # Reset project state (task data + config + auto-tickets)
-orchestrator project reset <project> --force --include-config
+orchestrator delete project/<project> --force
 
 # Deploy resources into project scope
 orchestrator apply -f <fixture> --project <project>
@@ -50,7 +50,7 @@ into the project config scope, not into any top-level global map.
 
 1. Reset and apply into project scope:
    ```bash
-   orchestrator project reset qa-scope --force --include-config
+   orchestrator delete project/qa-scope --force
    orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-scope
    ```
 
@@ -87,7 +87,7 @@ for selection, even when another project has agents with the same capability.
 
 1. Reset and apply into project scope:
    ```bash
-   orchestrator project reset qa-iso --force --include-config
+   orchestrator delete project/qa-iso --force
    orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-iso
    ```
 
@@ -134,7 +134,7 @@ fails with a clear error instead of silently falling back to another project.
 
 1. Reset and apply (project agents only have `qa` capability):
    ```bash
-   orchestrator project reset qa-nofallback --force --include-config
+   orchestrator delete project/qa-nofallback --force
    orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-nofallback
    ```
 
@@ -170,14 +170,14 @@ fails with a clear error instead of silently falling back to another project.
 
 ### Goal
 
-Validate that `project reset --force --include-config` removes `auto_*.md` files from
+Validate that `delete project/<name> --force` removes `auto_*.md` files from
 project workspace ticket directories.
 
 ### Steps
 
 1. Set up project with ticket files:
    ```bash
-   orchestrator project reset qa-tickets --force --include-config
+   orchestrator delete project/qa-tickets --force
    orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-tickets
    ```
 
@@ -199,7 +199,7 @@ project workspace ticket directories.
 
 3. Reset project:
    ```bash
-   orchestrator project reset qa-tickets --force --include-config
+   orchestrator delete project/qa-tickets --force
    ```
 
 4. Verify tickets cleaned:
@@ -229,8 +229,8 @@ Validate that agents from one project never leak into another project's tasks.
 
 1. Create two isolated projects:
    ```bash
-   orchestrator project reset qa-proj-a --force --include-config
-   orchestrator project reset qa-proj-b --force --include-config
+   orchestrator delete project/qa-proj-a --force
+   orchestrator delete project/qa-proj-b --force
    orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-proj-a
    orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project qa-proj-b
    ```

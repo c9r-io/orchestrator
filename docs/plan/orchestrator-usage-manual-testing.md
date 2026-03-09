@@ -33,7 +33,7 @@ orchestrator task --help
 ## 2. Clean Runtime State
 
 ```bash
-orchestrator db reset -f --include-config --include-history
+orchestrator delete project/<project> --force
 orchestrator init -f
 ```
 
@@ -243,8 +243,8 @@ Delete a task:
 orchestrator task delete <task_id> -f
 ```
 
-Reset DB/config:
+Reset project:
 
 ```bash
-orchestrator db reset -f --include-config --include-history
+orchestrator delete project/<project> --force
 ```

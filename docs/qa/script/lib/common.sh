@@ -138,7 +138,7 @@ qa_reset_project_data() {
   local project_root
   bin="$(qa_binary_path)"
   project_root="$(qa_project_root)"
-  "$bin" project reset "$QA_PROJECT" --force >/dev/null
+  "$bin" delete "project/$QA_PROJECT" --force >/dev/null
   rm -rf "$project_root/fixtures/ticket" "$project_root/docs/qa"
   mkdir -p "$project_root/docs/qa" "$project_root/fixtures/ticket"
 }
@@ -153,7 +153,7 @@ qa_recreate_project() {
   # The CLI does not yet expose project deletion. Recreate the isolated
   # project by resetting project-local rows, clearing its root path, then
   # forcing the scaffold to be created again.
-  "$bin" project reset "$QA_PROJECT" --force >/dev/null 2>&1 || true
+  "$bin" delete "project/$QA_PROJECT" --force >/dev/null 2>&1 || true
   rm -rf "$project_root"
   qa_prepare_project "$workflow"
 }

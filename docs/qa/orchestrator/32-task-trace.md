@@ -34,7 +34,7 @@ Every scenario starts from a clean project with at least one completed task:
 ```bash
 QA_PROJECT="qa-trace-$(date +%s)"
 orchestrator apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
-orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
+orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
 orchestrator apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml --project "${QA_PROJECT}" --force
 ```
@@ -207,7 +207,7 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 These checks use the official self-referential probe fixtures directly, not
 `apply --project`.
 
-Do not use `db reset --include-config` here; these probe checks rely on direct
+Do not use `delete project/<name> --force` here; these probe checks rely on direct
 runtime fixtures, not control-plane reinitialization.
 
 1. Apply the self-referential probe fixtures:

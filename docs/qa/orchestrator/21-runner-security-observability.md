@@ -88,7 +88,7 @@ Ensure run-phase command execution is denied by runner policy before process spa
 1. Prepare isolated project and apply policy config:
    ```bash
    QA_PROJECT="qa-runner-deny"
-   orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
+   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
    cat > /tmp/runner-policy-deny.yaml << 'YAML'
    apiVersion: orchestrator.dev/v2
@@ -159,7 +159,7 @@ Ensure sensitive token is redacted in persisted structured output and in `task l
        auto: false
    YAML
    QA_PROJECT="runner-redaction"
-   orchestrator project reset "${QA_PROJECT}" --force --include-config 2>/dev/null || true
+   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
    orchestrator apply -f /tmp/runner-redaction-config.yaml
    orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"

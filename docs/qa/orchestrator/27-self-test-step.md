@@ -133,7 +133,7 @@ Verify validation warns on missing self_test in self-referential workflows
 - Project initialized:
   ```bash
   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-  orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
+  orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
   rm -rf "workspace/${QA_PROJECT}"
   orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml --project "${QA_PROJECT}"
   ```

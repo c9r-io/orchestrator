@@ -27,7 +27,7 @@ Watchdog script: `scripts/watchdog.sh`.
 rm -f fixtures/ticket/auto_*.md
 
 QA_PROJECT="qa-enforcement"
-orchestrator project reset "${QA_PROJECT}" --force --include-config
+orchestrator delete "project/${QA_PROJECT}" --force
 ```
 
 ### Troubleshooting

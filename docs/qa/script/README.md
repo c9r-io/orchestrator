@@ -55,7 +55,7 @@ Shell scripts for executable QA scenarios.
 
 - Each script uses an isolated QA project by default (auto-generated when `--project` is not provided).
 - Each script recreates only that project's local scaffold with:
-  - `orchestrator project reset <project> --force`
+  - `orchestrator delete project/<project> --force`
   - `rm -rf workspace/<project>`
   - `orchestrator apply -f <fixture> --project <project>`
 - The SQLite DB file is preserved across runs.

@@ -40,30 +40,29 @@ Entry point: `orchestrator`
 
 Verify `--unsafe` bypasses the `--force` gate on a project-scoped destructive command without requiring `--force`.
 
-> **Safety note**: Do not use `--unsafe db reset` in QA scenarios — it destroys
-> the runtime database and kills any running self-bootstrap task. Use a
-> project-scoped command to verify force-gate bypass instead.
+> **Safety note**: Do not use `--unsafe` with destructive global commands in QA scenarios.
+> Use a project-scoped command to verify force-gate bypass instead.
 
 ### Steps
 
 1. Create an isolated QA project with a task to operate on:
    ```bash
    QA_PROJECT="qa-unsafe-force-$(date +%s)"
-   orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
+   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
    orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
    ```
 
-2. Run a force-gated command (`project reset`) with `--unsafe` but without `--force`:
+2. Run a force-gated command (`delete project/`) with `--unsafe` but without `--force`:
    ```bash
-   orchestrator --unsafe project reset "${QA_PROJECT}" 2>&1; echo "exit=$?"
+   orchestrator --unsafe delete "project/${QA_PROJECT}" 2>&1; echo "exit=$?"
    ```
 
 ### Expected
 
 - Command executes successfully (exit code 0).
 - No `Use --force to confirm` prompt appears.
-- The project was reset (force gate bypassed by `--unsafe`).
+- The project was deleted (force gate bypassed by `--unsafe`).
 
 ---
 
@@ -82,7 +81,7 @@ Verify `--unsafe` overrides the manifest's `policy: allowlist` to `Unsafe` at ru
 1. Prepare isolated project with restrictive allowlist policy:
    ```bash
    QA_PROJECT="qa-unsafe-override"
-   orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
+   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
    orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
    cat > /tmp/runner-allowlist-strict.yaml << 'YAML'
@@ -226,9 +225,9 @@ Regression guard: verify that force gates still block without `--unsafe` or `--f
 
 ### Steps
 
-1. Run `db reset` without `--force` or `--unsafe`:
+1. Run `delete project/<name>` without `--force` or `--unsafe`:
    ```bash
-   orchestrator db reset 2>&1; echo "exit=$?"
+   orchestrator delete project/nonexistent-project 2>&1; echo "exit=$?"
    ```
 
 2. Run `task retry` without `--force` or `--unsafe` (requires a retryable item):
@@ -248,7 +247,7 @@ Regression guard: verify that force gates still block without `--unsafe` or `--f
 
 ### Expected
 
-- `db reset` prints confirmation prompt and exits with code 1 (blocked).
+- `delete project/<name>` prints confirmation prompt or error and exits with non-zero code (blocked).
 - `task retry` prints confirmation prompt and exits with code 1 (blocked).
 - No `unsafe_mode_activated` event emitted in the last 10 seconds.
 

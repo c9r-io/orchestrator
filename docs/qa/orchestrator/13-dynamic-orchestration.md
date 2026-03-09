@@ -193,7 +193,7 @@ N/A - Unit test verification
 3. Reset an isolated QA project and apply the adaptive fixture:
    ```bash
    QA_PROJECT=qa-adaptive-runtime
-   orchestrator project reset "$QA_PROJECT" --force --include-config
+   orchestrator delete "project/$QA_PROJECT" --force
    orchestrator apply -f fixtures/manifests/bundles/adaptive-runtime.yaml --project "$QA_PROJECT"
    ```
 
@@ -285,7 +285,7 @@ N/A - Unit test verification
 Reset the isolated QA project when finished:
 ```bash
 QA_PROJECT=qa-adaptive-runtime
-orchestrator project reset "$QA_PROJECT" --force --include-config
+orchestrator delete "project/$QA_PROJECT" --force
 ```
 
 ---

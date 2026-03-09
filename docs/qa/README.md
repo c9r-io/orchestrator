@@ -37,14 +37,14 @@ Advanced scenarios use scripts in `docs/qa/script/`:
 Concurrency policy for QA scripts:
 - Prefer one unique `project` per scenario run.
 - Do not delete `data/agent_orchestrator.db` during routine QA execution.
-- Recreate per-project scaffolding via `orchestrator project reset <project> --force`, remove `workspace/<project>`, then run `orchestrator apply -f <fixture> --project <project>`.
+- Recreate per-project scaffolding via `orchestrator delete project/<project> --force`, remove `workspace/<project>`, then run `orchestrator apply -f <fixture> --project <project>`.
 
 Project isolation requirements for QA execution:
 - QA setup must treat `project` as the primary isolation boundary. Do not rely on global DB resets to obtain a clean environment.
-- Before each isolated QA run, recreate the target project with the current CLI: run `orchestrator project reset <project> --force`, remove `workspace/<project>`, then run `orchestrator apply -f <fixture> --project <project>`.
+- Before each isolated QA run, recreate the target project with the current CLI: run `orchestrator delete project/<project> --force`, remove `workspace/<project>`, then run `orchestrator apply -f <fixture> --project <project>`.
 - All QA task creation, task execution, and follow-up inspection must explicitly bind to the intended project. Do not rely on ambient defaults when a project-scoped command is available.
 - Fixture manifests used by QA must be applied only to support that QA run's project/workflow setup. Do not use QA fixtures to overwrite or replace the active orchestrator control-plane state for unrelated tasks.
-- Do not run `orchestrator db reset --force`, `orchestrator db reset --include-config`, `orchestrator db reset --force --include-config`, `orchestrator --unsafe db reset`, or any variant of `db reset` as a QA scenario setup/cleanup step. The `--unsafe` flag bypasses force gates and is equally destructive. Use `project reset <project> --force --include-config` for project-scoped isolation instead.
+- Do not run `orchestrator db reset --force`, `orchestrator db reset --include-config`, `orchestrator db reset --force --include-config`, `orchestrator --unsafe db reset`, or any variant of `db reset` as a QA scenario setup/cleanup step. The `--unsafe` flag bypasses force gates and is equally destructive. Use `delete project/<project> --force` for project-scoped isolation instead.
 - Do not change `Defaults` to point the whole runtime at a QA-only workflow as part of scenario setup. QA fixtures must not hijack the default workspace/workflow used by unrelated runs such as `self-bootstrap`.
 
 ## Regression Runner

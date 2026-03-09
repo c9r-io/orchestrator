@@ -13,7 +13,7 @@ This document validates config lifecycle commands and database reset behavior.
 
 Entry points:
 - `orchestrator apply|manifest <command>`
-- `orchestrator project reset`
+- `orchestrator delete project/<name>`
 
 > **Note**: `apply` and `manifest validate` accept multi-document YAML with
 > `apiVersion`/`kind`/`metadata`/`spec` resources. The flat config format
@@ -162,7 +162,7 @@ Entry points:
 
 ---
 
-## Scenario 4: Project Reset Clears Task State
+## Scenario 4: Delete Project Clears Task State
 
 ### Preconditions
 
@@ -173,7 +173,7 @@ Entry points:
 1. Prepare a project with at least one task:
    ```bash
    QA_PROJECT="qa-db-reset-test"
-   orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
+   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
    orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}" --force
    orchestrator task create --project "${QA_PROJECT}" --name "reset-test" --goal "reset test" --no-start
@@ -196,7 +196,7 @@ Entry points:
 
 3. Reset the project:
    ```bash
-   orchestrator project reset "${QA_PROJECT}" --force --include-config
+   orchestrator delete "project/${QA_PROJECT}" --force
    ```
 
 4. Verify task records within the project are cleared:
@@ -207,7 +207,7 @@ Entry points:
 
 ### Expected
 
-- Project reset succeeds with `--force`.
+- Delete project succeeds with `--force`.
 - Task records within the target project are cleared (count = 0).
 - Other project data is unaffected.
 
@@ -220,4 +220,4 @@ Entry points:
 | 1 | Manifest Apply - Update Configuration | ☐ | | | |
 | 2 | Manifest Apply - Invalid Configuration | ☐ | | | |
 | 3 | Manifest Apply - Add New Workspace | ☐ | | | |
-| 4 | Project Reset Clears Task State | ☐ | | | |
+| 4 | Delete Project Clears Task State | ☐ | | | |

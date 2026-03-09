@@ -20,8 +20,7 @@ High-risk CLI operations that perform irreversible state changes must require `-
 |---------|------|------------|
 | `delete <resource>` | Deletes resource from DB | ✓ existing |
 | `task delete <id>` | Deletes task + stops runtime | ✓ existing |
-| `db reset` | Drops and recreates database | ✓ existing |
-| `project reset <project>` | Resets project state | ✓ existing |
+| `delete project/<project>` | Deletes project and all its data | ✓ existing |
 | `apply --project <project>` | Overwrites existing project | ✓ existing |
 | `init` | Overwrites existing config | ✓ existing |
 | `task session close <id>` | Kills backing process | ✓ existing |
@@ -161,22 +160,22 @@ Verify that pre-existing `--force` gates still function correctly.
    orchestrator task delete nonexistent-id 2>&1; echo "exit=$?"
    ```
 
-2. `db reset` without `--force`:
+2. `delete project/<name>` without `--force`:
    ```bash
-   orchestrator db reset 2>&1; echo "exit=$?"
+   orchestrator delete project/nonexistent-project 2>&1; echo "exit=$?"
    ```
 
 3. Verify `--help` documents `--force` for each command:
    ```bash
    orchestrator task delete --help 2>&1 | grep -c '\-\-force'
    orchestrator task retry --help 2>&1 | grep -c '\-\-force'
-   orchestrator db reset --help 2>&1 | grep -c '\-\-force'
+   orchestrator delete --help 2>&1 | grep -c '\-\-force'
    orchestrator config backfill-events --help 2>&1 | grep -c '\-\-force'
    ```
 
 ### Expected
 - `task delete` without `--force`: prints confirmation prompt, exit code 0 (no deletion)
-- `db reset` without `--force`: prints confirmation prompt, exit code 1
+- `delete project/<name>` without `--force`: prints confirmation prompt or error, exit code 1
 - All four `--help` outputs contain `--force` (grep count >= 1 each)
 
 ---

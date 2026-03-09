@@ -22,7 +22,7 @@ Verify that when auto-rollback triggers (after max consecutive failures), the `.
 rm -f fixtures/ticket/auto_*.md
 orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml
 QA_PROJECT="qa-survival"
-orchestrator project reset "${QA_PROJECT}" --force --include-config
+orchestrator delete "project/${QA_PROJECT}" --force
 orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
 ```
 

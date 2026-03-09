@@ -33,7 +33,7 @@ cd /Volumes/Yotta/ai_native_sdlc
 Ensure runtime is clean:
 
 ```bash
-orchestrator db reset -f --include-config --include-history
+orchestrator delete project/self-bootstrap --force
 orchestrator init -f
 ```
 
@@ -241,6 +241,6 @@ orchestrator task delete <task_id> -f
 Optional hard reset:
 
 ```bash
-orchestrator db reset -f --include-config --include-history
+orchestrator delete project/self-bootstrap --force
 ```
 

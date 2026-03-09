@@ -34,7 +34,7 @@ Ensure that explicitly setting `policy: unsafe` is accepted, applied, and the ta
 1. Apply config with explicit unsafe policy:
    ```bash
    QA_PROJECT="qa-unsafe-explicit"
-   orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
+   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
    orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
    cat > /tmp/runner-unsafe-explicit.yaml << 'YAML'
@@ -111,7 +111,7 @@ Ensure that `policy: legacy` in YAML manifests is accepted as a backward-compati
 1. Apply config using the legacy alias:
    ```bash
    QA_PROJECT="qa-legacy-alias"
-   orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
+   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
    orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
    cat > /tmp/runner-legacy-alias.yaml << 'YAML'

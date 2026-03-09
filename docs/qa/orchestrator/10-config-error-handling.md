@@ -37,7 +37,7 @@ Entry point: `orchestrator <command>`
 1. 清理并初始化：
    ```bash
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
+   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
    orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
    orchestrator init
@@ -71,7 +71,7 @@ Entry point: `orchestrator <command>`
 1. 初始化并验证默认配置可用：
    ```bash
    QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
+   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
    orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
    orchestrator init

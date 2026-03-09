@@ -197,15 +197,9 @@ orchestrator task delete <task_id> --force
 orchestrator manifest validate -f manifest.yaml
 ```
 
-## Database
+## Project Cleanup
 
-```bash
-# Reset database (destructive — requires --force)
-orchestrator db reset --force
-orchestrator db reset --force --include-config
-```
-
-**Warning**: `db reset` is destructive. Use `project reset` for isolated cleanup.
+Use `orchestrator delete project/<id> --force` for project cleanup.
 
 ## Project Management
 
@@ -218,11 +212,8 @@ orchestrator apply -f manifest.yaml --project my-project
 # Query project-scoped resources
 orchestrator get agents --project my-project
 
-# Reset a project's task data (tasks, items, runs, events)
-orchestrator project reset <project> --force
-
-# Reset + remove project entry from configuration
-orchestrator project reset <project> --force --include-config
+# Delete a project and all its data (tasks, items, runs, events, config)
+orchestrator delete project/<project> --force
 ```
 
 ## Persistent Store
@@ -318,8 +309,8 @@ orchestrator task trace <id> [--verbose]
 orchestrator task retry <item_id> [--detach] [--force]
 orchestrator task delete <id> --force
 
-# Project isolation
-orchestrator project reset <id> --force [--include-config]
+# Project cleanup
+orchestrator delete project/<id> --force
 
 # Store (--project for project scope)
 orchestrator store put <store> <key> <value> [--project <id>]
@@ -333,7 +324,6 @@ orchestrator version
 orchestrator debug [--component config]
 orchestrator check [-o json] [--workflow <w>]
 orchestrator init [<root>]
-orchestrator db reset --force [--include-history] [--include-config]
 orchestrator manifest validate -f <file>
 ```
 

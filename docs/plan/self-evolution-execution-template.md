@@ -119,7 +119,7 @@ orchestrator task worker status
 ### 3.2 初始化数据库并加载资源
 
 ```bash
-orchestrator db reset -f --include-config --include-history
+orchestrator delete project/self-evolution --force
 orchestrator init -f
 orchestrator apply -f docs/workflow/claude-secret.yaml --project self-evolution
 orchestrator apply -f docs/workflow/minimax-secret.yaml --project self-evolution

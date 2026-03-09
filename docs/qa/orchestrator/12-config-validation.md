@@ -211,7 +211,7 @@ Entry point: `orchestrator <command>`
    ```bash
    orchestrator init --force
    QA_PROJECT="qa-validate-${USER}-$(date +%Y%m%d%H%M%S)"
-   orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
+   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
    ```
 

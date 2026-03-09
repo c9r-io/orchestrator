@@ -35,7 +35,7 @@ test -f data/agent_orchestrator.db || orchestrator init
 
 QA_PROJECT="qa-cycle2-${USER}-$(date +%Y%m%d%H%M%S)"
 orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml
-orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
+orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
 orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}"
 ```

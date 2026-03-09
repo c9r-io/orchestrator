@@ -55,7 +55,7 @@ Verify strict-mode validation fails phase output when `qa` stdout is not JSON.
 ### Steps
 1. Reset and apply the plain-text-agent fixture into project scope:
    ```bash
-   orchestrator project reset qa-plain --force --include-config
+   orchestrator delete project/qa-plain --force
    orchestrator apply -f fixtures/manifests/bundles/plain-text-agent.yaml --project qa-plain
    ```
 2. Create and run a task that uses non-JSON `qa` output:

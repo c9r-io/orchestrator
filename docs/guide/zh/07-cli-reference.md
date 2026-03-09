@@ -197,15 +197,9 @@ orchestrator task delete <task_id> --force
 orchestrator manifest validate -f manifest.yaml
 ```
 
-## 数据库
+## 项目清理
 
-```bash
-# 重置数据库（破坏性 —— 需要 --force）
-orchestrator db reset --force
-orchestrator db reset --force --include-config
-```
-
-**警告**：`db reset` 是破坏性操作。使用 `project reset` 进行隔离的清理。
+使用 `orchestrator delete project/<id> --force` 进行项目清理。
 
 ## 项目管理
 
@@ -218,11 +212,8 @@ orchestrator apply -f manifest.yaml --project my-project
 # 查询项目作用域资源
 orchestrator get agents --project my-project
 
-# 重置项目的任务数据（任务、项目、运行、事件）
-orchestrator project reset <project> --force
-
-# 重置并从配置中移除项目条目
-orchestrator project reset <project> --force --include-config
+# 删除项目及其所有数据（任务、项目、运行、事件、配置）
+orchestrator delete project/<project> --force
 ```
 
 ## 持久化存储
@@ -314,8 +305,8 @@ orchestrator task trace <id> [--verbose]
 orchestrator task retry <item_id> [--detach] [--force]
 orchestrator task delete <id> --force
 
-# 项目隔离
-orchestrator project reset <id> --force [--include-config]
+# 项目清理
+orchestrator delete project/<id> --force
 
 # 存储（--project 用于项目作用域）
 orchestrator store put <store> <key> <value> [--project <id>]
@@ -329,7 +320,6 @@ orchestrator version
 orchestrator debug [--component config]
 orchestrator check [-o json] [--workflow <w>]
 orchestrator init [<root>]
-orchestrator db reset --force [--include-history] [--include-config]
 orchestrator manifest validate -f <file>
 ```
 

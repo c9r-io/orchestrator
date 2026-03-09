@@ -42,7 +42,7 @@ Run once before scenarios:
 ```bash
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
 orchestrator apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
-orchestrator project reset "${QA_PROJECT}" --force 2>/dev/null || true
+orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
 orchestrator apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml --project "${QA_PROJECT}" --force
 ```
@@ -112,7 +112,7 @@ Expected:
 These checks intentionally do not use `apply --project`, because that path
 always creates non-self-referential workspaces.
 
-Do not pair these probe checks with `db reset --include-config`; they must keep
+Do not pair these probe checks with `delete project/<name> --force`; they must keep
 the active runtime config intact and only apply the dedicated probe fixtures.
 
 1. Apply the self-referential probe fixtures:

@@ -327,8 +327,7 @@ Verify resource apply (from file and stdin), store CRUD, and project-scoped reso
 9. Delete project resource and reset project:
    ```bash
    ./target/release/orchestrator delete agent/mock_echo --force --project iso-test
-   ./target/release/orchestrator project reset iso-test --force
-   ./target/release/orchestrator project reset iso-test --force --include-config
+   ./target/release/orchestrator delete project/iso-test --force
    ```
 10. Stop daemon:
     ```bash
@@ -345,8 +344,7 @@ Verify resource apply (from file and stdin), store CRUD, and project-scoped reso
 - `apply --project` creates resources in project scope with `(project: iso-test)` suffix.
 - `get agents --project` returns only project-scoped agents (not global).
 - `task create --project` creates task with correct `project_id`.
-- `project reset --force` deletes tasks/items/runs/events for the project.
-- `project reset --force --include-config` also removes the project entry from configuration.
+- `delete project/<name> --force` deletes the project and all its data (tasks/items/runs/events and config).
 
 ---
 
@@ -358,4 +356,4 @@ Verify resource apply (from file and stdin), store CRUD, and project-scoped reso
 | 2 | CLI-to-Daemon gRPC Communication | ✅ | 2026-03-09 | Claude | version, get, check all pass via gRPC |
 | 3 | Task Lifecycle via gRPC | ✅ | 2026-03-09 | Claude | create→list→info→start(detach)→logs→delete |
 | 4 | Embedded Worker Queue Consumption | ✅ | 2026-03-09 | Claude | 3 workers consumed 6 tasks concurrently |
-| 5 | Resource Management and Project Isolation via gRPC | ✅ | 2026-03-09 | Claude | apply file/stdin/dry-run + store CRUD + --project isolation + project reset |
+| 5 | Resource Management and Project Isolation via gRPC | ✅ | 2026-03-09 | Claude | apply file/stdin/dry-run + store CRUD + --project isolation + delete project |

@@ -105,7 +105,7 @@ grep -n "active_workers" core/src/service/system.rs
 ### 3.3 初始化数据库并加载资源
 
 ```bash
-orchestrator db reset -f --include-config --include-history
+orchestrator delete project/self-bootstrap --force
 orchestrator init -f
 orchestrator apply -f docs/workflow/claude-secret.yaml --project self-bootstrap
 orchestrator apply -f docs/workflow/self-bootstrap.yaml --project self-bootstrap
@@ -278,7 +278,7 @@ orchestrator task worker status
 # 预期：active_workers=0
 
 # 6. 清理
-orchestrator project reset verify-test --force --include-config
+orchestrator delete project/verify-test --force
 ```
 
 ---
