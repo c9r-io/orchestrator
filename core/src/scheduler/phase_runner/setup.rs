@@ -49,10 +49,7 @@ pub(super) async fn setup_phase_execution(
         let (extra_env, sensitive) = if let Some(agent_cfg) = agent_cfg {
             if let Some(ref env_entries) = agent_cfg.env {
                 let env = crate::env_resolve::resolve_agent_env(env_entries, env_stores)?;
-                let sens = crate::env_resolve::collect_sensitive_values(
-                    env_entries,
-                    env_stores,
-                );
+                let sens = crate::env_resolve::collect_sensitive_values(env_entries, env_stores);
                 (env, sens)
             } else {
                 (HashMap::new(), Vec::new())

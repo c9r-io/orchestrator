@@ -131,7 +131,12 @@ pub fn create_task_impl(
         .workspaces
         .get(&workspace_id)
         .cloned()
-        .with_context(|| format!("workspace not found: {} in project '{}'", workspace_id, project_id))?;
+        .with_context(|| {
+            format!(
+                "workspace not found: {} in project '{}'",
+                workspace_id, project_id
+            )
+        })?;
 
     let workflow_id = if let Some(workflow_id) = payload.workflow_id.clone() {
         workflow_id
@@ -142,7 +147,12 @@ pub fn create_task_impl(
         .workflows
         .get(&workflow_id)
         .cloned()
-        .with_context(|| format!("workflow not found: {} in project '{}'", workflow_id, project_id))?;
+        .with_context(|| {
+            format!(
+                "workflow not found: {} in project '{}'",
+                workflow_id, project_id
+            )
+        })?;
 
     let execution_plan =
         build_execution_plan_for_project(&active.config, &workflow, &workflow_id, &project_id)?;

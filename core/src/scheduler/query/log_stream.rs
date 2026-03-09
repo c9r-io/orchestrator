@@ -31,7 +31,11 @@ pub async fn stream_task_logs_impl(
     let redaction_patterns = {
         let active = read_loaded_config(state)?;
         let mut patterns = active.config.runtime_policy().runner.redaction_patterns;
-        if let Some(project) = active.config.projects.get(crate::config::DEFAULT_PROJECT_ID) {
+        if let Some(project) = active
+            .config
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+        {
             patterns.extend(collect_all_sensitive_store_values(&project.env_stores));
         }
         patterns
@@ -101,7 +105,11 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
     let redaction_patterns = {
         let active = read_loaded_config(state)?;
         let mut patterns = active.config.runtime_policy().runner.redaction_patterns;
-        if let Some(project) = active.config.projects.get(crate::config::DEFAULT_PROJECT_ID) {
+        if let Some(project) = active
+            .config
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+        {
             patterns.extend(collect_all_sensitive_store_values(&project.env_stores));
         }
         patterns
@@ -696,12 +704,12 @@ mod tests {
                 .expect("default project")
                 .env_stores
                 .insert(
-                "secrets".to_string(),
-                EnvStoreConfig {
-                    data: [("API_KEY".to_string(), "super-secret-value".to_string())].into(),
-                    sensitive: true,
-                },
-            );
+                    "secrets".to_string(),
+                    EnvStoreConfig {
+                        data: [("API_KEY".to_string(), "super-secret-value".to_string())].into(),
+                        sensitive: true,
+                    },
+                );
         }
 
         let dir = test_dir("stream-secret-store");

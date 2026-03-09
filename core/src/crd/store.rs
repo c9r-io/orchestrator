@@ -106,11 +106,7 @@ impl ResourceStore {
 
     /// Remove a resource by kind and name from any project namespace.
     /// Scans all entries of the form `kind/*/name`.
-    pub fn remove_first_by_kind_name(
-        &mut self,
-        kind: &str,
-        name: &str,
-    ) -> Option<CustomResource> {
+    pub fn remove_first_by_kind_name(&mut self, kind: &str, name: &str) -> Option<CustomResource> {
         let suffix = format!("/{}", name);
         let prefix = format!("{}/", kind);
         let key = self
@@ -188,7 +184,6 @@ impl ResourceStore {
     pub fn resources_mut(&mut self) -> &mut HashMap<String, CustomResource> {
         &mut self.resources
     }
-
 }
 
 #[cfg(test)]
@@ -328,7 +323,11 @@ mod tests {
         // Same name under different kinds must not collide.
         // Use non-project-scoped kinds so they go to _system.
         let mut store = ResourceStore::default();
-        store.put(make_cr("RuntimePolicy", "alpha", serde_json::json!({"a": 1})));
+        store.put(make_cr(
+            "RuntimePolicy",
+            "alpha",
+            serde_json::json!({"a": 1}),
+        ));
         store.put(make_cr("Project", "alpha", serde_json::json!({"w": 2})));
         assert_eq!(store.len(), 2);
         assert_eq!(store.get("RuntimePolicy", "alpha").unwrap().spec["a"], 1);
@@ -448,7 +447,11 @@ mod tests {
     #[test]
     fn put_auto_assigns_default_project_for_project_scoped_kinds() {
         let mut store = ResourceStore::default();
-        let cr = make_cr("Agent", "my-agent", serde_json::json!({"command": "echo test"}));
+        let cr = make_cr(
+            "Agent",
+            "my-agent",
+            serde_json::json!({"command": "echo test"}),
+        );
         assert!(cr.metadata.project.is_none());
         store.put(cr);
         // Should be stored under DEFAULT_PROJECT_ID, not _system

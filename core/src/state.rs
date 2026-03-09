@@ -200,7 +200,8 @@ mod tests {
             .and_then(|p| p.workflows.get(&original))
             .cloned()
             .expect("default workflow should exist");
-        guard.projects
+        guard
+            .projects
             .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
             .or_insert_with(|| crate::config::ResolvedProject {
                 workspaces: HashMap::new(),

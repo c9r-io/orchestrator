@@ -721,8 +721,9 @@ mod tests {
         let conn = mem_conn();
         let migrations = all_migrations();
         let applied = run_pending(&conn, &migrations).expect("run_pending");
-        assert_eq!(applied, 11);
-        assert_eq!(current_version(&conn).expect("version"), 11);
+        let latest_version = migrations.last().expect("at least one migration").version;
+        assert_eq!(applied, latest_version);
+        assert_eq!(current_version(&conn).expect("version"), latest_version);
     }
 
     #[test]
@@ -731,8 +732,9 @@ mod tests {
         let migrations = all_migrations();
         run_pending(&conn, &migrations).expect("first run");
         let applied = run_pending(&conn, &migrations).expect("second run");
+        let latest_version = migrations.last().expect("at least one migration").version;
         assert_eq!(applied, 0);
-        assert_eq!(current_version(&conn).expect("version"), 11);
+        assert_eq!(current_version(&conn).expect("version"), latest_version);
     }
 
     #[test]
@@ -757,10 +759,11 @@ mod tests {
         assert_eq!(applied, 2);
         assert_eq!(current_version(&conn).expect("version"), 2);
 
-        // Apply all 11 — should only run 3..11
+        // Apply the full set after running the first two — only the remainder should execute.
         let applied = run_pending(&conn, &all).expect("full run");
-        assert_eq!(applied, 9);
-        assert_eq!(current_version(&conn).expect("version"), 11);
+        let latest_version = all.last().expect("at least one migration").version;
+        assert_eq!(applied, latest_version - 2);
+        assert_eq!(current_version(&conn).expect("version"), latest_version);
     }
 
     #[test]
@@ -889,17 +892,27 @@ mod tests {
     #[test]
     fn backfill_promoted_populates_from_json() {
         let conn = mem_conn();
-        // Run migrations 1-3 first, then isolate m4 for testing
-        let mut migs = all_migrations();
-        let _m11 = migs.pop().expect("pop m11");
-        let _m10 = migs.pop().expect("pop m10");
-        let _m9 = migs.pop().expect("pop m9");
-        let _m8 = migs.pop().expect("pop m8");
-        let _m7 = migs.pop().expect("pop m7");
-        let _m6 = migs.pop().expect("pop m6");
-        let _m5 = migs.pop().expect("pop m5");
-        let m4 = migs.pop().expect("pop m4");
-        run_pending(&conn, &migs).expect("run m1-m3");
+        // Run migrations 1-3 first, then isolate m4 for testing.
+        let migrations = all_migrations();
+        let initial: Vec<Migration> = migrations
+            .iter()
+            .filter(|migration| migration.version <= 3)
+            .map(|migration| Migration {
+                version: migration.version,
+                name: migration.name,
+                up: migration.up,
+            })
+            .collect();
+        let m4 = migrations
+            .iter()
+            .find(|migration| migration.version == 4)
+            .map(|migration| Migration {
+                version: migration.version,
+                name: migration.name,
+                up: migration.up,
+            })
+            .expect("find m4");
+        run_pending(&conn, &initial).expect("run m1-m3");
 
         // Insert test events
         conn.execute(
@@ -1001,11 +1014,8 @@ mod tests {
             up: m0009_normalize_unspecified_agent_ids,
         }];
 
-        conn.execute(
-            "DELETE FROM schema_migrations WHERE version >= 9",
-            [],
-        )
-        .expect("clear migration 9+ records");
+        conn.execute("DELETE FROM schema_migrations WHERE version >= 9", [])
+            .expect("clear migration 9+ records");
         run_pending(&conn, &normalize).expect("rerun m0009");
 
         let agent_id: String = conn

@@ -4,7 +4,9 @@ use crate::crd::projection::{CrdProjectable, RuntimePolicyProjection, SecretStor
 pub fn reconcile_builtin_kind(config: &mut OrchestratorConfig, kind: &str) {
     match kind {
         "Project" => {
-            let projected = config.resource_store.project_map::<crate::config::ProjectConfig>();
+            let projected = config
+                .resource_store
+                .project_map::<crate::config::ProjectConfig>();
             for (name, proj) in projected {
                 config
                     .projects
@@ -50,10 +52,9 @@ pub fn seed_store_from_config_snapshot(
         "Agent" => {
             for (pid, project) in &config.projects {
                 if let Some(v) = project.agents.get(name) {
-                    config.resource_store.put(make_cr(
-                        Some(pid.clone()),
-                        v.to_cr_spec(),
-                    ));
+                    config
+                        .resource_store
+                        .put(make_cr(Some(pid.clone()), v.to_cr_spec()));
                     return;
                 }
             }
@@ -61,10 +62,9 @@ pub fn seed_store_from_config_snapshot(
         "Workflow" => {
             for (pid, project) in &config.projects {
                 if let Some(v) = project.workflows.get(name) {
-                    config.resource_store.put(make_cr(
-                        Some(pid.clone()),
-                        v.to_cr_spec(),
-                    ));
+                    config
+                        .resource_store
+                        .put(make_cr(Some(pid.clone()), v.to_cr_spec()));
                     return;
                 }
             }
@@ -72,10 +72,9 @@ pub fn seed_store_from_config_snapshot(
         "Workspace" => {
             for (pid, project) in &config.projects {
                 if let Some(v) = project.workspaces.get(name) {
-                    config.resource_store.put(make_cr(
-                        Some(pid.clone()),
-                        v.to_cr_spec(),
-                    ));
+                    config
+                        .resource_store
+                        .put(make_cr(Some(pid.clone()), v.to_cr_spec()));
                     return;
                 }
             }
@@ -83,10 +82,9 @@ pub fn seed_store_from_config_snapshot(
         "StepTemplate" => {
             for (pid, project) in &config.projects {
                 if let Some(v) = project.step_templates.get(name) {
-                    config.resource_store.put(make_cr(
-                        Some(pid.clone()),
-                        v.to_cr_spec(),
-                    ));
+                    config
+                        .resource_store
+                        .put(make_cr(Some(pid.clone()), v.to_cr_spec()));
                     return;
                 }
             }
@@ -95,10 +93,9 @@ pub fn seed_store_from_config_snapshot(
             for (pid, project) in &config.projects {
                 if let Some(v) = project.env_stores.get(name) {
                     if !v.sensitive {
-                        config.resource_store.put(make_cr(
-                            Some(pid.clone()),
-                            v.to_cr_spec(),
-                        ));
+                        config
+                            .resource_store
+                            .put(make_cr(Some(pid.clone()), v.to_cr_spec()));
                         return;
                     }
                 }
@@ -109,10 +106,9 @@ pub fn seed_store_from_config_snapshot(
                 if let Some(v) = project.env_stores.get(name) {
                     if v.sensitive {
                         let proj = SecretStoreProjection(v.clone());
-                        config.resource_store.put(make_cr(
-                            Some(pid.clone()),
-                            proj.to_cr_spec(),
-                        ));
+                        config
+                            .resource_store
+                            .put(make_cr(Some(pid.clone()), proj.to_cr_spec()));
                         return;
                     }
                 }
@@ -157,7 +153,10 @@ pub fn reconcile_single_resource(
 
     let cr = if is_project_scoped(kind) {
         let project_id = project.unwrap_or(crate::config::DEFAULT_PROJECT_ID);
-        config.resource_store.get_namespaced(kind, project_id, name).cloned()
+        config
+            .resource_store
+            .get_namespaced(kind, project_id, name)
+            .cloned()
     } else {
         config.resource_store.get(kind, name).cloned()
     };
@@ -420,13 +419,9 @@ pub fn sync_config_snapshot_to_store(config: &mut OrchestratorConfig) {
             } else {
                 store.to_cr_spec()
             };
-            config.resource_store.put(make_cr(
-                kind,
-                name,
-                Some(project_id.clone()),
-                spec,
-                &now,
-            ));
+            config
+                .resource_store
+                .put(make_cr(kind, name, Some(project_id.clone()), spec, &now));
         }
     }
 

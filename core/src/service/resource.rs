@@ -1,6 +1,6 @@
 use crate::config_load::{
-    load_config, persist_config_and_reload, persist_config_for_delete, read_active_config,
-    ResourceRemoval,
+    enforce_deletion_guards_for_removals, load_config, persist_config_and_reload,
+    persist_config_for_delete, read_active_config, ResourceRemoval,
 };
 use crate::crd::{self, ParsedManifest};
 use crate::resource::{
@@ -147,6 +147,11 @@ pub fn apply_manifests(
         Vec::new()
     };
 
+    if errors.is_empty() && !deleted_resources.is_empty() {
+        let conn = crate::db::open_conn(db_path)?;
+        enforce_deletion_guards_for_removals(&conn, &deleted_resources)?;
+    }
+
     for deletion in &deleted_resources {
         results.push(orchestrator_proto::ApplyResultEntry {
             kind: deletion.kind.to_lowercase(),
@@ -204,7 +209,13 @@ pub fn get_resource(
         let (kind, name) = (parts[0], parts[1]);
         get_single_resource(proj_cfg, kind, name, output_format)
     } else {
-        get_list_resource(proj_cfg, resource, selector, output_format, &config.resource_store)
+        get_list_resource(
+            proj_cfg,
+            resource,
+            selector,
+            output_format,
+            &config.resource_store,
+        )
     }
 }
 
@@ -384,10 +395,11 @@ pub fn delete_resource(
                         for entry in entries.flatten() {
                             let fname = entry.file_name();
                             let fname_str = fname.to_string_lossy();
-                            if fname_str.starts_with("auto_") && fname_str.ends_with(".md") {
-                                if std::fs::remove_file(entry.path()).is_ok() {
-                                    _tickets_cleaned += 1;
-                                }
+                            if fname_str.starts_with("auto_")
+                                && fname_str.ends_with(".md")
+                                && std::fs::remove_file(entry.path()).is_ok()
+                            {
+                                _tickets_cleaned += 1;
                             }
                         }
                     }
@@ -501,17 +513,42 @@ fn plan_prune_for_project(
     let mut deletions: Vec<ResourceRemoval> = Vec::new();
     for (kind, declared_names) in manifest_names {
         match *kind {
-            "Agent" => prune_map_entries(&mut candidate_project.agents, declared_names, kind, project_id, &mut deletions),
-            "Workflow" => prune_map_entries(&mut candidate_project.workflows, declared_names, kind, project_id, &mut deletions),
-            "Workspace" => prune_map_entries(&mut candidate_project.workspaces, declared_names, kind, project_id, &mut deletions),
-            "StepTemplate" => prune_map_entries(&mut candidate_project.step_templates, declared_names, kind, project_id, &mut deletions),
+            "Agent" => prune_map_entries(
+                &mut candidate_project.agents,
+                declared_names,
+                kind,
+                project_id,
+                &mut deletions,
+            ),
+            "Workflow" => prune_map_entries(
+                &mut candidate_project.workflows,
+                declared_names,
+                kind,
+                project_id,
+                &mut deletions,
+            ),
+            "Workspace" => prune_map_entries(
+                &mut candidate_project.workspaces,
+                declared_names,
+                kind,
+                project_id,
+                &mut deletions,
+            ),
+            "StepTemplate" => prune_map_entries(
+                &mut candidate_project.step_templates,
+                declared_names,
+                kind,
+                project_id,
+                &mut deletions,
+            ),
             "EnvStore" | "SecretStore" => {
                 let expected_sensitivity = *kind == "SecretStore";
                 let existing_names: Vec<String> = previous_project
                     .env_stores
                     .iter()
                     .filter_map(|(name, store)| {
-                        if store.sensitive == expected_sensitivity && !declared_names.contains(name) {
+                        if store.sensitive == expected_sensitivity && !declared_names.contains(name)
+                        {
                             Some(name.clone())
                         } else {
                             None
@@ -645,8 +682,14 @@ mod tests {
             workflow_manifest("keep-me", "echo keep"),
             workflow_manifest("update-me", "echo old")
         );
-        apply_manifests(&state, &first_manifest, false, Some(crate::config::DEFAULT_PROJECT_ID), false)
-            .expect("seed workflows");
+        apply_manifests(
+            &state,
+            &first_manifest,
+            false,
+            Some(crate::config::DEFAULT_PROJECT_ID),
+            false,
+        )
+        .expect("seed workflows");
 
         let second_manifest = workflow_manifest("update-me", "echo new");
         apply_manifests(
@@ -678,8 +721,14 @@ mod tests {
             workflow_manifest("keep-me", "echo keep"),
             workflow_manifest("delete-me", "echo delete")
         );
-        apply_manifests(&state, &seed_manifest, false, Some(crate::config::DEFAULT_PROJECT_ID), false)
-            .expect("seed workflows");
+        apply_manifests(
+            &state,
+            &seed_manifest,
+            false,
+            Some(crate::config::DEFAULT_PROJECT_ID),
+            false,
+        )
+        .expect("seed workflows");
 
         let dry_run = apply_manifests(
             &state,
@@ -709,7 +758,9 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
-        let qa_file = state.app_root.join("workspace/default/docs/qa/prune-block.md");
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/prune-block.md");
         std::fs::write(&qa_file, "# prune block\n").expect("seed qa file");
 
         let seed_manifest = format!(
@@ -717,8 +768,14 @@ mod tests {
             workflow_manifest("keep-me", "echo keep"),
             workflow_manifest("delete-me", "echo delete")
         );
-        apply_manifests(&state, &seed_manifest, false, Some(crate::config::DEFAULT_PROJECT_ID), false)
-            .expect("seed workflows");
+        apply_manifests(
+            &state,
+            &seed_manifest,
+            false,
+            Some(crate::config::DEFAULT_PROJECT_ID),
+            false,
+        )
+        .expect("seed workflows");
 
         create_task_impl(
             &state,
@@ -775,7 +832,9 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
-        let qa_file = state.app_root.join("workspace/default/docs/qa/cross-project.md");
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/cross-project.md");
         std::fs::write(&qa_file, "# cross project\n").expect("seed qa file");
 
         let bundle = project_bundle_manifest("delete-me");
@@ -793,8 +852,14 @@ mod tests {
         )
         .expect("create alpha blocker");
 
-        apply_manifests(&state, &project_subset_manifest(), false, Some("beta"), true)
-            .expect("beta prune should ignore alpha blocker");
+        apply_manifests(
+            &state,
+            &project_subset_manifest(),
+            false,
+            Some("beta"),
+            true,
+        )
+        .expect("beta prune should ignore alpha blocker");
 
         let active = read_active_config(&state).expect("read active config");
         let alpha = active.config.projects.get("alpha").expect("alpha project");

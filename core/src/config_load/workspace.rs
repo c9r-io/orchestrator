@@ -90,11 +90,8 @@ pub fn resolve_and_validate_workspaces_for_project(
         );
     }
 
-    let project_agents: HashMap<String, &crate::config::AgentConfig> = project
-        .agents
-        .iter()
-        .map(|(k, v)| (k.clone(), v))
-        .collect();
+    let project_agents: HashMap<String, &crate::config::AgentConfig> =
+        project.agents.iter().map(|(k, v)| (k.clone(), v)).collect();
     for (workflow_id, workflow) in &project.workflows {
         validate_workflow_config_with_agents(&project_agents, workflow, workflow_id)?;
     }
@@ -230,7 +227,10 @@ mod tests {
             ..OrchestratorConfig::default()
         };
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
-        assert!(result.is_ok(), "empty agent set is allowed for project-scoped config");
+        assert!(
+            result.is_ok(),
+            "empty agent set is allowed for project-scoped config"
+        );
     }
 
     #[test]
@@ -261,7 +261,10 @@ mod tests {
             ..OrchestratorConfig::default()
         };
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
-        assert!(result.is_ok(), "empty workflow set is allowed for project-scoped config");
+        assert!(
+            result.is_ok(),
+            "empty workflow set is allowed for project-scoped config"
+        );
     }
 
     #[test]
@@ -377,7 +380,10 @@ mod tests {
             ..OrchestratorConfig::default()
         };
         let result = resolve_and_validate_workspaces(Path::new("/"), &config);
-        assert!(result.is_ok(), "project-scoped workspace validation no longer requires workflows");
+        assert!(
+            result.is_ok(),
+            "project-scoped workspace validation no longer requires workflows"
+        );
         std::fs::remove_dir_all(&ws_root).ok();
     }
 

@@ -538,7 +538,10 @@ mod tests {
         let config = make_config_with_project_agents();
         // Unknown project stays isolated instead of borrowing resources from another scope.
         let agents = resolve_effective_agents("no-such-project", &config, Some("qa"));
-        assert!(agents.is_empty(), "unknown project must not fall back to another scope");
+        assert!(
+            agents.is_empty(),
+            "unknown project must not fall back to another scope"
+        );
     }
 
     #[test]
@@ -557,6 +560,9 @@ mod tests {
             },
         );
         let agents = resolve_effective_agents("empty-proj", &config, Some("qa"));
-        assert!(agents.is_empty(), "empty project must not fall back to global agents");
+        assert!(
+            agents.is_empty(),
+            "empty project must not fall back to global agents"
+        );
     }
 }

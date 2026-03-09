@@ -58,8 +58,11 @@ impl Resource for WorkflowResource {
 
     fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
         let mut metadata = self.metadata.clone();
-        metadata.project =
-            Some(config.effective_project_id(metadata.project.as_deref()).to_string());
+        metadata.project = Some(
+            config
+                .effective_project_id(metadata.project.as_deref())
+                .to_string(),
+        );
         Ok(super::apply_to_store(
             config,
             "Workflow",
@@ -77,14 +80,26 @@ impl Resource for WorkflowResource {
         )
     }
 
-    fn get_from_project(config: &OrchestratorConfig, name: &str, project_id: Option<&str>) -> Option<Self> {
-        config.project(project_id)?.workflows.get(name).map(|workflow| Self {
-            metadata: super::metadata_from_store(config, "Workflow", name, project_id),
-            spec: workflow_config_to_spec(workflow),
-        })
+    fn get_from_project(
+        config: &OrchestratorConfig,
+        name: &str,
+        project_id: Option<&str>,
+    ) -> Option<Self> {
+        config
+            .project(project_id)?
+            .workflows
+            .get(name)
+            .map(|workflow| Self {
+                metadata: super::metadata_from_store(config, "Workflow", name, project_id),
+                spec: workflow_config_to_spec(workflow),
+            })
     }
 
-    fn delete_from_project(config: &mut OrchestratorConfig, name: &str, project_id: Option<&str>) -> bool {
+    fn delete_from_project(
+        config: &mut OrchestratorConfig,
+        name: &str,
+        project_id: Option<&str>,
+    ) -> bool {
         super::helpers::delete_from_store_project(config, "Workflow", name, project_id)
     }
 }

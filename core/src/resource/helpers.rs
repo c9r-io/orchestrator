@@ -149,13 +149,11 @@ pub(crate) fn apply_to_store(
     }
 
     // Preserve generation and created_at from existing CR if updating
-    let (generation, created_at) = match config
-        .resource_store
-        .get_namespaced(kind, project_id, name)
-    {
-        Some(existing) => (existing.generation + 1, existing.created_at.clone()),
-        None => (1, now.clone()),
-    };
+    let (generation, created_at) =
+        match config.resource_store.get_namespaced(kind, project_id, name) {
+            Some(existing) => (existing.generation + 1, existing.created_at.clone()),
+            None => (1, now.clone()),
+        };
 
     let cr = CustomResource {
         kind: kind.to_string(),

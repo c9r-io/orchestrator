@@ -408,8 +408,8 @@ mod tests {
         init_schema(&db_path).expect("init_schema");
 
         let conn = open_conn(&db_path).expect("open_conn");
-        let count = count_non_terminal_tasks_by_workspace(&conn, "default", "nonexistent")
-            .expect("count");
+        let count =
+            count_non_terminal_tasks_by_workspace(&conn, "default", "nonexistent").expect("count");
         assert_eq!(count, 0);
     }
 
@@ -427,9 +427,12 @@ mod tests {
         create_task_impl(&state, CreateTaskPayload::default()).expect("task 2");
 
         let conn = open_conn(&state.db_path).expect("open sqlite");
-        let count =
-            count_non_terminal_tasks_by_workspace(&conn, crate::config::DEFAULT_PROJECT_ID, "default")
-                .expect("count");
+        let count = count_non_terminal_tasks_by_workspace(
+            &conn,
+            crate::config::DEFAULT_PROJECT_ID,
+            "default",
+        )
+        .expect("count");
         assert_eq!(count, 2);
     }
 
@@ -439,8 +442,8 @@ mod tests {
         init_schema(&db_path).expect("init_schema");
 
         let conn = open_conn(&db_path).expect("open_conn");
-        let count = count_non_terminal_tasks_by_workflow(&conn, "default", "nonexistent")
-            .expect("count");
+        let count =
+            count_non_terminal_tasks_by_workflow(&conn, "default", "nonexistent").expect("count");
         assert_eq!(count, 0);
     }
 

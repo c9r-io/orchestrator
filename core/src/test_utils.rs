@@ -1,9 +1,8 @@
 use crate::collab::MessageBus;
 use crate::config::{
     AgentConfig, AgentMetadata, AgentSelectionConfig, LoopMode, OrchestratorConfig, ProjectConfig,
-    PromptDelivery, SafetyConfig,
-    StepBehavior, WorkflowConfig, WorkflowFinalizeConfig, WorkflowLoopConfig,
-    WorkflowLoopGuardConfig, WorkflowStepConfig, WorkspaceConfig,
+    PromptDelivery, SafetyConfig, StepBehavior, WorkflowConfig, WorkflowFinalizeConfig,
+    WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig, WorkspaceConfig,
 };
 use crate::config_load::{
     build_active_config, load_config, persist_raw_config, read_active_config,
@@ -171,14 +170,14 @@ impl TestState {
             .expect("default project")
             .workspaces
             .insert(
-            workspace_id.clone(),
-            WorkspaceConfig {
-                root_path: path.into(),
-                qa_targets: vec!["docs/qa".to_string(), "docs/security".to_string()],
-                ticket_dir: "docs/ticket".to_string(),
-                self_referential: false,
-            },
-        );
+                workspace_id.clone(),
+                WorkspaceConfig {
+                    root_path: path.into(),
+                    qa_targets: vec!["docs/qa".to_string(), "docs/security".to_string()],
+                    ticket_dir: "docs/ticket".to_string(),
+                    self_referential: false,
+                },
+            );
         self
     }
 
@@ -249,13 +248,8 @@ impl TestState {
             .and_then(|p| p.workspaces.get("default"))
             .expect("default workspace missing in test config");
 
-        backfill_default_scope_data(
-            &db_path,
-            "default",
-            "basic",
-            default_workspace,
-        )
-        .expect("failed to backfill test data");
+        backfill_default_scope_data(&db_path, "default", "basic", default_workspace)
+            .expect("failed to backfill test data");
 
         let async_database = Arc::new({
             let db_p = db_path.clone();

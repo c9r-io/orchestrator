@@ -1685,17 +1685,17 @@ mod tests {
             .or_default()
             .agents
             .insert(
-            "bad-agent".to_string(),
-            AgentConfig {
-                env: Some(vec![AgentEnvEntry {
-                    name: None,
-                    value: None,
-                    from_ref: Some("nonexistent".to_string()),
-                    ref_value: None,
-                }]),
-                ..AgentConfig::default()
-            },
-        );
+                "bad-agent".to_string(),
+                AgentConfig {
+                    env: Some(vec![AgentEnvEntry {
+                        name: None,
+                        value: None,
+                        from_ref: Some("nonexistent".to_string()),
+                        ref_value: None,
+                    }]),
+                    ..AgentConfig::default()
+                },
+            );
         let err = validate_agent_env_store_refs(&config).unwrap_err();
         assert!(err.to_string().contains("unknown store"));
         assert!(err.to_string().contains("bad-agent"));
@@ -1713,20 +1713,20 @@ mod tests {
             .or_default()
             .agents
             .insert(
-            "bad-agent".to_string(),
-            AgentConfig {
-                env: Some(vec![AgentEnvEntry {
-                    name: Some("X".to_string()),
-                    value: None,
-                    from_ref: None,
-                    ref_value: Some(AgentEnvRefValue {
-                        name: "missing-store".to_string(),
-                        key: "KEY".to_string(),
-                    }),
-                }]),
-                ..AgentConfig::default()
-            },
-        );
+                "bad-agent".to_string(),
+                AgentConfig {
+                    env: Some(vec![AgentEnvEntry {
+                        name: Some("X".to_string()),
+                        value: None,
+                        from_ref: None,
+                        ref_value: Some(AgentEnvRefValue {
+                            name: "missing-store".to_string(),
+                            key: "KEY".to_string(),
+                        }),
+                    }]),
+                    ..AgentConfig::default()
+                },
+            );
         let err = validate_agent_env_store_refs(&config).unwrap_err();
         assert!(err.to_string().contains("unknown store"));
     }

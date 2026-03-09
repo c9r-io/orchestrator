@@ -248,20 +248,30 @@ mod tests {
         pr.apply(&mut config).expect("apply");
 
         // Add EnvStore and SecretStore
-        config.projects.get_mut("default").unwrap().env_stores.insert(
-            "shared-config".to_string(),
-            crate::config::EnvStoreConfig {
-                data: [("K".to_string(), "V".to_string())].into(),
-                sensitive: false,
-            },
-        );
-        config.projects.get_mut("default").unwrap().env_stores.insert(
-            "api-keys".to_string(),
-            crate::config::EnvStoreConfig {
-                data: [("SECRET".to_string(), "val".to_string())].into(),
-                sensitive: true,
-            },
-        );
+        config
+            .projects
+            .get_mut("default")
+            .unwrap()
+            .env_stores
+            .insert(
+                "shared-config".to_string(),
+                crate::config::EnvStoreConfig {
+                    data: [("K".to_string(), "V".to_string())].into(),
+                    sensitive: false,
+                },
+            );
+        config
+            .projects
+            .get_mut("default")
+            .unwrap()
+            .env_stores
+            .insert(
+                "api-keys".to_string(),
+                crate::config::EnvStoreConfig {
+                    data: [("SECRET".to_string(), "val".to_string())].into(),
+                    sensitive: true,
+                },
+            );
 
         let resources = export_manifest_resources(&config);
         let kinds: Vec<ResourceKind> = resources.iter().map(|r| r.kind()).collect();
@@ -423,20 +433,30 @@ mod tests {
         let pr = dispatch_resource(project_manifest("map-pr", "d")).expect("dispatch project");
         pr.apply(&mut config).expect("apply");
 
-        config.projects.get_mut("default").unwrap().env_stores.insert(
-            "test-config".to_string(),
-            crate::config::EnvStoreConfig {
-                data: [("K".to_string(), "V".to_string())].into(),
-                sensitive: false,
-            },
-        );
-        config.projects.get_mut("default").unwrap().env_stores.insert(
-            "test-secrets".to_string(),
-            crate::config::EnvStoreConfig {
-                data: [("S".to_string(), "V".to_string())].into(),
-                sensitive: true,
-            },
-        );
+        config
+            .projects
+            .get_mut("default")
+            .unwrap()
+            .env_stores
+            .insert(
+                "test-config".to_string(),
+                crate::config::EnvStoreConfig {
+                    data: [("K".to_string(), "V".to_string())].into(),
+                    sensitive: false,
+                },
+            );
+        config
+            .projects
+            .get_mut("default")
+            .unwrap()
+            .env_stores
+            .insert(
+                "test-secrets".to_string(),
+                crate::config::EnvStoreConfig {
+                    data: [("S".to_string(), "V".to_string())].into(),
+                    sensitive: true,
+                },
+            );
 
         let docs = export_manifest_documents(&config);
         let kinds: Vec<ResourceKind> = docs.iter().map(|d| d.kind).collect();

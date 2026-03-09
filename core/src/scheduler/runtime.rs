@@ -189,7 +189,9 @@ pub async fn load_task_runtime_context(
     let project_id = runtime_row.project_id;
 
     let active = read_active_config(state)?;
-    let effective_project_id = active.config.effective_project_id(Some(project_id.as_str()));
+    let effective_project_id = active
+        .config
+        .effective_project_id(Some(project_id.as_str()));
     let workflow = active
         .config
         .projects
@@ -212,12 +214,12 @@ pub async fn load_task_runtime_context(
                 &workflow_id,
                 effective_project_id,
             )
-                .unwrap_or(TaskExecutionPlan {
-                    steps: Vec::new(),
-                    loop_policy: crate::config::WorkflowLoopConfig::default(),
-                    finalize: crate::config::default_workflow_finalize_config(),
-                    max_parallel: None,
-                })
+            .unwrap_or(TaskExecutionPlan {
+                steps: Vec::new(),
+                loop_policy: crate::config::WorkflowLoopConfig::default(),
+                finalize: crate::config::default_workflow_finalize_config(),
+                max_parallel: None,
+            })
         });
     // Layer 1 defense: re-normalize builtin steps whose `behavior.execution`
     // may have been stored as the serde default `Agent` in SQLite.
@@ -363,9 +365,13 @@ mod tests {
         let plan_json = {
             let active = read_active_config(&state).expect("read active config");
             let (workflow_id, workflow) = default_workflow(&active);
-            let mut plan =
-                build_execution_plan_for_project(&active.config, workflow, workflow_id, crate::config::DEFAULT_PROJECT_ID)
-                    .expect("build execution plan");
+            let mut plan = build_execution_plan_for_project(
+                &active.config,
+                workflow,
+                workflow_id,
+                crate::config::DEFAULT_PROJECT_ID,
+            )
+            .expect("build execution plan");
             plan.finalize.rules.clear();
             serde_json::to_string(&plan).expect("serialize plan")
         };
@@ -539,9 +545,13 @@ mod tests {
         let plan_json = {
             let active = read_active_config(&state).expect("read active config");
             let (workflow_id, workflow) = default_workflow(&active);
-            let mut plan =
-                build_execution_plan_for_project(&active.config, workflow, workflow_id, crate::config::DEFAULT_PROJECT_ID)
-                    .expect("build execution plan");
+            let mut plan = build_execution_plan_for_project(
+                &active.config,
+                workflow,
+                workflow_id,
+                crate::config::DEFAULT_PROJECT_ID,
+            )
+            .expect("build execution plan");
 
             let stale_step = plan.steps.first_mut().expect("plan has step");
             stale_step.id = "self_test".to_string();

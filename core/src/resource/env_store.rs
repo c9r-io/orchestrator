@@ -45,22 +45,34 @@ impl Resource for EnvStoreResource {
         )
     }
 
-    fn get_from_project(config: &OrchestratorConfig, name: &str, project_id: Option<&str>) -> Option<Self> {
-        config.project(project_id)?.env_stores.get(name).and_then(|store| {
-            if store.sensitive {
-                None // SecretStore, not EnvStore
-            } else {
-                Some(Self {
-                    metadata: super::metadata_with_name(name),
-                    spec: EnvStoreSpec {
-                        data: store.data.clone(),
-                    },
-                })
-            }
-        })
+    fn get_from_project(
+        config: &OrchestratorConfig,
+        name: &str,
+        project_id: Option<&str>,
+    ) -> Option<Self> {
+        config
+            .project(project_id)?
+            .env_stores
+            .get(name)
+            .and_then(|store| {
+                if store.sensitive {
+                    None // SecretStore, not EnvStore
+                } else {
+                    Some(Self {
+                        metadata: super::metadata_with_name(name),
+                        spec: EnvStoreSpec {
+                            data: store.data.clone(),
+                        },
+                    })
+                }
+            })
     }
 
-    fn delete_from_project(config: &mut OrchestratorConfig, name: &str, project_id: Option<&str>) -> bool {
+    fn delete_from_project(
+        config: &mut OrchestratorConfig,
+        name: &str,
+        project_id: Option<&str>,
+    ) -> bool {
         config
             .project_mut(project_id)
             .map(|project| {

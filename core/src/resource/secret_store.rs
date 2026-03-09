@@ -45,22 +45,34 @@ impl Resource for SecretStoreResource {
         )
     }
 
-    fn get_from_project(config: &OrchestratorConfig, name: &str, project_id: Option<&str>) -> Option<Self> {
-        config.project(project_id)?.env_stores.get(name).and_then(|store| {
-            if store.sensitive {
-                Some(Self {
-                    metadata: super::metadata_with_name(name),
-                    spec: EnvStoreSpec {
-                        data: store.data.clone(),
-                    },
-                })
-            } else {
-                None // EnvStore, not SecretStore
-            }
-        })
+    fn get_from_project(
+        config: &OrchestratorConfig,
+        name: &str,
+        project_id: Option<&str>,
+    ) -> Option<Self> {
+        config
+            .project(project_id)?
+            .env_stores
+            .get(name)
+            .and_then(|store| {
+                if store.sensitive {
+                    Some(Self {
+                        metadata: super::metadata_with_name(name),
+                        spec: EnvStoreSpec {
+                            data: store.data.clone(),
+                        },
+                    })
+                } else {
+                    None // EnvStore, not SecretStore
+                }
+            })
     }
 
-    fn delete_from_project(config: &mut OrchestratorConfig, name: &str, project_id: Option<&str>) -> bool {
+    fn delete_from_project(
+        config: &mut OrchestratorConfig,
+        name: &str,
+        project_id: Option<&str>,
+    ) -> bool {
         config
             .project_mut(project_id)
             .map(|project| {
@@ -119,7 +131,15 @@ mod tests {
         assert_eq!(loaded.kind(), ResourceKind::SecretStore);
 
         // Underlying config should be marked sensitive
-        assert!(config.default_project().unwrap().env_stores.get("my-secrets").unwrap().sensitive);
+        assert!(
+            config
+                .default_project()
+                .unwrap()
+                .env_stores
+                .get("my-secrets")
+                .unwrap()
+                .sensitive
+        );
     }
 
     #[test]

@@ -71,25 +71,24 @@ pub fn run_checks(
     let mut checks = Vec::new();
 
     let effective_project = project_id.unwrap_or(crate::config::DEFAULT_PROJECT_ID);
-    let (workspaces, agents, workflows, step_templates) = if let Some(project) =
-        oc.projects.get(effective_project)
-    {
-        (
-            &project.workspaces,
-            &project.agents,
-            &project.workflows,
-            &project.step_templates,
-        )
-    } else {
-        checks.push(CheckResult {
-            rule: "project_not_found".into(),
-            severity: Severity::Error,
-            passed: false,
-            message: format!("project \"{effective_project}\" not found in config"),
-            context: None,
-        });
-        return build_report(checks);
-    };
+    let (workspaces, agents, workflows, step_templates) =
+        if let Some(project) = oc.projects.get(effective_project) {
+            (
+                &project.workspaces,
+                &project.agents,
+                &project.workflows,
+                &project.step_templates,
+            )
+        } else {
+            checks.push(CheckResult {
+                rule: "project_not_found".into(),
+                severity: Severity::Error,
+                passed: false,
+                message: format!("project \"{effective_project}\" not found in config"),
+                context: None,
+            });
+            return build_report(checks);
+        };
 
     check_workspace_roots(workspaces, app_root, &mut checks);
     check_qa_targets(workspaces, app_root, &mut checks);
@@ -1197,8 +1196,7 @@ mod tests {
             .agents
             .get_mut("agent1")
             .expect("agent1")
-            .command =
-            "claude -p \"{prompt}\"".to_string();
+            .command = "claude -p \"{prompt}\"".to_string();
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());
@@ -1222,8 +1220,7 @@ mod tests {
             .agents
             .get_mut("agent1")
             .expect("agent1")
-            .command =
-            "claude --file input.txt".to_string();
+            .command = "claude --file input.txt".to_string();
 
         let tmp = tempfile::tempdir().expect("create temp dir");
         make_temp_ws(tmp.path());

@@ -200,7 +200,12 @@ pub(crate) fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorCo
     crate::crd::writeback::sync_config_snapshot_to_store(&mut config);
 
     // Restore RuntimePolicy from old store, or seed defaults if absent
-    if let Some(rp_cr) = old_store.list_by_kind("RuntimePolicy").into_iter().next().cloned() {
+    if let Some(rp_cr) = old_store
+        .list_by_kind("RuntimePolicy")
+        .into_iter()
+        .next()
+        .cloned()
+    {
         config.resource_store.put(rp_cr);
     } else {
         // Cold start: seed a default RuntimePolicy
@@ -890,8 +895,12 @@ mod tests {
             .projects
             .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
             .or_default();
-        project.workflows.insert("wf1".to_string(), make_workflow(vec![]));
-        project.workflows.insert("wf2".to_string(), make_workflow(vec![]));
+        project
+            .workflows
+            .insert("wf1".to_string(), make_workflow(vec![]));
+        project
+            .workflows
+            .insert("wf2".to_string(), make_workflow(vec![]));
         let normalized = normalize_config(config);
         for wf in normalized
             .projects
@@ -1008,12 +1017,12 @@ mod tests {
             .or_default()
             .agents
             .insert(
-            "norm-ag".to_string(),
-            crate::config::AgentConfig {
-                command: "echo test".to_string(),
-                ..Default::default()
-            },
-        );
+                "norm-ag".to_string(),
+                crate::config::AgentConfig {
+                    command: "echo test".to_string(),
+                    ..Default::default()
+                },
+            );
         let normalized = normalize_config(config);
 
         assert!(
@@ -1024,7 +1033,10 @@ mod tests {
             "store should be populated from config snapshot agents"
         );
         assert!(
-            normalized.resource_store.get("RuntimePolicy", "runtime").is_some(),
+            normalized
+                .resource_store
+                .get("RuntimePolicy", "runtime")
+                .is_some(),
             "runtime policy should also be in the store"
         );
     }
@@ -1049,7 +1061,10 @@ mod tests {
         };
         config.resource_store.put(stale_cr);
         // Agent is project-scoped, so put() auto-assigns DEFAULT_PROJECT_ID
-        assert!(config.resource_store.get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "stale-agent").is_some());
+        assert!(config
+            .resource_store
+            .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "stale-agent")
+            .is_some());
 
         // Legacy does NOT have "stale-agent"
         let normalized = normalize_config(config);
@@ -1071,12 +1086,12 @@ mod tests {
             .or_default()
             .agents
             .insert(
-            "idem-ag".to_string(),
-            crate::config::AgentConfig {
-                command: "echo test".to_string(),
-                ..Default::default()
-            },
-        );
+                "idem-ag".to_string(),
+                crate::config::AgentConfig {
+                    command: "echo test".to_string(),
+                    ..Default::default()
+                },
+            );
         let first = normalize_config(config);
         let second = normalize_config(first);
 

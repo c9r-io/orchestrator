@@ -134,7 +134,11 @@ pub async fn execute_self_restart_step(
             return Ok(SelfRestartOutcome::Failed(1));
         }
         Err(_) => {
-            error!(phase = "verify_binary", timeout_secs = verify_timeout_secs, "new binary --help timed out");
+            error!(
+                phase = "verify_binary",
+                timeout_secs = verify_timeout_secs,
+                "new binary --help timed out"
+            );
             state.emit_event(
                 task_id,
                 Some(item_id),

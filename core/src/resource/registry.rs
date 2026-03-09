@@ -3,8 +3,8 @@ use crate::config::OrchestratorConfig;
 use anyhow::{anyhow, Result};
 
 use super::{
-    agent, env_store, project, runtime_policy, secret_store, step_template, workflow,
-    workspace, ApplyResult, Resource,
+    agent, env_store, project, runtime_policy, secret_store, step_template, workflow, workspace,
+    ApplyResult, Resource,
 };
 use super::{
     AgentResource, EnvStoreResource, ProjectResource, RuntimePolicyResource, SecretStoreResource,
@@ -159,7 +159,11 @@ impl Resource for RegisteredResource {
         }
     }
 
-    fn get_from_project(config: &OrchestratorConfig, name: &str, project_id: Option<&str>) -> Option<Self> {
+    fn get_from_project(
+        config: &OrchestratorConfig,
+        name: &str,
+        project_id: Option<&str>,
+    ) -> Option<Self> {
         if let Some(workspace) = WorkspaceResource::get_from_project(config, name, project_id) {
             return Some(Self::Workspace(workspace));
         }
@@ -172,24 +176,33 @@ impl Resource for RegisteredResource {
         if let Some(project) = ProjectResource::get_from_project(config, name, project_id) {
             return Some(Self::Project(project));
         }
-        if let Some(step_template) = StepTemplateResource::get_from_project(config, name, project_id) {
+        if let Some(step_template) =
+            StepTemplateResource::get_from_project(config, name, project_id)
+        {
             return Some(Self::StepTemplate(step_template));
         }
         if name == "runtime" {
-            if let Some(runtime_policy) = RuntimePolicyResource::get_from_project(config, name, project_id) {
+            if let Some(runtime_policy) =
+                RuntimePolicyResource::get_from_project(config, name, project_id)
+            {
                 return Some(Self::RuntimePolicy(runtime_policy));
             }
         }
         if let Some(env_store) = EnvStoreResource::get_from_project(config, name, project_id) {
             return Some(Self::EnvStore(env_store));
         }
-        if let Some(secret_store) = SecretStoreResource::get_from_project(config, name, project_id) {
+        if let Some(secret_store) = SecretStoreResource::get_from_project(config, name, project_id)
+        {
             return Some(Self::SecretStore(secret_store));
         }
         None
     }
 
-    fn delete_from_project(config: &mut OrchestratorConfig, name: &str, project_id: Option<&str>) -> bool {
+    fn delete_from_project(
+        config: &mut OrchestratorConfig,
+        name: &str,
+        project_id: Option<&str>,
+    ) -> bool {
         // Try each builtin kind in turn
         if WorkspaceResource::delete_from_project(config, name, project_id) {
             return true;

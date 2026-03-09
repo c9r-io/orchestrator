@@ -297,24 +297,39 @@ pub fn load_all_resources(
     })?;
 
     for row in rows {
-        let (kind, project, name, api_version, spec_json, metadata_json, generation, created_at, updated_at) = row?;
+        let (
+            kind,
+            project,
+            name,
+            api_version,
+            spec_json,
+            metadata_json,
+            generation,
+            created_at,
+            updated_at,
+        ) = row?;
 
         if kind == "CustomResourceDefinition" {
-            if let Ok(crd) = serde_json::from_str::<crate::crd::types::CustomResourceDefinition>(&spec_json) {
+            if let Ok(crd) =
+                serde_json::from_str::<crate::crd::types::CustomResourceDefinition>(&spec_json)
+            {
                 crds.insert(name, crd);
             }
             continue;
         }
 
         let spec: serde_json::Value = serde_json::from_str(&spec_json).unwrap_or_default();
-        let metadata: crate::cli_types::ResourceMetadata = serde_json::from_str(&metadata_json).unwrap_or_else(|_| {
-            crate::cli_types::ResourceMetadata {
+        let metadata: crate::cli_types::ResourceMetadata = serde_json::from_str(&metadata_json)
+            .unwrap_or_else(|_| crate::cli_types::ResourceMetadata {
                 name: name.clone(),
-                project: if project == crate::crd::store::SYSTEM_PROJECT { None } else { Some(project.clone()) },
+                project: if project == crate::crd::store::SYSTEM_PROJECT {
+                    None
+                } else {
+                    Some(project.clone())
+                },
                 labels: None,
                 annotations: None,
-            }
-        });
+            });
 
         let cr = crate::crd::types::CustomResource {
             kind,
@@ -367,7 +382,14 @@ pub fn load_config_from_resources_table(
         ..Default::default()
     };
     crate::crd::writeback::reconcile_all_builtins(&mut config);
-    let project_kinds = ["Agent", "Workflow", "Workspace", "StepTemplate", "EnvStore", "SecretStore"];
+    let project_kinds = [
+        "Agent",
+        "Workflow",
+        "Workspace",
+        "StepTemplate",
+        "EnvStore",
+        "SecretStore",
+    ];
     for kind in &project_kinds {
         let resources: Vec<(Option<String>, String)> = config
             .resource_store
@@ -425,9 +447,7 @@ pub fn persist_config_and_reload(
     deleted_resources: &[ResourceRemoval],
 ) -> Result<ConfigOverview> {
     let candidate = match target_project {
-        Some(project) => {
-            build_active_config_for_project(&state.app_root, config.clone(), project)?
-        }
+        Some(project) => build_active_config_for_project(&state.app_root, config.clone(), project)?,
         None => build_active_config(&state.app_root, config.clone())?,
     };
     let normalized = candidate.config.clone();
@@ -548,8 +568,9 @@ mod tests {
                 workflow_id: "basic".to_string(),
                 step_id: "self_test".to_string(),
                 rule: ConfigSelfHealRule::DropRequiredCapabilityFromBuiltinStep,
-                detail: "removed deprecated required_capability 'self_test' from builtin 'self_test'"
-                    .to_string(),
+                detail:
+                    "removed deprecated required_capability 'self_test' from builtin 'self_test'"
+                        .to_string(),
             },
             ConfigSelfHealChange {
                 workflow_id: "basic".to_string(),

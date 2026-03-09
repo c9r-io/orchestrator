@@ -260,11 +260,8 @@ pub fn enforce_deletion_guards_for_removals(
                 }
             }
             "Workflow" => {
-                let task_count = count_non_terminal_tasks_by_workflow(
-                    conn,
-                    &removal.project_id,
-                    &removal.name,
-                )?;
+                let task_count =
+                    count_non_terminal_tasks_by_workflow(conn, &removal.project_id, &removal.name)?;
                 if task_count > 0 {
                     let blockers = list_non_terminal_tasks_by_workflow(
                         conn,
@@ -358,12 +355,9 @@ mod tests {
             .to_string()
             .contains("cannot define both builtin and required_capability"));
 
-        let (active, report) = build_active_config_with_self_heal(
-            &app_root,
-            &db_path,
-            invalid_config,
-        )
-        .expect("self-heal wrapper should recover");
+        let (active, report) =
+            build_active_config_with_self_heal(&app_root, &db_path, invalid_config)
+                .expect("self-heal wrapper should recover");
 
         assert!(active
             .projects
@@ -397,12 +391,9 @@ mod tests {
         let invalid_config = config.clone();
         let seeded = persist_raw_config(&db_path, config, "test-seed").expect("seed config");
 
-        let (_active, report) = build_active_config_with_self_heal(
-            &app_root,
-            &db_path,
-            invalid_config,
-        )
-        .expect("self-heal wrapper should recover");
+        let (_active, report) =
+            build_active_config_with_self_heal(&app_root, &db_path, invalid_config)
+                .expect("self-heal wrapper should recover");
 
         let report = report.expect("expected self-heal report");
         assert_eq!(report.healed_version, seeded.version + 1);
@@ -437,12 +428,9 @@ mod tests {
         let invalid_config = config.clone();
         persist_raw_config(&db_path, config, "test-seed").expect("seed config");
 
-        let (_active, report) = build_active_config_with_self_heal(
-            &app_root,
-            &db_path,
-            invalid_config,
-        )
-        .expect("self-heal wrapper should recover");
+        let (_active, report) =
+            build_active_config_with_self_heal(&app_root, &db_path, invalid_config)
+                .expect("self-heal wrapper should recover");
 
         let report = report.expect("expected self-heal report");
         let entries =
@@ -476,8 +464,7 @@ mod tests {
             .expect_err("unhealable config should still fail");
 
         assert!(
-            err.to_string()
-                .contains("root_path not found"),
+            err.to_string().contains("root_path not found"),
             "expected original error to be preserved, got: {err}"
         );
         let conn = open_conn(&db_path).expect("open sqlite connection");
@@ -742,7 +729,10 @@ mod tests {
         let candidate = OrchestratorConfig::default();
 
         let result = enforce_deletion_guards(&conn, &previous, &candidate);
-        assert!(result.is_ok(), "terminal task should not block workflow deletion");
+        assert!(
+            result.is_ok(),
+            "terminal task should not block workflow deletion"
+        );
         std::fs::remove_file(&db_path).ok();
     }
 
@@ -770,7 +760,10 @@ mod tests {
         let candidate = OrchestratorConfig::default();
 
         let result = enforce_deletion_guards(&conn, &previous, &candidate);
-        assert!(result.is_ok(), "same workflow id in another project should not block");
+        assert!(
+            result.is_ok(),
+            "same workflow id in another project should not block"
+        );
         std::fs::remove_file(&db_path).ok();
     }
 }

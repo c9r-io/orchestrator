@@ -48,7 +48,7 @@ use std::collections::HashMap;
 pub const DEFAULT_PROJECT_ID: &str = "default";
 
 /// Main orchestrator configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OrchestratorConfig {
     #[serde(default)]
     pub projects: HashMap<String, ProjectConfig>,
@@ -60,17 +60,6 @@ pub struct OrchestratorConfig {
     /// Unified resource store — stores all resources (builtin + custom CRD instances).
     #[serde(default)]
     pub resource_store: ResourceStore,
-}
-
-impl Default for OrchestratorConfig {
-    fn default() -> Self {
-        Self {
-            projects: HashMap::new(),
-            custom_resource_definitions: HashMap::new(),
-            custom_resources: HashMap::new(),
-            resource_store: ResourceStore::default(),
-        }
-    }
 }
 
 impl OrchestratorConfig {

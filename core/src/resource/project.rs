@@ -51,7 +51,11 @@ impl Resource for ProjectResource {
         )
     }
 
-    fn get_from_project(config: &OrchestratorConfig, name: &str, _project_id: Option<&str>) -> Option<Self> {
+    fn get_from_project(
+        config: &OrchestratorConfig,
+        name: &str,
+        _project_id: Option<&str>,
+    ) -> Option<Self> {
         // Project is a global resource, not scoped to a project.
         config.projects.get(name).map(|project| Self {
             metadata: super::metadata_with_name(name),
@@ -61,7 +65,11 @@ impl Resource for ProjectResource {
         })
     }
 
-    fn delete_from_project(config: &mut OrchestratorConfig, name: &str, _project_id: Option<&str>) -> bool {
+    fn delete_from_project(
+        config: &mut OrchestratorConfig,
+        name: &str,
+        _project_id: Option<&str>,
+    ) -> bool {
         // Project is a global resource, not scoped to a project.
         super::delete_from_store(config, "Project", name)
     }

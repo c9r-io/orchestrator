@@ -69,7 +69,11 @@ impl Resource for RuntimePolicyResource {
         )
     }
 
-    fn get_from_project(config: &OrchestratorConfig, _name: &str, _project_id: Option<&str>) -> Option<Self> {
+    fn get_from_project(
+        config: &OrchestratorConfig,
+        _name: &str,
+        _project_id: Option<&str>,
+    ) -> Option<Self> {
         // RuntimePolicy is a global singleton, not scoped to a project.
         let rp = config.runtime_policy();
         Some(Self {
@@ -84,7 +88,11 @@ impl Resource for RuntimePolicyResource {
         })
     }
 
-    fn delete_from_project(_config: &mut OrchestratorConfig, _name: &str, _project_id: Option<&str>) -> bool {
+    fn delete_from_project(
+        _config: &mut OrchestratorConfig,
+        _name: &str,
+        _project_id: Option<&str>,
+    ) -> bool {
         // RuntimePolicy cannot be deleted.
         false
     }
