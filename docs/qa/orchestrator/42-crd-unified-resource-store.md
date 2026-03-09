@@ -141,7 +141,7 @@ Verify that `write_back_single` updates exactly one projected entry in the confi
    - `write_back_single_workspace` — updates `config.projects[project].workspaces["name"]`
    - `write_back_single_project` — updates `config.projects["name"]`, preserves sub-resources
    - `write_back_single_defaults` — updates `config.defaults` singleton
-   - `write_back_single_runtime_policy` — updates `config.runner` + `config.resume`
+   - `write_back_single_runtime_policy` — no-op (RuntimePolicy lives solely in ResourceStore, accessed via `config.runtime_policy()`)
    - `write_back_single_step_template` — updates `config.step_templates["name"]`
    - `write_back_single_env_store` — updates `config.env_stores["name"]` with sensitive=false
    - `write_back_single_secret_store` — updates `config.env_stores["name"]` with sensitive=true

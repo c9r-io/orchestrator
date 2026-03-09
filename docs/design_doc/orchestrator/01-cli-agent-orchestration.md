@@ -153,7 +153,7 @@ Commands:
 
 ### Operations
 
-- Runtime config store: `data/agent_orchestrator.db` (`orchestrator_config` table)
+- Runtime config store: `data/agent_orchestrator.db` (`resources` table; `orchestrator_config_versions` for audit history)
 - Database: `data/agent_orchestrator.db`
 - Logs: `data/logs/`
 

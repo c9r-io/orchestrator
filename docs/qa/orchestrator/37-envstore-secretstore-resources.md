@@ -54,7 +54,7 @@ Verify that both EnvStore and SecretStore resources can be applied from a single
 
 ### Expected Data State
 ```sql
--- Verify env_stores in config (SQLite stores serialized OrchestratorConfig)
+-- Verify env_stores in config (SQLite `resources` table stores per-resource CRs)
 -- EnvStore entry should have sensitive=false, SecretStore should have sensitive=true
 -- Check via manifest export output rather than direct DB query
 ```
