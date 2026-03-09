@@ -1,4 +1,3 @@
-use crate::async_database::flatten_err;
 use crate::dto::{CreateTaskPayload, LogChunk, TaskDetail, TaskSummary};
 use crate::scheduler::{
     delete_task_impl, find_latest_resumable_task_id, follow_task_logs, get_task_details_impl,
@@ -114,6 +113,8 @@ where
 pub struct TaskTraceResult {
     pub entries: Vec<TraceEntry>,
     pub anomalies: Vec<crate::anomaly::Anomaly>,
+    /// Full structured trace (built via build_trace with complete anomaly detection).
+    pub full_trace: Option<crate::scheduler::trace::TaskTrace>,
 }
 
 /// A single entry in a task trace timeline.
@@ -125,52 +126,49 @@ pub struct TraceEntry {
     pub payload_json: String,
 }
 
-/// Get task trace: event timeline and detected anomalies.
+/// Get task trace: event timeline, detected anomalies, and full structured trace.
 pub async fn get_task_trace(
     state: &InnerState,
     task_id: &str,
     verbose: bool,
 ) -> Result<TaskTraceResult> {
     let resolved_id = resolve_task_id(state, task_id).await?;
-    let task_id_owned = resolved_id.clone();
 
-    let events: Vec<(i64, String, Option<String>, String, String, String)> = state
-        .async_database
-        .reader()
-        .call(move |conn| {
-            let mut stmt = conn.prepare(
-                "SELECT id, task_id, task_item_id, event_type, payload_json, created_at \
-                 FROM events WHERE task_id = ?1 ORDER BY created_at ASC, id ASC",
-            )?;
-            let rows = stmt
-                .query_map(rusqlite::params![task_id_owned], |row| {
-                    Ok((
-                        row.get::<_, i64>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, Option<String>>(2)?,
-                        row.get::<_, String>(3)?,
-                        row.get::<_, String>(4)?,
-                        row.get::<_, String>(5)?,
-                    ))
-                })?
-                .collect::<std::result::Result<Vec<_>, _>>()?;
-            Ok(rows)
-        })
-        .await
-        .map_err(flatten_err)?;
+    // Fetch full task detail (events + command_runs) for build_trace
+    let detail = get_task_details_impl(state, &resolved_id).await?;
 
+    // Build the full structured trace with comprehensive anomaly detection
+    let event_dtos: Vec<crate::dto::EventDto> = detail.events;
+    let command_run_dtos: Vec<crate::dto::CommandRunDto> = detail.runs;
+
+    let full_trace = crate::scheduler::trace::build_trace_with_meta(
+        crate::scheduler::trace::TraceTaskMeta {
+            task_id: &detail.task.id,
+            status: &detail.task.status,
+            created_at: &detail.task.created_at,
+            started_at: detail.task.started_at.as_deref(),
+            completed_at: detail.task.completed_at.as_deref(),
+            updated_at: &detail.task.updated_at,
+        },
+        &event_dtos,
+        &command_run_dtos,
+    );
+
+    // Build timeline entries for terminal rendering
     let mut entries = Vec::new();
-    let mut anomalies = Vec::new();
-
-    for (_id, _task_id, item_id, event_type, payload_json, created_at) in &events {
-        let step = serde_json::from_str::<serde_json::Value>(payload_json)
-            .ok()
-            .and_then(|v| v.get("step").and_then(|s| s.as_str()).map(String::from))
-            .unwrap_or_default();
+    for event in &event_dtos {
+        let step = event
+            .payload
+            .get("step")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string();
+        let payload_json =
+            serde_json::to_string(&event.payload).unwrap_or_else(|_| "{}".to_string());
 
         if verbose
             || matches!(
-                event_type.as_str(),
+                event.event_type.as_str(),
                 "step_started"
                     | "step_finished"
                     | "cycle_started"
@@ -185,56 +183,21 @@ pub async fn get_task_trace(
             )
         {
             entries.push(TraceEntry {
-                timestamp: created_at.clone(),
-                event_type: event_type.clone(),
-                step: step.clone(),
-                item_id: item_id.clone(),
-                payload_json: payload_json.clone(),
+                timestamp: event.created_at.clone(),
+                event_type: event.event_type.clone(),
+                step,
+                item_id: event.task_item_id.clone(),
+                payload_json,
             });
-        }
-
-        // Detect anomalies from event data
-        if event_type == "anomaly" {
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(payload_json) {
-                let rule = v.get("rule").and_then(|s| s.as_str()).unwrap_or("unknown");
-                let severity = v
-                    .get("severity")
-                    .and_then(|s| s.as_str())
-                    .unwrap_or("warning");
-                let message = v
-                    .get("message")
-                    .and_then(|s| s.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                anomalies.push(crate::anomaly::Anomaly {
-                    rule: rule.to_string(),
-                    severity: match severity {
-                        "error" => crate::anomaly::Severity::Error,
-                        "info" => crate::anomaly::Severity::Info,
-                        _ => crate::anomaly::Severity::Warning,
-                    },
-                    escalation: crate::anomaly::Escalation::Notice,
-                    message,
-                    at: Some(created_at.clone()),
-                });
-            }
-        }
-
-        // Detect nonzero exit codes as anomalies
-        if event_type == "step_finished" {
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(payload_json) {
-                if let Some(exit_code) = v.get("exit_code").and_then(|c| c.as_i64()) {
-                    if exit_code != 0 {
-                        anomalies.push(crate::anomaly::Anomaly::new(
-                            crate::anomaly::AnomalyRule::NonzeroExit,
-                            format!("step '{}' exited with code {}", step, exit_code),
-                            Some(created_at.clone()),
-                        ));
-                    }
-                }
-            }
         }
     }
 
-    Ok(TaskTraceResult { entries, anomalies })
+    // Use anomalies from the full trace builder (includes low_output, long_running, etc.)
+    let anomalies = full_trace.anomalies.clone();
+
+    Ok(TaskTraceResult {
+        entries,
+        anomalies,
+        full_trace: Some(full_trace),
+    })
 }

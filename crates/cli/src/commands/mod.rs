@@ -434,11 +434,20 @@ async fn dispatch_task(
             Ok(())
         }
 
-        TaskCommands::Trace { task_id, verbose } => {
+        TaskCommands::Trace {
+            task_id,
+            verbose,
+            json,
+        } => {
             let resp = client
                 .task_trace(orchestrator_proto::TaskTraceRequest { task_id, verbose })
                 .await?
                 .into_inner();
+
+            if json {
+                println!("{}", resp.trace_json);
+                return Ok(());
+            }
 
             println!("TRACE TIMELINE ({} events)", resp.entries.len());
             println!("{:-<70}", "");

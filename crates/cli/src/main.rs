@@ -294,6 +294,10 @@ pub enum TaskCommands {
         /// Show all events (not just key lifecycle events)
         #[arg(long)]
         verbose: bool,
+
+        /// Output full trace as JSON
+        #[arg(long)]
+        json: bool,
     },
 }
 

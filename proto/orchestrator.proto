@@ -450,6 +450,8 @@ message TaskTraceRequest {
 message TaskTraceResponse {
   repeated TraceEntry entries = 1;
   repeated Anomaly anomalies = 2;
+  // Full trace as JSON (TaskTrace struct serialized) for --json output
+  string trace_json = 3;
 }
 
 message TraceEntry {
@@ -465,6 +467,7 @@ message Anomaly {
   string severity = 2;
   string message = 3;
   optional string at = 4;
+  string escalation = 5;
 }
 
 // ─── Project management ──────────────────────────────────────

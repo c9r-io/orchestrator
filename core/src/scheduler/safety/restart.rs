@@ -83,15 +83,20 @@ pub async fn execute_self_restart_step(
         json!({"phase": "cargo_build_release", "passed": true}),
     );
 
-    // Phase 2: verify new binary responds to --help (timeout 10s)
+    // Phase 2: verify new binary responds to --help (timeout 30s)
+    // macOS Gatekeeper / code signing checks on first cold launch can exceed 10s.
     state.emit_event(
         task_id,
         Some(item_id),
         "self_restart_phase",
         json!({"phase": "verify_binary"}),
     );
+    let verify_timeout_secs: u64 = std::env::var("ORCH_VERIFY_BINARY_TIMEOUT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(30);
     let verify_result = tokio::time::timeout(
-        std::time::Duration::from_secs(10),
+        std::time::Duration::from_secs(verify_timeout_secs),
         tokio::process::Command::new(&binary_path)
             .arg("--help")
             .output(),
@@ -129,7 +134,7 @@ pub async fn execute_self_restart_step(
             return Ok(SelfRestartOutcome::Failed(1));
         }
         Err(_) => {
-            error!(phase = "verify_binary", "new binary --help timed out (10s)");
+            error!(phase = "verify_binary", timeout_secs = verify_timeout_secs, "new binary --help timed out");
             state.emit_event(
                 task_id,
                 Some(item_id),

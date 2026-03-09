@@ -55,6 +55,8 @@ probe_setup_project() {
   PROBE_PROJECT="${prefix}-$(date +%s)-$RANDOM"
   PROBE_WORKSPACE="${PROBE_PROJECT}-ws"
   export PROBE_PROJECT PROBE_WORKSPACE
+  
+  "$PROBE_BINARY" apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml --project "$PROBE_PROJECT" >/dev/null 2>&1 || true
 }
 
 # ── Logging ──────────────────────────────────────────────────────────

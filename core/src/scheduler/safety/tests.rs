@@ -1105,13 +1105,15 @@ async fn test_execute_self_restart_step_verify_timeout() {
     write_executable(&fake_bin.join("cargo"), "#!/bin/sh\nexit 0\n");
     // workspace_root is already created by TestState
 
-    // Binary responds to --help by sleeping longer than the 10s timeout
+    // Binary responds to --help by sleeping longer than the timeout
     let binary_path = workspace_root.join(RELEASE_BINARY_REL);
     write_executable(&binary_path, "#!/bin/sh\nsleep 20\n");
 
     let fake_cargo = fake_bin.join("cargo");
     unsafe {
         std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
+        // Use a short timeout so the test doesn't block for 30s
+        std::env::set_var("ORCH_VERIFY_BINARY_TIMEOUT", "2");
     }
 
     let result = execute_self_restart_step(&workspace_root, &state, "task-timeout", "item-1")
@@ -1120,6 +1122,7 @@ async fn test_execute_self_restart_step_verify_timeout() {
 
     unsafe {
         std::env::remove_var("ORCH_SELF_TEST_CARGO");
+        std::env::remove_var("ORCH_VERIFY_BINARY_TIMEOUT");
     }
 
     // Timeout path returns Failed(1)

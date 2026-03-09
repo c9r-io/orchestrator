@@ -738,10 +738,22 @@ impl OrchestratorService for OrchestratorServer {
                 severity: format!("{:?}", a.severity).to_lowercase(),
                 message: a.message,
                 at: a.at,
+                escalation: format!("{:?}", a.escalation).to_lowercase(),
             })
             .collect();
 
-        Ok(Response::new(TaskTraceResponse { entries, anomalies }))
+        // Serialize full trace to JSON for --json output
+        let trace_json = result
+            .full_trace
+            .as_ref()
+            .and_then(|t| serde_json::to_string(t).ok())
+            .unwrap_or_else(|| "{}".to_string());
+
+        Ok(Response::new(TaskTraceResponse {
+            entries,
+            anomalies,
+            trace_json,
+        }))
     }
 
     // ─── Project management ──────────────────────────────────
