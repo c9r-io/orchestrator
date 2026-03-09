@@ -32,6 +32,9 @@ pub enum Commands {
         #[arg(long)]
         dry_run: bool,
 
+        #[arg(long)]
+        prune: bool,
+
         #[arg(short = 'p', long)]
         project: Option<String>,
     },

@@ -1,4 +1,7 @@
-use crate::config_load::{load_config, persist_config_and_reload, persist_config_for_delete, read_active_config};
+use crate::config_load::{
+    enforce_deletion_guards, load_config, persist_config_and_reload, persist_config_for_delete,
+    read_active_config, PendingResourceDeletion,
+};
 use crate::crd::{self, ParsedManifest};
 use crate::resource::{
     apply_to_project, dispatch_resource, kind_as_str, parse_manifests_from_yaml, ApplyResult,
@@ -6,6 +9,7 @@ use crate::resource::{
 };
 use crate::state::InnerState;
 use anyhow::{Context, Result};
+use std::collections::{HashMap, HashSet};
 
 /// Apply manifest content. Returns an ApplyResponse proto.
 pub fn apply_manifests(
@@ -13,17 +17,20 @@ pub fn apply_manifests(
     content: &str,
     dry_run: bool,
     project: Option<&str>,
+    prune: bool,
 ) -> Result<orchestrator_proto::ApplyResponse> {
     let db_path = &state.db_path;
     let manifests =
         parse_manifests_from_yaml(content).map_err(|e| anyhow::anyhow!("parse error: {}", e))?;
 
-    let mut merged_config = load_config(db_path)?
+    let current_config = load_config(db_path)?
         .map(|(cfg, _, _)| cfg)
         .unwrap_or_default();
+    let mut merged_config = current_config.clone();
 
     let mut results = Vec::new();
     let mut errors = Vec::new();
+    let mut prunable_manifest_names: HashMap<&'static str, HashSet<String>> = HashMap::new();
 
     let cli_project = project
         .filter(|value| !value.trim().is_empty())
@@ -64,11 +71,13 @@ pub fn apply_manifests(
                     }
                 }
                 let result = apply_to_project(&registered, &mut merged_config, cli_project)?;
-                let action = match result {
-                    ApplyResult::Created => "created",
-                    ApplyResult::Configured => "updated",
-                    ApplyResult::Unchanged => "unchanged",
-                };
+                if let Some(kind) = prunable_resource_kind(&registered) {
+                    prunable_manifest_names
+                        .entry(kind)
+                        .or_default()
+                        .insert(registered.name().to_string());
+                }
+                let action = apply_action_label(result);
                 results.push(orchestrator_proto::ApplyResultEntry {
                     kind: kind_as_str(registered.kind()).to_string(),
                     name: registered.name().to_string(),
@@ -81,11 +90,7 @@ pub fn apply_manifests(
                 let crd_kind = crd_manifest.spec.kind.clone();
                 match crd::apply_crd(&mut merged_config, crd_manifest) {
                     Ok(result) => {
-                        let action = match result {
-                            ApplyResult::Created => "created",
-                            ApplyResult::Configured => "updated",
-                            ApplyResult::Unchanged => "unchanged",
-                        };
+                        let action = apply_action_label(result);
                         results.push(orchestrator_proto::ApplyResultEntry {
                             kind: format!("crd({})", crd_kind),
                             name: crd_name,
@@ -108,11 +113,7 @@ pub fn apply_manifests(
                 let cr_name = cr_manifest.metadata.name.clone();
                 match crd::apply_custom_resource(&mut merged_config, cr_manifest) {
                     Ok(result) => {
-                        let action = match result {
-                            ApplyResult::Created => "created",
-                            ApplyResult::Configured => "updated",
-                            ApplyResult::Unchanged => "unchanged",
-                        };
+                        let action = apply_action_label(result);
                         let display_kind = crd::crd_kind_display(&cr_kind);
                         results.push(orchestrator_proto::ApplyResultEntry {
                             kind: display_kind,
@@ -135,11 +136,38 @@ pub fn apply_manifests(
         }
     }
 
+    let deleted_resources = if errors.is_empty() && prune {
+        plan_prune_for_project(&current_config, &mut merged_config, cli_project, &prunable_manifest_names)?
+    } else {
+        Vec::new()
+    };
+
+    for deletion in &deleted_resources {
+        results.push(orchestrator_proto::ApplyResultEntry {
+            kind: deletion.kind.to_lowercase(),
+            name: deletion.name.clone(),
+            action: "deleted".to_string(),
+            project_scope: Some(deletion.project.clone()),
+        });
+    }
+
+    if errors.is_empty() && !deleted_resources.is_empty() {
+        let conn = crate::db::open_conn(&state.db_path)?;
+        enforce_deletion_guards(&conn, &current_config, &merged_config)?;
+    }
+
     let config_version = if !dry_run && !results.is_empty() && errors.is_empty() {
         autofill_defaults_for_manifest_mode(&mut merged_config);
         let yaml = serde_yml::to_string(&merged_config)
             .context("failed to serialize config after apply")?;
-        let overview = persist_config_and_reload(state, merged_config, yaml, "daemon-apply", Some(cli_project))?;
+        let overview = persist_config_and_reload(
+            state,
+            merged_config,
+            yaml,
+            "daemon-apply",
+            Some(cli_project),
+            &deleted_resources,
+        )?;
         Some(overview.version)
     } else {
         None
@@ -382,7 +410,7 @@ pub fn delete_resource(
         }
 
         // 5. Persist (using delete-safe path)
-        persist_config_for_delete(state, config, "project-delete")?;
+        persist_config_for_delete(state, config, "project-delete", &[])?;
         return Ok(());
     }
 
@@ -391,25 +419,17 @@ pub fn delete_resource(
         .projects
         .get_mut(project_id)
         .context(format!("project not found: {}", project_id))?;
+    let canonical_kind = canonical_project_kind(kind)?;
     let deleted = delete_resource_from_project(proj_cfg, kind, name)?;
     if !deleted {
         anyhow::bail!("{}/{} not found in project '{}'", kind, name, project_id);
     }
-
-    // Also remove from per-resource table
-    {
-        let conn = crate::db::open_conn(&state.db_path)?;
-        let tx = conn.unchecked_transaction()?;
-        let _ = crate::config_load::delete_resource_row(
-            &tx,
-            kind,
-            project_id,
-            name,
-            "daemon-delete",
-        );
-        tx.commit()?;
-    }
-    persist_config_for_delete(state, config, "daemon-delete")?;
+    let deleted_resources = vec![PendingResourceDeletion {
+        kind: canonical_kind.to_string(),
+        project: project_id.to_string(),
+        name: name.to_string(),
+    }];
+    persist_config_for_delete(state, config, "daemon-delete", &deleted_resources)?;
     Ok(())
 }
 
@@ -428,6 +448,110 @@ fn delete_resource_from_project(
         "envstore" | "env-store" | "env_store" | "secretstore" | "secret-store"
         | "secret_store" => Ok(proj.env_stores.remove(name).is_some()),
         _ => anyhow::bail!("unknown resource type for project delete: {}", kind),
+    }
+}
+
+fn canonical_project_kind(kind: &str) -> Result<&'static str> {
+    match kind {
+        "ws" | "workspace" => Ok("Workspace"),
+        "agent" => Ok("Agent"),
+        "wf" | "workflow" => Ok("Workflow"),
+        "steptemplate" | "step-template" | "step_template" => Ok("StepTemplate"),
+        "envstore" | "env-store" | "env_store" => Ok("EnvStore"),
+        "secretstore" | "secret-store" | "secret_store" => Ok("SecretStore"),
+        _ => anyhow::bail!("unknown resource type for project delete: {}", kind),
+    }
+}
+
+fn prunable_resource_kind(resource: &crate::resource::RegisteredResource) -> Option<&'static str> {
+    match resource.kind() {
+        crate::cli_types::ResourceKind::Workspace => Some("Workspace"),
+        crate::cli_types::ResourceKind::Agent => Some("Agent"),
+        crate::cli_types::ResourceKind::Workflow => Some("Workflow"),
+        crate::cli_types::ResourceKind::StepTemplate => Some("StepTemplate"),
+        crate::cli_types::ResourceKind::EnvStore => Some("EnvStore"),
+        crate::cli_types::ResourceKind::SecretStore => Some("SecretStore"),
+        crate::cli_types::ResourceKind::Project | crate::cli_types::ResourceKind::RuntimePolicy => {
+            None
+        }
+    }
+}
+
+fn apply_action_label(result: ApplyResult) -> &'static str {
+    match result {
+        ApplyResult::Created => "created",
+        ApplyResult::Configured => "updated",
+        ApplyResult::Unchanged => "unchanged",
+    }
+}
+
+fn plan_prune_for_project(
+    previous: &crate::config::OrchestratorConfig,
+    candidate: &mut crate::config::OrchestratorConfig,
+    project_id: &str,
+    manifest_names: &HashMap<&'static str, HashSet<String>>,
+) -> Result<Vec<PendingResourceDeletion>> {
+    let Some(previous_project) = previous.projects.get(project_id) else {
+        return Ok(Vec::new());
+    };
+    let Some(candidate_project) = candidate.projects.get_mut(project_id) else {
+        return Ok(Vec::new());
+    };
+
+    let mut deletions = Vec::new();
+    for (kind, declared_names) in manifest_names {
+        match *kind {
+            "Agent" => prune_map_entries(&mut candidate_project.agents, declared_names, kind, project_id, &mut deletions),
+            "Workflow" => prune_map_entries(&mut candidate_project.workflows, declared_names, kind, project_id, &mut deletions),
+            "Workspace" => prune_map_entries(&mut candidate_project.workspaces, declared_names, kind, project_id, &mut deletions),
+            "StepTemplate" => prune_map_entries(&mut candidate_project.step_templates, declared_names, kind, project_id, &mut deletions),
+            "EnvStore" | "SecretStore" => {
+                let expected_sensitivity = *kind == "SecretStore";
+                let existing_names: Vec<String> = previous_project
+                    .env_stores
+                    .iter()
+                    .filter_map(|(name, store)| {
+                        if store.sensitive == expected_sensitivity && !declared_names.contains(name) {
+                            Some(name.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                for name in existing_names {
+                    candidate_project.env_stores.remove(&name);
+                    deletions.push(PendingResourceDeletion {
+                        kind: (*kind).to_string(),
+                        project: project_id.to_string(),
+                        name,
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(deletions)
+}
+
+fn prune_map_entries<T>(
+    map: &mut HashMap<String, T>,
+    declared_names: &HashSet<String>,
+    kind: &str,
+    project_id: &str,
+    deletions: &mut Vec<PendingResourceDeletion>,
+) {
+    let existing_names: Vec<String> = map
+        .keys()
+        .filter(|name| !declared_names.contains(*name))
+        .cloned()
+        .collect();
+    for name in existing_names {
+        map.remove(&name);
+        deletions.push(PendingResourceDeletion {
+            kind: kind.to_string(),
+            project: project_id.to_string(),
+            name,
+        });
     }
 }
 
@@ -485,4 +609,127 @@ fn autofill_defaults_for_manifest_mode(config: &mut crate::config::OrchestratorC
             step_templates: Default::default(),
             env_stores: Default::default(),
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config_load::read_active_config;
+    use crate::dto::CreateTaskPayload;
+    use crate::task_ops::create_task_impl;
+    use crate::test_utils::TestState;
+
+    fn workflow_manifest(name: &str, command: &str) -> String {
+        format!(
+            "apiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: {name}\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"{command}\"\n  loop:\n    mode: once\n"
+        )
+    }
+
+    #[test]
+    fn apply_without_prune_keeps_existing_resources_not_in_manifest() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let first_manifest = format!(
+            "{}---\n{}",
+            workflow_manifest("keep-me", "echo keep"),
+            workflow_manifest("update-me", "echo old")
+        );
+        apply_manifests(&state, &first_manifest, false, Some(crate::config::DEFAULT_PROJECT_ID), false)
+            .expect("seed workflows");
+
+        let second_manifest = workflow_manifest("update-me", "echo new");
+        apply_manifests(
+            &state,
+            &second_manifest,
+            false,
+            Some(crate::config::DEFAULT_PROJECT_ID),
+            false,
+        )
+        .expect("apply without prune");
+
+        let active = read_active_config(&state).expect("read active config");
+        let project = active
+            .config
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project");
+        assert!(project.workflows.contains_key("keep-me"));
+        assert!(project.workflows.contains_key("update-me"));
+    }
+
+    #[test]
+    fn apply_prune_dry_run_reports_deleted_without_persisting() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let seed_manifest = format!(
+            "{}---\n{}",
+            workflow_manifest("keep-me", "echo keep"),
+            workflow_manifest("delete-me", "echo delete")
+        );
+        apply_manifests(&state, &seed_manifest, false, Some(crate::config::DEFAULT_PROJECT_ID), false)
+            .expect("seed workflows");
+
+        let dry_run = apply_manifests(
+            &state,
+            &workflow_manifest("keep-me", "echo keep"),
+            true,
+            Some(crate::config::DEFAULT_PROJECT_ID),
+            true,
+        )
+        .expect("dry-run prune");
+
+        assert!(dry_run
+            .results
+            .iter()
+            .any(|entry| entry.name == "delete-me" && entry.action == "deleted"));
+
+        let active = read_active_config(&state).expect("read active config");
+        let project = active
+            .config
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .expect("default project");
+        assert!(project.workflows.contains_key("delete-me"));
+    }
+
+    #[test]
+    fn apply_prune_blocks_non_terminal_referenced_workflow() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let qa_file = state.app_root.join("workspace/default/docs/qa/prune-block.md");
+        std::fs::write(&qa_file, "# prune block\n").expect("seed qa file");
+
+        let seed_manifest = format!(
+            "{}---\n{}",
+            workflow_manifest("keep-me", "echo keep"),
+            workflow_manifest("delete-me", "echo delete")
+        );
+        apply_manifests(&state, &seed_manifest, false, Some(crate::config::DEFAULT_PROJECT_ID), false)
+            .expect("seed workflows");
+
+        create_task_impl(
+            &state,
+            CreateTaskPayload {
+                workflow_id: Some("delete-me".to_string()),
+                ..CreateTaskPayload::default()
+            },
+        )
+        .expect("create referencing task");
+
+        let error = apply_manifests(
+            &state,
+            &workflow_manifest("keep-me", "echo keep"),
+            true,
+            Some(crate::config::DEFAULT_PROJECT_ID),
+            true,
+        )
+        .expect_err("prune should be blocked");
+        let message = error.to_string();
+        assert!(message.contains("workflow/delete-me"));
+        assert!(message.contains("blocking tasks:"));
+        assert!(message.contains("rerun without --prune"));
+    }
 }

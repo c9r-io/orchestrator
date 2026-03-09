@@ -28,6 +28,19 @@ impl OrchestratorServer {
     }
 }
 
+fn map_resource_error(error: anyhow::Error) -> Status {
+    let message = error.to_string();
+    if message.starts_with("[FAILED_PRECONDITION]") {
+        return Status::failed_precondition(
+            message.trim_start_matches("[FAILED_PRECONDITION] ").to_string(),
+        );
+    }
+    if message.starts_with("use --force") {
+        return Status::failed_precondition(message);
+    }
+    Status::internal(message)
+}
+
 #[tonic::async_trait]
 impl OrchestratorService for OrchestratorServer {
     // ─── Task lifecycle ───────────────────────────────────────
@@ -424,8 +437,9 @@ impl OrchestratorService for OrchestratorServer {
             &req.content,
             req.dry_run,
             req.project.as_deref(),
+            req.prune,
         )
-        .map_err(|e| Status::internal(format!("{e}")))?;
+        .map_err(map_resource_error)?;
 
         Ok(Response::new(result))
     }
@@ -478,7 +492,7 @@ impl OrchestratorService for OrchestratorServer {
             req.project.as_deref(),
             req.dry_run,
         )
-        .map_err(|e| Status::internal(format!("{e}")))?;
+        .map_err(map_resource_error)?;
         let scope = req
             .project
             .map(|p| format!(" (project: {})", p))

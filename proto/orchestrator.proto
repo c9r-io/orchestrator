@@ -243,12 +243,13 @@ message ApplyRequest {
   string content = 1;       // YAML manifest content
   bool dry_run = 2;
   optional string project = 3;
+  bool prune = 4;
 }
 
 message ApplyResultEntry {
   string kind = 1;
   string name = 2;
-  string action = 3;        // "created" | "updated" | "unchanged"
+  string action = 3;        // "created" | "updated" | "unchanged" | "deleted"
   optional string project_scope = 4;
 }
 
@@ -457,4 +458,3 @@ message Anomaly {
   optional string at = 4;
   string escalation = 5;
 }
-

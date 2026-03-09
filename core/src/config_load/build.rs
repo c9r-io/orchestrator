@@ -1,5 +1,8 @@
 use crate::config::{ActiveConfig, OrchestratorConfig, TaskExecutionPlan, WorkflowConfig};
-use crate::db::{count_tasks_by_workflow, count_tasks_by_workspace, open_conn};
+use crate::db::{
+    count_non_terminal_tasks_by_workflow, count_non_terminal_tasks_by_workspace,
+    list_non_terminal_tasks_by_workflow, list_non_terminal_tasks_by_workspace, open_conn,
+};
 use anyhow::{Context, Result};
 use std::path::Path;
 
@@ -189,12 +192,20 @@ pub fn enforce_deletion_guards(
             .cloned()
             .collect();
         for workspace_id in removed_workspaces {
-            let task_count = count_tasks_by_workspace(conn, &workspace_id)?;
+            let task_count =
+                count_non_terminal_tasks_by_workspace(conn, project_id, &workspace_id)?;
             if task_count > 0 {
+                let blockers =
+                    list_non_terminal_tasks_by_workspace(conn, project_id, &workspace_id, 5)?;
                 anyhow::bail!(
-                    "cannot delete workspace '{}' because {} tasks reference it",
-                    workspace_id,
-                    task_count
+                    "{}",
+                    format_blocking_delete_error(
+                        "workspace",
+                        &workspace_id,
+                        project_id,
+                        task_count,
+                        &blockers
+                    )
                 );
             }
         }
@@ -209,18 +220,53 @@ pub fn enforce_deletion_guards(
             .cloned()
             .collect();
         for workflow_id in removed_workflows {
-            let task_count = count_tasks_by_workflow(conn, &workflow_id)?;
+            let task_count =
+                count_non_terminal_tasks_by_workflow(conn, project_id, &workflow_id)?;
             if task_count > 0 {
+                let blockers =
+                    list_non_terminal_tasks_by_workflow(conn, project_id, &workflow_id, 5)?;
                 anyhow::bail!(
-                    "cannot delete workflow '{}' because {} tasks reference it",
-                    workflow_id,
-                    task_count
+                    "{}",
+                    format_blocking_delete_error(
+                        "workflow",
+                        &workflow_id,
+                        project_id,
+                        task_count,
+                        &blockers
+                    )
                 );
             }
         }
     }
 
     Ok(())
+}
+
+fn format_blocking_delete_error(
+    kind: &str,
+    name: &str,
+    project_id: &str,
+    task_count: i64,
+    blockers: &[crate::db::TaskReference],
+) -> String {
+    let mut message = format!(
+        "[FAILED_PRECONDITION] apply/delete would remove {}/{} in project {}, but {} non-terminal task(s) still reference it",
+        kind, name, project_id, task_count
+    );
+    if !blockers.is_empty() {
+        message.push_str("\nblocking tasks:");
+        for blocker in blockers {
+            message.push_str(&format!(
+                "\n- {} status={}",
+                blocker.task_id, blocker.status
+            ));
+        }
+    }
+    message.push_str(&format!(
+        "\nsuggested fixes:\n- orchestrator task list --project {}\n- orchestrator task delete <task_id> --force\n- rerun without --prune if deletion is not intended",
+        project_id
+    ));
+    message
 }
 
 #[cfg(test)]
@@ -232,7 +278,6 @@ mod tests {
         make_minimal_buildable_config, make_step, make_test_db, make_workflow,
     };
     use crate::config_load::{detect_app_root, persist_raw_config};
-    use crate::config_load::load_config;
     #[allow(unused_imports)]
     use std::collections::HashMap;
 
@@ -574,6 +619,110 @@ mod tests {
         let candidate = OrchestratorConfig::default();
         let result = enforce_deletion_guards(&conn, &previous, &candidate);
         assert!(result.is_ok(), "removing unused workflow should be allowed");
+        std::fs::remove_file(&db_path).ok();
+    }
+
+    fn insert_task_reference(
+        conn: &rusqlite::Connection,
+        task_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        workflow_id: &str,
+        status: &str,
+    ) {
+        conn.execute(
+            "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, project_id, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, execution_plan_json, loop_mode, current_cycle, init_done, resume_token, created_at, updated_at, parent_task_id, spawn_reason, spawn_depth)
+             VALUES (?1, 'test', ?2, NULL, NULL, 'goal', '[]', '', ?3, ?4, ?5, '/tmp', '[]', 'tickets', '{}', 'once', 0, 0, NULL, datetime('now'), datetime('now'), NULL, NULL, 0)",
+            rusqlite::params![task_id, status, project_id, workspace_id, workflow_id],
+        )
+        .expect("insert task reference");
+    }
+
+    #[test]
+    fn enforce_deletion_guards_blocks_same_project_non_terminal_workflow_tasks() {
+        let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
+        crate::db::init_schema(&db_path).expect("init schema");
+        let conn = crate::db::open_conn(&db_path).expect("open db");
+        insert_task_reference(
+            &conn,
+            "task-running",
+            crate::config::DEFAULT_PROJECT_ID,
+            "default",
+            "wf-to-remove",
+            "running",
+        );
+
+        let mut previous = OrchestratorConfig::default();
+        previous
+            .projects
+            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+            .or_default()
+            .workflows
+            .insert("wf-to-remove".to_string(), make_workflow(vec![]));
+        let candidate = OrchestratorConfig::default();
+
+        let error = enforce_deletion_guards(&conn, &previous, &candidate)
+            .expect_err("running task should block workflow deletion");
+        let message = error.to_string();
+        assert!(message.contains("workflow/wf-to-remove"));
+        assert!(message.contains("project default"));
+        assert!(message.contains("task-running status=running"));
+        std::fs::remove_file(&db_path).ok();
+    }
+
+    #[test]
+    fn enforce_deletion_guards_ignores_terminal_workflow_tasks() {
+        let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
+        crate::db::init_schema(&db_path).expect("init schema");
+        let conn = crate::db::open_conn(&db_path).expect("open db");
+        insert_task_reference(
+            &conn,
+            "task-complete",
+            crate::config::DEFAULT_PROJECT_ID,
+            "default",
+            "wf-to-remove",
+            "completed",
+        );
+
+        let mut previous = OrchestratorConfig::default();
+        previous
+            .projects
+            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+            .or_default()
+            .workflows
+            .insert("wf-to-remove".to_string(), make_workflow(vec![]));
+        let candidate = OrchestratorConfig::default();
+
+        let result = enforce_deletion_guards(&conn, &previous, &candidate);
+        assert!(result.is_ok(), "terminal task should not block workflow deletion");
+        std::fs::remove_file(&db_path).ok();
+    }
+
+    #[test]
+    fn enforce_deletion_guards_ignores_other_project_tasks_with_same_workflow_id() {
+        let db_path = std::env::temp_dir().join(format!("test-guard-{}.db", uuid::Uuid::new_v4()));
+        crate::db::init_schema(&db_path).expect("init schema");
+        let conn = crate::db::open_conn(&db_path).expect("open db");
+        insert_task_reference(
+            &conn,
+            "task-other-project",
+            "other-project",
+            "default",
+            "wf-to-remove",
+            "running",
+        );
+
+        let mut previous = OrchestratorConfig::default();
+        previous
+            .projects
+            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+            .or_default()
+            .workflows
+            .insert("wf-to-remove".to_string(), make_workflow(vec![]));
+        let candidate = OrchestratorConfig::default();
+
+        let result = enforce_deletion_guards(&conn, &previous, &candidate);
+        assert!(result.is_ok(), "same workflow id in another project should not block");
         std::fs::remove_file(&db_path).ok();
     }
 }

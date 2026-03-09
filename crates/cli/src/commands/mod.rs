@@ -18,7 +18,11 @@ fn format_grpc_error(e: tonic::Status) -> anyhow::Error {
     let msg = e.message().to_string();
     match e.code() {
         tonic::Code::FailedPrecondition => {
-            anyhow::anyhow!("{}\nhint: check --force or resolve the precondition above", msg)
+            if msg.starts_with("use --force") {
+                anyhow::anyhow!("{}\nhint: check --force to confirm the requested deletion", msg)
+            } else {
+                anyhow::anyhow!("{}", msg)
+            }
         }
         _ => anyhow::anyhow!("{}", msg),
     }
@@ -32,6 +36,7 @@ pub async fn dispatch(
         Commands::Apply {
             file,
             dry_run,
+            prune,
             project,
         } => {
             let content = if file == "-" {
@@ -50,6 +55,7 @@ pub async fn dispatch(
                     content,
                     dry_run,
                     project,
+                    prune,
                 })
                 .await
                 .map_err(format_grpc_error)?

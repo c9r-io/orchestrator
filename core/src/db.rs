@@ -14,6 +14,12 @@ pub struct ProjectResetStats {
     pub tickets_cleaned: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskReference {
+    pub task_id: String,
+    pub status: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct TaskExecutionMetric {
     pub task_id: String,
@@ -74,22 +80,90 @@ pub fn init_schema(db_path: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn count_tasks_by_workspace(conn: &Connection, workspace_id: &str) -> Result<i64> {
+pub fn count_non_terminal_tasks_by_workspace(
+    conn: &Connection,
+    project_id: &str,
+    workspace_id: &str,
+) -> Result<i64> {
     let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM tasks WHERE workspace_id = ?1",
-        params![workspace_id],
+        "SELECT COUNT(*) FROM tasks
+         WHERE project_id = ?1
+           AND workspace_id = ?2
+           AND status IN ('pending', 'running', 'restart_pending')",
+        params![project_id, workspace_id],
         |row| row.get(0),
     )?;
     Ok(count)
 }
 
-pub fn count_tasks_by_workflow(conn: &Connection, workflow_id: &str) -> Result<i64> {
+pub fn count_non_terminal_tasks_by_workflow(
+    conn: &Connection,
+    project_id: &str,
+    workflow_id: &str,
+) -> Result<i64> {
     let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM tasks WHERE workflow_id = ?1",
-        params![workflow_id],
+        "SELECT COUNT(*) FROM tasks
+         WHERE project_id = ?1
+           AND workflow_id = ?2
+           AND status IN ('pending', 'running', 'restart_pending')",
+        params![project_id, workflow_id],
         |row| row.get(0),
     )?;
     Ok(count)
+}
+
+pub fn list_non_terminal_tasks_by_workspace(
+    conn: &Connection,
+    project_id: &str,
+    workspace_id: &str,
+    limit: usize,
+) -> Result<Vec<TaskReference>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, status FROM tasks
+         WHERE project_id = ?1
+           AND workspace_id = ?2
+           AND status IN ('pending', 'running', 'restart_pending')
+         ORDER BY created_at ASC
+         LIMIT ?3",
+    )?;
+    let rows = stmt.query_map(params![project_id, workspace_id, limit], |row| {
+        Ok(TaskReference {
+            task_id: row.get(0)?,
+            status: row.get(1)?,
+        })
+    })?;
+    let mut tasks = Vec::new();
+    for row in rows {
+        tasks.push(row?);
+    }
+    Ok(tasks)
+}
+
+pub fn list_non_terminal_tasks_by_workflow(
+    conn: &Connection,
+    project_id: &str,
+    workflow_id: &str,
+    limit: usize,
+) -> Result<Vec<TaskReference>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, status FROM tasks
+         WHERE project_id = ?1
+           AND workflow_id = ?2
+           AND status IN ('pending', 'running', 'restart_pending')
+         ORDER BY created_at ASC
+         LIMIT ?3",
+    )?;
+    let rows = stmt.query_map(params![project_id, workflow_id, limit], |row| {
+        Ok(TaskReference {
+            task_id: row.get(0)?,
+            status: row.get(1)?,
+        })
+    })?;
+    let mut tasks = Vec::new();
+    for row in rows {
+        tasks.push(row?);
+    }
+    Ok(tasks)
 }
 
 pub fn reset_db(
@@ -328,20 +402,21 @@ mod tests {
         .expect("ensure_column noop");
     }
 
-    // ── count_tasks_by_workspace / count_tasks_by_workflow ──
+    // ── non-terminal task reference counts ──
 
     #[test]
-    fn count_tasks_by_workspace_returns_zero_initially() {
+    fn count_non_terminal_tasks_by_workspace_returns_zero_initially() {
         let (_dir, db_path) = tmp_db_path();
         init_schema(&db_path).expect("init_schema");
 
         let conn = open_conn(&db_path).expect("open_conn");
-        let count = count_tasks_by_workspace(&conn, "nonexistent").expect("count");
+        let count = count_non_terminal_tasks_by_workspace(&conn, "default", "nonexistent")
+            .expect("count");
         assert_eq!(count, 0);
     }
 
     #[test]
-    fn count_tasks_by_workspace_counts_correctly() {
+    fn count_non_terminal_tasks_by_workspace_counts_correctly() {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
@@ -354,22 +429,25 @@ mod tests {
         create_task_impl(&state, CreateTaskPayload::default()).expect("task 2");
 
         let conn = open_conn(&state.db_path).expect("open sqlite");
-        let count = count_tasks_by_workspace(&conn, "default").expect("count");
+        let count =
+            count_non_terminal_tasks_by_workspace(&conn, crate::config::DEFAULT_PROJECT_ID, "default")
+                .expect("count");
         assert_eq!(count, 2);
     }
 
     #[test]
-    fn count_tasks_by_workflow_returns_zero_initially() {
+    fn count_non_terminal_tasks_by_workflow_returns_zero_initially() {
         let (_dir, db_path) = tmp_db_path();
         init_schema(&db_path).expect("init_schema");
 
         let conn = open_conn(&db_path).expect("open_conn");
-        let count = count_tasks_by_workflow(&conn, "nonexistent").expect("count");
+        let count = count_non_terminal_tasks_by_workflow(&conn, "default", "nonexistent")
+            .expect("count");
         assert_eq!(count, 0);
     }
 
     #[test]
-    fn count_tasks_by_workflow_counts_correctly() {
+    fn count_non_terminal_tasks_by_workflow_counts_correctly() {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
@@ -381,7 +459,9 @@ mod tests {
         create_task_impl(&state, CreateTaskPayload::default()).expect("task 1");
 
         let conn = open_conn(&state.db_path).expect("open sqlite");
-        let count = count_tasks_by_workflow(&conn, "basic").expect("count");
+        let count =
+            count_non_terminal_tasks_by_workflow(&conn, crate::config::DEFAULT_PROJECT_ID, "basic")
+                .expect("count");
         assert_eq!(count, 1);
     }
 

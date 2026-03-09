@@ -138,6 +138,13 @@ pub struct HealLogEntry {
     pub created_at: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PendingResourceDeletion {
+    pub kind: String,
+    pub project: String,
+    pub name: String,
+}
+
 /// Query the latest heal summary for a given config version.
 /// Returns `Some((version, original_error, changes_count, created_at))` if the
 /// current active config version matches the most recent self-heal version.
@@ -511,6 +518,7 @@ pub fn persist_config_and_reload(
     _yaml: String,
     author: &str,
     target_project: Option<&str>,
+    deleted_resources: &[PendingResourceDeletion],
 ) -> Result<ConfigOverview> {
     let candidate = match target_project {
         Some(project) => {
@@ -529,6 +537,15 @@ pub fn persist_config_and_reload(
     let conn = open_conn(&state.db_path)?;
     let tx = conn.unchecked_transaction()?;
     enforce_deletion_guards(&tx, &previous_config, &normalized)?;
+    for deletion in deleted_resources {
+        let _ = delete_resource_row(
+            &tx,
+            &deletion.kind,
+            &deletion.project,
+            &deletion.name,
+            author,
+        )?;
+    }
     let (next_version, now) = persist_config_versioned(&tx, &yaml, &json_raw, author)?;
     // Also write per-resource rows (dual-write for v10+ compatibility)
     let _ = persist_all_resources(
@@ -566,6 +583,7 @@ pub fn persist_config_for_delete(
     state: &crate::state::InnerState,
     config: OrchestratorConfig,
     author: &str,
+    deleted_resources: &[PendingResourceDeletion],
 ) -> Result<ConfigOverview> {
     let normalized = normalize_config(config);
     let (yaml, json_raw) = serialize_config_snapshot(&normalized)?;
@@ -578,6 +596,15 @@ pub fn persist_config_for_delete(
     let conn = open_conn(&state.db_path)?;
     let tx = conn.unchecked_transaction()?;
     enforce_deletion_guards(&tx, &previous_config, &normalized)?;
+    for deletion in deleted_resources {
+        let _ = delete_resource_row(
+            &tx,
+            &deletion.kind,
+            &deletion.project,
+            &deletion.name,
+            author,
+        )?;
+    }
     let (next_version, now) = persist_config_versioned(&tx, &yaml, &json_raw, author)?;
     let _ = persist_all_resources(
         &tx,
