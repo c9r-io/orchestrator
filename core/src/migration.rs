@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::Connection;
 
 const HISTORICAL_AGENT_PLACEHOLDER: &str = "legacy";
 
@@ -118,6 +118,11 @@ pub fn all_migrations() -> Vec<Migration> {
             name: "m0011_finalize_resource_migration",
             up: m0011_finalize_resource_migration,
         },
+        Migration {
+            version: 12,
+            name: "m0012_drop_legacy_orchestrator_config_blob",
+            up: m0012_drop_legacy_orchestrator_config_blob,
+        },
     ]
 }
 
@@ -202,14 +207,6 @@ fn m0001_baseline_schema(conn: &Connection) -> Result<()> {
             event_type TEXT NOT NULL,
             payload_json TEXT NOT NULL,
             created_at TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS orchestrator_config (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            config_yaml TEXT NOT NULL,
-            config_json TEXT NOT NULL,
-            version INTEGER NOT NULL,
-            updated_at TEXT NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS orchestrator_config_versions (
@@ -650,7 +647,6 @@ fn m0008_workflow_primitives(conn: &Connection) -> Result<()> {
 // ── Migration 10: Per-Resource Persistence ──
 
 fn m0010_per_resource_persistence(conn: &Connection) -> Result<()> {
-    // 1. Create the new per-resource tables
     conn.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS resources (
@@ -685,165 +681,17 @@ fn m0010_per_resource_persistence(conn: &Connection) -> Result<()> {
     )
     .context("m0010: failed to create resources tables")?;
 
-    // 2. Migrate existing data from orchestrator_config blob
-    let row: Option<String> = conn
-        .query_row(
-            "SELECT config_json FROM orchestrator_config WHERE id = 1",
-            [],
-            |r| r.get(0),
-        )
-        .optional()
-        .context("m0010: failed to read orchestrator_config")?;
-
-    if let Some(json_raw) = row {
-        if let Ok(config) = serde_json::from_str::<crate::config::OrchestratorConfig>(&json_raw) {
-            let config = crate::config_load::normalize_config(config);
-            let now = chrono::Utc::now().to_rfc3339();
-            let mut version_counter = 0i64;
-
-            for (key, cr) in config.resource_store.resources() {
-                let parts: Vec<&str> = key.split('/').collect();
-                let (kind, project, name) = match parts.len() {
-                    3 => (parts[0], parts[1], parts[2]),
-                    2 => (parts[0], crate::crd::store::SYSTEM_PROJECT, parts[1]),
-                    _ => continue,
-                };
-                let spec_json = serde_json::to_string(&cr.spec).unwrap_or_default();
-                let metadata_json = serde_json::to_string(&cr.metadata).unwrap_or_default();
-                version_counter += 1;
-
-                conn.execute(
-                    "INSERT OR REPLACE INTO resources (kind, project, name, api_version, spec_json, metadata_json, generation, created_at, updated_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-                    rusqlite::params![
-                        kind,
-                        project,
-                        name,
-                        cr.api_version,
-                        spec_json,
-                        metadata_json,
-                        cr.generation,
-                        cr.created_at,
-                        now
-                    ],
-                )
-                .with_context(|| format!("m0010: failed to insert resource {}/{}/{}", kind, project, name))?;
-
-                conn.execute(
-                    "INSERT INTO resource_versions (kind, project, name, spec_json, metadata_json, version, author, created_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                    rusqlite::params![
-                        kind,
-                        project,
-                        name,
-                        spec_json,
-                        metadata_json,
-                        version_counter,
-                        "migration-v10",
-                        now
-                    ],
-                )
-                .with_context(|| format!("m0010: failed to insert resource version for {}/{}/{}", kind, project, name))?;
-            }
-
-            // Also store CRD definitions
-            for (kind_name, crd) in &config.custom_resource_definitions {
-                let spec_json = serde_json::to_string(crd).unwrap_or_default();
-                let _ = version_counter; // suppress unused warning
-                conn.execute(
-                    "INSERT OR REPLACE INTO resources (kind, project, name, api_version, spec_json, metadata_json, generation, created_at, updated_at)
-                     VALUES ('CustomResourceDefinition', ?1, ?2, 'orchestrator.dev/v2', ?3, '{}', 1, ?4, ?5)",
-                    rusqlite::params![
-                        crate::crd::store::SYSTEM_PROJECT,
-                        kind_name,
-                        spec_json,
-                        now,
-                        now
-                    ],
-                )
-                .with_context(|| format!("m0010: failed to insert CRD {}", kind_name))?;
-            }
-        }
-    }
-
-    // 3. Old tables are preserved for safe rollback (not deleted)
     Ok(())
 }
 
-/// Safety net: ensure all resources from the orchestrator_config blob are in the
-/// resources table. Handles DBs that were written to before dual-write was active.
 fn m0011_finalize_resource_migration(conn: &Connection) -> Result<()> {
-    let row: Option<String> = conn
-        .query_row(
-            "SELECT config_json FROM orchestrator_config WHERE id = 1",
-            [],
-            |r| r.get(0),
-        )
-        .optional()
-        .context("m0011: failed to read orchestrator_config")?;
+    let _ = conn;
+    Ok(())
+}
 
-    if let Some(json_raw) = row {
-        // Use LegacyOrchestratorConfig to handle old blobs with runner/resume/observability fields
-        let config_result = serde_json::from_str::<crate::config::OrchestratorConfig>(&json_raw)
-            .or_else(|_| {
-                #[derive(serde::Deserialize)]
-                struct LegacyConfig {
-                    #[serde(default)]
-                    projects: std::collections::HashMap<String, crate::config::ProjectConfig>,
-                    #[serde(default)]
-                    custom_resource_definitions: std::collections::HashMap<
-                        String,
-                        crate::crd::types::CustomResourceDefinition,
-                    >,
-                    #[serde(default)]
-                    custom_resources:
-                        std::collections::HashMap<String, crate::crd::types::CustomResource>,
-                    #[serde(default)]
-                    resource_store: crate::crd::store::ResourceStore,
-                }
-                serde_json::from_str::<LegacyConfig>(&json_raw).map(|lc| {
-                    crate::config::OrchestratorConfig {
-                        projects: lc.projects,
-                        custom_resource_definitions: lc.custom_resource_definitions,
-                        custom_resources: lc.custom_resources,
-                        resource_store: lc.resource_store,
-                    }
-                })
-            });
-
-        if let Ok(config) = config_result {
-            let config = crate::config_load::normalize_config(config);
-            let now = chrono::Utc::now().to_rfc3339();
-
-            for (key, cr) in config.resource_store.resources() {
-                let parts: Vec<&str> = key.split('/').collect();
-                let (kind, project, name) = match parts.len() {
-                    3 => (parts[0], parts[1], parts[2]),
-                    2 => (parts[0], crate::crd::store::SYSTEM_PROJECT, parts[1]),
-                    _ => continue,
-                };
-                let spec_json = serde_json::to_string(&cr.spec).unwrap_or_default();
-                let metadata_json = serde_json::to_string(&cr.metadata).unwrap_or_default();
-
-                // INSERT OR IGNORE — only insert if not already present
-                conn.execute(
-                    "INSERT OR IGNORE INTO resources (kind, project, name, api_version, spec_json, metadata_json, generation, created_at, updated_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-                    rusqlite::params![
-                        kind, project, name, cr.api_version, spec_json, metadata_json,
-                        cr.generation, cr.created_at, now
-                    ],
-                )
-                .with_context(|| {
-                    format!(
-                        "m0011: failed to insert resource {}/{}/{}",
-                        kind, project, name
-                    )
-                })?;
-            }
-        }
-    }
-
+fn m0012_drop_legacy_orchestrator_config_blob(conn: &Connection) -> Result<()> {
+    conn.execute_batch("DROP TABLE IF EXISTS orchestrator_config;")
+        .context("m0012: failed to drop orchestrator_config")?;
     Ok(())
 }
 
@@ -973,7 +821,7 @@ mod tests {
         assert!(tables.contains(&"task_items".to_string()));
         assert!(tables.contains(&"command_runs".to_string()));
         assert!(tables.contains(&"events".to_string()));
-        assert!(tables.contains(&"orchestrator_config".to_string()));
+        assert!(tables.contains(&"orchestrator_config_versions".to_string()));
         assert!(tables.contains(&"agent_sessions".to_string()));
         assert!(tables.contains(&"session_attachments".to_string()));
         assert!(tables.contains(&"config_heal_log".to_string()));

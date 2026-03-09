@@ -12,62 +12,6 @@ use super::{
     normalize_config, now_ts, validate_agent_env_store_refs, ResourceRemoval,
 };
 
-/// Legacy deserialization struct for reading old DB blobs that contain
-/// top-level `runner`, `resume`, `observability`, and `resource_meta` fields.
-/// Used only in `load_raw_config_from_db` fallback and migration code.
-#[derive(Debug, serde::Deserialize)]
-struct LegacyOrchestratorConfig {
-    #[serde(default)]
-    runner: crate::config::RunnerConfig,
-    #[serde(default)]
-    resume: crate::config::ResumeConfig,
-    #[serde(default)]
-    observability: crate::config::ObservabilityConfig,
-    #[serde(default)]
-    projects: std::collections::HashMap<String, crate::config::ProjectConfig>,
-    #[serde(default)]
-    custom_resource_definitions:
-        std::collections::HashMap<String, crate::crd::types::CustomResourceDefinition>,
-    #[serde(default)]
-    custom_resources: std::collections::HashMap<String, crate::crd::types::CustomResource>,
-    #[serde(default)]
-    resource_store: crate::crd::store::ResourceStore,
-}
-
-impl From<LegacyOrchestratorConfig> for OrchestratorConfig {
-    fn from(legacy: LegacyOrchestratorConfig) -> Self {
-        let mut config = OrchestratorConfig {
-            projects: legacy.projects,
-            custom_resource_definitions: legacy.custom_resource_definitions,
-            custom_resources: legacy.custom_resources,
-            resource_store: legacy.resource_store,
-        };
-        // Seed a RuntimePolicy CR from the legacy runner/resume/observability fields
-        let rp = crate::crd::projection::RuntimePolicyProjection {
-            runner: legacy.runner,
-            resume: legacy.resume,
-            observability: legacy.observability,
-        };
-        let now = chrono::Utc::now().to_rfc3339();
-        let cr = crate::crd::types::CustomResource {
-            kind: "RuntimePolicy".to_string(),
-            api_version: "orchestrator.dev/v2".to_string(),
-            metadata: crate::cli_types::ResourceMetadata {
-                name: "runtime".to_string(),
-                project: Some(crate::crd::store::SYSTEM_PROJECT.to_string()),
-                labels: None,
-                annotations: None,
-            },
-            spec: crate::crd::projection::CrdProjectable::to_cr_spec(&rp),
-            generation: 1,
-            created_at: now.clone(),
-            updated_at: now,
-        };
-        config.resource_store.put(cr);
-        config
-    }
-}
-
 pub(crate) fn serialize_config_snapshot(config: &OrchestratorConfig) -> Result<(String, String)> {
     let yaml = export_manifest_resources(config)
         .iter()
@@ -92,8 +36,8 @@ pub(crate) fn persist_config_versioned(
     let next_version = current_version + 1;
     let now = now_ts();
 
-    // Audit trail only — the orchestrator_config blob (id=1) is no longer written.
-    // All resource data is persisted via persist_all_resources.
+    // Version history is kept in orchestrator_config_versions.
+    // Live resource state is persisted via persist_all_resources.
     tx.execute(
         "INSERT INTO orchestrator_config_versions (version, config_yaml, config_json, created_at, author) VALUES (?1, ?2, ?3, ?4, ?5)",
         params![next_version, yaml, json_raw, now, author],
@@ -197,14 +141,7 @@ pub fn query_heal_log_entries(db_path: &Path, limit: usize) -> Result<Vec<HealLo
 }
 
 pub fn load_or_seed_config(db_path: &Path) -> Result<(OrchestratorConfig, String, i64, String)> {
-    // Primary: load from per-resource `resources` table
     if let Some((config, version, updated_at)) = load_config_from_resources_table(db_path)? {
-        let (yaml, _json_raw) = serialize_config_snapshot(&config)?;
-        return Ok((config, yaml, version, updated_at));
-    }
-
-    // Fallback: legacy orchestrator_config blob (un-migrated DBs)
-    if let Some((config, version, updated_at)) = load_raw_config_from_db(db_path)? {
         let (yaml, _json_raw) = serialize_config_snapshot(&config)?;
         return Ok((config, yaml, version, updated_at));
     }
@@ -214,14 +151,9 @@ pub fn load_or_seed_config(db_path: &Path) -> Result<(OrchestratorConfig, String
     )
 }
 
-/// Unified config loader: tries resources table first, falls back to legacy blob.
+/// Unified config loader backed only by the per-resource `resources` table.
 pub fn load_config(db_path: &Path) -> Result<Option<(OrchestratorConfig, i64, String)>> {
-    // Primary: per-resource table
-    if let Some(result) = load_config_from_resources_table(db_path)? {
-        return Ok(Some(result));
-    }
-    // Fallback: legacy blob (un-migrated DBs)
-    load_raw_config_from_db(db_path)
+    load_config_from_resources_table(db_path)
 }
 
 /// Persist a single resource to the `resources` table with version tracking.
@@ -418,32 +350,6 @@ pub fn query_max_resource_version(db_path: &Path) -> Result<i64> {
         |row| row.get(0),
     )?;
     Ok(version)
-}
-
-#[deprecated(note = "use load_config() which reads from resources table first")]
-pub fn load_raw_config_from_db(
-    db_path: &Path,
-) -> Result<Option<(OrchestratorConfig, i64, String)>> {
-    let conn = open_conn(db_path)?;
-    let row: Option<(String, String, i64, String)> = conn
-        .query_row(
-            "SELECT config_yaml, config_json, version, updated_at FROM orchestrator_config WHERE id = 1",
-            [],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-        )
-        .optional()?;
-
-    let Some((_yaml, json_raw, version, updated_at)) = row else {
-        return Ok(None);
-    };
-
-    // Use LegacyOrchestratorConfig to handle old blobs with runner/resume/observability fields
-    let config: OrchestratorConfig =
-        serde_json::from_str::<LegacyOrchestratorConfig>(&json_raw)
-            .map(OrchestratorConfig::from)
-            .or_else(|_| serde_json::from_str::<OrchestratorConfig>(&json_raw))
-            .context("failed to parse config_json from sqlite")?;
-    Ok(Some((normalize_config(config), version, updated_at)))
 }
 
 /// Load config from the per-resource `resources` table (v10+).

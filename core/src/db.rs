@@ -198,7 +198,6 @@ pub fn reset_db_by_path(db_path: &Path, include_history: bool, include_config: b
     conn.execute("DELETE FROM tasks", [])?;
     conn.execute("DELETE FROM task_execution_metrics", [])?;
     if include_config {
-        conn.execute("DELETE FROM orchestrator_config", [])?;
         conn.execute("DELETE FROM orchestrator_config_versions", [])?;
     } else if include_history {
         conn.execute(
@@ -347,7 +346,6 @@ mod tests {
         assert!(tables.contains(&"task_items".to_string()));
         assert!(tables.contains(&"command_runs".to_string()));
         assert!(tables.contains(&"events".to_string()));
-        assert!(tables.contains(&"orchestrator_config".to_string()));
         assert!(tables.contains(&"agent_sessions".to_string()));
         assert!(tables.contains(&"session_attachments".to_string()));
     }
@@ -540,8 +538,7 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
-        // Confirm config versions exist (persist_raw_config writes to
-        // orchestrator_config_versions, not the legacy orchestrator_config blob)
+        // Confirm config versions exist in the active config history table.
         let conn = open_conn(&state.db_path).expect("open sqlite");
         let versions_before: i64 = conn
             .query_row(
