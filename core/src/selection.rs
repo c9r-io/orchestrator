@@ -117,6 +117,7 @@ pub fn select_agent_by_preference(
 /// Resolve effective agents for a task. Strict project isolation:
 /// - Tasks always resolve inside an explicit or implicit project.
 /// - Omitting project_id means the built-in `default` project.
+///
 /// No fallback to top-level agents.
 pub fn resolve_effective_agents<'a>(
     project_id: &str,
@@ -127,9 +128,8 @@ pub fn resolve_effective_agents<'a>(
     if let Some(project) = config.projects.get(project_id) {
         return &project.agents;
     }
-    static EMPTY: std::sync::LazyLock<HashMap<String, AgentConfig>> =
-        std::sync::LazyLock::new(HashMap::new);
-    &EMPTY
+    static EMPTY: std::sync::OnceLock<HashMap<String, AgentConfig>> = std::sync::OnceLock::new();
+    EMPTY.get_or_init(HashMap::new)
 }
 
 /// Resolve an agent by ID. Strict project isolation:

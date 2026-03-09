@@ -455,7 +455,11 @@ spec:
 
     let cr = config
         .resource_store
-        .get("Workspace", "labeled-ws")
+        .get_namespaced(
+            "Workspace",
+            agent_orchestrator::config::DEFAULT_PROJECT_ID,
+            "labeled-ws",
+        )
         .expect("metadata should be stored");
     assert_eq!(
         cr.metadata.labels.as_ref().and_then(|m| m.get("env")),

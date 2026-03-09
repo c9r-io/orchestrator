@@ -503,7 +503,8 @@ mod tests {
         LoopMode, OrchestratorConfig, StepBehavior, StepScope, WorkflowConfig, WorkflowStepConfig,
     };
     use crate::config_load::tests::{
-        make_builtin_step, make_command_step, make_config_with_agent, make_step, make_workflow,
+        make_builtin_step, make_command_step, make_config_with_agent,
+        make_config_with_default_project, make_step, make_workflow,
     };
     #[allow(unused_imports)]
     use std::collections::HashMap;
@@ -578,7 +579,7 @@ mod tests {
             max_parallel: None,
         };
 
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let result = validate_workflow_config(&config, &workflow, "test-workflow");
         assert!(
             result.is_ok(),
@@ -656,7 +657,7 @@ mod tests {
             max_parallel: None,
         };
 
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let result = validate_workflow_config(&config, &workflow, "test-workflow");
         assert!(
             result.is_ok(),
@@ -734,7 +735,7 @@ mod tests {
             max_parallel: None,
         };
 
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let result = validate_workflow_config(&config, &workflow, "test-workflow");
         assert!(
             result.is_err(),
@@ -921,7 +922,7 @@ mod tests {
     #[test]
     fn validate_workflow_rejects_empty_steps() {
         let workflow = make_workflow(vec![]);
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
         assert!(result
@@ -933,7 +934,7 @@ mod tests {
     #[test]
     fn validate_workflow_rejects_no_enabled_steps() {
         let workflow = make_workflow(vec![make_step("qa", false)]);
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
         assert!(result
@@ -945,7 +946,7 @@ mod tests {
     #[test]
     fn validate_workflow_rejects_missing_agent_template() {
         let workflow = make_workflow(vec![make_step("qa", true)]);
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
         assert!(result
@@ -969,7 +970,7 @@ mod tests {
     #[test]
     fn validate_workflow_accepts_builtin_step_without_agent() {
         let workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(
             result.is_ok(),
@@ -981,7 +982,7 @@ mod tests {
     #[test]
     fn validate_workflow_accepts_command_step_without_agent() {
         let workflow = make_workflow(vec![make_command_step("build", "cargo build")]);
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(
             result.is_ok(),
@@ -995,7 +996,7 @@ mod tests {
         let mut step = make_step("smoke_chain", true);
         step.chain_steps = vec![make_command_step("sub", "echo sub")];
         let workflow = make_workflow(vec![step]);
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(
             result.is_ok(),
@@ -1008,7 +1009,7 @@ mod tests {
     fn validate_workflow_rejects_zero_max_cycles() {
         let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         workflow.loop_policy.guard.max_cycles = Some(0);
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
         assert!(result
@@ -1022,7 +1023,7 @@ mod tests {
         let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         workflow.loop_policy.mode = LoopMode::Fixed;
         workflow.loop_policy.guard.max_cycles = None;
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
         assert!(result
@@ -1036,7 +1037,7 @@ mod tests {
         let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         workflow.loop_policy.mode = LoopMode::Fixed;
         workflow.loop_policy.guard.max_cycles = Some(2);
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(
             result.is_ok(),
@@ -1050,7 +1051,7 @@ mod tests {
         let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         workflow.loop_policy.mode = LoopMode::Infinite;
         workflow.loop_policy.guard.enabled = true;
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(result.is_err());
         assert!(result
@@ -1078,7 +1079,7 @@ mod tests {
         let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         workflow.loop_policy.mode = LoopMode::Once;
         workflow.loop_policy.guard.enabled = true;
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(
             result.is_ok(),
@@ -1093,7 +1094,7 @@ mod tests {
             make_step("qa", false),
             make_builtin_step("self_test", "self_test", true),
         ]);
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(
             result.is_ok(),
@@ -1108,7 +1109,7 @@ mod tests {
             make_step("ticket_scan", true),
             make_builtin_step("self_test", "self_test", true),
         ]);
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let result = validate_workflow_config(&config, &workflow, "test-wf");
         assert!(
             result.is_ok(),
@@ -1122,7 +1123,7 @@ mod tests {
         let mut step = make_builtin_step("self_test", "self_test", true);
         step.required_capability = Some("self_test".to_string());
         let workflow = make_workflow(vec![step]);
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
 
         let result = validate_workflow_config(&config, &workflow, "test-wf");
 
@@ -1189,7 +1190,7 @@ mod tests {
     fn validate_workflow_config_rejects_probe_without_git_tag_checkpoint() {
         let mut workflow = make_workflow(vec![make_command_step("implement", "echo probe")]);
         workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
 
         let err = validate_workflow_config(&config, &workflow, "probe")
             .expect_err("probe profile should require git_tag");
@@ -1201,7 +1202,7 @@ mod tests {
         let mut workflow = make_workflow(vec![make_command_step("implement", "echo probe")]);
         workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
 
         let err = validate_workflow_config(&config, &workflow, "probe")
             .expect_err("probe profile should require auto_rollback");
@@ -1214,7 +1215,7 @@ mod tests {
         workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
         workflow.safety.auto_rollback = true;
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
 
         let err = validate_workflow_config(&config, &workflow, "probe")
             .expect_err("probe profile should reject item scope");
@@ -1227,7 +1228,7 @@ mod tests {
         workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
         workflow.safety.auto_rollback = true;
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
 
         let err = validate_workflow_config(&config, &workflow, "probe")
             .expect_err("probe profile should reject agent steps");
@@ -1240,7 +1241,7 @@ mod tests {
         workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
         workflow.safety.auto_rollback = true;
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
 
         let err = validate_workflow_config(&config, &workflow, "probe")
             .expect_err("probe profile should reject strict phases");

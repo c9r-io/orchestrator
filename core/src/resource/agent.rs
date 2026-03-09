@@ -33,12 +33,15 @@ impl Resource for AgentResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
-        let incoming = agent_spec_to_config(&self.spec);
-        let project = config.ensure_project(self.metadata.project.as_deref());
-        Ok(super::helpers::apply_to_map(
-            &mut project.agents,
+        let mut metadata = self.metadata.clone();
+        metadata.project =
+            Some(config.effective_project_id(metadata.project.as_deref()).to_string());
+        Ok(super::apply_to_store(
+            config,
+            "Agent",
             self.name(),
-            incoming,
+            &metadata,
+            serde_json::to_value(&self.spec)?,
         ))
     }
 
@@ -58,10 +61,7 @@ impl Resource for AgentResource {
     }
 
     fn delete_from_project(config: &mut OrchestratorConfig, name: &str, project_id: Option<&str>) -> bool {
-        config
-            .project_mut(project_id)
-            .map(|project| project.agents.remove(name).is_some())
-            .unwrap_or(false)
+        super::helpers::delete_from_store_project(config, "Agent", name, project_id)
     }
 }
 
@@ -229,10 +229,16 @@ mod tests {
         let ag = dispatch_resource(agent_manifest("meta-ag", "glmcode -p \"{prompt}\""))
             .expect("dispatch agent resource");
         ag.apply(&mut config).expect("apply");
-        assert!(config.resource_store.get("Agent", "meta-ag").is_some());
+        assert!(config
+            .resource_store
+            .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "meta-ag")
+            .is_some());
 
         AgentResource::delete_from(&mut config, "meta-ag");
-        assert!(config.resource_store.get("Agent", "meta-ag").is_none());
+        assert!(config
+            .resource_store
+            .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "meta-ag")
+            .is_none());
     }
 
     #[test]
@@ -348,7 +354,7 @@ mod tests {
 
         let cr = config
             .resource_store
-            .get("Agent", "store-meta-ag")
+            .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "store-meta-ag")
             .expect("stored agent CR should exist");
         assert_eq!(
             cr.metadata

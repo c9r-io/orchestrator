@@ -57,13 +57,15 @@ impl Resource for WorkflowResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
-        let mut incoming = workflow_spec_to_config(&self.spec)?;
-        crate::config_load::normalize_workflow_config(&mut incoming);
-        let project = config.ensure_project(self.metadata.project.as_deref());
-        Ok(super::helpers::apply_to_map(
-            &mut project.workflows,
+        let mut metadata = self.metadata.clone();
+        metadata.project =
+            Some(config.effective_project_id(metadata.project.as_deref()).to_string());
+        Ok(super::apply_to_store(
+            config,
+            "Workflow",
             self.name(),
-            incoming,
+            &metadata,
+            serde_json::to_value(&self.spec)?,
         ))
     }
 
@@ -83,10 +85,7 @@ impl Resource for WorkflowResource {
     }
 
     fn delete_from_project(config: &mut OrchestratorConfig, name: &str, project_id: Option<&str>) -> bool {
-        config
-            .project_mut(project_id)
-            .map(|project| project.workflows.remove(name).is_some())
-            .unwrap_or(false)
+        super::helpers::delete_from_store_project(config, "Workflow", name, project_id)
     }
 }
 
@@ -410,10 +409,16 @@ mod tests {
         let wf =
             dispatch_resource(workflow_manifest("meta-wf")).expect("dispatch workflow resource");
         wf.apply(&mut config).expect("apply");
-        assert!(config.resource_store.get("Workflow", "meta-wf").is_some());
+        assert!(config
+            .resource_store
+            .get_namespaced("Workflow", crate::config::DEFAULT_PROJECT_ID, "meta-wf")
+            .is_some());
 
         WorkflowResource::delete_from(&mut config, "meta-wf");
-        assert!(config.resource_store.get("Workflow", "meta-wf").is_none());
+        assert!(config
+            .resource_store
+            .get_namespaced("Workflow", crate::config::DEFAULT_PROJECT_ID, "meta-wf")
+            .is_none());
     }
 
     #[test]
@@ -469,7 +474,11 @@ mod tests {
 
         let cr = config
             .resource_store
-            .get("Workflow", "store-meta-wf")
+            .get_namespaced(
+                "Workflow",
+                crate::config::DEFAULT_PROJECT_ID,
+                "store-meta-wf",
+            )
             .expect("stored workflow CR should exist");
         assert_eq!(
             cr.metadata

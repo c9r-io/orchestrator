@@ -160,9 +160,9 @@ pub fn enforce_deletion_guards(
         let removed_workspaces: Vec<String> = prev_project
             .workspaces
             .keys()
-            .filter(|id| {
-                candidate_project
-                    .is_none_or(|p| !p.workspaces.contains_key(*id))
+            .filter(|id| match candidate_project {
+                None => true,
+                Some(project) => !project.workspaces.contains_key(*id),
             })
             .cloned()
             .collect();
@@ -180,9 +180,9 @@ pub fn enforce_deletion_guards(
         let removed_workflows: Vec<String> = prev_project
             .workflows
             .keys()
-            .filter(|id| {
-                candidate_project
-                    .is_none_or(|p| !p.workflows.contains_key(*id))
+            .filter(|id| match candidate_project {
+                None => true,
+                Some(project) => !project.workflows.contains_key(*id),
             })
             .cloned()
             .collect();
@@ -206,8 +206,8 @@ mod tests {
     use super::*;
     use crate::config::{ExecutionMode, LoopMode, OrchestratorConfig};
     use crate::config_load::tests::{
-        make_builtin_step, make_command_step, make_minimal_buildable_config, make_step,
-        make_test_db, make_workflow,
+        make_builtin_step, make_command_step, make_config_with_default_project,
+        make_minimal_buildable_config, make_step, make_test_db, make_workflow,
     };
     use crate::config_load::{detect_app_root, load_raw_config_from_db, persist_raw_config};
     #[allow(unused_imports)]
@@ -354,15 +354,9 @@ mod tests {
             .get_mut(crate::config::DEFAULT_PROJECT_ID)
             .expect("default project")
             .workspaces
-            .insert(
-            "duplicate".to_string(),
-            crate::config::WorkspaceConfig {
-                root_path: ".".to_string(),
-                qa_targets: vec!["fixtures/qa-probe-targets".to_string()],
-                ticket_dir: "fixtures/ticket".to_string(),
-                self_referential: false,
-            },
-        );
+            .get_mut("default")
+            .expect("default workspace")
+            .root_path = "fixtures/does-not-exist".to_string();
         persist_raw_config(&db_path, config.clone(), "test-seed").expect("seed config");
 
         let err = build_active_config_with_self_heal(&app_root, &db_path, config)
@@ -370,7 +364,7 @@ mod tests {
 
         assert!(
             err.to_string()
-                .contains("share the same root path"),
+                .contains("root_path not found"),
             "expected original error to be preserved, got: {err}"
         );
         let conn = open_conn(&db_path).expect("open sqlite connection");
@@ -393,7 +387,7 @@ mod tests {
             make_builtin_step("self_test", "self_test", true),
             make_step("qa", false),
         ]);
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let plan =
             build_execution_plan(&config, &workflow, "test-wf").expect("build execution plan");
         assert_eq!(plan.steps.len(), 1, "should only contain enabled steps");
@@ -410,7 +404,7 @@ mod tests {
         step.cost_preference = Some(crate::config::CostPreference::Quality);
         step.scope = Some(crate::config::StepScope::Task);
         let workflow = make_workflow(vec![step]);
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let plan =
             build_execution_plan(&config, &workflow, "test-wf").expect("build execution plan");
         let s = &plan.steps[0];
@@ -435,7 +429,7 @@ mod tests {
             make_command_step("sub2", "cargo test"),
         ];
         let workflow = make_workflow(vec![step]);
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let plan =
             build_execution_plan(&config, &workflow, "test-wf").expect("build execution plan");
         assert_eq!(plan.steps[0].chain_steps.len(), 2);
@@ -455,7 +449,7 @@ mod tests {
         let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         workflow.loop_policy.mode = LoopMode::Fixed;
         workflow.loop_policy.guard.max_cycles = Some(3);
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let plan =
             build_execution_plan(&config, &workflow, "test-wf").expect("build execution plan");
         assert!(matches!(plan.loop_policy.mode, LoopMode::Fixed));
@@ -466,7 +460,7 @@ mod tests {
     fn build_execution_plan_copies_finalize_config() {
         let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
         workflow.finalize = crate::config::default_workflow_finalize_config();
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let plan =
             build_execution_plan(&config, &workflow, "test-wf").expect("build execution plan");
         assert!(
@@ -478,7 +472,7 @@ mod tests {
     #[test]
     fn build_execution_plan_fails_on_invalid_workflow() {
         let workflow = make_workflow(vec![]);
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
         let result = build_execution_plan(&config, &workflow, "test-wf");
         assert!(result.is_err(), "should fail validation");
     }
@@ -488,7 +482,7 @@ mod tests {
         let mut step = make_builtin_step("self_test", "self_test", true);
         step.behavior.execution = ExecutionMode::Agent;
         let workflow = make_workflow(vec![step]);
-        let config = OrchestratorConfig::default();
+        let config = make_config_with_default_project();
 
         let plan =
             build_execution_plan(&config, &workflow, "test-wf").expect("build execution plan");

@@ -482,7 +482,11 @@ mod cases {
         );
         assert!(config
             .resource_store
-            .get("Workspace", "snapshot-ws")
+            .get_namespaced(
+                "Workspace",
+                crate::config::DEFAULT_PROJECT_ID,
+                "snapshot-ws",
+            )
             .is_none());
 
         // Apply the identical resource — should return Unchanged because reconciliation detects it.
@@ -521,7 +525,7 @@ mod cases {
         apply_to_store(&mut config, "Workspace", "ws-gen", &meta, ws.to_cr_spec());
         let gen1 = config
             .resource_store
-            .get("Workspace", "ws-gen")
+            .get_namespaced("Workspace", crate::config::DEFAULT_PROJECT_ID, "ws-gen")
             .unwrap()
             .generation;
 
@@ -534,7 +538,7 @@ mod cases {
         apply_to_store(&mut config, "Workspace", "ws-gen", &meta, ws2.to_cr_spec());
         let gen2 = config
             .resource_store
-            .get("Workspace", "ws-gen")
+            .get_namespaced("Workspace", crate::config::DEFAULT_PROJECT_ID, "ws-gen")
             .unwrap()
             .generation;
         assert!(gen2 > gen1, "generation should increment on update");
@@ -562,7 +566,10 @@ mod cases {
 
         let removed = delete_from_store(&mut config, "Workspace", "ws-del");
         assert!(removed);
-        assert!(config.resource_store.get("Workspace", "ws-del").is_none());
+        assert!(config
+            .resource_store
+            .get_namespaced("Workspace", crate::config::DEFAULT_PROJECT_ID, "ws-del")
+            .is_none());
         assert!(!config
             .default_project()
             .expect("default project")

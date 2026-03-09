@@ -109,11 +109,28 @@ pub(crate) fn apply_to_store(
     // If the store doesn't have this entry yet but the config snapshot does,
     // seed the store from the current snapshot so that put() can correctly
     // detect Unchanged vs Configured (instead of always returning Created).
+    let is_project_scoped = matches!(
+        kind,
+        "Agent" | "Workflow" | "Workspace" | "StepTemplate" | "EnvStore" | "SecretStore"
+    );
     let project_id = metadata
         .project
         .as_deref()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or(crate::config::DEFAULT_PROJECT_ID);
+    let stored_metadata = if is_project_scoped
+        && metadata
+            .project
+            .as_deref()
+            .map(|value| value.is_empty())
+            .unwrap_or(true)
+    {
+        let mut adjusted = metadata.clone();
+        adjusted.project = Some(project_id.to_string());
+        adjusted
+    } else {
+        metadata.clone()
+    };
     if config
         .resource_store
         .get_namespaced(kind, project_id, name)
@@ -136,7 +153,7 @@ pub(crate) fn apply_to_store(
     let cr = CustomResource {
         kind: kind.to_string(),
         api_version: "orchestrator.dev/v2".to_string(),
-        metadata: metadata.clone(),
+        metadata: stored_metadata,
         spec,
         generation,
         created_at,
@@ -151,11 +168,55 @@ pub(crate) fn apply_to_store(
 /// Delete a builtin resource from the unified ResourceStore, then remove
 /// the single affected entry from the in-memory config snapshot.
 pub(crate) fn delete_from_store(config: &mut OrchestratorConfig, kind: &str, name: &str) -> bool {
+    if !config
+        .resource_store
+        .list_by_kind(kind)
+        .into_iter()
+        .any(|cr| cr.metadata.name == name)
+    {
+        crate::crd::writeback::seed_store_from_config_snapshot(
+            config,
+            kind,
+            name,
+            &chrono::Utc::now().to_rfc3339(),
+        );
+    }
     // Try to remove from all projects in the resource store, falling back to
     // un-namespaced lookup.
     let removed = config
         .resource_store
         .remove_by_kind_name_any_project(kind, name)
+        .or_else(|| config.resource_store.remove(kind, name))
+        .is_some();
+    if removed {
+        crate::crd::writeback::remove_from_config_snapshot(config, kind, name);
+    }
+    removed
+}
+
+pub(crate) fn delete_from_store_project(
+    config: &mut OrchestratorConfig,
+    kind: &str,
+    name: &str,
+    project_id: Option<&str>,
+) -> bool {
+    let project_id = config.effective_project_id(project_id).to_string();
+    if config
+        .resource_store
+        .get_namespaced(kind, &project_id, name)
+        .or_else(|| config.resource_store.get(kind, name))
+        .is_none()
+    {
+        crate::crd::writeback::seed_store_from_config_snapshot(
+            config,
+            kind,
+            name,
+            &chrono::Utc::now().to_rfc3339(),
+        );
+    }
+    let removed = config
+        .resource_store
+        .remove_namespaced(kind, &project_id, name)
         .or_else(|| config.resource_store.remove(kind, name))
         .is_some();
     if removed {

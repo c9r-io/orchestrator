@@ -775,10 +775,11 @@ impl OrchestratorService for OrchestratorServer {
                             for entry in entries.flatten() {
                                 let name = entry.file_name();
                                 let name_str = name.to_string_lossy();
-                                if name_str.starts_with("auto_") && name_str.ends_with(".md") {
-                                    if std::fs::remove_file(entry.path()).is_ok() {
-                                        stats.tickets_cleaned += 1;
-                                    }
+                                if name_str.starts_with("auto_")
+                                    && name_str.ends_with(".md")
+                                    && std::fs::remove_file(entry.path()).is_ok()
+                                {
+                                    stats.tickets_cleaned += 1;
                                 }
                             }
                         }

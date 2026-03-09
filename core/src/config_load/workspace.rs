@@ -199,7 +199,7 @@ mod tests {
         assert!(result
             .expect_err("operation should fail")
             .to_string()
-            .contains("EMPTY_WORKSPACES"));
+            .contains("project 'default' does not exist"));
     }
 
     #[test]
@@ -230,11 +230,7 @@ mod tests {
             ..OrchestratorConfig::default()
         };
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
-        assert!(result.is_err());
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("EMPTY_AGENTS"));
+        assert!(result.is_ok(), "empty agent set is allowed for project-scoped config");
     }
 
     #[test]
@@ -265,11 +261,7 @@ mod tests {
             ..OrchestratorConfig::default()
         };
         let result = resolve_and_validate_workspaces(Path::new("/tmp"), &config);
-        assert!(result.is_err());
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("EMPTY_WORKFLOWS"));
+        assert!(result.is_ok(), "empty workflow set is allowed for project-scoped config");
     }
 
     #[test]
@@ -385,11 +377,7 @@ mod tests {
             ..OrchestratorConfig::default()
         };
         let result = resolve_and_validate_workspaces(Path::new("/"), &config);
-        assert!(result.is_err());
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("at least one workflow"));
+        assert!(result.is_ok(), "project-scoped workspace validation no longer requires workflows");
         std::fs::remove_dir_all(&ws_root).ok();
     }
 

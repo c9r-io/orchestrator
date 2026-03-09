@@ -135,8 +135,17 @@ pub(crate) mod tests {
         config
     }
 
-    pub fn make_minimal_buildable_config() -> OrchestratorConfig {
+    pub fn make_config_with_default_project() -> OrchestratorConfig {
         let mut config = OrchestratorConfig::default();
+        config
+            .projects
+            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+            .or_default();
+        config
+    }
+
+    pub fn make_minimal_buildable_config() -> OrchestratorConfig {
+        let mut config = make_config_with_default_project();
         let project = config
             .projects
             .get_mut(crate::config::DEFAULT_PROJECT_ID)

@@ -31,12 +31,15 @@ impl Resource for WorkspaceResource {
     }
 
     fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult> {
-        let incoming = workspace_spec_to_config(&self.spec);
-        let project = config.ensure_project(self.metadata.project.as_deref());
-        Ok(super::helpers::apply_to_map(
-            &mut project.workspaces,
+        let mut metadata = self.metadata.clone();
+        metadata.project =
+            Some(config.effective_project_id(metadata.project.as_deref()).to_string());
+        Ok(super::apply_to_store(
+            config,
+            "Workspace",
             self.name(),
-            incoming,
+            &metadata,
+            serde_json::to_value(&self.spec)?,
         ))
     }
 
@@ -56,10 +59,7 @@ impl Resource for WorkspaceResource {
     }
 
     fn delete_from_project(config: &mut OrchestratorConfig, name: &str, project_id: Option<&str>) -> bool {
-        config
-            .project_mut(project_id)
-            .map(|project| project.workspaces.remove(name).is_some())
-            .unwrap_or(false)
+        super::helpers::delete_from_store_project(config, "Workspace", name, project_id)
     }
 }
 
@@ -209,10 +209,16 @@ mod tests {
         };
         let rr = dispatch_resource(resource).expect("dispatch workspace resource");
         rr.apply(&mut config).expect("apply");
-        assert!(config.resource_store.get("Workspace", "meta-ws").is_some());
+        assert!(config
+            .resource_store
+            .get_namespaced("Workspace", crate::config::DEFAULT_PROJECT_ID, "meta-ws")
+            .is_some());
 
         WorkspaceResource::delete_from(&mut config, "meta-ws");
-        assert!(config.resource_store.get("Workspace", "meta-ws").is_none());
+        assert!(config
+            .resource_store
+            .get_namespaced("Workspace", crate::config::DEFAULT_PROJECT_ID, "meta-ws")
+            .is_none());
     }
 
     #[test]
@@ -282,7 +288,11 @@ mod tests {
 
         let cr = config
             .resource_store
-            .get("Workspace", "store-meta-ws")
+            .get_namespaced(
+                "Workspace",
+                crate::config::DEFAULT_PROJECT_ID,
+                "store-meta-ws",
+            )
             .expect("stored workspace CR should exist");
         assert_eq!(
             cr.metadata

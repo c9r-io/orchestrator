@@ -339,9 +339,9 @@ mod tests {
         (state, created.id)
     }
 
-    fn default_workflow<'a>(
-        active: &'a crate::config::ActiveConfig,
-    ) -> (&'a str, &'a crate::config::WorkflowConfig) {
+    fn default_workflow(
+        active: &crate::config::ActiveConfig,
+    ) -> (&str, &crate::config::WorkflowConfig) {
         let project = active
             .projects
             .get(crate::config::DEFAULT_PROJECT_ID)
@@ -414,15 +414,17 @@ mod tests {
         {
             let mut active = state.active_config.write().expect("lock active config");
             let workflow_id = "basic".to_string();
-            active
+            let workflow = active
+                .config
                 .projects
                 .get_mut(crate::config::DEFAULT_PROJECT_ID)
                 .expect("default project")
                 .workflows
                 .get_mut(&workflow_id)
-                .expect("default workflow")
-                .safety
-                .profile = WorkflowSafetyProfile::SelfReferentialProbe;
+                .expect("default workflow");
+            workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
+            workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
+            workflow.safety.auto_rollback = true;
         }
 
         let err = load_task_runtime_context(&state, &task_id)
@@ -630,6 +632,7 @@ mod tests {
                 .expect("lock active config");
             let workflow_id = "basic".to_string();
             active
+                .config
                 .projects
                 .get_mut(crate::config::DEFAULT_PROJECT_ID)
                 .expect("default project")

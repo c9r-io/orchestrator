@@ -255,10 +255,9 @@ spec:
     #[test]
     fn delete_resource_by_kind_defaults() {
         let mut config = make_config();
-        assert!(
-            !delete_resource_by_kind(&mut config, "defaults", "defaults")
-                .expect("delete defaults should return false")
-        );
+        let err = delete_resource_by_kind(&mut config, "defaults", "defaults")
+            .expect_err("defaults should no longer resolve as a builtin resource kind");
+        assert!(err.to_string().contains("unknown resource type"));
     }
 
     #[test]
