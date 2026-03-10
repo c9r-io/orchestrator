@@ -246,7 +246,9 @@ mod tests {
         assert!(active.workspaces.is_empty());
         assert!(active_config_notice.is_none());
         assert!(
-            active.projects.contains_key(crate::config::DEFAULT_PROJECT_ID),
+            active
+                .projects
+                .contains_key(crate::config::DEFAULT_PROJECT_ID),
             "bootstrap should synthesize the built-in default project"
         );
         assert!(
@@ -274,7 +276,9 @@ mod tests {
 
         let loaded = read_active_config(&managed.inner).expect("read active config");
         assert!(loaded.workspaces.is_empty());
-        assert!(loaded.projects.contains_key(crate::config::DEFAULT_PROJECT_ID));
+        assert!(loaded
+            .projects
+            .contains_key(crate::config::DEFAULT_PROJECT_ID));
     }
 
     #[test]

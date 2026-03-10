@@ -309,10 +309,7 @@ async fn dispatch_task(
 
         TaskCommands::Start { task_id, latest } => {
             let resp = client
-                .task_start(orchestrator_proto::TaskStartRequest {
-                    task_id,
-                    latest,
-                })
+                .task_start(orchestrator_proto::TaskStartRequest { task_id, latest })
                 .await?
                 .into_inner();
             println!("{}", resp.message);
@@ -391,7 +388,10 @@ async fn dispatch_task(
             Ok(())
         }
 
-        TaskCommands::Retry { task_item_id, force } => {
+        TaskCommands::Retry {
+            task_item_id,
+            force,
+        } => {
             let resp = client
                 .task_retry(orchestrator_proto::TaskRetryRequest {
                     task_item_id,

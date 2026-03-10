@@ -214,6 +214,7 @@ pub fn get_resource(
             resource,
             selector,
             output_format,
+            project_id,
             &config.resource_store,
         )
     }
@@ -256,6 +257,7 @@ fn get_list_resource(
     resource_type: &str,
     selector: Option<&str>,
     output_format: &str,
+    project_id: &str,
     resource_store: &crate::crd::store::ResourceStore,
 ) -> Result<String> {
     let (names, crd_kind): (Vec<&String>, &str) = match resource_type {
@@ -271,7 +273,7 @@ fn get_list_resource(
             .into_iter()
             .filter(|name| {
                 let labels = resource_store
-                    .get(crd_kind, name)
+                    .get_namespaced(crd_kind, project_id, name)
                     .and_then(|cr| cr.metadata.labels.as_ref());
                 match_labels(labels, &conditions)
             })
@@ -668,6 +670,8 @@ mod tests {
     use crate::dto::CreateTaskPayload;
     use crate::task_ops::create_task_impl;
     use crate::test_utils::TestState;
+    use serde_json::Value;
+    use std::collections::HashMap;
 
     fn workflow_manifest(name: &str, command: &str) -> String {
         format!(
@@ -683,6 +687,12 @@ mod tests {
 
     fn project_subset_manifest() -> String {
         "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: shared-ws\nspec:\n  root_path: \"workspace/default\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Agent\nmetadata:\n  name: shared-agent\nspec:\n  capabilities:\n    - implement\n  command: \"echo '{\\\"confidence\\\":1.0,\\\"quality_score\\\":1.0,\\\"artifacts\\\":[]}'\"\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: keep-me\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo keep\"\n  loop:\n    mode: once\n".to_string()
+    }
+
+    fn labeled_bundle_manifest(project: &str) -> String {
+        format!(
+            "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: labeled-ws\n  labels:\n    env: dev\n    tier: qa\nspec:\n  root_path: \"workspace/default\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: unlabeled-ws\nspec:\n  root_path: \"workspace/default\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Agent\nmetadata:\n  name: labeled-agent\n  labels:\n    env: dev\nspec:\n  capabilities:\n    - implement\n  command: \"echo '{{\\\"confidence\\\":1.0,\\\"quality_score\\\":1.0,\\\"artifacts\\\":[]}}'\"\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: labeled-workflow\n  project: {project}\n  labels:\n    env: dev\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo keep\"\n  loop:\n    mode: once\n"
+        )
     }
 
     #[test]
@@ -889,5 +899,250 @@ mod tests {
         assert!(alpha.workflows.contains_key("delete-me"));
         assert!(!beta.workflows.contains_key("delete-me"));
         assert!(beta.workflows.contains_key("keep-me"));
+    }
+
+    #[test]
+    fn get_resource_supports_named_queries_describe_and_selector_helpers() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        apply_manifests(
+            &state,
+            &labeled_bundle_manifest(crate::config::DEFAULT_PROJECT_ID),
+            false,
+            Some(crate::config::DEFAULT_PROJECT_ID),
+            false,
+        )
+        .expect("seed labeled resources");
+
+        let named = get_resource(
+            &state,
+            "workspace/labeled-ws",
+            None,
+            "yaml",
+            Some(crate::config::DEFAULT_PROJECT_ID),
+        )
+        .expect("get named workspace");
+        assert!(named.contains("root_path: workspace/default"));
+
+        let listed = get_resource(
+            &state,
+            "workspaces",
+            None,
+            "json",
+            Some(crate::config::DEFAULT_PROJECT_ID),
+        )
+        .expect("list workspaces");
+        let listed_json: Value = serde_json::from_str(&listed).expect("parse filtered list");
+        let listed_values = listed_json.as_array().expect("workspace name array");
+        assert!(listed_values.contains(&Value::String("labeled-ws".to_string())));
+        assert!(listed_values.contains(&Value::String("unlabeled-ws".to_string())));
+
+        let described = describe_resource(
+            &state,
+            "agent/labeled-agent",
+            "json",
+            Some(crate::config::DEFAULT_PROJECT_ID),
+        )
+        .expect("describe agent");
+        assert!(described.contains("\"command\""));
+
+        let named_with_selector = get_resource(
+            &state,
+            "workflow/labeled-workflow",
+            Some("env=dev"),
+            "json",
+            Some(crate::config::DEFAULT_PROJECT_ID),
+        )
+        .expect_err("named query with selector should fail");
+        assert!(named_with_selector
+            .to_string()
+            .contains("label selector (-l) cannot be used"));
+
+        let conditions = parse_label_selector("env=dev,tier=qa").expect("parse selector");
+        assert_eq!(
+            conditions,
+            vec![
+                ("env".to_string(), "dev".to_string()),
+                ("tier".to_string(), "qa".to_string())
+            ]
+        );
+
+        let mut labels = std::collections::HashMap::new();
+        labels.insert("env".to_string(), "dev".to_string());
+        labels.insert("tier".to_string(), "qa".to_string());
+        assert!(match_labels(Some(&labels), &conditions));
+        assert!(!match_labels(
+            Some(&labels),
+            &[("env".to_string(), "prod".to_string())]
+        ));
+
+        let invalid_selector =
+            parse_label_selector("env").expect_err("invalid selector should fail");
+        assert!(invalid_selector
+            .to_string()
+            .contains("invalid label selector"));
+    }
+
+    #[test]
+    fn apply_manifests_reports_metadata_project_mismatch() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let response = apply_manifests(
+            &state,
+            &labeled_bundle_manifest("beta"),
+            false,
+            Some("alpha"),
+            false,
+        )
+        .expect("apply should return response");
+
+        assert!(response
+            .errors
+            .iter()
+            .any(|error| error.contains("project mismatch")));
+    }
+
+    #[test]
+    fn delete_resource_covers_force_dry_run_and_actual_delete() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        apply_manifests(
+            &state,
+            &project_bundle_manifest("delete-me"),
+            false,
+            Some("alpha"),
+            false,
+        )
+        .expect("seed alpha project");
+
+        let missing_force =
+            delete_resource(&state, "workflow/delete-me", false, Some("alpha"), false)
+                .expect_err("force should be required");
+        assert!(missing_force.to_string().contains("use --force"));
+
+        let missing = delete_resource(&state, "workflow/missing", true, Some("alpha"), true)
+            .expect_err("missing dry run should fail");
+        assert!(missing.to_string().contains("not found in project 'alpha'"));
+
+        delete_resource(&state, "workflow/delete-me", true, Some("alpha"), true)
+            .expect("dry run should succeed for existing workflow");
+        delete_resource(&state, "workflow/delete-me", true, Some("alpha"), false)
+            .expect("actual workflow delete");
+
+        let active = read_active_config(&state).expect("read active config");
+        let alpha = active.config.projects.get("alpha").expect("alpha project");
+        assert!(!alpha.workflows.contains_key("delete-me"));
+    }
+
+    #[test]
+    fn export_manifests_supports_json_and_yaml() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        apply_manifests(
+            &state,
+            &project_bundle_manifest("delete-me"),
+            false,
+            Some("alpha"),
+            false,
+        )
+        .expect("seed project for export");
+
+        let json = export_manifests(&state, "json").expect("export json");
+        let json_value: Value = serde_json::from_str(&json).expect("parse export json");
+        let docs = json_value.as_array().expect("json export array");
+        assert!(!docs.is_empty());
+        assert!(docs
+            .iter()
+            .any(|doc| doc.get("kind") == Some(&Value::String("Workspace".to_string()))));
+
+        let yaml = export_manifests(&state, "yaml").expect("export yaml");
+        assert!(yaml.contains("kind: Workspace"));
+        assert!(yaml.contains("kind: Workflow"));
+    }
+
+    #[test]
+    fn helper_functions_cover_delete_and_projection_paths() {
+        let mut project = crate::config::ProjectConfig {
+            description: None,
+            workspaces: HashMap::from([(
+                "ws".to_string(),
+                crate::config::WorkspaceConfig {
+                    root_path: "workspace/default".to_string(),
+                    qa_targets: vec!["docs/qa".to_string()],
+                    ticket_dir: "docs/ticket".to_string(),
+                    self_referential: false,
+                },
+            )]),
+            agents: HashMap::from([(
+                "agent".to_string(),
+                crate::config::AgentConfig {
+                    metadata: crate::config::AgentMetadata {
+                        name: "agent".to_string(),
+                        description: None,
+                        version: None,
+                        cost: None,
+                    },
+                    capabilities: vec!["implement".to_string()],
+                    command: "echo '{\"confidence\":1.0,\"quality_score\":1.0,\"artifacts\":[]}'"
+                        .to_string(),
+                    selection: crate::config::AgentSelectionConfig::default(),
+                    env: None,
+                    prompt_delivery: crate::config::PromptDelivery::default(),
+                },
+            )]),
+            workflows: HashMap::from([(
+                "wf".to_string(),
+                crate::config::WorkflowConfig {
+                    steps: vec![],
+                    loop_policy: crate::config::WorkflowLoopConfig {
+                        mode: crate::config::LoopMode::Once,
+                        guard: crate::config::WorkflowLoopGuardConfig::default(),
+                    },
+                    finalize: crate::config::WorkflowFinalizeConfig::default(),
+                    qa: None,
+                    fix: None,
+                    retest: None,
+                    dynamic_steps: vec![],
+                    adaptive: None,
+                    safety: crate::config::SafetyConfig::default(),
+                    max_parallel: None,
+                },
+            )]),
+            step_templates: HashMap::new(),
+            env_stores: HashMap::new(),
+            execution_profiles: HashMap::new(),
+        };
+
+        assert_eq!(
+            canonical_project_kind("execution_profile").expect("canonical kind"),
+            "ExecutionProfile"
+        );
+        assert!(canonical_project_kind("unknown").is_err());
+        assert!(
+            delete_resource_from_project(&mut project, "workspace", "ws")
+                .expect("delete workspace")
+        );
+        assert!(delete_resource_from_project(&mut project, "agent", "agent").expect("delete agent"));
+        assert!(
+            delete_resource_from_project(&mut project, "workflow", "wf").expect("delete workflow")
+        );
+        assert!(
+            !delete_resource_from_project(&mut project, "workflow", "missing")
+                .expect("missing workflow")
+        );
+
+        let mut config = crate::config::OrchestratorConfig::default();
+        autofill_defaults_for_manifest_mode(&mut config);
+        assert!(config
+            .projects
+            .contains_key(crate::config::DEFAULT_PROJECT_ID));
+
+        assert_eq!(apply_action_label(ApplyResult::Created), "created");
+        assert_eq!(apply_action_label(ApplyResult::Configured), "updated");
+        assert_eq!(apply_action_label(ApplyResult::Unchanged), "unchanged");
     }
 }

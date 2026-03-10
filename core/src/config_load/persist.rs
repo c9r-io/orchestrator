@@ -721,7 +721,10 @@ mod tests {
         let (_temp_dir, db_path) = make_test_db();
 
         let existing = load_config(&db_path).expect("load blank config");
-        assert!(existing.is_none(), "blank sqlite should have no persisted resources");
+        assert!(
+            existing.is_none(),
+            "blank sqlite should have no persisted resources"
+        );
 
         let (config, yaml, version, _updated_at) =
             load_or_seed_config(&db_path).expect("load blank default config");

@@ -280,9 +280,7 @@ pub enum TaskCommands {
     Pause { task_id: String },
 
     /// Resume a paused task
-    Resume {
-        task_id: String,
-    },
+    Resume { task_id: String },
 
     /// View task logs
     #[command(alias = "log")]

@@ -126,7 +126,7 @@ fn dns_resolve_probe(host: &str, port: u16) -> Result<()> {
     Ok(())
 }
 
-fn cleanup_children(children: &mut Vec<Child>) {
+fn cleanup_children(children: &mut [Child]) {
     for child in children.iter_mut() {
         let _ = child.kill();
         let _ = child.wait();

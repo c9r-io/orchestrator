@@ -641,4 +641,103 @@ mod tests {
         assert_eq!(writer_attachments, 2);
         assert_eq!(detached_attachments, 3);
     }
+
+    #[tokio::test]
+    async fn async_session_store_exercises_all_wrapper_methods() {
+        let (_dir, db_path) = make_db();
+        let async_db = Arc::new(AsyncDatabase::open(&db_path).await.expect("open async db"));
+        let store = AsyncSessionStore::new(async_db);
+
+        let session = make_session("sess-async", "task-1", "qa", "active");
+        store
+            .insert_session(OwnedNewSession::from(&session))
+            .await
+            .expect("insert session");
+
+        let loaded = store
+            .load_session("sess-async")
+            .await
+            .expect("load session")
+            .expect("session exists");
+        assert_eq!(loaded.id, "sess-async");
+        assert_eq!(loaded.state, "active");
+
+        let active = store
+            .load_active_session_for_task_step("task-1", "qa")
+            .await
+            .expect("load active session")
+            .expect("active session exists");
+        assert_eq!(active.id, "sess-async");
+
+        let listed = store
+            .list_task_sessions("task-1")
+            .await
+            .expect("list sessions");
+        assert_eq!(listed.len(), 1);
+
+        assert!(store
+            .acquire_writer("sess-async", "writer-1")
+            .await
+            .expect("acquire writer"));
+        assert!(!store
+            .acquire_writer("sess-async", "writer-2")
+            .await
+            .expect("reject second writer"));
+
+        store
+            .attach_reader("sess-async", "reader-1")
+            .await
+            .expect("attach reader");
+        store
+            .update_session_pid("sess-async", 5150)
+            .await
+            .expect("update pid");
+        store
+            .update_session_state("sess-async", "failed", Some(9), true)
+            .await
+            .expect("update session state");
+        store
+            .release_attachment("sess-async", "reader-1", "done")
+            .await
+            .expect("release reader");
+        store
+            .release_attachment("sess-async", "writer-1", "done")
+            .await
+            .expect("release writer");
+
+        let exited = store
+            .load_session("sess-async")
+            .await
+            .expect("reload exited session")
+            .expect("session still exists");
+        assert_eq!(exited.pid, 5150);
+        assert_eq!(exited.state, "failed");
+        assert_eq!(exited.exit_code, Some(9));
+        assert!(exited.ended_at.is_some());
+        assert!(exited.writer_client_id.is_none());
+
+        let conn = open_conn(&db_path).expect("open sync conn");
+        let old_ts = (chrono::Utc::now() - chrono::Duration::hours(100)).to_rfc3339();
+        conn.execute(
+            "UPDATE agent_sessions SET updated_at = ?2 WHERE id = ?1",
+            params!["sess-async", old_ts],
+        )
+        .expect("backdate session");
+
+        let deleted = store
+            .cleanup_stale_sessions(72)
+            .await
+            .expect("cleanup stale sessions");
+        assert_eq!(deleted, 1);
+        assert!(store
+            .load_session("sess-async")
+            .await
+            .expect("load deleted session")
+            .is_none());
+        assert!(store
+            .load_session("missing")
+            .await
+            .expect("load missing session")
+            .is_none());
+    }
 }

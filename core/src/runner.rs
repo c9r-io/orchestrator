@@ -166,7 +166,7 @@ mod tests {
         profile.mode = ExecutionProfileMode::Sandbox;
         profile.max_memory_mb = Some(256);
 
-        let err = io::Error::new(io::ErrorKind::Other, "Cannot allocate memory");
+        let err = io::Error::other("Cannot allocate memory");
         let classified =
             classify_sandbox_spawn_error(&profile, &err).expect("memory spawn error classified");
 
@@ -188,7 +188,7 @@ mod tests {
         profile.mode = ExecutionProfileMode::Sandbox;
         profile.max_memory_mb = Some(256);
 
-        let err = io::Error::new(io::ErrorKind::Other, "spawn failed");
+        let err = io::Error::other("spawn failed");
         let classified =
             classify_sandbox_spawn_error(&profile, &err).expect("single-limit fallback");
 
