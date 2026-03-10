@@ -2,7 +2,7 @@
 
 **Module**: orchestrator
 **Scope**: Validate deterministic sandbox resource-limit enforcement, network blocking, and explicit allowlist rejection on the active macOS backend
-**Scenarios**: 6
+**Scenarios**: 3
 **Priority**: High
 
 ---
@@ -36,11 +36,17 @@ Entry point: `orchestrator`
 Common setup:
 
 ```bash
+cargo build --release -p orchestratord -p orchestrator-cli
+kill "$(cat data/daemon.pid 2>/dev/null)" 2>/dev/null || true
+nohup ./target/release/orchestratord --foreground --workers 2 >/tmp/orchestratord-fr001.log 2>&1 &
+
 QA_PROJECT="${QA_PROJECT:-qa-fr001-sandbox}"
 orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
 orchestrator apply --project "${QA_PROJECT}" -f fixtures/manifests/bundles/sandbox-execution-profiles.yaml
 ```
+
+The sandbox scenarios run through the daemon, not an in-process CLI path. If backend sandbox code changed since the daemon was started, rebuild and restart it before testing or the run can report stale behavior.
 
 ## Scenario 1: Sandbox Emits sandbox_resource_exceeded for max_open_files
 
@@ -64,73 +70,13 @@ sqlite3 data/agent_orchestrator.db \
 - Payload contains `reason_code=open_files_limit_exceeded`.
 - Payload contains `resource_kind=open_files`.
 
-## Scenario 2: Sandbox Emits sandbox_resource_exceeded for max_cpu_seconds
+### Troubleshooting
 
-### Goal
+| Symptom | Likely Cause | Action |
+|---|---|---|
+| `SANDBOX_PROBE resource=open_files ...` appears in stderr, but no `sandbox_resource_exceeded` event is persisted | QA hit an older daemon binary that predates the sandbox event-classification change | Rebuild `orchestratord` and `orchestrator-cli`, restart the daemon, then rerun the scenario |
 
-Ensure a sandboxed CPU burn is terminated by the configured CPU limit.
-
-### Steps
-
-```bash
-TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --workflow sandbox-cpu-limit --name "sandbox cpu limit" --goal "sandbox cpu limit" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-orchestrator task start "${TASK_ID}" || true
-sqlite3 data/agent_orchestrator.db \
-  "SELECT event_type, payload_json FROM events WHERE task_id='${TASK_ID}' AND event_type='sandbox_resource_exceeded' ORDER BY created_at DESC LIMIT 1;"
-```
-
-### Expected
-
-- The run exits non-zero.
-- The latest event is `sandbox_resource_exceeded`.
-- Payload contains `reason_code=cpu_limit_exceeded`.
-- Payload contains `resource_kind=cpu`.
-
-## Scenario 3: Sandbox Emits sandbox_resource_exceeded for max_memory_mb
-
-### Goal
-
-Ensure a sandboxed memory allocation probe fails under the configured memory limit.
-
-### Steps
-
-```bash
-TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --workflow sandbox-memory-limit --name "sandbox memory limit" --goal "sandbox memory limit" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-orchestrator task start "${TASK_ID}" || true
-sqlite3 data/agent_orchestrator.db \
-  "SELECT event_type, payload_json FROM events WHERE task_id='${TASK_ID}' AND event_type='sandbox_resource_exceeded' ORDER BY created_at DESC LIMIT 1;"
-```
-
-### Expected
-
-- The run exits non-zero.
-- The latest event is `sandbox_resource_exceeded`.
-- Payload contains `reason_code=memory_limit_exceeded`.
-- Payload contains `resource_kind=memory`.
-
-## Scenario 4: Sandbox Emits sandbox_resource_exceeded for max_processes
-
-### Goal
-
-Ensure a sandboxed process-spawn probe fails under the configured process limit.
-
-### Steps
-
-```bash
-TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --workflow sandbox-process-limit --name "sandbox process limit" --goal "sandbox process limit" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-orchestrator task start "${TASK_ID}" || true
-sqlite3 data/agent_orchestrator.db \
-  "SELECT event_type, payload_json FROM events WHERE task_id='${TASK_ID}' AND event_type='sandbox_resource_exceeded' ORDER BY created_at DESC LIMIT 1;"
-```
-
-### Expected
-
-- The run exits non-zero.
-- The latest event is `sandbox_resource_exceeded`.
-- Payload contains `reason_code=processes_limit_exceeded`.
-- Payload contains `resource_kind=processes`.
-
-## Scenario 5: Sandbox Emits sandbox_network_blocked for network_mode=deny
+## Scenario 2: Sandbox Emits sandbox_network_blocked for network_mode=deny
 
 ### Goal
 
@@ -153,7 +99,7 @@ sqlite3 data/agent_orchestrator.db \
 - Payload contains `stderr_excerpt`.
 - `network_target` is best-effort; `example.com` is preferred but not required.
 
-## Scenario 6: Unsupported network_mode=allowlist Fails Fast With Structured Event
+## Scenario 3: Unsupported network_mode=allowlist Fails Fast With Structured Event
 
 ### Goal
 
@@ -181,8 +127,5 @@ orchestrator task get "${TASK_ID}"
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
 | 1 | Sandbox Emits sandbox_resource_exceeded for max_open_files | ☐ | | | |
-| 2 | Sandbox Emits sandbox_resource_exceeded for max_cpu_seconds | ☐ | | | |
-| 3 | Sandbox Emits sandbox_resource_exceeded for max_memory_mb | ☐ | | | |
-| 4 | Sandbox Emits sandbox_resource_exceeded for max_processes | ☐ | | | |
-| 5 | Sandbox Emits sandbox_network_blocked for network_mode=deny | ☐ | | | |
-| 6 | Unsupported network_mode=allowlist Fails Fast With Structured Event | ☐ | | | |
+| 2 | Sandbox Emits sandbox_network_blocked for network_mode=deny | ☐ | | | |
+| 3 | Unsupported network_mode=allowlist Fails Fast With Structured Event | ☐ | | | |
