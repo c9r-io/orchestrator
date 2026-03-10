@@ -116,7 +116,13 @@ pub(crate) fn apply_to_store(
     // detect Unchanged vs Configured (instead of always returning Created).
     let is_project_scoped = matches!(
         kind,
-        "Agent" | "Workflow" | "Workspace" | "StepTemplate" | "EnvStore" | "SecretStore"
+        "Agent"
+            | "Workflow"
+            | "Workspace"
+            | "StepTemplate"
+            | "ExecutionProfile"
+            | "EnvStore"
+            | "SecretStore"
     );
     let default_project = if is_project_scoped {
         crate::config::DEFAULT_PROJECT_ID

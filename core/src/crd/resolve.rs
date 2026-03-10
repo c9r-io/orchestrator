@@ -69,6 +69,7 @@ pub fn is_builtin_kind(kind: &str) -> bool {
             | "Project"
             | "RuntimePolicy"
             | "StepTemplate"
+            | "ExecutionProfile"
             | "EnvStore"
             | "SecretStore"
     )
@@ -95,6 +96,10 @@ pub fn is_builtin_alias(name: &str) -> bool {
             | "step_template"
             | "step-template"
             | "steptemplates"
+            | "executionprofile"
+            | "execution_profile"
+            | "execution-profile"
+            | "executionprofiles"
             | "envstore"
             | "env-store"
             | "env_store"

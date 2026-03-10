@@ -435,6 +435,7 @@ pub fn load_config_from_resources_table(
         "Workflow",
         "Workspace",
         "StepTemplate",
+        "ExecutionProfile",
         "EnvStore",
         "SecretStore",
     ];

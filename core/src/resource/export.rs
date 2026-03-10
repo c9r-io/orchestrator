@@ -2,9 +2,9 @@ use crate::cli_types::{OrchestratorResource, ResourceKind, ResourceSpec};
 use crate::config::OrchestratorConfig;
 
 use super::{
-    AgentResource, EnvStoreResource, ProjectResource, RegisteredResource, Resource,
-    RuntimePolicyResource, SecretStoreResource, StepTemplateResource, WorkflowResource,
-    WorkspaceResource, API_VERSION,
+    AgentResource, EnvStoreResource, ExecutionProfileResource, ProjectResource,
+    RegisteredResource, Resource, RuntimePolicyResource, SecretStoreResource,
+    StepTemplateResource, WorkflowResource, WorkspaceResource, API_VERSION,
 };
 
 pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredResource> {
@@ -71,6 +71,17 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
                     prompt: template.prompt.clone(),
                     description: template.description.clone(),
                 },
+            }));
+        }
+        for (name, profile) in &project.execution_profiles {
+            resources.push(RegisteredResource::ExecutionProfile(ExecutionProfileResource {
+                metadata: crate::cli_types::ResourceMetadata {
+                    name: name.clone(),
+                    project: Some(project_id.clone()),
+                    labels: None,
+                    annotations: None,
+                },
+                spec: crate::resource::execution_profile::execution_profile_config_to_spec(profile),
             }));
         }
         for (name, store) in &project.env_stores {

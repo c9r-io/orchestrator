@@ -3,7 +3,9 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use super::{ensure_within_root, validate_workflow_config_with_agents};
+use super::{
+    ensure_within_root, validate_execution_profiles_for_project, validate_workflow_config_with_agents,
+};
 
 pub fn resolve_workspace_path(
     workspace_root: &Path,
@@ -94,6 +96,7 @@ pub fn resolve_and_validate_workspaces_for_project(
         project.agents.iter().map(|(k, v)| (k.clone(), v)).collect();
     for (workflow_id, workflow) in &project.workflows {
         validate_workflow_config_with_agents(&project_agents, workflow, workflow_id)?;
+        validate_execution_profiles_for_project(config, workflow, workflow_id, project_id)?;
     }
 
     Ok(resolved)

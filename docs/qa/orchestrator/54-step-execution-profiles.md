@@ -264,7 +264,7 @@ Ensure a single workflow can run `implement` in sandbox and `qa_testing` on host
 2. Query execution profile events:
    ```bash
    sqlite3 data/agent_orchestrator.db \
-     "SELECT event_type, payload FROM events WHERE task_id='${TASK_ID}' AND event_type='execution_profile_applied' ORDER BY created_at;"
+     "SELECT event_type, payload_json FROM events WHERE task_id='${TASK_ID}' AND event_type='execution_profile_applied' ORDER BY created_at;"
    ```
 
 ### Expected
@@ -276,7 +276,7 @@ Ensure a single workflow can run `implement` in sandbox and `qa_testing` on host
 ### Expected Data State
 
 ```sql
-SELECT event_type, payload
+SELECT event_type, payload_json
 FROM events
 WHERE task_id = '{task_id}'
   AND event_type = 'execution_profile_applied'
@@ -305,10 +305,10 @@ Ensure old workflows with no `execution_profile` continue to run and resolve to 
    orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
    orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
-   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "exec-profile-compat" --goal "compat host default" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --workflow qa_only --name "exec-profile-compat" --goal "compat host default" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    orchestrator task start "${TASK_ID}" || true
    sqlite3 data/agent_orchestrator.db \
-     "SELECT event_type, payload FROM events WHERE task_id='${TASK_ID}' AND event_type='execution_profile_applied' ORDER BY created_at DESC LIMIT 5;"
+     "SELECT event_type, payload_json FROM events WHERE task_id='${TASK_ID}' AND event_type='execution_profile_applied' ORDER BY created_at DESC LIMIT 5;"
    ```
 
 ### Expected

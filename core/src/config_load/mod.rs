@@ -59,6 +59,7 @@ pub(crate) mod tests {
             description: None,
             builtin: None,
             required_capability: None,
+            execution_profile: None,
             enabled,
             repeatable: true,
             is_guard: false,
