@@ -49,6 +49,7 @@ Verify scheduler stores structured run payload and validation status.
      --name "agentoutput-mainline" \
      --goal "structured output" \
      --workspace default \
+     --workflow qa_only \
      --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    orchestrator task start "${TASK_ID}" || true
    ```
@@ -61,6 +62,12 @@ Verify scheduler stores structured run payload and validation status.
 - `validation_status` is populated per run.
 - `output_json` stores serialized `AgentOutput`.
 - `artifacts_json` stores artifact payload for parsed artifacts.
+
+### Troubleshooting
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| `task create failed: multiple workflows exist in project; specify --workflow explicitly` | `echo-workflow.yaml` defines multiple workflows (`qa_only`, `qa_fix`, `qa_fix_retest`, `loop_test`) so implicit workflow resolution is ambiguous | Pass `--workflow qa_only` in Scenario 1, or choose the specific workflow under test |
 
 ### Expected Data State
 ```sql

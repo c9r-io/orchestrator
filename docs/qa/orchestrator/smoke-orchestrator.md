@@ -7,6 +7,7 @@
 - [ ] CLI binary builds successfully (`cargo build --release`)
 - [ ] Database schema initializes at `data/agent_orchestrator.db`
 - [ ] CLI help command works (`./target/release/orchestrator --help`)
+- [ ] Daemon starts from a cold boot with an empty SQLite file and creates the UDS socket (`./target/release/orchestratord --foreground`)
 - [ ] Config manifest can be validated (`manifest validate`)
 - [ ] Agent listing responds (`get agents`)
 
