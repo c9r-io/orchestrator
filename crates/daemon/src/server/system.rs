@@ -7,7 +7,7 @@ pub(crate) async fn ping(
     server: &OrchestratorServer,
     request: Request<PingRequest>,
 ) -> Result<Response<PingResponse>, Status> {
-    let _auth = super::authorize(server, &request, "Ping")?;
+    super::authorize(server, &request, "Ping").map_err(Status::from)?;
     Ok(Response::new(PingResponse {
         version: env!("CARGO_PKG_VERSION").to_string(),
         git_hash: env!("BUILD_GIT_HASH").to_string(),
@@ -19,7 +19,7 @@ pub(crate) async fn shutdown(
     server: &OrchestratorServer,
     request: Request<ShutdownRequest>,
 ) -> Result<Response<ShutdownResponse>, Status> {
-    let _auth = super::authorize(server, &request, "Shutdown")?;
+    super::authorize(server, &request, "Shutdown").map_err(Status::from)?;
     let req = request.into_inner();
     tracing::info!(graceful = req.graceful, "shutdown requested via RPC");
     server.shutdown_notify.notify_one();
@@ -32,7 +32,7 @@ pub(crate) async fn config_debug(
     server: &OrchestratorServer,
     request: Request<ConfigDebugRequest>,
 ) -> Result<Response<ConfigDebugResponse>, Status> {
-    let _auth = super::authorize(server, &request, "ConfigDebug")?;
+    super::authorize(server, &request, "ConfigDebug").map_err(Status::from)?;
     let req = request.into_inner();
     let content =
         agent_orchestrator::service::system::debug_info(&server.state, req.component.as_deref())
@@ -48,7 +48,7 @@ pub(crate) async fn worker_status(
     server: &OrchestratorServer,
     request: Request<WorkerStatusRequest>,
 ) -> Result<Response<WorkerStatusResponse>, Status> {
-    let _auth = super::authorize(server, &request, "WorkerStatus")?;
+    super::authorize(server, &request, "WorkerStatus").map_err(Status::from)?;
     let status = agent_orchestrator::service::system::worker_status(&server.state)
         .await
         .map_err(|e| Status::internal(format!("{e}")))?;
@@ -60,7 +60,7 @@ pub(crate) async fn check(
     server: &OrchestratorServer,
     request: Request<CheckRequest>,
 ) -> Result<Response<CheckResponse>, Status> {
-    let _auth = super::authorize(server, &request, "Check")?;
+    super::authorize(server, &request, "Check").map_err(Status::from)?;
     let req = request.into_inner();
     let report = agent_orchestrator::service::system::run_check(
         &server.state,
@@ -87,7 +87,7 @@ pub(crate) async fn init(
     server: &OrchestratorServer,
     request: Request<InitRequest>,
 ) -> Result<Response<InitResponse>, Status> {
-    let _auth = super::authorize(server, &request, "Init")?;
+    super::authorize(server, &request, "Init").map_err(Status::from)?;
     let req = request.into_inner();
     let message = agent_orchestrator::service::system::run_init(&server.state, req.root.as_deref())
         .map_err(|e| Status::internal(format!("{e}")))?;
@@ -98,7 +98,7 @@ pub(crate) async fn manifest_validate(
     server: &OrchestratorServer,
     request: Request<ManifestValidateRequest>,
 ) -> Result<Response<ManifestValidateResponse>, Status> {
-    let _auth = super::authorize(server, &request, "ManifestValidate")?;
+    super::authorize(server, &request, "ManifestValidate").map_err(Status::from)?;
     let req = request.into_inner();
     let report = agent_orchestrator::service::system::validate_manifests(
         &server.state,

@@ -15,7 +15,7 @@ pub(crate) async fn task_create(
     server: &OrchestratorServer,
     request: Request<TaskCreateRequest>,
 ) -> Result<Response<TaskCreateResponse>, Status> {
-    let _auth = super::authorize(server, &request, "TaskCreate")?;
+    super::authorize(server, &request, "TaskCreate").map_err(Status::from)?;
     let req = request.into_inner();
     let payload = agent_orchestrator::dto::CreateTaskPayload {
         name: req.name,
@@ -57,7 +57,7 @@ pub(crate) async fn task_start(
     server: &OrchestratorServer,
     request: Request<TaskStartRequest>,
 ) -> Result<Response<TaskStartResponse>, Status> {
-    let _auth = super::authorize(server, &request, "TaskStart")?;
+    super::authorize(server, &request, "TaskStart").map_err(Status::from)?;
     let req = request.into_inner();
     let id = agent_orchestrator::service::task::resolve_start_id(
         &server.state,
@@ -81,7 +81,7 @@ pub(crate) async fn task_pause(
     server: &OrchestratorServer,
     request: Request<TaskPauseRequest>,
 ) -> Result<Response<TaskPauseResponse>, Status> {
-    let _auth = super::authorize(server, &request, "TaskPause")?;
+    super::authorize(server, &request, "TaskPause").map_err(Status::from)?;
     let req = request.into_inner();
     let id = agent_orchestrator::service::task::resolve_id(&server.state, &req.task_id)
         .await
@@ -99,7 +99,7 @@ pub(crate) async fn task_resume(
     server: &OrchestratorServer,
     request: Request<TaskResumeRequest>,
 ) -> Result<Response<TaskResumeResponse>, Status> {
-    let _auth = super::authorize(server, &request, "TaskResume")?;
+    super::authorize(server, &request, "TaskResume").map_err(Status::from)?;
     let req = request.into_inner();
     let id = agent_orchestrator::service::task::resolve_id(&server.state, &req.task_id)
         .await
@@ -119,7 +119,7 @@ pub(crate) async fn task_delete(
     server: &OrchestratorServer,
     request: Request<TaskDeleteRequest>,
 ) -> Result<Response<TaskDeleteResponse>, Status> {
-    let _auth = super::authorize(server, &request, "TaskDelete")?;
+    super::authorize(server, &request, "TaskDelete").map_err(Status::from)?;
     let req = request.into_inner();
     if !req.force {
         return Err(Status::failed_precondition(
@@ -141,7 +141,7 @@ pub(crate) async fn task_retry(
     server: &OrchestratorServer,
     request: Request<TaskRetryRequest>,
 ) -> Result<Response<TaskRetryResponse>, Status> {
-    let _auth = super::authorize(server, &request, "TaskRetry")?;
+    super::authorize(server, &request, "TaskRetry").map_err(Status::from)?;
     let req = request.into_inner();
     if !req.force {
         return Err(Status::failed_precondition(
@@ -166,7 +166,7 @@ pub(crate) async fn task_list(
     server: &OrchestratorServer,
     request: Request<TaskListRequest>,
 ) -> Result<Response<TaskListResponse>, Status> {
-    let _auth = super::authorize(server, &request, "TaskList")?;
+    super::authorize(server, &request, "TaskList").map_err(Status::from)?;
     let req = request.into_inner();
     let tasks = agent_orchestrator::service::task::list_tasks(&server.state)
         .await
@@ -192,7 +192,7 @@ pub(crate) async fn task_info(
     server: &OrchestratorServer,
     request: Request<TaskInfoRequest>,
 ) -> Result<Response<TaskInfoResponse>, Status> {
-    let _auth = super::authorize(server, &request, "TaskInfo")?;
+    super::authorize(server, &request, "TaskInfo").map_err(Status::from)?;
     let req = request.into_inner();
     let detail = agent_orchestrator::service::task::get_task_detail(&server.state, &req.task_id)
         .await
@@ -210,7 +210,7 @@ pub(crate) async fn task_logs(
     server: &OrchestratorServer,
     request: Request<TaskLogsRequest>,
 ) -> Result<Response<TaskLogsStream>, Status> {
-    let _auth = super::authorize(server, &request, "TaskLogs")?;
+    super::authorize(server, &request, "TaskLogs").map_err(Status::from)?;
     let req = request.into_inner();
     let logs = agent_orchestrator::service::task::get_task_logs(
         &server.state,
@@ -243,7 +243,7 @@ pub(crate) async fn task_follow(
     server: &OrchestratorServer,
     request: Request<TaskFollowRequest>,
 ) -> Result<Response<TaskFollowStream>, Status> {
-    let _auth = super::authorize(server, &request, "TaskFollow")?;
+    super::authorize(server, &request, "TaskFollow").map_err(Status::from)?;
     let req = request.into_inner();
     let state = server.state.clone();
     let (tx, rx) = tokio::sync::mpsc::channel(64);
@@ -278,7 +278,7 @@ pub(crate) async fn task_watch(
     server: &OrchestratorServer,
     request: Request<TaskWatchRequest>,
 ) -> Result<Response<TaskWatchStream>, Status> {
-    let _auth = super::authorize(server, &request, "TaskWatch")?;
+    super::authorize(server, &request, "TaskWatch").map_err(Status::from)?;
     let req = request.into_inner();
     let state = server.state.clone();
     let interval_secs = if req.interval_secs == 0 {
@@ -337,7 +337,7 @@ pub(crate) async fn task_trace(
     server: &OrchestratorServer,
     request: Request<TaskTraceRequest>,
 ) -> Result<Response<TaskTraceResponse>, Status> {
-    let _auth = super::authorize(server, &request, "TaskTrace")?;
+    super::authorize(server, &request, "TaskTrace").map_err(Status::from)?;
     let req = request.into_inner();
     let result =
         agent_orchestrator::service::task::get_task_trace(&server.state, &req.task_id, req.verbose)

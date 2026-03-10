@@ -7,7 +7,7 @@ pub(crate) async fn store_get(
     server: &OrchestratorServer,
     request: Request<StoreGetRequest>,
 ) -> Result<Response<StoreGetResponse>, Status> {
-    let _auth = super::authorize(server, &request, "StoreGet")?;
+    super::authorize(server, &request, "StoreGet").map_err(Status::from)?;
     let req = request.into_inner();
     let result = agent_orchestrator::service::store::store_get(
         &server.state,
@@ -28,7 +28,7 @@ pub(crate) async fn store_put(
     server: &OrchestratorServer,
     request: Request<StorePutRequest>,
 ) -> Result<Response<StorePutResponse>, Status> {
-    let _auth = super::authorize(server, &request, "StorePut")?;
+    super::authorize(server, &request, "StorePut").map_err(Status::from)?;
     let req = request.into_inner();
     agent_orchestrator::service::store::store_put(
         &server.state,
@@ -50,7 +50,7 @@ pub(crate) async fn store_delete(
     server: &OrchestratorServer,
     request: Request<StoreDeleteRequest>,
 ) -> Result<Response<StoreDeleteResponse>, Status> {
-    let _auth = super::authorize(server, &request, "StoreDelete")?;
+    super::authorize(server, &request, "StoreDelete").map_err(Status::from)?;
     let req = request.into_inner();
     agent_orchestrator::service::store::store_delete(
         &server.state,
@@ -70,7 +70,7 @@ pub(crate) async fn store_list(
     server: &OrchestratorServer,
     request: Request<StoreListRequest>,
 ) -> Result<Response<StoreListResponse>, Status> {
-    let _auth = super::authorize(server, &request, "StoreList")?;
+    super::authorize(server, &request, "StoreList").map_err(Status::from)?;
     let req = request.into_inner();
     let entries = agent_orchestrator::service::store::store_list(
         &server.state,
@@ -89,7 +89,7 @@ pub(crate) async fn store_prune(
     server: &OrchestratorServer,
     request: Request<StorePruneRequest>,
 ) -> Result<Response<StorePruneResponse>, Status> {
-    let _auth = super::authorize(server, &request, "StorePrune")?;
+    super::authorize(server, &request, "StorePrune").map_err(Status::from)?;
     let req = request.into_inner();
     agent_orchestrator::service::store::store_prune(&server.state, &req.store, &req.project)
         .await

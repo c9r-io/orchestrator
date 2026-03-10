@@ -12,7 +12,7 @@ use orchestrator_proto::*;
 use tokio::sync::Notify;
 use tonic::{Request, Response, Status};
 
-use crate::control_plane::ControlPlaneSecurity;
+use crate::control_plane::{AuthzError, ControlPlaneSecurity};
 
 /// gRPC service implementation — thin translation layer from gRPC requests
 /// to core service calls.
@@ -43,7 +43,7 @@ pub(crate) fn authorize<T>(
     server: &OrchestratorServer,
     request: &Request<T>,
     rpc: &'static str,
-) -> Result<(), Status> {
+) -> std::result::Result<(), AuthzError> {
     match &server.control_plane {
         Some(control_plane) => control_plane.authorize(request, rpc),
         None => Ok(()),

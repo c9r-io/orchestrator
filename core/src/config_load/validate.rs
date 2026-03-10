@@ -1280,7 +1280,9 @@ mod tests {
 
         let err = validate_workflow_config(&config, &workflow, "probe")
             .expect_err("probe profile should reject strict phases");
-        assert!(err.to_string().contains("does not allow"));
+        let message = err.to_string();
+        assert!(message.contains("self_ref.probe_forbidden_phase"));
+        assert!(message.contains("forbidden phase"));
     }
 
     #[test]
