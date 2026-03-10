@@ -36,6 +36,7 @@ pub(super) async fn apply_step_results(
     acc.exit_codes.insert(step.id.clone(), result.exit_code);
     acc.apply_captures(&step.behavior.captures, &step.id, result);
     acc.step_ran.insert(step.id.clone(), true);
+    acc.apply_run_diagnostics(result);
 
     // 4. Status transitions
     if result.is_success() {
@@ -56,7 +57,20 @@ pub(super) async fn apply_step_results(
                     task_id,
                     Some(item_id),
                     "step_finished",
-                    json!({"step": phase, "step_id": step.id, "step_scope": step.resolved_scope(), "early_return": true, "exit_code": result.exit_code, "success": false}),
+                    json!({
+                        "step": phase,
+                        "step_id": step.id,
+                        "step_scope": step.resolved_scope(),
+                        "agent_id": result.agent_id,
+                        "run_id": result.run_id,
+                        "early_return": true,
+                        "exit_code": result.exit_code,
+                        "success": false,
+                        "execution_profile": result.execution_profile,
+                        "execution_mode": result.execution_mode,
+                        "sandbox_denied": result.sandbox_denied,
+                        "sandbox_denial_reason": result.sandbox_denial_reason,
+                    }),
                 )
                 .await?;
                 return Ok(true);
@@ -270,7 +284,11 @@ pub(super) async fn apply_step_results(
             "test_failures": acc.pipeline_vars.test_failures.len(),
             "confidence": confidence,
             "quality_score": quality,
-            "validation_status": result.validation_status,
+                "validation_status": result.validation_status,
+                "execution_profile": result.execution_profile,
+                "execution_mode": result.execution_mode,
+                "sandbox_denied": result.sandbox_denied,
+                "sandbox_denial_reason": result.sandbox_denial_reason,
         }),
     )
     .await?;

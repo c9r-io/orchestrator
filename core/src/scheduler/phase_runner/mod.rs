@@ -24,6 +24,7 @@ use record::record_phase_results;
 use setup::setup_phase_execution;
 use spawn::spawn_phase_process;
 use validate::validate_phase_output_stage;
+use util::detect_sandbox_denial;
 use wait::wait_for_process;
 
 /// Orchestrator: runs a single phase with timeout by calling the 5 extracted stages in sequence.
@@ -122,6 +123,19 @@ async fn run_phase_with_timeout(
     )
     .await?;
 
+    let sandbox_denial = detect_sandbox_denial(
+        &setup.execution_profile,
+        wait_result.exit_code,
+        &setup.stderr_path,
+    )
+    .await;
+    let validated = super::phase_runner::types::ValidatedOutput {
+        sandbox_denied: sandbox_denial.denied,
+        sandbox_denial_reason: sandbox_denial.reason,
+        sandbox_denial_stderr_excerpt: sandbox_denial.stderr_excerpt,
+        ..validated
+    };
+
     // Stage 5: record results
     record_phase_results(
         state,
@@ -130,7 +144,9 @@ async fn run_phase_with_timeout(
         &spawn_result.session_id,
         task_id,
         item_id,
+        step_id,
         phase,
+        step_scope,
         tty,
         workspace_root,
         workspace_id,
@@ -151,6 +167,13 @@ async fn run_phase_with_timeout(
         validation_status: validated.validation_status.to_string(),
         agent_id: agent_id.to_string(),
         run_id: setup.run_id,
+        execution_profile: setup.execution_profile.name,
+        execution_mode: match setup.execution_profile.mode {
+            crate::config::ExecutionProfileMode::Host => "host".to_string(),
+            crate::config::ExecutionProfileMode::Sandbox => "sandbox".to_string(),
+        },
+        sandbox_denied: validated.sandbox_denied,
+        sandbox_denial_reason: validated.sandbox_denial_reason.clone(),
     })
 }
 

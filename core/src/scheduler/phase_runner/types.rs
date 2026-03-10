@@ -11,6 +11,7 @@ pub(super) const LOW_OUTPUT_DELTA_THRESHOLD_BYTES: u64 = 32;
 pub(super) const LOW_OUTPUT_MIN_ELAPSED_SECS: u64 = 90;
 pub(super) const LOW_OUTPUT_CONSECUTIVE_HEARTBEATS: u32 = 3;
 pub(super) const VALIDATION_FAILED_EXIT_CODE: i64 = -6;
+pub(super) const SANDBOX_STDERR_EXCERPT_MAX_BYTES: u64 = 1024;
 
 pub(super) struct LimitedOutput {
     pub text: String,
@@ -31,6 +32,13 @@ pub(super) struct HeartbeatSample {
     pub stderr_delta_bytes: u64,
     pub stagnant_heartbeats: u32,
     pub output_state: &'static str,
+}
+
+#[derive(Debug, Default, Clone)]
+pub(super) struct SandboxDenialInfo {
+    pub denied: bool,
+    pub reason: Option<String>,
+    pub stderr_excerpt: Option<String>,
 }
 
 /// Intermediate data produced by `setup_phase_execution` and consumed by later stages.
@@ -73,6 +81,9 @@ pub(super) struct ValidatedOutput {
     pub validation_event_payload_json: Option<String>,
     pub redacted_output: crate::collab::AgentOutput,
     pub validation_error: Option<String>,
+    pub sandbox_denied: bool,
+    pub sandbox_denial_reason: Option<String>,
+    pub sandbox_denial_stderr_excerpt: Option<String>,
 }
 
 pub struct PhaseRunRequest<'a> {

@@ -140,6 +140,13 @@ pub(super) async fn spawn_phase_process(
                 validation_status: "passed".to_string(),
                 agent_id: agent_id.to_string(),
                 run_id: setup.run_id.clone(),
+                execution_profile: setup.execution_profile.name.clone(),
+                execution_mode: match setup.execution_profile.mode {
+                    crate::config::ExecutionProfileMode::Host => "host".to_string(),
+                    crate::config::ExecutionProfileMode::Sandbox => "sandbox".to_string(),
+                },
+                sandbox_denied: false,
+                sandbox_denial_reason: None,
             }),
         });
     }

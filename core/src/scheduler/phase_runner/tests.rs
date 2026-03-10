@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod cases {
     use crate::config::StepScope;
+    use crate::config::{ExecutionFsMode, ExecutionNetworkMode, ExecutionProfileMode};
+    use crate::runner::ResolvedExecutionProfile;
     use crate::scheduler::phase_runner::types::*;
     use crate::scheduler::phase_runner::util::*;
 
@@ -179,6 +181,73 @@ mod cases {
 
         let result = read_output_with_limit(&path, 1024).await;
         assert!(result.is_err());
+    }
+
+    fn sandbox_profile() -> ResolvedExecutionProfile {
+        ResolvedExecutionProfile {
+            name: "sandbox_profile".to_string(),
+            mode: ExecutionProfileMode::Sandbox,
+            fs_mode: ExecutionFsMode::WorkspaceRwScoped,
+            writable_paths: Vec::new(),
+            network_mode: ExecutionNetworkMode::Deny,
+            network_allowlist: Vec::new(),
+            max_memory_mb: None,
+            max_cpu_seconds: None,
+            max_processes: None,
+            max_open_files: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn detect_sandbox_denial_returns_false_for_host_mode() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("stderr.log");
+        std::fs::write(&path, "Operation not permitted").expect("write stderr");
+
+        let info = detect_sandbox_denial(&ResolvedExecutionProfile::host(), 1, &path).await;
+
+        assert!(!info.denied);
+        assert!(info.reason.is_none());
+    }
+
+    #[tokio::test]
+    async fn detect_sandbox_denial_detects_operation_not_permitted() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("stderr.log");
+        std::fs::write(&path, "/bin/bash: sandbox-denied.txt: Operation not permitted\n")
+            .expect("write stderr");
+
+        let info = detect_sandbox_denial(&sandbox_profile(), 1, &path).await;
+
+        assert!(info.denied);
+        assert_eq!(info.reason.as_deref(), Some("file_write_denied"));
+        assert_eq!(
+            info.stderr_excerpt.as_deref(),
+            Some("/bin/bash: sandbox-denied.txt: Operation not permitted")
+        );
+    }
+
+    #[tokio::test]
+    async fn detect_sandbox_denial_ignores_other_stderr() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("stderr.log");
+        std::fs::write(&path, "syntax error near unexpected token").expect("write stderr");
+
+        let info = detect_sandbox_denial(&sandbox_profile(), 2, &path).await;
+
+        assert!(!info.denied);
+        assert!(info.reason.is_none());
+    }
+
+    #[tokio::test]
+    async fn detect_sandbox_denial_handles_missing_stderr() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("missing.log");
+
+        let info = detect_sandbox_denial(&sandbox_profile(), 1, &path).await;
+
+        assert!(!info.denied);
+        assert!(info.reason.is_none());
     }
 
     #[test]

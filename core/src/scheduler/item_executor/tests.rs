@@ -36,6 +36,10 @@ fn execution_hard_failure_detects_failed_validation_status() {
         validation_status: "failed".to_string(),
         agent_id: "agent".to_string(),
         run_id: "run".to_string(),
+        execution_profile: "host".to_string(),
+        execution_mode: "host".to_string(),
+        sandbox_denied: false,
+        sandbox_denial_reason: None,
     };
 
     assert!(is_execution_hard_failure(&result));
@@ -54,6 +58,10 @@ fn execution_hard_failure_ignores_non_validation_failures() {
         validation_status: "passed".to_string(),
         agent_id: "agent".to_string(),
         run_id: "run".to_string(),
+        execution_profile: "host".to_string(),
+        execution_mode: "host".to_string(),
+        sandbox_denied: false,
+        sandbox_denial_reason: None,
     };
 
     assert!(!is_execution_hard_failure(&result));
@@ -435,6 +443,10 @@ fn make_run_result(
         validation_status: if success { "passed" } else { "failed" }.to_string(),
         agent_id: "test-agent".to_string(),
         run_id: "run-1".to_string(),
+        execution_profile: "host".to_string(),
+        execution_mode: "host".to_string(),
+        sandbox_denied: false,
+        sandbox_denial_reason: None,
     }
 }
 

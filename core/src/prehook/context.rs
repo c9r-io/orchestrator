@@ -61,6 +61,36 @@ pub(super) fn build_step_prehook_cel_context(
             )
         })?;
     cel_context
+        .add_variable("last_sandbox_denied", context.last_sandbox_denied)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("sandbox_denied_count", context.sandbox_denied_count as i64)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable(
+            "last_sandbox_denial_reason",
+            context.last_sandbox_denial_reason.clone(),
+        )
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
         .add_variable("step", context.step.clone())
         .map_err(|err| {
             anyhow::anyhow!(
@@ -253,6 +283,18 @@ pub(super) fn build_finalize_cel_context(context: &ItemFinalizeContext) -> Resul
         .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
     cel_context
         .add_variable("fix_required", context.fix_required)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("last_sandbox_denied", context.last_sandbox_denied)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("sandbox_denied_count", context.sandbox_denied_count as i64)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable(
+            "last_sandbox_denial_reason",
+            context.last_sandbox_denial_reason.clone(),
+        )
         .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
     cel_context
         .add_variable("qa_configured", context.qa_configured)

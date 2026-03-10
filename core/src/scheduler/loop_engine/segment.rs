@@ -116,6 +116,12 @@ pub(super) async fn execute_task_segment(
             tracing::warn!("failed to persist pipeline_vars after task segment: {e}");
         }
     }
+    for item in items.iter() {
+        let acc = item_state
+            .entry(item.id.clone())
+            .or_insert_with(|| StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone()));
+        acc.merge_task_pipeline_vars(&task_acc.pipeline_vars);
+    }
 
     // Invariant checkpoint: after_implement (if this segment had implement steps)
     let has_implement = segment.step_ids.contains("implement")

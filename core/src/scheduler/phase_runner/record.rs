@@ -23,7 +23,9 @@ pub(super) async fn record_phase_results(
     session_id: &Option<String>,
     task_id: &str,
     item_id: &str,
+    step_id: &str,
     phase: &str,
+    step_scope: crate::config::StepScope,
     tty: bool,
     workspace_root: &Path,
     workspace_id: &str,
@@ -96,13 +98,37 @@ pub(super) async fn record_phase_results(
 
     let validation_event_payload_json = validated.validation_event_payload_json.clone();
     {
-        let mut events = Vec::with_capacity(2);
+        let mut events = Vec::with_capacity(3);
         if let Some(payload_json) = validation_event_payload_json {
             events.push(crate::db_write::DbEventRecord {
                 task_id: task_id_owned.clone(),
                 task_item_id: Some(item_id_owned.clone()),
                 event_type: "output_validation_failed".to_string(),
                 payload_json,
+            });
+        }
+        if validated.sandbox_denied {
+            events.push(crate::db_write::DbEventRecord {
+                task_id: task_id_owned.clone(),
+                task_item_id: Some(item_id_owned.clone()),
+                event_type: "sandbox_denied".to_string(),
+                payload_json: serde_json::to_string(&json!({
+                    "step": phase,
+                    "step_id": step_id,
+                    "step_scope": match step_scope {
+                        crate::config::StepScope::Task => "task",
+                        crate::config::StepScope::Item => "item",
+                    },
+                    "agent_id": agent_id,
+                    "run_id": setup.run_id,
+                    "execution_profile": setup.execution_profile.name,
+                    "execution_mode": match setup.execution_profile.mode {
+                        crate::config::ExecutionProfileMode::Host => "host",
+                        crate::config::ExecutionProfileMode::Sandbox => "sandbox",
+                    },
+                    "reason": validated.sandbox_denial_reason,
+                    "stderr_excerpt": validated.sandbox_denial_stderr_excerpt,
+                }))?,
             });
         }
         events.push(crate::db_write::DbEventRecord {

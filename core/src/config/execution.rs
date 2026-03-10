@@ -225,6 +225,12 @@ pub struct StepPrehookContext {
     /// Whether this is the last cycle (cycle == max_cycles)
     #[serde(default)]
     pub is_last_cycle: bool,
+    #[serde(default)]
+    pub last_sandbox_denied: bool,
+    #[serde(default)]
+    pub sandbox_denied_count: u32,
+    #[serde(default)]
+    pub last_sandbox_denial_reason: Option<String>,
     /// Whether this QA doc is safe to run in a self-referential workspace
     #[serde(default = "default_true")]
     pub self_referential_safe: bool,
@@ -276,6 +282,9 @@ pub struct ItemFinalizeContext {
     pub has_ticket_artifacts: bool,
     pub has_code_change_artifacts: bool,
     pub is_last_cycle: bool,
+    pub last_sandbox_denied: bool,
+    pub sandbox_denied_count: u32,
+    pub last_sandbox_denial_reason: Option<String>,
 }
 
 /// Workflow finalize outcome

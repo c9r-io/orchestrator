@@ -363,6 +363,10 @@ async fn execute_builtin_step_dispatch(
                 validation_status: "passed".to_string(),
                 agent_id: "builtin".to_string(),
                 run_id: String::new(),
+                execution_profile: "host".to_string(),
+                execution_mode: "host".to_string(),
+                sandbox_denied: false,
+                sandbox_denial_reason: None,
             };
             acc.apply_captures(&step.behavior.captures, &step.id, &synth_result);
             Ok(BuiltinStepOutcome::Handled)
@@ -1016,6 +1020,9 @@ fn build_dynamic_step_context(
         self_test_passed: prehook_ctx.self_test_passed,
         max_cycles: prehook_ctx.max_cycles,
         is_last_cycle: prehook_ctx.is_last_cycle,
+        last_sandbox_denied: prehook_ctx.last_sandbox_denied,
+        sandbox_denied_count: prehook_ctx.sandbox_denied_count,
+        last_sandbox_denial_reason: prehook_ctx.last_sandbox_denial_reason,
         self_referential_safe: prehook_ctx.self_referential_safe,
     }
 }
@@ -1213,11 +1220,21 @@ async fn execute_dynamic_step_config(
         task_id,
         Some(item_id),
         "dynamic_step_finished",
-        json!({"step_id": ds.id, "step_scope": "item", "exit_code": result.exit_code, "success": result.is_success()}),
+        json!({
+            "step_id": ds.id,
+            "step_scope": "item",
+            "exit_code": result.exit_code,
+            "success": result.is_success(),
+            "execution_profile": result.execution_profile,
+            "execution_mode": result.execution_mode,
+            "sandbox_denied": result.sandbox_denied,
+            "sandbox_denial_reason": result.sandbox_denial_reason,
+        }),
     )
     .await?;
     acc.exit_codes.insert(ds.id.clone(), result.exit_code);
     acc.step_ran.insert(ds.id.clone(), true);
+    acc.apply_run_diagnostics(&result);
     match ds.step_type.as_str() {
         "qa" => {
             acc.flags

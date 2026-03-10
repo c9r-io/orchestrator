@@ -22,6 +22,10 @@ This document validates the new step-level contract. Global runner policy behavi
 - `docs/qa/orchestrator/31-runner-policy-defaults-compatibility.md`
 - `docs/qa/orchestrator/45-cli-unsafe-mode.md`
 
+Sandbox denial semantics are validated separately in:
+
+- `docs/qa/orchestrator/55-sandbox-write-boundaries.md`
+
 Entry point: `orchestrator`
 
 ---

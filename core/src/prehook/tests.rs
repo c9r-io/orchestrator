@@ -384,6 +384,9 @@ fn default_step_prehook_context() -> StepPrehookContext {
         self_test_passed: false,
         max_cycles: 1,
         is_last_cycle: true,
+        last_sandbox_denied: false,
+        sandbox_denied_count: 0,
+        last_sandbox_denial_reason: None,
         self_referential_safe: true,
     }
 }
@@ -426,6 +429,9 @@ fn default_item_finalize_context() -> crate::config::ItemFinalizeContext {
         has_ticket_artifacts: false,
         has_code_change_artifacts: false,
         is_last_cycle: true,
+        last_sandbox_denied: false,
+        sandbox_denied_count: 0,
+        last_sandbox_denial_reason: None,
     }
 }
 

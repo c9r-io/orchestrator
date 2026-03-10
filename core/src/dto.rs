@@ -135,6 +135,10 @@ pub struct RunResult {
     pub validation_status: String,
     pub agent_id: String,
     pub run_id: String,
+    pub execution_profile: String,
+    pub execution_mode: String,
+    pub sandbox_denied: bool,
+    pub sandbox_denial_reason: Option<String>,
 }
 
 impl RunResult {

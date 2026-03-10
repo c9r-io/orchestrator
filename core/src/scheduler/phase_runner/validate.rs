@@ -63,5 +63,8 @@ pub(super) async fn validate_phase_output_stage(
         validation_event_payload_json,
         redacted_output,
         validation_error: validation.error,
+        sandbox_denied: false,
+        sandbox_denial_reason: None,
+        sandbox_denial_stderr_excerpt: None,
     })
 }

@@ -1,7 +1,9 @@
-use crate::config::StepScope;
+use crate::config::{ExecutionProfileMode, StepScope};
+use crate::runner::ResolvedExecutionProfile;
 use anyhow::{Context, Result};
 use std::path::Path;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tracing::debug;
 
 use super::types::*;
 
@@ -95,4 +97,47 @@ pub(super) async fn read_output_with_limit(path: &Path, max_bytes: u64) -> Resul
         text: String::from_utf8_lossy(&buf).into_owned(),
         truncated_prefix_bytes: start,
     })
+}
+
+pub(super) async fn detect_sandbox_denial(
+    execution_profile: &ResolvedExecutionProfile,
+    exit_code: i32,
+    stderr_path: &Path,
+) -> SandboxDenialInfo {
+    if execution_profile.mode != ExecutionProfileMode::Sandbox || exit_code == 0 {
+        return SandboxDenialInfo::default();
+    }
+
+    let stderr_tail = match read_output_with_limit(stderr_path, SANDBOX_STDERR_EXCERPT_MAX_BYTES).await
+    {
+        Ok(output) => output.text,
+        Err(err) => {
+            debug!(path = %stderr_path.display(), error = %err, "sandbox denial detection skipped: failed to read stderr");
+            return SandboxDenialInfo::default();
+        }
+    };
+
+    if !stderr_tail.contains("Operation not permitted") {
+        return SandboxDenialInfo::default();
+    }
+
+    SandboxDenialInfo {
+        denied: true,
+        reason: Some("file_write_denied".to_string()),
+        stderr_excerpt: sanitize_stderr_excerpt(&stderr_tail),
+    }
+}
+
+fn sanitize_stderr_excerpt(stderr_tail: &str) -> Option<String> {
+    let excerpt = stderr_tail
+        .lines()
+        .rev()
+        .find(|line| !line.trim().is_empty())
+        .unwrap_or(stderr_tail)
+        .trim();
+    if excerpt.is_empty() {
+        None
+    } else {
+        Some(excerpt.to_string())
+    }
 }

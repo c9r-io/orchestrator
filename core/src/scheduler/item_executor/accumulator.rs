@@ -22,6 +22,9 @@ pub struct StepExecutionAccumulator {
     pub qa_quality_score: Option<f32>,
     pub fix_confidence: Option<f32>,
     pub fix_quality_score: Option<f32>,
+    pub last_sandbox_denied: bool,
+    pub sandbox_denied_count: u32,
+    pub last_sandbox_denial_reason: Option<String>,
     pub terminal: bool,
     /// Buffered GenerateItems action from a post-action, to be applied after segment completes.
     pub pending_generate_items: Option<crate::config::GenerateItemsAction>,
@@ -44,6 +47,9 @@ impl StepExecutionAccumulator {
             qa_quality_score: None,
             fix_confidence: None,
             fix_quality_score: None,
+            last_sandbox_denied: false,
+            sandbox_denied_count: 0,
+            last_sandbox_denial_reason: None,
             terminal: false,
             pending_generate_items: None,
         }
@@ -61,6 +67,27 @@ impl StepExecutionAccumulator {
         }
         if self.pipeline_vars.test_failures.is_empty() {
             self.pipeline_vars.test_failures = task_pipeline_vars.test_failures.clone();
+        }
+        if !self.last_sandbox_denied {
+            self.last_sandbox_denied = task_pipeline_vars
+                .vars
+                .get("last_sandbox_denied")
+                .map(|v| v == "true")
+                .unwrap_or(false);
+        }
+        if self.sandbox_denied_count == 0 {
+            self.sandbox_denied_count = task_pipeline_vars
+                .vars
+                .get("sandbox_denied_count")
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(0);
+        }
+        if self.last_sandbox_denial_reason.is_none() {
+            self.last_sandbox_denial_reason = task_pipeline_vars
+                .vars
+                .get("last_sandbox_denial_reason")
+                .filter(|v| !v.is_empty())
+                .cloned();
         }
     }
 
@@ -142,6 +169,9 @@ impl StepExecutionAccumulator {
                 .unwrap_or(false),
             max_cycles,
             is_last_cycle: task_ctx.current_cycle >= max_cycles,
+            last_sandbox_denied: self.last_sandbox_denied,
+            sandbox_denied_count: self.sandbox_denied_count,
+            last_sandbox_denial_reason: self.last_sandbox_denial_reason.clone(),
             self_referential_safe: crate::ticket::is_self_referential_safe(
                 &task_ctx.workspace_root,
                 &item.qa_file_path,
@@ -261,7 +291,30 @@ impl StepExecutionAccumulator {
                     .guard
                     .max_cycles
                     .unwrap_or(1),
+            last_sandbox_denied: self.last_sandbox_denied,
+            sandbox_denied_count: self.sandbox_denied_count,
+            last_sandbox_denial_reason: self.last_sandbox_denial_reason.clone(),
         }
+    }
+
+    pub fn apply_run_diagnostics(&mut self, result: &crate::dto::RunResult) {
+        self.last_sandbox_denied = result.sandbox_denied;
+        self.last_sandbox_denial_reason = result.sandbox_denial_reason.clone();
+        if result.sandbox_denied {
+            self.sandbox_denied_count += 1;
+        }
+        self.pipeline_vars.vars.insert(
+            "last_sandbox_denied".to_string(),
+            self.last_sandbox_denied.to_string(),
+        );
+        self.pipeline_vars.vars.insert(
+            "sandbox_denied_count".to_string(),
+            self.sandbox_denied_count.to_string(),
+        );
+        self.pipeline_vars.vars.insert(
+            "last_sandbox_denial_reason".to_string(),
+            self.last_sandbox_denial_reason.clone().unwrap_or_default(),
+        );
     }
 
     /// Apply capture declarations from a step result into the accumulator.
