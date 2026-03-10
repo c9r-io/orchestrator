@@ -534,12 +534,7 @@ pub fn persist_config_and_reload(
         let mut active = crate::state::write_active_config(state)?;
         *active = candidate;
     }
-    if let Ok(mut error) = state.active_config_error.write() {
-        *error = None;
-    }
-    if let Ok(mut notice) = state.active_config_notice.write() {
-        *notice = None;
-    }
+    crate::state::clear_active_config_status(state)?;
 
     Ok(ConfigOverview {
         config: normalized,
@@ -591,9 +586,7 @@ pub fn persist_config_for_delete(
         Ok(candidate) => {
             let mut active = crate::state::write_active_config(state)?;
             *active = candidate;
-            if let Ok(mut err) = state.active_config_error.write() {
-                *err = None;
-            }
+            crate::state::clear_active_config_status(state)?;
         }
         Err(_) => {
             // Config is persisted but in-memory state may be stale.

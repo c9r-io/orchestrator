@@ -721,7 +721,7 @@ pub async fn execute_builtin_step(
         .await?
     } else {
         let resolved_prompt = step.template.as_ref().and_then(|tmpl_name| {
-            let cfg = state.active_config.read().ok()?;
+            let cfg = crate::config_load::read_loaded_config(state).ok()?;
             cfg.config
                 .default_project()?
                 .step_templates

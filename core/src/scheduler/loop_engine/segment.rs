@@ -567,9 +567,12 @@ async fn persist_selection_to_store(
             "eliminated_ids": result.eliminated_ids,
             "winner_vars": result.winner_vars,
         });
-        let cr = match state.active_config.read() {
+        let cr = match crate::config_load::read_loaded_config(state) {
             Ok(cfg) => cfg.config.custom_resources.clone(),
-            Err(_) => return,
+            Err(error) => {
+                warn!(%error, "failed to read active config while persisting item_select result");
+                return;
+            }
         };
         let op = crate::store::StoreOp::Put {
             store_name: store_target.namespace.clone(),

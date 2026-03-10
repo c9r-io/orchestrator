@@ -1,7 +1,7 @@
 use crate::collab::MessageBus;
 use crate::config::ActiveConfig;
 use crate::config_load::ConfigSelfHealReport;
-use crate::events::EventSink;
+use crate::events::{EventSink, TracingEventSink};
 use crate::metrics::{AgentHealthState, AgentMetrics};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -10,6 +10,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use tokio::process::Child;
 use tokio::sync::Mutex;
+use tracing::error;
 
 pub const MAX_CONCURRENT_TASKS: usize = 10;
 
@@ -52,9 +53,8 @@ impl InnerState {
         event_type: &str,
         payload: Value,
     ) {
-        if let Ok(sink) = self.event_sink.read() {
-            sink.emit(task_id, task_item_id, event_type, payload);
-        }
+        let sink = clone_event_sink(self);
+        sink.emit(task_id, task_item_id, event_type, payload);
     }
 }
 
@@ -92,53 +92,188 @@ impl RunningTask {
 pub fn write_active_config<'a>(
     state: &'a InnerState,
 ) -> Result<std::sync::RwLockWriteGuard<'a, ActiveConfig>, anyhow::Error> {
-    state
-        .active_config
-        .write()
-        .map_err(|_| anyhow::anyhow!("active config lock is poisoned"))
+    write_lock_fail_closed(&state.active_config, "active_config")
 }
 
 pub fn read_agent_health<'a>(
     state: &'a InnerState,
 ) -> RwLockReadGuard<'a, HashMap<String, AgentHealthState>> {
-    match state.agent_health.read() {
+    recoverable_read_lock(
+        &state.agent_health,
+        "agent_health",
+        HashMap::new,
+        Some(state),
+    )
+}
+
+pub fn write_active_config_error<'a>(
+    state: &'a InnerState,
+) -> Result<RwLockWriteGuard<'a, Option<String>>, anyhow::Error> {
+    write_lock_fail_closed(&state.active_config_error, "active_config_error")
+}
+
+pub fn write_active_config_notice<'a>(
+    state: &'a InnerState,
+) -> Result<RwLockWriteGuard<'a, Option<ConfigSelfHealReport>>, anyhow::Error> {
+    write_lock_fail_closed(&state.active_config_notice, "active_config_notice")
+}
+
+pub fn clear_active_config_status(state: &InnerState) -> Result<(), anyhow::Error> {
+    *write_active_config_error(state)? = None;
+    *write_active_config_notice(state)? = None;
+    Ok(())
+}
+
+pub fn reset_active_config_to_default(state: &InnerState) -> Result<(), anyhow::Error> {
+    *write_active_config(state)? = ActiveConfig {
+        config: Default::default(),
+        workspaces: Default::default(),
+        projects: Default::default(),
+    };
+    clear_active_config_status(state)
+}
+
+pub fn clone_event_sink(state: &InnerState) -> Arc<dyn EventSink> {
+    recoverable_read_lock(
+        &state.event_sink,
+        "event_sink",
+        || Arc::new(TracingEventSink::new()),
+        None,
+    )
+    .clone()
+}
+
+pub fn replace_event_sink(state: &InnerState, sink: Arc<dyn EventSink>) {
+    *recoverable_write_lock(&state.event_sink, "event_sink", || {
+        Arc::new(TracingEventSink::new())
+    }, None) = sink;
+}
+
+pub fn read_active_config_error<'a>(
+    state: &'a InnerState,
+) -> Result<RwLockReadGuard<'a, Option<String>>, anyhow::Error> {
+    read_lock_fail_closed(&state.active_config_error, "active_config_error")
+}
+
+pub fn read_loaded_config_guard<'a>(
+    state: &'a InnerState,
+) -> Result<RwLockReadGuard<'a, ActiveConfig>, anyhow::Error> {
+    read_lock_fail_closed(&state.active_config, "active_config")
+}
+
+pub fn read_active_config_notice<'a>(
+    state: &'a InnerState,
+) -> Result<RwLockReadGuard<'a, Option<ConfigSelfHealReport>>, anyhow::Error> {
+    read_lock_fail_closed(&state.active_config_notice, "active_config_notice")
+}
+
+fn control_plane_lock_error(lock_name: &str) -> anyhow::Error {
+    anyhow::anyhow!(
+        "{lock_name} lock poisoned; in-memory control-plane state corrupted; restart required"
+    )
+}
+
+fn read_lock_fail_closed<'a, T>(
+    lock: &'a RwLock<T>,
+    lock_name: &str,
+) -> Result<RwLockReadGuard<'a, T>, anyhow::Error> {
+    lock.read()
+        .map_err(|_| control_plane_lock_error(lock_name))
+}
+
+fn write_lock_fail_closed<'a, T>(
+    lock: &'a RwLock<T>,
+    lock_name: &str,
+) -> Result<RwLockWriteGuard<'a, T>, anyhow::Error> {
+    lock.write()
+        .map_err(|_| control_plane_lock_error(lock_name))
+}
+
+fn recoverable_read_lock<'a, T>(
+    lock: &'a RwLock<T>,
+    lock_name: &str,
+    reset: impl FnOnce() -> T,
+    state: Option<&InnerState>,
+) -> RwLockReadGuard<'a, T> {
+    match lock.read() {
         Ok(guard) => guard,
-        Err(err) => err.into_inner(),
+        Err(err) => {
+            drop(err.into_inner());
+            drop(recoverable_write_lock(lock, lock_name, reset, state));
+            lock.read().unwrap_or_else(|err| err.into_inner())
+        }
     }
 }
 
 pub fn write_agent_health<'a>(
     state: &'a InnerState,
 ) -> RwLockWriteGuard<'a, HashMap<String, AgentHealthState>> {
-    match state.agent_health.write() {
-        Ok(guard) => guard,
-        Err(err) => err.into_inner(),
-    }
+    recoverable_write_lock(&state.agent_health, "agent_health", HashMap::new, Some(state))
 }
 
 pub fn read_agent_metrics<'a>(
     state: &'a InnerState,
 ) -> RwLockReadGuard<'a, HashMap<String, AgentMetrics>> {
-    match state.agent_metrics.read() {
-        Ok(guard) => guard,
-        Err(err) => err.into_inner(),
-    }
+    recoverable_read_lock(
+        &state.agent_metrics,
+        "agent_metrics",
+        HashMap::new,
+        Some(state),
+    )
 }
 
 pub fn write_agent_metrics<'a>(
     state: &'a InnerState,
 ) -> RwLockWriteGuard<'a, HashMap<String, AgentMetrics>> {
-    match state.agent_metrics.write() {
+    recoverable_write_lock(
+        &state.agent_metrics,
+        "agent_metrics",
+        HashMap::new,
+        Some(state),
+    )
+}
+
+fn recoverable_write_lock<'a, T>(
+    lock: &'a RwLock<T>,
+    lock_name: &str,
+    reset: impl FnOnce() -> T,
+    state: Option<&InnerState>,
+) -> RwLockWriteGuard<'a, T> {
+    match lock.write() {
         Ok(guard) => guard,
-        Err(err) => err.into_inner(),
+        Err(err) => {
+            error!(
+                lock_name,
+                policy = "reset_and_continue",
+                "lock poisoned; resetting in-memory state"
+            );
+            let mut guard = err.into_inner();
+            *guard = reset();
+            lock.clear_poison();
+            if let Some(state) = state {
+                state.emit_event(
+                    "",
+                    None,
+                    "lock_poison_recovered",
+                    serde_json::json!({
+                        "lock_name": lock_name,
+                        "policy": "reset_and_continue",
+                        "state_dropped": true
+                    }),
+                );
+            }
+            guard
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config_load::{read_active_config, read_loaded_config};
     use crate::test_utils::TestState;
     use std::sync::atomic::Ordering;
+    use std::thread;
 
     #[test]
     fn running_task_starts_with_defaults() {
@@ -224,5 +359,114 @@ mod tests {
             .map(|p| p.workflows.contains_key(&format!("{}-updated", original)))
             .unwrap_or(false);
         assert!(updated_exists);
+    }
+
+    #[test]
+    fn poisoned_active_config_read_fails_closed() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let result = thread::spawn({
+            let state = state.clone();
+            move || {
+            let _guard = state.active_config.write().expect("lock active config");
+                panic!("poison active config");
+            }
+        });
+        assert!(result.join().is_err());
+
+        let error = read_loaded_config(&state).expect_err("poisoned config should fail");
+        assert!(error.to_string().contains("active_config lock poisoned"));
+        assert!(error.to_string().contains("restart required"));
+    }
+
+    #[test]
+    fn poisoned_active_config_error_fails_closed() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let result = thread::spawn({
+            let state = state.clone();
+            move || {
+                let _guard = state
+                    .active_config_error
+                    .write()
+                    .expect("lock active_config_error");
+                panic!("poison active_config_error");
+            }
+        });
+        assert!(result.join().is_err());
+
+        let error = read_active_config(&state).expect_err("poisoned config error lock should fail");
+        assert!(error
+            .to_string()
+            .contains("active_config_error lock poisoned"));
+        assert!(error.to_string().contains("restart required"));
+    }
+
+    #[test]
+    fn poisoned_agent_health_resets_and_clears_poison() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        write_agent_health(&state).insert("echo".to_string(), AgentHealthState::default());
+        let result = thread::spawn({
+            let state = state.clone();
+            move || {
+                let _guard = state.agent_health.write().expect("lock agent_health");
+                panic!("poison agent_health");
+            }
+        });
+        assert!(result.join().is_err());
+
+        let health = write_agent_health(&state);
+        assert!(health.is_empty());
+        drop(health);
+        assert!(state.agent_health.read().is_ok());
+    }
+
+    #[test]
+    fn poisoned_agent_metrics_resets_and_clears_poison() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        write_agent_metrics(&state).insert("echo".to_string(), AgentMetrics::default());
+        let result = thread::spawn({
+            let state = state.clone();
+            move || {
+                let _guard = state.agent_metrics.write().expect("lock agent_metrics");
+                panic!("poison agent_metrics");
+            }
+        });
+        assert!(result.join().is_err());
+
+        let metrics = write_agent_metrics(&state);
+        assert!(metrics.is_empty());
+        drop(metrics);
+        assert!(state.agent_metrics.read().is_ok());
+    }
+
+    #[test]
+    fn poisoned_event_sink_recovers_with_tracing_sink() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let result = thread::spawn({
+            let state = state.clone();
+            move || {
+                let _guard = state.event_sink.write().expect("lock event_sink");
+                panic!("poison event_sink");
+            }
+        });
+        assert!(result.join().is_err());
+
+        state.emit_event(
+            "task-1",
+            Some("item-1"),
+            "heartbeat",
+            serde_json::json!({"ok": true}),
+        );
+
+        assert!(state.event_sink.read().is_ok());
     }
 }

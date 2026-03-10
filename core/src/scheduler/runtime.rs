@@ -605,8 +605,7 @@ mod tests {
             async_database: base.async_database.clone(),
             logs_dir: base.logs_dir.clone(),
             active_config: std::sync::RwLock::new(
-                base.active_config
-                    .read()
+                crate::config_load::read_loaded_config(base)
                     .expect("lock active config")
                     .clone(),
             ),
@@ -616,9 +615,7 @@ mod tests {
             agent_health: std::sync::RwLock::new(std::collections::HashMap::new()),
             agent_metrics: std::sync::RwLock::new(std::collections::HashMap::new()),
             message_bus: base.message_bus.clone(),
-            event_sink: std::sync::RwLock::new(
-                base.event_sink.read().expect("lock event_sink").clone(),
-            ),
+            event_sink: std::sync::RwLock::new(crate::state::clone_event_sink(base)),
             db_writer: base.db_writer.clone(),
             session_store: base.session_store.clone(),
             task_repo: base.task_repo.clone(),
