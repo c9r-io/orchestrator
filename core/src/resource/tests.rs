@@ -10,9 +10,8 @@ mod cases {
     use crate::test_utils::TestState;
 
     use super::super::test_fixtures::{
-        agent_manifest, env_store_manifest, execution_profile_manifest, make_config,
-        project_manifest, runtime_policy_manifest, secret_store_manifest, step_template_manifest,
-        workflow_manifest, workspace_manifest,
+        agent_manifest, make_config, project_manifest, runtime_policy_manifest, workflow_manifest,
+        workspace_manifest,
     };
 
     #[test]

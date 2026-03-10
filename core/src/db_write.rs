@@ -1036,8 +1036,7 @@ mod tests {
 
     #[test]
     fn extract_event_promoted_fields_step_takes_priority_over_phase() {
-        let (step, _, _) =
-            extract_event_promoted_fields(r#"{"step":"qa","phase":"fix"}"#);
+        let (step, _, _) = extract_event_promoted_fields(r#"{"step":"qa","phase":"fix"}"#);
         assert_eq!(step, Some("qa".to_string()));
     }
 

@@ -221,6 +221,7 @@ pub(super) fn should_snapshot_binary(binary_snapshot: bool, self_referential: bo
 }
 
 /// Pure function: determine if auto-rollback should trigger.
+#[cfg(test)]
 pub(crate) fn should_auto_rollback(
     auto_rollback: bool,
     consecutive_failures: u64,
@@ -236,6 +237,7 @@ pub(crate) fn should_auto_rollback(
 }
 
 /// Pure function: compute the rollback tag for a given state.
+#[cfg(test)]
 pub(crate) fn compute_rollback_tag(
     task_id: &str,
     current_cycle: u64,

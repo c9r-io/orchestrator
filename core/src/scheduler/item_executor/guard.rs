@@ -131,6 +131,7 @@ pub async fn execute_guard_step(
 }
 
 /// Pure function: evaluate the builtin loop_guard decision.
+#[cfg(test)]
 pub(crate) fn evaluate_builtin_loop_guard(
     stop_when_no_unresolved: bool,
     unresolved: u64,
@@ -147,9 +148,9 @@ pub(crate) fn evaluate_builtin_loop_guard(
 }
 
 /// Pure function: parse guard output JSON from stdout.
+#[cfg(test)]
 pub(crate) fn parse_guard_output(stdout: &str) -> GuardResult {
-    let parsed: serde_json::Value =
-        serde_json::from_str(stdout).unwrap_or(serde_json::Value::Null);
+    let parsed: serde_json::Value = serde_json::from_str(stdout).unwrap_or(serde_json::Value::Null);
     let should_stop = parsed
         .get("should_stop")
         .and_then(|v| v.as_bool())
