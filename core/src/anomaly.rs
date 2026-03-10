@@ -2,7 +2,7 @@ use serde::Serialize;
 
 // ── Severity ────────────────────────────────────────────────────────
 
-#[derive(Debug, Serialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
     Error,

@@ -36,9 +36,10 @@ spec:
 当 `self_referential: true` 时，引擎强制要求：
 - `safety.auto_rollback` 必须为 `true`
 - `safety.checkpoint_strategy` 不能为 `none`
+- workflow 必须包含启用中的 builtin `self_test` 步骤
 - `safety.binary_snapshot` 应为 `true`
 
-如果缺少这些配置，编排器拒绝启动。
+如果缺少 required 配置，编排器拒绝启动。缺少 `binary_snapshot` 只会产生 warning，不会阻断启动。
 
 ## 4 层生存机制
 

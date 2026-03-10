@@ -57,9 +57,10 @@ If any phase fails, the step returns a non-zero exit code. Pipeline variables `s
 
 At task start, when the workspace has `self_referential: true`, `validate_self_referential_safety()` runs:
 
-- **Hard error**: `checkpoint_strategy == None` causes task start to fail
-- **Warning**: `auto_rollback == false` prints a warning to stderr
-- **Warning**: No `self_test` step in workflow prints a warning to stderr
+- **Hard error**: `checkpoint_strategy == none` causes task start to fail
+- **Hard error**: `auto_rollback == false` causes task start to fail
+- **Hard error**: No enabled builtin `self_test` step causes task start to fail
+- **Warning**: `binary_snapshot == false` is reported but does not block startup
 
 ### Layer 4: Watchdog Script
 
@@ -90,10 +91,10 @@ Environment variables: `BINARY_PATH`, `STABLE_PATH`, `WATCHDOG_POLL_INTERVAL`, `
 
 ## Observability
 
-- Events: `binary_snapshot_created`, `binary_snapshot_restored`, `self_test_phase`, `step_finished` (for self_test)
+- Events: `binary_snapshot_created`, `binary_snapshot_restored`, `self_test_phase`, `step_finished` (for self_test), `self_referential_policy_checked`
 - Pipeline variables: `self_test_exit_code`, `self_test_passed`
 - Watchdog stdout: `[watchdog]`-prefixed log lines for health check status, failure counts, restore actions
-- Stderr warnings: `[SELF_REF_UNSAFE]` prefix for hard errors, `[warn]` prefix for soft warnings
+- Startup rejection: `[SELF_REF_POLICY_VIOLATION]` prefix for hard errors with per-rule detail lines
 
 ## Operations / Release
 

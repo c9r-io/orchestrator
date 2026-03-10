@@ -161,6 +161,7 @@ This checks:
 | self-bootstrap | `docs/qa/self-bootstrap/07-self-restart-process-continuity.md` | 5 | Self-restart builtin step, restart_pending resumption, daemon restart loop, priority claiming |
 | self-bootstrap | `docs/qa/self-bootstrap/08-build-version-hash.md` | 5 | Build version hash: compile-time git hash/timestamp, version subcommand, restart event enrichment |
 | self-bootstrap | `docs/qa/self-bootstrap/09-self-restart-old-new-sha256-audit.md` | 4 | Self-restart old/new binary SHA256 audit chain: old_binary_sha256, new_binary_sha256, binary_changed, backward compat |
+| self-bootstrap | `docs/qa/self-bootstrap/10-self-referential-safety-policy-alignment.md` | 5 | FR-003 policy alignment: required self-referential safeguards, warning-only binary snapshot, probe workspace binding, and audit diagnostics |
 | self-bootstrap | `docs/qa/self-bootstrap/04-cycle2-validation-and-runtime-timestamps.md` | 2 | Regression: fixed two-cycle QA validation chain and task/item runtime timestamps |
 | self-bootstrap | `docs/qa/self-bootstrap/scenario2-binary-rollback.md` | 1 | Binary snapshot restoration on auto-rollback |
 | self-bootstrap | `docs/qa/self-bootstrap/scenario3-binary-skip-disabled.md` | 1 | Binary snapshot skip when disabled |

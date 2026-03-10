@@ -36,9 +36,10 @@ spec:
 When `self_referential: true`, the engine enforces:
 - `safety.auto_rollback` must be `true`
 - `safety.checkpoint_strategy` must not be `none`
+- the workflow must include an enabled builtin `self_test` step
 - `safety.binary_snapshot` should be `true`
 
-If these are missing, the orchestrator refuses to start.
+If the required settings are missing, the orchestrator refuses to start. Missing `binary_snapshot` emits a warning but does not block startup.
 
 ## 4-Layer Survival Mechanism
 

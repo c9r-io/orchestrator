@@ -1,10 +1,10 @@
 # FR-003 - Self-Referential Safety 约束语义收敛
 
 **Module**: orchestrator  
-**Status**: Proposed  
+**Status**: Implemented  
 **Priority**: P1  
 **Created**: 2026-03-09  
-**Last Updated**: 2026-03-09  
+**Last Updated**: 2026-03-11  
 **Source**: 深度项目评估报告最高优先级改进建议 #3
 
 ## Background
@@ -129,3 +129,11 @@
 - `required` 级约束违反时任务启动被拒绝
 - 错误消息明确包含规则和修复建议
 - 示例 workflow 与 preflight 输出均反映最新契约
+
+## Implementation Notes
+
+- 统一策略评估器已下沉为单独模块，并由 config validation、runtime、`orchestrator check`、`manifest validate` 共享
+- `required` 已收敛为：`checkpoint_strategy != none`、`auto_rollback == true`、存在 enabled builtin `self_test`
+- `binary_snapshot == true` 保持 warning-only
+- `self_referential_probe` 不再绕开基础规则，但允许 builtin `self_test` 作为唯一例外 builtin
+- `self_referential_policy_checked` 事件会记录结构化 diagnostics

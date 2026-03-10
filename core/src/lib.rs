@@ -33,6 +33,7 @@ pub mod scheduler_service;
 pub mod secret_store_crypto;
 pub mod secure_files;
 pub mod selection;
+pub mod self_referential_policy;
 pub mod service;
 pub mod session_store;
 pub mod state;

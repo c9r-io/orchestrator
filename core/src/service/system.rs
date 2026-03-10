@@ -1,9 +1,24 @@
 use crate::config_load::read_active_config;
-use crate::scheduler::check::run_checks;
+use crate::scheduler::check::{run_checks, CheckReport, CheckResult};
 use crate::scheduler_service::{pending_task_count, worker_stop_signal_path};
 use crate::state::InnerState;
 use anyhow::{Context, Result};
 use std::path::Path;
+
+#[derive(Debug, Clone)]
+pub struct ManifestValidationReport {
+    pub valid: bool,
+    pub errors: Vec<String>,
+    pub message: String,
+    pub diagnostics: Vec<orchestrator_proto::DiagnosticEntry>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RenderedCheckReport {
+    pub report: CheckReport,
+    pub content: String,
+    pub exit_code: i32,
+}
 
 /// Get debug information for a component.
 pub fn debug_info(state: &InnerState, component: Option<&str>) -> Result<String> {
@@ -93,13 +108,21 @@ pub fn validate_manifests(
     state: &InnerState,
     content: &str,
     project_id: Option<&str>,
-) -> Result<(bool, Vec<String>, String)> {
+) -> Result<ManifestValidationReport> {
     use crate::crd::{self, ParsedManifest};
     use crate::resource::{dispatch_resource, kind_as_str, Resource};
 
     let manifests = match crate::resource::parse_manifests_from_yaml(content) {
         Ok(m) => m,
-        Err(e) => return Ok((false, vec![e.to_string()], "Parse error".to_string())),
+        Err(e) => {
+            let err = e.to_string();
+            return Ok(ManifestValidationReport {
+                valid: false,
+                errors: vec![err.clone()],
+                message: "Parse error".to_string(),
+                diagnostics: vec![diagnostic_entry_from_error("parse_error", err)],
+            });
+        }
     };
 
     let mut merged_config = crate::config_load::load_config(&state.db_path)?
@@ -108,27 +131,43 @@ pub fn validate_manifests(
 
     let effective_project_id = project_id.unwrap_or(crate::config::DEFAULT_PROJECT_ID);
     let mut errors = Vec::new();
+    let mut diagnostics = Vec::new();
     for (index, manifest) in manifests.into_iter().enumerate() {
         match manifest {
             ParsedManifest::Builtin(resource) => {
                 if let Err(error) = resource.validate_version() {
-                    errors.push(format!("document {}: {}", index + 1, error));
+                    let message = format!("document {}: {}", index + 1, error);
+                    diagnostics.push(diagnostic_entry_from_error(
+                        "manifest_version_invalid",
+                        message.clone(),
+                    ));
+                    errors.push(message);
                     continue;
                 }
                 let registered = match dispatch_resource(resource) {
                     Ok(r) => r,
                     Err(error) => {
-                        errors.push(format!("document {}: {}", index + 1, error));
+                        let message = format!("document {}: {}", index + 1, error);
+                        diagnostics.push(diagnostic_entry_from_error(
+                            "manifest_dispatch_failed",
+                            message.clone(),
+                        ));
+                        errors.push(message);
                         continue;
                     }
                 };
                 if let Err(error) = registered.validate() {
-                    errors.push(format!(
+                    let message = format!(
                         "{}/{} invalid: {}",
                         kind_as_str(registered.kind()),
                         registered.name(),
                         error
+                    );
+                    diagnostics.push(diagnostic_entry_from_error(
+                        "manifest_resource_invalid",
+                        message.clone(),
                     ));
+                    errors.push(message);
                     continue;
                 }
                 let _ = crate::resource::apply_to_project(
@@ -139,29 +178,53 @@ pub fn validate_manifests(
             }
             ParsedManifest::Crd(crd_manifest) => {
                 if let Err(error) = crd::apply_crd(&mut merged_config, crd_manifest) {
-                    errors.push(format!("document {}: {}", index + 1, error));
+                    let message = format!("document {}: {}", index + 1, error);
+                    diagnostics.push(diagnostic_entry_from_error(
+                        "crd_apply_failed",
+                        message.clone(),
+                    ));
+                    errors.push(message);
                 }
             }
             ParsedManifest::Custom(cr_manifest) => {
                 if let Err(error) = crd::apply_custom_resource(&mut merged_config, cr_manifest) {
-                    errors.push(format!("document {}: {}", index + 1, error));
+                    let message = format!("document {}: {}", index + 1, error);
+                    diagnostics.push(diagnostic_entry_from_error(
+                        "custom_resource_apply_failed",
+                        message.clone(),
+                    ));
+                    errors.push(message);
                 }
             }
         }
     }
 
     if !errors.is_empty() {
-        return Ok((false, errors, "Validation failed".to_string()));
+        return Ok(ManifestValidationReport {
+            valid: false,
+            errors,
+            message: "Validation failed".to_string(),
+            diagnostics,
+        });
     }
 
     // Try to build active config to validate the full configuration
     match crate::config_load::build_active_config(&state.app_root, merged_config) {
-        Ok(_) => Ok((true, vec![], "Manifest is valid".to_string())),
-        Err(e) => Ok((
-            false,
-            vec![e.to_string()],
-            "Config build failed".to_string(),
-        )),
+        Ok(_) => Ok(ManifestValidationReport {
+            valid: true,
+            errors: vec![],
+            message: "Manifest is valid".to_string(),
+            diagnostics: vec![],
+        }),
+        Err(e) => {
+            let message = e.to_string();
+            Ok(ManifestValidationReport {
+                valid: false,
+                errors: vec![message.clone()],
+                message: "Config build failed".to_string(),
+                diagnostics: vec![diagnostic_entry_from_error("config_build_failed", message)],
+            })
+        }
     }
 }
 
@@ -172,7 +235,7 @@ pub fn run_check(
     workflow: Option<&str>,
     output_format: &str,
     project_id: Option<&str>,
-) -> Result<(String, i32)> {
+) -> Result<RenderedCheckReport> {
     let active = read_active_config(state)?;
     let report = run_checks(&active, &state.app_root, workflow, project_id);
 
@@ -192,7 +255,19 @@ pub fn run_check(
                         crate::anomaly::Severity::Info => "\u{2139}",
                     }
                 };
-                buf.push_str(&format!("{} {}\n", icon, check.message));
+                buf.push_str(&format!("{} [{}] {}\n", icon, check.rule, check.message));
+                if let Some(actual) = check.actual.as_deref() {
+                    buf.push_str(&format!("  actual: {actual}\n"));
+                }
+                if let Some(expected) = check.expected.as_deref() {
+                    buf.push_str(&format!("  expected: {expected}\n"));
+                }
+                if let Some(risk) = check.risk.as_deref() {
+                    buf.push_str(&format!("  risk: {risk}\n"));
+                }
+                if let Some(fix) = check.suggested_fix.as_deref() {
+                    buf.push_str(&format!("  suggested_fix: {fix}\n"));
+                }
             }
             buf.push_str(&format!(
                 "\n{} passed, {} errors, {} warnings\n",
@@ -203,7 +278,48 @@ pub fn run_check(
     };
 
     let exit_code = if report.summary.errors > 0 { 1 } else { 0 };
-    Ok((content, exit_code))
+    Ok(RenderedCheckReport {
+        report,
+        content,
+        exit_code,
+    })
+}
+
+pub fn diagnostic_entry_from_check(check: &CheckResult) -> orchestrator_proto::DiagnosticEntry {
+    orchestrator_proto::DiagnosticEntry {
+        source: check.source.clone(),
+        rule: check.rule.clone(),
+        severity: format!("{:?}", check.severity).to_lowercase(),
+        passed: check.passed,
+        blocking: check.blocking,
+        message: check.message.clone(),
+        context: check.context.clone(),
+        scope: check.scope.clone(),
+        actual: check.actual.clone(),
+        expected: check.expected.clone(),
+        risk: check.risk.clone(),
+        suggested_fix: check.suggested_fix.clone(),
+    }
+}
+
+fn diagnostic_entry_from_error(
+    rule: impl Into<String>,
+    message: impl Into<String>,
+) -> orchestrator_proto::DiagnosticEntry {
+    orchestrator_proto::DiagnosticEntry {
+        source: "manifest_validate".to_string(),
+        rule: rule.into(),
+        severity: "error".to_string(),
+        passed: false,
+        blocking: true,
+        message: message.into(),
+        context: None,
+        scope: None,
+        actual: None,
+        expected: None,
+        risk: None,
+        suggested_fix: None,
+    }
 }
 
 #[cfg(test)]
@@ -293,13 +409,14 @@ mod tests {
         let state = fixture.build();
 
         let parse_result = validate_manifests(&state, "not: [yaml", None).expect("parse result");
-        assert!(!parse_result.0);
-        assert_eq!(parse_result.2, "Parse error");
+        assert!(!parse_result.valid);
+        assert_eq!(parse_result.message, "Parse error");
+        assert!(!parse_result.diagnostics.is_empty());
 
         let valid = validate_manifests(&state, &workflow_manifest("validated"), None)
             .expect("valid manifest");
-        assert!(valid.0);
-        assert_eq!(valid.2, "Manifest is valid");
+        assert!(valid.valid);
+        assert_eq!(valid.message, "Manifest is valid");
 
         let invalid = validate_manifests(
             &state,
@@ -307,9 +424,9 @@ mod tests {
             None,
         )
         .expect("invalid manifest");
-        assert!(!invalid.0);
-        assert_eq!(invalid.2, "Validation failed");
-        assert!(!invalid.1.is_empty());
+        assert!(!invalid.valid);
+        assert_eq!(invalid.message, "Validation failed");
+        assert!(!invalid.errors.is_empty());
     }
 
     #[test]
@@ -325,16 +442,17 @@ mod tests {
         )
         .expect("apply workflow manifest");
 
-        let (text, text_exit) = run_check(&state, None, "text", None).expect("text check");
-        assert!(text.contains("orchestrator check"));
-        assert_eq!(text_exit, 0);
+        let text = run_check(&state, None, "text", None).expect("text check");
+        assert!(text.content.contains("orchestrator check"));
+        assert_eq!(text.exit_code, 0);
 
-        let (json, json_exit) = run_check(&state, None, "json", None).expect("json check");
-        assert!(json.contains("\"summary\""));
-        assert_eq!(json_exit, 0);
+        let json = run_check(&state, None, "json", None).expect("json check");
+        assert!(json.content.contains("\"summary\""));
+        assert_eq!(json.exit_code, 0);
+        assert!(!json.report.checks.is_empty());
 
-        let (yaml, yaml_exit) = run_check(&state, None, "yaml", None).expect("yaml check");
-        assert!(yaml.contains("summary:"));
-        assert_eq!(yaml_exit, 0);
+        let yaml = run_check(&state, None, "yaml", None).expect("yaml check");
+        assert!(yaml.content.contains("summary:"));
+        assert_eq!(yaml.exit_code, 0);
     }
 }

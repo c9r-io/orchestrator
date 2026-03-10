@@ -67,7 +67,7 @@ Verify scheduler stores structured run payload and validation status.
 
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
-| `task create failed: multiple workflows exist in project; specify --workflow explicitly` | `echo-workflow.yaml` defines multiple workflows (`qa_only`, `qa_fix`, `qa_fix_retest`, `loop_test`) so implicit workflow resolution is ambiguous | Pass `--workflow qa_only` in Scenario 1, or choose the specific workflow under test |
+| `task create failed: multiple workflows exist in project; specify the workflow flag explicitly` | `echo-workflow.yaml` defines multiple workflows (`qa_only`, `qa_fix`, `qa_fix_retest`, `loop_test`) so implicit workflow resolution is ambiguous | Pass the workflow flag with value `qa_only` in Scenario 1, or choose the specific workflow under test |
 
 ### Expected Data State
 ```sql

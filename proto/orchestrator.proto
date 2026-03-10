@@ -385,6 +385,21 @@ message WorkerStatusResponse {
   int64 active_workers = 3;
 }
 
+message DiagnosticEntry {
+  string source = 1;
+  string rule = 2;
+  string severity = 3;
+  bool passed = 4;
+  bool blocking = 5;
+  string message = 6;
+  optional string context = 7;
+  optional string scope = 8;
+  optional string actual = 9;
+  optional string expected = 10;
+  optional string risk = 11;
+  optional string suggested_fix = 12;
+}
+
 message CheckRequest {
   optional string workflow = 1;
   string output_format = 2;
@@ -395,6 +410,7 @@ message CheckResponse {
   string content = 1;
   string format = 2;
   int32 exit_code = 3;
+  repeated DiagnosticEntry diagnostics = 4;
 }
 
 // ─── Init / ManifestValidate / TaskTrace ─────────────────────
@@ -416,6 +432,7 @@ message ManifestValidateResponse {
   bool valid = 1;
   repeated string errors = 2;
   string message = 3;
+  repeated DiagnosticEntry diagnostics = 4;
 }
 
 message ManifestExportRequest {

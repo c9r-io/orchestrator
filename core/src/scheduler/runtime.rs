@@ -3,6 +3,9 @@ use crate::config_load::{
     build_execution_plan_for_project, read_active_config, resolve_workspace_path,
 };
 use crate::events::insert_event;
+use crate::self_referential_policy::{
+    evaluate_self_referential_policy, format_blocking_policy_error,
+};
 use crate::state::{task_semaphore, InnerState};
 use anyhow::{Context, Result};
 use serde_json::json;
@@ -188,39 +191,55 @@ pub async fn load_task_runtime_context(
     let task_goal = runtime_row.goal;
     let project_id = runtime_row.project_id;
 
-    let active = read_active_config(state)?;
-    let effective_project_id = active
-        .config
-        .effective_project_id(Some(project_id.as_str()));
-    let workflow = active
-        .config
-        .projects
-        .get(effective_project_id)
-        .and_then(|p| p.workflows.get(&workflow_id))
-        .with_context(|| {
-            format!(
-                "workflow not found: {} in project '{}' for task {}",
-                workflow_id, effective_project_id, task_id
-            )
-        })?;
-
-    let mut execution_plan = serde_json::from_str::<TaskExecutionPlan>(&execution_plan_json)
-        .ok()
-        .filter(|plan| !plan.steps.is_empty())
-        .unwrap_or_else(|| {
-            build_execution_plan_for_project(
-                &active.config,
-                workflow,
-                &workflow_id,
-                effective_project_id,
-            )
-            .unwrap_or(TaskExecutionPlan {
-                steps: Vec::new(),
-                loop_policy: crate::config::WorkflowLoopConfig::default(),
-                finalize: crate::config::default_workflow_finalize_config(),
-                max_parallel: None,
-            })
-        });
+    let (workflow, effective_project_id, self_referential, mut execution_plan) = {
+        let active = read_active_config(state)?;
+        let effective_project_id = active
+            .config
+            .effective_project_id(Some(project_id.as_str()))
+            .to_string();
+        let workflow = active
+            .config
+            .projects
+            .get(&effective_project_id)
+            .and_then(|p| p.workflows.get(&workflow_id))
+            .with_context(|| {
+                format!(
+                    "workflow not found: {} in project '{}' for task {}",
+                    workflow_id, effective_project_id, task_id
+                )
+            })?
+            .clone();
+        let self_referential = active
+            .config
+            .projects
+            .get(&effective_project_id)
+            .and_then(|p| p.workspaces.get(&workspace_id))
+            .map(|ws| ws.self_referential)
+            .unwrap_or(false);
+        let execution_plan = serde_json::from_str::<TaskExecutionPlan>(&execution_plan_json)
+            .ok()
+            .filter(|plan| !plan.steps.is_empty())
+            .unwrap_or_else(|| {
+                build_execution_plan_for_project(
+                    &active.config,
+                    &workflow,
+                    &workflow_id,
+                    &effective_project_id,
+                )
+                .unwrap_or(TaskExecutionPlan {
+                    steps: Vec::new(),
+                    loop_policy: crate::config::WorkflowLoopConfig::default(),
+                    finalize: crate::config::default_workflow_finalize_config(),
+                    max_parallel: None,
+                })
+            });
+        (
+            workflow,
+            effective_project_id,
+            self_referential,
+            execution_plan,
+        )
+    };
     // Layer 1 defense: re-normalize builtin steps whose `behavior.execution`
     // may have been stored as the serde default `Agent` in SQLite.
     for step in &mut execution_plan.steps {
@@ -252,25 +271,39 @@ pub async fn load_task_runtime_context(
     let dynamic_steps = workflow.dynamic_steps.clone();
     let adaptive = workflow.adaptive.clone();
     let safety = workflow.safety.clone();
-    let self_referential = active
-        .config
-        .projects
-        .get(effective_project_id)
-        .and_then(|p| p.workspaces.get(&workspace_id))
-        .map(|ws| ws.self_referential)
-        .unwrap_or(false);
 
-    if !state.unsafe_mode
-        && (self_referential
-            || workflow.safety.profile
-                == crate::config::WorkflowSafetyProfile::SelfReferentialProbe)
-    {
-        crate::config_load::validate_self_referential_safety(
-            workflow,
+    if !state.unsafe_mode {
+        let policy = evaluate_self_referential_policy(
+            &workflow,
             &workflow_id,
             &workspace_id,
             self_referential,
         )?;
+        if self_referential
+            || workflow.safety.profile == crate::config::WorkflowSafetyProfile::SelfReferentialProbe
+        {
+            insert_event(
+                state,
+                task_id,
+                None,
+                "self_referential_policy_checked",
+                json!({
+                    "workspace_id": workspace_id,
+                    "workflow_id": workflow_id,
+                    "profile": match workflow.safety.profile {
+                        crate::config::WorkflowSafetyProfile::Standard => "standard",
+                        crate::config::WorkflowSafetyProfile::SelfReferentialProbe => "self_referential_probe",
+                    },
+                    "workspace_self_referential": self_referential,
+                    "blocking": policy.has_blocking_errors(),
+                    "diagnostics": policy.diagnostics,
+                }),
+            )
+            .await?;
+        }
+        if policy.has_blocking_errors() {
+            anyhow::bail!(format_blocking_policy_error(&policy));
+        }
     }
 
     Ok(TaskRuntimeContext {
@@ -306,7 +339,7 @@ pub async fn load_task_runtime_context(
         safety,
         self_referential,
         consecutive_failures: 0,
-        project_id: effective_project_id.to_string(),
+        project_id: effective_project_id,
         workflow_id,
         spawn_depth: runtime_row.spawn_depth,
     })

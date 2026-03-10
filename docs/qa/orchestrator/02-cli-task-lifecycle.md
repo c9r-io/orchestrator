@@ -11,7 +11,7 @@
 
 This document validates task lifecycle behavior after the C/S queue-only refactor:
 
-- queue-only execution path for `task create/start/resume/retry`
+- queue-only execution path for `task-create` / `task-start` / `task-resume` / `task-retry`
 - daemon-embedded workers (`orchestratord --workers N`) — C/S mode
 - task logs and retry behavior
 
@@ -39,7 +39,6 @@ Run once before scenarios:
 
 ```bash
 QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-orchestrator apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
 orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
 rm -rf "workspace/${QA_PROJECT}"
 orchestrator apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml --project "${QA_PROJECT}"
@@ -171,7 +170,7 @@ WHERE id = '{task_id}';
 - Runtime initialized.
 
 ### Goal
-Verify `task create` and `task start` always enqueue work and never execute inline.
+Verify create/start enqueue behavior always uses the scheduler and never executes inline.
 
 ### Steps
 1. Create a task:

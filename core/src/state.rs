@@ -144,9 +144,12 @@ pub fn clone_event_sink(state: &InnerState) -> Arc<dyn EventSink> {
 }
 
 pub fn replace_event_sink(state: &InnerState, sink: Arc<dyn EventSink>) {
-    *recoverable_write_lock(&state.event_sink, "event_sink", || {
-        Arc::new(TracingEventSink::new())
-    }, None) = sink;
+    *recoverable_write_lock(
+        &state.event_sink,
+        "event_sink",
+        || Arc::new(TracingEventSink::new()),
+        None,
+    ) = sink;
 }
 
 pub fn read_active_config_error<'a>(
@@ -177,8 +180,7 @@ fn read_lock_fail_closed<'a, T>(
     lock: &'a RwLock<T>,
     lock_name: &str,
 ) -> Result<RwLockReadGuard<'a, T>, anyhow::Error> {
-    lock.read()
-        .map_err(|_| control_plane_lock_error(lock_name))
+    lock.read().map_err(|_| control_plane_lock_error(lock_name))
 }
 
 fn write_lock_fail_closed<'a, T>(
@@ -208,7 +210,12 @@ fn recoverable_read_lock<'a, T>(
 pub fn write_agent_health<'a>(
     state: &'a InnerState,
 ) -> RwLockWriteGuard<'a, HashMap<String, AgentHealthState>> {
-    recoverable_write_lock(&state.agent_health, "agent_health", HashMap::new, Some(state))
+    recoverable_write_lock(
+        &state.agent_health,
+        "agent_health",
+        HashMap::new,
+        Some(state),
+    )
 }
 
 pub fn read_agent_metrics<'a>(
@@ -369,7 +376,7 @@ mod tests {
         let result = thread::spawn({
             let state = state.clone();
             move || {
-            let _guard = state.active_config.write().expect("lock active config");
+                let _guard = state.active_config.write().expect("lock active config");
                 panic!("poison active config");
             }
         });

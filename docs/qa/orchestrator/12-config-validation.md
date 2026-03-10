@@ -70,7 +70,7 @@ Entry point: `orchestrator <command>`
 
 ### Expected
 
-- 验证成功，输出 "Configuration is valid"
+- 验证成功，输出 "Manifest is valid"
 
 ---
 

@@ -11,7 +11,7 @@
 
 This document covers the remaining two layers of the self-bootstrap survival mechanism:
 
-- **Layer 3 (Self-Referential Enforcement)**: At task start, `validate_self_referential_safety()` runs when `self_referential: true`. Hard error if `checkpoint_strategy == None`. Warnings for disabled `auto_rollback` or missing `self_test` step.
+- **Layer 3 (Self-Referential Enforcement)**: At task start, the unified self-referential policy runs when `self_referential: true`. Hard errors now cover `checkpoint_strategy == none`, `auto_rollback == false`, and missing builtin `self_test`. `binary_snapshot == false` remains warning-only.
 - **Layer 4 (Watchdog Script)**: `scripts/watchdog.sh` polls every 60 seconds, checks binary health via `--help`, and restores `.stable` after 3 consecutive failures.
 
 Key function: `validate_self_referential_safety()` in `core/src/config_load.rs`.
@@ -101,7 +101,7 @@ Verify that starting a task on a self-referential workspace with `checkpoint_str
 - Common Preconditions applied
 
 ### Goal
-Verify that a warning is emitted (not a hard error) when `auto_rollback: false` on a self-referential workspace with a valid checkpoint strategy.
+Verify that `auto_rollback: false` is rejected as a hard error on a self-referential workspace with a valid checkpoint strategy.
 
 ### Steps
 1. Apply a manifest with `self_referential: true`, `checkpoint_strategy: git_tag`, but `auto_rollback: false`:
@@ -134,16 +134,16 @@ Verify that a warning is emitted (not a hard error) when `auto_rollback: false` 
    ```bash
    orchestrator apply -f /tmp/warn-manifest.yaml --project "${QA_PROJECT}"
    ```
-2. Create a task and start it, capturing stderr:
+2. Apply the manifest and inspect stderr:
    ```bash
-   orchestrator task create --project "${QA_PROJECT}" --workflow warn-workflow --goal "test warn" 2>/tmp/warn-stderr.txt
-   cat /tmp/warn-stderr.txt
+   orchestrator apply -f /tmp/warn-manifest.yaml --project "${QA_PROJECT}" 2>/tmp/warn-manifest.err || true
+   cat /tmp/warn-manifest.err
    ```
 
 ### Expected
-- Task starts successfully (no hard error — no `[SELF_REF_UNSAFE]`)
-- Stderr contains: `WARN` and `auto_rollback is disabled`
-- Task proceeds past safety check (may later fail due to missing agents in test env — that is expected)
+- `apply` exits non-zero
+- stderr contains `self_ref.auto_rollback_required`
+- Rejection uses `[SELF_REF_POLICY_VIOLATION]`, not a warning-only path
 
 ---
 
@@ -153,7 +153,7 @@ Verify that a warning is emitted (not a hard error) when `auto_rollback: false` 
 - Common Preconditions applied
 
 ### Goal
-Verify that a warning is emitted when a self-referential workspace workflow has no `self_test` step.
+Verify that a self-referential workspace workflow without builtin `self_test` is rejected as a hard error.
 
 ### Steps
 1. Apply a manifest with `self_referential: true`, valid safety config, but no `self_test` step:
@@ -190,16 +190,16 @@ Verify that a warning is emitted when a self-referential workspace workflow has 
    ```bash
    orchestrator apply -f /tmp/notest-manifest.yaml --project "${QA_PROJECT}"
    ```
-2. Create a task and start it, capturing stderr:
+2. Apply the manifest and inspect stderr:
    ```bash
-   orchestrator task create --project "${QA_PROJECT}" --workflow notest-workflow --goal "test no self_test" 2>/tmp/notest-stderr.txt
-   cat /tmp/notest-stderr.txt
+   orchestrator apply -f /tmp/notest-manifest.yaml --project "${QA_PROJECT}" 2>/tmp/notest-manifest.err || true
+   cat /tmp/notest-manifest.err
    ```
 
 ### Expected
-- Task starts successfully (no hard error — no `[SELF_REF_UNSAFE]`)
-- Stderr contains: `WARN` and `has no self_test step`
-- Task proceeds past safety check (may later fail due to missing agents in test env — that is expected)
+- `apply` exits non-zero
+- stderr contains `self_ref.self_test_required`
+- Rejection uses `[SELF_REF_POLICY_VIOLATION]`, not a warning-only path
 
 ---
 

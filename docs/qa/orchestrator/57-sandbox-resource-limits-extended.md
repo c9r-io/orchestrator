@@ -72,7 +72,7 @@ sqlite3 data/agent_orchestrator.db \
 | Symptom | Likely Cause | Action |
 |---|---|---|
 | CPU probe runs but no `sandbox_resource_exceeded` event is persisted | QA hit an older daemon binary that predates the sandbox event-classification change | Rebuild `orchestratord` and `orchestrator-cli`, restart the daemon, then rerun the scenario |
-| CPU-bound task exits for a generic runner failure without `resource_kind=cpu` | The wrong workflow or execution profile was selected | Re-apply `sandbox-execution-profiles.yaml`, then confirm `--workflow sandbox-cpu-limit` is used verbatim |
+| CPU-bound task exits for a generic runner failure without `resource_kind=cpu` | The wrong workflow or execution profile was selected | Re-apply `sandbox-execution-profiles.yaml`, then confirm the workflow id `sandbox-cpu-limit` is used verbatim |
 
 ## Scenario 2: Sandbox Emits sandbox_resource_exceeded for max_memory_mb
 
@@ -101,7 +101,7 @@ sqlite3 data/agent_orchestrator.db \
 | Symptom | Likely Cause | Action |
 |---|---|---|
 | Memory probe fails but no `sandbox_resource_exceeded` event is recorded | Daemon was not restarted after backend sandbox changes | Rebuild binaries, restart the daemon, and rerun the scenario |
-| Event is emitted with the wrong `resource_kind` | QA executed the wrong fixture workflow | Re-apply the fixture bundle and rerun with `--workflow sandbox-memory-limit` |
+| Event is emitted with the wrong `resource_kind` | QA executed the wrong fixture workflow | Re-apply the fixture bundle and rerun with workflow id `sandbox-memory-limit` |
 
 ## Scenario 3: Sandbox Emits sandbox_resource_exceeded for max_processes
 

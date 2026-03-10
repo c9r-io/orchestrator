@@ -13,7 +13,10 @@ pub(super) fn print(resp: &TaskInfoResponse, format: OutputFormat) {
     match format {
         OutputFormat::Json => {
             let json = task_detail_value(task, resp);
-            println!("{}", serde_json::to_string_pretty(&json).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json).unwrap_or_default()
+            );
         }
         OutputFormat::Yaml => {
             let json = task_detail_value(task, resp);

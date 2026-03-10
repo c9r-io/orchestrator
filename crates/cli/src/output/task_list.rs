@@ -19,7 +19,10 @@ pub(super) fn print(tasks: &[TaskSummary], format: OutputFormat) {
                     })
                 })
                 .collect();
-            println!("{}", serde_json::to_string_pretty(&json).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json).unwrap_or_default()
+            );
         }
         OutputFormat::Yaml => {
             let yaml: Vec<serde_json::Value> = tasks

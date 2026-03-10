@@ -11,8 +11,8 @@ use anyhow::Result;
 use orchestrator_proto::OrchestratorServiceClient;
 use tonic::transport::Channel;
 
-use common::format_to_string;
 use crate::Commands;
+use common::format_to_string;
 
 pub async fn dispatch(
     client: &mut OrchestratorServiceClient<Channel>,
@@ -69,9 +69,7 @@ pub async fn dispatch(
             Ok(())
         }
 
-        Commands::Manifest(cmd) => {
-            manifest::dispatch(client, cmd).await
-        }
+        Commands::Manifest(cmd) => manifest::dispatch(client, cmd).await,
 
         // Handled before dispatch
         Commands::Version => unreachable!(),

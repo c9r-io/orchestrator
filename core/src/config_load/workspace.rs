@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use super::{
     ensure_within_root, validate_execution_profiles_for_project,
-    validate_workflow_config_with_agents,
+    validate_workflow_config_for_project,
 };
 
 pub fn resolve_workspace_path(
@@ -93,10 +93,8 @@ pub fn resolve_and_validate_workspaces_for_project(
         );
     }
 
-    let project_agents: HashMap<String, &crate::config::AgentConfig> =
-        project.agents.iter().map(|(k, v)| (k.clone(), v)).collect();
     for (workflow_id, workflow) in &project.workflows {
-        validate_workflow_config_with_agents(&project_agents, workflow, workflow_id)?;
+        validate_workflow_config_for_project(config, workflow, workflow_id, Some(project_id))?;
         validate_execution_profiles_for_project(config, workflow, workflow_id, project_id)?;
     }
 

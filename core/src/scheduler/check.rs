@@ -9,6 +9,7 @@ use crate::config::{
     PromptDelivery, StepSemanticKind, WorkflowStepConfig,
 };
 use crate::scheduler::trace::find_template_vars;
+use crate::self_referential_policy::{evaluate_self_referential_policy, PolicyDiagnostic};
 use serde::Serialize;
 use std::collections::HashSet;
 use std::path::Path;
@@ -32,7 +33,7 @@ const KNOWN_SYSTEM_VARS: &[&str] = &[
 
 // ── Data structures ─────────────────────────────────────────────────
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct CheckReport {
     pub checks: Vec<CheckResult>,
     pub summary: CheckSummary,
@@ -40,20 +41,76 @@ pub struct CheckReport {
 
 #[derive(Debug, Serialize, Clone)]
 pub struct CheckResult {
+    pub source: String,
     pub rule: String,
     pub severity: Severity,
     pub passed: bool,
+    pub blocking: bool,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actual: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub risk: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggested_fix: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct CheckSummary {
     pub total: u32,
     pub passed: u32,
     pub errors: u32,
     pub warnings: u32,
+}
+
+impl CheckResult {
+    fn simple(
+        rule: impl Into<String>,
+        severity: Severity,
+        passed: bool,
+        message: impl Into<String>,
+        context: Option<String>,
+    ) -> Self {
+        Self {
+            source: "preflight".to_string(),
+            rule: rule.into(),
+            severity: severity.clone(),
+            passed,
+            blocking: !passed && severity == Severity::Error,
+            message: message.into(),
+            context,
+            scope: None,
+            actual: None,
+            expected: None,
+            risk: None,
+            suggested_fix: None,
+        }
+    }
+}
+
+impl From<PolicyDiagnostic> for CheckResult {
+    fn from(value: PolicyDiagnostic) -> Self {
+        Self {
+            source: value.source,
+            rule: value.rule_id,
+            severity: value.severity,
+            passed: value.passed,
+            blocking: value.blocking,
+            message: value.message,
+            context: None,
+            scope: Some(value.scope),
+            actual: value.actual,
+            expected: value.expected,
+            risk: value.risk,
+            suggested_fix: value.suggested_fix,
+        }
+    }
 }
 
 // ── Entry point ─────────────────────────────────────────────────────
@@ -80,13 +137,13 @@ pub fn run_checks(
                 &project.step_templates,
             )
         } else {
-            checks.push(CheckResult {
-                rule: "project_not_found".into(),
-                severity: Severity::Error,
-                passed: false,
-                message: format!("project \"{effective_project}\" not found in config"),
-                context: None,
-            });
+            checks.push(CheckResult::simple(
+                "project_not_found",
+                Severity::Error,
+                false,
+                format!("project \"{effective_project}\" not found in config"),
+                None,
+            ));
             return build_report(checks);
         };
 
@@ -99,8 +156,41 @@ pub fn run_checks(
     check_pipe_to_refs(workflows, workflow_filter, &mut checks);
     check_template_vars(step_templates, workflows, workflow_filter, &mut checks);
     check_empty_workflows(workflows, workflow_filter, &mut checks);
+    check_self_referential_policy(workspaces, workflows, workflow_filter, &mut checks);
 
     build_report(checks)
+}
+
+fn check_self_referential_policy(
+    workspaces: &std::collections::HashMap<String, crate::config::WorkspaceConfig>,
+    workflows: &std::collections::HashMap<String, crate::config::WorkflowConfig>,
+    workflow_filter: Option<&str>,
+    out: &mut Vec<CheckResult>,
+) {
+    for (workspace_id, workspace) in workspaces {
+        if !workspace.self_referential {
+            continue;
+        }
+        for (workflow_id, workflow) in workflows {
+            if let Some(filter) = workflow_filter {
+                if workflow_id != filter {
+                    continue;
+                }
+            }
+            match evaluate_self_referential_policy(workflow, workflow_id, workspace_id, true) {
+                Ok(report) => out.extend(report.diagnostics.into_iter().map(CheckResult::from)),
+                Err(err) => out.push(CheckResult::simple(
+                    "self_ref.policy_evaluation_failed",
+                    Severity::Error,
+                    false,
+                    format!(
+                        "workflow \"{workflow_id}\" workspace \"{workspace_id}\": failed to evaluate self-referential policy: {err}"
+                    ),
+                    None,
+                )),
+            }
+        }
+    }
 }
 
 fn build_report(checks: Vec<CheckResult>) -> CheckReport {
@@ -136,11 +226,11 @@ fn check_workspace_roots(
     for (ws_id, ws) in workspaces {
         let full = app_root.join(&ws.root_path);
         let exists = full.exists();
-        out.push(CheckResult {
-            rule: "workspace_root_missing".into(),
-            severity: Severity::Error,
-            passed: exists,
-            message: if exists {
+        out.push(CheckResult::simple(
+            "workspace_root_missing",
+            Severity::Error,
+            exists,
+            if exists {
                 format!("workspace \"{ws_id}\": root path exists")
             } else {
                 format!(
@@ -148,8 +238,8 @@ fn check_workspace_roots(
                     ws.root_path
                 )
             },
-            context: Some(full.display().to_string()),
-        });
+            Some(full.display().to_string()),
+        ));
     }
 }
 
@@ -163,17 +253,17 @@ fn check_qa_targets(
         for target in &ws.qa_targets {
             let full = ws_root.join(target);
             let exists = full.exists();
-            out.push(CheckResult {
-                rule: "qa_targets_missing".into(),
-                severity: Severity::Warning,
-                passed: exists,
-                message: if exists {
+            out.push(CheckResult::simple(
+                "qa_targets_missing",
+                Severity::Warning,
+                exists,
+                if exists {
                     format!("workspace \"{ws_id}\": qa_target \"{target}\" exists")
                 } else {
                     format!("workspace \"{ws_id}\": qa_target \"{target}\" does not exist")
                 },
-                context: Some(full.display().to_string()),
-            });
+                Some(full.display().to_string()),
+            ));
         }
     }
 }
@@ -212,11 +302,11 @@ fn check_steps_capability(
         if let Ok(StepSemanticKind::Agent { capability }) = resolve_step_semantic_kind(step) {
             let cap = capability;
             let covered = all_caps.contains(cap.as_str());
-            out.push(CheckResult {
-                rule: "capability_no_agent".into(),
-                severity: Severity::Error,
-                passed: covered,
-                message: if covered {
+            out.push(CheckResult::simple(
+                "capability_no_agent",
+                Severity::Error,
+                covered,
+                if covered {
                     format!(
                         "workflow \"{wf_id}\" step \"{}\": capability \"{}\" is provided",
                         step.id, cap
@@ -227,8 +317,8 @@ fn check_steps_capability(
                         step.id, cap
                     )
                 },
-                context: None,
-            });
+                None,
+            ));
         }
         // Recurse into chain_steps
         if !step.chain_steps.is_empty() {
@@ -247,37 +337,37 @@ fn check_prompt_delivery(
 
         match delivery {
             PromptDelivery::Stdin | PromptDelivery::Env if cmd.contains("{prompt}") => {
-                out.push(CheckResult {
-                    rule: "prompt_delivery_placeholder_ignored".into(),
-                    severity: Severity::Warning,
-                    passed: false,
-                    message: format!(
+                out.push(CheckResult::simple(
+                    "prompt_delivery_placeholder_ignored",
+                    Severity::Warning,
+                    false,
+                    format!(
                         "agent \"{agent_id}\": command contains {{prompt}} but prompt_delivery={delivery:?}; placeholder will be ignored"
                     ),
-                    context: None,
-                });
+                    None,
+                ));
             }
             PromptDelivery::File if cmd.contains("{prompt}") => {
-                out.push(CheckResult {
-                    rule: "prompt_delivery_placeholder_ignored".into(),
-                    severity: Severity::Warning,
-                    passed: false,
-                    message: format!(
+                out.push(CheckResult::simple(
+                    "prompt_delivery_placeholder_ignored",
+                    Severity::Warning,
+                    false,
+                    format!(
                         "agent \"{agent_id}\": command contains {{prompt}} but prompt_delivery=file; use {{prompt_file}} instead"
                     ),
-                    context: None,
-                });
+                    None,
+                ));
             }
             PromptDelivery::File if !cmd.contains("{prompt_file}") => {
-                out.push(CheckResult {
-                    rule: "prompt_delivery_missing_placeholder".into(),
-                    severity: Severity::Warning,
-                    passed: false,
-                    message: format!(
+                out.push(CheckResult::simple(
+                    "prompt_delivery_missing_placeholder",
+                    Severity::Warning,
+                    false,
+                    format!(
                         "agent \"{agent_id}\": prompt_delivery=file but command is missing {{prompt_file}} placeholder"
                     ),
-                    context: None,
-                });
+                    None,
+                ));
             }
             _ => {}
         }
@@ -290,17 +380,17 @@ fn check_capability_templates(
 ) {
     for (agent_id, agent) in agents {
         let has_command = !agent.command.is_empty();
-        out.push(CheckResult {
-            rule: "agent_has_command".into(),
-            severity: Severity::Error,
-            passed: has_command,
-            message: if has_command {
+        out.push(CheckResult::simple(
+            "agent_has_command",
+            Severity::Error,
+            has_command,
+            if has_command {
                 format!("agent \"{agent_id}\": has command configured")
             } else {
                 format!("agent \"{agent_id}\": has no command configured")
             },
-            context: None,
-        });
+            None,
+        ));
     }
 }
 
@@ -325,24 +415,24 @@ fn check_steps_builtin(steps: &[WorkflowStepConfig], wf_id: &str, out: &mut Vec<
             continue;
         }
         if step.builtin.is_some() && step.required_capability.is_some() {
-            out.push(CheckResult {
-                rule: "step_semantic_conflict".into(),
-                severity: Severity::Error,
-                passed: false,
-                message: format!(
+            out.push(CheckResult::simple(
+                "step_semantic_conflict",
+                Severity::Error,
+                false,
+                format!(
                     "workflow \"{wf_id}\" step \"{}\": cannot define both builtin and required_capability",
                     step.id
                 ),
-                context: None,
-            });
+                None,
+            ));
         }
         if let Some(ref builtin) = step.builtin {
             let known = is_known_builtin_step_name(builtin);
-            out.push(CheckResult {
-                rule: "builtin_unknown".into(),
-                severity: Severity::Error,
-                passed: known,
-                message: if known {
+            out.push(CheckResult::simple(
+                "builtin_unknown",
+                Severity::Error,
+                known,
+                if known {
                     format!(
                         "workflow \"{wf_id}\" step \"{}\": builtin \"{builtin}\" is known",
                         step.id
@@ -353,11 +443,11 @@ fn check_steps_builtin(steps: &[WorkflowStepConfig], wf_id: &str, out: &mut Vec<
                         step.id
                     )
                 },
-                context: Some(
+                Some(
                     "known builtins: [\"init_once\", \"loop_guard\", \"ticket_scan\", \"self_test\"]"
                         .to_string(),
                 ),
-            });
+            ));
         }
         match resolve_step_semantic_kind(step) {
             Ok(semantic) => {
@@ -376,11 +466,11 @@ fn check_steps_builtin(steps: &[WorkflowStepConfig], wf_id: &str, out: &mut Vec<
                     }
                     StepSemanticKind::Chain => step.behavior.execution == ExecutionMode::Chain,
                 };
-                out.push(CheckResult {
-                    rule: "execution_mode_mismatch".into(),
-                    severity: Severity::Error,
-                    passed: matches_execution,
-                    message: if matches_execution {
+                out.push(CheckResult::simple(
+                    "execution_mode_mismatch",
+                    Severity::Error,
+                    matches_execution,
+                    if matches_execution {
                         format!(
                             "workflow \"{wf_id}\" step \"{}\": execution mode matches semantic meaning",
                             step.id
@@ -391,16 +481,16 @@ fn check_steps_builtin(steps: &[WorkflowStepConfig], wf_id: &str, out: &mut Vec<
                             step.id
                         )
                     },
-                    context: None,
-                });
+                    None,
+                ));
             }
-            Err(err) => out.push(CheckResult {
-                rule: "step_semantic_invalid".into(),
-                severity: Severity::Error,
-                passed: false,
-                message: format!("workflow \"{wf_id}\" step \"{}\": {err}", step.id),
-                context: None,
-            }),
+            Err(err) => out.push(CheckResult::simple(
+                "step_semantic_invalid",
+                Severity::Error,
+                false,
+                format!("workflow \"{wf_id}\" step \"{}\": {err}", step.id),
+                None,
+            )),
         }
         if !step.chain_steps.is_empty() {
             check_steps_builtin(&step.chain_steps, wf_id, out);
@@ -447,11 +537,11 @@ fn check_steps_pipe_to(
         }
         if let Some(ref target) = step.pipe_to {
             let known = step_ids.contains(target.as_str());
-            out.push(CheckResult {
-                rule: "pipe_to_unknown".into(),
-                severity: Severity::Error,
-                passed: known,
-                message: if known {
+            out.push(CheckResult::simple(
+                "pipe_to_unknown",
+                Severity::Error,
+                known,
+                if known {
                     format!(
                         "workflow \"{wf_id}\" step \"{}\": pipe_to \"{target}\" exists",
                         step.id
@@ -462,8 +552,8 @@ fn check_steps_pipe_to(
                         step.id
                     )
                 },
-                context: None,
-            });
+                None,
+            ));
         }
         if !step.chain_steps.is_empty() {
             check_steps_pipe_to(&step.chain_steps, wf_id, step_ids, out);
@@ -507,16 +597,16 @@ fn check_template_vars(
                 if pipeline_vars.contains(var) {
                     continue;
                 }
-                out.push(CheckResult {
-                    rule: "template_unknown_var".into(),
-                    severity: Severity::Warning,
-                    passed: false,
-                    message: format!(
+                out.push(CheckResult::simple(
+                    "template_unknown_var",
+                    Severity::Warning,
+                    false,
+                    format!(
                         "step_template \"{tmpl_name}\": prompt references {var_with_braces} \
                          — not a known system variable (may come from pipeline)"
                     ),
-                    context: None,
-                });
+                    None,
+                ));
             }
         }
     }
@@ -535,17 +625,17 @@ fn check_empty_workflows(
         }
         let enabled_count = wf.steps.iter().filter(|s| s.enabled).count();
         let is_empty = enabled_count == 0;
-        out.push(CheckResult {
-            rule: "empty_workflow".into(),
-            severity: Severity::Warning,
-            passed: !is_empty,
-            message: if is_empty {
+        out.push(CheckResult::simple(
+            "empty_workflow",
+            Severity::Warning,
+            !is_empty,
+            if is_empty {
                 format!("workflow \"{wf_id}\": has 0 enabled steps")
             } else {
                 format!("workflow \"{wf_id}\": has {enabled_count} enabled steps")
             },
-            context: None,
-        });
+            None,
+        ));
     }
 }
 

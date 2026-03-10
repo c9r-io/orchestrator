@@ -62,7 +62,7 @@ pub(crate) async fn check(
 ) -> Result<Response<CheckResponse>, Status> {
     let _auth = super::authorize(server, &request, "Check")?;
     let req = request.into_inner();
-    let (content, exit_code) = agent_orchestrator::service::system::run_check(
+    let report = agent_orchestrator::service::system::run_check(
         &server.state,
         req.workflow.as_deref(),
         &req.output_format,
@@ -71,9 +71,15 @@ pub(crate) async fn check(
     .map_err(|e| Status::internal(format!("{e}")))?;
 
     Ok(Response::new(CheckResponse {
-        content,
+        content: report.content,
         format: req.output_format,
-        exit_code,
+        exit_code: report.exit_code,
+        diagnostics: report
+            .report
+            .checks
+            .iter()
+            .map(agent_orchestrator::service::system::diagnostic_entry_from_check)
+            .collect(),
     }))
 }
 
@@ -94,15 +100,16 @@ pub(crate) async fn manifest_validate(
 ) -> Result<Response<ManifestValidateResponse>, Status> {
     let _auth = super::authorize(server, &request, "ManifestValidate")?;
     let req = request.into_inner();
-    let (valid, errors, message) = agent_orchestrator::service::system::validate_manifests(
+    let report = agent_orchestrator::service::system::validate_manifests(
         &server.state,
         &req.content,
         req.project_id.as_deref(),
     )
     .map_err(|e| Status::internal(format!("{e}")))?;
     Ok(Response::new(ManifestValidateResponse {
-        valid,
-        errors,
-        message,
+        valid: report.valid,
+        errors: report.errors,
+        message: report.message,
+        diagnostics: report.diagnostics,
     }))
 }

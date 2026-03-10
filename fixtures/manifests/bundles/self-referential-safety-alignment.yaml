@@ -1,0 +1,64 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: self
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+  self_referential: true
+---
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: plain
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+  self_referential: false
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: probe-valid
+spec:
+  steps:
+    - id: implement
+      type: implement
+      enabled: true
+      scope: task
+      command: "echo probe"
+    - id: self_test
+      type: self_test
+      enabled: true
+      scope: task
+  loop:
+    mode: once
+  safety:
+    auto_rollback: true
+    checkpoint_strategy: git_tag
+    binary_snapshot: true
+    profile: self_referential_probe
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: binary-warning
+spec:
+  steps:
+    - id: implement
+      type: implement
+      enabled: true
+      command: "echo warning"
+    - id: self_test
+      type: self_test
+      enabled: true
+  loop:
+    mode: once
+  safety:
+    auto_rollback: true
+    checkpoint_strategy: git_tag
+    binary_snapshot: false

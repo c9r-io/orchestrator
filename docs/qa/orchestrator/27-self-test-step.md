@@ -110,7 +110,7 @@ Verify normalization sets builtin = "self_test" for self_test step id
 
 ### Goal
 
-Verify validation warns on missing self_test in self-referential workflows
+Verify self-referential validation rejects workflows that omit builtin `self_test`
 
 ### Steps
 
@@ -121,7 +121,7 @@ Verify validation warns on missing self_test in self-referential workflows
 
 ### Expected
 
-- `validate_self_referential_safety_warns_missing_self_test` passes
+- `validate_self_referential_safety_errors_missing_self_test` passes
 - `validate_self_referential_safety_passes_with_self_test` passes
 
 ---

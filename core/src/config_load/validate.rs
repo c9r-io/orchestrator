@@ -1,6 +1,9 @@
 use crate::config::{
-    default_scope_for_step_id, resolve_step_semantic_kind, ExecutionProfileMode,
-    OrchestratorConfig, StepScope, StepSemanticKind, WorkflowConfig, WorkflowSafetyProfile,
+    resolve_step_semantic_kind, ExecutionProfileMode, OrchestratorConfig, StepSemanticKind,
+    WorkflowConfig, WorkflowSafetyProfile,
+};
+use crate::self_referential_policy::{
+    evaluate_self_referential_policy, format_blocking_policy_error,
 };
 use anyhow::{Context, Result};
 use std::collections::{HashMap, HashSet};
@@ -24,11 +27,11 @@ pub fn validate_workflow_config_for_project(
     project_id: Option<&str>,
 ) -> Result<()> {
     let pid = config.effective_project_id(project_id);
-    let project_agents = config
+    let project = config
         .projects
         .get(pid)
-        .map(|project| &project.agents)
         .ok_or_else(|| anyhow::anyhow!("project '{}' not found", pid))?;
+    let project_agents = &project.agents;
     if workflow.steps.is_empty() {
         anyhow::bail!("workflow '{}' must define at least one step", workflow_id);
     }
@@ -118,6 +121,25 @@ pub fn validate_workflow_config_for_project(
         }
     }
     validate_adaptive_workflow_config(workflow, workflow_id, project_agents)?;
+    let self_referential_workspaces: Vec<_> = project
+        .workspaces
+        .iter()
+        .filter(|(_, workspace)| workspace.self_referential)
+        .collect();
+
+    if workflow.safety.profile == WorkflowSafetyProfile::SelfReferentialProbe {
+        if self_referential_workspaces.is_empty() {
+            validate_self_referential_safety(workflow, workflow_id, "__unbound__", false)?;
+        } else {
+            for (workspace_id, _) in &self_referential_workspaces {
+                validate_self_referential_safety(workflow, workflow_id, workspace_id, true)?;
+            }
+        }
+    } else {
+        for (workspace_id, _) in self_referential_workspaces {
+            validate_self_referential_safety(workflow, workflow_id, workspace_id, true)?;
+        }
+    }
     Ok(())
 }
 
@@ -362,85 +384,10 @@ pub(crate) fn validate_probe_workflow_shape(
     if workflow.safety.profile != WorkflowSafetyProfile::SelfReferentialProbe {
         return Ok(());
     }
-
-    if !matches!(
-        workflow.safety.checkpoint_strategy,
-        crate::config::CheckpointStrategy::GitTag
-    ) {
-        anyhow::bail!(
-            "workflow '{}' with self_referential_probe profile requires safety.checkpoint_strategy=git_tag",
-            workflow_id
-        );
+    let evaluation = evaluate_self_referential_policy(workflow, workflow_id, "__probe__", true)?;
+    if evaluation.has_blocking_errors() {
+        anyhow::bail!(format_blocking_policy_error(&evaluation));
     }
-
-    if !workflow.safety.auto_rollback {
-        anyhow::bail!(
-            "workflow '{}' with self_referential_probe profile requires safety.auto_rollback=true",
-            workflow_id
-        );
-    }
-
-    if !matches!(workflow.loop_policy.mode, crate::config::LoopMode::Once) {
-        anyhow::bail!(
-            "workflow '{}' with self_referential_probe profile requires loop.mode=once",
-            workflow_id
-        );
-    }
-
-    for step in &workflow.steps {
-        if !step.enabled {
-            continue;
-        }
-
-        let scope = step
-            .scope
-            .unwrap_or_else(|| default_scope_for_step_id(&step.id));
-        if scope != StepScope::Task {
-            anyhow::bail!(
-                "workflow '{}' with self_referential_probe profile only allows task-scoped steps",
-                workflow_id
-            );
-        }
-
-        let semantic = resolve_step_semantic_kind(step).map_err(anyhow::Error::msg)?;
-        if !matches!(semantic, StepSemanticKind::Command) {
-            anyhow::bail!(
-                "workflow '{}' with self_referential_probe profile only allows self-contained command steps",
-                workflow_id
-            );
-        }
-
-        if !step.chain_steps.is_empty() {
-            anyhow::bail!(
-                "workflow '{}' with self_referential_probe profile does not allow chain steps",
-                workflow_id
-            );
-        }
-
-        if matches!(
-            step.id.as_str(),
-            "qa" | "qa_testing"
-                | "fix"
-                | "ticket_fix"
-                | "retest"
-                | "guard"
-                | "build"
-                | "test"
-                | "lint"
-                | "self_test"
-                | "smoke_chain"
-                | "ticket_scan"
-                | "init_once"
-                | "loop_guard"
-        ) {
-            anyhow::bail!(
-                "workflow '{}' with self_referential_probe profile does not allow strict or builtin phases like '{}'",
-                workflow_id,
-                step.id
-            );
-        }
-    }
-
     Ok(())
 }
 
@@ -451,46 +398,27 @@ pub fn validate_self_referential_safety(
     workspace_id: &str,
     workspace_is_self_referential: bool,
 ) -> Result<()> {
-    if workflow.safety.profile == WorkflowSafetyProfile::SelfReferentialProbe {
-        if !workspace_is_self_referential {
-            anyhow::bail!(
-                "workflow '{}' is marked self_referential_probe but workspace '{}' is not self_referential",
-                workflow_id,
-                workspace_id
-            );
-        }
-        return Ok(());
-    }
-
-    // Hard error: checkpoint_strategy must not be None
-    if matches!(
-        workflow.safety.checkpoint_strategy,
-        crate::config::CheckpointStrategy::None
-    ) {
-        anyhow::bail!(
-            "[SELF_REF_UNSAFE] workspace '{}' is self_referential but checkpoint_strategy is 'none'. \
-             Self-referential workspaces MUST have a checkpoint strategy (e.g. git_tag) to enable rollback.",
-            workspace_id
-        );
-    }
-
-    // Warning: auto_rollback should be enabled
-    if !workflow.safety.auto_rollback {
+    let evaluation = evaluate_self_referential_policy(
+        workflow,
+        workflow_id,
+        workspace_id,
+        workspace_is_self_referential,
+    )?;
+    for diagnostic in evaluation
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| !diagnostic.blocking)
+    {
         warn!(
             workspace_id,
-            "workspace is self_referential but auto_rollback is disabled; consider enabling it"
+            rule_id = diagnostic.rule_id,
+            "{}",
+            diagnostic.message
         );
     }
-
-    // Warning: no self_test step in workflow
-    let has_self_test = workflow.steps.iter().any(|s| s.id == "self_test");
-    if !has_self_test {
-        warn!(
-            workspace_id,
-            "workspace is self_referential but workflow has no self_test step"
-        );
+    if evaluation.has_blocking_errors() {
+        anyhow::bail!(format_blocking_policy_error(&evaluation));
     }
-
     Ok(())
 }
 
@@ -845,7 +773,7 @@ mod tests {
     }
 
     #[test]
-    fn validate_self_referential_safety_warns_missing_self_test() {
+    fn validate_self_referential_safety_errors_missing_self_test() {
         let workflow = WorkflowConfig {
             steps: vec![WorkflowStepConfig {
                 id: "implement".to_string(),
@@ -895,10 +823,11 @@ mod tests {
         };
 
         let result = validate_self_referential_safety(&workflow, "test-workflow", "test-ws", true);
-        assert!(
-            result.is_ok(),
-            "validation should pass even without self_test"
-        );
+        assert!(result.is_err(), "validation should fail without self_test");
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("self_ref.self_test_required"));
     }
 
     #[test]
@@ -1236,7 +1165,7 @@ mod tests {
     }
 
     #[test]
-    fn validate_self_referential_safety_warns_disabled_auto_rollback() {
+    fn validate_self_referential_safety_errors_disabled_auto_rollback() {
         let workflow = WorkflowConfig {
             steps: vec![make_step("implement", true)],
             safety: crate::config::SafetyConfig {
@@ -1251,7 +1180,11 @@ mod tests {
             ..make_workflow(vec![])
         };
         let result = validate_self_referential_safety(&workflow, "test-workflow", "test-ws", true);
-        assert!(result.is_ok());
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("self_ref.auto_rollback_required"));
     }
 
     #[test]
@@ -1274,14 +1207,18 @@ mod tests {
     }
 
     #[test]
-    fn self_referential_probe_without_self_test_does_not_warn_or_error() {
+    fn self_referential_probe_without_self_test_is_rejected() {
         let mut workflow = make_workflow(vec![make_command_step("implement", "echo probe")]);
         workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
         workflow.safety.auto_rollback = true;
 
         let result = validate_self_referential_safety(&workflow, "probe", "self-ref", true);
-        assert!(result.is_ok());
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("operation should fail")
+            .to_string()
+            .contains("self_ref.self_test_required"));
     }
 
     #[test]
@@ -1475,7 +1412,11 @@ mod tests {
         let mut step = make_command_step("implement", "echo probe");
         step.chain_steps = vec![make_command_step("sub", "echo sub")];
 
-        let mut workflow = make_workflow(vec![step]);
+        let mut workflow = make_workflow(vec![
+            step,
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        workflow.steps[1].scope = Some(StepScope::Task);
         workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
         workflow.safety.auto_rollback = true;
@@ -1485,7 +1426,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.expect_err("operation should fail").to_string();
         assert!(
-            err.contains("only allows self-contained command steps"),
+            err.contains("self_ref.probe_command_steps_only"),
             "unexpected error: {}",
             err
         );
@@ -1493,7 +1434,11 @@ mod tests {
 
     #[test]
     fn validate_probe_workflow_shape_rejects_fixed_loop_mode() {
-        let mut workflow = make_workflow(vec![make_command_step("implement", "echo probe")]);
+        let mut workflow = make_workflow(vec![
+            make_command_step("implement", "echo probe"),
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        workflow.steps[1].scope = Some(StepScope::Task);
         workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
         workflow.safety.auto_rollback = true;
@@ -1503,7 +1448,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.expect_err("operation should fail").to_string();
         assert!(
-            err.contains("requires loop.mode=once"),
+            err.contains("self_ref.probe_requires_loop_mode_once"),
             "unexpected error: {}",
             err
         );
@@ -1511,7 +1456,11 @@ mod tests {
 
     #[test]
     fn validate_probe_workflow_shape_rejects_infinite_loop_mode() {
-        let mut workflow = make_workflow(vec![make_command_step("implement", "echo probe")]);
+        let mut workflow = make_workflow(vec![
+            make_command_step("implement", "echo probe"),
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        workflow.steps[1].scope = Some(StepScope::Task);
         workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
         workflow.safety.auto_rollback = true;
@@ -1521,7 +1470,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.expect_err("operation should fail").to_string();
         assert!(
-            err.contains("requires loop.mode=once"),
+            err.contains("self_ref.probe_requires_loop_mode_once"),
             "unexpected error: {}",
             err
         );
@@ -1531,7 +1480,11 @@ mod tests {
     fn validate_probe_workflow_shape_rejects_forbidden_phase_qa_testing() {
         let mut step = make_command_step("qa_testing", "echo qa");
         step.scope = Some(StepScope::Task); // Set to Task scope to pass scope check
-        let mut workflow = make_workflow(vec![step]);
+        let mut workflow = make_workflow(vec![
+            step,
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        workflow.steps[1].scope = Some(StepScope::Task);
         workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
         workflow.safety.auto_rollback = true;
@@ -1540,7 +1493,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.expect_err("operation should fail").to_string();
         assert!(
-            err.contains("does not allow strict or builtin phases"),
+            err.contains("self_ref.probe_forbidden_phase"),
             "unexpected error: {}",
             err
         );
@@ -1554,7 +1507,11 @@ mod tests {
     fn validate_probe_workflow_shape_rejects_forbidden_phase_ticket_fix() {
         let mut step = make_command_step("ticket_fix", "echo fix");
         step.scope = Some(StepScope::Task); // Set to Task scope to pass scope check
-        let mut workflow = make_workflow(vec![step]);
+        let mut workflow = make_workflow(vec![
+            step,
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        workflow.steps[1].scope = Some(StepScope::Task);
         workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
         workflow.safety.auto_rollback = true;
@@ -1572,7 +1529,11 @@ mod tests {
     fn validate_probe_workflow_shape_rejects_forbidden_phase_loop_guard() {
         let mut step = make_command_step("loop_guard", "echo guard");
         step.scope = Some(StepScope::Task);
-        let mut workflow = make_workflow(vec![step]);
+        let mut workflow = make_workflow(vec![
+            step,
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        workflow.steps[1].scope = Some(StepScope::Task);
         workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
         workflow.safety.auto_rollback = true;
@@ -1588,8 +1549,11 @@ mod tests {
 
     #[test]
     fn validate_probe_workflow_shape_accepts_custom_phase_name() {
-        let mut workflow =
-            make_workflow(vec![make_command_step("custom_probe_task", "echo custom")]);
+        let mut workflow = make_workflow(vec![
+            make_command_step("custom_probe_task", "echo custom"),
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        workflow.steps[1].scope = Some(StepScope::Task);
         workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
         workflow.safety.auto_rollback = true;
@@ -1608,19 +1572,16 @@ mod tests {
     // ============================================================================
 
     #[test]
-    fn validate_self_referential_safety_standard_profile_checks_checkpoint_even_non_self_ref() {
-        // Even with workspace_is_self_referential=false, function still validates
-        // checkpoint_strategy != None for Standard profile workflows.
+    fn validate_self_referential_safety_standard_profile_skips_non_self_ref_workspace() {
         let mut workflow = make_workflow(vec![make_step("implement", true)]);
         workflow.safety.profile = WorkflowSafetyProfile::Standard;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::None;
 
         let result = validate_self_referential_safety(&workflow, "standard-wf", "plain-ws", false);
-        assert!(result.is_err(), "should reject checkpoint_strategy=None");
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("checkpoint_strategy"));
+        assert!(
+            result.is_ok(),
+            "non self-referential workspace should skip checks"
+        );
     }
 
     #[test]
@@ -1647,7 +1608,12 @@ mod tests {
         let mut step = make_command_step("self_test", "echo forbidden");
         step.enabled = false;
         step.scope = Some(StepScope::Task);
-        let mut workflow = make_workflow(vec![make_command_step("custom_task", "echo ok"), step]);
+        let mut workflow = make_workflow(vec![
+            make_command_step("custom_task", "echo ok"),
+            make_builtin_step("self_test", "self_test", true),
+            step,
+        ]);
+        workflow.steps[1].scope = Some(StepScope::Task);
         workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
         workflow.safety.auto_rollback = true;
@@ -1662,20 +1628,22 @@ mod tests {
     }
 
     #[test]
-    fn validate_probe_workflow_shape_rejects_forbidden_phase_self_test() {
-        let mut step = make_command_step("self_test", "echo test");
-        step.scope = Some(StepScope::Task);
-        let mut workflow = make_workflow(vec![step]);
+    fn validate_probe_workflow_shape_allows_builtin_self_test() {
+        let mut workflow = make_workflow(vec![
+            make_command_step("implement", "echo test"),
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        workflow.steps[0].scope = Some(StepScope::Task);
+        workflow.steps[1].scope = Some(StepScope::Task);
         workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
         workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
         workflow.safety.auto_rollback = true;
 
         let result = validate_probe_workflow_shape(&workflow, "probe");
-        assert!(result.is_err());
-        assert!(result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("self_test"));
+        assert!(
+            result.is_ok(),
+            "builtin self_test should be allowed for probe"
+        );
     }
 
     #[test]

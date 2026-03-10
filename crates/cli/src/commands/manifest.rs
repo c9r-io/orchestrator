@@ -20,8 +20,26 @@ pub(crate) async fn dispatch(
                 .await?
                 .into_inner();
             println!("{}", resp.message);
-            for err in &resp.errors {
-                eprintln!("  {}", err);
+            if !resp.diagnostics.is_empty() {
+                for diagnostic in &resp.diagnostics {
+                    eprintln!("  [{}] {}", diagnostic.rule, diagnostic.message);
+                    if let Some(actual) = diagnostic.actual.as_deref() {
+                        eprintln!("    actual: {}", actual);
+                    }
+                    if let Some(expected) = diagnostic.expected.as_deref() {
+                        eprintln!("    expected: {}", expected);
+                    }
+                    if let Some(risk) = diagnostic.risk.as_deref() {
+                        eprintln!("    risk: {}", risk);
+                    }
+                    if let Some(fix) = diagnostic.suggested_fix.as_deref() {
+                        eprintln!("    suggested_fix: {}", fix);
+                    }
+                }
+            } else {
+                for err in &resp.errors {
+                    eprintln!("  {}", err);
+                }
             }
             if !resp.valid {
                 std::process::exit(1);
