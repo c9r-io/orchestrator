@@ -73,7 +73,7 @@ metadata:
   name: impl-agent
 spec:
   capabilities:
-    - implement
+    - exec_profile_implement
   command: "echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
 ---
 apiVersion: orchestrator.dev/v2
@@ -82,7 +82,7 @@ metadata:
   name: qa-agent
 spec:
   capabilities:
-    - qa_testing
+    - exec_profile_qa_testing
   command: "echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
 ---
 apiVersion: orchestrator.dev/v2
@@ -91,7 +91,7 @@ metadata:
   name: sandbox-writer-root-deny
 spec:
   capabilities:
-    - implement
+    - sandbox_write_root_deny
   command: "set -e; echo blocked > sandbox-denied.txt; echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
 ---
 apiVersion: orchestrator.dev/v2
@@ -100,7 +100,7 @@ metadata:
   name: sandbox-writer-docs-allow
 spec:
   capabilities:
-    - implement
+    - sandbox_write_docs_allow
   command: "set -e; echo allowed > docs/sandbox-allowed.txt; echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
 ---
 apiVersion: orchestrator.dev/v2
@@ -109,7 +109,7 @@ metadata:
   name: fd-burner
 spec:
   capabilities:
-    - implement
+    - sandbox_fd_probe
   command: "python3 -c \"files=[]; [files.append(open('/dev/null','rb')) for _ in range(256)]; print('{\\\"confidence\\\":0.9,\\\"quality_score\\\":0.9,\\\"artifacts\\\":[]}')\""
 ---
 apiVersion: orchestrator.dev/v2
@@ -118,7 +118,7 @@ metadata:
   name: net-probe
 spec:
   capabilities:
-    - implement
+    - sandbox_network_probe
   command: "python3 -c \"import socket; socket.getaddrinfo('example.com', 443)\""
 ---
 apiVersion: orchestrator.dev/v2
@@ -127,7 +127,7 @@ metadata:
   name: noop-agent
 spec:
   capabilities:
-    - implement
+    - sandbox_allowlist_probe
   command: "echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
 ---
 apiVersion: orchestrator.dev/v2
@@ -138,13 +138,13 @@ spec:
   steps:
     - id: implement
       type: implement
-      required_capability: implement
+      required_capability: exec_profile_implement
       execution_profile: sandbox_write
       enabled: true
       scope: task
     - id: qa_testing
       type: qa_testing
-      required_capability: qa_testing
+      required_capability: exec_profile_qa_testing
       execution_profile: host
       enabled: true
       scope: item
@@ -159,7 +159,7 @@ spec:
   steps:
     - id: implement
       type: implement
-      required_capability: implement
+      required_capability: sandbox_write_root_deny
       execution_profile: sandbox_docs_only
       enabled: true
       scope: task
@@ -174,7 +174,7 @@ spec:
   steps:
     - id: implement
       type: implement
-      required_capability: implement
+      required_capability: sandbox_write_docs_allow
       execution_profile: sandbox_docs_only
       enabled: true
       scope: task
@@ -189,7 +189,7 @@ spec:
   steps:
     - id: implement
       type: implement
-      required_capability: implement
+      required_capability: sandbox_fd_probe
       execution_profile: sandbox_fd_limit
       enabled: true
       scope: task
@@ -204,7 +204,7 @@ spec:
   steps:
     - id: implement
       type: implement
-      required_capability: implement
+      required_capability: sandbox_network_probe
       execution_profile: sandbox_network_deny
       enabled: true
       scope: task
@@ -219,7 +219,7 @@ spec:
   steps:
     - id: implement
       type: implement
-      required_capability: implement
+      required_capability: sandbox_allowlist_probe
       execution_profile: sandbox_network_allowlist
       enabled: true
       scope: task
