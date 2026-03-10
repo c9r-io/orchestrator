@@ -250,6 +250,48 @@ This platform supports a complete AI-first development loop:
 
 See [SKILLS.md](./SKILLS.md) for the complete list of available skills and how to use them.
 
+## CI and Security Automation
+
+The repository includes GitHub Actions workflows for baseline quality gates:
+
+- `CI`: runs `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace`
+- `Security`: runs `cargo audit` on pushes, pull requests, and a weekly schedule
+- `Dependabot`: opens weekly update PRs for Cargo dependencies and GitHub Actions
+- `Release`: builds tagged releases for Linux and macOS, packages `orchestrator` and `orchestratord`, and publishes checksum files to GitHub Releases
+
+These workflows live under `.github/workflows/`, and dependency update policy is defined in `.github/dependabot.yml`.
+
+## Installation
+
+Install the latest GitHub Release with:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gpgkd906/ai_native_sdlc/main/install.sh | sh
+```
+
+Install a specific version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gpgkd906/ai_native_sdlc/main/install.sh | INSTALL_ORCHESTRATOR_VERSION=v0.1.0 sh
+```
+
+Useful environment variables:
+
+- `INSTALL_ORCHESTRATOR_VERSION`: release tag, defaults to `latest`
+- `INSTALL_ORCHESTRATOR_BIN_DIR`: installation directory, defaults to `/usr/local/bin`
+- `INSTALL_ORCHESTRATOR_REPO`: GitHub repository in `owner/name` format, defaults to `gpgkd906/ai_native_sdlc`
+
+## Release Process
+
+Push a tag in the form `vX.Y.Z` to trigger the release workflow:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow publishes tarballs for supported targets plus a `sha256sums` manifest. The install script uses those release assets directly.
+
 ### Quick Reference
 
 | Skill | Purpose |
