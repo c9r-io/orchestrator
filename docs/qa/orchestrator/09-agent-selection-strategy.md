@@ -241,9 +241,9 @@ Validate that `task retry` resets a failed item to pending and re-queues it.
      "SELECT id, status FROM task_items WHERE task_id = '{task_id}' AND status = 'unresolved' LIMIT 1;"
    ```
 
-3. Retry with `--detach` to verify the reset separately from re-execution:
+3. Retry with `--force` to verify the reset is queued before re-execution:
    ```bash
-   orchestrator task retry {task_item_id} --detach
+   orchestrator task retry {task_item_id} --force
    ```
 
 4. Immediately check item status (before task loop runs):
@@ -254,11 +254,10 @@ Validate that `task retry` resets a failed item to pending and re-queues it.
 
 ### Expected
 
-- Immediately after `task retry --detach`, the item status is `pending`
-- Without `--detach`, `task retry` resets to `pending` and then runs the full
-  task loop; the item is re-finalized after execution, so the final status
-  depends on the finalize rules (it may return to `unresolved` if the
-  underlying issue persists)
+- Immediately after `task retry --force`, the item status is `pending`
+- Retry is always queue-based in C/S mode; the item is re-finalized after
+  execution, so the final status depends on the finalize rules (it may return
+  to `unresolved` if the underlying issue persists)
 - Automatic retry with agent rotation is **not implemented** — the same agent
   may be selected again
 - After 2+ consecutive failures, the failing agent is marked diseased and

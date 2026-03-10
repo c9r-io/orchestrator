@@ -150,15 +150,14 @@ fails with a clear error instead of silently falling back to another project.
      --name "no-fallback-test" \
      --goal "Should fail — project lacks fix agent" \
      --workspace default \
-     --workflow qa_fix \
-     --attach 2>&1; echo "EXIT=$?"
+     --workflow qa_fix
    ```
 
 ### Expected
 
-- Task creation or execution fails with a clear error about missing `fix` capability.
+- Task creation succeeds but queued execution fails with a clear error about missing `fix` capability.
 - No agents from other projects are selected — strict project isolation is enforced.
-- Exit code is non-zero.
+- `task info` / `task trace` surfaces the failure after the daemon worker runs it.
 
 ---
 

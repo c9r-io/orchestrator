@@ -93,8 +93,8 @@ nohup ./target/release/orchestratord --foreground --workers 2 > /tmp/orchestrato
 
 # 验证 daemon 运行
 ps aux | grep orchestratord | grep -v grep
-# 验证 worker 状态
-orchestrator task worker status
+# 验证队列能被 daemon worker 消费
+orchestrator task list -o json
 ```
 
 > ⚠️ CLI 二进制路径：C/S 模式的 CLI 在 `target/release/orchestrator`（crates/cli），
@@ -151,7 +151,7 @@ sqlite3 data/agent_orchestrator.db \
 
 ### 3.4 创建并启动任务
 
-C/S 模式下 `task create` 默认 `--detach`（enqueue 到 daemon worker），
+C/S 模式下 `task create` 会直接 enqueue 到 daemon worker，
 任务创建即自动开始执行，不需要单独 `task start`。
 
 ```bash
@@ -163,16 +163,7 @@ orchestrator task create \
 ```
 
 记录返回的 `<task_id>`。任务会立即被 worker 认领并开始执行。
-
-如需手动阻塞等待（如脚本中），可用 `--attach`：
-
-```bash
-orchestrator task create --attach \
-  -n "evo-prompt-template-enhance" \
-  -w self -W self-evolution \
-  --project self-evolution \
-  -g "..."
-```
+如需等待完成，请使用 `orchestrator task watch <task_id>` 或轮询 `task info`。
 
 ---
 
@@ -230,8 +221,8 @@ orchestrator task logs --tail 200 <task_id>
 # daemon 进程
 ps aux | grep orchestratord | grep -v grep
 
-# daemon worker 队列状态
-orchestrator task worker status
+# 队列/任务状态
+orchestrator task list -o json
 
 # agent 子进程（claude -p）
 ps aux | grep "claude -p" | grep -v grep
@@ -319,7 +310,7 @@ git diff --stat
 | daemon 未运行 | CLI 报 `failed to connect to daemon at .../orchestrator.sock` | 用 `orchestratord --foreground --workers 2` 启动 |
 | CLI 指向旧单体二进制 | `which orchestrator` 指向 `core/target/release/` | 更新 symlink 到 `target/release/orchestrator` |
 | 重建后 daemon 仍用旧代码 | 观察到已修复的 bug 复现 | 杀掉旧 daemon 进程再启动新的 |
-| task create 后任务立即开始 | task list 显示 `running` | C/S 模式默认 `--detach`，这是正常行为 |
+| task create 后任务立即开始 | task list 显示 `pending` 或很快变成 `running` | C/S 模式下 task lifecycle 为 queue-only，这是正常行为 |
 
 ### 7.3 通用异常
 

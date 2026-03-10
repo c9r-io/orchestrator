@@ -57,19 +57,17 @@ message TaskCreateRequest {
   optional string workflow_id = 5;
   repeated string target_files = 6;
   bool no_start = 7;
-  bool detach = 8;
 }
 
 message TaskCreateResponse {
   string task_id = 1;
-  string status = 2;      // "created" | "enqueued" | "running"
+  string status = 2;      // "created" | "enqueued"
   string message = 3;
 }
 
 message TaskStartRequest {
   optional string task_id = 1;
   bool latest = 2;
-  bool detach = 3;
 }
 
 message TaskStartResponse {
@@ -89,7 +87,6 @@ message TaskPauseResponse {
 
 message TaskResumeRequest {
   string task_id = 1;
-  bool detach = 2;
 }
 
 message TaskResumeResponse {
@@ -109,8 +106,7 @@ message TaskDeleteResponse {
 
 message TaskRetryRequest {
   string task_item_id = 1;
-  bool detach = 2;
-  bool force = 3;
+  bool force = 2;
 }
 
 message TaskRetryResponse {

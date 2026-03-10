@@ -197,27 +197,25 @@ N/A - Unit test verification
    orchestrator apply -f fixtures/manifests/bundles/adaptive-runtime.yaml --project "$QA_PROJECT"
    ```
 
-4. Execute the success-path adaptive workflow inline.
-   Run tasks sequentially; do not launch two `--attach` sessions in parallel against the same SQLite file.
+4. Execute the success-path adaptive workflow.
+   Run tasks sequentially and use `task watch` / `task info` to observe completion.
    ```bash
    orchestrator task create \
      -n adaptive-success \
      -g "adaptive runtime success verification" \
      --project "$QA_PROJECT" \
      -w adaptive_ws \
-     -W adaptive_success \
-     --attach
+     -W adaptive_success
    ```
 
-5. Execute the fallback-path adaptive workflow inline:
+5. Execute the fallback-path adaptive workflow:
    ```bash
    orchestrator task create \
      -n adaptive-fallback \
      -g "adaptive runtime fallback verification" \
      --project "$QA_PROJECT" \
      -w adaptive_ws \
-     -W adaptive_fallback \
-     --attach
+     -W adaptive_fallback
    ```
 
 6. Check workflow export contains adaptive configuration:

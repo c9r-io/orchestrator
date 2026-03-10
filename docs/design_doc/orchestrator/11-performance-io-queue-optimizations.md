@@ -23,7 +23,7 @@ Performance audit and code review identified three hotspots in scheduler runtime
 - Bound phase output read volume and preserve validation observability with truncation marker.
 - Implement true tail behavior for `task logs --tail` using reverse seek scanning.
 - Add atomic pending claim and multi-worker consumption path.
-- Keep CLI UX stable and backward-compatible (`task worker start|stop|status`, `task logs`).
+- Keep CLI UX stable for queue observation and log inspection (`task list/info/watch/logs`).
 
 ## Non-goals
 
@@ -40,7 +40,7 @@ Performance audit and code review identified three hotspots in scheduler runtime
   - bounded output reads for stdout/stderr validation path.
   - reverse-seek log tail helper for CLI task log view.
   - `claim_next_pending_task` transactional queue claim API.
-  - `task worker start --workers N` parallel consumer option.
+  - daemon `--workers N` parallel consumer option.
   - QA performance baseline scripts under `docs/qa/script/`.
 
 - Out of scope:
@@ -59,9 +59,9 @@ Performance audit and code review identified three hotspots in scheduler runtime
 
 ## CLI Surface
 
-- Added worker option:
-  - `task worker start --workers <N>`
-- Existing command compatibility preserved.
+- Queue consumption is controlled by daemon startup:
+  - `orchestratord --workers <N>`
+- Existing observation commands remain available.
 
 ## Database Changes
 

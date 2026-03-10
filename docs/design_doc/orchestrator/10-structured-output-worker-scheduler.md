@@ -2,7 +2,7 @@
 
 **Module**: orchestrator
 **Status**: Approved
-**Related Plan**: Close implementation gap where `collab` stayed off mainline; switch scheduler to structured output decision path and introduce a real queue/worker scheduling layer while keeping foreground UX.
+**Related Plan**: Close implementation gap where `collab` stayed off mainline; switch scheduler to structured output decision path and introduce a real queue/worker scheduling layer for C/S mode.
 **Related QA**: `docs/qa/orchestrator/20-structured-output-worker-scheduler.md`
 **Created**: 2026-02-23
 **Last Updated**: 2026-02-23
@@ -14,16 +14,16 @@
 Audit feedback identified two architecture gaps:
 
 - `collab` data model existed but scheduler decisions still centered on `exit_code + log files`.
-- CLI task execution still relied on per-command runtime creation and inline execution.
+- CLI task execution still relied on per-command runtime creation and optional inline execution.
 
-The refactor integrated structured outputs into phase execution and added queue/worker control for detached execution.
+The refactor integrated structured outputs into phase execution and added queue/worker control for daemon-managed execution.
 
 ## Goals
 
 - Enforce structured output validation for critical phases (`qa`, `fix`, `retest`, `guard`).
 - Persist structured phase outputs for queryable post-run analysis.
 - Publish phase results to the collaboration message bus from scheduler mainline.
-- Add detach + worker command flow while keeping foreground execution compatibility.
+- Add queue + worker command flow aligned with daemon-managed C/S execution.
 
 ## Non-goals
 
@@ -38,7 +38,7 @@ The refactor integrated structured outputs into phase execution and added queue/
   - Strict output validation module and scheduler integration.
   - `command_runs` schema extension for structured data.
   - Scheduler events for validation and publication.
-  - `task --detach` and `task worker start|stop|status`.
+  - Queue-based task lifecycle commands and embedded daemon workers.
   - Shared process runtime for CLI instead of per-command runtime creation.
 
 - Out of scope:
@@ -88,7 +88,7 @@ The refactor integrated structured outputs into phase execution and added queue/
 - Risk: existing agent templates output plain text and fail after rollout.
   - Mitigation: explicit `output_validation_failed` events and QA docs for migration verification.
 - Risk: worker process coordination confusion in local usage.
-  - Mitigation: explicit `task worker status` and stop-signal control.
+  - Mitigation: explicit daemon startup guidance plus `task list/info/watch/logs` for queue observation.
 
 ## Observability And Operations (Required)
 
@@ -139,5 +139,5 @@ The refactor integrated structured outputs into phase execution and added queue/
 - Scheduler uses structured output validation in main phase execution path.
 - `command_runs` stores structured payload and validation status.
 - Phase publication events are queryable in `events`.
-- `--detach` plus worker commands support queue-based execution.
+- Queue-based task lifecycle commands support daemon-managed execution.
 - CLI no longer creates a new runtime per task command.

@@ -257,12 +257,6 @@ pub enum TaskCommands {
 
         #[arg(long)]
         no_start: bool,
-
-        #[arg(long, default_value_t = true)]
-        detach: bool,
-
-        #[arg(long, conflicts_with = "detach")]
-        attach: bool,
     },
 
     /// Get task details
@@ -280,9 +274,6 @@ pub enum TaskCommands {
 
         #[arg(long, short)]
         latest: bool,
-
-        #[arg(long)]
-        detach: bool,
     },
 
     /// Pause a running task
@@ -291,9 +282,6 @@ pub enum TaskCommands {
     /// Resume a paused task
     Resume {
         task_id: String,
-
-        #[arg(long)]
-        detach: bool,
     },
 
     /// View task logs
@@ -323,9 +311,6 @@ pub enum TaskCommands {
     /// Retry a failed task item
     Retry {
         task_item_id: String,
-
-        #[arg(long)]
-        detach: bool,
 
         #[arg(short, long)]
         force: bool,

@@ -181,9 +181,9 @@ Verify task lifecycle (create, list, info, start, pause, delete) works through g
    ```bash
    ./target/release/orchestrator task info "$TASK_ID" -o json
    ```
-5. Start task (detach — let embedded worker pick it up):
+5. Start task (queue it for the embedded worker):
    ```bash
-   ./target/release/orchestrator task start "$TASK_ID" --detach
+   ./target/release/orchestrator task start "$TASK_ID"
    ```
 6. Wait for worker to finish, then check status:
    ```bash
@@ -204,7 +204,7 @@ Verify task lifecycle (create, list, info, start, pause, delete) works through g
 ### Expected
 - Task is created with status `created` or `pending`.
 - `task list` shows the task in JSON output.
-- `task start --detach` enqueues the task (status `pending`).
+- `task start` enqueues the task (status `pending`).
 - Embedded worker picks up and executes the task.
 - After execution, task reaches terminal status (`completed` or `failed`).
 - `task logs` returns run output grouped by phase.
@@ -237,7 +237,7 @@ Verify embedded daemon workers consume pending tasks concurrently and atomically
 2. Create 6 tasks in detach mode:
    ```bash
    for i in $(seq 1 6); do
-     ./target/release/orchestrator task create --name "batch-$i" --goal "batch test $i" --project cs-qa --detach
+     ./target/release/orchestrator task create --name "batch-$i" --goal "batch test $i" --project cs-qa
    done
    ```
 3. Monitor worker progress:

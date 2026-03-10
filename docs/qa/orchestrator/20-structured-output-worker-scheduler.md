@@ -15,7 +15,7 @@ This document validates the refactor that moved `collab` capabilities into the s
 - structured output persistence in `command_runs`
 - phase execution result publication to MessageBus with observable events
 - dual CLI model: foreground run and detach queue + worker loop
-- C/S mode: daemon-embedded workers replace standalone `task worker start`
+- C/S mode: daemon-embedded workers replace standalone worker lifecycle commands
 
 Entry point: `orchestrator` (CLI client) or `orchestratord` (daemon)
 
@@ -159,26 +159,26 @@ WHERE task_id = '{task_id}'
 
 ---
 
-## Scenario 4: Detach Mode Enqueues Tasks
+## Scenario 4: Queue-Only Lifecycle Enqueues Tasks
 
 ### Preconditions
 - Runtime initialized and config applied.
 
 ### Goal
-Verify `--detach` no longer executes task inline and enqueues it for worker processing.
+Verify task lifecycle commands no longer execute inline and always enqueue work for daemon processing.
 
 ### Steps
-1. Create a task in detach mode:
+1. Create a task:
    ```bash
-   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "detach-create" --goal "queue" --detach | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "queue-create" --goal "queue" | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 2. Enqueue an existing task explicitly:
    ```bash
-   orchestrator task start "${TASK_ID}" --detach
+   orchestrator task start "${TASK_ID}"
    ```
 3. Query queue and scheduling events:
    ```bash
-   orchestrator task worker status
+   orchestrator task info "${TASK_ID}" -o json
    sqlite3 data/agent_orchestrator.db "SELECT event_type FROM events WHERE task_id='${TASK_ID}' AND event_type='scheduler_enqueued' ORDER BY id DESC LIMIT 5;"
    ```
 
@@ -205,31 +205,28 @@ WHERE id = '{task_id}';
 Verify worker loop consumes pending tasks and honors stop signal.
 
 ### Steps
-1. Start worker in terminal A:
+1. Start the daemon with multiple embedded workers in terminal A:
    ```bash
-   orchestrator task worker start --poll-ms 500 --workers 3
+   ./target/release/orchestratord --foreground --workers 3
    ```
-2. In terminal B, monitor queue:
+2. In terminal B, monitor queue and task progress:
    ```bash
-   orchestrator task worker status
    orchestrator task list -o json
+   orchestrator task watch "${TASK_ID}" --interval 1
    ```
-3. Stop worker:
+3. Stop the daemon after the queue drains:
    ```bash
-   orchestrator task worker stop
+   kill "${DAEMON_PID}"
    ```
-4. Wait for worker process to fully exit, then confirm stop signal cleared:
+4. Wait for daemon process to fully exit:
    ```bash
-   # Wait for worker process to exit
-   while pgrep -f "orchestrator task worker" > /dev/null 2>&1; do sleep 1; done
-   orchestrator task worker status
+   while kill -0 "${DAEMON_PID}" 2>/dev/null; do sleep 1; done
    ```
 
 ### Expected
 - Worker consumes pending tasks and updates task status to terminal state.
 - Pending queue claim is atomic under parallel consumers (no duplicate pending-task execution).
-- `task worker stop` triggers graceful loop termination.
-- `stop_signal` returns `false` after worker exits and clears marker file.
+- Stopping the daemon terminates embedded workers gracefully.
 
 ### Troubleshooting
 

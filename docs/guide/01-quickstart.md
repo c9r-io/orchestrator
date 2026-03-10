@@ -147,7 +147,7 @@ Instead of running tasks inline, you can use the daemon for background execution
 
 # In another terminal — use the gRPC client
 ./target/release/orchestrator apply -f my-first-workflow.yaml
-./target/release/orchestrator task create --name "my-task" --goal "QA" --workflow simple_qa --detach
+./target/release/orchestrator task create --name "my-task" --goal "QA" --workflow simple_qa
 ./target/release/orchestrator task list
 ./target/release/orchestrator task logs <task_id>
 ```

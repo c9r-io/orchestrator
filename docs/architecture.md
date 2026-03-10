@@ -177,9 +177,9 @@ A **Task** is the unit of execution, binding a Workspace and Workflow to a set o
 
 #### Scheduler Layer
 
-- **Dual Mode Execution**:
-  - Foreground: `task create/start/resume/retry` runs inline and waits for completion.
-  - Background: `--detach` enqueues tasks for worker processing.
+- **Queue-Only Task Execution**:
+  - `task create/start/resume/retry` enqueue work for daemon workers in C/S mode.
+  - Foreground waiting is handled by explicit observer commands such as `task watch` and `task logs --follow`, not lifecycle flags.
 - **Worker Models**:
   - Standalone: `task worker start --workers N` runs a separate worker loop.
   - C/S: `orchestratord --workers N` embeds workers directly in the daemon process.

@@ -140,7 +140,6 @@ orchestrator task create \
 | `-W, --workflow` | 工作流 ID |
 | `-t, --target-file` | 目标文件（可重复） |
 | `--no-start` | 创建但不自动启动 |
-| `--detach` | 加入后台工作器队列 |
 
 ### task list / info
 
@@ -157,7 +156,6 @@ orchestrator task info <task_id> -o yaml
 
 ```bash
 orchestrator task start <task_id>
-orchestrator task start <task_id> --detach
 
 orchestrator task pause <task_id>
 orchestrator task resume <task_id>
@@ -299,16 +297,16 @@ orchestrator describe <kind/name> [--project <id>]
 orchestrator delete <kind/name> --force [--project <id>]
 
 # 任务生命周期
-orchestrator task create --name X --goal Y [--project <id>] [--workflow Z] [--detach]
+orchestrator task create --name X --goal Y [--project <id>] [--workflow Z]
 orchestrator task list [-o json] [--project <id>] [--status <s>]
 orchestrator task info <id> [-o json]
-orchestrator task start <id> [--detach]
+orchestrator task start <id>
 orchestrator task pause <id>
-orchestrator task resume <id> [--detach]
+orchestrator task resume <id>
 orchestrator task logs <id> [--tail N] [--follow]
 orchestrator task watch <id>
 orchestrator task trace <id> [--verbose]
-orchestrator task retry <item_id> [--detach] [--force]
+orchestrator task retry <item_id> [--force]
 orchestrator task delete <id> --force
 
 # 项目清理

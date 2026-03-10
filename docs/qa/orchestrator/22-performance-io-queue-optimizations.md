@@ -180,15 +180,15 @@ LIMIT 1;
 ### Steps
 1. Create one pending task:
    ```bash
-   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "atomic-claim" --goal "single winner" --detach | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "atomic-claim" --goal "single winner" | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
-2. Start worker with parallel consumers:
+2. Start the daemon with parallel embedded workers:
    ```bash
-   orchestrator task worker start --poll-ms 200 --workers 2
+   ./target/release/orchestratord --foreground --workers 2
    ```
-3. Stop worker after completion:
+3. Stop the daemon after completion:
    ```bash
-   orchestrator task worker stop
+   kill "${DAEMON_PID}"
    ```
 4. Verify task executed once by phase-run uniqueness:
    ```bash
@@ -215,23 +215,23 @@ WHERE id = '{task_id}';
 - Multiple pending tasks exist (for example, 20+).
 
 ### Steps
-1. Batch create detached tasks:
+1. Batch create queued tasks:
    ```bash
    for i in $(seq 1 20); do
-     orchestrator task create --project "${QA_PROJECT}" --name "mw-${i}" --goal "throughput" --detach >/dev/null
+     orchestrator task create --project "${QA_PROJECT}" --name "mw-${i}" --goal "throughput" >/dev/null
    done
    ```
-2. Start high worker count:
+2. Start high daemon worker count:
    ```bash
-   orchestrator task worker start --poll-ms 200 --workers 20
+   ./target/release/orchestratord --foreground --workers 20
    ```
 3. During run, sample running count:
    ```bash
    sqlite3 data/agent_orchestrator.db "SELECT COUNT(*) FROM tasks WHERE status='running';"
    ```
-4. Stop worker:
+4. Stop the daemon:
    ```bash
-   orchestrator task worker stop
+   kill "${DAEMON_PID}"
    ```
 
 ### Expected

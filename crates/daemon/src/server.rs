@@ -74,26 +74,11 @@ impl OrchestratorService for OrchestratorServer {
         let mut message = format!("Task created: {}", created.id);
 
         if !req.no_start {
-            if req.detach {
-                agent_orchestrator::service::task::enqueue_task(&self.state, &created.id)
-                    .await
-                    .map_err(|e| Status::internal(format!("enqueue failed: {e}")))?;
-                status = "enqueued".to_string();
-                message = format!("Task enqueued: {}", created.id);
-            } else {
-                agent_orchestrator::service::task::start_task_blocking(
-                    self.state.clone(),
-                    &created.id,
-                )
+            agent_orchestrator::service::task::enqueue_task(&self.state, &created.id)
                 .await
-                .map_err(|e| Status::internal(format!("start failed: {e}")))?;
-                let summary =
-                    agent_orchestrator::service::task::load_summary(&self.state, &created.id)
-                        .await
-                        .map_err(|e| Status::internal(format!("load summary: {e}")))?;
-                status = summary.status.clone();
-                message = format!("Task finished: {} status={}", summary.id, summary.status);
-            }
+                .map_err(|e| Status::internal(format!("enqueue failed: {e}")))?;
+            status = "enqueued".to_string();
+            message = format!("Task enqueued: {}", created.id);
         }
 
         Ok(Response::new(TaskCreateResponse {
@@ -116,28 +101,14 @@ impl OrchestratorService for OrchestratorServer {
         .await
         .map_err(|e| Status::internal(format!("{e}")))?;
 
-        if req.detach {
-            agent_orchestrator::service::task::enqueue_task(&self.state, &id)
-                .await
-                .map_err(|e| Status::internal(format!("{e}")))?;
-            Ok(Response::new(TaskStartResponse {
-                task_id: id.clone(),
-                status: "enqueued".into(),
-                message: format!("Task enqueued: {id}"),
-            }))
-        } else {
-            agent_orchestrator::service::task::start_task_blocking(self.state.clone(), &id)
-                .await
-                .map_err(|e| Status::internal(format!("{e}")))?;
-            let summary = agent_orchestrator::service::task::load_summary(&self.state, &id)
-                .await
-                .map_err(|e| Status::internal(format!("{e}")))?;
-            Ok(Response::new(TaskStartResponse {
-                task_id: id.clone(),
-                status: summary.status.clone(),
-                message: format!("Task finished: {} status={}", summary.id, summary.status),
-            }))
-        }
+        agent_orchestrator::service::task::enqueue_task(&self.state, &id)
+            .await
+            .map_err(|e| Status::internal(format!("{e}")))?;
+        Ok(Response::new(TaskStartResponse {
+            task_id: id.clone(),
+            status: "enqueued".into(),
+            message: format!("Task enqueued: {id}"),
+        }))
     }
 
     async fn task_pause(
@@ -166,28 +137,14 @@ impl OrchestratorService for OrchestratorServer {
             .await
             .map_err(|e| Status::internal(format!("{e}")))?;
 
-        if req.detach {
-            agent_orchestrator::service::task::enqueue_task(&self.state, &id)
-                .await
-                .map_err(|e| Status::internal(format!("{e}")))?;
-            Ok(Response::new(TaskResumeResponse {
-                task_id: id.clone(),
-                status: "enqueued".into(),
-                message: format!("Task enqueued: {id}"),
-            }))
-        } else {
-            agent_orchestrator::service::task::start_task_blocking(self.state.clone(), &id)
-                .await
-                .map_err(|e| Status::internal(format!("{e}")))?;
-            let summary = agent_orchestrator::service::task::load_summary(&self.state, &id)
-                .await
-                .map_err(|e| Status::internal(format!("{e}")))?;
-            Ok(Response::new(TaskResumeResponse {
-                task_id: id.clone(),
-                status: summary.status.clone(),
-                message: format!("Task finished: {} status={}", summary.id, summary.status),
-            }))
-        }
+        agent_orchestrator::service::task::enqueue_task(&self.state, &id)
+            .await
+            .map_err(|e| Status::internal(format!("{e}")))?;
+        Ok(Response::new(TaskResumeResponse {
+            task_id: id.clone(),
+            status: "enqueued".into(),
+            message: format!("Task enqueued: {id}"),
+        }))
     }
 
     async fn task_delete(
@@ -225,28 +182,14 @@ impl OrchestratorService for OrchestratorServer {
             agent_orchestrator::service::task::retry_task_item(&self.state, &req.task_item_id)
                 .map_err(|e| Status::internal(format!("{e}")))?;
 
-        if req.detach {
-            agent_orchestrator::service::task::enqueue_task(&self.state, &task_id)
-                .await
-                .map_err(|e| Status::internal(format!("{e}")))?;
-            Ok(Response::new(TaskRetryResponse {
-                task_id: task_id.clone(),
-                status: "enqueued".into(),
-                message: format!("Task enqueued: {task_id}"),
-            }))
-        } else {
-            agent_orchestrator::service::task::start_task_blocking(self.state.clone(), &task_id)
-                .await
-                .map_err(|e| Status::internal(format!("{e}")))?;
-            let summary = agent_orchestrator::service::task::load_summary(&self.state, &task_id)
-                .await
-                .map_err(|e| Status::internal(format!("{e}")))?;
-            Ok(Response::new(TaskRetryResponse {
-                task_id: task_id.clone(),
-                status: summary.status.clone(),
-                message: format!("Retry finished: {} status={}", summary.id, summary.status),
-            }))
-        }
+        agent_orchestrator::service::task::enqueue_task(&self.state, &task_id)
+            .await
+            .map_err(|e| Status::internal(format!("{e}")))?;
+        Ok(Response::new(TaskRetryResponse {
+            task_id: task_id.clone(),
+            status: "enqueued".into(),
+            message: format!("Task enqueued: {task_id}"),
+        }))
     }
 
     // ─── Task queries ─────────────────────────────────────────

@@ -108,10 +108,11 @@ Daemon lifecycle:
    orchestrator task create --project <qa-project-id> --name "contract-check" --goal "check" --no-start
    ```
 
-6. Validate new scheduling flags:
+6. Validate task lifecycle help no longer exposes legacy scheduling flags:
    ```bash
-   orchestrator task create --help | rg -- "--detach"
-   orchestrator task start --help | rg -- "--detach"
+   orchestrator task create --help | rg -- "--no-start"
+   ! orchestrator task create --help | rg -- "--detach|--attach"
+   ! orchestrator task start --help | rg -- "--detach|--attach"
    ```
 
 ### Expected Result
@@ -119,7 +120,7 @@ Daemon lifecycle:
 - `describe workspace` accepts positional workspace name.
 - Output format flags work for commands that support `-o`.
 - `task create --format ...` is never required in QA docs.
-- `--detach` flags are part of the CLI contract.
+- Legacy `--detach` / `--attach` flags are absent from the CLI contract.
 
 ---
 

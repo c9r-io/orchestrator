@@ -112,7 +112,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/17-dynamic-yaml-integration.md` | 1 | Split from doc 13 |
 | orchestrator | `docs/qa/orchestrator/18-kubectl-style-extensions.md` | 4 | Get list / create / stdin apply / label selector |
 | orchestrator | `docs/qa/orchestrator/19-scheduler-repository-refactor-regression.md` | 5 | P0/P1 scheduler repository refactor regression and observability checks |
-| orchestrator | `docs/qa/orchestrator/20-structured-output-worker-scheduler.md` | 5 | Structured output validation + detach/worker scheduling mainline |
+| orchestrator | `docs/qa/orchestrator/20-structured-output-worker-scheduler.md` | 5 | Structured output validation + queue-only daemon worker scheduling mainline |
 | orchestrator | `docs/qa/orchestrator/21-runner-security-observability.md` | 5 | Runner allowlist boundary, redaction, and task execution metrics observability |
 | orchestrator | `docs/qa/orchestrator/22-performance-io-queue-optimizations.md` | 5 | Transactional phase-result persistence, bounded output reads, true tail, and atomic multi-worker queue checks |
 | orchestrator | `docs/qa/orchestrator/23-dynamic-plan-step-exec-tty.md` | 5 | Dynamic `plan` step insertion, step-level `tty`, and `exec` target contract |
@@ -149,6 +149,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/54-step-execution-profiles.md` | 5 | Step-level ExecutionProfile: resource round-trip, validation, mixed host/sandbox routing, compatibility default |
 | orchestrator | `docs/qa/orchestrator/55-sandbox-write-boundaries.md` | 2 | Sandbox file write boundaries: deny workspace-root writes, allow declared writable subtree |
 | orchestrator | `docs/qa/orchestrator/56-sandbox-resource-network-enforcement.md` | 3 | Sandbox resource/network enforcement: open-files limit event, network deny event, unsupported allowlist gating |
+| orchestrator | `docs/qa/orchestrator/57-sandbox-resource-limits-extended.md` | 3 | Sandbox resource limits for CPU, memory, processes |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
 | script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |

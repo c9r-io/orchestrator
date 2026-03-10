@@ -1,7 +1,7 @@
 # Orchestrator - CLI Task Lifecycle
 
 **Module**: orchestrator
-**Scope**: Validate foreground task execution, detach queue mode, worker lifecycle control, logs, and retry
+**Scope**: Validate queue-only task execution, daemon worker consumption, logs, and retry
 **Scenarios**: 5
 **Priority**: High
 
@@ -9,11 +9,9 @@
 
 ## Background
 
-This document validates task lifecycle behavior after scheduler refactor:
+This document validates task lifecycle behavior after the C/S queue-only refactor:
 
-- foreground execution path (`task start/resume/retry`)
-- detached queue execution (`--detach`)
-- worker commands (`task worker start|stop|status`) — standalone mode
+- queue-only execution path for `task create/start/resume/retry`
 - daemon-embedded workers (`orchestratord --workers N`) — C/S mode
 - task logs and retry behavior
 
@@ -33,7 +31,7 @@ Runtime control commands also need to remain stable while a task is actively run
 
 Entry point: `orchestrator task <command>` (standalone) or `./target/release/orchestrator task <command>` (C/S client)
 
-**C/S mode note**: In C/S mode, the daemon (`orchestratord`) embeds background workers that automatically consume pending tasks. The standalone `task worker start|stop|status` commands are not needed — use `orchestratord --workers N` instead. See `docs/qa/orchestrator/53-client-server-architecture.md` for C/S-specific scenarios.
+**C/S mode note**: In C/S mode, the daemon (`orchestratord`) embeds background workers that automatically consume pending tasks. Use `orchestratord --workers N` plus `task info/watch/logs` for observation. See `docs/qa/orchestrator/53-client-server-architecture.md` for C/S-specific scenarios.
 
 ### Project Isolation Setup
 
@@ -88,9 +86,9 @@ Expected:
 
 For manual verification against a real in-flight task from the fixed probe fixtures:
 
-1. Create a detached task that will run long enough to observe live state:
+1. Create a task that will run long enough to observe live state:
    ```bash
-   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_runtime_control --name "runtime-control" --goal "runtime control validation" --detach | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_runtime_control --name "runtime-control" --goal "runtime control validation" | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 2. Start a worker in another terminal and wait for the task to enter `running`.
 3. While the task is still running:
@@ -119,9 +117,9 @@ the active runtime config intact and only apply the dedicated probe fixtures.
    ```bash
    orchestrator apply -f fixtures/manifests/bundles/self-referential-probe-fixtures.yaml
    ```
-2. Submit a detached task directly against the global workspace `self_ref_probe_ws` using `self_ref_probe_runtime_control`.
-3. Submit a detached task directly against the global workspace `self_ref_probe_ws` using `self_ref_probe_low_output`.
-4. Submit a detached task directly against the global workspace `self_ref_probe_ws` using `self_ref_probe_active_output`.
+2. Submit a task directly against the global workspace `self_ref_probe_ws` using `self_ref_probe_runtime_control`.
+3. Submit a task directly against the global workspace `self_ref_probe_ws` using `self_ref_probe_low_output`.
+4. Submit a task directly against the global workspace `self_ref_probe_ws` using `self_ref_probe_active_output`.
 
 Expected:
 - The self-referential probe workflows create and run without requiring `self_test`.
@@ -131,7 +129,7 @@ Expected:
 
 ---
 
-## Scenario 1: Foreground Task Start
+## Scenario 1: Queue-Only Task Start
 
 ### Preconditions
 - Runtime initialized and config applied.
@@ -144,9 +142,9 @@ Expected:
    ```bash
    TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --workflow probe_task_scoped --name "fg-start" --goal "foreground" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
-2. Start task in foreground:
+2. Start task:
    ```bash
-   orchestrator task start "${TASK_ID}" || true
+   orchestrator task start "${TASK_ID}"
    ```
 3. Inspect result:
    ```bash
@@ -154,8 +152,8 @@ Expected:
    ```
 
 ### Expected
-- Command blocks until run loop reaches terminal status.
-- Task transitions through `running` to `completed` or `failed`.
+- Command returns promptly with an enqueue message.
+- Task transitions through `pending` to `running`, then to `completed` or `failed` after daemon worker consumption.
 
 ### Expected Data State
 ```sql
@@ -167,26 +165,26 @@ WHERE id = '{task_id}';
 
 ---
 
-## Scenario 2: Detach Enqueue Mode
+## Scenario 2: Create/Start Enqueue Mode
 
 ### Preconditions
 - Runtime initialized.
 
 ### Goal
-Verify `--detach` does not execute inline and enqueues task.
+Verify `task create` and `task start` always enqueue work and never execute inline.
 
 ### Steps
-1. Create in detach mode:
+1. Create a task:
    ```bash
-   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "detach-mode" --goal "queue" --detach | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "queue-mode" --goal "queue" | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 2. Check task state:
    ```bash
    orchestrator task info "${TASK_ID}" -o json
    ```
-3. Re-enqueue with start detach:
+3. Re-enqueue explicitly:
    ```bash
-   orchestrator task start "${TASK_ID}" --detach
+   orchestrator task start "${TASK_ID}"
    ```
 
 ### Expected
@@ -203,38 +201,29 @@ WHERE id = '{task_id}';
 
 ---
 
-## Scenario 3: Worker Start/Status/Stop
+## Scenario 3: Daemon Worker Consumption
 
 ### Preconditions
 - At least one pending task exists.
 
 ### Steps
-1. Start worker in terminal A:
+1. Start the daemon with embedded workers:
    ```bash
-   orchestrator task worker start --poll-ms 500
+   ./target/release/orchestratord --foreground --workers 3
    ```
-   Optional (parallel consumers):
+2. In another terminal, watch the task until it leaves `pending`:
    ```bash
-   orchestrator task worker start --poll-ms 500 --workers 3
+   orchestrator task watch "${TASK_ID}" --interval 1
    ```
-2. In terminal B, check status:
+3. Inspect final status:
    ```bash
-   orchestrator task worker status
-   ```
-3. Stop worker:
-   ```bash
-   orchestrator task worker stop
-   ```
-4. Re-check status:
-   ```bash
-   orchestrator task worker status
+   orchestrator task info "${TASK_ID}" -o json
    ```
 
 ### Expected
-- Worker consumes pending tasks while running.
-- With `--workers N`, pending tasks can be consumed concurrently by N consumers.
-- Stop signal terminates worker loop gracefully.
-- `task worker status` reflects pending count and stop-signal state.
+- Embedded daemon workers consume pending tasks while running.
+- With `--workers N`, pending tasks can be consumed concurrently by N workers.
+- `task watch` and `task info` reflect the status change from `pending` to an executing/terminal state.
 
 ### Expected Data State
 ```sql
@@ -244,7 +233,7 @@ WHERE task_id = '{task_id}'
   AND event_type = 'scheduler_enqueued'
 ORDER BY id DESC
 LIMIT 5;
--- Expected: enqueue events exist for detached submissions
+-- Expected: enqueue events exist for queued submissions
 ```
 
 ---
@@ -284,7 +273,7 @@ ORDER BY started_at DESC;
 
 ---
 
-## Scenario 5: Task Retry (Foreground and Detach)
+## Scenario 5: Task Retry (Queue-Only)
 
 ### Preconditions
 - A task has at least one failed or unresolved item.
@@ -298,19 +287,14 @@ ORDER BY started_at DESC;
    ```bash
    orchestrator task retry {task_item_id} 2>&1; echo "exit=$?"
    ```
-3. Retry in foreground with `--force`:
+3. Retry with `--force`:
    ```bash
-   orchestrator task retry {task_item_id} --force || true
-   ```
-4. Retry in detach mode with `--force`:
-   ```bash
-   orchestrator task retry {task_item_id} --detach --force
+   orchestrator task retry {task_item_id} --force
    ```
 
 ### Expected
 - Without `--force`: prints warning to stderr and exits with code 1; no state change occurs.
-- Foreground retry with `--force` runs immediately and returns terminal result.
-- Detach retry with `--force` enqueues associated task and returns without inline execution.
+- Retry with `--force` enqueues associated task and returns without inline execution.
 
 ### Expected Data State
 ```sql
@@ -326,8 +310,8 @@ WHERE id = '{task_item_id}';
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Foreground Task Start | ☐ | | | |
-| 2 | Detach Enqueue Mode | ☐ | | | |
-| 3 | Worker Start/Status/Stop | ☐ | | | |
+| 1 | Queue-Only Task Start | ☐ | | | |
+| 2 | Create/Start Enqueue Mode | ☐ | | | |
+| 3 | Daemon Worker Consumption | ☐ | | | |
 | 4 | Task Logs | ☐ | | | |
-| 5 | Task Retry (Foreground and Detach) | ☐ | | | |
+| 5 | Task Retry (Queue-Only) | ☐ | | | |
