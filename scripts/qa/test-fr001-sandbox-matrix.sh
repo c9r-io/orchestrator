@@ -30,6 +30,13 @@ run_task() {
   )
   orchestrator task start "${task_id}" || true
 
+  for _ in {1..30}; do
+    if orchestrator task info "${task_id}" | grep -qiE 'status:[[:space:]]*(completed|failed)'; then
+      break
+    fi
+    sleep 1
+  done
+
   local payload
   payload=$(
     sqlite3 "${DB_PATH}" \

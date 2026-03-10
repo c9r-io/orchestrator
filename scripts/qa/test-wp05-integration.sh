@@ -149,6 +149,14 @@ create_and_run_task() {
 
   # Start task (may fail for invariant tests — that's expected)
   $ORCH task start "$task_id" >/dev/null 2>&1 || true
+
+  for _ in {1..30}; do
+    if $ORCH task info "$task_id" | grep -qiE 'status:[[:space:]]*(completed|failed)'; then
+      break
+    fi
+    sleep 1
+  done
+
   echo "$task_id"
 }
 
