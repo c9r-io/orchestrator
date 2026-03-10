@@ -5,11 +5,11 @@ use crate::runner::kill_child_process_group;
 use crate::state::InnerState;
 use anyhow::Result;
 use serde_json::json;
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::time::Instant;
-#[cfg(unix)]
-use std::os::unix::process::ExitStatusExt;
 
 use super::types::HEARTBEAT_INTERVAL_SECS;
 use super::types::{HeartbeatProgress, WaitResult};

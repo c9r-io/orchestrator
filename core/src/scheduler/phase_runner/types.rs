@@ -38,6 +38,7 @@ pub(super) struct HeartbeatSample {
 pub(super) struct SandboxViolationInfo {
     pub denied: bool,
     pub event_type: Option<&'static str>,
+    pub reason_code: Option<&'static str>,
     pub reason: Option<String>,
     pub stderr_excerpt: Option<String>,
     pub resource_kind: Option<SandboxResourceKind>,
@@ -87,6 +88,7 @@ pub(super) struct ValidatedOutput {
     pub validation_error: Option<String>,
     pub sandbox_denied: bool,
     pub sandbox_event_type: Option<&'static str>,
+    pub sandbox_reason_code: Option<&'static str>,
     pub sandbox_denial_reason: Option<String>,
     pub sandbox_denial_stderr_excerpt: Option<String>,
     pub sandbox_resource_kind: Option<SandboxResourceKind>,

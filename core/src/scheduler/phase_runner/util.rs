@@ -7,6 +7,22 @@ use tracing::debug;
 
 use super::types::*;
 
+const SANDBOX_PROBE_PREFIX: &str = "SANDBOX_PROBE";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SandboxProbeKind {
+    Resource(SandboxResourceKind),
+    NetworkBlocked,
+}
+
+#[derive(Debug, Clone)]
+struct SandboxProbeMarker {
+    kind: SandboxProbeKind,
+    reason_code: &'static str,
+    reason: String,
+    network_target: Option<String>,
+}
+
 pub(super) fn step_scope_label(scope: StepScope) -> &'static str {
     match scope {
         StepScope::Task => "task",
@@ -120,12 +136,36 @@ pub(super) async fn detect_sandbox_violation(
     let stderr_excerpt = sanitize_stderr_excerpt(&stderr_tail);
     let lower_stderr = stderr_tail.to_lowercase();
 
+    if let Some(marker) = detect_probe_marker(&stderr_tail) {
+        return match marker.kind {
+            SandboxProbeKind::Resource(resource_kind) => SandboxViolationInfo {
+                denied: true,
+                event_type: Some("sandbox_resource_exceeded"),
+                reason_code: Some(marker.reason_code),
+                reason: Some(marker.reason),
+                stderr_excerpt,
+                resource_kind: Some(resource_kind),
+                network_target: None,
+            },
+            SandboxProbeKind::NetworkBlocked => SandboxViolationInfo {
+                denied: true,
+                event_type: Some("sandbox_network_blocked"),
+                reason_code: Some(marker.reason_code),
+                reason: Some(marker.reason),
+                stderr_excerpt,
+                resource_kind: None,
+                network_target: marker.network_target,
+            },
+        };
+    }
+
     if execution_profile.network_mode == crate::config::ExecutionNetworkMode::Allowlist
         && lower_stderr.contains("does not support network allowlists")
     {
         return SandboxViolationInfo {
             denied: true,
             event_type: Some("sandbox_network_blocked"),
+            reason_code: Some("unsupported_backend_feature"),
             reason: Some("unsupported_backend_feature".to_string()),
             stderr_excerpt,
             resource_kind: None,
@@ -139,6 +179,7 @@ pub(super) async fn detect_sandbox_violation(
         return SandboxViolationInfo {
             denied: true,
             event_type: Some("sandbox_resource_exceeded"),
+            reason_code: Some(resource_kind_reason_code(&resource_kind)),
             reason: Some(format!("{}_limit_exceeded", resource_kind.as_str())),
             stderr_excerpt,
             resource_kind: Some(resource_kind),
@@ -152,6 +193,7 @@ pub(super) async fn detect_sandbox_violation(
         return SandboxViolationInfo {
             denied: true,
             event_type: Some("sandbox_network_blocked"),
+            reason_code: Some("network_blocked"),
             reason: Some("network_blocked".to_string()),
             stderr_excerpt,
             resource_kind: None,
@@ -166,6 +208,7 @@ pub(super) async fn detect_sandbox_violation(
     SandboxViolationInfo {
         denied: true,
         event_type: Some("sandbox_denied"),
+        reason_code: Some("file_write_denied"),
         reason: Some("file_write_denied".to_string()),
         stderr_excerpt,
         resource_kind: None,
@@ -185,6 +228,60 @@ fn sanitize_stderr_excerpt(stderr_tail: &str) -> Option<String> {
     } else {
         Some(excerpt.to_string())
     }
+}
+
+fn detect_probe_marker(stderr_tail: &str) -> Option<SandboxProbeMarker> {
+    let line = stderr_tail
+        .lines()
+        .rev()
+        .find(|line| line.contains(SANDBOX_PROBE_PREFIX))?;
+    let fields = parse_probe_fields(line);
+    match fields.get("resource").copied() {
+        Some("open_files") => Some(SandboxProbeMarker {
+            kind: SandboxProbeKind::Resource(SandboxResourceKind::OpenFiles),
+            reason_code: "open_files_limit_exceeded",
+            reason: "open_files_limit_exceeded".to_string(),
+            network_target: None,
+        }),
+        Some("cpu") => Some(SandboxProbeMarker {
+            kind: SandboxProbeKind::Resource(SandboxResourceKind::Cpu),
+            reason_code: "cpu_limit_exceeded",
+            reason: "cpu_limit_exceeded".to_string(),
+            network_target: None,
+        }),
+        Some("memory") => Some(SandboxProbeMarker {
+            kind: SandboxProbeKind::Resource(SandboxResourceKind::Memory),
+            reason_code: "memory_limit_exceeded",
+            reason: "memory_limit_exceeded".to_string(),
+            network_target: None,
+        }),
+        Some("processes") => Some(SandboxProbeMarker {
+            kind: SandboxProbeKind::Resource(SandboxResourceKind::Processes),
+            reason_code: "processes_limit_exceeded",
+            reason: "processes_limit_exceeded".to_string(),
+            network_target: None,
+        }),
+        _ if fields.get("network").copied() == Some("blocked") => Some(SandboxProbeMarker {
+            kind: SandboxProbeKind::NetworkBlocked,
+            reason_code: "network_blocked",
+            reason: "network_blocked".to_string(),
+            network_target: fields.get("target").map(|value| (*value).to_string()),
+        }),
+        _ => None,
+    }
+}
+
+fn parse_probe_fields(line: &str) -> std::collections::HashMap<&str, &str> {
+    let mut fields = std::collections::HashMap::new();
+    for token in line.split_whitespace() {
+        if token == SANDBOX_PROBE_PREFIX {
+            continue;
+        }
+        if let Some((key, value)) = token.split_once('=') {
+            fields.insert(key, value);
+        }
+    }
+    fields
 }
 
 fn detect_resource_exceeded(
@@ -214,6 +311,15 @@ fn detect_resource_exceeded(
         return Some(SandboxResourceKind::Memory);
     }
     None
+}
+
+fn resource_kind_reason_code(resource_kind: &SandboxResourceKind) -> &'static str {
+    match resource_kind {
+        SandboxResourceKind::Memory => "memory_limit_exceeded",
+        SandboxResourceKind::Cpu => "cpu_limit_exceeded",
+        SandboxResourceKind::Processes => "processes_limit_exceeded",
+        SandboxResourceKind::OpenFiles => "open_files_limit_exceeded",
+    }
 }
 
 fn looks_like_network_denial(lower_stderr: &str) -> bool {

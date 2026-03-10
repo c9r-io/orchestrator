@@ -65,6 +65,7 @@ pub(super) async fn validate_phase_output_stage(
         validation_error: validation.error,
         sandbox_denied: false,
         sandbox_event_type: None,
+        sandbox_reason_code: None,
         sandbox_denial_reason: None,
         sandbox_denial_stderr_excerpt: None,
         sandbox_resource_kind: None,

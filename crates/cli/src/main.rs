@@ -112,6 +112,9 @@ pub enum Commands {
     Debug {
         #[arg(long)]
         component: Option<String>,
+
+        #[command(subcommand)]
+        command: Option<DebugCommands>,
     },
 
     /// Preflight check
@@ -140,6 +143,58 @@ pub enum Commands {
 
     /// Show version
     Version,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum DebugCommands {
+    /// Run a local sandbox probe without contacting the daemon
+    SandboxProbe {
+        #[command(subcommand)]
+        probe: SandboxProbeCommands,
+    },
+
+    #[command(hide = true)]
+    ChildIdle {
+        #[arg(long, default_value = "60")]
+        sleep_secs: u64,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum SandboxProbeCommands {
+    WriteFile {
+        #[arg(long)]
+        path: String,
+
+        #[arg(long, default_value = "probe")]
+        contents: String,
+    },
+    OpenFiles {
+        #[arg(long, default_value = "256")]
+        count: usize,
+    },
+    CpuBurn,
+    AllocMemory {
+        #[arg(long, default_value = "8")]
+        chunk_mb: usize,
+
+        #[arg(long, default_value = "256")]
+        total_mb: usize,
+    },
+    SpawnChildren {
+        #[arg(long, default_value = "64")]
+        count: usize,
+
+        #[arg(long, default_value = "60")]
+        sleep_secs: u64,
+    },
+    DnsResolve {
+        #[arg(long, default_value = "example.com")]
+        host: String,
+
+        #[arg(long, default_value = "443")]
+        port: u16,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -359,6 +414,10 @@ fn main() -> Result<()> {
     rt.block_on(async move {
         match cli.command {
             Commands::Version => commands::version::run().await,
+            Commands::Debug {
+                component: _,
+                command: Some(debug_command),
+            } => commands::debug::run_local(debug_command).await,
             _ => {
                 let mut client = client::connect().await?;
                 commands::dispatch(&mut client, cli.command).await

@@ -169,15 +169,12 @@ async fn run_phase_with_timeout(
     )
     .await?;
 
-    let sandbox_violation = detect_sandbox_violation(
-        &setup.execution_profile,
-        &wait_result,
-        &setup.stderr_path,
-    )
-    .await;
+    let sandbox_violation =
+        detect_sandbox_violation(&setup.execution_profile, &wait_result, &setup.stderr_path).await;
     let validated = super::phase_runner::types::ValidatedOutput {
         sandbox_denied: sandbox_violation.denied,
         sandbox_event_type: sandbox_violation.event_type,
+        sandbox_reason_code: sandbox_violation.reason_code,
         sandbox_denial_reason: sandbox_violation.reason,
         sandbox_denial_stderr_excerpt: sandbox_violation.stderr_excerpt,
         sandbox_resource_kind: sandbox_violation.resource_kind,
@@ -265,6 +262,8 @@ async fn handle_sandbox_backend_error(
             "execution_profile": execution_profile,
             "execution_mode": "sandbox",
             "reason_code": sandbox_err.reason_code,
+            "reason": sandbox_err.reason_code,
+            "resource_kind": sandbox_err.resource_kind.as_ref().map(|value| value.as_str()),
             "backend": sandbox_err.backend,
             "stderr_excerpt": sandbox_err.to_string(),
         }),
@@ -286,7 +285,10 @@ async fn handle_sandbox_backend_error(
         sandbox_denied: true,
         sandbox_denial_reason: Some(sandbox_err.reason_code.to_string()),
         sandbox_violation_kind: Some(sandbox_err.event_type.to_string()),
-        sandbox_resource_kind: None,
+        sandbox_resource_kind: sandbox_err
+            .resource_kind
+            .as_ref()
+            .map(|value| value.as_str().to_string()),
         sandbox_network_target: None,
     }))
 }

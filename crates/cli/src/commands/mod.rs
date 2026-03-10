@@ -1,3 +1,4 @@
+pub mod debug;
 pub mod version;
 
 use anyhow::Result;
@@ -156,7 +157,10 @@ pub async fn dispatch(
         Commands::Task(cmd) => dispatch_task(client, cmd).await,
         Commands::Store(cmd) => dispatch_store(client, cmd).await,
 
-        Commands::Debug { component } => {
+        Commands::Debug {
+            component,
+            command: None,
+        } => {
             let resp = client
                 .config_debug(orchestrator_proto::ConfigDebugRequest { component })
                 .await?
@@ -164,6 +168,11 @@ pub async fn dispatch(
             print!("{}", resp.content);
             Ok(())
         }
+
+        Commands::Debug {
+            component: _,
+            command: Some(_),
+        } => unreachable!("local debug subcommands are handled before daemon dispatch"),
 
         Commands::Check {
             workflow,

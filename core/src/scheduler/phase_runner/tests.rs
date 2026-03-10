@@ -213,7 +213,12 @@ mod cases {
         let path = dir.path().join("stderr.log");
         std::fs::write(&path, "Operation not permitted").expect("write stderr");
 
-        let info = detect_sandbox_violation(&ResolvedExecutionProfile::host(), &wait_result(1, None), &path).await;
+        let info = detect_sandbox_violation(
+            &ResolvedExecutionProfile::host(),
+            &wait_result(1, None),
+            &path,
+        )
+        .await;
 
         assert!(!info.denied);
         assert!(info.reason.is_none());
@@ -233,6 +238,7 @@ mod cases {
 
         assert!(info.denied);
         assert_eq!(info.event_type, Some("sandbox_denied"));
+        assert_eq!(info.reason_code, Some("file_write_denied"));
         assert_eq!(info.reason.as_deref(), Some("file_write_denied"));
         assert_eq!(
             info.stderr_excerpt.as_deref(),
@@ -275,7 +281,74 @@ mod cases {
 
         assert!(info.denied);
         assert_eq!(info.event_type, Some("sandbox_resource_exceeded"));
-        assert_eq!(info.resource_kind.map(|value| value.as_str()), Some("open_files"));
+        assert_eq!(info.reason_code, Some("open_files_limit_exceeded"));
+        assert_eq!(
+            info.resource_kind.map(|value| value.as_str()),
+            Some("open_files")
+        );
+    }
+
+    #[tokio::test]
+    async fn detect_sandbox_violation_detects_probe_memory_marker() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("stderr.log");
+        std::fs::write(
+            &path,
+            "SANDBOX_PROBE resource=memory reason_code=memory_limit_exceeded error=memory_limit\n",
+        )
+        .expect("write stderr");
+        let mut profile = sandbox_profile();
+        profile.max_memory_mb = Some(32);
+
+        let info = detect_sandbox_violation(&profile, &wait_result(1, None), &path).await;
+
+        assert!(info.denied);
+        assert_eq!(info.event_type, Some("sandbox_resource_exceeded"));
+        assert_eq!(info.reason_code, Some("memory_limit_exceeded"));
+        assert_eq!(
+            info.resource_kind.map(|value| value.as_str()),
+            Some("memory")
+        );
+    }
+
+    #[tokio::test]
+    async fn detect_sandbox_violation_detects_probe_process_marker() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("stderr.log");
+        std::fs::write(
+            &path,
+            "SANDBOX_PROBE resource=processes reason_code=processes_limit_exceeded error=resource_temporarily_unavailable\n",
+        )
+        .expect("write stderr");
+        let mut profile = sandbox_profile();
+        profile.max_processes = Some(1);
+
+        let info = detect_sandbox_violation(&profile, &wait_result(1, None), &path).await;
+
+        assert!(info.denied);
+        assert_eq!(info.event_type, Some("sandbox_resource_exceeded"));
+        assert_eq!(info.reason_code, Some("processes_limit_exceeded"));
+        assert_eq!(
+            info.resource_kind.map(|value| value.as_str()),
+            Some("processes")
+        );
+    }
+
+    #[tokio::test]
+    async fn detect_sandbox_violation_detects_cpu_signal() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("stderr.log");
+        std::fs::write(&path, "").expect("write stderr");
+        let mut profile = sandbox_profile();
+        profile.max_cpu_seconds = Some(1);
+
+        let info =
+            detect_sandbox_violation(&profile, &wait_result(1, Some(libc::SIGXCPU)), &path).await;
+
+        assert!(info.denied);
+        assert_eq!(info.event_type, Some("sandbox_resource_exceeded"));
+        assert_eq!(info.reason_code, Some("cpu_limit_exceeded"));
+        assert_eq!(info.resource_kind.map(|value| value.as_str()), Some("cpu"));
     }
 
     #[tokio::test]
@@ -292,6 +365,7 @@ mod cases {
 
         assert!(info.denied);
         assert_eq!(info.event_type, Some("sandbox_network_blocked"));
+        assert_eq!(info.reason_code, Some("network_blocked"));
         assert_eq!(info.reason.as_deref(), Some("network_blocked"));
         assert_eq!(
             info.network_target.as_deref(),
@@ -310,12 +384,31 @@ mod cases {
 
         assert!(info.denied);
         assert_eq!(info.event_type, Some("sandbox_network_blocked"));
+        assert_eq!(info.reason_code, Some("network_blocked"));
         assert_eq!(info.reason.as_deref(), Some("network_blocked"));
         assert_eq!(info.network_target.as_deref(), Some("example.com"));
         assert_eq!(
             info.stderr_excerpt.as_deref(),
             Some("curl: (6) Could not resolve host: example.com")
         );
+    }
+
+    #[tokio::test]
+    async fn detect_sandbox_violation_detects_probe_network_marker() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("stderr.log");
+        std::fs::write(
+            &path,
+            "SANDBOX_PROBE network=blocked reason_code=network_blocked target=example.com error=dns_failed\n",
+        )
+        .expect("write stderr");
+
+        let info = detect_sandbox_violation(&sandbox_profile(), &wait_result(1, None), &path).await;
+
+        assert!(info.denied);
+        assert_eq!(info.event_type, Some("sandbox_network_blocked"));
+        assert_eq!(info.reason_code, Some("network_blocked"));
+        assert_eq!(info.network_target.as_deref(), Some("example.com"));
     }
 
     #[tokio::test]

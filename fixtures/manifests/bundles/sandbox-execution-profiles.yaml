@@ -50,6 +50,36 @@ spec:
 apiVersion: orchestrator.dev/v2
 kind: ExecutionProfile
 metadata:
+  name: sandbox_cpu_limit
+spec:
+  mode: sandbox
+  fs_mode: workspace_readonly
+  network_mode: deny
+  max_cpu_seconds: 1
+---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: sandbox_memory_limit
+spec:
+  mode: sandbox
+  fs_mode: workspace_readonly
+  network_mode: deny
+  max_memory_mb: 256
+---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: sandbox_process_limit
+spec:
+  mode: sandbox
+  fs_mode: workspace_readonly
+  network_mode: deny
+  max_processes: 1
+---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
   name: sandbox_network_deny
 spec:
   mode: sandbox
@@ -92,7 +122,7 @@ metadata:
 spec:
   capabilities:
     - sandbox_write_root_deny
-  command: "set -e; echo blocked > sandbox-denied.txt; echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
+  command: "exec ./target/debug/orchestrator debug sandbox-probe write-file --path sandbox-denied.txt --contents blocked"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -101,7 +131,7 @@ metadata:
 spec:
   capabilities:
     - sandbox_write_docs_allow
-  command: "set -e; echo allowed > docs/sandbox-allowed.txt; echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
+  command: "exec ./target/debug/orchestrator debug sandbox-probe write-file --path docs/sandbox-allowed.txt --contents allowed"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -110,7 +140,34 @@ metadata:
 spec:
   capabilities:
     - sandbox_fd_probe
-  command: "python3 -c \"files=[]; [files.append(open('/dev/null','rb')) for _ in range(256)]; print('{\\\"confidence\\\":0.9,\\\"quality_score\\\":0.9,\\\"artifacts\\\":[]}')\""
+  command: "exec ./target/debug/orchestrator debug sandbox-probe open-files --count 256"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: cpu-burner
+spec:
+  capabilities:
+    - sandbox_cpu_probe
+  command: "exec ./target/debug/orchestrator debug sandbox-probe cpu-burn"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: memory-burner
+spec:
+  capabilities:
+    - sandbox_memory_probe
+  command: "exec ./target/debug/orchestrator debug sandbox-probe alloc-memory --chunk-mb 16 --total-mb 1024"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: process-burner
+spec:
+  capabilities:
+    - sandbox_process_probe
+  command: "exec ./target/debug/orchestrator debug sandbox-probe spawn-children --count 8 --sleep-secs 60"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -119,7 +176,7 @@ metadata:
 spec:
   capabilities:
     - sandbox_network_probe
-  command: "python3 -c \"import socket; socket.getaddrinfo('example.com', 443)\""
+  command: "exec ./target/debug/orchestrator debug sandbox-probe dns-resolve --host example.com --port 443"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -206,6 +263,51 @@ spec:
       type: implement
       required_capability: sandbox_network_probe
       execution_profile: sandbox_network_deny
+      enabled: true
+      scope: task
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: sandbox-cpu-limit
+spec:
+  steps:
+    - id: implement
+      type: implement
+      required_capability: sandbox_cpu_probe
+      execution_profile: sandbox_cpu_limit
+      enabled: true
+      scope: task
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: sandbox-memory-limit
+spec:
+  steps:
+    - id: implement
+      type: implement
+      required_capability: sandbox_memory_probe
+      execution_profile: sandbox_memory_limit
+      enabled: true
+      scope: task
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: sandbox-process-limit
+spec:
+  steps:
+    - id: implement
+      type: implement
+      required_capability: sandbox_process_probe
+      execution_profile: sandbox_process_limit
       enabled: true
       scope: task
   loop:

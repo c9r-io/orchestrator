@@ -2,20 +2,16 @@
 
 **Module**: orchestrator
 **Status**: Approved
-**Related Plan**: Close FR-001 remaining gaps by adding real runtime resource enforcement, structured sandbox resource/network events, and backend capability gating for unsupported network allowlists
+**Related Plan**: Close step-level execution isolation on the active backend with deterministic probe-based QA, structured sandbox events, and explicit allowlist backend gating
 **Related QA**: `docs/qa/orchestrator/56-sandbox-resource-network-enforcement.md`
 **Created**: 2026-03-10
 **Last Updated**: 2026-03-10
 
 ## Background
 
-Step-level `ExecutionProfile` routing was already implemented, but three FR-001 gaps remained:
+Step-level `ExecutionProfile` routing was already implemented. The remaining work was to make resource-limit and network outcomes deterministic enough to close execution-isolation work on the active macOS backend without pretending that true `network_mode=allowlist` enforcement already exists.
 
-- `max_memory_mb`, `max_cpu_seconds`, `max_processes`, and `max_open_files` existed only as config fields, not stable runtime enforcement
-- `sandbox_resource_exceeded` and `sandbox_network_blocked` were not emitted
-- `network_mode=allowlist` had no verifiable backend implementation
-
-The current macOS sandbox path already provides file-write isolation through `sandbox-exec`, so the remaining work is to make resource and network outcomes observable without coupling profile policy to agent definitions.
+The current macOS sandbox path already provides file-write isolation through `sandbox-exec`. This design completes the closure path by adding deterministic probe commands, stable event payloads, and a strict unsupported-backend contract for `network_mode=allowlist`.
 
 ## Goals
 
@@ -42,6 +38,7 @@ The current macOS sandbox path already provides file-write isolation through `sa
 - `ResolvedExecutionProfile` remains the scheduler-facing execution policy object
 - Runner layer now validates backend support before spawn
 - Phase runner now carries signal-aware wait results and structured sandbox violation metadata through validation and recording
+- `orchestrator debug sandbox-probe ...` provides internal deterministic probes for QA fixtures and scripts
 
 ## Event Payload Changes
 
@@ -58,6 +55,7 @@ Shared payload fields:
 - `agent_id`, `run_id`
 - `execution_profile`, `execution_mode`
 - `backend`
+- `reason_code`
 - `reason`
 - `stderr_excerpt`
 
@@ -71,9 +69,10 @@ Additional fields when applicable:
 1. Resource limits are enforced in the spawned Unix child via `setrlimit`, so the sandbox wrapper and the eventual agent process inherit the same execution boundary.
 2. macOS remains the only active sandbox backend; backend capability validation happens before spawn and turns unsupported allowlist usage into a structured sandbox failure.
 3. Phase execution keeps wait-time signal information so `RLIMIT_CPU` style exits can be classified without depending only on stderr heuristics.
-4. `network_mode=deny` classification is based on outbound-network failure signatures, not only `Operation not permitted`; DNS-resolution failures are treated as valid sandbox network-block outcomes on macOS.
-5. Sandbox classification is centralized in the phase runner utility layer, so recorders and downstream task logic consume a single normalized result shape.
-6. `RunResult` now carries `sandbox_violation_kind`, `sandbox_resource_kind`, and `sandbox_network_target` for downstream diagnostics and future policy hooks.
+4. QA fixtures call internal sandbox probes that emit canonical `SANDBOX_PROBE ...` stderr markers, allowing deterministic classification for memory, process, open-file, and DNS-block scenarios.
+5. `network_mode=deny` classification still falls back to outbound-network failure signatures for non-probe commands; DNS-resolution failures remain valid network-block outcomes on macOS.
+6. Sandbox classification is centralized in the phase runner utility layer, so recorders and downstream task logic consume a single normalized result shape.
+7. `RunResult` now carries `sandbox_violation_kind`, `sandbox_resource_kind`, and `sandbox_network_target` for downstream diagnostics and future policy hooks.
 
 ## Alternatives And Tradeoffs
 
@@ -93,25 +92,25 @@ Additional fields when applicable:
 ## Observability
 
 - Logs: `execution_profile_applied` now includes `backend`
-- Events: `sandbox_resource_exceeded` and `sandbox_network_blocked` are persisted alongside existing `sandbox_denied`
+- Events: `sandbox_resource_exceeded` and `sandbox_network_blocked` are persisted alongside existing `sandbox_denied`, with stable `reason_code`
 - Trace/follow: sandbox-specific events are queryable through the same events table and surfaced by `query_step_events`
 
 Default recommendations:
 
-- Treat `sandbox_network_blocked` with `reason=unsupported_backend_feature` as a configuration/design issue, not as a transient task failure
-- Prefer resource limits that can be validated deterministically in QA (`max_open_files`, `max_cpu_seconds`) before expanding profile templates broadly
+- Treat `sandbox_network_blocked` with `reason_code=unsupported_backend_feature` as a configuration/design issue, not as a transient task failure
+- Prefer probe-backed resource validation for backend acceptance instead of raw stderr matching
 
 ## Operations / Release
 
 - Config: no new manifest fields
 - Compatibility: host mode and old workflows remain unchanged
 - Rollback: revert to the previous binary; persisted events and new result fields are additive
-- Platform note: true `network_mode=allowlist` remains a future backend feature
+- Platform note: true `network_mode=allowlist` remains a future backend feature tracked by `FR-006`
 
 ## Test Plan
 
-- Unit tests: sandbox violation classification for file-write denial, open-files exhaustion, and network blocking
-- Integration-style QA: project-scoped workflows that trigger `sandbox_resource_exceeded` and `sandbox_network_blocked`
+- Unit tests: sandbox violation classification for file-write denial, CPU signal handling, probe-backed memory/process/open-files markers, and network blocking
+- Integration-style QA: project-scoped workflows that trigger `sandbox_resource_exceeded` and `sandbox_network_blocked` across the full resource matrix
 - Regression tests: existing execution profile and sandbox write-boundary QA remain valid
 
 ## QA Docs

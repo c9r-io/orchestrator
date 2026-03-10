@@ -2,7 +2,7 @@
 
 **Module**: orchestrator  
 **Date**: 2026-03-10  
-**Related FR**: `docs/feature_request/FR-001-agent-execution-isolation.md`  
+**Related FR**: `docs/feature_request/FR-006-sandbox-network-allowlist-backend.md`  
 **Related Design Doc**: `docs/design_doc/orchestrator/21-sandbox-resource-network-enforcement.md`  
 **Related QA**: `docs/qa/orchestrator/56-sandbox-resource-network-enforcement.md`
 
@@ -15,6 +15,7 @@ This governance note records how sandbox network-enforcement behavior should be 
 - `network_mode=deny` on the active macOS sandbox backend emits `sandbox_network_blocked` for outbound-network failures recognized as DNS or connection denial.
 - `sandbox_network_blocked` is an observability event, not a guarantee that the backend can always identify the exact destination.
 - `network_mode=allowlist` is still not implemented as a verifiable backend capability on macOS; current behavior is a structured rejection with `reason_code=unsupported_backend_feature`.
+- QA fixtures should prefer the internal `orchestrator debug sandbox-probe dns-resolve ...` probe over ad-hoc shell or Python snippets when validating network blocking.
 
 ## Governance Decisions
 
@@ -27,7 +28,7 @@ This governance note records how sandbox network-enforcement behavior should be 
 
 When sandbox-network behavior changes, update these artifacts together:
 
-1. `docs/feature_request/FR-001-agent-execution-isolation.md`
+1. `docs/feature_request/FR-006-sandbox-network-allowlist-backend.md`
 2. `docs/design_doc/orchestrator/21-sandbox-resource-network-enforcement.md`
 3. `docs/qa/orchestrator/56-sandbox-resource-network-enforcement.md`
 4. `docs/guide/03-workflow-configuration.md`
@@ -49,4 +50,4 @@ After the ticket fix:
 
 ## Follow-up
 
-- If a future backend adds real allowlist enforcement, revise this note to separate “backend unsupported” from “backend supported but blocked by policy”.
+- If a future backend adds real allowlist enforcement, revise this note to separate “backend unsupported” from “backend supported but blocked by policy”, and link that change to `FR-006-sandbox-network-allowlist-backend.md`.

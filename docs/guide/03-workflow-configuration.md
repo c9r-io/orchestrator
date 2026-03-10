@@ -101,8 +101,9 @@ spec:
 Runtime notes:
 
 - On the current macOS backend, `network_mode: deny` may surface as DNS failure or connection failure; both map to `sandbox_network_blocked`.
+- Sandbox events now carry a stable `reason_code`; use that for automation before falling back to free-form `stderr_excerpt`.
 - `network_target` is best-effort metadata and may be empty for some error shapes.
-- `network_mode: allowlist` is not yet implemented as a verifiable backend capability on macOS; it fails fast with a structured error instead of silently degrading.
+- `network_mode: allowlist` is not yet implemented as a verifiable backend capability on macOS; it fails fast with a structured error instead of silently degrading. Real allowlist backend support is tracked in `FR-006`.
 
 ### Known Step IDs
 

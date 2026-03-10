@@ -159,6 +159,49 @@ mod tests {
         assert_eq!(result, "hello world");
     }
 
+    #[test]
+    fn test_classify_sandbox_spawn_error_for_memory_limit() {
+        let mut profile = ResolvedExecutionProfile::host();
+        profile.name = "sandbox_memory_limit".to_string();
+        profile.mode = ExecutionProfileMode::Sandbox;
+        profile.max_memory_mb = Some(256);
+
+        let err = io::Error::new(io::ErrorKind::Other, "Cannot allocate memory");
+        let classified =
+            classify_sandbox_spawn_error(&profile, &err).expect("memory spawn error classified");
+
+        assert_eq!(classified.event_type, "sandbox_resource_exceeded");
+        assert_eq!(classified.reason_code, "memory_limit_exceeded");
+        assert_eq!(
+            classified
+                .resource_kind
+                .as_ref()
+                .map(|value| value.as_str()),
+            Some("memory")
+        );
+    }
+
+    #[test]
+    fn test_classify_sandbox_spawn_error_uses_single_configured_limit_fallback() {
+        let mut profile = ResolvedExecutionProfile::host();
+        profile.name = "sandbox_memory_limit".to_string();
+        profile.mode = ExecutionProfileMode::Sandbox;
+        profile.max_memory_mb = Some(256);
+
+        let err = io::Error::new(io::ErrorKind::Other, "spawn failed");
+        let classified =
+            classify_sandbox_spawn_error(&profile, &err).expect("single-limit fallback");
+
+        assert_eq!(classified.reason_code, "memory_limit_exceeded");
+        assert_eq!(
+            classified
+                .resource_kind
+                .as_ref()
+                .map(|value| value.as_str()),
+            Some("memory")
+        );
+    }
+
     #[tokio::test]
     async fn test_spawn_with_runner_allowlist_filters_environment() {
         let temp = tempdir().expect("create tempdir");
@@ -353,6 +396,7 @@ pub struct SandboxBackendError {
     pub backend: &'static str,
     pub event_type: &'static str,
     pub reason_code: &'static str,
+    pub resource_kind: Option<SandboxResourceKind>,
     message: String,
 }
 
@@ -364,6 +408,7 @@ impl SandboxBackendError {
             backend: sandbox_backend_label(execution_profile),
             event_type: "sandbox_network_blocked",
             reason_code: "unsupported_backend_feature",
+            resource_kind: None,
             message: format!(
                 "sandbox backend '{}' does not support network allowlists for execution profile '{}'",
                 sandbox_backend_label(execution_profile),
@@ -379,9 +424,34 @@ impl SandboxBackendError {
             backend: sandbox_backend_label(execution_profile),
             event_type: "sandbox_denied",
             reason_code: "sandbox_backend_unavailable",
+            resource_kind: None,
             message: format!(
                 "sandbox execution is not implemented on this platform for execution profile '{}'",
                 execution_profile.name
+            ),
+        }
+    }
+
+    fn resource_exhausted(
+        execution_profile: &ResolvedExecutionProfile,
+        resource_kind: SandboxResourceKind,
+        source: &io::Error,
+    ) -> Self {
+        let reason_code = match resource_kind {
+            SandboxResourceKind::Memory => "memory_limit_exceeded",
+            SandboxResourceKind::Cpu => "cpu_limit_exceeded",
+            SandboxResourceKind::Processes => "processes_limit_exceeded",
+            SandboxResourceKind::OpenFiles => "open_files_limit_exceeded",
+        };
+        Self {
+            execution_profile: execution_profile.name.clone(),
+            backend: sandbox_backend_label(execution_profile),
+            event_type: "sandbox_resource_exceeded",
+            reason_code,
+            resource_kind: Some(resource_kind),
+            message: format!(
+                "sandbox process spawn failed under execution profile '{}': {}",
+                execution_profile.name, source
             ),
         }
     }
@@ -496,7 +566,9 @@ pub fn validate_execution_profile_support(
     #[cfg(target_os = "macos")]
     {
         if execution_profile.network_mode == ExecutionNetworkMode::Allowlist {
-            return Err(SandboxBackendError::unsupported_network_allowlist(execution_profile).into());
+            return Err(
+                SandboxBackendError::unsupported_network_allowlist(execution_profile).into(),
+            );
         }
         Ok(())
     }
@@ -567,12 +639,20 @@ impl RunnerExecutor for ShellRunnerExecutor {
         // refuse to start due to nested session detection.
         cmd.env_remove("CLAUDECODE");
 
-        cmd.spawn().with_context(|| {
-            format!(
-                "failed to spawn runner shell={} shell_arg={}",
-                runner.shell, runner.shell_arg
-            )
-        })
+        match cmd.spawn() {
+            Ok(child) => Ok(child),
+            Err(err) => {
+                if let Some(sandbox_err) = classify_sandbox_spawn_error(execution_profile, &err) {
+                    return Err(sandbox_err.into());
+                }
+                Err(err).with_context(|| {
+                    format!(
+                        "failed to spawn runner shell={} shell_arg={}",
+                        runner.shell, runner.shell_arg
+                    )
+                })
+            }
+        }
     }
 }
 
@@ -592,6 +672,65 @@ fn build_command_for_profile(
     };
     cmd.current_dir(cwd);
     Ok(cmd)
+}
+
+fn classify_sandbox_spawn_error(
+    execution_profile: &ResolvedExecutionProfile,
+    err: &io::Error,
+) -> Option<SandboxBackendError> {
+    if execution_profile.mode != ExecutionProfileMode::Sandbox {
+        return None;
+    }
+    let lower = err.to_string().to_lowercase();
+    if execution_profile.max_memory_mb.is_some()
+        && (lower.contains("cannot allocate memory")
+            || lower.contains("not enough space")
+            || lower.contains("not enough memory")
+            || lower.contains("memory"))
+    {
+        return Some(SandboxBackendError::resource_exhausted(
+            execution_profile,
+            SandboxResourceKind::Memory,
+            err,
+        ));
+    }
+    if execution_profile.max_processes.is_some()
+        && lower.contains("resource temporarily unavailable")
+    {
+        return Some(SandboxBackendError::resource_exhausted(
+            execution_profile,
+            SandboxResourceKind::Processes,
+            err,
+        ));
+    }
+    if execution_profile.max_open_files.is_some() && lower.contains("too many open files") {
+        return Some(SandboxBackendError::resource_exhausted(
+            execution_profile,
+            SandboxResourceKind::OpenFiles,
+            err,
+        ));
+    }
+    let mut configured_limits = Vec::new();
+    if execution_profile.max_memory_mb.is_some() {
+        configured_limits.push(SandboxResourceKind::Memory);
+    }
+    if execution_profile.max_processes.is_some() {
+        configured_limits.push(SandboxResourceKind::Processes);
+    }
+    if execution_profile.max_open_files.is_some() {
+        configured_limits.push(SandboxResourceKind::OpenFiles);
+    }
+    if execution_profile.max_cpu_seconds.is_some() {
+        configured_limits.push(SandboxResourceKind::Cpu);
+    }
+    if configured_limits.len() == 1 {
+        return Some(SandboxBackendError::resource_exhausted(
+            execution_profile,
+            configured_limits.remove(0),
+            err,
+        ));
+    }
+    None
 }
 
 fn build_sandbox_command(
@@ -664,9 +803,7 @@ fn apply_unix_resource_limits_to_command(
     // Apply rlimits in the child just before exec so the sandbox wrapper and
     // the eventual agent process inherit the same enforcement boundary.
     unsafe {
-        cmd.pre_exec(move || {
-            apply_unix_resource_limits(&limits).map_err(io::Error::other)
-        });
+        cmd.pre_exec(move || apply_unix_resource_limits(&limits).map_err(io::Error::other));
     }
     Ok(())
 }

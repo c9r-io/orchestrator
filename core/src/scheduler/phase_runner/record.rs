@@ -127,6 +127,7 @@ pub(super) async fn record_phase_results(
                         crate::config::ExecutionProfileMode::Host => "host",
                         crate::config::ExecutionProfileMode::Sandbox => "sandbox",
                     },
+                    "reason_code": validated.sandbox_reason_code,
                     "reason": validated.sandbox_denial_reason,
                     "resource_kind": validated
                         .sandbox_resource_kind
