@@ -811,22 +811,37 @@ fn apply_unix_resource_limits_to_command(
 #[cfg(unix)]
 fn apply_unix_resource_limits(limits: &UnixResourceLimits) -> Result<()> {
     if let Some(value) = limits.max_memory_bytes {
-        set_rlimit(libc::RLIMIT_AS, value)?;
+        set_rlimit(rlimit_resource(libc::RLIMIT_AS), value)?;
     }
     if let Some(value) = limits.max_cpu_seconds {
-        set_rlimit(libc::RLIMIT_CPU, value)?;
+        set_rlimit(rlimit_resource(libc::RLIMIT_CPU), value)?;
     }
     if let Some(value) = limits.max_processes {
-        set_rlimit(libc::RLIMIT_NPROC, value)?;
+        set_rlimit(rlimit_resource(libc::RLIMIT_NPROC), value)?;
     }
     if let Some(value) = limits.max_open_files {
-        set_rlimit(libc::RLIMIT_NOFILE, value)?;
+        set_rlimit(rlimit_resource(libc::RLIMIT_NOFILE), value)?;
     }
     Ok(())
 }
 
 #[cfg(unix)]
-fn set_rlimit(resource: libc::c_int, value: u64) -> Result<()> {
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+type RlimitResource = libc::__rlimit_resource_t;
+
+#[cfg(unix)]
+#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+type RlimitResource = libc::c_int;
+
+#[cfg(unix)]
+fn rlimit_resource(resource: libc::c_int) -> RlimitResource {
+    // libc 0.2.183 exposes Linux/GNU setrlimit resource selectors as u32 even
+    // though RLIMIT_* constants remain c_int. Centralize the ABI cast here.
+    resource as RlimitResource
+}
+
+#[cfg(unix)]
+fn set_rlimit(resource: RlimitResource, value: u64) -> Result<()> {
     let limit = libc::rlimit {
         rlim_cur: value as libc::rlim_t,
         rlim_max: value as libc::rlim_t,
