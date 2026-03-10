@@ -217,6 +217,6 @@ spec:
 
 ## Remaining Gaps
 
-- 为 sandbox profile 的资源限制字段补上真实执行期 enforcement
-- 为资源/网络拒绝补上结构化事件与可观测断言
-- 将 FR 状态从 `Partially Implemented` 推进到 `Implemented`
+- 为 `max_memory_mb` / `max_cpu_seconds` / `max_processes` 补齐稳定、端到端 QA 覆盖，当前仅 `max_open_files` 已完成主场景验证
+- 为真正可验证的 `network_mode=allowlist` 补齐后端能力；当前 macOS 路径仍以 `unsupported_backend_feature` 结构化拒绝
+- 在以上尾项完成后，再将 FR 状态从 `Partially Implemented` 推进到 `Implemented`

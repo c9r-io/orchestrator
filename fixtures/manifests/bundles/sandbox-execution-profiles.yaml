@@ -1,0 +1,227 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa/orchestrator
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: sandbox_write
+spec:
+  mode: sandbox
+  fs_mode: workspace_rw_scoped
+  writable_paths:
+    - docs
+  network_mode: deny
+---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: host
+spec:
+  mode: host
+---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: sandbox_docs_only
+spec:
+  mode: sandbox
+  fs_mode: workspace_rw_scoped
+  writable_paths:
+    - docs
+  network_mode: deny
+---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: sandbox_fd_limit
+spec:
+  mode: sandbox
+  fs_mode: workspace_readonly
+  network_mode: deny
+  max_open_files: 16
+---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: sandbox_network_deny
+spec:
+  mode: sandbox
+  fs_mode: workspace_readonly
+  network_mode: deny
+---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: sandbox_network_allowlist
+spec:
+  mode: sandbox
+  fs_mode: workspace_readonly
+  network_mode: allowlist
+  network_allowlist:
+    - example.com:443
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: impl-agent
+spec:
+  capabilities:
+    - implement
+  command: "echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: qa-agent
+spec:
+  capabilities:
+    - qa_testing
+  command: "echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: sandbox-writer-root-deny
+spec:
+  capabilities:
+    - implement
+  command: "set -e; echo blocked > sandbox-denied.txt; echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: sandbox-writer-docs-allow
+spec:
+  capabilities:
+    - implement
+  command: "set -e; echo allowed > docs/sandbox-allowed.txt; echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: fd-burner
+spec:
+  capabilities:
+    - implement
+  command: "python3 -c \"files=[]; [files.append(open('/dev/null','rb')) for _ in range(256)]; print('{\\\"confidence\\\":0.9,\\\"quality_score\\\":0.9,\\\"artifacts\\\":[]}')\""
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: net-probe
+spec:
+  capabilities:
+    - implement
+  command: "python3 -c \"import socket; socket.getaddrinfo('example.com', 443)\""
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: noop-agent
+spec:
+  capabilities:
+    - implement
+  command: "echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: exec-profile-mixed
+spec:
+  steps:
+    - id: implement
+      type: implement
+      required_capability: implement
+      execution_profile: sandbox_write
+      enabled: true
+      scope: task
+    - id: qa_testing
+      type: qa_testing
+      required_capability: qa_testing
+      execution_profile: host
+      enabled: true
+      scope: item
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: sandbox-deny-root-write
+spec:
+  steps:
+    - id: implement
+      type: implement
+      required_capability: implement
+      execution_profile: sandbox_docs_only
+      enabled: true
+      scope: task
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: sandbox-allow-docs-write
+spec:
+  steps:
+    - id: implement
+      type: implement
+      required_capability: implement
+      execution_profile: sandbox_docs_only
+      enabled: true
+      scope: task
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: sandbox-open-files-limit
+spec:
+  steps:
+    - id: implement
+      type: implement
+      required_capability: implement
+      execution_profile: sandbox_fd_limit
+      enabled: true
+      scope: task
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: sandbox-network-deny
+spec:
+  steps:
+    - id: implement
+      type: implement
+      required_capability: implement
+      execution_profile: sandbox_network_deny
+      enabled: true
+      scope: task
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: sandbox-network-allowlist
+spec:
+  steps:
+    - id: implement
+      type: implement
+      required_capability: implement
+      execution_profile: sandbox_network_allowlist
+      enabled: true
+      scope: task
+  loop:
+    mode: once

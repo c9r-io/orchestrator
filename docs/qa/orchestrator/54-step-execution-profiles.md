@@ -43,40 +43,24 @@ Ensure `ExecutionProfile` manifests can be applied and exported as project-scope
 
 ### Steps
 
-1. Create and apply a sandbox profile:
+1. Apply the reusable sandbox execution fixture bundle:
    ```bash
    QA_PROJECT="qa-exec-profile-roundtrip"
    orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   cat > /tmp/execution-profile-roundtrip.yaml << 'YAML'
-   apiVersion: orchestrator.dev/v2
-   kind: ExecutionProfile
-   metadata:
-     name: sandbox_write
-     project: qa-exec-profile-roundtrip
-   spec:
-     mode: sandbox
-     fs_mode: workspace_rw_scoped
-     writable_paths:
-       - docs
-       - src
-     network_mode: deny
-     max_processes: 16
-     max_open_files: 128
-   YAML
-   orchestrator apply --project "${QA_PROJECT}" -f /tmp/execution-profile-roundtrip.yaml
+   orchestrator apply --project "${QA_PROJECT}" -f fixtures/manifests/bundles/sandbox-execution-profiles.yaml
    ```
 2. Export manifests and inspect the profile:
    ```bash
    orchestrator manifest export > /tmp/execution-profile-export.yaml
-   rg -n "kind: ExecutionProfile|name: sandbox_write|mode: sandbox|fs_mode: workspace_rw_scoped" /tmp/execution-profile-export.yaml
+   rg -n "kind: ExecutionProfile|name: sandbox_write|mode: sandbox|fs_mode: workspace_rw_scoped|name: sandbox_network_deny" /tmp/execution-profile-export.yaml
    ```
 
 ### Expected
 
 - `apply` succeeds.
-- Export contains the `ExecutionProfile` resource under the target project.
-- Export preserves `mode`, `fs_mode`, and declared limits.
+- Export contains the fixture-bundle `ExecutionProfile` resources under the target project.
+- Export preserves the declared `mode`, `fs_mode`, and profile names such as `sandbox_write` and `sandbox_network_deny`.
 
 ---
 
@@ -192,77 +176,13 @@ Ensure a single workflow can run `implement` in sandbox and `qa_testing` on host
 
 ### Steps
 
-1. Apply execution profiles, workspace, agents, and workflow:
+1. Apply the reusable sandbox execution fixture bundle:
    ```bash
    QA_PROJECT="qa-exec-profile-mixed"
    orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   cat > /tmp/execution-profile-mixed.yaml << 'YAML'
-   apiVersion: orchestrator.dev/v2
-   kind: ExecutionProfile
-   metadata:
-     name: sandbox_write
-   spec:
-     mode: sandbox
-     fs_mode: workspace_rw_scoped
-     writable_paths: [docs]
-     network_mode: deny
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: ExecutionProfile
-   metadata:
-     name: host
-   spec:
-     mode: host
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Workspace
-   metadata:
-     name: default
-   spec:
-     root_path: "."
-     qa_targets: [docs/qa]
-     ticket_dir: docs/ticket
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: impl-agent
-   spec:
-     capabilities: [implement]
-     command: "echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: qa-agent
-   spec:
-     capabilities: [qa_testing]
-     command: "echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Workflow
-   metadata:
-     name: exec-profile-mixed
-   spec:
-     steps:
-       - id: implement
-         type: implement
-         required_capability: implement
-         execution_profile: sandbox_write
-         enabled: true
-         scope: task
-       - id: qa_testing
-         type: qa_testing
-         required_capability: qa_testing
-         execution_profile: host
-         enabled: true
-         scope: item
-     loop:
-       mode: once
-   YAML
-   orchestrator apply --project "${QA_PROJECT}" -f /tmp/execution-profile-mixed.yaml
-   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "exec-profile-mixed" --goal "mixed profiles" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   orchestrator apply --project "${QA_PROJECT}" -f fixtures/manifests/bundles/sandbox-execution-profiles.yaml
+   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --workflow exec-profile-mixed --name "exec-profile-mixed" --goal "mixed profiles" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    orchestrator task start "${TASK_ID}" || true
    ```
 2. Query execution profile events:

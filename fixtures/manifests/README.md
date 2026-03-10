@@ -37,6 +37,21 @@ It provides fixed workspaces and workflows for:
 - low-output detection
 - trace verbose scope verification
 
+## Sandbox Execution Fixtures
+
+For step-level execution-profile and sandbox QA, use the dedicated bundle:
+
+```bash
+orchestrator apply -f fixtures/manifests/bundles/sandbox-execution-profiles.yaml --project qa-sandbox
+```
+
+It provides fixed resources for:
+
+- execution-profile routing and host-default compatibility
+- sandbox write allow/deny boundaries
+- sandbox file-descriptor limit enforcement
+- sandbox network deny and unsupported allowlist checks
+
 ## Self-Referential Probe Fixtures
 
 For self-referential runtime diagnostics, use the dedicated probe bundle:

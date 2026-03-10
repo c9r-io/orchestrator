@@ -38,56 +38,13 @@ Ensure a sandboxed step with a low `max_open_files` limit fails with `sandbox_re
 
 ### Steps
 
-1. Apply an isolated project with a low file-descriptor limit:
+1. Apply the reusable sandbox execution fixture bundle:
    ```bash
    QA_PROJECT="qa-sandbox-open-files-limit"
    orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   cat > /tmp/sandbox-open-files-limit.yaml << 'YAML'
-   apiVersion: orchestrator.dev/v2
-   kind: ExecutionProfile
-   metadata:
-     name: sandbox_fd_limit
-   spec:
-     mode: sandbox
-     fs_mode: workspace_readonly
-     network_mode: deny
-     max_open_files: 16
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Workspace
-   metadata:
-     name: default
-   spec:
-     root_path: "."
-     qa_targets: [docs/qa]
-     ticket_dir: docs/ticket
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: fd-burner
-   spec:
-     capabilities: [implement]
-     command: "python3 -c \"files=[]; [files.append(open('/dev/null','rb')) for _ in range(256)]; print('{\\\"confidence\\\":0.9,\\\"quality_score\\\":0.9,\\\"artifacts\\\":[]}')\""
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Workflow
-   metadata:
-     name: sandbox-open-files-limit
-   spec:
-     steps:
-       - id: implement
-         type: implement
-         required_capability: implement
-         execution_profile: sandbox_fd_limit
-         enabled: true
-         scope: task
-     loop:
-       mode: once
-   YAML
-   orchestrator apply --project "${QA_PROJECT}" -f /tmp/sandbox-open-files-limit.yaml
-   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "sandbox fd limit" --goal "sandbox fd limit" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   orchestrator apply --project "${QA_PROJECT}" -f fixtures/manifests/bundles/sandbox-execution-profiles.yaml
+   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --workflow sandbox-open-files-limit --name "sandbox fd limit" --goal "sandbox fd limit" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    orchestrator task start "${TASK_ID}" || true
    ```
 2. Inspect the event and stderr:
@@ -122,56 +79,13 @@ Ensure a sandboxed step cannot perform outbound network access when `network_mod
 
 ### Steps
 
-1. Apply an isolated project with a network probe agent:
+1. Apply the reusable sandbox execution fixture bundle:
    ```bash
    QA_PROJECT="qa-sandbox-network-deny"
    orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   cat > /tmp/sandbox-network-deny.yaml << 'YAML'
-   apiVersion: orchestrator.dev/v2
-   kind: ExecutionProfile
-   metadata:
-     name: sandbox_network_deny
-   spec:
-     mode: sandbox
-     fs_mode: workspace_readonly
-     network_mode: deny
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Workspace
-   metadata:
-     name: default
-   spec:
-     root_path: "."
-     qa_targets: [docs/qa]
-     ticket_dir: docs/ticket
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: net-probe
-   spec:
-     capabilities: [implement]
-     command: |
-       python3 -c "import socket; socket.getaddrinfo('example.com', 443)"
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Workflow
-   metadata:
-     name: sandbox-network-deny
-   spec:
-     steps:
-       - id: implement
-         type: implement
-         required_capability: implement
-         execution_profile: sandbox_network_deny
-         enabled: true
-         scope: task
-     loop:
-       mode: once
-   YAML
-   orchestrator apply --project "${QA_PROJECT}" -f /tmp/sandbox-network-deny.yaml
-   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "sandbox network deny" --goal "sandbox network deny" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   orchestrator apply --project "${QA_PROJECT}" -f fixtures/manifests/bundles/sandbox-execution-profiles.yaml
+   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --workflow sandbox-network-deny --name "sandbox network deny" --goal "sandbox network deny" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    orchestrator task start "${TASK_ID}" || true
    ```
 2. Verify the network event:
@@ -204,57 +118,13 @@ Ensure the current backend rejects unsupported allowlist network profiles explic
 
 ### Steps
 
-1. Apply an isolated project with an allowlist profile and a simple agent:
+1. Apply the reusable sandbox execution fixture bundle:
    ```bash
    QA_PROJECT="qa-sandbox-network-allowlist-unsupported"
    orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
    rm -rf "workspace/${QA_PROJECT}"
-   cat > /tmp/sandbox-network-allowlist.yaml << 'YAML'
-   apiVersion: orchestrator.dev/v2
-   kind: ExecutionProfile
-   metadata:
-     name: sandbox_network_allowlist
-   spec:
-     mode: sandbox
-     fs_mode: workspace_readonly
-     network_mode: allowlist
-     network_allowlist:
-       - example.com:443
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Workspace
-   metadata:
-     name: default
-   spec:
-     root_path: "."
-     qa_targets: [docs/qa]
-     ticket_dir: docs/ticket
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: noop-agent
-   spec:
-     capabilities: [implement]
-     command: "echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Workflow
-   metadata:
-     name: sandbox-network-allowlist
-   spec:
-     steps:
-       - id: implement
-         type: implement
-         required_capability: implement
-         execution_profile: sandbox_network_allowlist
-         enabled: true
-         scope: task
-     loop:
-       mode: once
-   YAML
-   orchestrator apply --project "${QA_PROJECT}" -f /tmp/sandbox-network-allowlist.yaml
-   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "sandbox allowlist unsupported" --goal "sandbox allowlist unsupported" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   orchestrator apply --project "${QA_PROJECT}" -f fixtures/manifests/bundles/sandbox-execution-profiles.yaml
+   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --workflow sandbox-network-allowlist --name "sandbox allowlist unsupported" --goal "sandbox allowlist unsupported" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    orchestrator task start "${TASK_ID}" || true
    ```
 2. Inspect the structured failure:
