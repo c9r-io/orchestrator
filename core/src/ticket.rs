@@ -778,4 +778,615 @@ mod tests {
         let content = "---\ntitle: Test Doc\npriority: high\n---\n# Title";
         assert!(parse_qa_doc_self_referential_safe(content));
     }
+
+    // ── parse_qa_doc_self_referential_safe edge cases ──
+
+    #[test]
+    fn test_parse_qa_doc_self_referential_safe_empty_input() {
+        assert!(parse_qa_doc_self_referential_safe(""));
+    }
+
+    #[test]
+    fn test_parse_qa_doc_self_referential_safe_unterminated_frontmatter() {
+        // Frontmatter never closes — should return true (default)
+        let content = "---\nself_referential_safe: true\nsome_field: value\n";
+        assert!(parse_qa_doc_self_referential_safe(content));
+    }
+
+    #[test]
+    fn test_parse_qa_doc_self_referential_safe_false_after_closing_fence() {
+        // self_referential_safe: false appears AFTER closing `---`, should not be detected
+        let content = "---\ntitle: Test\n---\nself_referential_safe: false\n";
+        assert!(parse_qa_doc_self_referential_safe(content));
+    }
+
+    #[test]
+    fn test_parse_qa_doc_self_referential_safe_whitespace_delimiters() {
+        let content = "  ---  \nself_referential_safe: false\n  ---  \n# Title";
+        assert!(!parse_qa_doc_self_referential_safe(content));
+    }
+
+    // ── is_self_referential_safe ──
+
+    #[test]
+    fn test_is_self_referential_safe_non_self_referential_workspace() {
+        // When self_referential is false, always returns true
+        let dir = std::env::temp_dir().join(format!("self-ref-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create dir");
+        assert!(is_self_referential_safe(&dir, "nonexistent.md", false));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_is_self_referential_safe_file_not_found_defaults_true() {
+        let dir = std::env::temp_dir().join(format!("self-ref-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create dir");
+        // File does not exist, self_referential=true => defaults to true
+        assert!(is_self_referential_safe(&dir, "missing.md", true));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_is_self_referential_safe_file_says_false() {
+        let dir = std::env::temp_dir().join(format!("self-ref-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create dir");
+        let content = "---\nself_referential_safe: false\n---\n# Test";
+        std::fs::write(dir.join("test.md"), content).expect("write qa doc");
+        assert!(!is_self_referential_safe(&dir, "test.md", true));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_is_self_referential_safe_file_says_true() {
+        let dir = std::env::temp_dir().join(format!("self-ref-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create dir");
+        let content = "---\nself_referential_safe: true\n---\n# Test";
+        std::fs::write(dir.join("test.md"), content).expect("write qa doc");
+        assert!(is_self_referential_safe(&dir, "test.md", true));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── normalize_rel_path_for_match edge cases ──
+
+    #[test]
+    fn test_normalize_rel_path_for_match_leading_slash() {
+        // Leading slash produces an empty segment, filtered out
+        assert_eq!(normalize_rel_path_for_match("/foo/bar"), "foo/bar");
+    }
+
+    #[test]
+    fn test_normalize_rel_path_for_match_leading_dot_slash() {
+        assert_eq!(normalize_rel_path_for_match("./foo/bar"), "foo/bar");
+    }
+
+    #[test]
+    fn test_normalize_rel_path_for_match_only_dots() {
+        assert_eq!(normalize_rel_path_for_match("./././"), "");
+    }
+
+    #[test]
+    fn test_normalize_rel_path_for_match_dotdot_at_start() {
+        assert_eq!(normalize_rel_path_for_match("../foo"), "");
+    }
+
+    #[test]
+    fn test_normalize_rel_path_for_match_dotdot_at_end() {
+        assert_eq!(normalize_rel_path_for_match("foo/.."), "");
+    }
+
+    // ── parse_ticket_preview_content edge cases ──
+
+    #[test]
+    fn test_parse_ticket_preview_content_status_after_line_80() {
+        let mut content = String::new();
+        for i in 0..85 {
+            content.push_str(&format!("line {}\n", i));
+        }
+        content.push_str("**Status**: LATE\n");
+        let result = parse_ticket_preview_content(&content);
+        // Status after line 80 should not be detected
+        assert!(result.status.is_empty());
+    }
+
+    #[test]
+    fn test_parse_ticket_preview_content_multiple_status_lines() {
+        let content = "**Status**: OPEN\n**Status**: FAILED\n";
+        let result = parse_ticket_preview_content(content);
+        // Last status wins
+        assert_eq!(result.status, "FAILED");
+    }
+
+    #[test]
+    fn test_parse_ticket_preview_content_empty_qa_doc_value() {
+        let content = "**Status**: OPEN\n**QA Document**: \n";
+        let result = parse_ticket_preview_content(content);
+        assert_eq!(result.status, "OPEN");
+        assert!(result.qa_document.is_empty());
+    }
+
+    #[test]
+    fn test_parse_ticket_preview_content_empty_string() {
+        let result = parse_ticket_preview_content("");
+        assert!(result.status.is_empty());
+        assert!(result.qa_document.is_empty());
+    }
+
+    // ── is_active_ticket_status edge cases ──
+
+    #[test]
+    fn test_is_active_ticket_status_mixed_case() {
+        assert!(is_active_ticket_status("Failed"));
+        assert!(is_active_ticket_status("Open"));
+    }
+
+    #[test]
+    fn test_is_active_ticket_status_leading_whitespace() {
+        assert!(is_active_ticket_status(" FAILED"));
+        assert!(is_active_ticket_status(" OPEN "));
+    }
+
+    // ── create_ticket_for_qa_failure edge cases ──
+
+    #[test]
+    fn test_create_ticket_for_qa_failure_missing_log_files() {
+        let dir = std::env::temp_dir().join(format!("ticket-nologs-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+
+        let result = create_ticket_for_qa_failure(
+            &dir,
+            "docs/ticket",
+            "test-task",
+            "docs/qa/auth.md",
+            1,
+            "/nonexistent/stdout.log",
+            "/nonexistent/stderr.log",
+        )
+        .expect("create ticket with missing logs");
+
+        assert!(result.is_some());
+        let ticket_path = result.unwrap();
+        let abs_path = dir.join(&ticket_path);
+        let content = std::fs::read_to_string(&abs_path).expect("read ticket");
+        assert!(content.contains("**Status**: FAILED"));
+        // Snippets should be empty but ticket should still be created
+        assert!(content.contains("```text\n\n```"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_create_ticket_for_qa_failure_long_stdout_truncated() {
+        let dir = std::env::temp_dir().join(format!("ticket-long-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+
+        let stdout_path = dir.join("stdout.log");
+        // Write 50 lines, only last 20 should appear
+        let stdout_content: String = (1..=50).map(|i| format!("line {}\n", i)).collect();
+        std::fs::write(&stdout_path, &stdout_content).expect("write stdout");
+        let stderr_path = dir.join("stderr.log");
+        let stderr_content: String = (1..=30).map(|i| format!("err {}\n", i)).collect();
+        std::fs::write(&stderr_path, &stderr_content).expect("write stderr");
+
+        let result = create_ticket_for_qa_failure(
+            &dir,
+            "docs/ticket",
+            "test-task",
+            "docs/qa/test.md",
+            2,
+            stdout_path.to_str().unwrap(),
+            stderr_path.to_str().unwrap(),
+        )
+        .expect("create ticket");
+
+        let ticket_path = result.unwrap();
+        let content = std::fs::read_to_string(dir.join(&ticket_path)).expect("read ticket");
+        // Should contain line 31-50 (last 20) but not line 1
+        assert!(content.contains("line 50"));
+        assert!(content.contains("line 31"));
+        assert!(!content.contains("line 1\n"));
+        // stderr: should contain last 10 (err 21-30) but not err 1
+        assert!(content.contains("err 30"));
+        assert!(content.contains("err 21"));
+        assert!(!content.contains("err 1\n"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_create_ticket_for_qa_failure_unknown_stem() {
+        let dir = std::env::temp_dir().join(format!("ticket-stem-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+
+        // Use a path with no file stem
+        let result = create_ticket_for_qa_failure(
+            &dir,
+            "docs/ticket",
+            "test-task",
+            "/",
+            1,
+            "/nonexistent",
+            "/nonexistent",
+        )
+        .expect("create ticket unknown stem");
+
+        assert!(result.is_some());
+        let ticket_path = result.unwrap();
+        // Should use "unknown" as the stem
+        assert!(ticket_path.contains("auto_unknown_"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── list_existing_tickets_for_item ──
+
+    #[test]
+    fn test_list_existing_tickets_for_item_matches_by_qa_doc() {
+        let dir = std::env::temp_dir().join(format!("ticket-list-{}", uuid::Uuid::new_v4()));
+        let ticket_dir = dir.join("docs/ticket");
+        std::fs::create_dir_all(&ticket_dir).expect("create ticket dir");
+
+        // Create tickets with different QA document references
+        std::fs::write(
+            ticket_dir.join("t1.md"),
+            "**Status**: FAILED\n**QA Document**: `docs/qa/auth.md`\n",
+        )
+        .expect("write t1");
+        std::fs::write(
+            ticket_dir.join("t2.md"),
+            "**Status**: FAILED\n**QA Document**: `docs/qa/other.md`\n",
+        )
+        .expect("write t2");
+        std::fs::write(
+            ticket_dir.join("t3.md"),
+            "**Status**: PASSED\n**QA Document**: `docs/qa/auth.md`\n",
+        )
+        .expect("write t3"); // Not active
+
+        let task_ctx = TaskRuntimeContext {
+            workspace_id: "ws".to_string(),
+            workspace_root: dir.clone(),
+            ticket_dir: "docs/ticket".to_string(),
+            execution_plan: crate::config::TaskExecutionPlan {
+                steps: vec![],
+                loop_policy: crate::config::WorkflowLoopConfig::default(),
+                finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
+                max_parallel: None,
+            },
+            current_cycle: 0,
+            init_done: false,
+            dynamic_steps: vec![],
+            adaptive: None,
+            pipeline_vars: crate::config::PipelineVariables::default(),
+            safety: crate::config::SafetyConfig::default(),
+            self_referential: false,
+            consecutive_failures: 0,
+            project_id: String::new(),
+            pinned_invariants: std::sync::Arc::new(vec![]),
+            workflow_id: String::new(),
+            spawn_depth: 0,
+        };
+
+        let result =
+            list_existing_tickets_for_item(&task_ctx, "docs/qa/auth.md").expect("list tickets");
+        assert_eq!(result.len(), 1);
+        assert!(result[0].contains("t1.md"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_list_existing_tickets_for_item_unassigned() {
+        let dir = std::env::temp_dir().join(format!("ticket-unassigned-{}", uuid::Uuid::new_v4()));
+        let ticket_dir = dir.join("docs/ticket");
+        std::fs::create_dir_all(&ticket_dir).expect("create ticket dir");
+
+        // Ticket with no QA Document (empty doc)
+        std::fs::write(ticket_dir.join("t1.md"), "**Status**: FAILED\n").expect("write t1");
+        // Ticket with QA Document
+        std::fs::write(
+            ticket_dir.join("t2.md"),
+            "**Status**: FAILED\n**QA Document**: `docs/qa/auth.md`\n",
+        )
+        .expect("write t2");
+
+        let task_ctx = TaskRuntimeContext {
+            workspace_id: "ws".to_string(),
+            workspace_root: dir.clone(),
+            ticket_dir: "docs/ticket".to_string(),
+            execution_plan: crate::config::TaskExecutionPlan {
+                steps: vec![],
+                loop_policy: crate::config::WorkflowLoopConfig::default(),
+                finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
+                max_parallel: None,
+            },
+            current_cycle: 0,
+            init_done: false,
+            dynamic_steps: vec![],
+            adaptive: None,
+            pipeline_vars: crate::config::PipelineVariables::default(),
+            safety: crate::config::SafetyConfig::default(),
+            self_referential: false,
+            consecutive_failures: 0,
+            project_id: String::new(),
+            pinned_invariants: std::sync::Arc::new(vec![]),
+            workflow_id: String::new(),
+            spawn_depth: 0,
+        };
+
+        // When looking for UNASSIGNED, should match ticket with empty QA doc
+        let result = list_existing_tickets_for_item(&task_ctx, UNASSIGNED_QA_FILE_PATH)
+            .expect("list unassigned");
+        assert_eq!(result.len(), 1);
+        assert!(result[0].contains("t1.md"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── scan_active_tickets_for_task_items ──
+
+    #[test]
+    fn test_scan_active_tickets_for_task_items_groups_correctly() {
+        let dir = std::env::temp_dir().join(format!("ticket-scan-{}", uuid::Uuid::new_v4()));
+        let ticket_dir = dir.join("docs/ticket");
+        std::fs::create_dir_all(&ticket_dir).expect("create ticket dir");
+
+        std::fs::write(
+            ticket_dir.join("t1.md"),
+            "**Status**: FAILED\n**QA Document**: `docs/qa/auth.md`\n",
+        )
+        .expect("write t1");
+        std::fs::write(
+            ticket_dir.join("t2.md"),
+            "**Status**: OPEN\n**QA Document**: `docs/qa/auth.md`\n",
+        )
+        .expect("write t2");
+        std::fs::write(ticket_dir.join("t3.md"), "**Status**: FAILED\n").expect("write t3"); // No QA doc -> unassigned
+        std::fs::write(
+            ticket_dir.join("t4.md"),
+            "**Status**: PASSED\n**QA Document**: `docs/qa/auth.md`\n",
+        )
+        .expect("write t4"); // Not active
+
+        let task_ctx = TaskRuntimeContext {
+            workspace_id: "ws".to_string(),
+            workspace_root: dir.clone(),
+            ticket_dir: "docs/ticket".to_string(),
+            execution_plan: crate::config::TaskExecutionPlan {
+                steps: vec![],
+                loop_policy: crate::config::WorkflowLoopConfig::default(),
+                finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
+                max_parallel: None,
+            },
+            current_cycle: 0,
+            init_done: false,
+            dynamic_steps: vec![],
+            adaptive: None,
+            pipeline_vars: crate::config::PipelineVariables::default(),
+            safety: crate::config::SafetyConfig::default(),
+            self_referential: false,
+            consecutive_failures: 0,
+            project_id: String::new(),
+            pinned_invariants: std::sync::Arc::new(vec![]),
+            workflow_id: String::new(),
+            spawn_depth: 0,
+        };
+
+        let items = vec!["docs/qa/auth.md".to_string()];
+        let result = scan_active_tickets_for_task_items(&task_ctx, &items).expect("scan tickets");
+
+        // t1 and t2 should be in docs/qa/auth.md bucket
+        let auth_tickets = result.get("docs/qa/auth.md").expect("auth bucket");
+        assert_eq!(auth_tickets.len(), 2);
+
+        // t3 should be in unassigned bucket
+        let unassigned = result
+            .get(UNASSIGNED_QA_FILE_PATH)
+            .expect("unassigned bucket");
+        assert_eq!(unassigned.len(), 1);
+
+        // t4 (PASSED) should not appear
+        let total: usize = result.values().map(|v| v.len()).sum();
+        assert_eq!(total, 3);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_scan_active_tickets_for_task_items_unknown_qa_doc_goes_to_unassigned() {
+        let dir = std::env::temp_dir().join(format!("ticket-scan2-{}", uuid::Uuid::new_v4()));
+        let ticket_dir = dir.join("docs/ticket");
+        std::fs::create_dir_all(&ticket_dir).expect("create ticket dir");
+
+        // Ticket referencing a QA doc that's NOT in our item list
+        std::fs::write(
+            ticket_dir.join("t1.md"),
+            "**Status**: FAILED\n**QA Document**: `docs/qa/unknown.md`\n",
+        )
+        .expect("write t1");
+
+        let task_ctx = TaskRuntimeContext {
+            workspace_id: "ws".to_string(),
+            workspace_root: dir.clone(),
+            ticket_dir: "docs/ticket".to_string(),
+            execution_plan: crate::config::TaskExecutionPlan {
+                steps: vec![],
+                loop_policy: crate::config::WorkflowLoopConfig::default(),
+                finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
+                max_parallel: None,
+            },
+            current_cycle: 0,
+            init_done: false,
+            dynamic_steps: vec![],
+            adaptive: None,
+            pipeline_vars: crate::config::PipelineVariables::default(),
+            safety: crate::config::SafetyConfig::default(),
+            self_referential: false,
+            consecutive_failures: 0,
+            project_id: String::new(),
+            pinned_invariants: std::sync::Arc::new(vec![]),
+            workflow_id: String::new(),
+            spawn_depth: 0,
+        };
+
+        let items = vec!["docs/qa/auth.md".to_string()];
+        let result = scan_active_tickets_for_task_items(&task_ctx, &items).expect("scan tickets");
+
+        // Unknown QA doc not in item list goes to unassigned
+        let unassigned = result
+            .get(UNASSIGNED_QA_FILE_PATH)
+            .expect("unassigned bucket");
+        assert_eq!(unassigned.len(), 1);
+        assert!(!result.contains_key("docs/qa/auth.md"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── collect_target_files_from_active_tickets ──
+
+    #[test]
+    fn test_collect_target_files_from_active_tickets_with_valid_qa_docs() {
+        let dir = std::env::temp_dir().join(format!("ticket-collect-{}", uuid::Uuid::new_v4()));
+        let ticket_dir = dir.join("docs/ticket");
+        let qa_dir = dir.join("docs/qa");
+        std::fs::create_dir_all(&ticket_dir).expect("create ticket dir");
+        std::fs::create_dir_all(&qa_dir).expect("create qa dir");
+
+        // Create QA files
+        std::fs::write(qa_dir.join("auth.md"), "# Auth").expect("write auth qa");
+
+        // Active ticket with valid QA doc
+        std::fs::write(
+            ticket_dir.join("t1.md"),
+            "**Status**: FAILED\n**QA Document**: `docs/qa/auth.md`\n",
+        )
+        .expect("write t1");
+        // Active ticket with no QA doc -> sets include_unassigned
+        std::fs::write(ticket_dir.join("t2.md"), "**Status**: FAILED\n").expect("write t2");
+        // Inactive ticket -> should be skipped
+        std::fs::write(
+            ticket_dir.join("t3.md"),
+            "**Status**: PASSED\n**QA Document**: `docs/qa/auth.md`\n",
+        )
+        .expect("write t3");
+
+        let result = collect_target_files_from_active_tickets(&dir, "docs/ticket")
+            .expect("collect from tickets");
+
+        // Should include auth.md and UNASSIGNED
+        assert!(result.iter().any(|p| p.contains("auth.md")));
+        assert!(result.iter().any(|p| p == UNASSIGNED_QA_FILE_PATH));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_collect_target_files_from_active_tickets_nonexistent_qa_file() {
+        let dir = std::env::temp_dir().join(format!("ticket-collect2-{}", uuid::Uuid::new_v4()));
+        let ticket_dir = dir.join("docs/ticket");
+        std::fs::create_dir_all(&ticket_dir).expect("create ticket dir");
+
+        // Active ticket with QA doc that doesn't exist on disk
+        std::fs::write(
+            ticket_dir.join("t1.md"),
+            "**Status**: FAILED\n**QA Document**: `docs/qa/nonexistent.md`\n",
+        )
+        .expect("write t1");
+
+        let result = collect_target_files_from_active_tickets(&dir, "docs/ticket")
+            .expect("collect from tickets");
+
+        // Non-existent QA doc -> falls back to unassigned
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], UNASSIGNED_QA_FILE_PATH);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_collect_target_files_from_active_tickets_no_active_tickets() {
+        let dir = std::env::temp_dir().join(format!("ticket-collect3-{}", uuid::Uuid::new_v4()));
+        let ticket_dir = dir.join("docs/ticket");
+        std::fs::create_dir_all(&ticket_dir).expect("create ticket dir");
+
+        std::fs::write(
+            ticket_dir.join("t1.md"),
+            "**Status**: PASSED\n**QA Document**: `docs/qa/auth.md`\n",
+        )
+        .expect("write t1");
+
+        let result = collect_target_files_from_active_tickets(&dir, "docs/ticket")
+            .expect("collect from tickets");
+
+        assert!(result.is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── collect_target_files edge cases ──
+
+    #[test]
+    fn test_collect_target_files_explicit_dedup() {
+        let dir = std::env::temp_dir().join(format!("target-dedup-{}", uuid::Uuid::new_v4()));
+        let qa_dir = dir.join("docs/qa");
+        std::fs::create_dir_all(&qa_dir).expect("create qa dir");
+        std::fs::write(qa_dir.join("test.md"), "# Test").expect("write test");
+
+        let input = vec![
+            "docs/qa/test.md".to_string(),
+            "docs/qa/test.md".to_string(), // duplicate
+        ];
+        let result = collect_target_files(&dir, &[], Some(input)).expect("collect with dedup");
+        assert_eq!(result.len(), 1);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_collect_target_files_directory_in_explicit_list_skipped() {
+        let dir = std::env::temp_dir().join(format!("target-dir-{}", uuid::Uuid::new_v4()));
+        let qa_dir = dir.join("docs/qa");
+        std::fs::create_dir_all(&qa_dir).expect("create qa dir");
+
+        let input = vec!["docs/qa".to_string()]; // is a directory
+        let result = collect_target_files(&dir, &[], Some(input)).expect("collect with directory");
+        // Directory should be skipped (not a file)
+        assert!(result.is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── list_ticket_files_in_workspace edge cases ──
+
+    #[test]
+    fn test_list_ticket_files_in_workspace_nested_subdirectory() {
+        let dir = std::env::temp_dir().join(format!("ticket-nested-{}", uuid::Uuid::new_v4()));
+        let ticket_dir = dir.join("docs/ticket");
+        let sub_dir = ticket_dir.join("sub");
+        std::fs::create_dir_all(&sub_dir).expect("create nested dirs");
+
+        std::fs::write(ticket_dir.join("t1.md"), "# T1").expect("write t1");
+        std::fs::write(sub_dir.join("t2.md"), "# T2").expect("write nested t2");
+
+        let result = list_ticket_files_in_workspace(&dir, "docs/ticket").expect("list nested");
+        assert_eq!(result.len(), 2);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_list_ticket_files_in_workspace_case_insensitive_readme() {
+        let dir = std::env::temp_dir().join(format!("ticket-readme-{}", uuid::Uuid::new_v4()));
+        let ticket_dir = dir.join("docs/ticket");
+        std::fs::create_dir_all(&ticket_dir).expect("create ticket dir");
+
+        std::fs::write(ticket_dir.join("readme.md"), "# readme").expect("write lowercase readme");
+        std::fs::write(ticket_dir.join("t1.md"), "# T1").expect("write t1");
+
+        let result = list_ticket_files_in_workspace(&dir, "docs/ticket").expect("list with readme");
+        // readme.md (lowercase) should be excluded by eq_ignore_ascii_case
+        assert_eq!(result.len(), 1);
+        assert!(result[0].contains("t1.md"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

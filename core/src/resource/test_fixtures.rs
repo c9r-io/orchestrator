@@ -147,6 +147,67 @@ pub fn step_template_manifest(name: &str, prompt: &str) -> OrchestratorResource 
     }
 }
 
+pub fn execution_profile_manifest(name: &str, mode: &str, fs_mode: &str) -> OrchestratorResource {
+    use crate::cli_types::ExecutionProfileSpec;
+    OrchestratorResource {
+        api_version: API_VERSION.to_string(),
+        kind: ResourceKind::ExecutionProfile,
+        metadata: ResourceMetadata {
+            name: name.to_string(),
+            project: None,
+            labels: None,
+            annotations: None,
+        },
+        spec: ResourceSpec::ExecutionProfile(ExecutionProfileSpec {
+            mode: mode.to_string(),
+            fs_mode: fs_mode.to_string(),
+            writable_paths: vec![],
+            network_mode: "inherit".to_string(),
+            network_allowlist: vec![],
+            max_memory_mb: None,
+            max_cpu_seconds: None,
+            max_processes: None,
+            max_open_files: None,
+        }),
+    }
+}
+
+pub fn env_store_manifest(name: &str) -> OrchestratorResource {
+    use crate::cli_types::EnvStoreSpec;
+    use std::collections::HashMap;
+    let mut data = HashMap::new();
+    data.insert("KEY".to_string(), "value".to_string());
+    OrchestratorResource {
+        api_version: API_VERSION.to_string(),
+        kind: ResourceKind::EnvStore,
+        metadata: ResourceMetadata {
+            name: name.to_string(),
+            project: None,
+            labels: None,
+            annotations: None,
+        },
+        spec: ResourceSpec::EnvStore(EnvStoreSpec { data }),
+    }
+}
+
+pub fn secret_store_manifest(name: &str) -> OrchestratorResource {
+    use crate::cli_types::EnvStoreSpec;
+    use std::collections::HashMap;
+    let mut data = HashMap::new();
+    data.insert("SECRET".to_string(), "s3cret".to_string());
+    OrchestratorResource {
+        api_version: API_VERSION.to_string(),
+        kind: ResourceKind::SecretStore,
+        metadata: ResourceMetadata {
+            name: name.to_string(),
+            project: None,
+            labels: None,
+            annotations: None,
+        },
+        spec: ResourceSpec::EnvStore(EnvStoreSpec { data }),
+    }
+}
+
 pub fn runtime_policy_manifest() -> OrchestratorResource {
     OrchestratorResource {
         api_version: API_VERSION.to_string(),

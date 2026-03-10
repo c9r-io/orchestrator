@@ -1240,3 +1240,85 @@ async fn emit_skipped_item_step_events_empty_items_emits_nothing() {
         .expect("count");
     assert_eq!(count, 0);
 }
+
+// ── cycle_safety pure-function tests ─────────────────────
+
+#[test]
+fn should_auto_rollback_true_when_all_conditions_met() {
+    use crate::config::CheckpointStrategy;
+    assert!(super::cycle_safety::should_auto_rollback(
+        true,
+        3,
+        3,
+        &CheckpointStrategy::GitTag
+    ));
+}
+
+#[test]
+fn should_auto_rollback_false_when_disabled() {
+    use crate::config::CheckpointStrategy;
+    assert!(!super::cycle_safety::should_auto_rollback(
+        false,
+        5,
+        3,
+        &CheckpointStrategy::GitTag
+    ));
+}
+
+#[test]
+fn should_auto_rollback_false_when_below_threshold() {
+    use crate::config::CheckpointStrategy;
+    assert!(!super::cycle_safety::should_auto_rollback(
+        true,
+        2,
+        3,
+        &CheckpointStrategy::GitTag
+    ));
+}
+
+#[test]
+fn should_auto_rollback_false_when_no_checkpoint_strategy() {
+    use crate::config::CheckpointStrategy;
+    assert!(!super::cycle_safety::should_auto_rollback(
+        true,
+        5,
+        3,
+        &CheckpointStrategy::None
+    ));
+}
+
+#[test]
+fn should_auto_rollback_true_when_failures_exceed_threshold() {
+    use crate::config::CheckpointStrategy;
+    assert!(super::cycle_safety::should_auto_rollback(
+        true,
+        10,
+        3,
+        &CheckpointStrategy::GitTag
+    ));
+}
+
+#[test]
+fn compute_rollback_tag_normal() {
+    let tag = super::cycle_safety::compute_rollback_tag("task-1", 5, 2);
+    assert_eq!(tag, "checkpoint/task-1/3");
+}
+
+#[test]
+fn compute_rollback_tag_zero_failures() {
+    let tag = super::cycle_safety::compute_rollback_tag("task-1", 5, 0);
+    assert_eq!(tag, "checkpoint/task-1/5");
+}
+
+#[test]
+fn compute_rollback_tag_saturates_to_one() {
+    // current_cycle=1, failures=5 => saturating_sub gives 0, max(1) gives 1
+    let tag = super::cycle_safety::compute_rollback_tag("task-1", 1, 5);
+    assert_eq!(tag, "checkpoint/task-1/1");
+}
+
+#[test]
+fn compute_rollback_tag_exact_cycle_one() {
+    let tag = super::cycle_safety::compute_rollback_tag("my-task", 3, 3);
+    assert_eq!(tag, "checkpoint/my-task/1");
+}

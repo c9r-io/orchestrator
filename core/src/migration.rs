@@ -1059,4 +1059,367 @@ mod tests {
             .expect("query normalized agent_id");
         assert_eq!(agent_id, "unspecified");
     }
+
+    // ============================================================================
+    // m0002 data-driven tests: backfill_historical_defaults
+    // ============================================================================
+
+    #[test]
+    fn m0002_backfills_empty_agent_id() {
+        let conn = mem_conn();
+        // Run m0001 to create baseline schema
+        let all = all_migrations();
+        let m1 = vec![Migration {
+            version: 1,
+            name: all[0].name,
+            up: all[0].up,
+        }];
+        run_pending(&conn, &m1).expect("run m0001");
+
+        // Insert a task + item + command_run with empty agent_id
+        conn.execute(
+            "INSERT INTO tasks (
+                id, name, status, goal, target_files_json, mode, workspace_id, workflow_id,
+                project_id, workspace_root, qa_targets_json, ticket_dir, created_at, updated_at
+             ) VALUES (
+                'task-1', 'test', 'running', 'goal', '[]', 'once', 'default', 'basic',
+                'default', '.', '[]', 'docs/ticket', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
+             )",
+            [],
+        )
+        .expect("insert task");
+        conn.execute(
+            "INSERT INTO task_items (
+                id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json,
+                created_at, updated_at
+             ) VALUES (
+                'item-1', 'task-1', 0, 'qa.md', 'pending', '[]', '{}',
+                '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
+             )",
+            [],
+        )
+        .expect("insert task item");
+        conn.execute(
+            "INSERT INTO command_runs (
+                id, task_item_id, phase, command, cwd, workspace_id, agent_id, project_id,
+                stdout_path, stderr_path, started_at
+             ) VALUES (
+                'run-1', 'item-1', 'qa', 'echo ok', '.', 'default', '', 'default',
+                '/tmp/stdout', '/tmp/stderr', '2026-01-01T00:00:00Z'
+             )",
+            [],
+        )
+        .expect("insert command run with empty agent_id");
+
+        // Run m0002
+        let m2 = vec![
+            Migration {
+                version: 1,
+                name: all[0].name,
+                up: all[0].up,
+            },
+            Migration {
+                version: 2,
+                name: all[1].name,
+                up: all[1].up,
+            },
+        ];
+        run_pending(&conn, &m2).expect("run m0002");
+
+        let agent_id: String = conn
+            .query_row(
+                "SELECT agent_id FROM command_runs WHERE id = 'run-1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query agent_id");
+        assert_eq!(agent_id, "unspecified");
+    }
+
+    #[test]
+    fn m0002_backfills_event_step_scope_from_task_item_id() {
+        let conn = mem_conn();
+        let all = all_migrations();
+        let m1 = vec![Migration {
+            version: 1,
+            name: all[0].name,
+            up: all[0].up,
+        }];
+        run_pending(&conn, &m1).expect("run m0001");
+
+        // Insert event with task_item_id set (should infer "item" scope)
+        conn.execute(
+            "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at)
+             VALUES ('t1', 'item-1', 'step_started', '{\"step\":\"qa\"}', '2026-01-01')",
+            [],
+        )
+        .expect("insert event with task_item_id");
+
+        // Insert event without task_item_id (should infer "task" scope)
+        conn.execute(
+            "INSERT INTO events (task_id, event_type, payload_json, created_at)
+             VALUES ('t1', 'step_finished', '{\"step\":\"build\"}', '2026-01-01')",
+            [],
+        )
+        .expect("insert event without task_item_id");
+
+        let m2 = vec![
+            Migration {
+                version: 1,
+                name: all[0].name,
+                up: all[0].up,
+            },
+            Migration {
+                version: 2,
+                name: all[1].name,
+                up: all[1].up,
+            },
+        ];
+        run_pending(&conn, &m2).expect("run m0002");
+
+        // Check item-scoped event
+        let payload1: String = conn
+            .query_row(
+                "SELECT payload_json FROM events WHERE event_type = 'step_started'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query step_started payload");
+        let parsed1: serde_json::Value = serde_json::from_str(&payload1).expect("parse payload");
+        assert_eq!(parsed1["step_scope"], "item");
+
+        // Check task-scoped event
+        let payload2: String = conn
+            .query_row(
+                "SELECT payload_json FROM events WHERE event_type = 'step_finished'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query step_finished payload");
+        let parsed2: serde_json::Value = serde_json::from_str(&payload2).expect("parse payload");
+        assert_eq!(parsed2["step_scope"], "task");
+    }
+
+    #[test]
+    fn m0002_skips_event_with_existing_step_scope() {
+        let conn = mem_conn();
+        let all = all_migrations();
+        let m1 = vec![Migration {
+            version: 1,
+            name: all[0].name,
+            up: all[0].up,
+        }];
+        run_pending(&conn, &m1).expect("run m0001");
+
+        // Insert event that already has step_scope in payload
+        conn.execute(
+            "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at)
+             VALUES ('t1', 'item-1', 'step_started', '{\"step\":\"qa\",\"step_scope\":\"item\"}', '2026-01-01')",
+            [],
+        )
+        .expect("insert event with existing step_scope");
+
+        let m2 = vec![
+            Migration {
+                version: 1,
+                name: all[0].name,
+                up: all[0].up,
+            },
+            Migration {
+                version: 2,
+                name: all[1].name,
+                up: all[1].up,
+            },
+        ];
+        run_pending(&conn, &m2).expect("run m0002");
+
+        // Payload should remain unchanged
+        let payload: String = conn
+            .query_row(
+                "SELECT payload_json FROM events WHERE event_type = 'step_started'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query payload");
+        let parsed: serde_json::Value = serde_json::from_str(&payload).expect("parse");
+        assert_eq!(parsed["step_scope"], "item");
+    }
+
+    #[test]
+    fn m0002_skips_unparseable_json() {
+        let conn = mem_conn();
+        let all = all_migrations();
+        let m1 = vec![Migration {
+            version: 1,
+            name: all[0].name,
+            up: all[0].up,
+        }];
+        run_pending(&conn, &m1).expect("run m0001");
+
+        // Insert event with invalid JSON
+        conn.execute(
+            "INSERT INTO events (task_id, event_type, payload_json, created_at)
+             VALUES ('t1', 'step_started', 'not-valid-json', '2026-01-01')",
+            [],
+        )
+        .expect("insert event with bad json");
+
+        let m2 = vec![
+            Migration {
+                version: 1,
+                name: all[0].name,
+                up: all[0].up,
+            },
+            Migration {
+                version: 2,
+                name: all[1].name,
+                up: all[1].up,
+            },
+        ];
+        // Should not fail — bad JSON is skipped via `continue`
+        run_pending(&conn, &m2).expect("m0002 should skip bad JSON");
+
+        // Payload should remain unchanged
+        let payload: String = conn
+            .query_row(
+                "SELECT payload_json FROM events WHERE event_type = 'step_started'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query payload");
+        assert_eq!(payload, "not-valid-json");
+    }
+
+    // ============================================================================
+    // m0009 empty agent_id branch
+    // ============================================================================
+
+    #[test]
+    fn m0009_normalizes_empty_agent_id() {
+        let conn = mem_conn();
+        let all = all_migrations();
+        // Run all migrations up to m0008 to get the schema in place
+        let up_to_8: Vec<Migration> = all
+            .iter()
+            .filter(|m| m.version <= 8)
+            .map(|m| Migration {
+                version: m.version,
+                name: m.name,
+                up: m.up,
+            })
+            .collect();
+        run_pending(&conn, &up_to_8).expect("run m1-m8");
+
+        // Insert task + item + command run with empty agent_id
+        conn.execute(
+            "INSERT INTO tasks (
+                id, name, status, goal, target_files_json, mode, workspace_id, workflow_id,
+                project_id, workspace_root, qa_targets_json, ticket_dir, created_at, updated_at
+             ) VALUES (
+                'task-1', 'test', 'running', 'goal', '[]', 'once', 'default', 'basic',
+                'default', '.', '[]', 'docs/ticket', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
+             )",
+            [],
+        )
+        .expect("insert task");
+        conn.execute(
+            "INSERT INTO task_items (
+                id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json,
+                created_at, updated_at
+             ) VALUES (
+                'item-1', 'task-1', 0, 'qa.md', 'pending', '[]', '{}',
+                '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
+             )",
+            [],
+        )
+        .expect("insert task item");
+        conn.execute(
+            "INSERT INTO command_runs (
+                id, task_item_id, phase, command, cwd, workspace_id, agent_id, project_id,
+                stdout_path, stderr_path, started_at
+             ) VALUES (
+                'run-empty', 'item-1', 'qa', 'echo ok', '.', 'default', '', 'default',
+                '/tmp/stdout', '/tmp/stderr', '2026-01-01T00:00:00Z'
+             )",
+            [],
+        )
+        .expect("insert command run with empty agent_id");
+
+        // Run m0009
+        let m9 = all
+            .iter()
+            .filter(|m| m.version <= 9)
+            .map(|m| Migration {
+                version: m.version,
+                name: m.name,
+                up: m.up,
+            })
+            .collect::<Vec<_>>();
+        run_pending(&conn, &m9).expect("run m9");
+
+        let agent_id: String = conn
+            .query_row(
+                "SELECT agent_id FROM command_runs WHERE id = 'run-empty'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query agent_id");
+        assert_eq!(agent_id, "unspecified");
+    }
+
+    // ============================================================================
+    // all_migrations() invariants
+    // ============================================================================
+
+    #[test]
+    fn all_migrations_versions_are_ascending() {
+        let migrations = all_migrations();
+        for window in migrations.windows(2) {
+            assert!(
+                window[0].version < window[1].version,
+                "migration versions must be ascending: {} >= {}",
+                window[0].version,
+                window[1].version
+            );
+        }
+    }
+
+    #[test]
+    fn all_migrations_versions_are_contiguous() {
+        let migrations = all_migrations();
+        assert!(!migrations.is_empty(), "must have at least one migration");
+        assert_eq!(
+            migrations[0].version, 1,
+            "first migration must be version 1"
+        );
+        for window in migrations.windows(2) {
+            assert_eq!(
+                window[1].version,
+                window[0].version + 1,
+                "migration versions must be contiguous: {} -> {}",
+                window[0].version,
+                window[1].version
+            );
+        }
+    }
+
+    #[test]
+    fn all_migrations_names_are_unique() {
+        let migrations = all_migrations();
+        let mut seen = std::collections::HashSet::new();
+        for m in &migrations {
+            assert!(seen.insert(m.name), "duplicate migration name: {}", m.name);
+        }
+    }
+
+    #[test]
+    fn all_migrations_count_matches_expected() {
+        let migrations = all_migrations();
+        assert_eq!(
+            migrations.len(),
+            13,
+            "expected 13 migrations, got {}",
+            migrations.len()
+        );
+    }
 }

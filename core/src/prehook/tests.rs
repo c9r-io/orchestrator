@@ -2111,3 +2111,105 @@ fn test_resolve_finalize_outcome_no_rules_match() {
     let result = resolve_workflow_finalize_outcome(&config, &ctx).unwrap();
     assert!(result.is_none());
 }
+
+// ── CEL sandbox variable coverage: exercise sandbox fields in prehook context ──
+
+#[test]
+fn test_prehook_cel_context_last_sandbox_denied_true() {
+    let mut ctx = make_prehook_ctx();
+    ctx.last_sandbox_denied = true;
+    let result = evaluate_step_prehook_expression("last_sandbox_denied == true", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_sandbox_denied_count_nonzero() {
+    let mut ctx = make_prehook_ctx();
+    ctx.sandbox_denied_count = 5;
+    let result = evaluate_step_prehook_expression("sandbox_denied_count == 5", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_last_sandbox_denial_reason_set() {
+    let mut ctx = make_prehook_ctx();
+    ctx.last_sandbox_denial_reason = Some("permission denied".to_string());
+    let result =
+        evaluate_step_prehook_expression("last_sandbox_denial_reason == 'permission denied'", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_last_sandbox_denial_reason_none() {
+    let ctx = make_prehook_ctx();
+    // When None, cel-interpreter registers the value as null (not empty string)
+    let result = evaluate_step_prehook_expression("last_sandbox_denial_reason == null", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_sandbox_combined_expression() {
+    let mut ctx = make_prehook_ctx();
+    ctx.last_sandbox_denied = true;
+    ctx.sandbox_denied_count = 3;
+    ctx.last_sandbox_denial_reason = Some("network blocked".to_string());
+    let result = evaluate_step_prehook_expression(
+        "last_sandbox_denied && sandbox_denied_count > 2 && last_sandbox_denial_reason == 'network blocked'",
+        &ctx,
+    );
+    assert!(result.unwrap());
+}
+
+// ── CEL sandbox variable coverage: exercise sandbox fields in finalize context ──
+
+#[test]
+fn test_finalize_cel_context_last_sandbox_denied_true() {
+    let mut ctx = make_finalize_ctx();
+    ctx.last_sandbox_denied = true;
+    let rule = make_rule("r1", "last_sandbox_denied == true", "blocked", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_sandbox_denied_count_nonzero() {
+    let mut ctx = make_finalize_ctx();
+    ctx.sandbox_denied_count = 7;
+    let rule = make_rule("r1", "sandbox_denied_count == 7", "blocked", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_last_sandbox_denial_reason_set() {
+    let mut ctx = make_finalize_ctx();
+    ctx.last_sandbox_denial_reason = Some("fs write denied".to_string());
+    let rule = make_rule(
+        "r1",
+        "last_sandbox_denial_reason == 'fs write denied'",
+        "blocked",
+        None,
+    );
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_last_sandbox_denial_reason_none() {
+    let ctx = make_finalize_ctx();
+    // When None, cel-interpreter registers the value as null (not empty string)
+    let rule = make_rule("r1", "last_sandbox_denial_reason == null", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_sandbox_combined_expression() {
+    let mut ctx = make_finalize_ctx();
+    ctx.last_sandbox_denied = true;
+    ctx.sandbox_denied_count = 2;
+    ctx.last_sandbox_denial_reason = Some("process limit".to_string());
+    let rule = make_rule(
+        "r1",
+        "last_sandbox_denied && sandbox_denied_count >= 2",
+        "blocked",
+        None,
+    );
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}

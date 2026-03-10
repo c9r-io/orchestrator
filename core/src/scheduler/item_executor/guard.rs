@@ -129,3 +129,39 @@ pub async fn execute_guard_step(
         reason,
     })
 }
+
+/// Pure function: evaluate the builtin loop_guard decision.
+pub(crate) fn evaluate_builtin_loop_guard(
+    stop_when_no_unresolved: bool,
+    unresolved: u64,
+) -> GuardResult {
+    let should_stop = stop_when_no_unresolved && unresolved == 0;
+    GuardResult {
+        should_stop,
+        reason: if should_stop {
+            "no_unresolved".to_string()
+        } else {
+            "has_unresolved".to_string()
+        },
+    }
+}
+
+/// Pure function: parse guard output JSON from stdout.
+pub(crate) fn parse_guard_output(stdout: &str) -> GuardResult {
+    let parsed: serde_json::Value =
+        serde_json::from_str(stdout).unwrap_or(serde_json::Value::Null);
+    let should_stop = parsed
+        .get("should_stop")
+        .and_then(|v| v.as_bool())
+        .or_else(|| parsed.get("continue").and_then(|v| v.as_bool()).map(|v| !v))
+        .unwrap_or(false);
+    let reason = parsed
+        .get("reason")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "guard_json".to_string());
+    GuardResult {
+        should_stop,
+        reason,
+    }
+}

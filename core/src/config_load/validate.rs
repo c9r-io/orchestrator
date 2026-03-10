@@ -1776,4 +1776,671 @@ mod tests {
             .insert("basic-agent".to_string(), AgentConfig::default());
         assert!(validate_agent_env_store_refs(&config).is_ok());
     }
+
+    // ============================================================================
+    // Group 5: validate_execution_profiles_for_project()
+    // ============================================================================
+
+    #[test]
+    fn exec_profile_rejects_non_agent_step_with_profile() {
+        use crate::config::ExecutionProfileConfig;
+        let mut step = make_command_step("build", "cargo build");
+        step.execution_profile = Some("sandboxed".to_string());
+
+        let workflow = make_workflow(vec![step]);
+        let mut config = make_config_with_default_project();
+        let pid = crate::config::DEFAULT_PROJECT_ID;
+        config
+            .projects
+            .get_mut(pid)
+            .unwrap()
+            .execution_profiles
+            .insert("sandboxed".to_string(), ExecutionProfileConfig::default());
+
+        let err = validate_execution_profiles_for_project(&config, &workflow, "wf1", pid)
+            .expect_err("command step should reject profile");
+        assert!(
+            err.to_string().contains("only supported on agent steps"),
+            "unexpected: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn exec_profile_rejects_unknown_profile_name() {
+        let mut step = make_step("qa", true);
+        step.execution_profile = Some("nonexistent".to_string());
+
+        let workflow = make_workflow(vec![step]);
+        let config = make_config_with_agent("qa", "qa.md");
+        let pid = crate::config::DEFAULT_PROJECT_ID;
+
+        let err = validate_execution_profiles_for_project(&config, &workflow, "wf1", pid)
+            .expect_err("unknown profile should fail");
+        assert!(
+            err.to_string().contains("unknown execution profile"),
+            "unexpected: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn exec_profile_rejects_host_mode_with_sandbox_fields() {
+        use crate::config::{ExecutionProfileConfig, ExecutionProfileMode};
+        let mut step = make_step("qa", true);
+        step.execution_profile = Some("bad-host".to_string());
+
+        let workflow = make_workflow(vec![step]);
+        let mut config = make_config_with_agent("qa", "qa.md");
+        let pid = crate::config::DEFAULT_PROJECT_ID;
+        config
+            .projects
+            .get_mut(pid)
+            .unwrap()
+            .execution_profiles
+            .insert(
+                "bad-host".to_string(),
+                ExecutionProfileConfig {
+                    mode: ExecutionProfileMode::Host,
+                    writable_paths: vec!["/tmp".to_string()],
+                    ..ExecutionProfileConfig::default()
+                },
+            );
+
+        let err = validate_execution_profiles_for_project(&config, &workflow, "wf1", pid)
+            .expect_err("host with sandbox fields should fail");
+        assert!(
+            err.to_string().contains("sandbox-only fields"),
+            "unexpected: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn exec_profile_accepts_sandbox_mode_with_sandbox_fields() {
+        use crate::config::{ExecutionProfileConfig, ExecutionProfileMode};
+        let mut step = make_step("qa", true);
+        step.execution_profile = Some("sandboxed".to_string());
+
+        let workflow = make_workflow(vec![step]);
+        let mut config = make_config_with_agent("qa", "qa.md");
+        let pid = crate::config::DEFAULT_PROJECT_ID;
+        config
+            .projects
+            .get_mut(pid)
+            .unwrap()
+            .execution_profiles
+            .insert(
+                "sandboxed".to_string(),
+                ExecutionProfileConfig {
+                    mode: ExecutionProfileMode::Sandbox,
+                    writable_paths: vec!["/tmp".to_string()],
+                    max_memory_mb: Some(512),
+                    ..ExecutionProfileConfig::default()
+                },
+            );
+
+        let result = validate_execution_profiles_for_project(&config, &workflow, "wf1", pid);
+        assert!(
+            result.is_ok(),
+            "sandbox mode should allow sandbox fields: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn exec_profile_skips_step_without_profile() {
+        let workflow = make_workflow(vec![make_step("qa", true)]);
+        let config = make_config_with_agent("qa", "qa.md");
+        let pid = crate::config::DEFAULT_PROJECT_ID;
+
+        let result = validate_execution_profiles_for_project(&config, &workflow, "wf1", pid);
+        assert!(
+            result.is_ok(),
+            "step without profile should pass: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn exec_profile_rejects_missing_project() {
+        let workflow = make_workflow(vec![make_step("qa", true)]);
+        let config = make_config_with_default_project();
+
+        let err = validate_execution_profiles_for_project(&config, &workflow, "wf1", "nonexistent")
+            .expect_err("missing project should fail");
+        assert!(
+            err.to_string().contains("project 'nonexistent' not found"),
+            "unexpected: {}",
+            err
+        );
+    }
+
+    // ============================================================================
+    // Group 6: validate_adaptive_workflow_config() (owned agents)
+    // ============================================================================
+
+    #[test]
+    fn adaptive_none_returns_ok() {
+        let workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        let agents: HashMap<String, crate::config::AgentConfig> = HashMap::new();
+        let result = validate_adaptive_workflow_config(&workflow, "wf1", &agents);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn adaptive_disabled_returns_ok() {
+        use crate::dynamic_orchestration::AdaptivePlannerConfig;
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.adaptive = Some(AdaptivePlannerConfig {
+            enabled: false,
+            ..AdaptivePlannerConfig::default()
+        });
+        let agents: HashMap<String, crate::config::AgentConfig> = HashMap::new();
+        let result = validate_adaptive_workflow_config(&workflow, "wf1", &agents);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn adaptive_missing_planner_agent_errors() {
+        use crate::dynamic_orchestration::AdaptivePlannerConfig;
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.adaptive = Some(AdaptivePlannerConfig {
+            enabled: true,
+            planner_agent: None,
+            ..AdaptivePlannerConfig::default()
+        });
+        let agents: HashMap<String, crate::config::AgentConfig> = HashMap::new();
+        let err = validate_adaptive_workflow_config(&workflow, "wf1", &agents)
+            .expect_err("missing planner_agent should fail");
+        assert!(
+            err.to_string().contains("planner_agent is missing"),
+            "unexpected: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn adaptive_empty_planner_agent_errors() {
+        use crate::dynamic_orchestration::AdaptivePlannerConfig;
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.adaptive = Some(AdaptivePlannerConfig {
+            enabled: true,
+            planner_agent: Some("  ".to_string()),
+            ..AdaptivePlannerConfig::default()
+        });
+        let agents: HashMap<String, crate::config::AgentConfig> = HashMap::new();
+        let err = validate_adaptive_workflow_config(&workflow, "wf1", &agents)
+            .expect_err("whitespace-only planner_agent should fail");
+        assert!(
+            err.to_string().contains("planner_agent is missing"),
+            "unexpected: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn adaptive_unknown_agent_errors() {
+        use crate::dynamic_orchestration::AdaptivePlannerConfig;
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.adaptive = Some(AdaptivePlannerConfig {
+            enabled: true,
+            planner_agent: Some("ghost".to_string()),
+            ..AdaptivePlannerConfig::default()
+        });
+        let agents: HashMap<String, crate::config::AgentConfig> = HashMap::new();
+        let err = validate_adaptive_workflow_config(&workflow, "wf1", &agents)
+            .expect_err("unknown agent should fail");
+        assert!(
+            err.to_string().contains("unknown agent 'ghost'"),
+            "unexpected: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn adaptive_agent_missing_capability_errors() {
+        use crate::dynamic_orchestration::AdaptivePlannerConfig;
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.adaptive = Some(AdaptivePlannerConfig {
+            enabled: true,
+            planner_agent: Some("planner".to_string()),
+            ..AdaptivePlannerConfig::default()
+        });
+        let mut agents: HashMap<String, crate::config::AgentConfig> = HashMap::new();
+        agents.insert(
+            "planner".to_string(),
+            crate::config::AgentConfig {
+                capabilities: vec!["qa".to_string()],
+                command: "echo plan".to_string(),
+                ..crate::config::AgentConfig::default()
+            },
+        );
+        let err = validate_adaptive_workflow_config(&workflow, "wf1", &agents)
+            .expect_err("agent without adaptive_plan capability should fail");
+        assert!(
+            err.to_string()
+                .contains("must support capability 'adaptive_plan'"),
+            "unexpected: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn adaptive_valid_config_passes() {
+        use crate::dynamic_orchestration::AdaptivePlannerConfig;
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.adaptive = Some(AdaptivePlannerConfig {
+            enabled: true,
+            planner_agent: Some("planner".to_string()),
+            ..AdaptivePlannerConfig::default()
+        });
+        let mut agents: HashMap<String, crate::config::AgentConfig> = HashMap::new();
+        agents.insert(
+            "planner".to_string(),
+            crate::config::AgentConfig {
+                capabilities: vec!["adaptive_plan".to_string()],
+                command: "echo plan".to_string(),
+                ..crate::config::AgentConfig::default()
+            },
+        );
+        let result = validate_adaptive_workflow_config(&workflow, "wf1", &agents);
+        assert!(
+            result.is_ok(),
+            "valid adaptive config should pass: {:?}",
+            result.err()
+        );
+    }
+
+    // ============================================================================
+    // Group 7: validate_adaptive_workflow_config_refs() (borrowed agents)
+    // ============================================================================
+
+    #[test]
+    fn adaptive_refs_none_returns_ok() {
+        let workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        let result = validate_adaptive_workflow_config_refs(&workflow, "wf1", &agents);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn adaptive_refs_disabled_returns_ok() {
+        use crate::dynamic_orchestration::AdaptivePlannerConfig;
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.adaptive = Some(AdaptivePlannerConfig {
+            enabled: false,
+            ..AdaptivePlannerConfig::default()
+        });
+        let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        let result = validate_adaptive_workflow_config_refs(&workflow, "wf1", &agents);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn adaptive_refs_missing_planner_agent_errors() {
+        use crate::dynamic_orchestration::AdaptivePlannerConfig;
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.adaptive = Some(AdaptivePlannerConfig {
+            enabled: true,
+            planner_agent: None,
+            ..AdaptivePlannerConfig::default()
+        });
+        let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        let err = validate_adaptive_workflow_config_refs(&workflow, "wf1", &agents)
+            .expect_err("missing planner_agent should fail");
+        assert!(err.to_string().contains("planner_agent is missing"));
+    }
+
+    #[test]
+    fn adaptive_refs_unknown_agent_errors() {
+        use crate::dynamic_orchestration::AdaptivePlannerConfig;
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.adaptive = Some(AdaptivePlannerConfig {
+            enabled: true,
+            planner_agent: Some("ghost".to_string()),
+            ..AdaptivePlannerConfig::default()
+        });
+        let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        let err = validate_adaptive_workflow_config_refs(&workflow, "wf1", &agents)
+            .expect_err("unknown agent should fail");
+        assert!(err.to_string().contains("unknown agent 'ghost'"));
+    }
+
+    #[test]
+    fn adaptive_refs_agent_missing_capability_errors() {
+        use crate::dynamic_orchestration::AdaptivePlannerConfig;
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.adaptive = Some(AdaptivePlannerConfig {
+            enabled: true,
+            planner_agent: Some("planner".to_string()),
+            ..AdaptivePlannerConfig::default()
+        });
+        let agent = crate::config::AgentConfig {
+            capabilities: vec!["qa".to_string()],
+            command: "echo plan".to_string(),
+            ..crate::config::AgentConfig::default()
+        };
+        let mut agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        agents.insert("planner".to_string(), &agent);
+        let err = validate_adaptive_workflow_config_refs(&workflow, "wf1", &agents)
+            .expect_err("missing adaptive_plan capability should fail");
+        assert!(err
+            .to_string()
+            .contains("must support capability 'adaptive_plan'"));
+    }
+
+    #[test]
+    fn adaptive_refs_valid_config_passes() {
+        use crate::dynamic_orchestration::AdaptivePlannerConfig;
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.adaptive = Some(AdaptivePlannerConfig {
+            enabled: true,
+            planner_agent: Some("planner".to_string()),
+            ..AdaptivePlannerConfig::default()
+        });
+        let agent = crate::config::AgentConfig {
+            capabilities: vec!["adaptive_plan".to_string()],
+            command: "echo plan".to_string(),
+            ..crate::config::AgentConfig::default()
+        };
+        let mut agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        agents.insert("planner".to_string(), &agent);
+        let result = validate_adaptive_workflow_config_refs(&workflow, "wf1", &agents);
+        assert!(
+            result.is_ok(),
+            "valid refs config should pass: {:?}",
+            result.err()
+        );
+    }
+
+    // ============================================================================
+    // Group 8: validate_workflow_config_with_agents()
+    // ============================================================================
+
+    #[test]
+    fn with_agents_rejects_empty_steps() {
+        let workflow = make_workflow(vec![]);
+        let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        let err = validate_workflow_config_with_agents(&agents, &workflow, "wf1")
+            .expect_err("empty steps should fail");
+        assert!(err.to_string().contains("at least one step"));
+    }
+
+    #[test]
+    fn with_agents_rejects_no_enabled_steps() {
+        let workflow = make_workflow(vec![make_step("qa", false)]);
+        let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        let err = validate_workflow_config_with_agents(&agents, &workflow, "wf1")
+            .expect_err("no enabled steps should fail");
+        assert!(err.to_string().contains("no enabled steps"));
+    }
+
+    #[test]
+    fn with_agents_rejects_duplicate_step_ids() {
+        let workflow = make_workflow(vec![
+            make_builtin_step("dup", "self_test", true),
+            make_builtin_step("dup", "self_test", true),
+        ]);
+        let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        let err = validate_workflow_config_with_agents(&agents, &workflow, "wf1")
+            .expect_err("duplicate step ids should fail");
+        assert!(err.to_string().contains("duplicate step id 'dup'"));
+    }
+
+    #[test]
+    fn with_agents_rejects_missing_capability_agent() {
+        let workflow = make_workflow(vec![make_step("qa", true)]);
+        let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        let err = validate_workflow_config_with_agents(&agents, &workflow, "wf1")
+            .expect_err("missing agent should fail");
+        assert!(err.to_string().contains("no agent supports capability"));
+    }
+
+    #[test]
+    fn with_agents_accepts_builtin_step() {
+        let workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        let result = validate_workflow_config_with_agents(&agents, &workflow, "wf1");
+        assert!(result.is_ok(), "builtin should pass: {:?}", result.err());
+    }
+
+    #[test]
+    fn with_agents_accepts_command_step() {
+        let workflow = make_workflow(vec![make_command_step("build", "cargo build")]);
+        let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        let result = validate_workflow_config_with_agents(&agents, &workflow, "wf1");
+        assert!(result.is_ok(), "command should pass: {:?}", result.err());
+    }
+
+    #[test]
+    fn with_agents_accepts_agent_step_with_matching_agent() {
+        let workflow = make_workflow(vec![make_step("qa", true)]);
+        let agent = crate::config::AgentConfig {
+            capabilities: vec!["qa".to_string()],
+            command: "echo qa".to_string(),
+            ..crate::config::AgentConfig::default()
+        };
+        let mut agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        agents.insert("qa-agent".to_string(), &agent);
+        let result = validate_workflow_config_with_agents(&agents, &workflow, "wf1");
+        assert!(
+            result.is_ok(),
+            "agent with capability should pass: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn with_agents_rejects_zero_max_cycles() {
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.loop_policy.guard.max_cycles = Some(0);
+        let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        let err = validate_workflow_config_with_agents(&agents, &workflow, "wf1")
+            .expect_err("zero max_cycles should fail");
+        assert!(err.to_string().contains("max_cycles must be > 0"));
+    }
+
+    #[test]
+    fn with_agents_rejects_fixed_without_max_cycles() {
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.loop_policy.mode = LoopMode::Fixed;
+        let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        let err = validate_workflow_config_with_agents(&agents, &workflow, "wf1")
+            .expect_err("fixed without max_cycles should fail");
+        assert!(err.to_string().contains("loop.mode=fixed requires"));
+    }
+
+    #[test]
+    fn with_agents_rejects_guard_without_loop_guard_agent() {
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.loop_policy.mode = LoopMode::Infinite;
+        workflow.loop_policy.guard.enabled = true;
+        let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        let err = validate_workflow_config_with_agents(&agents, &workflow, "wf1")
+            .expect_err("guard without agent should fail");
+        assert!(err.to_string().contains("no agent supports loop_guard"));
+    }
+
+    #[test]
+    fn with_agents_accepts_guard_with_loop_guard_agent() {
+        let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+        workflow.loop_policy.mode = LoopMode::Infinite;
+        workflow.loop_policy.guard.enabled = true;
+        let agent = crate::config::AgentConfig {
+            capabilities: vec!["loop_guard".to_string()],
+            command: "echo guard".to_string(),
+            ..crate::config::AgentConfig::default()
+        };
+        let mut agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        agents.insert("guard-agent".to_string(), &agent);
+        let result = validate_workflow_config_with_agents(&agents, &workflow, "wf1");
+        assert!(
+            result.is_ok(),
+            "guard with agent should pass: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn with_agents_skips_disabled_steps() {
+        let workflow = make_workflow(vec![
+            make_step("qa", false),
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        let result = validate_workflow_config_with_agents(&agents, &workflow, "wf1");
+        assert!(
+            result.is_ok(),
+            "disabled step should be skipped: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn with_agents_allows_ticket_scan_without_agent() {
+        let workflow = make_workflow(vec![
+            make_step("ticket_scan", true),
+            make_builtin_step("self_test", "self_test", true),
+        ]);
+        let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        let result = validate_workflow_config_with_agents(&agents, &workflow, "wf1");
+        assert!(
+            result.is_ok(),
+            "ticket_scan should not need agent: {:?}",
+            result.err()
+        );
+    }
+
+    // ============================================================================
+    // Group 9: validate_agent_env_store_refs_for_project()
+    // ============================================================================
+
+    #[test]
+    fn env_store_refs_project_missing_returns_ok() {
+        let config = OrchestratorConfig::default();
+        let result = validate_agent_env_store_refs_for_project(&config, "nonexistent");
+        assert!(result.is_ok(), "missing project should return Ok");
+    }
+
+    #[test]
+    fn env_store_refs_project_valid_refs_pass() {
+        use crate::cli_types::{AgentEnvEntry, AgentEnvRefValue};
+        use crate::config::{AgentConfig, EnvStoreConfig};
+
+        let mut config = OrchestratorConfig::default();
+        let pid = "my-project";
+        let project = config.projects.entry(pid.to_string()).or_default();
+        project.env_stores.insert(
+            "vault".to_string(),
+            EnvStoreConfig {
+                data: [("SECRET".to_string(), "hidden".to_string())].into(),
+                sensitive: true,
+            },
+        );
+        project.agents.insert(
+            "agent1".to_string(),
+            AgentConfig {
+                env: Some(vec![
+                    AgentEnvEntry {
+                        name: None,
+                        value: None,
+                        from_ref: Some("vault".to_string()),
+                        ref_value: None,
+                    },
+                    AgentEnvEntry {
+                        name: Some("SECRET_KEY".to_string()),
+                        value: None,
+                        from_ref: None,
+                        ref_value: Some(AgentEnvRefValue {
+                            name: "vault".to_string(),
+                            key: "SECRET".to_string(),
+                        }),
+                    },
+                ]),
+                ..AgentConfig::default()
+            },
+        );
+        let result = validate_agent_env_store_refs_for_project(&config, pid);
+        assert!(result.is_ok(), "valid refs should pass: {:?}", result.err());
+    }
+
+    #[test]
+    fn env_store_refs_project_unknown_from_ref_errors() {
+        use crate::cli_types::AgentEnvEntry;
+        use crate::config::AgentConfig;
+
+        let mut config = OrchestratorConfig::default();
+        let pid = "my-project";
+        config
+            .projects
+            .entry(pid.to_string())
+            .or_default()
+            .agents
+            .insert(
+                "agent1".to_string(),
+                AgentConfig {
+                    env: Some(vec![AgentEnvEntry {
+                        name: None,
+                        value: None,
+                        from_ref: Some("missing-store".to_string()),
+                        ref_value: None,
+                    }]),
+                    ..AgentConfig::default()
+                },
+            );
+        let err = validate_agent_env_store_refs_for_project(&config, pid)
+            .expect_err("unknown from_ref should fail");
+        assert!(err.to_string().contains("unknown store"));
+        assert!(err.to_string().contains("missing-store"));
+    }
+
+    #[test]
+    fn env_store_refs_project_unknown_ref_value_errors() {
+        use crate::cli_types::{AgentEnvEntry, AgentEnvRefValue};
+        use crate::config::AgentConfig;
+
+        let mut config = OrchestratorConfig::default();
+        let pid = "my-project";
+        config
+            .projects
+            .entry(pid.to_string())
+            .or_default()
+            .agents
+            .insert(
+                "agent1".to_string(),
+                AgentConfig {
+                    env: Some(vec![AgentEnvEntry {
+                        name: Some("X".to_string()),
+                        value: None,
+                        from_ref: None,
+                        ref_value: Some(AgentEnvRefValue {
+                            name: "absent".to_string(),
+                            key: "K".to_string(),
+                        }),
+                    }]),
+                    ..AgentConfig::default()
+                },
+            );
+        let err = validate_agent_env_store_refs_for_project(&config, pid)
+            .expect_err("unknown ref_value store should fail");
+        assert!(err.to_string().contains("unknown store"));
+        assert!(err.to_string().contains("absent"));
+    }
+
+    #[test]
+    fn env_store_refs_project_no_env_passes() {
+        use crate::config::AgentConfig;
+
+        let mut config = OrchestratorConfig::default();
+        let pid = "my-project";
+        config
+            .projects
+            .entry(pid.to_string())
+            .or_default()
+            .agents
+            .insert("basic".to_string(), AgentConfig::default());
+        let result = validate_agent_env_store_refs_for_project(&config, pid);
+        assert!(result.is_ok(), "no env should pass: {:?}", result.err());
+    }
 }

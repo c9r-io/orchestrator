@@ -1159,3 +1159,92 @@ fn step_ids_for_capability_no_duplicates_for_canonical_names() {
     // "qa_testing" is already in canonical list, should not be duplicated
     assert_eq!(ids, vec!["qa", "qa_testing"]);
 }
+
+// ── guard pure-function tests ────────────────────────────
+
+#[test]
+fn evaluate_builtin_loop_guard_stops_when_no_unresolved() {
+    let result = super::guard::evaluate_builtin_loop_guard(true, 0);
+    assert!(result.should_stop);
+    assert_eq!(result.reason, "no_unresolved");
+}
+
+#[test]
+fn evaluate_builtin_loop_guard_continues_when_has_unresolved() {
+    let result = super::guard::evaluate_builtin_loop_guard(true, 5);
+    assert!(!result.should_stop);
+    assert_eq!(result.reason, "has_unresolved");
+}
+
+#[test]
+fn evaluate_builtin_loop_guard_continues_when_flag_disabled() {
+    let result = super::guard::evaluate_builtin_loop_guard(false, 0);
+    assert!(!result.should_stop);
+    assert_eq!(result.reason, "has_unresolved");
+}
+
+#[test]
+fn evaluate_builtin_loop_guard_continues_when_flag_disabled_and_has_items() {
+    let result = super::guard::evaluate_builtin_loop_guard(false, 3);
+    assert!(!result.should_stop);
+    assert_eq!(result.reason, "has_unresolved");
+}
+
+#[test]
+fn parse_guard_output_should_stop_true() {
+    let result = super::guard::parse_guard_output(r#"{"should_stop": true, "reason": "done"}"#);
+    assert!(result.should_stop);
+    assert_eq!(result.reason, "done");
+}
+
+#[test]
+fn parse_guard_output_should_stop_false() {
+    let result = super::guard::parse_guard_output(r#"{"should_stop": false, "reason": "ongoing"}"#);
+    assert!(!result.should_stop);
+    assert_eq!(result.reason, "ongoing");
+}
+
+#[test]
+fn parse_guard_output_continue_true_means_dont_stop() {
+    let result = super::guard::parse_guard_output(r#"{"continue": true}"#);
+    assert!(!result.should_stop);
+    assert_eq!(result.reason, "guard_json");
+}
+
+#[test]
+fn parse_guard_output_continue_false_means_stop() {
+    let result = super::guard::parse_guard_output(r#"{"continue": false}"#);
+    assert!(result.should_stop);
+    assert_eq!(result.reason, "guard_json");
+}
+
+#[test]
+fn parse_guard_output_invalid_json_defaults_to_continue() {
+    let result = super::guard::parse_guard_output("not valid json");
+    assert!(!result.should_stop);
+    assert_eq!(result.reason, "guard_json");
+}
+
+#[test]
+fn parse_guard_output_empty_string_defaults_to_continue() {
+    let result = super::guard::parse_guard_output("");
+    assert!(!result.should_stop);
+    assert_eq!(result.reason, "guard_json");
+}
+
+#[test]
+fn parse_guard_output_missing_fields_defaults_to_continue() {
+    let result = super::guard::parse_guard_output(r#"{"other": 42}"#);
+    assert!(!result.should_stop);
+    assert_eq!(result.reason, "guard_json");
+}
+
+#[test]
+fn parse_guard_output_should_stop_takes_precedence_over_continue() {
+    // When both fields are present, should_stop is checked first
+    let result = super::guard::parse_guard_output(
+        r#"{"should_stop": true, "continue": true, "reason": "both"}"#,
+    );
+    assert!(result.should_stop);
+    assert_eq!(result.reason, "both");
+}

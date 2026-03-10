@@ -698,4 +698,346 @@ mod tests {
         // Debug should work
         let _debug = format!("{:?}", a);
     }
+
+    // ── list_non_terminal_tasks_by_workspace ──
+
+    #[test]
+    fn list_non_terminal_tasks_by_workspace_empty() {
+        let (_dir, db_path) = tmp_db_path();
+        init_schema(&db_path).expect("init_schema");
+
+        let conn = open_conn(&db_path).expect("open_conn");
+        let tasks =
+            list_non_terminal_tasks_by_workspace(&conn, "default", "ws1", 10).expect("list empty");
+        assert!(tasks.is_empty());
+    }
+
+    #[test]
+    fn list_non_terminal_tasks_by_workspace_returns_matching() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/list_ws_test.md");
+        std::fs::write(&qa_file, "# list ws test\n").expect("seed qa file");
+
+        create_task_impl(&state, CreateTaskPayload::default()).expect("task 1");
+        create_task_impl(&state, CreateTaskPayload::default()).expect("task 2");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let tasks = list_non_terminal_tasks_by_workspace(
+            &conn,
+            crate::config::DEFAULT_PROJECT_ID,
+            "default",
+            10,
+        )
+        .expect("list");
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(tasks[0].status, "pending");
+        assert_eq!(tasks[1].status, "pending");
+    }
+
+    #[test]
+    fn list_non_terminal_tasks_by_workspace_respects_limit() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/limit_ws_test.md");
+        std::fs::write(&qa_file, "# limit ws test\n").expect("seed qa file");
+
+        create_task_impl(&state, CreateTaskPayload::default()).expect("task 1");
+        create_task_impl(&state, CreateTaskPayload::default()).expect("task 2");
+        create_task_impl(&state, CreateTaskPayload::default()).expect("task 3");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let tasks = list_non_terminal_tasks_by_workspace(
+            &conn,
+            crate::config::DEFAULT_PROJECT_ID,
+            "default",
+            2,
+        )
+        .expect("list limited");
+        assert_eq!(tasks.len(), 2);
+    }
+
+    #[test]
+    fn list_non_terminal_tasks_by_workspace_excludes_terminal() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/terminal_ws_test.md");
+        std::fs::write(&qa_file, "# terminal ws test\n").expect("seed qa file");
+
+        let task = create_task_impl(&state, CreateTaskPayload::default()).expect("task");
+
+        // Mark as completed (terminal)
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET status = 'completed' WHERE id = ?1",
+            params![task.id],
+        )
+        .expect("set task completed");
+
+        let tasks = list_non_terminal_tasks_by_workspace(
+            &conn,
+            crate::config::DEFAULT_PROJECT_ID,
+            "default",
+            10,
+        )
+        .expect("list");
+        assert!(tasks.is_empty());
+    }
+
+    // ── list_non_terminal_tasks_by_workflow ──
+
+    #[test]
+    fn list_non_terminal_tasks_by_workflow_empty() {
+        let (_dir, db_path) = tmp_db_path();
+        init_schema(&db_path).expect("init_schema");
+
+        let conn = open_conn(&db_path).expect("open_conn");
+        let tasks =
+            list_non_terminal_tasks_by_workflow(&conn, "default", "wf1", 10).expect("list empty");
+        assert!(tasks.is_empty());
+    }
+
+    #[test]
+    fn list_non_terminal_tasks_by_workflow_returns_matching() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/list_wf_test.md");
+        std::fs::write(&qa_file, "# list wf test\n").expect("seed qa file");
+
+        create_task_impl(&state, CreateTaskPayload::default()).expect("task 1");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let tasks = list_non_terminal_tasks_by_workflow(
+            &conn,
+            crate::config::DEFAULT_PROJECT_ID,
+            "basic",
+            10,
+        )
+        .expect("list");
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].status, "pending");
+    }
+
+    #[test]
+    fn list_non_terminal_tasks_by_workflow_respects_limit() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/limit_wf_test.md");
+        std::fs::write(&qa_file, "# limit wf test\n").expect("seed qa file");
+
+        create_task_impl(&state, CreateTaskPayload::default()).expect("task 1");
+        create_task_impl(&state, CreateTaskPayload::default()).expect("task 2");
+        create_task_impl(&state, CreateTaskPayload::default()).expect("task 3");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let tasks = list_non_terminal_tasks_by_workflow(
+            &conn,
+            crate::config::DEFAULT_PROJECT_ID,
+            "basic",
+            1,
+        )
+        .expect("list limited");
+        assert_eq!(tasks.len(), 1);
+    }
+
+    // ── insert_control_plane_audit ──
+
+    #[test]
+    fn insert_control_plane_audit_stores_row() {
+        let (_dir, db_path) = tmp_db_path();
+        init_schema(&db_path).expect("init_schema");
+
+        let record = ControlPlaneAuditRecord {
+            transport: "grpc".to_string(),
+            remote_addr: Some("127.0.0.1:5000".to_string()),
+            rpc: "CreateTask".to_string(),
+            subject_id: Some("user-1".to_string()),
+            authn_result: "ok".to_string(),
+            authz_result: "allowed".to_string(),
+            role: Some("admin".to_string()),
+            reason: Some("normal access".to_string()),
+            tls_fingerprint: None,
+        };
+        insert_control_plane_audit(&db_path, &record).expect("insert audit");
+
+        let conn = open_conn(&db_path).expect("open sqlite");
+        let (transport, rpc, authn, authz): (String, String, String, String) = conn
+            .query_row(
+                "SELECT transport, rpc, authn_result, authz_result FROM control_plane_audit LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("query audit");
+        assert_eq!(transport, "grpc");
+        assert_eq!(rpc, "CreateTask");
+        assert_eq!(authn, "ok");
+        assert_eq!(authz, "allowed");
+    }
+
+    #[test]
+    fn insert_control_plane_audit_with_none_fields() {
+        let (_dir, db_path) = tmp_db_path();
+        init_schema(&db_path).expect("init_schema");
+
+        let record = ControlPlaneAuditRecord {
+            transport: "uds".to_string(),
+            remote_addr: None,
+            rpc: "ListTasks".to_string(),
+            subject_id: None,
+            authn_result: "skipped".to_string(),
+            authz_result: "skipped".to_string(),
+            role: None,
+            reason: None,
+            tls_fingerprint: None,
+        };
+        insert_control_plane_audit(&db_path, &record).expect("insert audit with nones");
+
+        let conn = open_conn(&db_path).expect("open sqlite");
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM control_plane_audit", [], |row| {
+                row.get(0)
+            })
+            .expect("count audit");
+        assert_eq!(count, 1);
+    }
+
+    // ── reset_db include_history branch ──
+
+    #[test]
+    fn reset_db_with_history_keeps_latest_config_version() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        // Confirm config versions exist
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let versions_before: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM orchestrator_config_versions",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count config versions before");
+        assert!(versions_before > 0);
+        drop(conn);
+
+        // Reset with include_history=true, include_config=false
+        // Should keep only the latest config version
+        reset_db(&state, true, false).expect("reset_db with history");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let versions_after: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM orchestrator_config_versions",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count config versions after");
+        // Should keep at most 1 (the latest)
+        assert!(versions_after <= 1, "Expected <= 1, got {}", versions_after);
+        // Tasks should be cleared
+        let tasks: i64 = conn
+            .query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get(0))
+            .expect("count tasks");
+        assert_eq!(tasks, 0);
+    }
+
+    // ── reset_project_data with actual data ──
+
+    #[test]
+    fn reset_project_data_clears_project_data_and_returns_stats() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/proj_reset_test.md");
+        std::fs::write(&qa_file, "# proj reset test\n").expect("seed qa file");
+
+        let task = create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
+
+        // Verify task exists
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let task_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM tasks WHERE project_id = ?1",
+                params![crate::config::DEFAULT_PROJECT_ID],
+                |row| row.get(0),
+            )
+            .expect("count tasks");
+        assert!(task_count > 0);
+
+        // Insert an event for the task
+        conn.execute(
+            "INSERT INTO events (task_id, event_type, payload_json, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![task.id, "test", "{}", crate::config_load::now_ts()],
+        )
+        .expect("insert event");
+        drop(conn);
+
+        let stats =
+            reset_project_data(&state, crate::config::DEFAULT_PROJECT_ID).expect("reset project");
+        assert!(stats.tasks > 0, "expected tasks > 0, got {}", stats.tasks);
+        assert_eq!(stats.tickets_cleaned, 0); // hardcoded to 0
+
+        // Verify data is cleared
+        let conn = open_conn(&state.db_path).expect("open sqlite after reset");
+        let task_count_after: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM tasks WHERE project_id = ?1",
+                params![crate::config::DEFAULT_PROJECT_ID],
+                |row| row.get(0),
+            )
+            .expect("count tasks after");
+        assert_eq!(task_count_after, 0);
+
+        let event_count_after: i64 = conn
+            .query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))
+            .expect("count events after");
+        assert_eq!(event_count_after, 0);
+    }
+
+    // ── count excludes terminal statuses ──
+
+    #[test]
+    fn count_non_terminal_tasks_by_workspace_excludes_completed() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/terminal_count_test.md");
+        std::fs::write(&qa_file, "# terminal count test\n").expect("seed qa file");
+
+        let task = create_task_impl(&state, CreateTaskPayload::default()).expect("task");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE tasks SET status = 'completed' WHERE id = ?1",
+            params![task.id],
+        )
+        .expect("set completed");
+
+        let count = count_non_terminal_tasks_by_workspace(
+            &conn,
+            crate::config::DEFAULT_PROJECT_ID,
+            "default",
+        )
+        .expect("count");
+        assert_eq!(count, 0);
+    }
 }

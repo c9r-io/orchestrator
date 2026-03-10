@@ -219,3 +219,28 @@ pub(super) async fn apply_auto_rollback_if_needed(
 pub(super) fn should_snapshot_binary(binary_snapshot: bool, self_referential: bool) -> bool {
     binary_snapshot && self_referential
 }
+
+/// Pure function: determine if auto-rollback should trigger.
+pub(crate) fn should_auto_rollback(
+    auto_rollback: bool,
+    consecutive_failures: u64,
+    max_consecutive_failures: u64,
+    checkpoint_strategy: &crate::config::CheckpointStrategy,
+) -> bool {
+    auto_rollback
+        && consecutive_failures >= max_consecutive_failures
+        && matches!(
+            checkpoint_strategy,
+            crate::config::CheckpointStrategy::GitTag
+        )
+}
+
+/// Pure function: compute the rollback tag for a given state.
+pub(crate) fn compute_rollback_tag(
+    task_id: &str,
+    current_cycle: u64,
+    consecutive_failures: u64,
+) -> String {
+    let rollback_cycle = current_cycle.saturating_sub(consecutive_failures);
+    format!("checkpoint/{}/{}", task_id, rollback_cycle.max(1))
+}

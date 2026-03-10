@@ -1013,4 +1013,451 @@ mod tests {
         assert_eq!(cmd, "echo test");
         assert!((confidence.expect("confidence should be persisted") - 0.95).abs() < 0.01);
     }
+
+    // ── extract_event_promoted_fields ──
+
+    #[test]
+    fn extract_event_promoted_fields_with_step_key() {
+        let (step, step_scope, cycle) =
+            extract_event_promoted_fields(r#"{"step":"qa","step_scope":"item","cycle":3}"#);
+        assert_eq!(step, Some("qa".to_string()));
+        assert_eq!(step_scope, Some("item".to_string()));
+        assert_eq!(cycle, Some(3));
+    }
+
+    #[test]
+    fn extract_event_promoted_fields_phase_fallback() {
+        let (step, step_scope, cycle) =
+            extract_event_promoted_fields(r#"{"phase":"fix","cycle":1}"#);
+        assert_eq!(step, Some("fix".to_string()));
+        assert_eq!(step_scope, None);
+        assert_eq!(cycle, Some(1));
+    }
+
+    #[test]
+    fn extract_event_promoted_fields_step_takes_priority_over_phase() {
+        let (step, _, _) =
+            extract_event_promoted_fields(r#"{"step":"qa","phase":"fix"}"#);
+        assert_eq!(step, Some("qa".to_string()));
+    }
+
+    #[test]
+    fn extract_event_promoted_fields_invalid_json() {
+        let (step, step_scope, cycle) = extract_event_promoted_fields("not json at all");
+        assert_eq!(step, None);
+        assert_eq!(step_scope, None);
+        assert_eq!(cycle, None);
+    }
+
+    #[test]
+    fn extract_event_promoted_fields_empty_json_object() {
+        let (step, step_scope, cycle) = extract_event_promoted_fields("{}");
+        assert_eq!(step, None);
+        assert_eq!(step_scope, None);
+        assert_eq!(cycle, None);
+    }
+
+    #[test]
+    fn extract_event_promoted_fields_cycle_as_string() {
+        // cycle is a string, not an integer
+        let (_, _, cycle) = extract_event_promoted_fields(r#"{"cycle":"not_a_number"}"#);
+        assert_eq!(cycle, None);
+    }
+
+    // ── insert_event promoted fields verification ──
+
+    #[tokio::test]
+    async fn insert_event_stores_promoted_fields() {
+        let (state, task_id, _item_id) = setup_task();
+
+        state
+            .db_writer
+            .insert_event(
+                &task_id,
+                None,
+                "phase_result",
+                r#"{"step":"qa","step_scope":"task","cycle":5}"#,
+            )
+            .await
+            .expect("insert_event");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (step, step_scope, cycle): (Option<String>, Option<String>, Option<i64>) = conn
+            .query_row(
+                "SELECT step, step_scope, cycle FROM events WHERE task_id = ?1",
+                params![task_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("query promoted fields");
+
+        assert_eq!(step, Some("qa".to_string()));
+        assert_eq!(step_scope, Some("task".to_string()));
+        assert_eq!(cycle, Some(5));
+    }
+
+    // ── update_command_run ──
+
+    #[tokio::test]
+    async fn update_command_run_updates_fields() {
+        let (state, _task_id, item_id) = setup_task();
+        let mut run = make_command_run(&item_id);
+        let run_id = run.id.clone();
+
+        // First insert the command run
+        state
+            .db_writer
+            .insert_command_run(&run)
+            .await
+            .expect("insert_command_run");
+
+        // Now update it
+        run.exit_code = 0;
+        run.ended_at = "2026-01-02T00:00:00Z".to_string();
+        run.interrupted = 1;
+        run.confidence = Some(0.99);
+        run.validation_status = "verified".to_string();
+
+        state
+            .db_writer
+            .update_command_run(&run)
+            .await
+            .expect("update_command_run");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (exit_code, ended_at, interrupted, confidence, validation): (
+            Option<i64>,
+            Option<String>,
+            bool,
+            Option<f64>,
+            Option<String>,
+        ) = conn
+            .query_row(
+                "SELECT exit_code, ended_at, interrupted, confidence, validation_status FROM command_runs WHERE id = ?1",
+                params![run_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            )
+            .expect("query updated command_run");
+
+        assert_eq!(exit_code, Some(0));
+        assert!(ended_at.is_some());
+        assert!(interrupted);
+        assert!((confidence.unwrap() - 0.99).abs() < 0.01);
+        assert_eq!(validation, Some("verified".to_string()));
+    }
+
+    // ── update_command_run_with_events ──
+
+    #[tokio::test]
+    async fn update_command_run_with_events_updates_and_inserts() {
+        let (state, task_id, item_id) = setup_task();
+        let mut run = make_command_run(&item_id);
+        let run_id = run.id.clone();
+
+        state
+            .db_writer
+            .insert_command_run(&run)
+            .await
+            .expect("insert_command_run");
+
+        run.exit_code = 1;
+        let events = vec![
+            DbEventRecord {
+                task_id: task_id.clone(),
+                task_item_id: Some(item_id.clone()),
+                event_type: "phase_start".to_string(),
+                payload_json: r#"{"step":"qa","cycle":1}"#.to_string(),
+            },
+            DbEventRecord {
+                task_id: task_id.clone(),
+                task_item_id: Some(item_id.clone()),
+                event_type: "phase_end".to_string(),
+                payload_json: r#"{"step":"qa","cycle":1}"#.to_string(),
+            },
+        ];
+
+        state
+            .db_writer
+            .update_command_run_with_events(&run, &events)
+            .await
+            .expect("update_command_run_with_events");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let exit_code: Option<i64> = conn
+            .query_row(
+                "SELECT exit_code FROM command_runs WHERE id = ?1",
+                params![run_id],
+                |row| row.get(0),
+            )
+            .expect("query updated run");
+        assert_eq!(exit_code, Some(1));
+
+        let event_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM events WHERE task_id = ?1",
+                params![task_id],
+                |row| row.get(0),
+            )
+            .expect("count events");
+        assert_eq!(event_count, 2);
+    }
+
+    #[tokio::test]
+    async fn update_command_run_with_events_empty_events() {
+        let (state, _task_id, item_id) = setup_task();
+        let mut run = make_command_run(&item_id);
+        let run_id = run.id.clone();
+
+        state
+            .db_writer
+            .insert_command_run(&run)
+            .await
+            .expect("insert_command_run");
+
+        run.exit_code = 0;
+        state
+            .db_writer
+            .update_command_run_with_events(&run, &[])
+            .await
+            .expect("update with empty events");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let exit_code: Option<i64> = conn
+            .query_row(
+                "SELECT exit_code FROM command_runs WHERE id = ?1",
+                params![run_id],
+                |row| row.get(0),
+            )
+            .expect("query run");
+        assert_eq!(exit_code, Some(0));
+    }
+
+    // ── update_command_run_pid ──
+
+    #[tokio::test]
+    async fn update_command_run_pid_sets_pid() {
+        let (state, _task_id, item_id) = setup_task();
+        let run = make_command_run(&item_id);
+        let run_id = run.id.clone();
+
+        state
+            .db_writer
+            .insert_command_run(&run)
+            .await
+            .expect("insert_command_run");
+
+        state
+            .db_writer
+            .update_command_run_pid(&run_id, 12345)
+            .await
+            .expect("update pid");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let pid: Option<i64> = conn
+            .query_row(
+                "SELECT pid FROM command_runs WHERE id = ?1",
+                params![run_id],
+                |row| row.get(0),
+            )
+            .expect("query pid");
+        assert_eq!(pid, Some(12345));
+    }
+
+    // ── find_active_child_pids ──
+
+    #[tokio::test]
+    async fn find_active_child_pids_empty() {
+        let (state, task_id, _item_id) = setup_task();
+
+        let pids = state
+            .db_writer
+            .find_active_child_pids(&task_id)
+            .await
+            .expect("find pids");
+        assert!(pids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn find_active_child_pids_returns_active_pids() {
+        let (state, task_id, item_id) = setup_task();
+        let run = make_command_run(&item_id);
+        let run_id = run.id.clone();
+
+        state
+            .db_writer
+            .insert_command_run(&run)
+            .await
+            .expect("insert_command_run");
+
+        // Set exit_code = -1 (active) and pid
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE command_runs SET exit_code = -1, pid = 9999 WHERE id = ?1",
+            params![run_id],
+        )
+        .expect("set active pid");
+        drop(conn);
+
+        let pids = state
+            .db_writer
+            .find_active_child_pids(&task_id)
+            .await
+            .expect("find pids");
+        assert_eq!(pids, vec![9999]);
+    }
+
+    #[tokio::test]
+    async fn find_active_child_pids_ignores_completed_runs() {
+        let (state, task_id, item_id) = setup_task();
+        let run = make_command_run(&item_id);
+        let run_id = run.id.clone();
+
+        state
+            .db_writer
+            .insert_command_run(&run)
+            .await
+            .expect("insert_command_run");
+
+        // Set exit_code = 0 (completed) and pid — should NOT be returned
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE command_runs SET exit_code = 0, pid = 8888 WHERE id = ?1",
+            params![run_id],
+        )
+        .expect("set completed pid");
+        drop(conn);
+
+        let pids = state
+            .db_writer
+            .find_active_child_pids(&task_id)
+            .await
+            .expect("find pids");
+        assert!(pids.is_empty());
+    }
+
+    // ── update_task_pipeline_vars ──
+
+    #[tokio::test]
+    async fn update_task_pipeline_vars_stores_json() {
+        let (state, task_id, _item_id) = setup_task();
+
+        state
+            .db_writer
+            .update_task_pipeline_vars(&task_id, r#"{"key":"value"}"#)
+            .await
+            .expect("update pipeline vars");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let vars: Option<String> = conn
+            .query_row(
+                "SELECT pipeline_vars_json FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| row.get(0),
+            )
+            .expect("query pipeline vars");
+        assert_eq!(vars, Some(r#"{"key":"value"}"#.to_string()));
+    }
+
+    // ── set_task_status: paused and interrupted branches ──
+
+    #[tokio::test]
+    async fn set_task_status_paused_clears_completed_at() {
+        let (state, task_id, _item_id) = setup_task();
+
+        // First set to completed
+        state
+            .db_writer
+            .set_task_status(&task_id, "completed", true)
+            .await
+            .expect("set completed");
+
+        // Now pause
+        state
+            .db_writer
+            .set_task_status(&task_id, "paused", false)
+            .await
+            .expect("set paused");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (status, completed_at): (String, Option<String>) = conn
+            .query_row(
+                "SELECT status, completed_at FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("query task");
+        assert_eq!(status, "paused");
+        assert!(completed_at.is_none());
+    }
+
+    #[tokio::test]
+    async fn set_task_status_interrupted_clears_completed_at() {
+        let (state, task_id, _item_id) = setup_task();
+
+        state
+            .db_writer
+            .set_task_status(&task_id, "completed", true)
+            .await
+            .expect("set completed");
+
+        state
+            .db_writer
+            .set_task_status(&task_id, "interrupted", false)
+            .await
+            .expect("set interrupted");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let (status, completed_at): (String, Option<String>) = conn
+            .query_row(
+                "SELECT status, completed_at FROM tasks WHERE id = ?1",
+                params![task_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("query task");
+        assert_eq!(status, "interrupted");
+        assert!(completed_at.is_none());
+    }
+
+    // ── mark_task_item_running idempotency ──
+
+    #[tokio::test]
+    async fn mark_task_item_running_preserves_started_at_on_second_call() {
+        let (state, _task_id, item_id) = setup_task();
+
+        state
+            .db_writer
+            .mark_task_item_running(&item_id)
+            .await
+            .expect("mark running first time");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let first_started_at: Option<String> = conn
+            .query_row(
+                "SELECT started_at FROM task_items WHERE id = ?1",
+                params![item_id],
+                |row| row.get(0),
+            )
+            .expect("get started_at");
+        drop(conn);
+
+        // Small delay to ensure timestamps differ
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        state
+            .db_writer
+            .mark_task_item_running(&item_id)
+            .await
+            .expect("mark running second time");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let second_started_at: Option<String> = conn
+            .query_row(
+                "SELECT started_at FROM task_items WHERE id = ?1",
+                params![item_id],
+                |row| row.get(0),
+            )
+            .expect("get started_at after second mark");
+
+        // COALESCE should preserve the original started_at
+        assert_eq!(first_started_at, second_started_at);
+    }
 }

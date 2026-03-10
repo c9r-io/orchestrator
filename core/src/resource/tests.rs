@@ -10,8 +10,9 @@ mod cases {
     use crate::test_utils::TestState;
 
     use super::super::test_fixtures::{
-        agent_manifest, make_config, project_manifest, runtime_policy_manifest, workflow_manifest,
-        workspace_manifest,
+        agent_manifest, env_store_manifest, execution_profile_manifest, make_config,
+        project_manifest, runtime_policy_manifest, secret_store_manifest, step_template_manifest,
+        workflow_manifest, workspace_manifest,
     };
 
     #[test]
@@ -721,5 +722,460 @@ mod apply_to_project_tests {
         let result = apply_to_project(&resource, &mut config, "ignored-project").expect("apply");
 
         assert_eq!(result, ApplyResult::Configured);
+    }
+}
+
+// ── execution_profile tests ─────────────────────────────────────────
+#[cfg(test)]
+mod execution_profile_tests {
+    use super::super::test_fixtures::{
+        env_store_manifest, execution_profile_manifest, make_config, secret_store_manifest,
+        step_template_manifest,
+    };
+    use super::super::*;
+    use crate::cli_types::{
+        ExecutionProfileSpec, OrchestratorResource, ResourceKind, ResourceMetadata, ResourceSpec,
+    };
+    use crate::config::{
+        ExecutionFsMode, ExecutionNetworkMode, ExecutionProfileConfig, ExecutionProfileMode,
+    };
+    use crate::resource::execution_profile::{
+        build_execution_profile, execution_profile_config_to_spec, execution_profile_spec_to_config,
+    };
+
+    // ── spec_to_config conversion ───────────────────────────────
+
+    #[test]
+    fn spec_to_config_sandbox_mode() {
+        let spec = ExecutionProfileSpec {
+            mode: "sandbox".to_string(),
+            fs_mode: "workspace_readonly".to_string(),
+            writable_paths: vec!["/tmp".to_string()],
+            network_mode: "deny".to_string(),
+            network_allowlist: vec![],
+            max_memory_mb: Some(512),
+            max_cpu_seconds: Some(60),
+            max_processes: Some(10),
+            max_open_files: Some(256),
+        };
+        let config = execution_profile_spec_to_config(&spec);
+        assert_eq!(config.mode, ExecutionProfileMode::Sandbox);
+        assert_eq!(config.fs_mode, ExecutionFsMode::WorkspaceReadonly);
+        assert_eq!(config.writable_paths, vec!["/tmp".to_string()]);
+        assert_eq!(config.network_mode, ExecutionNetworkMode::Deny);
+        assert_eq!(config.max_memory_mb, Some(512));
+        assert_eq!(config.max_cpu_seconds, Some(60));
+        assert_eq!(config.max_processes, Some(10));
+        assert_eq!(config.max_open_files, Some(256));
+    }
+
+    #[test]
+    fn spec_to_config_host_mode_defaults() {
+        let spec = ExecutionProfileSpec {
+            mode: "host".to_string(),
+            fs_mode: "inherit".to_string(),
+            writable_paths: vec![],
+            network_mode: "inherit".to_string(),
+            network_allowlist: vec![],
+            max_memory_mb: None,
+            max_cpu_seconds: None,
+            max_processes: None,
+            max_open_files: None,
+        };
+        let config = execution_profile_spec_to_config(&spec);
+        assert_eq!(config.mode, ExecutionProfileMode::Host);
+        assert_eq!(config.fs_mode, ExecutionFsMode::Inherit);
+        assert_eq!(config.network_mode, ExecutionNetworkMode::Inherit);
+    }
+
+    #[test]
+    fn spec_to_config_workspace_rw_scoped() {
+        let spec = ExecutionProfileSpec {
+            mode: "sandbox".to_string(),
+            fs_mode: "workspace_rw_scoped".to_string(),
+            writable_paths: vec![],
+            network_mode: "allowlist".to_string(),
+            network_allowlist: vec!["example.com".to_string()],
+            max_memory_mb: None,
+            max_cpu_seconds: None,
+            max_processes: None,
+            max_open_files: None,
+        };
+        let config = execution_profile_spec_to_config(&spec);
+        assert_eq!(config.fs_mode, ExecutionFsMode::WorkspaceRwScoped);
+        assert_eq!(config.network_mode, ExecutionNetworkMode::Allowlist);
+        assert_eq!(config.network_allowlist, vec!["example.com".to_string()]);
+    }
+
+    #[test]
+    fn spec_to_config_unknown_mode_defaults_to_host() {
+        let spec = ExecutionProfileSpec {
+            mode: "unknown_mode".to_string(),
+            fs_mode: "unknown_fs".to_string(),
+            writable_paths: vec![],
+            network_mode: "unknown_net".to_string(),
+            network_allowlist: vec![],
+            max_memory_mb: None,
+            max_cpu_seconds: None,
+            max_processes: None,
+            max_open_files: None,
+        };
+        let config = execution_profile_spec_to_config(&spec);
+        assert_eq!(config.mode, ExecutionProfileMode::Host);
+        assert_eq!(config.fs_mode, ExecutionFsMode::Inherit);
+        assert_eq!(config.network_mode, ExecutionNetworkMode::Inherit);
+    }
+
+    // ── config_to_spec conversion ───────────────────────────────
+
+    #[test]
+    fn config_to_spec_sandbox_mode() {
+        let config = ExecutionProfileConfig {
+            mode: ExecutionProfileMode::Sandbox,
+            fs_mode: ExecutionFsMode::WorkspaceReadonly,
+            writable_paths: vec!["/out".to_string()],
+            network_mode: ExecutionNetworkMode::Allowlist,
+            network_allowlist: vec!["api.example.com".to_string()],
+            max_memory_mb: Some(1024),
+            max_cpu_seconds: Some(120),
+            max_processes: Some(50),
+            max_open_files: Some(512),
+        };
+        let spec = execution_profile_config_to_spec(&config);
+        assert_eq!(spec.mode, "sandbox");
+        assert_eq!(spec.fs_mode, "workspace_readonly");
+        assert_eq!(spec.writable_paths, vec!["/out".to_string()]);
+        assert_eq!(spec.network_mode, "allowlist");
+        assert_eq!(spec.network_allowlist, vec!["api.example.com".to_string()]);
+        assert_eq!(spec.max_memory_mb, Some(1024));
+        assert_eq!(spec.max_cpu_seconds, Some(120));
+        assert_eq!(spec.max_processes, Some(50));
+        assert_eq!(spec.max_open_files, Some(512));
+    }
+
+    #[test]
+    fn config_to_spec_host_mode() {
+        let config = ExecutionProfileConfig {
+            mode: ExecutionProfileMode::Host,
+            fs_mode: ExecutionFsMode::Inherit,
+            writable_paths: vec![],
+            network_mode: ExecutionNetworkMode::Inherit,
+            network_allowlist: vec![],
+            max_memory_mb: None,
+            max_cpu_seconds: None,
+            max_processes: None,
+            max_open_files: None,
+        };
+        let spec = execution_profile_config_to_spec(&config);
+        assert_eq!(spec.mode, "host");
+        assert_eq!(spec.fs_mode, "inherit");
+        assert_eq!(spec.network_mode, "inherit");
+    }
+
+    #[test]
+    fn config_to_spec_workspace_rw_scoped_and_deny() {
+        let config = ExecutionProfileConfig {
+            mode: ExecutionProfileMode::Sandbox,
+            fs_mode: ExecutionFsMode::WorkspaceRwScoped,
+            writable_paths: vec![],
+            network_mode: ExecutionNetworkMode::Deny,
+            network_allowlist: vec![],
+            max_memory_mb: None,
+            max_cpu_seconds: None,
+            max_processes: None,
+            max_open_files: None,
+        };
+        let spec = execution_profile_config_to_spec(&config);
+        assert_eq!(spec.fs_mode, "workspace_rw_scoped");
+        assert_eq!(spec.network_mode, "deny");
+    }
+
+    // ── roundtrip ───────────────────────────────────────────────
+
+    #[test]
+    fn spec_config_roundtrip_identity() {
+        let original_spec = ExecutionProfileSpec {
+            mode: "sandbox".to_string(),
+            fs_mode: "workspace_rw_scoped".to_string(),
+            writable_paths: vec!["/a".to_string(), "/b".to_string()],
+            network_mode: "allowlist".to_string(),
+            network_allowlist: vec!["x.com".to_string()],
+            max_memory_mb: Some(256),
+            max_cpu_seconds: Some(30),
+            max_processes: Some(5),
+            max_open_files: Some(100),
+        };
+        let config = execution_profile_spec_to_config(&original_spec);
+        let roundtripped = execution_profile_config_to_spec(&config);
+        assert_eq!(original_spec, roundtripped);
+    }
+
+    // ── validate ────────────────────────────────────────────────
+
+    #[test]
+    fn validate_host_with_non_inherit_fs_mode_fails() {
+        let resource = dispatch_resource(execution_profile_manifest(
+            "bad-host",
+            "host",
+            "workspace_readonly",
+        ))
+        .expect("dispatch");
+        let err = resource.validate().expect_err("should fail validation");
+        assert!(err.to_string().contains("fs_mode"));
+    }
+
+    #[test]
+    fn validate_sandbox_with_any_fs_mode_ok() {
+        let resource = dispatch_resource(execution_profile_manifest(
+            "ok-sandbox",
+            "sandbox",
+            "workspace_readonly",
+        ))
+        .expect("dispatch");
+        assert!(resource.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_host_with_inherit_fs_mode_ok() {
+        let resource = dispatch_resource(execution_profile_manifest("ok-host", "host", "inherit"))
+            .expect("dispatch");
+        assert!(resource.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_allowlist_with_empty_network_allowlist_fails() {
+        let manifest = OrchestratorResource {
+            api_version: super::super::API_VERSION.to_string(),
+            kind: ResourceKind::ExecutionProfile,
+            metadata: ResourceMetadata {
+                name: "bad-allowlist".to_string(),
+                project: None,
+                labels: None,
+                annotations: None,
+            },
+            spec: ResourceSpec::ExecutionProfile(ExecutionProfileSpec {
+                mode: "sandbox".to_string(),
+                fs_mode: "inherit".to_string(),
+                writable_paths: vec![],
+                network_mode: "allowlist".to_string(),
+                network_allowlist: vec![], // empty!
+                max_memory_mb: None,
+                max_cpu_seconds: None,
+                max_processes: None,
+                max_open_files: None,
+            }),
+        };
+        let resource = dispatch_resource(manifest).expect("dispatch");
+        let err = resource.validate().expect_err("should fail");
+        assert!(err.to_string().contains("network_allowlist"));
+    }
+
+    #[test]
+    fn validate_allowlist_with_entries_ok() {
+        let manifest = OrchestratorResource {
+            api_version: super::super::API_VERSION.to_string(),
+            kind: ResourceKind::ExecutionProfile,
+            metadata: ResourceMetadata {
+                name: "ok-allowlist".to_string(),
+                project: None,
+                labels: None,
+                annotations: None,
+            },
+            spec: ResourceSpec::ExecutionProfile(ExecutionProfileSpec {
+                mode: "sandbox".to_string(),
+                fs_mode: "inherit".to_string(),
+                writable_paths: vec![],
+                network_mode: "allowlist".to_string(),
+                network_allowlist: vec!["example.com".to_string()],
+                max_memory_mb: None,
+                max_cpu_seconds: None,
+                max_processes: None,
+                max_open_files: None,
+            }),
+        };
+        let resource = dispatch_resource(manifest).expect("dispatch");
+        assert!(resource.validate().is_ok());
+    }
+
+    // ── build_execution_profile ─────────────────────────────────
+
+    #[test]
+    fn build_rejects_wrong_kind() {
+        use crate::cli_types::WorkspaceSpec;
+        let manifest = OrchestratorResource {
+            api_version: super::super::API_VERSION.to_string(),
+            kind: ResourceKind::Workspace,
+            metadata: ResourceMetadata {
+                name: "wrong".to_string(),
+                project: None,
+                labels: None,
+                annotations: None,
+            },
+            spec: ResourceSpec::Workspace(WorkspaceSpec {
+                root_path: "/tmp".to_string(),
+                qa_targets: vec![],
+                ticket_dir: "t".to_string(),
+                self_referential: false,
+            }),
+        };
+        assert!(build_execution_profile(manifest).is_err());
+    }
+
+    #[test]
+    fn build_rejects_mismatched_spec() {
+        use crate::cli_types::WorkspaceSpec;
+        let manifest = OrchestratorResource {
+            api_version: super::super::API_VERSION.to_string(),
+            kind: ResourceKind::ExecutionProfile,
+            metadata: ResourceMetadata {
+                name: "mismatch".to_string(),
+                project: None,
+                labels: None,
+                annotations: None,
+            },
+            spec: ResourceSpec::Workspace(WorkspaceSpec {
+                root_path: "/tmp".to_string(),
+                qa_targets: vec![],
+                ticket_dir: "t".to_string(),
+                self_referential: false,
+            }),
+        };
+        assert!(build_execution_profile(manifest).is_err());
+    }
+
+    #[test]
+    fn build_succeeds_with_correct_kind_and_spec() {
+        let manifest = execution_profile_manifest("good", "sandbox", "inherit");
+        let result = build_execution_profile(manifest).expect("should succeed");
+        assert_eq!(result.kind(), ResourceKind::ExecutionProfile);
+        assert_eq!(result.name(), "good");
+    }
+
+    // ── dispatch / kind / name / to_yaml for ExecutionProfile ───
+
+    #[test]
+    fn dispatch_maps_execution_profile_manifest() {
+        let resource = dispatch_resource(execution_profile_manifest("ep-test", "host", "inherit"))
+            .expect("dispatch should succeed");
+        assert_eq!(resource.kind(), ResourceKind::ExecutionProfile);
+        assert_eq!(resource.name(), "ep-test");
+    }
+
+    #[test]
+    fn execution_profile_to_yaml_contains_kind() {
+        let resource = dispatch_resource(execution_profile_manifest(
+            "ep-yaml",
+            "sandbox",
+            "workspace_readonly",
+        ))
+        .expect("dispatch");
+        let yaml = resource.to_yaml().expect("yaml");
+        assert!(yaml.contains("ExecutionProfile"));
+        assert!(yaml.contains("ep-yaml"));
+    }
+
+    // ── apply / get_from / delete_from for ExecutionProfile ─────
+
+    #[test]
+    fn apply_execution_profile_creates_and_retrieves() {
+        let mut config = make_config();
+        let resource =
+            dispatch_resource(execution_profile_manifest("apply-ep", "sandbox", "inherit"))
+                .expect("dispatch");
+        let result = resource.apply(&mut config).expect("apply");
+        assert_eq!(result, ApplyResult::Created);
+
+        let found = RegisteredResource::get_from(&config, "apply-ep");
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().kind(), ResourceKind::ExecutionProfile);
+    }
+
+    #[test]
+    fn delete_execution_profile_removes() {
+        let mut config = make_config();
+        let resource = dispatch_resource(execution_profile_manifest("del-ep", "host", "inherit"))
+            .expect("dispatch");
+        resource.apply(&mut config).expect("apply");
+        assert!(RegisteredResource::delete_from(&mut config, "del-ep"));
+        assert!(RegisteredResource::get_from(&config, "del-ep").is_none());
+    }
+
+    // ── StepTemplate variant coverage ───────────────────────────
+
+    #[test]
+    fn step_template_kind_name_validate_yaml() {
+        let resource = dispatch_resource(step_template_manifest("tmpl-1", "Run QA"))
+            .expect("dispatch step template");
+        assert_eq!(resource.kind(), ResourceKind::StepTemplate);
+        assert_eq!(resource.name(), "tmpl-1");
+        assert!(resource.validate().is_ok());
+        let yaml = resource.to_yaml().expect("yaml");
+        assert!(yaml.contains("StepTemplate"));
+        assert!(yaml.contains("tmpl-1"));
+    }
+
+    #[test]
+    fn step_template_apply_and_delete() {
+        let mut config = make_config();
+        let resource =
+            dispatch_resource(step_template_manifest("tmpl-ad", "prompt")).expect("dispatch");
+        assert_eq!(
+            resource.apply(&mut config).expect("apply"),
+            ApplyResult::Created
+        );
+        assert!(RegisteredResource::get_from(&config, "tmpl-ad").is_some());
+        assert!(RegisteredResource::delete_from(&mut config, "tmpl-ad"));
+        assert!(RegisteredResource::get_from(&config, "tmpl-ad").is_none());
+    }
+
+    // ── EnvStore variant coverage ───────────────────────────────
+
+    #[test]
+    fn env_store_kind_name_validate_yaml() {
+        let resource = dispatch_resource(env_store_manifest("env-1")).expect("dispatch env store");
+        assert_eq!(resource.kind(), ResourceKind::EnvStore);
+        assert_eq!(resource.name(), "env-1");
+        assert!(resource.validate().is_ok());
+        let yaml = resource.to_yaml().expect("yaml");
+        assert!(yaml.contains("EnvStore"));
+    }
+
+    #[test]
+    fn env_store_apply_and_delete() {
+        let mut config = make_config();
+        let resource = dispatch_resource(env_store_manifest("env-ad")).expect("dispatch");
+        assert_eq!(
+            resource.apply(&mut config).expect("apply"),
+            ApplyResult::Created
+        );
+        assert!(RegisteredResource::get_from(&config, "env-ad").is_some());
+        assert!(RegisteredResource::delete_from(&mut config, "env-ad"));
+        assert!(RegisteredResource::get_from(&config, "env-ad").is_none());
+    }
+
+    // ── SecretStore variant coverage ────────────────────────────
+
+    #[test]
+    fn secret_store_kind_name_validate_yaml() {
+        let resource =
+            dispatch_resource(secret_store_manifest("sec-1")).expect("dispatch secret store");
+        assert_eq!(resource.kind(), ResourceKind::SecretStore);
+        assert_eq!(resource.name(), "sec-1");
+        assert!(resource.validate().is_ok());
+        let yaml = resource.to_yaml().expect("yaml");
+        assert!(yaml.contains("SecretStore"));
+    }
+
+    #[test]
+    fn secret_store_apply_and_delete() {
+        let mut config = make_config();
+        let resource = dispatch_resource(secret_store_manifest("sec-ad")).expect("dispatch");
+        assert_eq!(
+            resource.apply(&mut config).expect("apply"),
+            ApplyResult::Created
+        );
+        assert!(RegisteredResource::get_from(&config, "sec-ad").is_some());
+        assert!(RegisteredResource::delete_from(&mut config, "sec-ad"));
+        assert!(RegisteredResource::get_from(&config, "sec-ad").is_none());
     }
 }
