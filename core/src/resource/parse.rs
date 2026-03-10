@@ -7,8 +7,9 @@ use anyhow::{anyhow, Result};
 use serde::Deserialize;
 
 use super::{
-    AgentResource, EnvStoreResource, ProjectResource, Resource, RuntimePolicyResource,
-    SecretStoreResource, StepTemplateResource, WorkflowResource, WorkspaceResource,
+    AgentResource, EnvStoreResource, ExecutionProfileResource, ProjectResource, Resource,
+    RuntimePolicyResource, SecretStoreResource, StepTemplateResource, WorkflowResource,
+    WorkspaceResource,
 };
 
 /// Parse YAML into builtin OrchestratorResource types only (backward-compatible).
@@ -79,6 +80,9 @@ pub fn delete_resource_by_kind(
         "steptemplate" | "step_template" | "step-template" => {
             Ok(StepTemplateResource::delete_from(config, name))
         }
+        "executionprofile" | "execution-profile" | "execution_profile" => {
+            Ok(ExecutionProfileResource::delete_from(config, name))
+        }
         "envstore" | "env-store" | "env_store" => Ok(EnvStoreResource::delete_from(config, name)),
         "secretstore" | "secret-store" | "secret_store" => {
             Ok(SecretStoreResource::delete_from(config, name))
@@ -94,7 +98,7 @@ pub fn delete_resource_by_kind(
                 return crate::crd::delete_custom_resource(config, &crd_kind, name);
             }
             Err(anyhow!(
-                "unknown resource type: {} (supported: workspace, agent, workflow, project, runtimepolicy, steptemplate, envstore, secretstore, or CRD-defined types)",
+                "unknown resource type: {} (supported: workspace, agent, workflow, project, runtimepolicy, steptemplate, executionprofile, envstore, secretstore, or CRD-defined types)",
                 kind
             ))
         }
@@ -109,6 +113,7 @@ pub fn kind_as_str(kind: ResourceKind) -> &'static str {
         ResourceKind::Project => "project",
         ResourceKind::RuntimePolicy => "runtimepolicy",
         ResourceKind::StepTemplate => "steptemplate",
+        ResourceKind::ExecutionProfile => "executionprofile",
         ResourceKind::EnvStore => "envstore",
         ResourceKind::SecretStore => "secretstore",
     }

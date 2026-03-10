@@ -1,8 +1,11 @@
 use crate::config::PromptDelivery;
 use crate::config_load::now_ts;
+use crate::events::insert_event;
+use crate::runner::ResolvedExecutionProfile;
 use crate::state::InnerState;
 use crate::task_repository::NewCommandRun;
 use anyhow::{Context, Result};
+use serde_json::json;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -25,6 +28,7 @@ pub(super) async fn setup_phase_execution(
     prompt_delivery: PromptDelivery,
     prompt_payload: &Option<String>,
     project_id: &str,
+    execution_profile_name: Option<&str>,
 ) -> Result<PhaseSetup> {
     let now = now_ts();
     let run_uuid = Uuid::new_v4();
@@ -33,7 +37,7 @@ pub(super) async fn setup_phase_execution(
     let stdout_path = logs_dir.join(format!("{}_{}.stdout", phase, run_id));
     let stderr_path = logs_dir.join(format!("{}_{}.stderr", phase, run_id));
 
-    let (runner, mut resolved_extra_env, sensitive_values) = {
+    let (runner, execution_profile, mut resolved_extra_env, sensitive_values) = {
         let active = crate::config_load::read_active_config(state)?;
         let mut runner = active.config.runtime_policy().runner;
         if state.unsafe_mode {
@@ -57,7 +61,23 @@ pub(super) async fn setup_phase_execution(
         } else {
             (HashMap::new(), Vec::new())
         };
-        (runner, extra_env, sensitive)
+        let execution_profile = execution_profile_name
+            .and_then(|name| {
+                project_cfg
+                    .and_then(|p| p.execution_profiles.get(name))
+                    .map(|profile| {
+                        let always_writable =
+                            vec![state.logs_dir.join(task_id), std::env::temp_dir()];
+                        ResolvedExecutionProfile::from_config(
+                            name,
+                            profile,
+                            workspace_root,
+                            &always_writable,
+                        )
+                    })
+            })
+            .unwrap_or_else(ResolvedExecutionProfile::host);
+        (runner, execution_profile, extra_env, sensitive)
     };
     let mut redaction_patterns = runner.redaction_patterns.clone();
     redaction_patterns.extend(sensitive_values);
@@ -138,6 +158,22 @@ pub(super) async fn setup_phase_execution(
 
     // Insert a "running" command_run record immediately so `task logs` shows it during execution
     {
+        insert_event(
+            state,
+            task_id,
+            Some(item_id),
+            "execution_profile_applied",
+            json!({
+                "step": phase,
+                "agent_id": agent_id,
+                "execution_profile": execution_profile.name,
+                "execution_mode": match execution_profile.mode {
+                    crate::config::ExecutionProfileMode::Host => "host",
+                    crate::config::ExecutionProfileMode::Sandbox => "sandbox",
+                },
+            }),
+        )
+        .await?;
         let initial_run = NewCommandRun {
             id: run_id.clone(),
             task_item_id: item_id.to_string(),
@@ -173,6 +209,7 @@ pub(super) async fn setup_phase_execution(
         run_id,
         now,
         runner,
+        execution_profile,
         resolved_extra_env,
         redaction_patterns,
         stdout_path,

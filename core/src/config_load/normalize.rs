@@ -54,6 +54,7 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                 id: step_id.to_string(),
                 description: None,
                 required_capability: None,
+                execution_profile: None,
                 builtin: None,
                 enabled: false,
                 repeatable: true,
@@ -179,6 +180,7 @@ pub(crate) fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorCo
             workflows: Default::default(),
             step_templates: Default::default(),
             env_stores: Default::default(),
+            execution_profiles: Default::default(),
         });
 
     for project in config.projects.values_mut() {

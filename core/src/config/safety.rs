@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use super::{AgentConfig, EnvStoreConfig, InvariantConfig, StepTemplateConfig, WorkflowConfig};
+use super::{
+    AgentConfig, EnvStoreConfig, ExecutionProfileConfig, InvariantConfig, StepTemplateConfig,
+    WorkflowConfig,
+};
 
 /// Safety configuration for self-bootstrap and dangerous operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -104,6 +107,8 @@ pub struct ProjectConfig {
     pub step_templates: HashMap<String, StepTemplateConfig>,
     #[serde(default)]
     pub env_stores: HashMap<String, EnvStoreConfig>,
+    #[serde(default)]
+    pub execution_profiles: HashMap<String, ExecutionProfileConfig>,
 }
 
 #[cfg(test)]

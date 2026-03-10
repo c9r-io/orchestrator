@@ -4,9 +4,10 @@ use std::sync::Arc;
 
 use super::{
     default_scope_for_step_id, is_known_builtin_step_name, AgentConfig, CostPreference,
-    ExecutionMode, InvariantConfig, ItemSelectConfig, OrchestratorConfig, PipelineVariables,
-    SafetyConfig, StepBehavior, StepPrehookConfig, StepScope, StoreInputConfig, StoreOutputConfig,
-    WorkflowConfig, WorkflowFinalizeConfig, WorkflowLoopConfig,
+    ExecutionMode, ExecutionProfileConfig, InvariantConfig, ItemSelectConfig, OrchestratorConfig,
+    PipelineVariables, SafetyConfig, StepBehavior, StepPrehookConfig, StepScope,
+    StoreInputConfig, StoreOutputConfig, WorkflowConfig, WorkflowFinalizeConfig,
+    WorkflowLoopConfig,
 };
 
 fn default_true() -> bool {
@@ -22,6 +23,8 @@ pub struct TaskExecutionStep {
     /// Reference to a StepTemplate resource name
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_profile: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub builtin: Option<String>,
     #[serde(default = "default_true")]
@@ -299,6 +302,7 @@ pub struct ResolvedProject {
     pub workflows: HashMap<String, WorkflowConfig>,
     pub step_templates: HashMap<String, crate::config::StepTemplateConfig>,
     pub env_stores: HashMap<String, crate::config::EnvStoreConfig>,
+    pub execution_profiles: HashMap<String, ExecutionProfileConfig>,
 }
 
 /// Active configuration (runtime state)
@@ -322,6 +326,7 @@ mod tests {
             id: id.to_string(),
             required_capability: capability.map(|s| s.to_string()),
             template: None,
+            execution_profile: None,
             builtin: builtin.map(|s| s.to_string()),
             enabled: true,
             repeatable: true,
@@ -349,6 +354,7 @@ mod tests {
             id: "qa".to_string(), // default would be Item
             required_capability: None,
             template: None,
+            execution_profile: None,
             builtin: None,
             enabled: true,
             repeatable: true,
@@ -377,6 +383,7 @@ mod tests {
             id: "plan".to_string(),
             required_capability: None,
             template: None,
+            execution_profile: None,
             builtin: None,
             enabled: true,
             repeatable: true,
@@ -405,6 +412,7 @@ mod tests {
             id: "my_custom_step".to_string(),
             required_capability: None,
             template: None,
+            execution_profile: None,
             builtin: None,
             enabled: true,
             repeatable: true,
@@ -435,6 +443,7 @@ mod tests {
                     id: "plan".to_string(),
                     required_capability: None,
                     template: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: false,
@@ -458,6 +467,7 @@ mod tests {
                     id: "qa".to_string(),
                     required_capability: None,
                     template: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,

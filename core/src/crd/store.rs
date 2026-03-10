@@ -11,7 +11,13 @@ pub const SYSTEM_PROJECT: &str = "_system";
 pub fn is_project_scoped(kind: &str) -> bool {
     matches!(
         kind,
-        "Agent" | "Workflow" | "Workspace" | "StepTemplate" | "EnvStore" | "SecretStore"
+        "Agent"
+            | "Workflow"
+            | "Workspace"
+            | "StepTemplate"
+            | "ExecutionProfile"
+            | "EnvStore"
+            | "SecretStore"
     )
 }
 

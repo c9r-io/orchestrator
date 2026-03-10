@@ -3,12 +3,13 @@ use crate::config::OrchestratorConfig;
 use anyhow::{anyhow, Result};
 
 use super::{
-    agent, env_store, project, runtime_policy, secret_store, step_template, workflow, workspace,
-    ApplyResult, Resource,
+    agent, env_store, execution_profile, project, runtime_policy, secret_store, step_template,
+    workflow, workspace, ApplyResult, Resource,
 };
 use super::{
-    AgentResource, EnvStoreResource, ProjectResource, RuntimePolicyResource, SecretStoreResource,
-    StepTemplateResource, WorkflowResource, WorkspaceResource,
+    AgentResource, EnvStoreResource, ExecutionProfileResource, ProjectResource,
+    RuntimePolicyResource, SecretStoreResource, StepTemplateResource, WorkflowResource,
+    WorkspaceResource,
 };
 
 #[derive(Debug, Clone)]
@@ -19,6 +20,7 @@ pub enum RegisteredResource {
     Project(ProjectResource),
     RuntimePolicy(RuntimePolicyResource),
     StepTemplate(StepTemplateResource),
+    ExecutionProfile(ExecutionProfileResource),
     EnvStore(EnvStoreResource),
     SecretStore(SecretStoreResource),
 }
@@ -29,7 +31,7 @@ pub struct ResourceRegistration {
     pub build: fn(OrchestratorResource) -> Result<RegisteredResource>,
 }
 
-pub fn resource_registry() -> [ResourceRegistration; 8] {
+pub fn resource_registry() -> [ResourceRegistration; 9] {
     [
         ResourceRegistration {
             kind: ResourceKind::Workspace,
@@ -56,6 +58,10 @@ pub fn resource_registry() -> [ResourceRegistration; 8] {
             build: step_template::build_step_template,
         },
         ResourceRegistration {
+            kind: ResourceKind::ExecutionProfile,
+            build: execution_profile::build_execution_profile,
+        },
+        ResourceRegistration {
             kind: ResourceKind::EnvStore,
             build: env_store::build_env_store,
         },
@@ -76,6 +82,7 @@ impl RegisteredResource {
             Self::Project(r) => &r.metadata,
             Self::RuntimePolicy(r) => &r.metadata,
             Self::StepTemplate(r) => &r.metadata,
+            Self::ExecutionProfile(r) => &r.metadata,
             Self::EnvStore(r) => &r.metadata,
             Self::SecretStore(r) => &r.metadata,
         };
@@ -102,6 +109,7 @@ impl Resource for RegisteredResource {
             Self::Project(_) => ResourceKind::Project,
             Self::RuntimePolicy(_) => ResourceKind::RuntimePolicy,
             Self::StepTemplate(_) => ResourceKind::StepTemplate,
+            Self::ExecutionProfile(_) => ResourceKind::ExecutionProfile,
             Self::EnvStore(_) => ResourceKind::EnvStore,
             Self::SecretStore(_) => ResourceKind::SecretStore,
         }
@@ -115,6 +123,7 @@ impl Resource for RegisteredResource {
             Self::Project(resource) => &resource.metadata.name,
             Self::RuntimePolicy(resource) => &resource.metadata.name,
             Self::StepTemplate(resource) => &resource.metadata.name,
+            Self::ExecutionProfile(resource) => &resource.metadata.name,
             Self::EnvStore(resource) => &resource.metadata.name,
             Self::SecretStore(resource) => &resource.metadata.name,
         }
@@ -128,6 +137,7 @@ impl Resource for RegisteredResource {
             Self::Project(resource) => resource.validate(),
             Self::RuntimePolicy(resource) => resource.validate(),
             Self::StepTemplate(resource) => resource.validate(),
+            Self::ExecutionProfile(resource) => resource.validate(),
             Self::EnvStore(resource) => resource.validate(),
             Self::SecretStore(resource) => resource.validate(),
         }
@@ -141,6 +151,7 @@ impl Resource for RegisteredResource {
             Self::Project(resource) => resource.apply(config),
             Self::RuntimePolicy(resource) => resource.apply(config),
             Self::StepTemplate(resource) => resource.apply(config),
+            Self::ExecutionProfile(resource) => resource.apply(config),
             Self::EnvStore(resource) => resource.apply(config),
             Self::SecretStore(resource) => resource.apply(config),
         }
@@ -154,6 +165,7 @@ impl Resource for RegisteredResource {
             Self::Project(resource) => resource.to_yaml(),
             Self::RuntimePolicy(resource) => resource.to_yaml(),
             Self::StepTemplate(resource) => resource.to_yaml(),
+            Self::ExecutionProfile(resource) => resource.to_yaml(),
             Self::EnvStore(resource) => resource.to_yaml(),
             Self::SecretStore(resource) => resource.to_yaml(),
         }
@@ -180,6 +192,11 @@ impl Resource for RegisteredResource {
             StepTemplateResource::get_from_project(config, name, project_id)
         {
             return Some(Self::StepTemplate(step_template));
+        }
+        if let Some(execution_profile) =
+            ExecutionProfileResource::get_from_project(config, name, project_id)
+        {
+            return Some(Self::ExecutionProfile(execution_profile));
         }
         if name == "runtime" {
             if let Some(runtime_policy) =
@@ -217,6 +234,9 @@ impl Resource for RegisteredResource {
             return true;
         }
         if StepTemplateResource::delete_from_project(config, name, project_id) {
+            return true;
+        }
+        if ExecutionProfileResource::delete_from_project(config, name, project_id) {
             return true;
         }
         if EnvStoreResource::delete_from_project(config, name, project_id) {

@@ -146,6 +146,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/51-primitive-composition.md` | 5 | WP05 primitive composition: Store+Spawning, Store+Items, Invariant+Selection pairwise/triple |
 | orchestrator | `docs/qa/orchestrator/52-engine-wiring-dynamic-items-selection.md` | 2 | Split from doc 50: pending_generate_items consumption, item_select orchestration |
 | orchestrator | `docs/qa/orchestrator/53-client-server-architecture.md` | 5 | C/S architecture: daemon lifecycle, gRPC communication, embedded workers, service layer |
+| orchestrator | `docs/qa/orchestrator/54-step-execution-profiles.md` | 5 | Step-level ExecutionProfile: resource round-trip, validation, mixed host/sandbox routing, compatibility default |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
 | script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |

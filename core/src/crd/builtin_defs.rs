@@ -12,6 +12,7 @@ pub fn builtin_crd_definitions() -> Vec<CustomResourceDefinition> {
         project_crd(),
         runtime_policy_crd(),
         step_template_crd(),
+        execution_profile_crd(),
         env_store_crd(),
         secret_store_crd(),
         workflow_store_crd(),
@@ -143,6 +144,32 @@ fn step_template_crd() -> CustomResourceDefinition {
         }))],
         hooks: CrdHooks::default(),
         scope: CrdScope::Cluster,
+        builtin: true,
+    }
+}
+
+fn execution_profile_crd() -> CustomResourceDefinition {
+    CustomResourceDefinition {
+        kind: "ExecutionProfile".to_string(),
+        plural: "executionprofiles".to_string(),
+        short_names: vec!["execution-profile".to_string(), "execution_profile".to_string()],
+        group: BUILTIN_GROUP.to_string(),
+        versions: vec![builtin_version(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "mode": { "type": "string" },
+                "fs_mode": { "type": "string" },
+                "writable_paths": { "type": "array", "items": { "type": "string" } },
+                "network_mode": { "type": "string" },
+                "network_allowlist": { "type": "array", "items": { "type": "string" } },
+                "max_memory_mb": { "type": "integer" },
+                "max_cpu_seconds": { "type": "integer" },
+                "max_processes": { "type": "integer" },
+                "max_open_files": { "type": "integer" }
+            }
+        }))],
+        hooks: CrdHooks::default(),
+        scope: CrdScope::Namespaced,
         builtin: true,
     }
 }

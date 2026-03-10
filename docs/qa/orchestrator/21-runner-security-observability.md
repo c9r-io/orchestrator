@@ -18,6 +18,7 @@ This document validates the runner boundary and observability coverage from the 
 - `qa doctor` observability exposure for execution metrics
 
 Default-policy initialization and backward-compatibility checks are covered in `docs/qa/orchestrator/31-runner-policy-defaults-compatibility.md`.
+Step-level host/sandbox selection via `ExecutionProfile` is covered separately in `docs/qa/orchestrator/54-step-execution-profiles.md`.
 
 Entry point: `orchestrator`
 

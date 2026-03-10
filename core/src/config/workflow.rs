@@ -18,6 +18,8 @@ pub struct WorkflowStepConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_profile: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub builtin: Option<String>,
     pub enabled: bool,
     #[serde(default = "default_true")]

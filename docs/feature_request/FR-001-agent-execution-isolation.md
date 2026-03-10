@@ -1,10 +1,10 @@
-# FR-001 - Agent 执行隔离与受限运行时
+# FR-001 - Step 执行隔离与按需 Sandbox
 
 **Module**: orchestrator  
 **Status**: Proposed  
 **Priority**: P0  
 **Created**: 2026-03-09  
-**Last Updated**: 2026-03-09  
+**Last Updated**: 2026-03-10  
 **Source**: 深度项目评估报告最高优先级改进建议 #1
 
 ## Background
@@ -16,124 +16,178 @@
 - 环境变量 allowlist
 - 日志脱敏与敏感词替换
 
-这些措施可以降低误配置风险，但并不能提供真正的执行隔离。agent 进程依然共享宿主机文件系统、网络、进程能力和资源配额，无法满足更高等级的安全边界要求。
+这些措施可以降低误配置风险，但并不能提供真正的执行边界。更重要的是，隔离需求并不由 `agent` 身份决定，而由 `step` 语义决定：
+
+- `implement` / `ticket_fix` 会修改代码，应优先放入 sandbox
+- `qa_testing` 需要最大宿主机测试能力，应允许直接在宿主机执行
+
+因此将 sandbox 绑定到 agent 会导致能力耦合和误用，无法优雅表达同一 agent 在不同 step 下的不同执行边界。
 
 ## Problem Statement
 
 当前执行模型存在以下结构性问题：
 
-- agent 命令默认运行在宿主机，没有文件系统写入边界、网络出口边界和系统调用边界
-- `allowlist` 只约束 shell 和少量环境变量，不能阻止高危命令在允许 shell 内执行
-- 一旦 workflow、step template 或 agent prompt 被污染，可能触发越权读写、凭证外泄、横向访问或资源耗尽
-- 该执行模型适用于可信本地环境，但不适用于半可信或不可信 agent
+- agent 命令默认运行在宿主机，没有文件系统写入边界、网络出口边界和资源边界
+- `allowlist` 只约束 shell 和少量环境变量，不能表达 “这个 step 可以写代码，但那个 step 只能读”
+- 若把 sandbox 绑到 agent，会迫使同一 agent 在所有能力上共享一个隔离等级，丢失 step 语义
+- workflow 作者无法显式声明哪些步骤需要保护宿主机，哪些步骤需要最大系统可见性
 
 ## Goals
 
-- 为 agent 执行引入受限运行时，默认提供强于 shell allowlist 的隔离能力
-- 将文件系统、网络、进程、资源四类边界纳入统一执行策略
-- 保持现有 workflow / agent 配置模型的兼容性
-- 支持按 workspace / workflow / step 逐级配置隔离等级
+- 将执行隔离决策下沉到 `workflow step`
+- 新增可复用的 `ExecutionProfile` 资源，由 step 显式引用
+- 保持 `Agent` 继续只负责 capability / template，不承载运行隔离策略
+- 默认兼容：旧工作流不配置时仍按宿主机模式运行
+- 第一阶段支持至少一种本地 sandbox 实现，并为不可用平台返回结构化错误
 
 ## Non-goals
 
-- 在第一阶段实现完整多租户沙箱平台
-- 在第一阶段支持所有操作系统的完全一致隔离语义
-- 替换现有 runner 模型中的所有 shell 执行能力
+- 第一阶段不把 sandbox 绑定到 agent
+- 第一阶段不把 builtin / command step 全部纳入同一体系
+- 第一阶段不实现完整远程沙箱服务或容器调度平台
+- 第一阶段不在工作流层引入自动默认映射或隐式继承链
 
 ## Scope
 
 - In scope:
-  - 新增受限执行模式与 runtime abstraction
-  - 文件系统白名单 / 只读挂载 / 工作目录收敛
-  - 网络策略开关与域名/IP allowlist
-  - CPU / memory / wall clock / process count 资源限制
-  - 失败事件、拒绝原因、资源超限原因的结构化审计
+  - `ExecutionProfile` project-scoped 资源
+  - `WorkflowStep.execution_profile` 字段
+  - agent step 的 host / sandbox 选择
+  - 文件系统写边界、资源限制、事件审计
+  - 新示例工作流：`implement` / `ticket_fix` 使用 sandbox，`qa_testing` 使用 host
 - Out of scope:
-  - 浏览器级隔离
-  - 集群级调度器
-  - 完整远程沙箱服务
+  - builtin step 隔离
+  - command step 隔离
+  - 跨 project profile 继承
+  - 浏览器级或集群级隔离
 
 ## Proposed Design
 
-### 1. Runner 执行策略分层
+### 1. Step 选择执行 Profile
 
-在现有 `RunnerExecutorKind::Shell` 基础上，引入新的执行后端，例如：
+在 `WorkflowStep` 上新增可选字段：
 
-- `shell`：兼容模式，保留当前行为
-- `sandboxed_process`：本地受限子进程
-- `containerized`：基于容器/微虚拟化的隔离执行
+```yaml
+- id: implement
+  required_capability: implement
+  execution_profile: sandbox_write
 
-### 2. 安全策略模型
+- id: qa_testing
+  required_capability: qa_testing
+  execution_profile: host
+```
 
-新增 `ExecutionSandboxPolicy`，支持以下维度：
+规则：
 
+- 未声明 `execution_profile` 时，使用隐式 `host`
+- `execution_profile` 仅允许用于 agent step
+- profile 必须在同一 project 内存在
+
+### 2. 新增 ExecutionProfile 资源
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: sandbox_write
+spec:
+  mode: sandbox
+  fs_mode: workspace_rw_scoped
+  writable_paths:
+    - src
+    - docs
+    - Cargo.toml
+  network_mode: deny
+  max_processes: 32
+  max_open_files: 256
+```
+
+建议字段：
+
+- `mode`: `host` | `sandbox`
 - `fs_mode`: `inherit` | `workspace_readonly` | `workspace_rw_scoped`
-- `writable_paths`: 显式允许写入路径
+- `writable_paths`
 - `network_mode`: `inherit` | `deny` | `allowlist`
-- `network_allowlist`: 域名/IP/端口范围
+- `network_allowlist`
 - `max_memory_mb`
 - `max_cpu_seconds`
 - `max_processes`
 - `max_open_files`
 
-### 3. 默认策略升级
+### 3. 执行层解耦
 
-默认新建配置不再鼓励直接使用宿主机 shell 全权限执行，而是：
+- `RuntimePolicy.runner` 保留为全局 runner 基线配置
+- scheduler 在 step dispatch 时解析 `execution_profile`
+- runner 基于 `EffectiveExecutionContext` 选择：
+  - `host` -> 现有 shell runner
+  - `sandbox` -> 本地 sandbox runner
 
-- 非自引用 QA / 分析步骤默认 `workspace_readonly + network_deny`
-- fix / implement 步骤默认 `workspace_rw_scoped + network_allowlist`
-- self-bootstrap workflow 明确声明允许的写路径与构建目录
+这样 `Agent`、`Workflow`、`Runner` 三层职责分离：
 
-### 4. 审计与拒绝可观测性
+- Agent: 我会做什么
+- Workflow Step: 这一步需要什么能力，以及是否进入 sandbox
+- ExecutionProfile: 这一步如何被隔离
 
-新增事件与日志：
+### 4. 默认推荐
 
-- `sandbox_policy_applied`
+- `implement` / `ticket_fix`: `sandbox`
+- `qa_testing`: `host`
+- `plan` / `qa_doc_gen` / `align_tests`: 根据具体 workspace 决定，默认仍建议显式配置
+
+## Alternatives And Tradeoffs
+
+- **继续按 agent 配置 sandbox**: 配置看似简单，但能力和隔离耦合，无法表达同一 agent 在不同 step 下的不同边界
+- **workflow 级统一 sandbox**: 会把 `qa_testing` 这类需要宿主机能力的步骤一起关进沙箱，损失测试能力
+- **step 引用命名 profile**: 最解耦，可复用，可逐步演进。缺点是多一个资源类型，但长期最清晰
+
+## Risks And Mitigations
+
+- **用户忘记给危险步骤配 sandbox**: 通过文档、模板和 QA 场景强化推荐做法
+- **平台隔离能力不一致**: 第一阶段以 Unix-like 本地实现为主，其他平台返回结构化错误，不静默降级
+- **profile 过度复杂**: 第一阶段只支持少量稳定字段，不引入 workflow-level inheritance
+
+## Observability
+
+新增事件：
+
+- `execution_profile_applied`
 - `sandbox_denied`
 - `sandbox_resource_exceeded`
 - `sandbox_network_blocked`
 
-## Alternatives And Tradeoffs
+`task trace` 和 step 事件应展示：
 
-- **继续增强 shell allowlist**: 实现简单，但无法形成真正安全边界
-- **直接强依赖容器**: 隔离强，但本地开发体验变重，兼容性复杂
-- **双轨制**: 默认本地受限进程，进阶场景接入容器化执行。该方案更符合当前项目演进阶段
-
-## Risks And Mitigations
-
-- **本地开发体验下降**: 通过 per-workflow override 和 `unsafe` 显式豁免降低影响
-- **与现有自举流程冲突**: 为 self-bootstrap 定义受控例外策略与专用 profile
-- **平台兼容差异**: 第一阶段明确以 Unix-like 环境为主
-
-## Observability
-
-- 记录每次 step 的 sandbox profile、拒绝原因、资源使用摘要
-- `task trace` 中展示被阻止的系统调用/网络访问/路径写入
-- `worker_status` 增加受限执行统计
+- profile 名称
+- 执行模式 `host` / `sandbox`
+- 被拒绝的路径/网络/资源摘要
 
 ## Operations / Release
 
-- 新增配置必须保持向后兼容，老配置默认映射到兼容策略
-- 默认新模板与示例工作流应采用受限执行模式
-- 发布说明需明确兼容模式与推荐模式
+- 旧工作流无配置时保持宿主机执行，不破坏兼容
+- 新模板和示例工作流应显式使用 `ExecutionProfile`
+- 发布说明应强调：
+  - sandbox 现在是 step 级选择
+  - host 是隐式默认
+  - 推荐将 `implement` / `ticket_fix` 放入 sandbox
 
 ## Test Plan
 
 - Unit tests:
-  - sandbox policy 配置 round-trip
-  - 写路径拒绝 / 网络拒绝 / 资源超限检测
-  - 日志脱敏与 sandbox 审计共存
+  - `ExecutionProfile` 配置 round-trip
+  - `WorkflowStep.execution_profile` round-trip
+  - agent step profile 引用校验
+  - 非 agent step 使用 profile 时拒绝
 - Integration tests:
-  - 实际子进程在只读工作区无法写入
-  - 禁网模式下访问外网失败并记录事件
-  - 限制进程数与超时行为
-- E2E:
-  - self-bootstrap workflow 在受控白名单下仍可运行
+  - sandbox step 在只读工作区无法写入
+  - `workspace_rw_scoped` 仅允许写白名单路径
+  - 同一 workflow 中 `implement` 用 sandbox、`qa_testing` 用 host
+- Compatibility:
+  - 老工作流不配置 profile 时行为不变
 
 ## Acceptance Criteria
 
-- 平台支持至少一种强于宿主 shell 的受限执行模式
-- workflow / step 可声明并继承 sandbox 策略
-- 文件系统、网络、资源限制至少覆盖三类边界
-- 被拒绝执行时系统返回结构化原因并写入事件
-- 现有工作流可在兼容模式下无破坏运行
+- 平台支持按 step 选择 `host` 或 `sandbox`
+- `Agent` 资源不需要知道 sandbox 策略
+- `ExecutionProfile` 可在 project 内复用
+- `implement` / `ticket_fix` / `qa_testing` 可在同一 workflow 中使用不同执行模式
+- 旧工作流在未配置 profile 时可无破坏运行

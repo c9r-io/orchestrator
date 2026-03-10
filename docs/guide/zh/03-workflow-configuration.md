@@ -33,6 +33,7 @@ spec:
   repeatable: true                  # （可选）能否在后续循环中重新运行（默认：true）
   required_capability: plan         # （可选）所需的代理能力（从 id 自动推断）
   template: plan                    # （可选）用于提示词注入的 StepTemplate 名称
+  execution_profile: sandbox_write  # （可选）agent step 运行时 profile
   builtin: self_test                # （可选）内置步骤处理器名称
   command: "cargo check"            # （可选）直接 shell 命令（无需代理）
   is_guard: false                   # （可选）标记为循环终止守卫步骤
@@ -61,6 +62,47 @@ spec:
 
 - 已知内置 ID（`init_once`、`loop_guard`、`ticket_scan`、`self_test`、`self_restart`、`item_select`）→ 自动内置
 - 已知代理 ID（`plan`、`implement`、`qa`、`fix` 等）→ 自动能力匹配
+
+### 执行 Profile
+
+`execution_profile` 用于选择该 agent step 的执行边界：
+
+- 未设置时，默认使用隐式 `host`
+- 仅 agent step 可设置该字段
+- profile 必须引用同 project 下的 `ExecutionProfile` 资源
+
+推荐做法：
+
+- `implement` / `ticket_fix` → `sandbox`
+- `qa_testing` → `host`
+
+示例：
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: sandbox_write
+spec:
+  mode: sandbox
+  fs_mode: workspace_rw_scoped
+  writable_paths:
+    - src
+    - docs
+  network_mode: deny
+```
+
+```yaml
+- id: implement
+  type: implement
+  required_capability: implement
+  execution_profile: sandbox_write
+
+- id: qa_testing
+  type: qa_testing
+  required_capability: qa_testing
+  execution_profile: host
+```
 
 ### 已知步骤 ID
 

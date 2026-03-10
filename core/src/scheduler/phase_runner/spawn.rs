@@ -98,6 +98,7 @@ pub(super) async fn spawn_phase_process(
         setup.redaction_patterns.clone(),
         &setup.resolved_extra_env,
         effective_pipe_stdin,
+        &setup.execution_profile,
     )?;
     let mut child = captured.child;
     let output_capture = Some(captured.output_capture);
@@ -165,6 +166,7 @@ pub(super) async fn spawn_phase_process(
             "run_id": setup.run_id,
             "pid": child_pid,
             "command_preview": preview,
+            "execution_profile": setup.execution_profile.name,
         }),
     )
     .await?;

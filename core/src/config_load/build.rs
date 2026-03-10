@@ -12,7 +12,8 @@ use super::{
     resolve_and_validate_workspaces, resolve_and_validate_workspaces_for_project,
     serialize_config_snapshot, validate_agent_env_store_refs,
     validate_agent_env_store_refs_for_project, validate_workflow_config,
-    validate_workflow_config_with_agents, ConfigSelfHealReport,
+    validate_workflow_config_with_agents, validate_execution_profiles_for_project,
+    ConfigSelfHealReport,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,6 +126,7 @@ pub fn build_execution_plan_for_project(
         .map(|project| project.agents.iter().map(|(k, v)| (k.clone(), v)).collect())
         .unwrap_or_default();
     validate_workflow_config_with_agents(&agents, workflow, workflow_id)?;
+    validate_execution_profiles_for_project(config, workflow, workflow_id, project_id)?;
     build_execution_plan_inner(workflow)
 }
 
@@ -155,6 +157,7 @@ pub(crate) fn task_step_from_workflow_step(
     Ok(crate::config::TaskExecutionStep {
         id: normalized.id.clone(),
         required_capability: normalized.required_capability.clone(),
+        execution_profile: normalized.execution_profile.clone(),
         builtin: normalized.builtin.clone(),
         enabled: normalized.enabled,
         repeatable: normalized.repeatable,

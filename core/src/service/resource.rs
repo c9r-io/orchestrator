@@ -457,6 +457,9 @@ fn delete_resource_from_project(
         "steptemplate" | "step-template" | "step_template" => {
             Ok(proj.step_templates.remove(name).is_some())
         }
+        "executionprofile" | "execution-profile" | "execution_profile" => {
+            Ok(proj.execution_profiles.remove(name).is_some())
+        }
         "envstore" | "env-store" | "env_store" | "secretstore" | "secret-store"
         | "secret_store" => Ok(proj.env_stores.remove(name).is_some()),
         _ => anyhow::bail!("unknown resource type for project delete: {}", kind),
@@ -469,6 +472,7 @@ fn canonical_project_kind(kind: &str) -> Result<&'static str> {
         "agent" => Ok("Agent"),
         "wf" | "workflow" => Ok("Workflow"),
         "steptemplate" | "step-template" | "step_template" => Ok("StepTemplate"),
+        "executionprofile" | "execution-profile" | "execution_profile" => Ok("ExecutionProfile"),
         "envstore" | "env-store" | "env_store" => Ok("EnvStore"),
         "secretstore" | "secret-store" | "secret_store" => Ok("SecretStore"),
         _ => anyhow::bail!("unknown resource type for project delete: {}", kind),
@@ -481,6 +485,7 @@ fn prunable_resource_kind(resource: &crate::resource::RegisteredResource) -> Opt
         crate::cli_types::ResourceKind::Agent => Some("Agent"),
         crate::cli_types::ResourceKind::Workflow => Some("Workflow"),
         crate::cli_types::ResourceKind::StepTemplate => Some("StepTemplate"),
+        crate::cli_types::ResourceKind::ExecutionProfile => Some("ExecutionProfile"),
         crate::cli_types::ResourceKind::EnvStore => Some("EnvStore"),
         crate::cli_types::ResourceKind::SecretStore => Some("SecretStore"),
         crate::cli_types::ResourceKind::Project | crate::cli_types::ResourceKind::RuntimePolicy => {
@@ -536,6 +541,13 @@ fn plan_prune_for_project(
             ),
             "StepTemplate" => prune_map_entries(
                 &mut candidate_project.step_templates,
+                declared_names,
+                kind,
+                project_id,
+                &mut deletions,
+            ),
+            "ExecutionProfile" => prune_map_entries(
+                &mut candidate_project.execution_profiles,
                 declared_names,
                 kind,
                 project_id,
@@ -645,6 +657,7 @@ fn autofill_defaults_for_manifest_mode(config: &mut crate::config::OrchestratorC
             workflows: Default::default(),
             step_templates: Default::default(),
             env_stores: Default::default(),
+            execution_profiles: Default::default(),
         });
 }
 

@@ -24,6 +24,7 @@ pub fn apply_to_project(
             workflows: Default::default(),
             step_templates: Default::default(),
             env_stores: Default::default(),
+            execution_profiles: Default::default(),
         });
 
     match resource {
@@ -73,6 +74,11 @@ pub fn apply_to_project(
                 incoming,
             ))
         }
+        RegisteredResource::ExecutionProfile(profile) => Ok(apply_to_map(
+            &mut project_entry.execution_profiles,
+            profile.name(),
+            crate::resource::execution_profile::execution_profile_spec_to_config(&profile.spec),
+        )),
         RegisteredResource::SecretStore(store) => {
             let incoming = crate::config::EnvStoreConfig {
                 data: store.spec.data.clone(),

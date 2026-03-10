@@ -73,6 +73,7 @@ pub fn workflow_manifest(name: &str) -> OrchestratorResource {
                 step_type: "qa".to_string(),
                 required_capability: None,
                 template: None,
+                execution_profile: None,
                 builtin: None,
                 enabled: true,
                 repeatable: true,

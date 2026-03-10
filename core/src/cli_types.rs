@@ -76,6 +76,11 @@ impl<'de> Deserialize<'de> for OrchestratorResource {
                     serde_yml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
                 ResourceSpec::StepTemplate(s)
             }
+            ResourceKind::ExecutionProfile => {
+                let s: ExecutionProfileSpec =
+                    serde_yml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                ResourceSpec::ExecutionProfile(s)
+            }
             ResourceKind::EnvStore | ResourceKind::SecretStore => {
                 let s: EnvStoreSpec =
                     serde_yml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
@@ -116,6 +121,7 @@ pub enum ResourceKind {
     Project,
     RuntimePolicy,
     StepTemplate,
+    ExecutionProfile,
     EnvStore,
     SecretStore,
 }
@@ -162,6 +168,9 @@ pub enum ResourceSpec {
 
     /// Step template resource spec
     StepTemplate(StepTemplateSpec),
+
+    /// Execution profile resource spec
+    ExecutionProfile(ExecutionProfileSpec),
 
     /// Env store / Secret store resource spec (both share the same data shape).
     /// The `ResourceKind` field on `OrchestratorResource` distinguishes them.
@@ -283,6 +292,42 @@ pub struct StepTemplateSpec {
     /// Optional description of what this template does
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+}
+
+/// Execution profile resource specification.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ExecutionProfileSpec {
+    #[serde(default = "default_execution_profile_mode")]
+    pub mode: String,
+    #[serde(default = "default_execution_fs_mode")]
+    pub fs_mode: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub writable_paths: Vec<String>,
+    #[serde(default = "default_execution_network_mode")]
+    pub network_mode: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub network_allowlist: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_memory_mb: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_cpu_seconds: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_processes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_open_files: Option<u64>,
+}
+
+fn default_execution_profile_mode() -> String {
+    "host".to_string()
+}
+
+fn default_execution_fs_mode() -> String {
+    "inherit".to_string()
+}
+
+fn default_execution_network_mode() -> String {
+    "inherit".to_string()
 }
 
 /// EnvStore resource specification.
@@ -452,6 +497,10 @@ pub struct WorkflowStepSpec {
     /// Reference to a StepTemplate resource name
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<String>,
+
+    /// Optional execution profile name for agent steps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_profile: Option<String>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub builtin: Option<String>,

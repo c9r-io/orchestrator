@@ -1,4 +1,4 @@
-use crate::config::{EnvStoreConfig, OrchestratorConfig};
+use crate::config::{EnvStoreConfig, ExecutionProfileConfig, OrchestratorConfig};
 use crate::crd::projection::{CrdProjectable, RuntimePolicyProjection, SecretStoreProjection};
 
 pub fn reconcile_builtin_kind(config: &mut OrchestratorConfig, kind: &str) {
@@ -82,6 +82,16 @@ pub fn seed_store_from_config_snapshot(
         "StepTemplate" => {
             for (pid, project) in &config.projects {
                 if let Some(v) = project.step_templates.get(name) {
+                    config
+                        .resource_store
+                        .put(make_cr(Some(pid.clone()), v.to_cr_spec()));
+                    return;
+                }
+            }
+        }
+        "ExecutionProfile" => {
+            for (pid, project) in &config.projects {
+                if let Some(v) = project.execution_profiles.get(name) {
                     config
                         .resource_store
                         .put(make_cr(Some(pid.clone()), v.to_cr_spec()));
@@ -209,6 +219,14 @@ pub fn reconcile_single_resource(
                     .insert(name.to_string(), v);
             }
         }
+        "ExecutionProfile" => {
+            if let Ok(v) = ExecutionProfileConfig::from_cr_spec(&spec) {
+                config
+                    .ensure_project(cr.metadata.project.as_deref())
+                    .execution_profiles
+                    .insert(name.to_string(), v);
+            }
+        }
         "EnvStore" => {
             if let Ok(v) = EnvStoreConfig::from_cr_spec(&spec) {
                 config
@@ -286,6 +304,19 @@ pub fn remove_from_config_snapshot(
             } else {
                 for project in config.projects.values_mut() {
                     if project.step_templates.remove(name).is_some() {
+                        return;
+                    }
+                }
+            }
+        }
+        "ExecutionProfile" => {
+            if let Some(project_id) = project {
+                if let Some(project) = config.projects.get_mut(project_id) {
+                    project.execution_profiles.remove(name);
+                }
+            } else {
+                for project in config.projects.values_mut() {
+                    if project.execution_profiles.remove(name).is_some() {
                         return;
                     }
                 }
@@ -405,6 +436,15 @@ pub fn sync_config_snapshot_to_store(config: &mut OrchestratorConfig) {
                 name,
                 Some(project_id.clone()),
                 tmpl.to_cr_spec(),
+                &now,
+            ));
+        }
+        for (name, profile) in &project.execution_profiles {
+            config.resource_store.put(make_cr(
+                "ExecutionProfile",
+                name,
+                Some(project_id.clone()),
+                profile.to_cr_spec(),
                 &now,
             ));
         }

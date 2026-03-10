@@ -20,13 +20,18 @@ pub trait CrdProjectable: Sized + Serialize + DeserializeOwned {
 // ── Implementations for the 9 builtin config types ───────────────────────────
 
 use crate::cli_types::{
-    AgentSpec, EnvStoreSpec, ProjectSpec, RuntimePolicySpec, StepTemplateSpec, WorkspaceSpec,
+    AgentSpec, EnvStoreSpec, ExecutionProfileSpec, ProjectSpec, RuntimePolicySpec,
+    StepTemplateSpec, WorkspaceSpec,
 };
 use crate::config::{
-    AgentConfig, EnvStoreConfig, ProjectConfig, ResumeConfig, RunnerConfig, StepTemplateConfig,
-    StoreBackendProviderConfig, WorkflowConfig, WorkflowStoreConfig, WorkspaceConfig,
+    AgentConfig, EnvStoreConfig, ExecutionProfileConfig, ProjectConfig, ResumeConfig,
+    RunnerConfig, StepTemplateConfig, StoreBackendProviderConfig, WorkflowConfig,
+    WorkflowStoreConfig, WorkspaceConfig,
 };
 use crate::resource::agent::{agent_config_to_spec, agent_spec_to_config};
+use crate::resource::execution_profile::{
+    execution_profile_config_to_spec, execution_profile_spec_to_config,
+};
 use crate::resource::runtime_policy::{runner_config_to_spec, runner_spec_to_config};
 use crate::resource::workflow::{workflow_config_to_spec, workflow_spec_to_config};
 use crate::resource::workspace::{workspace_config_to_spec, workspace_spec_to_config};
@@ -93,6 +98,7 @@ impl CrdProjectable for ProjectConfig {
             workflows: Default::default(),
             step_templates: Default::default(),
             env_stores: Default::default(),
+            execution_profiles: Default::default(),
         })
     }
 
@@ -165,6 +171,22 @@ impl CrdProjectable for StepTemplateConfig {
             prompt: self.prompt.clone(),
             description: self.description.clone(),
         };
+        serde_json::to_value(&spec).unwrap_or_default()
+    }
+}
+
+impl CrdProjectable for ExecutionProfileConfig {
+    fn crd_kind() -> &'static str {
+        "ExecutionProfile"
+    }
+
+    fn from_cr_spec(spec: &serde_json::Value) -> Result<Self> {
+        let profile_spec: ExecutionProfileSpec = serde_json::from_value(spec.clone())?;
+        Ok(execution_profile_spec_to_config(&profile_spec))
+    }
+
+    fn to_cr_spec(&self) -> serde_json::Value {
+        let spec = execution_profile_config_to_spec(self);
         serde_json::to_value(&spec).unwrap_or_default()
     }
 }
@@ -332,6 +354,7 @@ mod tests {
             workflows: Default::default(),
             step_templates: Default::default(),
             env_stores: Default::default(),
+            execution_profiles: Default::default(),
         };
         let spec = config.to_cr_spec();
         let back = ProjectConfig::from_cr_spec(&spec).expect("should deserialize");

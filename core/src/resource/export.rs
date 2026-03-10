@@ -206,6 +206,12 @@ pub fn export_manifest_documents(config: &OrchestratorConfig) -> Vec<Orchestrato
                 metadata: item.metadata,
                 spec: ResourceSpec::StepTemplate(item.spec),
             },
+            RegisteredResource::ExecutionProfile(item) => OrchestratorResource {
+                api_version: API_VERSION.to_string(),
+                kind: ResourceKind::ExecutionProfile,
+                metadata: item.metadata,
+                spec: ResourceSpec::ExecutionProfile(item.spec),
+            },
             RegisteredResource::EnvStore(item) => OrchestratorResource {
                 api_version: API_VERSION.to_string(),
                 kind: ResourceKind::EnvStore,
@@ -481,6 +487,7 @@ mod tests {
                 workflows: Default::default(),
                 step_templates: Default::default(),
                 env_stores: Default::default(),
+                execution_profiles: Default::default(),
             },
         );
 

@@ -24,6 +24,7 @@ This flag does NOT disable redaction, timeouts, or stagnation detection. It is C
 
 Force-gate behavior without `--unsafe` is validated in `docs/qa/orchestrator/43-cli-force-gate-audit.md`.
 Runner policy YAML-level configuration is validated in `docs/qa/orchestrator/21-runner-security-observability.md` and `docs/qa/orchestrator/31-runner-policy-defaults-compatibility.md`.
+Step-level `execution_profile` routing is validated in `docs/qa/orchestrator/54-step-execution-profiles.md`; this document only covers the global `--unsafe` override path.
 
 Entry point: `orchestrator`
 

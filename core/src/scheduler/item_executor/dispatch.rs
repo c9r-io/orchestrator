@@ -708,6 +708,7 @@ pub async fn execute_builtin_step(
                 prompt_payload: None,
                 pipe_stdin: false,
                 project_id: &task_ctx.project_id,
+                execution_profile: None,
             },
         )
         .await?
@@ -740,6 +741,7 @@ pub async fn execute_builtin_step(
                 step_scope: step.resolved_scope(),
                 step_template_prompt: resolved_prompt.as_deref(),
                 project_id: &task_ctx.project_id,
+                execution_profile: step.execution_profile.as_deref(),
             },
         )
         .await?
@@ -959,6 +961,7 @@ impl AdaptivePlanExecutor for AgentBackedAdaptiveExecutor<'_> {
                 step_scope: crate::config::StepScope::Item,
                 step_template_prompt: Some(prompt),
                 project_id: &self.task_ctx.project_id,
+                execution_profile: None,
             },
         )
         .await?;
@@ -1174,6 +1177,7 @@ async fn execute_dynamic_step_config(
                 step_scope: crate::config::StepScope::Item,
                 step_template_prompt: None,
                 project_id: &task_ctx.project_id,
+                execution_profile: None,
             },
         )
         .await?
@@ -1199,6 +1203,7 @@ async fn execute_dynamic_step_config(
                 step_scope: crate::config::StepScope::Item,
                 step_template_prompt: ds.template.as_deref(),
                 project_id: &task_ctx.project_id,
+                execution_profile: None,
             },
         )
         .await?

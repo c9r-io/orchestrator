@@ -1,4 +1,5 @@
 use crate::config::{PipelineVariables, PromptDelivery, RunnerConfig, StepScope};
+use crate::runner::ResolvedExecutionProfile;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -45,6 +46,7 @@ pub(super) struct PhaseSetup {
     pub stdout_file: std::fs::File,
     pub stderr_file: std::fs::File,
     pub command: String,
+    pub execution_profile: ResolvedExecutionProfile,
 }
 
 /// Intermediate data produced by `spawn_phase_process`.
@@ -94,6 +96,7 @@ pub struct PhaseRunRequest<'a> {
     pub pipe_stdin: bool,
     /// Project ID for project-scoped agent env resolution (empty = non-project).
     pub project_id: &'a str,
+    pub execution_profile: Option<&'a str>,
 }
 
 pub struct RotatingPhaseRunRequest<'a> {
@@ -116,6 +119,7 @@ pub struct RotatingPhaseRunRequest<'a> {
     pub step_template_prompt: Option<&'a str>,
     /// Project ID for project-scoped agent selection (empty = non-project).
     pub project_id: &'a str,
+    pub execution_profile: Option<&'a str>,
 }
 
 pub struct SelectedPhaseRunRequest<'a> {
@@ -139,4 +143,5 @@ pub struct SelectedPhaseRunRequest<'a> {
     pub step_template_prompt: Option<&'a str>,
     /// Project ID for project-scoped agent env resolution (empty = non-project).
     pub project_id: &'a str,
+    pub execution_profile: Option<&'a str>,
 }

@@ -284,6 +284,7 @@ spec:
       scope: task
       required_capability: implement
       template: implement
+      execution_profile: sandbox_write
       enabled: true
       repeatable: true
       tty: false
@@ -316,6 +317,7 @@ spec:
       scope: item
       required_capability: qa_testing
       template: qa_testing
+      execution_profile: host
       enabled: true
       repeatable: true
       tty: false
@@ -329,6 +331,7 @@ spec:
       scope: item
       required_capability: ticket_fix
       template: ticket_fix
+      execution_profile: sandbox_write
       enabled: true
       repeatable: true
       tty: false

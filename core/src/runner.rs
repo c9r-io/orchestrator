@@ -1,8 +1,11 @@
-use crate::config::{RunnerConfig, RunnerExecutorKind, RunnerPolicy};
+use crate::config::{
+    ExecutionFsMode, ExecutionNetworkMode, ExecutionProfileConfig, ExecutionProfileMode,
+    RunnerConfig, RunnerExecutorKind, RunnerPolicy,
+};
 use crate::output_capture::{spawn_sanitized_output_capture, OutputCaptureHandles};
 use anyhow::{anyhow, Context, Result};
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 #[cfg(test)]
@@ -298,11 +301,77 @@ pub struct SpawnParams<'a> {
     pub stdio_mode: RunnerStdioMode,
     pub extra_env: &'a std::collections::HashMap<String, String>,
     pub pipe_stdin: bool,
+    pub execution_profile: &'a ResolvedExecutionProfile,
 }
 
 pub enum RunnerStdioMode {
     Files { stdout: File, stderr: File },
     Piped,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedExecutionProfile {
+    pub name: String,
+    pub mode: ExecutionProfileMode,
+    pub fs_mode: ExecutionFsMode,
+    pub writable_paths: Vec<PathBuf>,
+    pub network_mode: ExecutionNetworkMode,
+    pub network_allowlist: Vec<String>,
+    pub max_memory_mb: Option<u64>,
+    pub max_cpu_seconds: Option<u64>,
+    pub max_processes: Option<u64>,
+    pub max_open_files: Option<u64>,
+}
+
+impl ResolvedExecutionProfile {
+    pub fn host() -> Self {
+        Self {
+            name: "host".to_string(),
+            mode: ExecutionProfileMode::Host,
+            fs_mode: ExecutionFsMode::Inherit,
+            writable_paths: Vec::new(),
+            network_mode: ExecutionNetworkMode::Inherit,
+            network_allowlist: Vec::new(),
+            max_memory_mb: None,
+            max_cpu_seconds: None,
+            max_processes: None,
+            max_open_files: None,
+        }
+    }
+
+    pub fn from_config(
+        name: &str,
+        config: &ExecutionProfileConfig,
+        workspace_root: &Path,
+        always_writable: &[PathBuf],
+    ) -> Self {
+        let mut writable_paths = always_writable.to_vec();
+        writable_paths.extend(
+            config
+                .writable_paths
+                .iter()
+                .map(|path| {
+                    let raw = PathBuf::from(path);
+                    if raw.is_absolute() {
+                        raw
+                    } else {
+                        workspace_root.join(raw)
+                    }
+                }),
+        );
+        Self {
+            name: name.to_string(),
+            mode: config.mode.clone(),
+            fs_mode: config.fs_mode.clone(),
+            writable_paths,
+            network_mode: config.network_mode.clone(),
+            network_allowlist: config.network_allowlist.clone(),
+            max_memory_mb: config.max_memory_mb,
+            max_cpu_seconds: config.max_cpu_seconds,
+            max_processes: config.max_processes,
+            max_open_files: config.max_open_files,
+        }
+    }
 }
 
 pub trait RunnerExecutor {
@@ -321,12 +390,11 @@ impl RunnerExecutor for ShellRunnerExecutor {
             stdio_mode,
             extra_env,
             pipe_stdin,
+            execution_profile,
         } = params;
 
         enforce_runner_policy(runner, command)?;
-
-        let mut cmd = tokio::process::Command::new(&runner.shell);
-        cmd.arg(&runner.shell_arg).arg(command).current_dir(cwd);
+        let mut cmd = build_command_for_profile(runner, command, cwd, execution_profile)?;
 
         match stdio_mode {
             RunnerStdioMode::Files { stdout, stderr } => {
@@ -375,6 +443,83 @@ impl RunnerExecutor for ShellRunnerExecutor {
     }
 }
 
+fn build_command_for_profile(
+    runner: &RunnerConfig,
+    command: &str,
+    cwd: &Path,
+    execution_profile: &ResolvedExecutionProfile,
+) -> Result<tokio::process::Command> {
+    let mut cmd = match execution_profile.mode {
+        ExecutionProfileMode::Host => {
+            let mut cmd = tokio::process::Command::new(&runner.shell);
+            cmd.arg(&runner.shell_arg).arg(command);
+            cmd
+        }
+        ExecutionProfileMode::Sandbox => build_sandbox_command(runner, command, execution_profile)?,
+    };
+    cmd.current_dir(cwd);
+    Ok(cmd)
+}
+
+fn build_sandbox_command(
+    runner: &RunnerConfig,
+    command: &str,
+    execution_profile: &ResolvedExecutionProfile,
+) -> Result<tokio::process::Command> {
+    #[cfg(target_os = "macos")]
+    {
+        let mut cmd = tokio::process::Command::new("/usr/bin/sandbox-exec");
+        cmd.arg("-p")
+            .arg(build_macos_sandbox_profile(execution_profile))
+            .arg(&runner.shell)
+            .arg(&runner.shell_arg)
+            .arg(command);
+        Ok(cmd)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (runner, command, execution_profile);
+        Err(anyhow!(
+            "sandbox execution is not implemented on this platform"
+        ))
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn build_macos_sandbox_profile(execution_profile: &ResolvedExecutionProfile) -> String {
+    let mut lines = vec![
+        "(version 1)".to_string(),
+        "(deny default)".to_string(),
+        "(import \"system.sb\")".to_string(),
+        "(allow process*)".to_string(),
+        "(allow file-read*)".to_string(),
+        "(allow sysctl-read)".to_string(),
+    ];
+    if execution_profile.network_mode != ExecutionNetworkMode::Deny {
+        lines.push("(allow network*)".to_string());
+    }
+    match execution_profile.fs_mode {
+        ExecutionFsMode::Inherit => {
+            lines.push("(allow file-write*)".to_string());
+        }
+        ExecutionFsMode::WorkspaceReadonly | ExecutionFsMode::WorkspaceRwScoped => {
+            if !execution_profile.writable_paths.is_empty() {
+                lines.push("(allow file-write*".to_string());
+                for path in &execution_profile.writable_paths {
+                    lines.push(format!("    (subpath \"{}\")", escape_sb_string(path)));
+                }
+                lines.push(")".to_string());
+            }
+        }
+    }
+    lines.join("\n")
+}
+
+#[cfg(target_os = "macos")]
+fn escape_sb_string(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"")
+}
+
 pub fn spawn_with_runner(
     runner: &RunnerConfig,
     command: &str,
@@ -383,6 +528,7 @@ pub fn spawn_with_runner(
     stderr: File,
     extra_env: &std::collections::HashMap<String, String>,
     pipe_stdin: bool,
+    execution_profile: &ResolvedExecutionProfile,
 ) -> Result<tokio::process::Child> {
     match runner.executor {
         RunnerExecutorKind::Shell => ShellRunnerExecutor.spawn(SpawnParams {
@@ -392,6 +538,7 @@ pub fn spawn_with_runner(
             stdio_mode: RunnerStdioMode::Files { stdout, stderr },
             extra_env,
             pipe_stdin,
+            execution_profile,
         }),
     }
 }
@@ -410,6 +557,7 @@ pub fn spawn_with_runner_and_capture(
     redaction_patterns: Vec<String>,
     extra_env: &std::collections::HashMap<String, String>,
     pipe_stdin: bool,
+    execution_profile: &ResolvedExecutionProfile,
 ) -> Result<CapturedChild> {
     let mut child = match runner.executor {
         RunnerExecutorKind::Shell => ShellRunnerExecutor.spawn(SpawnParams {
@@ -419,6 +567,7 @@ pub fn spawn_with_runner_and_capture(
             stdio_mode: RunnerStdioMode::Piped,
             extra_env,
             pipe_stdin,
+            execution_profile,
         })?,
     };
     let child_stdout = child

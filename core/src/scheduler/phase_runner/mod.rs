@@ -48,6 +48,7 @@ async fn run_phase_with_timeout(
         prompt_payload,
         pipe_stdin: req_pipe_stdin,
         project_id,
+        execution_profile,
     } = request;
 
     // Stage 1: setup
@@ -64,6 +65,7 @@ async fn run_phase_with_timeout(
         prompt_delivery,
         &prompt_payload,
         project_id,
+        execution_profile,
     )
     .await?;
 
@@ -181,6 +183,7 @@ pub async fn run_phase_with_rotation(
         step_scope,
         step_template_prompt,
         project_id,
+        execution_profile,
     } = request;
     let effective_capability = capability.or(match phase {
         "qa" | "fix" | "retest" => Some(phase),
@@ -235,6 +238,7 @@ pub async fn run_phase_with_rotation(
             step_scope,
             step_template_prompt,
             project_id,
+            execution_profile,
         },
     )
     .await
@@ -264,6 +268,7 @@ pub async fn run_phase_with_selected_agent(
         step_scope,
         step_template_prompt,
         project_id,
+        execution_profile,
     } = request;
 
     // Render template variables into the step template prompt, then inject into agent command
@@ -354,6 +359,7 @@ pub async fn run_phase_with_selected_agent(
             prompt_payload,
             pipe_stdin: prompt_delivery == PromptDelivery::Stdin,
             project_id,
+            execution_profile,
         },
     )
     .await

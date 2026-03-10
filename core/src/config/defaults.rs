@@ -14,6 +14,7 @@ fn step_config(
         id: id.to_string(),
         description: None,
         required_capability: required_capability.map(String::from),
+        execution_profile: None,
         builtin: builtin.map(String::from),
         enabled,
         repeatable,

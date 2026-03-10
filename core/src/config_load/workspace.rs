@@ -125,6 +125,7 @@ pub fn resolve_and_validate_projects(
                 workflows: project_config.workflows.clone(),
                 step_templates: project_config.step_templates.clone(),
                 env_stores: project_config.env_stores.clone(),
+                execution_profiles: project_config.execution_profiles.clone(),
             },
         );
     }
@@ -293,6 +294,7 @@ mod tests {
                     .into(),
                     step_templates: Default::default(),
                     env_stores: Default::default(),
+                    execution_profiles: Default::default(),
                 },
             )]
             .into(),
@@ -332,6 +334,7 @@ mod tests {
                     .into(),
                     step_templates: Default::default(),
                     env_stores: Default::default(),
+                    execution_profiles: Default::default(),
                 },
             )]
             .into(),
@@ -374,6 +377,7 @@ mod tests {
                     workflows: Default::default(),
                     step_templates: Default::default(),
                     env_stores: Default::default(),
+                    execution_profiles: Default::default(),
                 },
             )]
             .into(),

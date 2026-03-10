@@ -8,6 +8,7 @@ pub(crate) const API_VERSION: &str = "orchestrator.dev/v2";
 
 pub(crate) mod agent;
 mod env_store;
+pub(crate) mod execution_profile;
 mod export;
 mod parse;
 mod project;
@@ -28,6 +29,7 @@ mod tests;
 
 pub use agent::AgentResource;
 pub use env_store::EnvStoreResource;
+pub use execution_profile::ExecutionProfileResource;
 pub use export::{export_crd_documents, export_manifest_documents, export_manifest_resources};
 pub use parse::{
     delete_resource_by_kind, kind_as_str, parse_manifests_from_yaml, parse_resources_from_yaml,
