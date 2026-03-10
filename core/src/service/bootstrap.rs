@@ -206,6 +206,7 @@ fn initialize_runtime(app_root: &Path) -> Result<(std::path::PathBuf, std::path:
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config_load::read_active_config;
     use crate::dto::CreateTaskPayload;
     use crate::task_ops::create_task_impl;
     use crate::test_utils::TestState;
@@ -218,6 +219,62 @@ mod tests {
         assert!(db_path.exists());
         assert!(logs_dir.exists());
         assert!(crate::secret_store_crypto::secret_key_path(temp.path()).exists());
+    }
+
+    #[test]
+    fn blank_database_bootstraps_runnable_state_without_persisted_resources() {
+        let temp = tempfile::tempdir().expect("create tempdir");
+        let (db_path, logs_dir) = initialize_runtime(temp.path()).expect("initialize runtime");
+
+        let (config, _yaml, version, _updated_at) =
+            load_or_seed_config(&db_path).expect("load blank config");
+        assert!(config.projects.is_empty());
+        assert!(config.custom_resource_definitions.is_empty());
+        assert!(config.custom_resources.is_empty());
+        assert!(config.resource_store.is_empty());
+        assert_eq!(version, 0);
+        assert!(
+            crate::config_load::load_config(&db_path)
+                .expect("load persisted resources")
+                .is_none(),
+            "synthetic bootstrap config must not be persisted into sqlite"
+        );
+
+        let (active, active_config_error, active_config_notice) =
+            build_active_config_result(temp.path(), &db_path, config)
+                .expect("build active config from blank bootstrap state");
+        assert!(active.workspaces.is_empty());
+        assert!(active_config_notice.is_none());
+        assert!(
+            active.projects.contains_key(crate::config::DEFAULT_PROJECT_ID),
+            "bootstrap should synthesize the built-in default project"
+        );
+        assert!(
+            active_config_error.is_none(),
+            "blank bootstrap state should still be readable so apply/init can proceed"
+        );
+
+        let async_database = Arc::new(
+            tokio::runtime::Runtime::new()
+                .expect("create runtime")
+                .block_on(crate::async_database::AsyncDatabase::open(&db_path))
+                .expect("open async database"),
+        );
+        let managed = build_managed_state(
+            temp.path().to_path_buf(),
+            db_path,
+            logs_dir,
+            false,
+            async_database,
+            active,
+            active_config_error,
+            active_config_notice,
+        )
+        .expect("build managed state");
+
+        let loaded = read_active_config(&managed.inner).expect("read active config");
+        assert!(loaded.workspaces.is_empty());
+        assert!(loaded.projects.contains_key(crate::config::DEFAULT_PROJECT_ID));
     }
 
     #[test]

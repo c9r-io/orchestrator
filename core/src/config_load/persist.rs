@@ -177,9 +177,9 @@ pub fn load_or_seed_config(db_path: &Path) -> Result<(OrchestratorConfig, String
         return Ok((config, yaml, version, updated_at));
     }
 
-    anyhow::bail!(
-        "[CONFIG_NOT_INITIALIZED] orchestrator manifest is not initialized in sqlite\n  category: validation\n  suggested_fix: run 'orchestrator apply -f <manifest.yaml>' first"
-    )
+    let config = OrchestratorConfig::default();
+    let (yaml, _json_raw) = serialize_config_snapshot(&config)?;
+    Ok((config, yaml, 0, now_ts()))
 }
 
 /// Unified config loader backed only by the per-resource `resources` table.
@@ -714,6 +714,33 @@ mod tests {
         for entry in &entries {
             assert_eq!(entry.original_error, "builtin/capability conflict");
         }
+    }
+
+    #[test]
+    fn load_or_seed_config_returns_blank_default_when_resources_are_empty() {
+        let (_temp_dir, db_path) = make_test_db();
+
+        let existing = load_config(&db_path).expect("load blank config");
+        assert!(existing.is_none(), "blank sqlite should have no persisted resources");
+
+        let (config, yaml, version, _updated_at) =
+            load_or_seed_config(&db_path).expect("load blank default config");
+
+        assert!(config.projects.is_empty());
+        assert!(config.custom_resource_definitions.is_empty());
+        assert!(config.custom_resources.is_empty());
+        assert!(config.resource_store.is_empty());
+        assert_eq!(version, 0);
+        assert!(
+            yaml.contains("kind: RuntimePolicy"),
+            "blank default config should still export synthesized runtime policy"
+        );
+
+        let still_blank = load_config(&db_path).expect("reload blank config");
+        assert!(
+            still_blank.is_none(),
+            "load_or_seed_config must not persist synthetic resources for a blank db"
+        );
     }
 
     #[test]
