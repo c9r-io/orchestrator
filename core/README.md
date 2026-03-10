@@ -43,6 +43,22 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D clippy::unwrap_used -D clippy::panic
 ```
 
+## Linux x86 Check
+
+To validate the Linux GNU `setrlimit` ABI used by [runner.rs](/Volumes/Yotta/ai_native_sdlc/core/src/runner.rs), run:
+
+```bash
+./scripts/check-linux-x86-rlimit.sh
+```
+
+This installs `i686-unknown-linux-gnu` if needed and type-checks the `RLIMIT_*` to `setrlimit` conversion without requiring the full cross-compilation toolchain.
+
+For a full crate check on `i686-unknown-linux-gnu`, you also need an `i686` C compiler because `rusqlite` builds bundled SQLite C code:
+
+```bash
+cargo check -p agent-orchestrator --target i686-unknown-linux-gnu
+```
+
 ## Config And Data
 
 When run from repo root, runtime paths are:

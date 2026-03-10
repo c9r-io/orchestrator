@@ -811,16 +811,16 @@ fn apply_unix_resource_limits_to_command(
 #[cfg(unix)]
 fn apply_unix_resource_limits(limits: &UnixResourceLimits) -> Result<()> {
     if let Some(value) = limits.max_memory_bytes {
-        set_rlimit(rlimit_resource(libc::RLIMIT_AS), value)?;
+        set_rlimit(rlimit_resource(libc::RLIMIT_AS as u64)?, value)?;
     }
     if let Some(value) = limits.max_cpu_seconds {
-        set_rlimit(rlimit_resource(libc::RLIMIT_CPU), value)?;
+        set_rlimit(rlimit_resource(libc::RLIMIT_CPU as u64)?, value)?;
     }
     if let Some(value) = limits.max_processes {
-        set_rlimit(rlimit_resource(libc::RLIMIT_NPROC), value)?;
+        set_rlimit(rlimit_resource(libc::RLIMIT_NPROC as u64)?, value)?;
     }
     if let Some(value) = limits.max_open_files {
-        set_rlimit(rlimit_resource(libc::RLIMIT_NOFILE), value)?;
+        set_rlimit(rlimit_resource(libc::RLIMIT_NOFILE as u64)?, value)?;
     }
     Ok(())
 }
@@ -834,10 +834,11 @@ type RlimitResource = libc::__rlimit_resource_t;
 type RlimitResource = libc::c_int;
 
 #[cfg(unix)]
-fn rlimit_resource(resource: libc::c_int) -> RlimitResource {
-    // libc 0.2.183 exposes Linux/GNU setrlimit resource selectors as u32 even
-    // though RLIMIT_* constants remain c_int. Centralize the ABI cast here.
-    resource as RlimitResource
+fn rlimit_resource(resource: u64) -> Result<RlimitResource> {
+    // libc exposes RLIMIT_* with target-specific integer types. Convert via a
+    // wide intermediate so Linux GNU x86/u32 and Darwin/i32 both type-check.
+    RlimitResource::try_from(resource)
+        .map_err(|_| anyhow!("unsupported rlimit resource selector: {resource}"))
 }
 
 #[cfg(unix)]
