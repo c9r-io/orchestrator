@@ -1,0 +1,64 @@
+use orchestrator_proto::TaskInfoResponse;
+
+use crate::OutputFormat;
+
+use super::value::task_detail_value;
+
+pub(super) fn print(resp: &TaskInfoResponse, format: OutputFormat) {
+    let Some(ref task) = resp.task else {
+        println!("No task data");
+        return;
+    };
+
+    match format {
+        OutputFormat::Json => {
+            let json = task_detail_value(task, resp);
+            println!("{}", serde_json::to_string_pretty(&json).unwrap_or_default());
+        }
+        OutputFormat::Yaml => {
+            let json = task_detail_value(task, resp);
+            println!("{}", serde_yml::to_string(&json).unwrap_or_default());
+        }
+        OutputFormat::Table => {
+            println!("Task: {}", task.id);
+            println!("  Name: {}", task.name);
+            println!("  Status: {}", task.status);
+            println!("  Workspace: {}", task.workspace_id);
+            println!("  Workflow: {}", task.workflow_id);
+            println!(
+                "  Progress: {}/{} items",
+                task.finished_items, task.total_items
+            );
+            println!("  Failed: {}", task.failed_items);
+            if !task.goal.is_empty() {
+                println!("  Goal: {}", task.goal);
+            }
+            println!("  Items: {}", resp.items.len());
+            for item in &resp.items {
+                println!(
+                    "    - {} [{}] order={} path={}",
+                    item.id, item.status, item.order_no, item.qa_file_path
+                );
+            }
+            println!("  Runs: {}", resp.runs.len());
+            for run in &resp.runs {
+                let exit_code = run
+                    .exit_code
+                    .map(|code| code.to_string())
+                    .unwrap_or_else(|| "running".to_string());
+                println!(
+                    "    - {} item={} phase={} exit={}",
+                    run.id, run.task_item_id, run.phase, exit_code
+                );
+            }
+            println!("  Events: {}", resp.events.len());
+            for event in &resp.events {
+                let item_id = event.task_item_id.as_deref().unwrap_or("-");
+                println!(
+                    "    - {} {} item={} at={}",
+                    event.id, event.event_type, item_id, event.created_at
+                );
+            }
+        }
+    }
+}
