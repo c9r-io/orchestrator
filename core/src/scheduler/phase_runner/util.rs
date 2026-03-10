@@ -1,5 +1,5 @@
 use crate::config::{ExecutionProfileMode, StepScope};
-use crate::runner::ResolvedExecutionProfile;
+use crate::runner::{ResolvedExecutionProfile, SandboxResourceKind};
 use anyhow::{Context, Result};
 use std::path::Path;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
@@ -99,13 +99,13 @@ pub(super) async fn read_output_with_limit(path: &Path, max_bytes: u64) -> Resul
     })
 }
 
-pub(super) async fn detect_sandbox_denial(
+pub(super) async fn detect_sandbox_violation(
     execution_profile: &ResolvedExecutionProfile,
-    exit_code: i32,
+    wait_result: &WaitResult,
     stderr_path: &Path,
-) -> SandboxDenialInfo {
-    if execution_profile.mode != ExecutionProfileMode::Sandbox || exit_code == 0 {
-        return SandboxDenialInfo::default();
+) -> SandboxViolationInfo {
+    if execution_profile.mode != ExecutionProfileMode::Sandbox || wait_result.exit_code == 0 {
+        return SandboxViolationInfo::default();
     }
 
     let stderr_tail = match read_output_with_limit(stderr_path, SANDBOX_STDERR_EXCERPT_MAX_BYTES)
@@ -114,18 +114,63 @@ pub(super) async fn detect_sandbox_denial(
         Ok(output) => output.text,
         Err(err) => {
             debug!(path = %stderr_path.display(), error = %err, "sandbox denial detection skipped: failed to read stderr");
-            return SandboxDenialInfo::default();
+            return SandboxViolationInfo::default();
         }
     };
+    let stderr_excerpt = sanitize_stderr_excerpt(&stderr_tail);
+    let lower_stderr = stderr_tail.to_lowercase();
 
-    if !stderr_tail.contains("Operation not permitted") {
-        return SandboxDenialInfo::default();
+    if execution_profile.network_mode == crate::config::ExecutionNetworkMode::Allowlist
+        && lower_stderr.contains("does not support network allowlists")
+    {
+        return SandboxViolationInfo {
+            denied: true,
+            event_type: Some("sandbox_network_blocked"),
+            reason: Some("unsupported_backend_feature".to_string()),
+            stderr_excerpt,
+            resource_kind: None,
+            network_target: None,
+        };
     }
 
-    SandboxDenialInfo {
+    if let Some(resource_kind) =
+        detect_resource_exceeded(execution_profile, wait_result.exit_signal, &lower_stderr)
+    {
+        return SandboxViolationInfo {
+            denied: true,
+            event_type: Some("sandbox_resource_exceeded"),
+            reason: Some(format!("{}_limit_exceeded", resource_kind.as_str())),
+            stderr_excerpt,
+            resource_kind: Some(resource_kind),
+            network_target: None,
+        };
+    }
+
+    if execution_profile.network_mode == crate::config::ExecutionNetworkMode::Deny
+        && lower_stderr.contains("operation not permitted")
+        && looks_like_network_denial(&lower_stderr)
+    {
+        return SandboxViolationInfo {
+            denied: true,
+            event_type: Some("sandbox_network_blocked"),
+            reason: Some("network_blocked".to_string()),
+            stderr_excerpt,
+            resource_kind: None,
+            network_target: detect_network_target(&stderr_tail),
+        };
+    }
+
+    if !stderr_tail.contains("Operation not permitted") {
+        return SandboxViolationInfo::default();
+    }
+
+    SandboxViolationInfo {
         denied: true,
+        event_type: Some("sandbox_denied"),
         reason: Some("file_write_denied".to_string()),
-        stderr_excerpt: sanitize_stderr_excerpt(&stderr_tail),
+        stderr_excerpt,
+        resource_kind: None,
+        network_target: None,
     }
 }
 
@@ -141,4 +186,64 @@ fn sanitize_stderr_excerpt(stderr_tail: &str) -> Option<String> {
     } else {
         Some(excerpt.to_string())
     }
+}
+
+fn detect_resource_exceeded(
+    execution_profile: &ResolvedExecutionProfile,
+    exit_signal: Option<i32>,
+    lower_stderr: &str,
+) -> Option<SandboxResourceKind> {
+    #[cfg(unix)]
+    {
+        if exit_signal == Some(libc::SIGXCPU) && execution_profile.max_cpu_seconds.is_some() {
+            return Some(SandboxResourceKind::Cpu);
+        }
+    }
+    if execution_profile.max_open_files.is_some() && lower_stderr.contains("too many open files") {
+        return Some(SandboxResourceKind::OpenFiles);
+    }
+    if execution_profile.max_processes.is_some()
+        && lower_stderr.contains("resource temporarily unavailable")
+    {
+        return Some(SandboxResourceKind::Processes);
+    }
+    if execution_profile.max_memory_mb.is_some()
+        && (lower_stderr.contains("cannot allocate memory")
+            || lower_stderr.contains("out of memory")
+            || lower_stderr.contains("memory exhausted"))
+    {
+        return Some(SandboxResourceKind::Memory);
+    }
+    None
+}
+
+fn looks_like_network_denial(lower_stderr: &str) -> bool {
+    lower_stderr.contains("connect")
+        || lower_stderr.contains("network")
+        || lower_stderr.contains("curl:")
+        || lower_stderr.contains("wget:")
+        || lower_stderr.contains("fetch")
+        || lower_stderr.contains("connection")
+        || lower_stderr.contains("socket")
+}
+
+fn detect_network_target(stderr_tail: &str) -> Option<String> {
+    for token in stderr_tail.split_whitespace() {
+        let trimmed = token.trim_matches(|ch: char| "()[]{}<>\",'\"".contains(ch));
+        if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+            return Some(trimmed.to_string());
+        }
+    }
+    for token in stderr_tail.split_whitespace() {
+        let trimmed = token.trim_matches(|ch: char| "()[]{}<>\",'\"".contains(ch));
+        if trimmed.contains(':')
+            && !trimmed.starts_with('/')
+            && trimmed.chars().any(|ch| ch.is_ascii_alphabetic())
+            && trimmed != "curl:"
+            && trimmed != "wget:"
+        {
+            return Some(trimmed.to_string());
+        }
+    }
+    None
 }

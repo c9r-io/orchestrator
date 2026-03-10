@@ -147,6 +147,9 @@ pub(super) async fn spawn_phase_process(
                 },
                 sandbox_denied: false,
                 sandbox_denial_reason: None,
+                sandbox_violation_kind: None,
+                sandbox_resource_kind: None,
+                sandbox_network_target: None,
             }),
         });
     }

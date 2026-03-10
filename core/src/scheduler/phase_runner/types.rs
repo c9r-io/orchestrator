@@ -1,5 +1,5 @@
 use crate::config::{PipelineVariables, PromptDelivery, RunnerConfig, StepScope};
-use crate::runner::ResolvedExecutionProfile;
+use crate::runner::{ResolvedExecutionProfile, SandboxResourceKind};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -35,10 +35,13 @@ pub(super) struct HeartbeatSample {
 }
 
 #[derive(Debug, Default, Clone)]
-pub(super) struct SandboxDenialInfo {
+pub(super) struct SandboxViolationInfo {
     pub denied: bool,
+    pub event_type: Option<&'static str>,
     pub reason: Option<String>,
     pub stderr_excerpt: Option<String>,
+    pub resource_kind: Option<SandboxResourceKind>,
+    pub network_target: Option<String>,
 }
 
 /// Intermediate data produced by `setup_phase_execution` and consumed by later stages.
@@ -69,6 +72,7 @@ pub(super) struct SpawnResult {
 /// Intermediate data produced by `wait_for_process`.
 pub(super) struct WaitResult {
     pub exit_code: i32,
+    pub exit_signal: Option<i32>,
     pub timed_out: bool,
     pub duration: std::time::Duration,
 }
@@ -82,8 +86,11 @@ pub(super) struct ValidatedOutput {
     pub redacted_output: crate::collab::AgentOutput,
     pub validation_error: Option<String>,
     pub sandbox_denied: bool,
+    pub sandbox_event_type: Option<&'static str>,
     pub sandbox_denial_reason: Option<String>,
     pub sandbox_denial_stderr_excerpt: Option<String>,
+    pub sandbox_resource_kind: Option<SandboxResourceKind>,
+    pub sandbox_network_target: Option<String>,
 }
 
 pub struct PhaseRunRequest<'a> {

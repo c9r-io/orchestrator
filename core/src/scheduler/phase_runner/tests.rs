@@ -198,20 +198,29 @@ mod cases {
         }
     }
 
+    fn wait_result(exit_code: i32, exit_signal: Option<i32>) -> WaitResult {
+        WaitResult {
+            exit_code,
+            exit_signal,
+            timed_out: false,
+            duration: std::time::Duration::from_secs(1),
+        }
+    }
+
     #[tokio::test]
-    async fn detect_sandbox_denial_returns_false_for_host_mode() {
+    async fn detect_sandbox_violation_returns_false_for_host_mode() {
         let dir = tempfile::tempdir().expect("create tempdir");
         let path = dir.path().join("stderr.log");
         std::fs::write(&path, "Operation not permitted").expect("write stderr");
 
-        let info = detect_sandbox_denial(&ResolvedExecutionProfile::host(), 1, &path).await;
+        let info = detect_sandbox_violation(&ResolvedExecutionProfile::host(), &wait_result(1, None), &path).await;
 
         assert!(!info.denied);
         assert!(info.reason.is_none());
     }
 
     #[tokio::test]
-    async fn detect_sandbox_denial_detects_operation_not_permitted() {
+    async fn detect_sandbox_violation_detects_operation_not_permitted() {
         let dir = tempfile::tempdir().expect("create tempdir");
         let path = dir.path().join("stderr.log");
         std::fs::write(
@@ -220,9 +229,10 @@ mod cases {
         )
         .expect("write stderr");
 
-        let info = detect_sandbox_denial(&sandbox_profile(), 1, &path).await;
+        let info = detect_sandbox_violation(&sandbox_profile(), &wait_result(1, None), &path).await;
 
         assert!(info.denied);
+        assert_eq!(info.event_type, Some("sandbox_denied"));
         assert_eq!(info.reason.as_deref(), Some("file_write_denied"));
         assert_eq!(
             info.stderr_excerpt.as_deref(),
@@ -231,26 +241,62 @@ mod cases {
     }
 
     #[tokio::test]
-    async fn detect_sandbox_denial_ignores_other_stderr() {
+    async fn detect_sandbox_violation_ignores_other_stderr() {
         let dir = tempfile::tempdir().expect("create tempdir");
         let path = dir.path().join("stderr.log");
         std::fs::write(&path, "syntax error near unexpected token").expect("write stderr");
 
-        let info = detect_sandbox_denial(&sandbox_profile(), 2, &path).await;
+        let info = detect_sandbox_violation(&sandbox_profile(), &wait_result(2, None), &path).await;
 
         assert!(!info.denied);
         assert!(info.reason.is_none());
     }
 
     #[tokio::test]
-    async fn detect_sandbox_denial_handles_missing_stderr() {
+    async fn detect_sandbox_violation_handles_missing_stderr() {
         let dir = tempfile::tempdir().expect("create tempdir");
         let path = dir.path().join("missing.log");
 
-        let info = detect_sandbox_denial(&sandbox_profile(), 1, &path).await;
+        let info = detect_sandbox_violation(&sandbox_profile(), &wait_result(1, None), &path).await;
 
         assert!(!info.denied);
         assert!(info.reason.is_none());
+    }
+
+    #[tokio::test]
+    async fn detect_sandbox_violation_detects_open_files_limit() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("stderr.log");
+        std::fs::write(&path, "bash: /tmp/x: Too many open files\n").expect("write stderr");
+        let mut profile = sandbox_profile();
+        profile.max_open_files = Some(16);
+
+        let info = detect_sandbox_violation(&profile, &wait_result(1, None), &path).await;
+
+        assert!(info.denied);
+        assert_eq!(info.event_type, Some("sandbox_resource_exceeded"));
+        assert_eq!(info.resource_kind.map(|value| value.as_str()), Some("open_files"));
+    }
+
+    #[tokio::test]
+    async fn detect_sandbox_violation_detects_network_block() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("stderr.log");
+        std::fs::write(
+            &path,
+            "curl: (7) Failed to connect to https://example.com:443: Operation not permitted\n",
+        )
+        .expect("write stderr");
+
+        let info = detect_sandbox_violation(&sandbox_profile(), &wait_result(1, None), &path).await;
+
+        assert!(info.denied);
+        assert_eq!(info.event_type, Some("sandbox_network_blocked"));
+        assert_eq!(info.reason.as_deref(), Some("network_blocked"));
+        assert_eq!(
+            info.network_target.as_deref(),
+            Some("https://example.com:443:")
+        );
     }
 
     #[test]

@@ -139,6 +139,9 @@ pub struct RunResult {
     pub execution_mode: String,
     pub sandbox_denied: bool,
     pub sandbox_denial_reason: Option<String>,
+    pub sandbox_violation_kind: Option<String>,
+    pub sandbox_resource_kind: Option<String>,
+    pub sandbox_network_target: Option<String>,
 }
 
 impl RunResult {

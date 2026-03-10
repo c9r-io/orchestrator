@@ -5,6 +5,7 @@ use crate::config::{
 use crate::output_capture::{spawn_sanitized_output_capture, OutputCaptureHandles};
 use anyhow::{anyhow, Context, Result};
 use std::fs::File;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
@@ -327,6 +328,103 @@ pub struct ResolvedExecutionProfile {
     pub max_open_files: Option<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SandboxResourceKind {
+    Memory,
+    Cpu,
+    Processes,
+    OpenFiles,
+}
+
+impl SandboxResourceKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Memory => "memory",
+            Self::Cpu => "cpu",
+            Self::Processes => "processes",
+            Self::OpenFiles => "open_files",
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct SandboxBackendError {
+    pub execution_profile: String,
+    pub backend: &'static str,
+    pub event_type: &'static str,
+    pub reason_code: &'static str,
+    message: String,
+}
+
+impl SandboxBackendError {
+    #[cfg(target_os = "macos")]
+    fn unsupported_network_allowlist(execution_profile: &ResolvedExecutionProfile) -> Self {
+        Self {
+            execution_profile: execution_profile.name.clone(),
+            backend: sandbox_backend_label(execution_profile),
+            event_type: "sandbox_network_blocked",
+            reason_code: "unsupported_backend_feature",
+            message: format!(
+                "sandbox backend '{}' does not support network allowlists for execution profile '{}'",
+                sandbox_backend_label(execution_profile),
+                execution_profile.name
+            ),
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn backend_unavailable(execution_profile: &ResolvedExecutionProfile) -> Self {
+        Self {
+            execution_profile: execution_profile.name.clone(),
+            backend: sandbox_backend_label(execution_profile),
+            event_type: "sandbox_denied",
+            reason_code: "sandbox_backend_unavailable",
+            message: format!(
+                "sandbox execution is not implemented on this platform for execution profile '{}'",
+                execution_profile.name
+            ),
+        }
+    }
+}
+
+impl std::fmt::Display for SandboxBackendError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for SandboxBackendError {}
+
+#[derive(Debug, Clone)]
+struct UnixResourceLimits {
+    max_memory_bytes: Option<u64>,
+    max_cpu_seconds: Option<u64>,
+    max_processes: Option<u64>,
+    max_open_files: Option<u64>,
+}
+
+impl UnixResourceLimits {
+    fn from_execution_profile(execution_profile: &ResolvedExecutionProfile) -> Option<Self> {
+        let limits = Self {
+            max_memory_bytes: execution_profile
+                .max_memory_mb
+                .map(|value| value.saturating_mul(1024 * 1024)),
+            max_cpu_seconds: execution_profile.max_cpu_seconds,
+            max_processes: execution_profile.max_processes,
+            max_open_files: execution_profile.max_open_files,
+        };
+        if limits.max_memory_bytes.is_none()
+            && limits.max_cpu_seconds.is_none()
+            && limits.max_processes.is_none()
+            && limits.max_open_files.is_none()
+        {
+            None
+        } else {
+            Some(limits)
+        }
+    }
+}
+
 impl ResolvedExecutionProfile {
     pub fn host() -> Self {
         Self {
@@ -373,6 +471,41 @@ impl ResolvedExecutionProfile {
     }
 }
 
+pub fn sandbox_backend_label(execution_profile: &ResolvedExecutionProfile) -> &'static str {
+    match execution_profile.mode {
+        ExecutionProfileMode::Host => "host",
+        ExecutionProfileMode::Sandbox => {
+            #[cfg(target_os = "macos")]
+            {
+                "macos_seatbelt"
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                "sandbox_unavailable"
+            }
+        }
+    }
+}
+
+pub fn validate_execution_profile_support(
+    execution_profile: &ResolvedExecutionProfile,
+) -> Result<()> {
+    if execution_profile.mode != ExecutionProfileMode::Sandbox {
+        return Ok(());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if execution_profile.network_mode == ExecutionNetworkMode::Allowlist {
+            return Err(SandboxBackendError::unsupported_network_allowlist(execution_profile).into());
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err(SandboxBackendError::backend_unavailable(execution_profile).into())
+    }
+}
+
 pub trait RunnerExecutor {
     fn spawn(&self, params: SpawnParams<'_>) -> Result<tokio::process::Child>;
 }
@@ -413,6 +546,7 @@ impl RunnerExecutor for ShellRunnerExecutor {
         #[cfg(unix)]
         {
             cmd.process_group(0); // child becomes its own process group leader
+            apply_unix_resource_limits_to_command(&mut cmd, execution_profile)?;
         }
 
         if runner.policy == RunnerPolicy::Allowlist {
@@ -478,9 +612,7 @@ fn build_sandbox_command(
     #[cfg(not(target_os = "macos"))]
     {
         let _ = (runner, command, execution_profile);
-        Err(anyhow!(
-            "sandbox execution is not implemented on this platform"
-        ))
+        Err(SandboxBackendError::backend_unavailable(execution_profile).into())
     }
 }
 
@@ -519,6 +651,60 @@ fn escape_sb_string(path: &Path) -> String {
     path.to_string_lossy()
         .replace('\\', "\\\\")
         .replace('"', "\\\"")
+}
+
+#[cfg(unix)]
+fn apply_unix_resource_limits_to_command(
+    cmd: &mut tokio::process::Command,
+    execution_profile: &ResolvedExecutionProfile,
+) -> Result<()> {
+    let Some(limits) = UnixResourceLimits::from_execution_profile(execution_profile) else {
+        return Ok(());
+    };
+    // Apply rlimits in the child just before exec so the sandbox wrapper and
+    // the eventual agent process inherit the same enforcement boundary.
+    unsafe {
+        cmd.pre_exec(move || {
+            apply_unix_resource_limits(&limits).map_err(io::Error::other)
+        });
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn apply_unix_resource_limits(limits: &UnixResourceLimits) -> Result<()> {
+    if let Some(value) = limits.max_memory_bytes {
+        set_rlimit(libc::RLIMIT_AS, value)?;
+    }
+    if let Some(value) = limits.max_cpu_seconds {
+        set_rlimit(libc::RLIMIT_CPU, value)?;
+    }
+    if let Some(value) = limits.max_processes {
+        set_rlimit(libc::RLIMIT_NPROC, value)?;
+    }
+    if let Some(value) = limits.max_open_files {
+        set_rlimit(libc::RLIMIT_NOFILE, value)?;
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn set_rlimit(resource: libc::c_int, value: u64) -> Result<()> {
+    let limit = libc::rlimit {
+        rlim_cur: value as libc::rlim_t,
+        rlim_max: value as libc::rlim_t,
+    };
+    // SAFETY: `setrlimit` is called in the child process before exec with a
+    // valid resource selector and initialized `rlimit` struct.
+    let rc = unsafe { libc::setrlimit(resource, &limit) };
+    if rc == 0 {
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "setrlimit({resource}) failed: {}",
+            io::Error::last_os_error()
+        ))
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

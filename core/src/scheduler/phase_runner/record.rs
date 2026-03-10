@@ -108,10 +108,11 @@ pub(super) async fn record_phase_results(
             });
         }
         if validated.sandbox_denied {
+            let event_type = validated.sandbox_event_type.unwrap_or("sandbox_denied");
             events.push(crate::db_write::DbEventRecord {
                 task_id: task_id_owned.clone(),
                 task_item_id: Some(item_id_owned.clone()),
-                event_type: "sandbox_denied".to_string(),
+                event_type: event_type.to_string(),
                 payload_json: serde_json::to_string(&json!({
                     "step": phase,
                     "step_id": step_id,
@@ -127,7 +128,13 @@ pub(super) async fn record_phase_results(
                         crate::config::ExecutionProfileMode::Sandbox => "sandbox",
                     },
                     "reason": validated.sandbox_denial_reason,
+                    "resource_kind": validated
+                        .sandbox_resource_kind
+                        .as_ref()
+                        .map(|value| value.as_str()),
+                    "network_target": validated.sandbox_network_target,
                     "stderr_excerpt": validated.sandbox_denial_stderr_excerpt,
+                    "backend": crate::runner::sandbox_backend_label(&setup.execution_profile),
                 }))?,
             });
         }

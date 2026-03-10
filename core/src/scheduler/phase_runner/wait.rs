@@ -8,6 +8,8 @@ use serde_json::json;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::time::Instant;
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
 
 use super::types::HEARTBEAT_INTERVAL_SECS;
 use super::types::{HeartbeatProgress, WaitResult};
@@ -37,7 +39,7 @@ pub(super) async fn wait_for_process(
     let mut timed_out = false;
     let mut heartbeat_progress = HeartbeatProgress::default();
 
-    let exit_code: i32 = loop {
+    let (exit_code, exit_signal): (i32, Option<i32>) = loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
             let mut child_lock = runtime.child.lock().await;
@@ -59,7 +61,7 @@ pub(super) async fn wait_for_process(
                 }),
             )
             .await?;
-            break -4;
+            break (-4, None);
         }
 
         let wait_duration = heartbeat_interval.min(remaining);
@@ -68,18 +70,30 @@ pub(super) async fn wait_for_process(
             if let Some(ref mut child) = *child_lock {
                 tokio::time::timeout(wait_duration, child.wait()).await
             } else {
-                break -3;
+                break (-3, None);
             }
         };
 
         match wait_result {
-            Ok(Ok(status)) => break status.code().unwrap_or(-1),
+            Ok(Ok(status)) => {
+                #[cfg(unix)]
+                {
+                    break (status.code().unwrap_or(-1), status.signal());
+                }
+                #[cfg(not(unix))]
+                {
+                    break (status.code().unwrap_or(-1), None);
+                }
+            }
             Ok(Err(e)) => {
-                break if e.kind() == std::io::ErrorKind::NotFound {
-                    -2
-                } else {
-                    -3
-                };
+                break (
+                    if e.kind() == std::io::ErrorKind::NotFound {
+                        -2
+                    } else {
+                        -3
+                    },
+                    None,
+                );
             }
             Err(_) => {
                 let elapsed = start.elapsed();
@@ -139,7 +153,7 @@ pub(super) async fn wait_for_process(
                     if let Some(ref mut child) = *child_lock {
                         kill_child_process_group(child).await;
                     }
-                    break -5; // externally paused
+                    break (-5, None); // externally paused
                 }
             }
         }
@@ -156,6 +170,7 @@ pub(super) async fn wait_for_process(
 
     Ok(WaitResult {
         exit_code,
+        exit_signal,
         timed_out,
         duration,
     })

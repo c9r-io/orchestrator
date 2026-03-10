@@ -70,6 +70,9 @@ pub(super) async fn apply_step_results(
                         "execution_mode": result.execution_mode,
                         "sandbox_denied": result.sandbox_denied,
                         "sandbox_denial_reason": result.sandbox_denial_reason,
+                        "sandbox_violation_kind": result.sandbox_violation_kind,
+                        "sandbox_resource_kind": result.sandbox_resource_kind,
+                        "sandbox_network_target": result.sandbox_network_target,
                     }),
                 )
                 .await?;
@@ -289,8 +292,11 @@ pub(super) async fn apply_step_results(
                 "execution_mode": result.execution_mode,
                 "sandbox_denied": result.sandbox_denied,
                 "sandbox_denial_reason": result.sandbox_denial_reason,
-        }),
-    )
+                "sandbox_violation_kind": result.sandbox_violation_kind,
+                "sandbox_resource_kind": result.sandbox_resource_kind,
+                "sandbox_network_target": result.sandbox_network_target,
+            }),
+        )
     .await?;
 
     if is_execution_hard_failure(result) {

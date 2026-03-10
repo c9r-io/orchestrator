@@ -367,6 +367,9 @@ async fn execute_builtin_step_dispatch(
                 execution_mode: "host".to_string(),
                 sandbox_denied: false,
                 sandbox_denial_reason: None,
+                sandbox_violation_kind: None,
+                sandbox_resource_kind: None,
+                sandbox_network_target: None,
             };
             acc.apply_captures(&step.behavior.captures, &step.id, &synth_result);
             Ok(BuiltinStepOutcome::Handled)
@@ -1229,6 +1232,9 @@ async fn execute_dynamic_step_config(
             "execution_mode": result.execution_mode,
             "sandbox_denied": result.sandbox_denied,
             "sandbox_denial_reason": result.sandbox_denial_reason,
+            "sandbox_violation_kind": result.sandbox_violation_kind,
+            "sandbox_resource_kind": result.sandbox_resource_kind,
+            "sandbox_network_target": result.sandbox_network_target,
         }),
     )
     .await?;

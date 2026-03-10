@@ -11,19 +11,23 @@ pub use types::{PhaseRunRequest, RotatingPhaseRunRequest, SelectedPhaseRunReques
 pub(crate) use util::shell_escape;
 
 use crate::config::PromptDelivery;
+use crate::events::insert_event;
 use crate::metrics::MetricsCollector;
+use crate::runner::SandboxBackendError;
 use crate::selection::{select_agent_advanced, select_agent_by_preference};
 use crate::state::{read_agent_health, read_agent_metrics, write_agent_metrics, InnerState};
 use anyhow::Result;
+use serde_json::json;
 use std::collections::HashSet;
 use std::sync::Arc;
+use uuid::Uuid;
 
 use super::RunningTask;
 
 use record::record_phase_results;
 use setup::setup_phase_execution;
 use spawn::spawn_phase_process;
-use util::detect_sandbox_denial;
+use util::detect_sandbox_violation;
 use validate::validate_phase_output_stage;
 use wait::wait_for_process;
 
@@ -53,7 +57,7 @@ async fn run_phase_with_timeout(
     } = request;
 
     // Stage 1: setup
-    let mut setup = setup_phase_execution(
+    let mut setup = match setup_phase_execution(
         state,
         task_id,
         item_id,
@@ -68,10 +72,31 @@ async fn run_phase_with_timeout(
         project_id,
         execution_profile,
     )
-    .await?;
+    .await
+    {
+        Ok(setup) => setup,
+        Err(err) => {
+            if let Some(result) = handle_sandbox_backend_error(
+                state,
+                &err,
+                task_id,
+                item_id,
+                step_id,
+                phase,
+                step_scope,
+                agent_id,
+                execution_profile.unwrap_or("host"),
+            )
+            .await?
+            {
+                return Ok(result);
+            }
+            return Err(err);
+        }
+    };
 
     // Stage 2: spawn
-    let spawn_result = spawn_phase_process(
+    let spawn_result = match spawn_phase_process(
         state,
         &mut setup,
         task_id,
@@ -86,7 +111,28 @@ async fn run_phase_with_timeout(
         &prompt_payload,
         req_pipe_stdin,
     )
-    .await?;
+    .await
+    {
+        Ok(spawn_result) => spawn_result,
+        Err(err) => {
+            if let Some(result) = handle_sandbox_backend_error(
+                state,
+                &err,
+                task_id,
+                item_id,
+                step_id,
+                phase,
+                step_scope,
+                agent_id,
+                &setup.execution_profile.name,
+            )
+            .await?
+            {
+                return Ok(result);
+            }
+            return Err(err);
+        }
+    };
 
     // TTY early return
     if let Some(result) = spawn_result.tty_early_return {
@@ -123,16 +169,19 @@ async fn run_phase_with_timeout(
     )
     .await?;
 
-    let sandbox_denial = detect_sandbox_denial(
+    let sandbox_violation = detect_sandbox_violation(
         &setup.execution_profile,
-        wait_result.exit_code,
+        &wait_result,
         &setup.stderr_path,
     )
     .await;
     let validated = super::phase_runner::types::ValidatedOutput {
-        sandbox_denied: sandbox_denial.denied,
-        sandbox_denial_reason: sandbox_denial.reason,
-        sandbox_denial_stderr_excerpt: sandbox_denial.stderr_excerpt,
+        sandbox_denied: sandbox_violation.denied,
+        sandbox_event_type: sandbox_violation.event_type,
+        sandbox_denial_reason: sandbox_violation.reason,
+        sandbox_denial_stderr_excerpt: sandbox_violation.stderr_excerpt,
+        sandbox_resource_kind: sandbox_violation.resource_kind,
+        sandbox_network_target: sandbox_violation.network_target,
         ..validated
     };
 
@@ -174,7 +223,72 @@ async fn run_phase_with_timeout(
         },
         sandbox_denied: validated.sandbox_denied,
         sandbox_denial_reason: validated.sandbox_denial_reason.clone(),
+        sandbox_violation_kind: validated.sandbox_event_type.map(str::to_string),
+        sandbox_resource_kind: validated
+            .sandbox_resource_kind
+            .as_ref()
+            .map(|value| value.as_str().to_string()),
+        sandbox_network_target: validated.sandbox_network_target.clone(),
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn handle_sandbox_backend_error(
+    state: &Arc<InnerState>,
+    err: &anyhow::Error,
+    task_id: &str,
+    item_id: &str,
+    step_id: &str,
+    phase: &str,
+    step_scope: crate::config::StepScope,
+    agent_id: &str,
+    execution_profile: &str,
+) -> Result<Option<crate::dto::RunResult>> {
+    let Some(sandbox_err) = err.downcast_ref::<SandboxBackendError>() else {
+        return Ok(None);
+    };
+    let run_id = Uuid::new_v4().to_string();
+    insert_event(
+        state,
+        task_id,
+        Some(item_id),
+        sandbox_err.event_type,
+        json!({
+            "step": phase,
+            "step_id": step_id,
+            "step_scope": match step_scope {
+                crate::config::StepScope::Task => "task",
+                crate::config::StepScope::Item => "item",
+            },
+            "agent_id": agent_id,
+            "run_id": run_id,
+            "execution_profile": execution_profile,
+            "execution_mode": "sandbox",
+            "reason_code": sandbox_err.reason_code,
+            "backend": sandbox_err.backend,
+            "stderr_excerpt": sandbox_err.to_string(),
+        }),
+    )
+    .await?;
+    Ok(Some(crate::dto::RunResult {
+        success: false,
+        exit_code: -7,
+        stdout_path: String::new(),
+        stderr_path: String::new(),
+        timed_out: false,
+        duration_ms: Some(0),
+        output: None,
+        validation_status: "failed".to_string(),
+        agent_id: agent_id.to_string(),
+        run_id,
+        execution_profile: sandbox_err.execution_profile.clone(),
+        execution_mode: "sandbox".to_string(),
+        sandbox_denied: true,
+        sandbox_denial_reason: Some(sandbox_err.reason_code.to_string()),
+        sandbox_violation_kind: Some(sandbox_err.event_type.to_string()),
+        sandbox_resource_kind: None,
+        sandbox_network_target: None,
+    }))
 }
 
 pub async fn run_phase(

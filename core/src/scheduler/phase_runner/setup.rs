@@ -1,7 +1,7 @@
 use crate::config::PromptDelivery;
 use crate::config_load::now_ts;
 use crate::events::insert_event;
-use crate::runner::ResolvedExecutionProfile;
+use crate::runner::{validate_execution_profile_support, ResolvedExecutionProfile};
 use crate::state::InnerState;
 use crate::task_repository::NewCommandRun;
 use anyhow::{Context, Result};
@@ -77,6 +77,7 @@ pub(super) async fn setup_phase_execution(
                     })
             })
             .unwrap_or_else(ResolvedExecutionProfile::host);
+        validate_execution_profile_support(&execution_profile)?;
         (runner, execution_profile, extra_env, sensitive)
     };
     let mut redaction_patterns = runner.redaction_patterns.clone();
@@ -171,6 +172,7 @@ pub(super) async fn setup_phase_execution(
                     crate::config::ExecutionProfileMode::Host => "host",
                     crate::config::ExecutionProfileMode::Sandbox => "sandbox",
                 },
+                "backend": crate::runner::sandbox_backend_label(&execution_profile),
             }),
         )
         .await?;

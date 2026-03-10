@@ -40,6 +40,9 @@ fn execution_hard_failure_detects_failed_validation_status() {
         execution_mode: "host".to_string(),
         sandbox_denied: false,
         sandbox_denial_reason: None,
+        sandbox_violation_kind: None,
+        sandbox_resource_kind: None,
+        sandbox_network_target: None,
     };
 
     assert!(is_execution_hard_failure(&result));
@@ -62,6 +65,9 @@ fn execution_hard_failure_ignores_non_validation_failures() {
         execution_mode: "host".to_string(),
         sandbox_denied: false,
         sandbox_denial_reason: None,
+        sandbox_violation_kind: None,
+        sandbox_resource_kind: None,
+        sandbox_network_target: None,
     };
 
     assert!(!is_execution_hard_failure(&result));
@@ -448,6 +454,9 @@ fn make_run_result(
         execution_mode: "host".to_string(),
         sandbox_denied: false,
         sandbox_denial_reason: None,
+        sandbox_violation_kind: None,
+        sandbox_resource_kind: None,
+        sandbox_network_target: None,
     }
 }
 

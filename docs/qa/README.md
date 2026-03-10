@@ -148,6 +148,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/53-client-server-architecture.md` | 5 | C/S architecture: daemon lifecycle, gRPC communication, embedded workers, service layer |
 | orchestrator | `docs/qa/orchestrator/54-step-execution-profiles.md` | 5 | Step-level ExecutionProfile: resource round-trip, validation, mixed host/sandbox routing, compatibility default |
 | orchestrator | `docs/qa/orchestrator/55-sandbox-write-boundaries.md` | 2 | Sandbox file write boundaries: deny workspace-root writes, allow declared writable subtree |
+| orchestrator | `docs/qa/orchestrator/56-sandbox-resource-network-enforcement.md` | 3 | Sandbox resource/network enforcement: open-files limit event, network deny event, unsupported allowlist gating |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
 | script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |

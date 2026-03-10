@@ -35,9 +35,9 @@
 
 当前仍有未完成项：
 
-- `max_memory_mb` / `max_cpu_seconds` / `max_processes` / `max_open_files` 仍是配置模型字段，尚未形成稳定 enforcement
-- `sandbox_resource_exceeded` 与 `sandbox_network_blocked` 事件尚未实现
-- sandbox 网络 allowlist 仍未形成完整、可验证的后端能力
+- `max_memory_mb` / `max_cpu_seconds` / `max_processes` / `max_open_files` 已接入 Unix child `setrlimit` enforcement，但除 `max_open_files` 外仍缺少稳定、端到端 QA 覆盖
+- `sandbox_resource_exceeded` 已实现并完成主场景 QA；`sandbox_network_blocked` 已具备事件模型，但 `network_mode=deny` 的 macOS 主场景仍有识别缺口
+- sandbox 网络 allowlist 仍未形成完整、可验证的后端能力；当前行为是结构化拒绝，不再静默降级
 
 因此本 FR 不应视为“完全关闭”，而应视为“核心能力已交付，剩余增强项待补完”。
 
@@ -175,8 +175,8 @@ spec:
 
 当前状态：
 
-- 已实现：`execution_profile_applied`、`sandbox_denied`
-- 未实现：`sandbox_resource_exceeded`、`sandbox_network_blocked`
+- 已实现：`execution_profile_applied`、`sandbox_denied`、`sandbox_resource_exceeded`
+- 部分实现：`sandbox_network_blocked`
 
 `task trace` 和 step 事件应展示：
 
