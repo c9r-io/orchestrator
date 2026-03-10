@@ -1,3 +1,8 @@
+#![cfg_attr(
+    not(test),
+    deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)
+)]
+
 mod cli;
 mod client;
 mod commands;

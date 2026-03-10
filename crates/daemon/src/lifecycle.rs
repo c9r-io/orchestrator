@@ -47,10 +47,10 @@ pub fn cleanup(socket_path: &Path, pid_path: &Path) {
 }
 
 /// Wait for SIGTERM or SIGINT, then initiate graceful shutdown.
-pub async fn shutdown_signal(_state: Arc<InnerState>) {
+pub async fn shutdown_signal(_state: Arc<InnerState>) -> Result<()> {
     let ctrl_c = tokio::signal::ctrl_c();
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-        .expect("failed to install SIGTERM handler");
+        .context("failed to install SIGTERM handler")?;
 
     tokio::select! {
         _ = ctrl_c => {
@@ -62,4 +62,5 @@ pub async fn shutdown_signal(_state: Arc<InnerState>) {
     }
 
     // Worker draining and cleanup handled by main.rs after gRPC server stops.
+    Ok(())
 }

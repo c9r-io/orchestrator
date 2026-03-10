@@ -1,3 +1,8 @@
+#![cfg_attr(
+    not(test),
+    deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)
+)]
+
 mod lifecycle;
 mod server;
 
@@ -102,7 +107,11 @@ fn main() -> Result<()> {
             let notify = shutdown_notify.clone();
             async move {
                 tokio::select! {
-                    _ = lifecycle::shutdown_signal(inner2) => {}
+                    result = lifecycle::shutdown_signal(inner2) => {
+                        if let Err(error) = result {
+                            tracing::error!(%error, "failed to initialize shutdown signal handling");
+                        }
+                    }
                     _ = restart_rx2.changed() => {}
                     _ = notify.notified() => {
                         tracing::info!("shutdown triggered via RPC");
