@@ -123,6 +123,11 @@ pub fn all_migrations() -> Vec<Migration> {
             name: "m0012_drop_legacy_orchestrator_config_blob",
             up: m0012_drop_legacy_orchestrator_config_blob,
         },
+        Migration {
+            version: 13,
+            name: "m0013_control_plane_audit",
+            up: m0013_control_plane_audit,
+        },
     ]
 }
 
@@ -692,6 +697,33 @@ fn m0011_finalize_resource_migration(conn: &Connection) -> Result<()> {
 fn m0012_drop_legacy_orchestrator_config_blob(conn: &Connection) -> Result<()> {
     conn.execute_batch("DROP TABLE IF EXISTS orchestrator_config;")
         .context("m0012: failed to drop orchestrator_config")?;
+    Ok(())
+}
+
+fn m0013_control_plane_audit(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS control_plane_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            transport TEXT NOT NULL,
+            remote_addr TEXT,
+            rpc TEXT NOT NULL,
+            subject_id TEXT,
+            authn_result TEXT NOT NULL,
+            authz_result TEXT NOT NULL,
+            role TEXT,
+            reason TEXT,
+            tls_fingerprint TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_control_plane_audit_created_at
+            ON control_plane_audit(created_at);
+
+        CREATE INDEX IF NOT EXISTS idx_control_plane_audit_rpc
+            ON control_plane_audit(rpc, created_at);
+        "#,
+    )?;
     Ok(())
 }
 

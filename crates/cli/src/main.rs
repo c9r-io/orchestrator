@@ -28,14 +28,19 @@ fn main() -> Result<()> {
 }
 
 async fn run(cli: Cli) -> Result<()> {
-    match cli.command {
-        Commands::Version => commands::version::run().await,
+    let Cli {
+        command,
+        control_plane_config,
+        ..
+    } = cli;
+    match command {
+        Commands::Version => commands::version::run(control_plane_config.as_deref()).await,
         Commands::Debug {
             component: _,
             command: Some(debug_command),
         } => commands::debug::run_local(debug_command).await,
         command => {
-            let mut client = client::connect().await?;
+            let mut client = client::connect(control_plane_config.as_deref()).await?;
             commands::dispatch(&mut client, command).await
         }
     }

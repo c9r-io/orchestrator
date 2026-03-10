@@ -1,0 +1,747 @@
+use std::collections::BTreeSet;
+use std::net::{IpAddr, SocketAddr};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use agent_orchestrator::db::{insert_control_plane_audit, ControlPlaneAuditRecord};
+use anyhow::{anyhow, bail, Context, Result};
+use clap::ValueEnum;
+use rcgen::{
+    BasicConstraints, Certificate, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair,
+    KeyUsagePurpose, SanType,
+};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use tonic::transport::{Certificate as TonicCertificate, Identity, ServerTlsConfig};
+use tonic::{Request, Status};
+use x509_parser::extensions::GeneralName;
+use x509_parser::prelude::{FromDer, X509Certificate};
+
+#[derive(Debug, Clone)]
+pub struct ControlPlaneSecurity {
+    db_path: PathBuf,
+    policy_path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+pub struct SecureServerConfig {
+    pub tls: ServerTlsConfig,
+    pub security: Arc<ControlPlaneSecurity>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum Role {
+    ReadOnly,
+    Operator,
+    Admin,
+}
+
+impl Role {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadOnly => "read_only",
+            Self::Operator => "operator",
+            Self::Admin => "admin",
+        }
+    }
+
+    fn rank(self) -> u8 {
+        match self {
+            Self::ReadOnly => 1,
+            Self::Operator => 2,
+            Self::Admin => 3,
+        }
+    }
+
+    pub fn allows(self, required: Self) -> bool {
+        self.rank() >= required.rank()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PolicySubject {
+    pub id: String,
+    pub role: Role,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub disabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AuthzPolicy {
+    #[serde(default)]
+    pub subjects: Vec<PolicySubject>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ControlPlaneConfig {
+    pub current_context: String,
+    pub clusters: Vec<NamedCluster>,
+    pub users: Vec<NamedUser>,
+    pub contexts: Vec<NamedContext>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NamedCluster {
+    pub name: String,
+    pub cluster: ClusterRef,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClusterRef {
+    pub server: String,
+    pub certificate_authority: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NamedUser {
+    pub name: String,
+    pub user: UserRef,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserRef {
+    pub client_certificate: String,
+    pub client_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NamedContext {
+    pub name: String,
+    pub context: ContextRef,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContextRef {
+    pub cluster: String,
+    pub user: String,
+}
+
+impl ControlPlaneSecurity {
+    pub fn authorize<T>(&self, request: &Request<T>, rpc: &'static str) -> Result<(), Status> {
+        let required = required_role_for_rpc(rpc);
+        let remote_addr = request.remote_addr().map(|addr| addr.to_string());
+        let peer_cert = request
+            .peer_certs()
+            .and_then(|certs| certs.first().cloned())
+            .ok_or_else(|| {
+                let _ = self.audit(
+                    "tcp",
+                    remote_addr.clone(),
+                    rpc,
+                    None,
+                    "failed",
+                    "denied",
+                    None,
+                    Some("client certificate required".to_string()),
+                    None,
+                );
+                Status::unauthenticated("client certificate required")
+            })?;
+
+        let fingerprint = sha256_fingerprint(peer_cert.as_ref());
+        let subject_id = match subject_id_from_der(peer_cert.as_ref()) {
+            Ok(subject) => subject,
+            Err(error) => {
+                let _ = self.audit(
+                    "tcp",
+                    remote_addr.clone(),
+                    rpc,
+                    None,
+                    "failed",
+                    "denied",
+                    None,
+                    Some(error.to_string()),
+                    Some(fingerprint.clone()),
+                );
+                return Err(Status::unauthenticated(
+                    "client certificate missing URI SAN",
+                ));
+            }
+        };
+
+        let policy = load_policy(&self.policy_path)
+            .map_err(|error| Status::internal(format!("failed to load authz policy: {error}")))?;
+        let subject = match policy
+            .subjects
+            .into_iter()
+            .find(|candidate| candidate.id == subject_id)
+        {
+            Some(subject) if !subject.disabled => subject,
+            Some(_) => {
+                let _ = self.audit(
+                    "tcp",
+                    remote_addr,
+                    rpc,
+                    Some(subject_id),
+                    "succeeded",
+                    "denied",
+                    None,
+                    Some("subject disabled".to_string()),
+                    Some(fingerprint),
+                );
+                return Err(Status::permission_denied("subject disabled"));
+            }
+            None => {
+                let _ = self.audit(
+                    "tcp",
+                    remote_addr,
+                    rpc,
+                    Some(subject_id),
+                    "succeeded",
+                    "denied",
+                    None,
+                    Some("subject not present in policy".to_string()),
+                    Some(fingerprint),
+                );
+                return Err(Status::permission_denied("subject not authorized"));
+            }
+        };
+
+        if !subject.role.allows(required) {
+            let _ = self.audit(
+                "tcp",
+                request.remote_addr().map(|addr| addr.to_string()),
+                rpc,
+                Some(subject.id.clone()),
+                "succeeded",
+                "denied",
+                Some(subject.role.as_str().to_string()),
+                Some(format!(
+                    "role {} cannot call {}",
+                    subject.role.as_str(),
+                    rpc
+                )),
+                Some(fingerprint),
+            );
+            return Err(Status::permission_denied("permission denied"));
+        }
+
+        let _ = self.audit(
+            "tcp",
+            request.remote_addr().map(|addr| addr.to_string()),
+            rpc,
+            Some(subject.id.clone()),
+            "succeeded",
+            "allowed",
+            Some(subject.role.as_str().to_string()),
+            None,
+            Some(fingerprint),
+        );
+        if required == Role::Admin {
+            let _ = self.audit(
+                "tcp",
+                request.remote_addr().map(|addr| addr.to_string()),
+                rpc,
+                Some(subject.id.clone()),
+                "succeeded",
+                "admin_rpc_called",
+                Some(subject.role.as_str().to_string()),
+                None,
+                None,
+            );
+        }
+
+        Ok(())
+    }
+
+    fn audit(
+        &self,
+        transport: &str,
+        remote_addr: Option<String>,
+        rpc: &str,
+        subject_id: Option<String>,
+        authn_result: &str,
+        authz_result: &str,
+        role: Option<String>,
+        reason: Option<String>,
+        tls_fingerprint: Option<String>,
+    ) -> Result<()> {
+        insert_control_plane_audit(
+            &self.db_path,
+            &ControlPlaneAuditRecord {
+                transport: transport.to_string(),
+                remote_addr,
+                rpc: rpc.to_string(),
+                subject_id,
+                authn_result: authn_result.to_string(),
+                authz_result: authz_result.to_string(),
+                role,
+                reason,
+                tls_fingerprint,
+            },
+        )
+    }
+}
+
+pub fn prepare_secure_server(
+    app_root: &Path,
+    db_path: &Path,
+    bind_addr: &SocketAddr,
+    control_plane_dir: Option<&Path>,
+) -> Result<SecureServerConfig> {
+    let dir = control_plane_dir
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| app_root.join("data/control-plane"));
+    let paths = ControlPlanePaths::new(dir);
+    bootstrap_control_plane(&paths, bind_addr)?;
+    ensure_default_user_materials(app_root, &paths, bind_addr)?;
+
+    let server_cert = std::fs::read(&paths.server_cert)
+        .with_context(|| format!("failed to read {}", paths.server_cert.display()))?;
+    let server_key = std::fs::read(&paths.server_key)
+        .with_context(|| format!("failed to read {}", paths.server_key.display()))?;
+    let ca_cert = std::fs::read(&paths.ca_cert)
+        .with_context(|| format!("failed to read {}", paths.ca_cert.display()))?;
+
+    let tls = ServerTlsConfig::new()
+        .identity(Identity::from_pem(server_cert, server_key))
+        .client_ca_root(TonicCertificate::from_pem(ca_cert))
+        .client_auth_optional(true);
+
+    Ok(SecureServerConfig {
+        tls,
+        security: Arc::new(ControlPlaneSecurity {
+            db_path: db_path.to_path_buf(),
+            policy_path: paths.policy,
+        }),
+    })
+}
+
+pub fn issue_client_materials(
+    app_root: &Path,
+    bind_addr: &SocketAddr,
+    control_plane_dir: Option<&Path>,
+    home_dir: &Path,
+    subject_id: &str,
+    role: Role,
+) -> Result<PathBuf> {
+    let dir = control_plane_dir
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| app_root.join("data/control-plane"));
+    let paths = ControlPlanePaths::new(dir);
+    bootstrap_control_plane(&paths, bind_addr)?;
+    let username = subject_id
+        .rsplit('/')
+        .next()
+        .filter(|value| !value.is_empty())
+        .unwrap_or("client");
+    let client_dir = client_home_dir(home_dir, Some(username));
+    write_client_bundle(&paths, bind_addr, &client_dir, subject_id)?;
+    upsert_policy_subject(
+        &paths.policy,
+        PolicySubject {
+            id: subject_id.to_string(),
+            role,
+            description: Some("issued via control-plane command".to_string()),
+            disabled: false,
+        },
+    )?;
+    Ok(client_dir)
+}
+
+#[derive(Debug, Clone)]
+struct ControlPlanePaths {
+    base: PathBuf,
+    ca_cert: PathBuf,
+    ca_key: PathBuf,
+    server_cert: PathBuf,
+    server_key: PathBuf,
+    policy: PathBuf,
+}
+
+impl ControlPlanePaths {
+    fn new(base: PathBuf) -> Self {
+        let pki = base.join("pki");
+        Self {
+            base: base.clone(),
+            ca_cert: pki.join("ca.crt"),
+            ca_key: pki.join("ca.key"),
+            server_cert: pki.join("server.crt"),
+            server_key: pki.join("server.key"),
+            policy: base.join("policy.yaml"),
+        }
+    }
+}
+
+fn bootstrap_control_plane(paths: &ControlPlanePaths, bind_addr: &SocketAddr) -> Result<()> {
+    agent_orchestrator::secure_files::ensure_dir(&paths.base, 0o700)?;
+    agent_orchestrator::secure_files::ensure_dir(&paths.base.join("pki"), 0o700)?;
+
+    if !paths.ca_cert.exists() || !paths.ca_key.exists() {
+        let ca = generate_ca()?;
+        agent_orchestrator::secure_files::write_atomic(
+            &paths.ca_cert,
+            ca.cert_pem.as_bytes(),
+            0o644,
+        )?;
+        agent_orchestrator::secure_files::write_atomic(
+            &paths.ca_key,
+            ca.key_pem.as_bytes(),
+            0o600,
+        )?;
+    }
+
+    if !paths.server_cert.exists() || !paths.server_key.exists() {
+        let server = sign_server_cert(
+            &std::fs::read_to_string(&paths.ca_cert)?,
+            &std::fs::read_to_string(&paths.ca_key)?,
+            bind_addr,
+        )?;
+        agent_orchestrator::secure_files::write_atomic(
+            &paths.server_cert,
+            server.cert_pem.as_bytes(),
+            0o644,
+        )?;
+        agent_orchestrator::secure_files::write_atomic(
+            &paths.server_key,
+            server.key_pem.as_bytes(),
+            0o600,
+        )?;
+    }
+
+    if !paths.policy.exists() {
+        let policy = AuthzPolicy::default();
+        let raw = serde_yml::to_string(&policy).context("failed to serialize authz policy")?;
+        agent_orchestrator::secure_files::write_atomic(&paths.policy, raw.as_bytes(), 0o644)?;
+    }
+
+    Ok(())
+}
+
+fn ensure_default_user_materials(
+    app_root: &Path,
+    paths: &ControlPlanePaths,
+    bind_addr: &SocketAddr,
+) -> Result<()> {
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .ok_or_else(|| anyhow!("HOME is not set; cannot write client control-plane config"))?;
+    let username = current_username();
+    let subject_id = format!("spiffe://orchestrator/local-user/{username}");
+    let client_dir = client_home_dir(&home, None);
+    write_client_bundle(paths, bind_addr, &client_dir, &subject_id)?;
+    upsert_policy_subject(
+        &paths.policy,
+        PolicySubject {
+            id: subject_id,
+            role: Role::Admin,
+            description: Some(format!(
+                "default local admin generated for {}",
+                app_root.display()
+            )),
+            disabled: false,
+        },
+    )
+}
+
+fn write_client_bundle(
+    paths: &ControlPlanePaths,
+    bind_addr: &SocketAddr,
+    client_dir: &Path,
+    subject_id: &str,
+) -> Result<()> {
+    agent_orchestrator::secure_files::ensure_dir(client_dir, 0o700)?;
+
+    let client_cert = client_dir.join("client.crt");
+    let client_key = client_dir.join("client.key");
+    let ca_copy = client_dir.join("ca.crt");
+    let config_path = client_dir.join("config.yaml");
+
+    if !client_cert.exists() || !client_key.exists() {
+        let client = sign_client_cert(
+            &std::fs::read_to_string(&paths.ca_cert)?,
+            &std::fs::read_to_string(&paths.ca_key)?,
+            subject_id,
+        )?;
+        agent_orchestrator::secure_files::write_atomic(
+            &client_cert,
+            client.cert_pem.as_bytes(),
+            0o644,
+        )?;
+        agent_orchestrator::secure_files::write_atomic(
+            &client_key,
+            client.key_pem.as_bytes(),
+            0o600,
+        )?;
+    }
+
+    agent_orchestrator::secure_files::write_atomic(
+        &ca_copy,
+        &std::fs::read(&paths.ca_cert)?,
+        0o644,
+    )?;
+
+    let endpoint = preferred_endpoint(bind_addr);
+    let config = ControlPlaneConfig {
+        current_context: "default".to_string(),
+        clusters: vec![NamedCluster {
+            name: "default".to_string(),
+            cluster: ClusterRef {
+                server: format!("https://{endpoint}"),
+                certificate_authority: ca_copy.display().to_string(),
+            },
+        }],
+        users: vec![NamedUser {
+            name: "default".to_string(),
+            user: UserRef {
+                client_certificate: client_cert.display().to_string(),
+                client_key: client_key.display().to_string(),
+            },
+        }],
+        contexts: vec![NamedContext {
+            name: "default".to_string(),
+            context: ContextRef {
+                cluster: "default".to_string(),
+                user: "default".to_string(),
+            },
+        }],
+    };
+    let raw =
+        serde_yml::to_string(&config).context("failed to serialize control-plane client config")?;
+    agent_orchestrator::secure_files::write_atomic(&config_path, raw.as_bytes(), 0o644)?;
+    Ok(())
+}
+
+fn upsert_policy_subject(policy_path: &Path, subject: PolicySubject) -> Result<()> {
+    let mut policy = load_policy(policy_path)?;
+    if let Some(existing) = policy
+        .subjects
+        .iter_mut()
+        .find(|item| item.id == subject.id)
+    {
+        *existing = subject;
+    } else {
+        policy.subjects.push(subject);
+        policy.subjects.sort_by(|a, b| a.id.cmp(&b.id));
+    }
+    let raw = serde_yml::to_string(&policy).context("failed to serialize authz policy")?;
+    agent_orchestrator::secure_files::write_atomic(policy_path, raw.as_bytes(), 0o644)
+}
+
+fn load_policy(policy_path: &Path) -> Result<AuthzPolicy> {
+    let raw = std::fs::read_to_string(policy_path)
+        .with_context(|| format!("failed to read {}", policy_path.display()))?;
+    serde_yml::from_str(&raw).context("failed to parse authz policy")
+}
+
+fn current_username() -> String {
+    std::env::var("USER")
+        .ok()
+        .or_else(|| std::env::var("LOGNAME").ok())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "local".to_string())
+}
+
+fn client_home_dir(home: &Path, suffix: Option<&str>) -> PathBuf {
+    let base = home.join(".orchestrator/control-plane");
+    match suffix {
+        Some(value) => base.join(value),
+        None => base,
+    }
+}
+
+fn preferred_endpoint(bind_addr: &SocketAddr) -> String {
+    let host = match bind_addr.ip() {
+        IpAddr::V4(ip) if ip.is_unspecified() => IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        IpAddr::V6(ip) if ip.is_unspecified() => IpAddr::V6(std::net::Ipv6Addr::LOCALHOST),
+        ip => ip,
+    };
+    format!("{host}:{}", bind_addr.port())
+}
+
+fn generate_ca() -> Result<PemBundle> {
+    let mut params = CertificateParams::new(Vec::<String>::new());
+    let mut dn = DistinguishedName::new();
+    dn.push(DnType::CommonName, "orchestrator control-plane CA");
+    params.distinguished_name = dn;
+    params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    params.key_usages = vec![
+        KeyUsagePurpose::KeyCertSign,
+        KeyUsagePurpose::DigitalSignature,
+        KeyUsagePurpose::CrlSign,
+    ];
+    let cert = Certificate::from_params(params).context("failed to build CA certificate")?;
+    Ok(PemBundle {
+        cert_pem: cert
+            .serialize_pem()
+            .context("failed to serialize CA cert")?,
+        key_pem: cert.serialize_private_key_pem(),
+    })
+}
+
+fn sign_server_cert(
+    ca_cert_pem: &str,
+    ca_key_pem: &str,
+    bind_addr: &SocketAddr,
+) -> Result<PemBundle> {
+    let signer = signer_from_pem(ca_cert_pem, ca_key_pem)?;
+    let mut params = CertificateParams::new(Vec::<String>::new());
+    let mut dn = DistinguishedName::new();
+    dn.push(DnType::CommonName, "orchestrator-control-plane");
+    params.distinguished_name = dn;
+    params.key_usages = vec![
+        KeyUsagePurpose::DigitalSignature,
+        KeyUsagePurpose::KeyEncipherment,
+    ];
+    params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
+    for san in server_sans(bind_addr) {
+        params.subject_alt_names.push(san);
+    }
+    let cert = Certificate::from_params(params).context("failed to build server certificate")?;
+    Ok(PemBundle {
+        cert_pem: cert
+            .serialize_pem_with_signer(&signer)
+            .context("failed to sign server certificate")?,
+        key_pem: cert.serialize_private_key_pem(),
+    })
+}
+
+fn sign_client_cert(ca_cert_pem: &str, ca_key_pem: &str, subject_id: &str) -> Result<PemBundle> {
+    let signer = signer_from_pem(ca_cert_pem, ca_key_pem)?;
+    let mut params = CertificateParams::new(Vec::<String>::new());
+    let mut dn = DistinguishedName::new();
+    dn.push(DnType::CommonName, subject_id);
+    params.distinguished_name = dn;
+    params.key_usages = vec![
+        KeyUsagePurpose::DigitalSignature,
+        KeyUsagePurpose::KeyEncipherment,
+    ];
+    params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ClientAuth];
+    params
+        .subject_alt_names
+        .push(SanType::URI(subject_id.to_string()));
+    let cert = Certificate::from_params(params).context("failed to build client certificate")?;
+    Ok(PemBundle {
+        cert_pem: cert
+            .serialize_pem_with_signer(&signer)
+            .context("failed to sign client certificate")?,
+        key_pem: cert.serialize_private_key_pem(),
+    })
+}
+
+fn signer_from_pem(ca_cert_pem: &str, ca_key_pem: &str) -> Result<Certificate> {
+    let key_pair = KeyPair::from_pem(ca_key_pem).context("failed to parse CA key")?;
+    let params = CertificateParams::from_ca_cert_pem(ca_cert_pem, key_pair)
+        .context("failed to parse CA certificate")?;
+    Certificate::from_params(params).context("failed to rebuild CA signer")
+}
+
+fn server_sans(bind_addr: &SocketAddr) -> Vec<SanType> {
+    let mut ip_sans = BTreeSet::new();
+    ip_sans.insert(IpAddr::V4(std::net::Ipv4Addr::LOCALHOST));
+    ip_sans.insert(IpAddr::V6(std::net::Ipv6Addr::LOCALHOST));
+    match bind_addr.ip() {
+        IpAddr::V4(ip) if ip.is_unspecified() => {}
+        IpAddr::V6(ip) if ip.is_unspecified() => {}
+        ip => {
+            ip_sans.insert(ip);
+        }
+    }
+
+    let mut sans = vec![
+        SanType::DnsName("localhost".to_string()),
+        SanType::DnsName("orchestrator.local".to_string()),
+    ];
+    sans.extend(ip_sans.into_iter().map(SanType::IpAddress));
+    sans
+}
+
+fn required_role_for_rpc(rpc: &str) -> Role {
+    match rpc {
+        "Ping" | "TaskList" | "TaskInfo" | "TaskLogs" | "TaskFollow" | "TaskWatch" | "Get"
+        | "Describe" | "StoreGet" | "StoreList" | "WorkerStatus" | "Check" | "ManifestExport" => {
+            Role::ReadOnly
+        }
+        "TaskCreate" | "TaskStart" | "TaskPause" | "TaskResume" | "TaskRetry" | "Apply"
+        | "StorePut" | "StoreDelete" | "StorePrune" | "ManifestValidate" | "Init" | "TaskTrace" => {
+            Role::Operator
+        }
+        "Shutdown" | "TaskDelete" | "Delete" | "ConfigDebug" => Role::Admin,
+        _ => Role::Admin,
+    }
+}
+
+fn subject_id_from_der(der: &[u8]) -> Result<String> {
+    let (_, cert) =
+        X509Certificate::from_der(der).map_err(|_| anyhow!("invalid client certificate"))?;
+    let san = cert
+        .subject_alternative_name()
+        .map_err(|_| anyhow!("failed to read subject alternative name"))?
+        .ok_or_else(|| anyhow!("client certificate missing subject alternative name"))?;
+    for name in &san.value.general_names {
+        if let GeneralName::URI(uri) = name {
+            return Ok(uri.to_string());
+        }
+    }
+    bail!("client certificate missing URI SAN")
+}
+
+fn sha256_fingerprint(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<Vec<_>>()
+        .join(":")
+}
+
+#[derive(Debug, Clone)]
+struct PemBundle {
+    cert_pem: String,
+    key_pem: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_orchestrator::db::init_schema;
+
+    #[test]
+    fn required_role_mapping_is_stable() {
+        assert_eq!(required_role_for_rpc("Ping"), Role::ReadOnly);
+        assert_eq!(required_role_for_rpc("Apply"), Role::Operator);
+        assert_eq!(required_role_for_rpc("Shutdown"), Role::Admin);
+    }
+
+    #[test]
+    fn subject_id_round_trip_uses_uri_san() {
+        let ca = generate_ca().expect("ca");
+        let client = sign_client_cert(
+            &ca.cert_pem,
+            &ca.key_pem,
+            "spiffe://orchestrator/local-user/test",
+        )
+        .expect("client");
+        let pem = pem::parse(client.cert_pem).expect("parse pem");
+        let subject = subject_id_from_der(pem.contents()).expect("subject");
+        assert_eq!(subject, "spiffe://orchestrator/local-user/test");
+    }
+
+    #[test]
+    fn prepare_secure_server_bootstraps_materials_and_policy() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let home = temp.path().join("home");
+        std::fs::create_dir_all(&home).expect("home");
+        std::env::set_var("HOME", &home);
+        std::env::set_var("USER", "tester");
+        let db_path = temp.path().join("data/agent_orchestrator.db");
+        std::fs::create_dir_all(db_path.parent().expect("db parent")).expect("data dir");
+        init_schema(&db_path).expect("schema");
+        let bind_addr: SocketAddr = "127.0.0.1:50051".parse().expect("addr");
+
+        let secure =
+            prepare_secure_server(temp.path(), &db_path, &bind_addr, None).expect("secure");
+        assert!(secure.security.policy_path.exists());
+        assert!(temp.path().join("data/control-plane/pki/ca.crt").exists());
+        assert!(home
+            .join(".orchestrator/control-plane/config.yaml")
+            .exists());
+
+        let policy = load_policy(&secure.security.policy_path).expect("policy");
+        assert_eq!(policy.subjects.len(), 1);
+        assert_eq!(policy.subjects[0].role, Role::Admin);
+    }
+}

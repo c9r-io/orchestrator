@@ -3,12 +3,15 @@
     deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)
 )]
 
+mod control_plane;
 mod lifecycle;
 mod server;
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use clap::{Parser, Subcommand};
 use tonic::transport::Server;
 use tracing::{error, info};
 
@@ -21,20 +24,56 @@ use agent_orchestrator::scheduler_service::{
 use agent_orchestrator::state::{task_semaphore, InnerState};
 use orchestrator_proto::OrchestratorServiceServer;
 
+#[derive(Debug, Parser)]
+#[command(name = "orchestratord", version, about = "Agent Orchestrator daemon")]
+struct Args {
+    #[arg(short = 'f', long = "foreground")]
+    foreground: bool,
+
+    #[arg(long = "bind")]
+    bind: Option<String>,
+
+    #[arg(long = "insecure-bind")]
+    insecure_bind: Option<String>,
+
+    #[arg(long = "workers", default_value_t = 1)]
+    workers: usize,
+
+    #[arg(long = "control-plane-dir")]
+    control_plane_dir: Option<PathBuf>,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Debug, Subcommand)]
+enum Commands {
+    #[command(subcommand)]
+    ControlPlane(ControlPlaneCommands),
+}
+
+#[derive(Debug, Subcommand)]
+enum ControlPlaneCommands {
+    IssueClient {
+        #[arg(long = "bind")]
+        bind: String,
+
+        #[arg(long = "subject")]
+        subject: String,
+
+        #[arg(long = "role", default_value = "operator")]
+        role: control_plane::Role,
+
+        #[arg(long = "home")]
+        home: Option<PathBuf>,
+
+        #[arg(long = "control-plane-dir")]
+        control_plane_dir: Option<PathBuf>,
+    },
+}
+
 fn main() -> Result<()> {
-    let args: Vec<String> = std::env::args().collect();
-    let _foreground = args.iter().any(|a| a == "--foreground" || a == "-f");
-    let bind_addr = args
-        .iter()
-        .position(|a| a == "--bind")
-        .and_then(|i| args.get(i + 1))
-        .cloned();
-    let worker_count: usize = args
-        .iter()
-        .position(|a| a == "--workers")
-        .and_then(|i| args.get(i + 1))
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(1);
+    let args = Args::parse();
 
     let subscriber = tracing_subscriber::fmt()
         .with_target(false)
@@ -47,6 +86,10 @@ fn main() -> Result<()> {
         .enable_all()
         .build()
         .context("failed to build tokio runtime")?;
+
+    if let Some(command) = args.command {
+        return handle_subcommand(command);
+    }
 
     rt.block_on(async move {
         let startup_instant = std::time::Instant::now();
@@ -80,8 +123,8 @@ fn main() -> Result<()> {
             tokio::sync::watch::channel::<Option<std::path::PathBuf>>(None);
 
         // Spawn worker tasks
-        let mut worker_handles = Vec::with_capacity(worker_count);
-        for idx in 0..worker_count {
+        let mut worker_handles = Vec::with_capacity(args.workers);
+        for idx in 0..args.workers {
             let rx = shutdown_rx.clone();
             let st = inner.clone();
             let rtx = restart_tx.clone();
@@ -89,7 +132,7 @@ fn main() -> Result<()> {
             worker_handles.push(handle);
         }
         drop(restart_tx); // drop original sender so only workers hold it
-        info!(workers = worker_count, "background workers started");
+        info!(workers = args.workers, "background workers started");
 
         let shutdown_notify = Arc::new(tokio::sync::Notify::new());
 
@@ -97,8 +140,8 @@ fn main() -> Result<()> {
             inner.clone(),
             startup_instant,
             shutdown_notify.clone(),
+            None,
         );
-        let grpc_service = OrchestratorServiceServer::new(service);
 
         // Shutdown future: listen for OS signals, restart request, or RPC shutdown
         let shutdown_fut = {
@@ -120,12 +163,33 @@ fn main() -> Result<()> {
             }
         };
 
-        // Determine bind address: UDS by default, TCP if --bind provided
-        if let Some(addr) = bind_addr {
+        // Determine bind address: UDS by default, secure TCP if --bind provided
+        if let Some(addr) = args.bind.as_deref() {
             let addr = addr.parse().context("invalid bind address")?;
+            let secure = control_plane::prepare_secure_server(
+                &inner.app_root,
+                &inner.db_path,
+                &addr,
+                args.control_plane_dir.as_deref(),
+            )?;
             info!(%addr, "listening on TCP");
             Server::builder()
-                .add_service(grpc_service)
+                .tls_config(secure.tls)?
+                .add_service(OrchestratorServiceServer::new(server::OrchestratorServer::new(
+                    inner.clone(),
+                    startup_instant,
+                    shutdown_notify.clone(),
+                    Some(secure.security),
+                )))
+                .serve_with_shutdown(addr, shutdown_fut)
+                .await
+                .context("gRPC server error")?;
+        } else if let Some(addr) = args.insecure_bind.as_deref() {
+            let addr = addr.parse().context("invalid insecure bind address")?;
+            info!(%addr, "listening on insecure TCP");
+            tracing::warn!("insecure TCP control-plane enabled; use only for local development");
+            Server::builder()
+                .add_service(OrchestratorServiceServer::new(service))
                 .serve_with_shutdown(addr, shutdown_fut)
                 .await
                 .context("gRPC server error")?;
@@ -140,7 +204,7 @@ fn main() -> Result<()> {
 
             info!(socket = %socket_path.display(), "listening on UDS");
             Server::builder()
-                .add_service(grpc_service)
+                .add_service(OrchestratorServiceServer::new(service))
                 .serve_with_incoming_shutdown(uds_stream, shutdown_fut)
                 .await
                 .context("gRPC server error")?;
@@ -185,6 +249,35 @@ fn main() -> Result<()> {
         info!("orchestratord stopped");
         Ok(())
     })
+}
+
+fn handle_subcommand(command: Commands) -> Result<()> {
+    match command {
+        Commands::ControlPlane(ControlPlaneCommands::IssueClient {
+            bind,
+            subject,
+            role,
+            home,
+            control_plane_dir,
+        }) => {
+            let state = agent_orchestrator::service::bootstrap::init_state(false)
+                .context("failed to initialize orchestrator state")?;
+            let addr = bind.parse().context("invalid bind address")?;
+            let home = home
+                .or_else(|| std::env::var_os("HOME").map(PathBuf::from))
+                .ok_or_else(|| anyhow::anyhow!("HOME is not set; pass --home explicitly"))?;
+            let client_dir = control_plane::issue_client_materials(
+                &state.inner.app_root,
+                &addr,
+                control_plane_dir.as_deref(),
+                &home,
+                &subject,
+                role,
+            )?;
+            println!("{}", client_dir.display());
+            Ok(())
+        }
+    }
 }
 
 /// Background worker loop: polls for pending tasks, claims and executes them.

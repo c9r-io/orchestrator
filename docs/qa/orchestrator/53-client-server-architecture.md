@@ -18,7 +18,7 @@ This document validates the client/server architecture refactor that splits the 
 The daemon holds all state (engine, DB, task queue) and the CLI is a thin RPC client with zero dependency on the core engine.
 
 Entry points:
-- Daemon: `./target/release/orchestratord [--foreground] [--bind addr] [--workers N]`
+- Daemon: `./target/release/orchestratord [--foreground] [--bind addr | --insecure-bind addr] [--workers N]`
 - CLI: `./target/release/orchestrator <command>`
 
 ---
@@ -51,8 +51,11 @@ orchestrator (CLI)  ──gRPC/UDS──>  orchestratord (daemon)
 ### Transport
 
 - Default: Unix Domain Socket at `$APP_ROOT/data/orchestrator.sock`
-- Optional: TCP via `--bind 0.0.0.0:50051`
+- Secure TCP: `--bind 0.0.0.0:50051` with auto-bootstrapped mTLS
+- Unsafe TCP (development only): `--insecure-bind 0.0.0.0:50051`
 - PID file at `$APP_ROOT/data/daemon.pid`
+
+For dedicated transport/auth regression coverage, see `docs/qa/orchestrator/58-control-plane-security.md`.
 
 ---
 

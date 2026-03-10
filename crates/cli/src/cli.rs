@@ -8,6 +8,10 @@ use clap::{Parser, Subcommand, ValueEnum};
     about = "Agent Orchestrator — workflow automation CLI"
 )]
 pub struct Cli {
+    /// Override the control-plane client config file
+    #[arg(long, global = true, env = "ORCHESTRATOR_CONTROL_PLANE_CONFIG")]
+    pub control_plane_config: Option<String>,
+
     #[command(subcommand)]
     pub command: Commands,
 
@@ -120,9 +124,7 @@ pub enum Commands {
     },
 
     /// Initialize orchestrator runtime
-    Init {
-        root: Option<String>,
-    },
+    Init { root: Option<String> },
 
     /// Manifest operations
     #[command(subcommand)]
@@ -258,9 +260,13 @@ pub enum TaskCommands {
         latest: bool,
     },
 
-    Pause { task_id: String },
+    Pause {
+        task_id: String,
+    },
 
-    Resume { task_id: String },
+    Resume {
+        task_id: String,
+    },
 
     #[command(alias = "log")]
     Logs {

@@ -12,12 +12,15 @@ use orchestrator_proto::*;
 use tokio::sync::Notify;
 use tonic::{Request, Response, Status};
 
+use crate::control_plane::ControlPlaneSecurity;
+
 /// gRPC service implementation — thin translation layer from gRPC requests
 /// to core service calls.
 pub struct OrchestratorServer {
     pub(crate) state: Arc<InnerState>,
     pub(crate) startup_instant: Instant,
     pub(crate) shutdown_notify: Arc<Notify>,
+    pub(crate) control_plane: Option<Arc<ControlPlaneSecurity>>,
 }
 
 impl OrchestratorServer {
@@ -25,12 +28,25 @@ impl OrchestratorServer {
         state: Arc<InnerState>,
         startup_instant: Instant,
         shutdown_notify: Arc<Notify>,
+        control_plane: Option<Arc<ControlPlaneSecurity>>,
     ) -> Self {
         Self {
             state,
             startup_instant,
             shutdown_notify,
+            control_plane,
         }
+    }
+}
+
+pub(crate) fn authorize<T>(
+    server: &OrchestratorServer,
+    request: &Request<T>,
+    rpc: &'static str,
+) -> Result<(), Status> {
+    match &server.control_plane {
+        Some(control_plane) => control_plane.authorize(request, rpc),
+        None => Ok(()),
     }
 }
 

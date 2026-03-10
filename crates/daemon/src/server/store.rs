@@ -7,11 +7,16 @@ pub(crate) async fn store_get(
     server: &OrchestratorServer,
     request: Request<StoreGetRequest>,
 ) -> Result<Response<StoreGetResponse>, Status> {
+    let _auth = super::authorize(server, &request, "StoreGet")?;
     let req = request.into_inner();
-    let result =
-        agent_orchestrator::service::store::store_get(&server.state, &req.store, &req.key, &req.project)
-            .await
-            .map_err(|e| Status::internal(format!("{e}")))?;
+    let result = agent_orchestrator::service::store::store_get(
+        &server.state,
+        &req.store,
+        &req.key,
+        &req.project,
+    )
+    .await
+    .map_err(|e| Status::internal(format!("{e}")))?;
 
     Ok(Response::new(StoreGetResponse {
         value_json: result.clone(),
@@ -23,6 +28,7 @@ pub(crate) async fn store_put(
     server: &OrchestratorServer,
     request: Request<StorePutRequest>,
 ) -> Result<Response<StorePutResponse>, Status> {
+    let _auth = super::authorize(server, &request, "StorePut")?;
     let req = request.into_inner();
     agent_orchestrator::service::store::store_put(
         &server.state,
@@ -44,10 +50,16 @@ pub(crate) async fn store_delete(
     server: &OrchestratorServer,
     request: Request<StoreDeleteRequest>,
 ) -> Result<Response<StoreDeleteResponse>, Status> {
+    let _auth = super::authorize(server, &request, "StoreDelete")?;
     let req = request.into_inner();
-    agent_orchestrator::service::store::store_delete(&server.state, &req.store, &req.key, &req.project)
-        .await
-        .map_err(|e| Status::internal(format!("{e}")))?;
+    agent_orchestrator::service::store::store_delete(
+        &server.state,
+        &req.store,
+        &req.key,
+        &req.project,
+    )
+    .await
+    .map_err(|e| Status::internal(format!("{e}")))?;
 
     Ok(Response::new(StoreDeleteResponse {
         message: format!("deleted key '{}' from '{}'", req.key, req.store),
@@ -58,6 +70,7 @@ pub(crate) async fn store_list(
     server: &OrchestratorServer,
     request: Request<StoreListRequest>,
 ) -> Result<Response<StoreListResponse>, Status> {
+    let _auth = super::authorize(server, &request, "StoreList")?;
     let req = request.into_inner();
     let entries = agent_orchestrator::service::store::store_list(
         &server.state,
@@ -76,6 +89,7 @@ pub(crate) async fn store_prune(
     server: &OrchestratorServer,
     request: Request<StorePruneRequest>,
 ) -> Result<Response<StorePruneResponse>, Status> {
+    let _auth = super::authorize(server, &request, "StorePrune")?;
     let req = request.into_inner();
     agent_orchestrator::service::store::store_prune(&server.state, &req.store, &req.project)
         .await

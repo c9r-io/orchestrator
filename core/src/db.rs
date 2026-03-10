@@ -32,6 +32,19 @@ pub struct TaskExecutionMetric {
     pub created_at: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct ControlPlaneAuditRecord {
+    pub transport: String,
+    pub remote_addr: Option<String>,
+    pub rpc: String,
+    pub subject_id: Option<String>,
+    pub authn_result: String,
+    pub authz_result: String,
+    pub role: Option<String>,
+    pub reason: Option<String>,
+    pub tls_fingerprint: Option<String>,
+}
+
 pub fn open_conn(db_path: &Path) -> Result<Connection> {
     let conn = Connection::open(db_path).context("failed to open sqlite db")?;
     configure_conn(&conn)?;
@@ -197,6 +210,7 @@ pub fn reset_db_by_path(db_path: &Path, include_history: bool, include_config: b
     conn.execute("DELETE FROM task_items", [])?;
     conn.execute("DELETE FROM tasks", [])?;
     conn.execute("DELETE FROM task_execution_metrics", [])?;
+    let _ = conn.execute("DELETE FROM control_plane_audit", []);
     if include_config {
         conn.execute("DELETE FROM orchestrator_config_versions", [])?;
     } else if include_history {
@@ -205,6 +219,29 @@ pub fn reset_db_by_path(db_path: &Path, include_history: bool, include_config: b
             [],
         )?;
     }
+    Ok(())
+}
+
+pub fn insert_control_plane_audit(db_path: &Path, record: &ControlPlaneAuditRecord) -> Result<()> {
+    let conn = open_conn(db_path)?;
+    conn.execute(
+        "INSERT INTO control_plane_audit (
+            created_at, transport, remote_addr, rpc, subject_id, authn_result,
+            authz_result, role, reason, tls_fingerprint
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        params![
+            crate::config_load::now_ts(),
+            record.transport,
+            record.remote_addr,
+            record.rpc,
+            record.subject_id,
+            record.authn_result,
+            record.authz_result,
+            record.role,
+            record.reason,
+            record.tls_fingerprint,
+        ],
+    )?;
     Ok(())
 }
 
