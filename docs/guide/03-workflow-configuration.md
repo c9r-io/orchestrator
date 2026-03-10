@@ -62,6 +62,48 @@ If you don't specify `builtin` or `required_capability`, the engine infers from 
 - Known builtin IDs (`init_once`, `loop_guard`, `ticket_scan`, `self_test`, `self_restart`, `item_select`) → auto-builtin
 - Known agent IDs (`plan`, `implement`, `qa`, `fix`, etc.) → auto-capability
 
+### Execution Profiles
+
+`execution_profile` selects the runtime boundary for an agent step:
+
+- if omitted, the step uses implicit `host`
+- only agent steps may set this field
+- the referenced profile must exist in the same project
+
+Recommended defaults:
+
+- `implement` / `ticket_fix` -> sandbox profile
+- `qa_testing` -> host profile
+
+Example:
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: sandbox_write
+spec:
+  mode: sandbox
+  fs_mode: workspace_rw_scoped
+  writable_paths:
+    - src
+    - docs
+  network_mode: deny
+```
+
+```yaml
+- id: implement
+  type: implement
+  required_capability: implement
+  execution_profile: sandbox_write
+```
+
+Runtime notes:
+
+- On the current macOS backend, `network_mode: deny` may surface as DNS failure or connection failure; both map to `sandbox_network_blocked`.
+- `network_target` is best-effort metadata and may be empty for some error shapes.
+- `network_mode: allowlist` is not yet implemented as a verifiable backend capability on macOS; it fails fast with a structured error instead of silently degrading.
+
 ### Known Step IDs
 
 | ID | Default Scope | Default Mode | Description |

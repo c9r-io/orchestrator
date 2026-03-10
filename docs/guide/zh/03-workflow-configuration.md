@@ -104,6 +104,12 @@ spec:
   execution_profile: host
 ```
 
+运行时说明：
+
+- 在当前 macOS sandbox 后端上，`network_mode: deny` 既可能表现为连接失败，也可能表现为 DNS 解析失败；两者都会归类为 `sandbox_network_blocked`。
+- `network_target` 只是 best-effort 元数据，某些错误形态下可能为空。
+- `network_mode: allowlist` 在当前 macOS 后端还没有可验证的真实实现；系统会返回结构化拒绝，而不是静默降级到宽松网络访问。
+
 ### 已知步骤 ID
 
 | ID | 默认作用域 | 默认模式 | 说明 |

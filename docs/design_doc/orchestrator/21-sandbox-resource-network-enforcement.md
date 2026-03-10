@@ -64,15 +64,16 @@ Shared payload fields:
 Additional fields when applicable:
 
 - `resource_kind`
-- `network_target`
+- `network_target` (best-effort)
 
 ## Key Design
 
 1. Resource limits are enforced in the spawned Unix child via `setrlimit`, so the sandbox wrapper and the eventual agent process inherit the same execution boundary.
 2. macOS remains the only active sandbox backend; backend capability validation happens before spawn and turns unsupported allowlist usage into a structured sandbox failure.
 3. Phase execution keeps wait-time signal information so `RLIMIT_CPU` style exits can be classified without depending only on stderr heuristics.
-4. Sandbox classification is centralized in the phase runner utility layer, so recorders and downstream task logic consume a single normalized result shape.
-5. `RunResult` now carries `sandbox_violation_kind`, `sandbox_resource_kind`, and `sandbox_network_target` for downstream diagnostics and future policy hooks.
+4. `network_mode=deny` classification is based on outbound-network failure signatures, not only `Operation not permitted`; DNS-resolution failures are treated as valid sandbox network-block outcomes on macOS.
+5. Sandbox classification is centralized in the phase runner utility layer, so recorders and downstream task logic consume a single normalized result shape.
+6. `RunResult` now carries `sandbox_violation_kind`, `sandbox_resource_kind`, and `sandbox_network_target` for downstream diagnostics and future policy hooks.
 
 ## Alternatives And Tradeoffs
 
