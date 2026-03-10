@@ -23,8 +23,8 @@ use super::RunningTask;
 use record::record_phase_results;
 use setup::setup_phase_execution;
 use spawn::spawn_phase_process;
-use validate::validate_phase_output_stage;
 use util::detect_sandbox_denial;
+use validate::validate_phase_output_stage;
 use wait::wait_for_process;
 
 /// Orchestrator: runs a single phase with timeout by calling the 5 extracted stages in sequence.

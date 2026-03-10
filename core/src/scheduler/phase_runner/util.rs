@@ -108,7 +108,8 @@ pub(super) async fn detect_sandbox_denial(
         return SandboxDenialInfo::default();
     }
 
-    let stderr_tail = match read_output_with_limit(stderr_path, SANDBOX_STDERR_EXCERPT_MAX_BYTES).await
+    let stderr_tail = match read_output_with_limit(stderr_path, SANDBOX_STDERR_EXCERPT_MAX_BYTES)
+        .await
     {
         Ok(output) => output.text,
         Err(err) => {

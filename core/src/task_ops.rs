@@ -299,6 +299,7 @@ mod tests {
             builtin: builtin.map(str::to_string),
             required_capability: required_capability.map(str::to_string),
             template: None,
+            execution_profile: None,
             enabled: true,
             repeatable: false,
             is_guard: false,
@@ -644,6 +645,7 @@ mod tests {
                     workflows: HashMap::new(),
                     step_templates: HashMap::new(),
                     env_stores: HashMap::new(),
+                    execution_profiles: HashMap::new(),
                 },
             );
             active.projects.insert(
@@ -654,6 +656,7 @@ mod tests {
                     workflows: HashMap::new(),
                     step_templates: HashMap::new(),
                     env_stores: HashMap::new(),
+                    execution_profiles: HashMap::new(),
                 },
             );
         }

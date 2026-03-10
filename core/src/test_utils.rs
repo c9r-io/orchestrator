@@ -79,6 +79,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                                     description: None,
                                     builtin: None,
                                     required_capability: None,
+                                    execution_profile: None,
                                     enabled: true,
                                     repeatable: false,
                                     is_guard: false,
@@ -121,6 +122,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                     },
                     step_templates: HashMap::new(),
                     env_stores: HashMap::new(),
+                    execution_profiles: HashMap::new(),
                 },
             );
             projects

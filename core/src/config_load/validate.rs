@@ -143,14 +143,17 @@ pub(crate) fn validate_execution_profiles_for_project(
                 step.id
             );
         }
-        let profile = project.execution_profiles.get(profile_name).ok_or_else(|| {
-            anyhow::anyhow!(
-                "workflow '{}' step '{}' references unknown execution profile '{}'",
-                workflow_id,
-                step.id,
-                profile_name
-            )
-        })?;
+        let profile = project
+            .execution_profiles
+            .get(profile_name)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "workflow '{}' step '{}' references unknown execution profile '{}'",
+                    workflow_id,
+                    step.id,
+                    profile_name
+                )
+            })?;
         if profile.mode == ExecutionProfileMode::Host
             && (!profile.writable_paths.is_empty()
                 || !profile.network_allowlist.is_empty()
@@ -604,6 +607,7 @@ mod tests {
                     description: None,
                     builtin: Some("self_test".to_string()),
                     required_capability: None,
+                    execution_profile: None,
                     enabled: true,
                     repeatable: false,
                     is_guard: false,
@@ -628,6 +632,7 @@ mod tests {
                     description: None,
                     builtin: Some("self_test".to_string()),
                     required_capability: None,
+                    execution_profile: None,
                     enabled: true,
                     repeatable: false,
                     is_guard: false,
@@ -682,6 +687,7 @@ mod tests {
                     description: None,
                     builtin: None,
                     required_capability: None,
+                    execution_profile: None,
                     enabled: true,
                     repeatable: false,
                     is_guard: false,
@@ -706,6 +712,7 @@ mod tests {
                     description: None,
                     builtin: None,
                     required_capability: None,
+                    execution_profile: None,
                     enabled: true,
                     repeatable: false,
                     is_guard: false,
@@ -760,6 +767,7 @@ mod tests {
                     description: None,
                     builtin: Some("self_test".to_string()),
                     required_capability: None,
+                    execution_profile: None,
                     enabled: true,
                     repeatable: false,
                     is_guard: false,
@@ -784,6 +792,7 @@ mod tests {
                     description: None,
                     builtin: None,
                     required_capability: None,
+                    execution_profile: None,
                     enabled: true,
                     repeatable: false,
                     is_guard: false,
@@ -843,6 +852,7 @@ mod tests {
                 description: None,
                 builtin: None,
                 required_capability: Some("implement".to_string()),
+                execution_profile: None,
                 enabled: true,
                 repeatable: true,
                 is_guard: false,
@@ -900,6 +910,7 @@ mod tests {
                     description: None,
                     builtin: None,
                     required_capability: Some("implement".to_string()),
+                    execution_profile: None,
                     enabled: true,
                     repeatable: true,
                     is_guard: false,
@@ -924,6 +935,7 @@ mod tests {
                     description: None,
                     builtin: None,
                     required_capability: None,
+                    execution_profile: None,
                     enabled: true,
                     repeatable: false,
                     is_guard: false,

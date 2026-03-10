@@ -209,6 +209,7 @@ mod tests {
                 workflows: HashMap::new(),
                 step_templates: HashMap::new(),
                 env_stores: HashMap::new(),
+                execution_profiles: HashMap::new(),
             })
             .workflows
             .insert(format!("{}-updated", original), workflow_clone);

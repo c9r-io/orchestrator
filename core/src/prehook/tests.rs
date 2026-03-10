@@ -142,6 +142,9 @@ fn test_evaluate_step_prehook_expression_true() {
         self_test_passed: false,
         max_cycles: 1,
         is_last_cycle: true,
+        last_sandbox_denied: false,
+        sandbox_denied_count: 0,
+        last_sandbox_denial_reason: None,
         self_referential_safe: true,
     };
     let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
@@ -178,6 +181,9 @@ fn test_evaluate_step_prehook_expression_false() {
         self_test_passed: false,
         max_cycles: 1,
         is_last_cycle: true,
+        last_sandbox_denied: false,
+        sandbox_denied_count: 0,
+        last_sandbox_denial_reason: None,
         self_referential_safe: true,
     };
     let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
@@ -214,6 +220,9 @@ fn test_evaluate_step_prehook_expression_invalid() {
         self_test_passed: false,
         max_cycles: 1,
         is_last_cycle: true,
+        last_sandbox_denied: false,
+        sandbox_denied_count: 0,
+        last_sandbox_denial_reason: None,
         self_referential_safe: true,
     };
     let result = evaluate_step_prehook_expression("invalid @#$ expression", &context);
@@ -249,6 +258,9 @@ fn test_evaluate_step_prehook_expression_qa_failed() {
         self_test_passed: false,
         max_cycles: 1,
         is_last_cycle: true,
+        last_sandbox_denied: false,
+        sandbox_denied_count: 0,
+        last_sandbox_denial_reason: None,
         self_referential_safe: true,
     };
     let result = evaluate_step_prehook_expression("qa_failed == true", &context);
@@ -285,6 +297,9 @@ fn test_evaluate_step_prehook_expression_compound() {
         self_test_passed: false,
         max_cycles: 1,
         is_last_cycle: true,
+        last_sandbox_denied: false,
+        sandbox_denied_count: 0,
+        last_sandbox_denial_reason: None,
         self_referential_safe: true,
     };
     let result = evaluate_step_prehook_expression(
@@ -325,6 +340,9 @@ fn test_build_errors_prehook_expression() {
         self_test_passed: false,
         max_cycles: 1,
         is_last_cycle: true,
+        last_sandbox_denied: false,
+        sandbox_denied_count: 0,
+        last_sandbox_denial_reason: None,
         self_referential_safe: true,
     };
     let result = evaluate_step_prehook_expression(
@@ -476,6 +494,9 @@ fn test_max_cycles_and_is_last_cycle_cel_variables() {
         max_cycles: 2,
         is_last_cycle: false,
         self_referential_safe: true,
+        last_sandbox_denied: false,
+        sandbox_denied_count: 0,
+        last_sandbox_denial_reason: None,
     };
     // cycle 1 of 2: not last cycle, skip qa_testing
     let result = evaluate_step_prehook_expression("is_last_cycle", &context);
@@ -1739,6 +1760,9 @@ fn make_prehook_ctx() -> StepPrehookContext {
         max_cycles: 3,
         is_last_cycle: false,
         self_referential_safe: true,
+        last_sandbox_denied: false,
+        sandbox_denied_count: 0,
+        last_sandbox_denial_reason: None,
     }
 }
 
@@ -1893,6 +1917,9 @@ fn make_finalize_ctx() -> ItemFinalizeContext {
         has_ticket_artifacts: true,
         has_code_change_artifacts: true,
         is_last_cycle: false,
+        last_sandbox_denied: false,
+        sandbox_denied_count: 0,
+        last_sandbox_denial_reason: None,
     }
 }
 

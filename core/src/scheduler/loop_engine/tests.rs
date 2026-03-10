@@ -77,6 +77,7 @@ fn build_segments_groups_contiguous_scopes() {
                     id: "plan".into(),
 
                     required_capability: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,
@@ -101,6 +102,7 @@ fn build_segments_groups_contiguous_scopes() {
                     id: "implement".into(),
 
                     required_capability: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,
@@ -125,6 +127,7 @@ fn build_segments_groups_contiguous_scopes() {
                     id: "qa_testing".into(),
 
                     required_capability: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,
@@ -149,6 +152,7 @@ fn build_segments_groups_contiguous_scopes() {
                     id: "ticket_fix".into(),
 
                     required_capability: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,
@@ -173,6 +177,7 @@ fn build_segments_groups_contiguous_scopes() {
                     id: "doc_governance".into(),
 
                     required_capability: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,
@@ -245,6 +250,7 @@ fn build_segments_skips_guards() {
                     id: "plan".into(),
 
                     required_capability: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,
@@ -269,6 +275,7 @@ fn build_segments_skips_guards() {
                     id: "loop_guard".into(),
 
                     required_capability: None,
+                    execution_profile: None,
                     builtin: Some("loop_guard".into()),
                     enabled: true,
                     repeatable: true,
@@ -323,6 +330,7 @@ fn resolved_scope_uses_explicit_override() {
         id: "qa_testing".into(),
 
         required_capability: None,
+        execution_profile: None,
         builtin: None,
         enabled: true,
         repeatable: true,
@@ -417,6 +425,7 @@ fn collect_remaining_item_step_steps_returns_only_item_steps_after_segment() {
                 TaskExecutionStep {
                     id: "implement".into(),
                     required_capability: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,
@@ -440,6 +449,7 @@ fn collect_remaining_item_step_steps_returns_only_item_steps_after_segment() {
                 TaskExecutionStep {
                     id: "qa_testing".into(),
                     required_capability: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,
@@ -463,6 +473,7 @@ fn collect_remaining_item_step_steps_returns_only_item_steps_after_segment() {
                 TaskExecutionStep {
                     id: "ticket_fix".into(),
                     required_capability: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,
@@ -486,6 +497,7 @@ fn collect_remaining_item_step_steps_returns_only_item_steps_after_segment() {
                 TaskExecutionStep {
                     id: "align_tests".into(),
                     required_capability: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,
@@ -549,6 +561,7 @@ fn collect_remaining_item_step_steps_skips_non_repeatable_steps_after_first_cycl
             steps: vec![TaskExecutionStep {
                 id: "qa_testing".into(),
                 required_capability: None,
+                execution_profile: None,
                 builtin: None,
                 enabled: true,
                 repeatable: false,
@@ -661,6 +674,7 @@ fn build_segments_skips_disabled_steps() {
                 TaskExecutionStep {
                     id: "plan".into(),
                     required_capability: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,
@@ -684,6 +698,7 @@ fn build_segments_skips_disabled_steps() {
                 TaskExecutionStep {
                     id: "disabled_step".into(),
                     required_capability: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: false,
                     repeatable: true,
@@ -889,6 +904,7 @@ fn collect_remaining_item_step_steps_from_start_index_2() {
                 TaskExecutionStep {
                     id: "plan".into(),
                     required_capability: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,
@@ -912,6 +928,7 @@ fn collect_remaining_item_step_steps_from_start_index_2() {
                 TaskExecutionStep {
                     id: "qa".into(),
                     required_capability: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,
@@ -935,6 +952,7 @@ fn collect_remaining_item_step_steps_from_start_index_2() {
                 TaskExecutionStep {
                     id: "governance".into(),
                     required_capability: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,
@@ -1039,6 +1057,7 @@ fn build_segments_item_select_is_task_scoped() {
                 TaskExecutionStep {
                     id: "qa_testing".into(),
                     required_capability: None,
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: true,
@@ -1062,6 +1081,7 @@ fn build_segments_item_select_is_task_scoped() {
                 TaskExecutionStep {
                     id: "evaluate".into(),
                     required_capability: None,
+                    execution_profile: None,
                     builtin: Some("item_select".into()),
                     enabled: true,
                     repeatable: false,

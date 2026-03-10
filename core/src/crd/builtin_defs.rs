@@ -152,7 +152,10 @@ fn execution_profile_crd() -> CustomResourceDefinition {
     CustomResourceDefinition {
         kind: "ExecutionProfile".to_string(),
         plural: "executionprofiles".to_string(),
-        short_names: vec!["execution-profile".to_string(), "execution_profile".to_string()],
+        short_names: vec![
+            "execution-profile".to_string(),
+            "execution_profile".to_string(),
+        ],
         group: BUILTIN_GROUP.to_string(),
         versions: vec![builtin_version(serde_json::json!({
             "type": "object",
@@ -267,23 +270,23 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn returns_ten_definitions() {
+    fn returns_eleven_definitions() {
         let defs = builtin_crd_definitions();
-        assert_eq!(defs.len(), 10);
+        assert_eq!(defs.len(), 11);
     }
 
     #[test]
     fn all_kinds_unique() {
         let defs = builtin_crd_definitions();
         let kinds: HashSet<&str> = defs.iter().map(|d| d.kind.as_str()).collect();
-        assert_eq!(kinds.len(), 10);
+        assert_eq!(kinds.len(), 11);
     }
 
     #[test]
     fn all_plurals_unique() {
         let defs = builtin_crd_definitions();
         let plurals: HashSet<&str> = defs.iter().map(|d| d.plural.as_str()).collect();
-        assert_eq!(plurals.len(), 10);
+        assert_eq!(plurals.len(), 11);
     }
 
     #[test]

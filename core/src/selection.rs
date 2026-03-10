@@ -490,6 +490,7 @@ mod tests {
             workflows: HashMap::new(),
             step_templates: HashMap::new(),
             env_stores: HashMap::new(),
+            execution_profiles: HashMap::new(),
         };
         let (id_proj, cfg_proj) = make_test_agent("proj_qa", "qa", 20);
         project.agents.insert(id_proj, cfg_proj);
@@ -557,6 +558,7 @@ mod tests {
                 workflows: HashMap::new(),
                 step_templates: HashMap::new(),
                 env_stores: HashMap::new(),
+                execution_profiles: HashMap::new(),
             },
         );
         let agents = resolve_effective_agents("empty-proj", &config, Some("qa"));

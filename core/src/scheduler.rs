@@ -131,6 +131,7 @@ mod tests {
 
                             builtin: None,
                             required_capability: Some("plan".to_string()),
+                            execution_profile: None,
                             enabled: true,
                             repeatable: false,
                             is_guard: false,
@@ -156,6 +157,7 @@ mod tests {
 
                             builtin: None,
                             required_capability: Some("qa_doc_gen".to_string()),
+                            execution_profile: None,
                             enabled: true,
                             repeatable: false,
                             is_guard: false,
@@ -181,6 +183,7 @@ mod tests {
 
                             builtin: Some("loop_guard".to_string()),
                             required_capability: None,
+                            execution_profile: None,
                             enabled: true,
                             repeatable: true,
                             is_guard: true,
@@ -274,6 +277,7 @@ mod tests {
 
                 builtin: None,
                 required_capability: None,
+                execution_profile: None,
                 enabled: true,
                 repeatable: true,
                 is_guard: false,
@@ -290,6 +294,7 @@ mod tests {
 
                     builtin: None,
                     required_capability: Some("qa".to_string()),
+                    execution_profile: None,
                     enabled: true,
                     repeatable: true,
                     is_guard: false,
@@ -394,6 +399,7 @@ mod tests {
 
                             builtin: None,
                             required_capability: Some("plan".to_string()),
+                            execution_profile: None,
                             enabled: true,
                             repeatable: false,
                             is_guard: false,
@@ -422,6 +428,7 @@ mod tests {
 
                             builtin: None,
                             required_capability: Some("qa_doc_gen".to_string()),
+                            execution_profile: None,
                             enabled: true,
                             repeatable: false,
                             is_guard: false,
@@ -447,6 +454,7 @@ mod tests {
 
                             builtin: Some("loop_guard".to_string()),
                             required_capability: None,
+                            execution_profile: None,
                             enabled: true,
                             repeatable: true,
                             is_guard: true,
@@ -701,6 +709,7 @@ mod tests {
                         // Use a known step type so the workflow survives the CRD
                         // round-trip (workflow_config_to_spec -> from_cr_spec).
                         required_capability: Some("evaluate".to_string()),
+                        execution_profile: None,
                         enabled: true,
                         repeatable: false,
                         is_guard: false,
@@ -730,6 +739,7 @@ mod tests {
                         description: None,
                         builtin: None,
                         required_capability: Some("evaluate".to_string()),
+                        execution_profile: None,
                         enabled: true,
                         repeatable: false,
                         is_guard: false,
@@ -837,6 +847,7 @@ mod tests {
                         description: None,
                         builtin: None,
                         required_capability: Some("evaluate".to_string()),
+                        execution_profile: None,
                         enabled: true,
                         repeatable: false,
                         is_guard: false,
@@ -861,6 +872,7 @@ mod tests {
                         description: None,
                         builtin: None,
                         required_capability: Some("evaluate".to_string()),
+                        execution_profile: None,
                         enabled: true,
                         repeatable: false,
                         is_guard: false,
@@ -971,6 +983,7 @@ mod tests {
                     description: None,
                     builtin: None,
                     required_capability: Some("evaluate".to_string()),
+                    execution_profile: None,
                     enabled: true,
                     repeatable: true,
                     is_guard: false,

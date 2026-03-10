@@ -182,6 +182,7 @@ mod tests {
             stderr,
             &std::collections::HashMap::new(),
             false,
+            &ResolvedExecutionProfile::host(),
         )
         .expect("spawn with allowlist");
 
@@ -219,6 +220,7 @@ mod tests {
             stderr,
             &std::collections::HashMap::new(),
             false,
+            &ResolvedExecutionProfile::host(),
         )
         .expect_err("missing shell should fail");
         assert!(err.to_string().contains("failed to spawn runner"));
@@ -244,6 +246,7 @@ mod tests {
             stderr,
             &extra_env,
             false,
+            &ResolvedExecutionProfile::host(),
         )
         .expect("spawn with extra env");
 
@@ -273,6 +276,7 @@ mod tests {
             vec!["sk-test-123".to_string(), "super-secret-value".to_string()],
             &std::collections::HashMap::new(),
             false,
+            &ResolvedExecutionProfile::host(),
         )
         .expect("spawn with capture");
         let mut child = captured.child;
@@ -346,19 +350,14 @@ impl ResolvedExecutionProfile {
         always_writable: &[PathBuf],
     ) -> Self {
         let mut writable_paths = always_writable.to_vec();
-        writable_paths.extend(
-            config
-                .writable_paths
-                .iter()
-                .map(|path| {
-                    let raw = PathBuf::from(path);
-                    if raw.is_absolute() {
-                        raw
-                    } else {
-                        workspace_root.join(raw)
-                    }
-                }),
-        );
+        writable_paths.extend(config.writable_paths.iter().map(|path| {
+            let raw = PathBuf::from(path);
+            if raw.is_absolute() {
+                raw
+            } else {
+                workspace_root.join(raw)
+            }
+        }));
         Self {
             name: name.to_string(),
             mode: config.mode.clone(),
@@ -517,9 +516,12 @@ fn build_macos_sandbox_profile(execution_profile: &ResolvedExecutionProfile) -> 
 
 #[cfg(target_os = "macos")]
 fn escape_sb_string(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"")
+    path.to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_with_runner(
     runner: &RunnerConfig,
     command: &str,
@@ -548,6 +550,7 @@ pub struct CapturedChild {
     pub output_capture: OutputCaptureHandles,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_with_runner_and_capture(
     runner: &RunnerConfig,
     command: &str,

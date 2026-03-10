@@ -82,7 +82,9 @@ impl Resource for ExecutionProfileResource {
     }
 }
 
-pub(super) fn build_execution_profile(resource: OrchestratorResource) -> Result<RegisteredResource> {
+pub(super) fn build_execution_profile(
+    resource: OrchestratorResource,
+) -> Result<RegisteredResource> {
     let OrchestratorResource {
         kind,
         metadata,
@@ -93,17 +95,16 @@ pub(super) fn build_execution_profile(resource: OrchestratorResource) -> Result<
         return Err(anyhow!("resource kind/spec mismatch for ExecutionProfile"));
     }
     match spec {
-        ResourceSpec::ExecutionProfile(spec) => {
-            Ok(RegisteredResource::ExecutionProfile(ExecutionProfileResource {
-                metadata,
-                spec,
-            }))
-        }
+        ResourceSpec::ExecutionProfile(spec) => Ok(RegisteredResource::ExecutionProfile(
+            ExecutionProfileResource { metadata, spec },
+        )),
         _ => Err(anyhow!("resource kind/spec mismatch for ExecutionProfile")),
     }
 }
 
-pub(crate) fn execution_profile_spec_to_config(spec: &ExecutionProfileSpec) -> ExecutionProfileConfig {
+pub(crate) fn execution_profile_spec_to_config(
+    spec: &ExecutionProfileSpec,
+) -> ExecutionProfileConfig {
     ExecutionProfileConfig {
         mode: match spec.mode.as_str() {
             "sandbox" => crate::config::ExecutionProfileMode::Sandbox,
@@ -139,9 +140,7 @@ pub(crate) fn execution_profile_config_to_spec(
         fs_mode: match config.fs_mode {
             crate::config::ExecutionFsMode::Inherit => "inherit".to_string(),
             crate::config::ExecutionFsMode::WorkspaceReadonly => "workspace_readonly".to_string(),
-            crate::config::ExecutionFsMode::WorkspaceRwScoped => {
-                "workspace_rw_scoped".to_string()
-            }
+            crate::config::ExecutionFsMode::WorkspaceRwScoped => "workspace_rw_scoped".to_string(),
         },
         writable_paths: config.writable_paths.clone(),
         network_mode: match config.network_mode {

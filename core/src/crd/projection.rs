@@ -24,9 +24,9 @@ use crate::cli_types::{
     StepTemplateSpec, WorkspaceSpec,
 };
 use crate::config::{
-    AgentConfig, EnvStoreConfig, ExecutionProfileConfig, ProjectConfig, ResumeConfig,
-    RunnerConfig, StepTemplateConfig, StoreBackendProviderConfig, WorkflowConfig,
-    WorkflowStoreConfig, WorkspaceConfig,
+    AgentConfig, EnvStoreConfig, ExecutionProfileConfig, ProjectConfig, ResumeConfig, RunnerConfig,
+    StepTemplateConfig, StoreBackendProviderConfig, WorkflowConfig, WorkflowStoreConfig,
+    WorkspaceConfig,
 };
 use crate::resource::agent::{agent_config_to_spec, agent_spec_to_config};
 use crate::resource::execution_profile::{
@@ -375,6 +375,7 @@ mod tests {
                     id: "plan".to_string(),
                     description: Some("Planning step".to_string()),
                     required_capability: Some("plan".to_string()),
+                    execution_profile: None,
                     builtin: None,
                     enabled: true,
                     repeatable: false,
@@ -399,6 +400,7 @@ mod tests {
                     id: "self_test".to_string(),
                     description: None,
                     required_capability: None,
+                    execution_profile: None,
                     builtin: Some("self_test".to_string()),
                     enabled: true,
                     repeatable: false,

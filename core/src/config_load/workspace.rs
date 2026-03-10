@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use super::{
-    ensure_within_root, validate_execution_profiles_for_project, validate_workflow_config_with_agents,
+    ensure_within_root, validate_execution_profiles_for_project,
+    validate_workflow_config_with_agents,
 };
 
 pub fn resolve_workspace_path(
@@ -225,6 +226,7 @@ mod tests {
                     workflows: HashMap::new(),
                     step_templates: HashMap::new(),
                     env_stores: HashMap::new(),
+                    execution_profiles: HashMap::new(),
                 },
             )]
             .into(),
@@ -259,6 +261,7 @@ mod tests {
                     workflows: HashMap::new(),
                     step_templates: HashMap::new(),
                     env_stores: HashMap::new(),
+                    execution_profiles: HashMap::new(),
                 },
             )]
             .into(),
@@ -427,6 +430,7 @@ mod tests {
                 workflows: HashMap::new(),
                 step_templates: HashMap::new(),
                 env_stores: HashMap::new(),
+                execution_profiles: HashMap::new(),
             },
         );
         let config = OrchestratorConfig {

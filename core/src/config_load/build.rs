@@ -11,9 +11,8 @@ use super::{
     persist_config_versioned, persist_heal_log, resolve_and_validate_projects,
     resolve_and_validate_workspaces, resolve_and_validate_workspaces_for_project,
     serialize_config_snapshot, validate_agent_env_store_refs,
-    validate_agent_env_store_refs_for_project, validate_workflow_config,
-    validate_workflow_config_with_agents, validate_execution_profiles_for_project,
-    ConfigSelfHealReport,
+    validate_agent_env_store_refs_for_project, validate_execution_profiles_for_project,
+    validate_workflow_config, validate_workflow_config_with_agents, ConfigSelfHealReport,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -263,6 +263,7 @@ mod tests {
                 description: None,
                 builtin: None,
                 required_capability: None,
+                execution_profile: None,
                 enabled: true,
                 repeatable: false,
                 is_guard: false,
@@ -364,6 +365,7 @@ mod tests {
                     description: None,
                     builtin: Some("self_test".to_string()),
                     required_capability: None,
+                    execution_profile: None,
                     enabled: true,
                     repeatable: false,
                     is_guard: false,
@@ -388,6 +390,7 @@ mod tests {
                     description: None,
                     builtin: Some("self_test".to_string()),
                     required_capability: None,
+                    execution_profile: None,
                     enabled: true,
                     repeatable: false,
                     is_guard: false,
@@ -921,6 +924,7 @@ mod tests {
             id: "run_qa".to_string(),
             description: None,
             required_capability: Some("qa".to_string()),
+            execution_profile: None,
             builtin: None,
             enabled: true,
             repeatable: true,
@@ -1107,6 +1111,6 @@ mod tests {
             .resource_store
             .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "idem-ag")
             .is_some());
-        assert_eq!(second.custom_resource_definitions.len(), 10);
+        assert_eq!(second.custom_resource_definitions.len(), 11);
     }
 }

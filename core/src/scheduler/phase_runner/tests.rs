@@ -214,8 +214,11 @@ mod cases {
     async fn detect_sandbox_denial_detects_operation_not_permitted() {
         let dir = tempfile::tempdir().expect("create tempdir");
         let path = dir.path().join("stderr.log");
-        std::fs::write(&path, "/bin/bash: sandbox-denied.txt: Operation not permitted\n")
-            .expect("write stderr");
+        std::fs::write(
+            &path,
+            "/bin/bash: sandbox-denied.txt: Operation not permitted\n",
+        )
+        .expect("write stderr");
 
         let info = detect_sandbox_denial(&sandbox_profile(), 1, &path).await;
 

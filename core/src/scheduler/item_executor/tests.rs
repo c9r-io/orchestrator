@@ -312,6 +312,7 @@ fn make_step(
         id: id.to_string(),
         builtin: builtin.map(|s| s.to_string()),
         required_capability: None,
+        execution_profile: None,
         enabled: true,
         repeatable: true,
         is_guard: false,
