@@ -101,6 +101,7 @@ async fn run_phase_with_timeout(
         step_timeout_secs,
         runtime,
         spawn_result.child_pid,
+        spawn_result.output_capture,
         &setup.stdout_path,
         &setup.stderr_path,
     )

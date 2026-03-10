@@ -1,4 +1,5 @@
 use crate::config::{RunnerConfig, RunnerExecutorKind, RunnerPolicy};
+use crate::output_capture::{spawn_sanitized_output_capture, OutputCaptureHandles};
 use anyhow::{anyhow, Context, Result};
 use std::fs::File;
 use std::path::Path;
@@ -250,16 +251,58 @@ mod tests {
             "injected_value"
         );
     }
+
+    #[tokio::test]
+    async fn test_spawn_with_runner_and_capture_redacts_persisted_output() {
+        let temp = tempdir().expect("create tempdir");
+        let stdout_path = temp.path().join("stdout.log");
+        let stderr_path = temp.path().join("stderr.log");
+        let stdout = File::create(&stdout_path).expect("create stdout file");
+        let stderr = File::create(&stderr_path).expect("create stderr file");
+
+        let runner = make_runner_config();
+        let captured = spawn_with_runner_and_capture(
+            &runner,
+            "printf 'api=sk-test-123'; printf ' secret=super-secret-value' >&2",
+            temp.path(),
+            stdout,
+            stderr,
+            vec!["sk-test-123".to_string(), "super-secret-value".to_string()],
+            &std::collections::HashMap::new(),
+            false,
+        )
+        .expect("spawn with capture");
+        let mut child = captured.child;
+        let output_capture = captured.output_capture;
+
+        let status = child.wait().await.expect("wait for child");
+        assert!(status.success());
+        output_capture
+            .wait()
+            .await
+            .expect("wait for output capture");
+
+        let stdout_output = std::fs::read_to_string(&stdout_path).expect("read stdout");
+        let stderr_output = std::fs::read_to_string(&stderr_path).expect("read stderr");
+        assert!(!stdout_output.contains("sk-test-123"));
+        assert!(stdout_output.contains("[REDACTED]"));
+        assert!(!stderr_output.contains("super-secret-value"));
+        assert!(stderr_output.contains("[REDACTED]"));
+    }
 }
 
 pub struct SpawnParams<'a> {
     pub runner: &'a RunnerConfig,
     pub command: &'a str,
     pub cwd: &'a Path,
-    pub stdout: File,
-    pub stderr: File,
+    pub stdio_mode: RunnerStdioMode,
     pub extra_env: &'a std::collections::HashMap<String, String>,
     pub pipe_stdin: bool,
+}
+
+pub enum RunnerStdioMode {
+    Files { stdout: File, stderr: File },
+    Piped,
 }
 
 pub trait RunnerExecutor {
@@ -275,8 +318,7 @@ impl RunnerExecutor for ShellRunnerExecutor {
             runner,
             command,
             cwd,
-            stdout,
-            stderr,
+            stdio_mode,
             extra_env,
             pipe_stdin,
         } = params;
@@ -284,12 +326,18 @@ impl RunnerExecutor for ShellRunnerExecutor {
         enforce_runner_policy(runner, command)?;
 
         let mut cmd = tokio::process::Command::new(&runner.shell);
-        cmd.arg(&runner.shell_arg)
-            .arg(command)
-            .current_dir(cwd)
-            .stdout(Stdio::from(stdout))
-            .stderr(Stdio::from(stderr))
-            .kill_on_drop(true);
+        cmd.arg(&runner.shell_arg).arg(command).current_dir(cwd);
+
+        match stdio_mode {
+            RunnerStdioMode::Files { stdout, stderr } => {
+                cmd.stdout(Stdio::from(stdout)).stderr(Stdio::from(stderr));
+            }
+            RunnerStdioMode::Piped => {
+                cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+            }
+        }
+
+        cmd.kill_on_drop(true);
 
         if pipe_stdin {
             cmd.stdin(Stdio::piped());
@@ -341,12 +389,57 @@ pub fn spawn_with_runner(
             runner,
             command,
             cwd,
-            stdout,
-            stderr,
+            stdio_mode: RunnerStdioMode::Files { stdout, stderr },
             extra_env,
             pipe_stdin,
         }),
     }
+}
+
+pub struct CapturedChild {
+    pub child: tokio::process::Child,
+    pub output_capture: OutputCaptureHandles,
+}
+
+pub fn spawn_with_runner_and_capture(
+    runner: &RunnerConfig,
+    command: &str,
+    cwd: &Path,
+    stdout: File,
+    stderr: File,
+    redaction_patterns: Vec<String>,
+    extra_env: &std::collections::HashMap<String, String>,
+    pipe_stdin: bool,
+) -> Result<CapturedChild> {
+    let mut child = match runner.executor {
+        RunnerExecutorKind::Shell => ShellRunnerExecutor.spawn(SpawnParams {
+            runner,
+            command,
+            cwd,
+            stdio_mode: RunnerStdioMode::Piped,
+            extra_env,
+            pipe_stdin,
+        })?,
+    };
+    let child_stdout = child
+        .stdout
+        .take()
+        .context("captured runner child missing stdout pipe")?;
+    let child_stderr = child
+        .stderr
+        .take()
+        .context("captured runner child missing stderr pipe")?;
+    let output_capture = spawn_sanitized_output_capture(
+        child_stdout,
+        child_stderr,
+        stdout,
+        stderr,
+        redaction_patterns,
+    );
+    Ok(CapturedChild {
+        child,
+        output_capture,
+    })
 }
 
 pub fn enforce_runner_policy(runner: &RunnerConfig, command: &str) -> Result<()> {

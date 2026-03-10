@@ -1,6 +1,6 @@
 use crate::config::StepScope;
 use crate::events::insert_event;
-use crate::runner::spawn_with_runner;
+use crate::runner::spawn_with_runner_and_capture;
 use crate::session_store;
 use crate::state::InnerState;
 use anyhow::{Context, Result};
@@ -89,16 +89,18 @@ pub(super) async fn spawn_phase_process(
     };
     // For stdin delivery in TTY mode, we already warned and fell back to arg
     let effective_pipe_stdin = req_pipe_stdin && !tty;
-    let mut child = spawn_with_runner(
+    let captured = spawn_with_runner_and_capture(
         &setup.runner,
         &command_to_run,
         workspace_root,
-        // Take files out of setup; they are consumed by spawn
         std::mem::replace(&mut setup.stdout_file, tempfile_placeholder()?),
         std::mem::replace(&mut setup.stderr_file, tempfile_placeholder()?),
+        setup.redaction_patterns.clone(),
         &setup.resolved_extra_env,
         effective_pipe_stdin,
     )?;
+    let mut child = captured.child;
+    let output_capture = Some(captured.output_capture);
 
     // Write prompt to child stdin for stdin delivery mode
     if effective_pipe_stdin {
@@ -125,6 +127,7 @@ pub(super) async fn spawn_phase_process(
         return Ok(SpawnResult {
             session_id,
             child_pid: None,
+            output_capture,
             tty_early_return: Some(crate::dto::RunResult {
                 success: true,
                 exit_code: 0,
@@ -174,6 +177,7 @@ pub(super) async fn spawn_phase_process(
     Ok(SpawnResult {
         session_id,
         child_pid,
+        output_capture,
         tty_early_return: None,
     })
 }

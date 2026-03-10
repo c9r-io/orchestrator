@@ -51,6 +51,7 @@ pub(super) struct PhaseSetup {
 pub(super) struct SpawnResult {
     pub session_id: Option<String>,
     pub child_pid: Option<u32>,
+    pub output_capture: Option<crate::output_capture::OutputCaptureHandles>,
     /// If `true`, the TTY early-return path was taken and the caller should return immediately.
     pub tty_early_return: Option<crate::dto::RunResult>,
 }

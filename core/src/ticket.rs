@@ -610,6 +610,36 @@ mod tests {
     }
 
     #[test]
+    fn test_create_ticket_for_qa_failure_preserves_redacted_snippets() {
+        let dir = std::env::temp_dir().join(format!("ticket-redacted-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+
+        let stdout_path = dir.join("stdout.log");
+        let stderr_path = dir.join("stderr.log");
+        std::fs::write(&stdout_path, "api=[REDACTED]").expect("write stdout log");
+        std::fs::write(&stderr_path, "secret=[REDACTED]").expect("write stderr log");
+
+        let result = create_ticket_for_qa_failure(
+            &dir,
+            "docs/ticket",
+            "test-task",
+            "docs/qa/auth.md",
+            1,
+            stdout_path.to_str().expect("stdout path should be utf-8"),
+            stderr_path.to_str().expect("stderr path should be utf-8"),
+        )
+        .expect("create ticket for qa failure");
+
+        let ticket_path = result.expect("ticket path should be returned");
+        let abs_path = dir.join(&ticket_path);
+        let content = std::fs::read_to_string(&abs_path).expect("read generated ticket");
+        assert!(content.contains("[REDACTED]"));
+        assert!(!content.contains("super-secret-value"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn test_collect_target_files_with_explicit_list() {
         let dir = std::env::temp_dir().join(format!("target-files-{}", uuid::Uuid::new_v4()));
         let qa_dir = dir.join("docs/qa");

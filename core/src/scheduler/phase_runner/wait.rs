@@ -1,5 +1,6 @@
 use crate::config::StepScope;
 use crate::events::insert_event;
+use crate::output_capture::OutputCaptureHandles;
 use crate::runner::kill_child_process_group;
 use crate::state::InnerState;
 use anyhow::Result;
@@ -25,6 +26,7 @@ pub(super) async fn wait_for_process(
     step_timeout_secs: Option<u64>,
     runtime: &RunningTask,
     child_pid: Option<u32>,
+    output_capture: Option<OutputCaptureHandles>,
     stdout_path: &Path,
     stderr_path: &Path,
 ) -> Result<WaitResult> {
@@ -147,6 +149,9 @@ pub(super) async fn wait_for_process(
     {
         let mut child_lock = runtime.child.lock().await;
         *child_lock = None;
+    }
+    if let Some(capture) = output_capture {
+        capture.wait().await?;
     }
 
     Ok(WaitResult {

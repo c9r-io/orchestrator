@@ -22,6 +22,7 @@ pub mod json_extract;
 pub mod metrics;
 pub mod migration;
 pub mod observability;
+pub mod output_capture;
 pub mod output_validation;
 pub mod prehook;
 pub mod qa_utils;
