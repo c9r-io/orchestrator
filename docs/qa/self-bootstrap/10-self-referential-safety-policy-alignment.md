@@ -19,6 +19,10 @@ FR-003 aligned self-referential safety behavior so every entry point uses the sa
 
 This document validates the shared evaluator through `orchestrator check`, task startup, and persisted policy audit events.
 
+## Environment Note
+
+Run this document against a freshly started daemon with an isolated app root and socket. Do not reuse a long-lived shared `data/` directory from unrelated QA runs.
+
 ---
 
 ## Scenario 1: `orchestrator check` Reports `binary_snapshot` As Warning-Only
