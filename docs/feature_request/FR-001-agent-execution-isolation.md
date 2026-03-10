@@ -1,7 +1,7 @@
 # FR-001 - Step 执行隔离与按需 Sandbox
 
 **Module**: orchestrator  
-**Status**: Proposed  
+**Status**: Partially Implemented  
 **Priority**: P0  
 **Created**: 2026-03-09  
 **Last Updated**: 2026-03-10  
@@ -22,6 +22,24 @@
 - `qa_testing` 需要最大宿主机测试能力，应允许直接在宿主机执行
 
 因此将 sandbox 绑定到 agent 会导致能力耦合和误用，无法优雅表达同一 agent 在不同 step 下的不同执行边界。
+
+## Implementation Status
+
+截至 2026-03-10，本需求已完成主路径落地：
+
+- 已支持 project-scoped `ExecutionProfile` 资源
+- 已支持 `WorkflowStep.execution_profile`
+- 已支持 agent step 的 `host` / `sandbox` 路由
+- 已支持 `execution_profile_applied` 与 `sandbox_denied` 事件
+- 已补充 QA 文档并完成主场景验证
+
+当前仍有未完成项：
+
+- `max_memory_mb` / `max_cpu_seconds` / `max_processes` / `max_open_files` 仍是配置模型字段，尚未形成稳定 enforcement
+- `sandbox_resource_exceeded` 与 `sandbox_network_blocked` 事件尚未实现
+- sandbox 网络 allowlist 仍未形成完整、可验证的后端能力
+
+因此本 FR 不应视为“完全关闭”，而应视为“核心能力已交付，剩余增强项待补完”。
 
 ## Problem Statement
 
@@ -155,6 +173,11 @@ spec:
 - `sandbox_resource_exceeded`
 - `sandbox_network_blocked`
 
+当前状态：
+
+- 已实现：`execution_profile_applied`、`sandbox_denied`
+- 未实现：`sandbox_resource_exceeded`、`sandbox_network_blocked`
+
 `task trace` 和 step 事件应展示：
 
 - profile 名称
@@ -191,3 +214,9 @@ spec:
 - `ExecutionProfile` 可在 project 内复用
 - `implement` / `ticket_fix` / `qa_testing` 可在同一 workflow 中使用不同执行模式
 - 旧工作流在未配置 profile 时可无破坏运行
+
+## Remaining Gaps
+
+- 为 sandbox profile 的资源限制字段补上真实执行期 enforcement
+- 为资源/网络拒绝补上结构化事件与可观测断言
+- 将 FR 状态从 `Partially Implemented` 推进到 `Implemented`
