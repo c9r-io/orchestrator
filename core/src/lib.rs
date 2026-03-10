@@ -29,6 +29,7 @@ pub mod resource;
 pub mod runner;
 pub mod scheduler;
 pub mod scheduler_service;
+pub mod secret_store_crypto;
 pub mod selection;
 pub mod service;
 pub mod session_store;

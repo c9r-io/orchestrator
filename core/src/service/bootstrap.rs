@@ -199,6 +199,7 @@ fn initialize_runtime(app_root: &Path) -> Result<(std::path::PathBuf, std::path:
         .with_context(|| format!("failed to create logs dir {}", logs_dir.display()))?;
     let db_path = data_dir.join("agent_orchestrator.db");
     init_schema(&db_path)?;
+    crate::secret_store_crypto::ensure_secret_key(app_root, &db_path)?;
     Ok((db_path, logs_dir))
 }
 
@@ -216,6 +217,7 @@ mod tests {
 
         assert!(db_path.exists());
         assert!(logs_dir.exists());
+        assert!(crate::secret_store_crypto::secret_key_path(temp.path()).exists());
     }
 
     #[test]

@@ -3,6 +3,11 @@ use crate::config_load::ConfigSelfHealChange;
 use crate::db::open_conn;
 use crate::dto::ConfigOverview;
 use crate::resource::export_manifest_resources;
+use crate::secret_store_crypto::{
+    decrypt_resource_spec_json, encrypt_resource_spec_json, ensure_secret_key,
+    load_existing_secret_key, redact_secret_data_map, resolve_app_root_from_db_path,
+    SecretEncryption,
+};
 use anyhow::{Context, Result};
 use rusqlite::{params, OptionalExtension, Transaction};
 use std::path::Path;
@@ -13,13 +18,39 @@ use super::{
 };
 
 pub(crate) fn serialize_config_snapshot(config: &OrchestratorConfig) -> Result<(String, String)> {
-    let yaml = export_manifest_resources(config)
+    let sanitized = sanitized_config_snapshot(config);
+    let yaml = export_manifest_resources(&sanitized)
         .iter()
         .map(crate::resource::Resource::to_yaml)
         .collect::<Result<Vec<_>>>()?
         .join("---\n");
-    let json_raw = serde_json::to_string(config).context("failed to serialize config json")?;
+    let json_raw =
+        serde_json::to_string(&sanitized).context("failed to serialize redacted config json")?;
     Ok((yaml, json_raw))
+}
+
+fn sanitized_config_snapshot(config: &OrchestratorConfig) -> OrchestratorConfig {
+    let mut sanitized = config.clone();
+    for project in sanitized.projects.values_mut() {
+        for store in project.env_stores.values_mut() {
+            if store.sensitive {
+                for value in store.data.values_mut() {
+                    *value = crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER.to_string();
+                }
+            }
+        }
+    }
+    for resource in sanitized.resource_store.resources_mut().values_mut() {
+        if resource.kind != "SecretStore" {
+            continue;
+        }
+        if let Some(spec) = resource.spec.as_object_mut() {
+            if let Some(data) = spec.get_mut("data").and_then(|value| value.as_object_mut()) {
+                redact_secret_data_map(data);
+            }
+        }
+    }
+    sanitized
 }
 
 pub(crate) fn persist_config_versioned(
@@ -161,6 +192,7 @@ pub(crate) fn persist_resource(
     tx: &Transaction<'_>,
     cr: &crate::crd::types::CustomResource,
     author: &str,
+    secret_encryption: &SecretEncryption,
 ) -> Result<()> {
     let project = cr
         .metadata
@@ -179,7 +211,13 @@ pub(crate) fn persist_resource(
             cr.metadata.name
         );
     }
-    let spec_json = serde_json::to_string(&cr.spec)?;
+    let spec_json = encrypt_resource_spec_json(
+        secret_encryption,
+        &cr.kind,
+        project,
+        &cr.metadata.name,
+        &cr.spec,
+    )?;
     let metadata_json = serde_json::to_string(&cr.metadata)?;
     let now = now_ts();
 
@@ -212,9 +250,10 @@ pub(crate) fn persist_all_resources(
     store: &crate::crd::store::ResourceStore,
     crds: &std::collections::HashMap<String, crate::crd::types::CustomResourceDefinition>,
     author: &str,
+    secret_encryption: &SecretEncryption,
 ) -> Result<()> {
     for cr in store.resources().values() {
-        persist_resource(tx, cr, author)?;
+        persist_resource(tx, cr, author, secret_encryption)?;
     }
     let now = now_ts();
     for (kind_name, crd) in crds {
@@ -260,6 +299,8 @@ pub fn load_all_resources(
     crate::crd::store::ResourceStore,
     std::collections::HashMap<String, crate::crd::types::CustomResourceDefinition>,
 )> {
+    let app_root = resolve_app_root_from_db_path(db_path)?;
+    let secret_encryption = load_existing_secret_key(&app_root)?.map(SecretEncryption::from_key);
     let conn = open_conn(db_path)?;
     // Check if resources table exists
     let table_exists: bool = conn
@@ -318,7 +359,14 @@ pub fn load_all_resources(
             continue;
         }
 
-        let spec: serde_json::Value = serde_json::from_str(&spec_json).unwrap_or_default();
+        let spec = decrypt_resource_spec_json(
+            secret_encryption.as_ref(),
+            &kind,
+            &project,
+            &name,
+            &spec_json,
+        )
+        .with_context(|| format!("failed to load resource {kind}/{project}/{name}"))?;
         let metadata: crate::cli_types::ResourceMetadata = serde_json::from_str(&metadata_json)
             .unwrap_or_else(|_| crate::cli_types::ResourceMetadata {
                 name: name.clone(),
@@ -419,15 +467,18 @@ pub fn persist_raw_config(
     let normalized = normalize_config(config);
     validate_agent_env_store_refs(&normalized)?;
     let (yaml, json_raw) = serialize_config_snapshot(&normalized)?;
+    let app_root = resolve_app_root_from_db_path(db_path)?;
+    let secret_encryption = SecretEncryption::from_key(ensure_secret_key(&app_root, db_path)?);
     let conn = open_conn(db_path)?;
     let tx = conn.unchecked_transaction()?;
     let (next_version, now) = persist_config_versioned(&tx, &yaml, &json_raw, author)?;
-    let _ = persist_all_resources(
+    persist_all_resources(
         &tx,
         &normalized.resource_store,
         &normalized.custom_resource_definitions,
         author,
-    );
+        &secret_encryption,
+    )?;
     tx.commit()?;
 
     Ok(ConfigOverview {
@@ -452,6 +503,8 @@ pub fn persist_config_and_reload(
     };
     let normalized = candidate.config.clone();
     let (yaml, json_raw) = serialize_config_snapshot(&normalized)?;
+    let secret_encryption =
+        SecretEncryption::from_key(ensure_secret_key(&state.app_root, &state.db_path)?);
 
     let conn = open_conn(&state.db_path)?;
     let tx = conn.unchecked_transaction()?;
@@ -467,12 +520,13 @@ pub fn persist_config_and_reload(
     }
     let (next_version, now) = persist_config_versioned(&tx, &yaml, &json_raw, author)?;
     // Also write per-resource rows (dual-write for v10+ compatibility)
-    let _ = persist_all_resources(
+    persist_all_resources(
         &tx,
         &normalized.resource_store,
         &normalized.custom_resource_definitions,
         author,
-    );
+        &secret_encryption,
+    )?;
     tx.commit()?;
 
     {
@@ -506,6 +560,8 @@ pub fn persist_config_for_delete(
 ) -> Result<ConfigOverview> {
     let normalized = normalize_config(config);
     let (yaml, json_raw) = serialize_config_snapshot(&normalized)?;
+    let secret_encryption =
+        SecretEncryption::from_key(ensure_secret_key(&state.app_root, &state.db_path)?);
 
     let conn = open_conn(&state.db_path)?;
     let tx = conn.unchecked_transaction()?;
@@ -520,12 +576,13 @@ pub fn persist_config_for_delete(
         )?;
     }
     let (next_version, now) = persist_config_versioned(&tx, &yaml, &json_raw, author)?;
-    let _ = persist_all_resources(
+    persist_all_resources(
         &tx,
         &normalized.resource_store,
         &normalized.custom_resource_definitions,
         author,
-    );
+        &secret_encryption,
+    )?;
     tx.commit()?;
 
     // Best-effort rebuild of active config; if validation fails, still persist
@@ -714,5 +771,74 @@ mod tests {
         assert!(beta.agents.contains_key("shared-agent"));
         assert!(alpha.workflows.contains_key("shared-wf"));
         assert!(beta.workflows.contains_key("shared-wf"));
+    }
+
+    #[test]
+    fn persist_raw_config_encrypts_secret_store_resources_and_redacts_snapshots() {
+        let (_temp_dir, db_path) = make_test_db();
+        let mut config = crate::config_load::tests::make_config_with_default_project();
+        config
+            .ensure_project(Some(crate::config::DEFAULT_PROJECT_ID))
+            .env_stores
+            .insert(
+                "api-keys".to_string(),
+                crate::config::EnvStoreConfig {
+                    data: [("OPENAI_API_KEY".to_string(), "sk-secret-123".to_string())].into(),
+                    sensitive: true,
+                },
+            );
+        crate::crd::writeback::reconcile_all_builtins(&mut config);
+
+        persist_raw_config(&db_path, config, "test-seed").expect("persist config");
+
+        let conn = open_conn(&db_path).expect("open sqlite");
+        let spec_json: String = conn
+            .query_row(
+                "SELECT spec_json FROM resources WHERE kind = 'SecretStore' AND name = 'api-keys'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query encrypted secret store resource");
+        assert!(!spec_json.contains("sk-secret-123"));
+        assert!(spec_json.contains("\"_encrypted\":true"));
+
+        let version_spec_json: String = conn
+            .query_row(
+                "SELECT spec_json FROM resource_versions WHERE kind = 'SecretStore' AND name = 'api-keys' ORDER BY version DESC LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query encrypted secret store version");
+        assert!(!version_spec_json.contains("sk-secret-123"));
+        assert!(version_spec_json.contains("\"_encrypted\":true"));
+
+        let snapshot: (String, String) = conn
+            .query_row(
+                "SELECT config_yaml, config_json FROM orchestrator_config_versions ORDER BY version DESC LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("query config snapshot");
+        assert!(!snapshot.0.contains("sk-secret-123"));
+        assert!(!snapshot.1.contains("sk-secret-123"));
+        assert!(snapshot
+            .0
+            .contains(crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER));
+        assert!(snapshot
+            .1
+            .contains(crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER));
+
+        let loaded = load_config(&db_path)
+            .expect("load config")
+            .expect("config should exist")
+            .0;
+        let loaded_value = loaded
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .and_then(|project| project.env_stores.get("api-keys"))
+            .and_then(|store| store.data.get("OPENAI_API_KEY"))
+            .cloned()
+            .expect("loaded decrypted secret value");
+        assert_eq!(loaded_value, "sk-secret-123");
     }
 }
