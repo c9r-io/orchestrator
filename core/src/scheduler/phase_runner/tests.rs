@@ -299,6 +299,42 @@ mod cases {
         );
     }
 
+    #[tokio::test]
+    async fn detect_sandbox_violation_detects_dns_block_as_network_event() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("stderr.log");
+        std::fs::write(&path, "curl: (6) Could not resolve host: example.com\n")
+            .expect("write stderr");
+
+        let info = detect_sandbox_violation(&sandbox_profile(), &wait_result(6, None), &path).await;
+
+        assert!(info.denied);
+        assert_eq!(info.event_type, Some("sandbox_network_blocked"));
+        assert_eq!(info.reason.as_deref(), Some("network_blocked"));
+        assert_eq!(info.network_target.as_deref(), Some("example.com"));
+        assert_eq!(
+            info.stderr_excerpt.as_deref(),
+            Some("curl: (6) Could not resolve host: example.com")
+        );
+    }
+
+    #[tokio::test]
+    async fn detect_sandbox_violation_keeps_network_target_empty_for_traceback_noise() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("stderr.log");
+        std::fs::write(
+            &path,
+            "Traceback (most recent call last):\nsocket.gaierror: [Errno 8] nodename nor servname provided, or not known\n",
+        )
+        .expect("write stderr");
+
+        let info = detect_sandbox_violation(&sandbox_profile(), &wait_result(1, None), &path).await;
+
+        assert!(info.denied);
+        assert_eq!(info.event_type, Some("sandbox_network_blocked"));
+        assert_eq!(info.network_target, None);
+    }
+
     #[test]
     fn heartbeat_sample_delta_exactly_at_threshold_counts_as_stagnant() {
         let mut progress = HeartbeatProgress::default();

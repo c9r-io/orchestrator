@@ -147,7 +147,6 @@ pub(super) async fn detect_sandbox_violation(
     }
 
     if execution_profile.network_mode == crate::config::ExecutionNetworkMode::Deny
-        && lower_stderr.contains("operation not permitted")
         && looks_like_network_denial(&lower_stderr)
     {
         return SandboxViolationInfo {
@@ -225,6 +224,13 @@ fn looks_like_network_denial(lower_stderr: &str) -> bool {
         || lower_stderr.contains("fetch")
         || lower_stderr.contains("connection")
         || lower_stderr.contains("socket")
+        || lower_stderr.contains("resolve")
+        || lower_stderr.contains("could not resolve host")
+        || lower_stderr.contains("name or service not known")
+        || lower_stderr.contains("temporary failure in name resolution")
+        || lower_stderr.contains("nodename nor servname provided")
+        || lower_stderr.contains("no route to host")
+        || lower_stderr.contains("network is unreachable")
 }
 
 fn detect_network_target(stderr_tail: &str) -> Option<String> {
@@ -234,15 +240,52 @@ fn detect_network_target(stderr_tail: &str) -> Option<String> {
             return Some(trimmed.to_string());
         }
     }
+    if let Some(host) = extract_host_from_stderr(stderr_tail) {
+        return Some(host);
+    }
     for token in stderr_tail.split_whitespace() {
         let trimmed = token.trim_matches(|ch: char| "()[]{}<>\",'\"".contains(ch));
         if trimmed.contains(':')
             && !trimmed.starts_with('/')
+            && !trimmed.ends_with(':')
             && trimmed.chars().any(|ch| ch.is_ascii_alphabetic())
+            && (trimmed.contains('.') || has_numeric_port_suffix(trimmed))
             && trimmed != "curl:"
             && trimmed != "wget:"
         {
             return Some(trimmed.to_string());
+        }
+    }
+    None
+}
+
+fn has_numeric_port_suffix(value: &str) -> bool {
+    let Some((host, port)) = value.rsplit_once(':') else {
+        return false;
+    };
+    !host.is_empty() && !port.is_empty() && port.chars().all(|ch| ch.is_ascii_digit())
+}
+
+fn extract_host_from_stderr(stderr_tail: &str) -> Option<String> {
+    for line in stderr_tail.lines() {
+        let lower = line.to_lowercase();
+        for marker in [
+            "could not resolve host:",
+            "failed to connect to",
+            "connection to",
+        ] {
+            if let Some(idx) = lower.find(marker) {
+                let value = line[idx + marker.len()..]
+                    .trim()
+                    .trim_matches(|ch: char| "()[]{}<>\",'\"".contains(ch))
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .trim_matches(|ch: char| ",.;".contains(ch));
+                if !value.is_empty() {
+                    return Some(value.to_string());
+                }
+            }
         }
     }
     None

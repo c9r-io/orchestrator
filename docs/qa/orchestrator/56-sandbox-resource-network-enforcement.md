@@ -152,7 +152,8 @@ Ensure a sandboxed step cannot perform outbound network access when `network_mod
      name: net-probe
    spec:
      capabilities: [implement]
-     command: "curl --silent --show-error --fail https://example.com/"
+     command: |
+       python3 -c "import socket; socket.getaddrinfo('example.com', 443)"
    ---
    apiVersion: orchestrator.dev/v2
    kind: Workflow
@@ -184,7 +185,8 @@ Ensure a sandboxed step cannot perform outbound network access when `network_mod
 - The run exits non-zero.
 - An event row exists with `event_type='sandbox_network_blocked'`.
 - The payload includes `reason` containing `network_blocked`.
-- The payload includes either `network_target` or a stderr excerpt showing the blocked outbound connection.
+- The payload includes a `stderr_excerpt` showing DNS or connection blocking.
+- `network_target` is `example.com` when host extraction succeeds; if not, the event is still valid as long as the stderr excerpt is present.
 
 ---
 
