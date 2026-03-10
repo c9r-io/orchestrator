@@ -101,7 +101,7 @@ qa_apply_fixture_additive() {
     qa_error "QA_PROJECT must be resolved before applying fixture: $manifest"
     exit 2
   fi
-  "$bin" init --force >/dev/null 2>&1 || true
+  "$bin" init >/dev/null 2>&1 || true
   "$bin" apply -f "$manifest" --project "$QA_PROJECT" >/dev/null 2>&1 || {
     qa_error "Failed to apply config manifest: $manifest"
     exit 2
@@ -114,18 +114,30 @@ qa_prepare_project() {
   local root
   local sample_dir
   local project_root
+  local manifest_tmp
   bin="$(qa_binary_path)"
-  project_root="workspace/$QA_PROJECT"
-  "$bin" apply --project "$QA_PROJECT" \
-    --workspace "$QA_WORKSPACE" \
-    --workflow "$workflow" \
-    --root-path "$project_root" \
-    --qa-target "docs/qa" \
-    --ticket-dir "fixtures/ticket" \
-    --force >/dev/null
   root="$(qa_repo_root)"
+  project_root="workspace/$QA_PROJECT"
+
+  manifest_tmp="$(mktemp)"
+  cat > "$manifest_tmp" <<YAML
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: ${QA_WORKSPACE}
+spec:
+  root_path: ${project_root}
+  qa_targets:
+    - docs/qa
+  ticket_dir: fixtures/ticket
+YAML
+
   sample_dir="$root/$project_root/docs/qa"
-  mkdir -p "$sample_dir"
+  mkdir -p "$sample_dir" "$root/$project_root/fixtures/ticket"
+
+  "$bin" init >/dev/null 2>&1 || true
+  "$bin" apply -f "$manifest_tmp" --project "$QA_PROJECT" >/dev/null
+  rm -f "$manifest_tmp"
   cat >"$sample_dir/qa-smoke.md" <<'EOF'
 # QA Smoke
 

@@ -17,7 +17,7 @@ spec:
     - qa
     - fix
     - retest
-  command: "echo '{\"confidence\":0.33,\"quality_score\":0.2,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"regression\",\"content\":{\"title\":\"three-phase-qa-fail\",\"qa_file\":\"target-file\"}}]}' && exit 1"
+  command: "echo '{\"confidence\":0.33,\"quality_score\":0.2,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"regression\",\"content\":{\"title\":\"three-phase-qa-fail\",\"qa_file\":\"target-file\"}}]}'"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow
