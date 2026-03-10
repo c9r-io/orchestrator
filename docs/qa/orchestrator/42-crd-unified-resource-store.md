@@ -37,6 +37,14 @@ These were unified into a **single ResourceStore** that acts as the write point 
 - Orchestrator binary is built
 - A fresh or existing config database
 
+### Local Runner Setup
+
+When running from a repo checkout instead of an installed binary, use an explicit command prefix so the steps are copy-paste-ready:
+
+```bash
+ORCH="cargo run -q -p orchestrator-cli --"
+```
+
 ### Goal
 Verify that `normalize_config` ensures builtin CRD definitions exist and that the ResourceStore is populated from the normalized project-scoped config snapshot.
 
@@ -44,12 +52,12 @@ Verify that `normalize_config` ensures builtin CRD definitions exist and that th
 
 1. Initialize the orchestrator:
    ```bash
-   orchestrator init
+   ${ORCH:-orchestrator} init
    ```
 
 2. Apply a simple agent to populate legacy fields:
    ```bash
-   cat <<'EOF' | orchestrator apply -f -
+   cat <<'EOF' | ${ORCH:-orchestrator} apply -f -
    apiVersion: orchestrator.dev/v2
    kind: Agent
    metadata:
@@ -61,7 +69,7 @@ Verify that `normalize_config` ensures builtin CRD definitions exist and that th
 
 3. Verify the agent exists:
    ```bash
-   orchestrator get agent/test-bootstrap-agent -o yaml
+   ${ORCH:-orchestrator} get agent/test-bootstrap-agent -o yaml
    ```
 
 4. Verify via unit tests that all 9 builtin CRDs are registered:
@@ -71,7 +79,7 @@ Verify that `normalize_config` ensures builtin CRD definitions exist and that th
 
 5. Verify the ResourceStore is populated after normalization:
    ```
-   cargo test --lib "config_load::normalize::tests::normalize_config_rebuilds_resource_store_from_legacy"
+   cargo test --lib "config_load::normalize::tests::normalize_config_rebuilds_resource_store_from_config_snapshot"
    ```
 
 ### Expected
@@ -79,6 +87,13 @@ Verify that `normalize_config` ensures builtin CRD definitions exist and that th
 - Agent is created and retrievable
 - Builtin CRD definitions are present after normalization
 - ResourceStore contains entries matching the project-scoped config snapshot after normalization
+
+### Troubleshooting
+
+| Symptom | Likely Cause | Action |
+|---|---|---|
+| `orchestrator: command not found` | Binary not installed on `PATH` | Define `ORCH="cargo run -q -p orchestrator-cli --"` and rerun the scenario |
+| CLI steps fail before unit tests run | Local runtime not initialized yet | Re-run step 1, then continue with the unit-test checks in steps 4 and 5 |
 
 ---
 
