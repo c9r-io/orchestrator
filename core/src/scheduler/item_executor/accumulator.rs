@@ -321,6 +321,8 @@ impl StepExecutionAccumulator {
     pub fn apply_captures(
         &mut self,
         captures: &[crate::config::CaptureDecl],
+        logs_dir: &Path,
+        task_id: &str,
         step_id: &str,
         result: &crate::dto::RunResult,
     ) {
@@ -350,8 +352,8 @@ impl StepExecutionAccumulator {
                 CaptureSource::Stdout => {
                     if let Some(ref output) = result.output {
                         spill_large_var(
-                            Path::new(""),
-                            "",
+                            logs_dir,
+                            task_id,
                             &cap.var,
                             output.stdout.clone(),
                             &mut self.pipeline_vars,

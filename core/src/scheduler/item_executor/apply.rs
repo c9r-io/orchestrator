@@ -36,7 +36,13 @@ pub(super) async fn apply_step_results(
 ) -> Result<bool> {
     // 3. Capture outputs
     acc.exit_codes.insert(step.id.clone(), result.exit_code);
-    acc.apply_captures(&step.behavior.captures, &step.id, result);
+    acc.apply_captures(
+        &step.behavior.captures,
+        &state.logs_dir,
+        task_id,
+        &step.id,
+        result,
+    );
     acc.step_ran.insert(step.id.clone(), true);
     acc.apply_run_diagnostics(result);
 

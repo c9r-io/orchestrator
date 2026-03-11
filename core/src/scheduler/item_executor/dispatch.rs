@@ -533,7 +533,13 @@ async fn execute_builtin_step_dispatch(
                 sandbox_resource_kind: None,
                 sandbox_network_target: None,
             };
-            acc.apply_captures(&step.behavior.captures, &step.id, &synth_result);
+            acc.apply_captures(
+                &step.behavior.captures,
+                &state.logs_dir,
+                task_id,
+                &step.id,
+                &synth_result,
+            );
             Ok(BuiltinStepOutcome::Handled { success: passed })
         }
 

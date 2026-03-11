@@ -1,21 +1,21 @@
 use crate::config::OrchestratorConfig;
+#[cfg(test)]
+use crate::db::open_conn;
 use crate::dto::ConfigOverview;
 use crate::persistence::repository::{ConfigRepository, HealLogEntry, SqliteConfigRepository};
 use crate::resource::export_manifest_resources;
 use crate::secret_store_crypto::redact_secret_data_map;
 use anyhow::{Context, Result};
 #[cfg(test)]
-use crate::db::open_conn;
-#[cfg(test)]
 use rusqlite::params;
 use std::path::Path;
 
+#[cfg(test)]
+use super::now_ts;
 use super::{
     build_active_config, build_active_config_for_project, normalize_config,
     validate_agent_env_store_refs, ResourceRemoval,
 };
-#[cfg(test)]
-use super::now_ts;
 
 pub(crate) fn serialize_config_snapshot(config: &OrchestratorConfig) -> Result<(String, String)> {
     let sanitized = sanitized_config_snapshot(config);

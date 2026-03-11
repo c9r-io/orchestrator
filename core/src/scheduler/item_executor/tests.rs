@@ -558,13 +558,14 @@ fn merge_task_pipeline_vars_preserves_existing_build_errors() {
 #[test]
 fn apply_captures_exit_code() {
     let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+    let temp = tempfile::tempdir().expect("tempdir");
     let captures = vec![CaptureDecl {
         var: "qa_exit".to_string(),
         source: CaptureSource::ExitCode,
     }];
     let result = make_run_result(42, false, None);
 
-    acc.apply_captures(&captures, "qa_testing", &result);
+    acc.apply_captures(&captures, temp.path(), "task-1", "qa_testing", &result);
 
     assert_eq!(*acc.exit_codes.get("qa_testing").unwrap(), 42);
     assert_eq!(acc.pipeline_vars.vars.get("qa_exit").unwrap(), "42");
@@ -573,13 +574,14 @@ fn apply_captures_exit_code() {
 #[test]
 fn apply_captures_failed_flag() {
     let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+    let temp = tempfile::tempdir().expect("tempdir");
     let captures = vec![CaptureDecl {
         var: "qa_failed".to_string(),
         source: CaptureSource::FailedFlag,
     }];
     let result = make_run_result(1, false, None);
 
-    acc.apply_captures(&captures, "qa", &result);
+    acc.apply_captures(&captures, temp.path(), "task-1", "qa", &result);
 
     assert!(*acc.flags.get("qa_failed").unwrap());
     assert_eq!(acc.pipeline_vars.vars.get("qa_failed").unwrap(), "true");
@@ -588,13 +590,14 @@ fn apply_captures_failed_flag() {
 #[test]
 fn apply_captures_success_flag() {
     let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+    let temp = tempfile::tempdir().expect("tempdir");
     let captures = vec![CaptureDecl {
         var: "fix_success".to_string(),
         source: CaptureSource::SuccessFlag,
     }];
     let result = make_run_result(0, true, None);
 
-    acc.apply_captures(&captures, "fix", &result);
+    acc.apply_captures(&captures, temp.path(), "task-1", "fix", &result);
 
     assert!(*acc.flags.get("fix_success").unwrap());
     assert_eq!(acc.pipeline_vars.vars.get("fix_success").unwrap(), "true");
@@ -603,13 +606,14 @@ fn apply_captures_success_flag() {
 #[test]
 fn apply_captures_success_flag_on_failure() {
     let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+    let temp = tempfile::tempdir().expect("tempdir");
     let captures = vec![CaptureDecl {
         var: "fix_success".to_string(),
         source: CaptureSource::SuccessFlag,
     }];
     let result = make_run_result(1, false, None);
 
-    acc.apply_captures(&captures, "fix", &result);
+    acc.apply_captures(&captures, temp.path(), "task-1", "fix", &result);
 
     assert!(!*acc.flags.get("fix_success").unwrap());
 }
@@ -632,13 +636,14 @@ fn apply_captures_stderr() {
         test_failures: vec![],
     };
     let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+    let temp = tempfile::tempdir().expect("tempdir");
     let captures = vec![CaptureDecl {
         var: "qa_stderr".to_string(),
         source: CaptureSource::Stderr,
     }];
     let result = make_run_result(0, true, Some(output));
 
-    acc.apply_captures(&captures, "qa", &result);
+    acc.apply_captures(&captures, temp.path(), "task-1", "qa", &result);
 
     assert_eq!(
         acc.pipeline_vars.vars.get("qa_stderr").unwrap(),
@@ -649,13 +654,14 @@ fn apply_captures_stderr() {
 #[test]
 fn apply_captures_stdout_no_output_is_noop() {
     let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+    let temp = tempfile::tempdir().expect("tempdir");
     let captures = vec![CaptureDecl {
         var: "qa_stdout".to_string(),
         source: CaptureSource::Stdout,
     }];
     let result = make_run_result(0, true, None);
 
-    acc.apply_captures(&captures, "qa", &result);
+    acc.apply_captures(&captures, temp.path(), "task-1", "qa", &result);
 
     assert!(!acc.pipeline_vars.vars.contains_key("qa_stdout"));
 }
@@ -663,13 +669,14 @@ fn apply_captures_stdout_no_output_is_noop() {
 #[test]
 fn apply_captures_stderr_no_output_is_noop() {
     let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+    let temp = tempfile::tempdir().expect("tempdir");
     let captures = vec![CaptureDecl {
         var: "qa_stderr".to_string(),
         source: CaptureSource::Stderr,
     }];
     let result = make_run_result(0, true, None);
 
-    acc.apply_captures(&captures, "qa", &result);
+    acc.apply_captures(&captures, temp.path(), "task-1", "qa", &result);
 
     assert!(!acc.pipeline_vars.vars.contains_key("qa_stderr"));
 }
@@ -677,6 +684,7 @@ fn apply_captures_stderr_no_output_is_noop() {
 #[test]
 fn apply_captures_multiple() {
     let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+    let temp = tempfile::tempdir().expect("tempdir");
     let captures = vec![
         CaptureDecl {
             var: "exit".to_string(),
@@ -693,11 +701,52 @@ fn apply_captures_multiple() {
     ];
     let result = make_run_result(0, true, None);
 
-    acc.apply_captures(&captures, "step1", &result);
+    acc.apply_captures(&captures, temp.path(), "task-1", "step1", &result);
 
     assert_eq!(acc.pipeline_vars.vars.get("exit").unwrap(), "0");
     assert!(!*acc.flags.get("failed").unwrap());
     assert!(*acc.flags.get("ok").unwrap());
+}
+
+#[test]
+fn apply_captures_stdout_spills_under_task_logs_dir() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+    let captures = vec![CaptureDecl {
+        var: "plan_output".to_string(),
+        source: CaptureSource::Stdout,
+    }];
+    let output = crate::collab::AgentOutput {
+        run_id: uuid::Uuid::new_v4(),
+        agent_id: "planner".to_string(),
+        phase: "plan".to_string(),
+        exit_code: 0,
+        stdout: "CHAIN_PLAN".to_string(),
+        stderr: String::new(),
+        artifacts: vec![],
+        metrics: Default::default(),
+        confidence: 0.0,
+        quality_score: 0.0,
+        created_at: chrono::Utc::now(),
+        build_errors: vec![],
+        test_failures: vec![],
+    };
+    let result = make_run_result(0, true, Some(output));
+
+    acc.apply_captures(&captures, temp.path(), "task-123", "plan", &result);
+
+    let spill_path = temp.path().join("task-123").join("plan_output.txt");
+    assert_eq!(
+        acc.pipeline_vars
+            .vars
+            .get("plan_output_path")
+            .expect("path var should be set"),
+        &spill_path.to_string_lossy().to_string()
+    );
+    assert_eq!(
+        std::fs::read_to_string(&spill_path).expect("read spill file"),
+        "CHAIN_PLAN"
+    );
 }
 
 // ── to_prehook_context() ─────────────────
