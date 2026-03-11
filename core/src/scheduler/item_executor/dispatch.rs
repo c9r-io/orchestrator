@@ -169,13 +169,15 @@ pub async fn process_item_filtered(
 
         match execute_step(
             state,
-            task_id,
-            item,
-            task_item_paths,
-            StepEventContext::top_level(),
-            step,
-            task_ctx,
-            runtime,
+            StepExecutionRequest {
+                task_id,
+                item,
+                task_item_paths,
+                event_ctx: StepEventContext::top_level(),
+                step,
+                task_ctx,
+                runtime,
+            },
             acc,
         )
         .await?
@@ -231,6 +233,16 @@ impl<'a> StepEventContext<'a> {
     }
 }
 
+struct StepExecutionRequest<'a> {
+    task_id: &'a str,
+    item: &'a crate::dto::TaskItemRow,
+    task_item_paths: &'a [String],
+    event_ctx: StepEventContext<'a>,
+    step: &'a TaskExecutionStep,
+    task_ctx: &'a TaskRuntimeContext,
+    runtime: &'a RunningTask,
+}
+
 enum StepExecutionOutcome {
     Completed { success: bool },
     EarlyReturn,
@@ -272,10 +284,7 @@ fn build_step_skipped_payload(
     payload
 }
 
-fn synthetic_chain_result(
-    step: &TaskExecutionStep,
-    success: bool,
-) -> crate::dto::RunResult {
+fn synthetic_chain_result(step: &TaskExecutionStep, success: bool) -> crate::dto::RunResult {
     let output = crate::collab::AgentOutput::new(
         uuid::Uuid::new_v4(),
         "chain".to_string(),
@@ -307,16 +316,19 @@ fn synthetic_chain_result(
 
 fn execute_step<'a>(
     state: &'a Arc<InnerState>,
-    task_id: &'a str,
-    item: &'a crate::dto::TaskItemRow,
-    task_item_paths: &'a [String],
-    event_ctx: StepEventContext<'a>,
-    step: &'a TaskExecutionStep,
-    task_ctx: &'a TaskRuntimeContext,
-    runtime: &'a RunningTask,
+    request: StepExecutionRequest<'a>,
     acc: &'a mut StepExecutionAccumulator,
 ) -> Pin<Box<dyn Future<Output = Result<StepExecutionOutcome>> + Send + 'a>> {
     Box::pin(async move {
+        let StepExecutionRequest {
+            task_id,
+            item,
+            task_item_paths,
+            event_ctx,
+            step,
+            task_ctx,
+            runtime,
+        } = request;
         let item_id = item.id.as_str();
         let phase = step.id.as_str();
 
@@ -483,14 +495,7 @@ async fn execute_builtin_step_dispatch(
             if let Some(parent_step) = parent_step {
                 payload["parent_step"] = json!(parent_step);
             }
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                finish_event_type,
-                payload,
-            )
-            .await?;
+            insert_event(state, task_id, Some(item_id), finish_event_type, payload).await?;
 
             // Apply behavior-driven status transitions for self_test
             if !passed {
@@ -556,14 +561,7 @@ async fn execute_builtin_step_dispatch(
                     if let Some(parent_step) = parent_step {
                         payload["parent_step"] = json!(parent_step);
                     }
-                    insert_event(
-                        state,
-                        task_id,
-                        Some(item_id),
-                        finish_event_type,
-                        payload,
-                    )
-                    .await?;
+                    insert_event(state, task_id, Some(item_id), finish_event_type, payload).await?;
 
                     // Invariant checkpoint: before_restart
                     let inv_results = crate::scheduler::invariant::evaluate_invariants(
@@ -622,14 +620,7 @@ async fn execute_builtin_step_dispatch(
                     if let Some(parent_step) = parent_step {
                         payload["parent_step"] = json!(parent_step);
                     }
-                    insert_event(
-                        state,
-                        task_id,
-                        Some(item_id),
-                        finish_event_type,
-                        payload,
-                    )
-                    .await?;
+                    insert_event(state, task_id, Some(item_id), finish_event_type, payload).await?;
 
                     // Build or verification failed — apply on_failure behavior
                     if exit_code != 0 {
@@ -669,14 +660,7 @@ async fn execute_builtin_step_dispatch(
             if let Some(parent_step) = parent_step {
                 payload["parent_step"] = json!(parent_step);
             }
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                finish_event_type,
-                payload,
-            )
-            .await?;
+            insert_event(state, task_id, Some(item_id), finish_event_type, payload).await?;
             Ok(BuiltinStepOutcome::Handled { success: true })
         }
 
@@ -692,14 +676,7 @@ async fn execute_builtin_step_dispatch(
             if let Some(parent_step) = parent_step {
                 payload["parent_step"] = json!(parent_step);
             }
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                finish_event_type,
-                payload,
-            )
-            .await?;
+            insert_event(state, task_id, Some(item_id), finish_event_type, payload).await?;
             Ok(BuiltinStepOutcome::Handled { success: true })
         }
 
@@ -739,16 +716,19 @@ async fn execute_agent_step(
                 step_ctx.pipeline_vars = acc.pipeline_vars.clone();
                 match execute_step(
                     state,
-                    task_id,
-                    item,
-                    task_item_paths,
-                    StepEventContext::chain_child(&step.id),
-                    chain_step,
-                    &step_ctx,
-                    runtime,
+                    StepExecutionRequest {
+                        task_id,
+                        item,
+                        task_item_paths,
+                        event_ctx: StepEventContext::chain_child(&step.id),
+                        step: chain_step,
+                        task_ctx: &step_ctx,
+                        runtime,
+                    },
                     acc,
                 )
-                .await? {
+                .await?
+                {
                     StepExecutionOutcome::Completed { success } => {
                         if !success {
                             chain_passed = false;
@@ -784,7 +764,7 @@ async fn execute_agent_step(
 
             let (result, new_pipeline) = match exec_result {
                 Ok(val) => val,
-                    Err(e) => {
+                Err(e) => {
                     let mut payload = json!({
                         "step": step.id,
                         "step_id": step.id,

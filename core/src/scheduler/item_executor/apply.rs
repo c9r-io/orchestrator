@@ -74,14 +74,7 @@ pub(super) async fn apply_step_results(
                 if let Some(parent_step) = parent_step {
                     payload["parent_step"] = json!(parent_step);
                 }
-                insert_event(
-                    state,
-                    task_id,
-                    Some(item_id),
-                    finish_event_type,
-                    payload,
-                )
-                .await?;
+                insert_event(state, task_id, Some(item_id), finish_event_type, payload).await?;
                 return Ok(true);
             }
         }

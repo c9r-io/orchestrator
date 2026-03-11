@@ -622,7 +622,10 @@ mod tests {
 
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert_eq!(config.steps[0].chain_steps.len(), 2);
-        assert_eq!(config.steps[0].behavior.execution, crate::config::ExecutionMode::Chain);
+        assert_eq!(
+            config.steps[0].behavior.execution,
+            crate::config::ExecutionMode::Chain
+        );
         assert_eq!(
             config.steps[0].chain_steps[0].command.as_deref(),
             Some("printf 'CHAIN_PLAN'")
