@@ -1,5 +1,6 @@
-use crate::async_database::{flatten_err, AsyncDatabase};
+use crate::async_database::AsyncDatabase;
 use crate::config_load::now_ts;
+use crate::persistence::repository::{SessionRepository, SqliteSessionRepository};
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -279,31 +280,20 @@ impl<'a> From<&NewSession<'a>> for OwnedNewSession {
 }
 
 pub struct AsyncSessionStore {
-    async_db: Arc<AsyncDatabase>,
+    repository: Arc<dyn SessionRepository>,
 }
 
 impl AsyncSessionStore {
     pub fn new(async_db: Arc<AsyncDatabase>) -> Self {
-        Self { async_db }
+        Self::with_repository(Arc::new(SqliteSessionRepository::new(async_db)))
+    }
+
+    pub fn with_repository(repository: Arc<dyn SessionRepository>) -> Self {
+        Self { repository }
     }
 
     pub async fn insert_session(&self, s: OwnedNewSession) -> Result<()> {
-        self.async_db
-            .writer()
-            .call(move |conn| {
-                let now = now_ts();
-                conn.execute(
-                    "INSERT INTO agent_sessions (id, task_id, task_item_id, step_id, phase, agent_id, state, pid, pty_backend, cwd, command, input_fifo_path, stdout_path, stderr_path, transcript_path, output_json_path, writer_client_id, created_at, updated_at, ended_at, exit_code) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, NULL, ?17, ?17, NULL, NULL)",
-                    params![
-                        s.id, s.task_id, s.task_item_id, s.step_id, s.phase, s.agent_id,
-                        s.state, s.pid, s.pty_backend, s.cwd, s.command, s.input_fifo_path,
-                        s.stdout_path, s.stderr_path, s.transcript_path, s.output_json_path, now
-                    ],
-                )?;
-                Ok(())
-            })
-            .await
-            .map_err(flatten_err)
+        self.repository.insert_session(s).await
     }
 
     pub async fn update_session_state(
@@ -313,47 +303,17 @@ impl AsyncSessionStore {
         exit_code: Option<i64>,
         ended: bool,
     ) -> Result<()> {
-        let session_id = session_id.to_owned();
-        let state = state.to_owned();
-        self.async_db
-            .writer()
-            .call(move |conn| {
-                let now = now_ts();
-                let ended_at = if ended { Some(now.clone()) } else { None };
-                conn.execute(
-                    "UPDATE agent_sessions SET state = ?2, updated_at = ?3, ended_at = COALESCE(?4, ended_at), exit_code = COALESCE(?5, exit_code) WHERE id = ?1",
-                    params![session_id, state, now, ended_at, exit_code],
-                )?;
-                Ok(())
-            })
+        self.repository
+            .update_session_state(session_id, state, exit_code, ended)
             .await
-            .map_err(flatten_err)
     }
 
     pub async fn update_session_pid(&self, session_id: &str, pid: i64) -> Result<()> {
-        let session_id = session_id.to_owned();
-        self.async_db
-            .writer()
-            .call(move |conn| {
-                conn.execute(
-                    "UPDATE agent_sessions SET pid = ?2, updated_at = ?3 WHERE id = ?1",
-                    params![session_id, pid, now_ts()],
-                )?;
-                Ok(())
-            })
-            .await
-            .map_err(flatten_err)
+        self.repository.update_session_pid(session_id, pid).await
     }
 
     pub async fn load_session(&self, session_id: &str) -> Result<Option<SessionRow>> {
-        let session_id = session_id.to_owned();
-        self.async_db
-            .reader()
-            .call(move |conn| {
-                load_session(conn, &session_id).map_err(|e| tokio_rusqlite::Error::Other(e.into()))
-            })
-            .await
-            .map_err(flatten_err)
+        self.repository.load_session(session_id).await
     }
 
     pub async fn load_active_session_for_task_step(
@@ -361,65 +321,25 @@ impl AsyncSessionStore {
         task_id: &str,
         step_id: &str,
     ) -> Result<Option<SessionRow>> {
-        let task_id = task_id.to_owned();
-        let step_id = step_id.to_owned();
-        self.async_db
-            .reader()
-            .call(move |conn| {
-                load_active_session_for_task_step(conn, &task_id, &step_id)
-                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
-            })
+        self.repository
+            .load_active_session_for_task_step(task_id, step_id)
             .await
-            .map_err(flatten_err)
     }
 
     pub async fn list_task_sessions(&self, task_id: &str) -> Result<Vec<SessionRow>> {
-        let task_id = task_id.to_owned();
-        self.async_db
-            .reader()
-            .call(move |conn| {
-                list_task_sessions(conn, &task_id)
-                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
-            })
-            .await
-            .map_err(flatten_err)
+        self.repository.list_task_sessions(task_id).await
     }
 
     pub async fn acquire_writer(&self, session_id: &str, client_id: &str) -> Result<bool> {
-        let session_id = session_id.to_owned();
-        let client_id = client_id.to_owned();
-        self.async_db
-            .writer()
-            .call(move |conn| {
-                acquire_writer(conn, &session_id, &client_id)
-                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
-            })
-            .await
-            .map_err(flatten_err)
+        self.repository.acquire_writer(session_id, client_id).await
     }
 
     pub async fn attach_reader(&self, session_id: &str, client_id: &str) -> Result<()> {
-        let session_id = session_id.to_owned();
-        let client_id = client_id.to_owned();
-        self.async_db
-            .writer()
-            .call(move |conn| {
-                attach_reader(conn, &session_id, &client_id)
-                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
-            })
-            .await
-            .map_err(flatten_err)
+        self.repository.attach_reader(session_id, client_id).await
     }
 
     pub async fn cleanup_stale_sessions(&self, max_age_hours: u64) -> Result<usize> {
-        self.async_db
-            .writer()
-            .call(move |conn| {
-                cleanup_stale_sessions(conn, max_age_hours)
-                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
-            })
-            .await
-            .map_err(flatten_err)
+        self.repository.cleanup_stale_sessions(max_age_hours).await
     }
 
     pub async fn release_attachment(
@@ -428,17 +348,9 @@ impl AsyncSessionStore {
         client_id: &str,
         reason: &str,
     ) -> Result<()> {
-        let session_id = session_id.to_owned();
-        let client_id = client_id.to_owned();
-        let reason = reason.to_owned();
-        self.async_db
-            .writer()
-            .call(move |conn| {
-                release_attachment(conn, &session_id, &client_id, &reason)
-                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
-            })
+        self.repository
+            .release_attachment(session_id, client_id, reason)
             .await
-            .map_err(flatten_err)
     }
 }
 

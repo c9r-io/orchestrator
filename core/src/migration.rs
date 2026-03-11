@@ -9,6 +9,22 @@ pub struct Migration {
     pub up: fn(&Connection) -> Result<()>,
 }
 
+fn ensure_column_exists(conn: &Connection, table: &str, column: &str, ddl: &str) -> Result<()> {
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .with_context(|| format!("failed to read schema for {table}"))?;
+    let columns = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+
+    if !columns.iter().any(|existing| existing == column) {
+        conn.execute(ddl, [])
+            .with_context(|| format!("failed to add column {table}.{column}"))?;
+    }
+
+    Ok(())
+}
+
 /// Returns the current schema version (0 if no migrations have run).
 pub fn current_version(conn: &Connection) -> Result<u32> {
     conn.execute_batch(
@@ -304,134 +320,133 @@ fn m0001_baseline_schema(conn: &Connection) -> Result<()> {
 
     // Safety net for partially-migrated databases: ensure all columns exist
     // (no-op if the CREATE TABLE above already created them inline)
-    use crate::db::ensure_column;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "tasks",
         "workspace_id",
         "ALTER TABLE tasks ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "tasks",
         "workflow_id",
         "ALTER TABLE tasks ADD COLUMN workflow_id TEXT NOT NULL DEFAULT ''",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "tasks",
         "project_id",
         "ALTER TABLE tasks ADD COLUMN project_id TEXT NOT NULL DEFAULT ''",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "tasks",
         "workspace_root",
         "ALTER TABLE tasks ADD COLUMN workspace_root TEXT NOT NULL DEFAULT ''",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "tasks",
         "qa_targets_json",
         "ALTER TABLE tasks ADD COLUMN qa_targets_json TEXT NOT NULL DEFAULT '[]'",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "tasks",
         "ticket_dir",
         "ALTER TABLE tasks ADD COLUMN ticket_dir TEXT NOT NULL DEFAULT ''",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "tasks",
         "execution_plan_json",
         "ALTER TABLE tasks ADD COLUMN execution_plan_json TEXT NOT NULL DEFAULT '{}'",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "tasks",
         "loop_mode",
         "ALTER TABLE tasks ADD COLUMN loop_mode TEXT NOT NULL DEFAULT 'once'",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "tasks",
         "current_cycle",
         "ALTER TABLE tasks ADD COLUMN current_cycle INTEGER NOT NULL DEFAULT 0",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "tasks",
         "init_done",
         "ALTER TABLE tasks ADD COLUMN init_done INTEGER NOT NULL DEFAULT 0",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "command_runs",
         "workspace_id",
         "ALTER TABLE command_runs ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "command_runs",
         "agent_id",
         "ALTER TABLE command_runs ADD COLUMN agent_id TEXT NOT NULL DEFAULT ''",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "command_runs",
         "project_id",
         "ALTER TABLE command_runs ADD COLUMN project_id TEXT NOT NULL DEFAULT ''",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "command_runs",
         "output_json",
         "ALTER TABLE command_runs ADD COLUMN output_json TEXT NOT NULL DEFAULT '{}'",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "command_runs",
         "artifacts_json",
         "ALTER TABLE command_runs ADD COLUMN artifacts_json TEXT NOT NULL DEFAULT '[]'",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "command_runs",
         "confidence",
         "ALTER TABLE command_runs ADD COLUMN confidence REAL",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "command_runs",
         "quality_score",
         "ALTER TABLE command_runs ADD COLUMN quality_score REAL",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "command_runs",
         "validation_status",
         "ALTER TABLE command_runs ADD COLUMN validation_status TEXT NOT NULL DEFAULT 'unknown'",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "command_runs",
         "session_id",
         "ALTER TABLE command_runs ADD COLUMN session_id TEXT",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "command_runs",
         "machine_output_source",
         "ALTER TABLE command_runs ADD COLUMN machine_output_source TEXT NOT NULL DEFAULT 'stdout'",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "command_runs",
         "output_json_path",
         "ALTER TABLE command_runs ADD COLUMN output_json_path TEXT",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "command_runs",
         "pid",
@@ -499,20 +514,19 @@ fn m0002_backfill_historical_defaults(conn: &Connection) -> Result<()> {
 // ── Migration 3: Events Column Promotion ──
 
 fn m0003_events_promote_columns(conn: &Connection) -> Result<()> {
-    use crate::db::ensure_column;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "events",
         "step",
         "ALTER TABLE events ADD COLUMN step TEXT",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "events",
         "step_scope",
         "ALTER TABLE events ADD COLUMN step_scope TEXT",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "events",
         "cycle",
@@ -567,8 +581,7 @@ fn m0005_add_task_lookup_indexes(conn: &Connection) -> Result<()> {
 // ── Migration 6: Pipeline Variables JSON Column ──
 
 fn m0006_add_pipeline_vars_json(conn: &Connection) -> Result<()> {
-    use crate::db::ensure_column;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "tasks",
         "pipeline_vars_json",
@@ -607,22 +620,20 @@ fn m0007_workflow_store_entries(conn: &Connection) -> Result<()> {
 // ── Migration 8: Workflow Primitives (WP02 + WP03) ──
 
 fn m0008_workflow_primitives(conn: &Connection) -> Result<()> {
-    use crate::db::ensure_column;
-
     // WP02: Task lineage
-    ensure_column(
+    ensure_column_exists(
         conn,
         "tasks",
         "parent_task_id",
         "ALTER TABLE tasks ADD COLUMN parent_task_id TEXT",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "tasks",
         "spawn_reason",
         "ALTER TABLE tasks ADD COLUMN spawn_reason TEXT",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "tasks",
         "spawn_depth",
@@ -632,19 +643,19 @@ fn m0008_workflow_primitives(conn: &Connection) -> Result<()> {
         .context("m0008: create parent_task_id index")?;
 
     // WP03: Dynamic item metadata
-    ensure_column(
+    ensure_column_exists(
         conn,
         "task_items",
         "dynamic_vars_json",
         "ALTER TABLE task_items ADD COLUMN dynamic_vars_json TEXT",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "task_items",
         "label",
         "ALTER TABLE task_items ADD COLUMN label TEXT",
     )?;
-    ensure_column(
+    ensure_column_exists(
         conn,
         "task_items",
         "source",

@@ -154,6 +154,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/59-dynamic-dag-mainline-execution.md` | 5 | FR-004: explicit `dynamic_dag` mode, CEL trigger validation, graph materialization, persisted graph debug bundles, and DAG debug view |
 | orchestrator | `docs/qa/orchestrator/60-daemon-lifecycle-runtime-metrics.md` | 4 | FR-005: daemon runtime snapshot, live worker/task counters, graceful drain, and restart-state reset |
 | orchestrator | `docs/qa/orchestrator/61-chain-steps-execution.md` | 4 | FR-008: chain_steps runtime contract, runtime plan preservation, parent/child failure ordering, and trace compatibility |
+| orchestrator | `docs/qa/orchestrator/62-database-persistence-bootstrap-repositories.md` | 5 | FR-009 Phase 1: persistence bootstrap ownership, public ensure_column removal, and repository-backed session/store boundaries |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
 | script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |

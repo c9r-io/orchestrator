@@ -79,8 +79,6 @@ pub struct StoreEntry {
 
 /// Manages store operations, dispatching to the appropriate backend.
 pub struct StoreManager {
-    #[allow(dead_code)] // retained for future direct DB queries
-    async_db: Arc<AsyncDatabase>,
     local_backend: LocalStoreBackend,
     file_backend: FileStoreBackend,
     command_adapter: CommandAdapter,
@@ -92,7 +90,6 @@ impl StoreManager {
             local_backend: LocalStoreBackend::new(async_db.clone()),
             file_backend: FileStoreBackend::new(app_root),
             command_adapter: CommandAdapter,
-            async_db,
         }
     }
 

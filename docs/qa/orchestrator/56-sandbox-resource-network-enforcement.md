@@ -223,9 +223,11 @@ spec:
 YAML
 
 orchestrator apply --project "${QA_PROJECT}" -f /tmp/sandbox-allowlist-linux.yaml
-ALLOW_TASK_CREATE_OUTPUT=$(orchestrator task create --project "${QA_PROJECT}" --workflow sandbox-network-allowlist-linux-allow --name "sandbox allow allow" --goal "sandbox allow allow" --no-start)
+ALLOW_WORKFLOW_ID="sandbox-network-allowlist-linux-allow"
+BLOCK_WORKFLOW_ID="sandbox-network-allowlist-linux-block"
+ALLOW_TASK_CREATE_OUTPUT=$(orchestrator task create --project "${QA_PROJECT}" --workflow "${ALLOW_WORKFLOW_ID}" --name "sandbox allow allow" --goal "sandbox allow allow" --no-start)
 ALLOW_TASK_ID=$(printf '%s\n' "${ALLOW_TASK_CREATE_OUTPUT}" | grep -oE '[0-9a-f-]{36}' | tail -1)
-BLOCK_TASK_CREATE_OUTPUT=$(orchestrator task create --project "${QA_PROJECT}" --workflow sandbox-network-allowlist-linux-block --name "sandbox allow block" --goal "sandbox allow block" --no-start)
+BLOCK_TASK_CREATE_OUTPUT=$(orchestrator task create --project "${QA_PROJECT}" --workflow "${BLOCK_WORKFLOW_ID}" --name "sandbox allow block" --goal "sandbox allow block" --no-start)
 BLOCK_TASK_ID=$(printf '%s\n' "${BLOCK_TASK_CREATE_OUTPUT}" | grep -oE '[0-9a-f-]{36}' | tail -1)
 orchestrator task start "${ALLOW_TASK_ID}"
 orchestrator task start "${BLOCK_TASK_ID}" || true

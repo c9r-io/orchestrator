@@ -24,6 +24,7 @@ pub mod migration;
 pub mod observability;
 pub mod output_capture;
 pub mod output_validation;
+pub mod persistence;
 pub mod prehook;
 pub mod qa_utils;
 pub mod resource;

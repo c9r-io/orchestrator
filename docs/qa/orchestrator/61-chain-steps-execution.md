@@ -119,3 +119,14 @@ This doc validates the contract introduced by FR-008 governance:
 - The test passes
 - Trace builder still accepts `chain_step_started` / `chain_step_finished`
 - Chain events remain visible in cycle step reconstruction
+
+---
+
+## Checklist
+
+| # | Scenario | Status | Test Date | Tester | Notes |
+|---|----------|--------|-----------|--------|-------|
+| 1 | Runtime Execution Preserves Chain Shape | ☐ | | | |
+| 2 | Chain Children Are Valid Self-Contained Steps | ☐ | | | |
+| 3 | Guide Contract Matches Runtime Semantics | ☐ | | | |
+| 4 | Chain Event Names Remain Trace-Compatible | ☐ | | | |

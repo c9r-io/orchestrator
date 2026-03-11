@@ -1,9 +1,8 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use rusqlite::{params, Connection};
 use std::path::Path;
-use std::time::Duration;
 
-pub const SQLITE_BUSY_TIMEOUT_MS: u64 = 5000;
+pub use crate::persistence::sqlite::SQLITE_BUSY_TIMEOUT_MS;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectResetStats {
@@ -46,50 +45,15 @@ pub struct ControlPlaneAuditRecord {
 }
 
 pub fn open_conn(db_path: &Path) -> Result<Connection> {
-    let conn = Connection::open(db_path).context("failed to open sqlite db")?;
-    configure_conn(&conn)?;
-    Ok(conn)
+    crate::persistence::sqlite::open_conn(db_path)
 }
 
 pub fn configure_conn(conn: &Connection) -> Result<()> {
-    conn.busy_timeout(Duration::from_millis(SQLITE_BUSY_TIMEOUT_MS))
-        .context("failed to set sqlite busy timeout")?;
-    conn.execute_batch(
-        r#"
-        PRAGMA foreign_keys = ON;
-        "#,
-    )
-    .context("failed to configure sqlite pragmas")?;
-    Ok(())
-}
-
-pub fn ensure_column(conn: &Connection, table: &str, column: &str, ddl: &str) -> Result<()> {
-    let mut stmt = conn
-        .prepare(&format!("PRAGMA table_info({})", table))
-        .with_context(|| format!("failed to read schema for {}", table))?;
-    let cols = stmt
-        .query_map([], |row| row.get::<_, String>(1))?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-    if !cols.iter().any(|c| c == column) {
-        conn.execute(ddl, [])
-            .with_context(|| format!("failed to add column {}.{}", table, column))?;
-    }
-    Ok(())
+    crate::persistence::sqlite::configure_conn(conn)
 }
 
 pub fn init_schema(db_path: &Path) -> Result<()> {
-    let conn = open_conn(db_path)?;
-    conn.execute_batch(
-        r#"
-        PRAGMA journal_mode = WAL;
-        PRAGMA synchronous = NORMAL;
-        "#,
-    )
-    .context("failed to configure sqlite wal mode")?;
-    let applied = crate::migration::run_pending(&conn, &crate::migration::all_migrations())?;
-    if applied > 0 {
-        tracing::info!(applied, "schema migrations applied");
-    }
+    crate::persistence::schema::PersistenceBootstrap::ensure_current(db_path)?;
     Ok(())
 }
 
@@ -402,49 +366,6 @@ mod tests {
         let (_dir, db_path) = tmp_db_path();
         init_schema(&db_path).expect("first init");
         init_schema(&db_path).expect("second init should succeed");
-    }
-
-    // ── ensure_column ──
-
-    #[test]
-    fn ensure_column_adds_missing_column() {
-        let (_dir, db_path) = tmp_db_path();
-        init_schema(&db_path).expect("init_schema");
-
-        let conn = open_conn(&db_path).expect("open_conn");
-        // Add a new column that doesn't exist yet
-        ensure_column(
-            &conn,
-            "tasks",
-            "test_col_xyz",
-            "ALTER TABLE tasks ADD COLUMN test_col_xyz TEXT",
-        )
-        .expect("ensure_column add");
-
-        // Verify column exists
-        let mut stmt = conn.prepare("PRAGMA table_info(tasks)").expect("prepare");
-        let cols: Vec<String> = stmt
-            .query_map([], |row| row.get::<_, String>(1))
-            .expect("query")
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .expect("collect");
-        assert!(cols.contains(&"test_col_xyz".to_string()));
-    }
-
-    #[test]
-    fn ensure_column_noop_if_exists() {
-        let (_dir, db_path) = tmp_db_path();
-        init_schema(&db_path).expect("init_schema");
-
-        let conn = open_conn(&db_path).expect("open_conn");
-        // "status" already exists on tasks; should be a no-op
-        ensure_column(
-            &conn,
-            "tasks",
-            "status",
-            "ALTER TABLE tasks ADD COLUMN status TEXT",
-        )
-        .expect("ensure_column noop");
     }
 
     // ── non-terminal task reference counts ──

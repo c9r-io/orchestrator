@@ -2,7 +2,7 @@ use crate::collab::MessageBus;
 use crate::config_load::{
     build_active_config_with_self_heal, detect_app_root, load_or_seed_config,
 };
-use crate::db::init_schema;
+use crate::persistence::schema::PersistenceBootstrap;
 use crate::state::{InnerState, ManagedState};
 use anyhow::{Context, Result};
 use std::collections::HashMap;
@@ -199,7 +199,7 @@ fn initialize_runtime(app_root: &Path) -> Result<(std::path::PathBuf, std::path:
     std::fs::create_dir_all(&logs_dir)
         .with_context(|| format!("failed to create logs dir {}", logs_dir.display()))?;
     let db_path = data_dir.join("agent_orchestrator.db");
-    init_schema(&db_path)?;
+    PersistenceBootstrap::ensure_current(&db_path)?;
     crate::secret_store_crypto::ensure_secret_key(app_root, &db_path)?;
     Ok((db_path, logs_dir))
 }
