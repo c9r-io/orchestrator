@@ -1,0 +1,84 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: self
+spec:
+  root_path: "."
+  self_referential: true
+  binary_snapshot: true
+  ticket_dir: fixtures/ticket
+  qa_targets:
+    - docs/qa
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: qa_testing
+spec:
+  description: "Execute QA scenarios"
+  prompt: "run qa"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: failing-agent-1
+spec:
+  capabilities:
+    - qa_testing
+  command: "exit 1"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: failing-agent-2
+spec:
+  capabilities:
+    - qa_testing
+  command: "exit 1"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: failing-agent-3
+spec:
+  capabilities:
+    - qa_testing
+  command: "exit 1"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: guard-agent
+spec:
+  capabilities:
+    - loop_guard
+  command: "echo '{\"continue\":true}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: fail-loop
+spec:
+  steps:
+    - id: self_test
+      type: self_test
+      scope: task
+      builtin: self_test
+      enabled: true
+      repeatable: true
+    - id: qa_testing
+      type: qa_testing
+      scope: item
+      required_capability: qa_testing
+      template: qa_testing
+      enabled: true
+      repeatable: true
+  loop:
+    mode: fixed
+    max_cycles: 5
+    enabled: true
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: true
+    checkpoint_strategy: git_tag
+    binary_snapshot: true
