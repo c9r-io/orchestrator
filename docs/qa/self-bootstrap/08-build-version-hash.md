@@ -27,6 +27,7 @@ Key files:
 
 ### Preconditions
 - Binary built with `cargo build --release` from workspace root
+- Rebuild immediately before verification so the checked binary matches current sources and build metadata
 
 ### Goal
 Verify that `--version` includes the package version and git hash in parentheses.
@@ -53,6 +54,7 @@ Verify that `--version` includes the package version and git hash in parentheses
 
 ### Preconditions
 - Release binary available
+- Binary was rebuilt in Scenario 1 or immediately before this check
 
 ### Goal
 Verify that `version` subcommand prints version, git hash, and build time in human-readable format, and works without an initialized workspace (preflight).
@@ -78,6 +80,7 @@ Verify that `version` subcommand prints version, git hash, and build time in hum
 
 ### Preconditions
 - Release binary available
+- Binary was rebuilt in Scenario 1 or immediately before this check
 
 ### Goal
 Verify that `version --json` produces valid JSON with all three fields.

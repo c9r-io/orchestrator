@@ -84,7 +84,7 @@ pub async fn dispatch(
         Commands::Manifest(cmd) => manifest::dispatch(client, cmd).await,
 
         // Handled before dispatch
-        Commands::Version => unreachable!(),
+        Commands::Version { .. } => unreachable!(),
         Commands::Apply { .. }
         | Commands::Get { .. }
         | Commands::Describe { .. }

@@ -9,10 +9,60 @@ spec:
   ticket_dir: fixtures/ticket
   self_referential: true
 ---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: sandbox_write
+spec:
+  mode: sandbox
+  fs_mode: workspace_rw_scoped
+  writable_paths:
+    - docs
+    - fixtures
+  network_mode: deny
+---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: host
+spec:
+  mode: host
+---
+apiVersion: orchestrator.dev/v2
+kind: SecretStore
+metadata:
+  name: claude-opus
+spec:
+  data:
+    ANTHROPIC_MODEL: "claude-opus-4-6"
+---
+apiVersion: orchestrator.dev/v2
+kind: SecretStore
+metadata:
+  name: claude-sonnet
+spec:
+  data:
+    ANTHROPIC_MODEL: "claude-sonnet-4-6"
+---
+apiVersion: orchestrator.dev/v2
+kind: SecretStore
+metadata:
+  name: claude-haiku
+spec:
+  data:
+    ANTHROPIC_MODEL: "claude-haiku-4-5-20251001"
+---
+apiVersion: orchestrator.dev/v2
+kind: SecretStore
+metadata:
+  name: minimax
+spec:
+  data:
+    ANTHROPIC_MODEL: "MiniMax-M2.5-highspeed"
+---
 # ── Step Templates ──────────────────────────────────────────────────────
 # Prompts are decoupled from agents. Each template defines the prompt for
 # a workflow step; the agent's `command` injects it via the {prompt} placeholder.
----
 apiVersion: orchestrator.dev/v2
 kind: StepTemplate
 metadata:

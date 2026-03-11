@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 #[derive(Parser, Debug)]
 #[command(
     name = "orchestrator",
-    version,
+    version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("BUILD_GIT_HASH"), ")"),
     about = "Agent Orchestrator — workflow automation CLI"
 )]
 pub struct Cli {
@@ -131,7 +131,23 @@ pub enum Commands {
     Manifest(ManifestCommands),
 
     /// Show version
-    Version,
+    Version {
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Cli, Commands};
+    use clap::Parser;
+
+    #[test]
+    fn version_subcommand_accepts_json_flag() {
+        let cli = Cli::try_parse_from(["orchestrator", "version", "--json"])
+            .expect("version --json should parse");
+        assert!(matches!(cli.command, Commands::Version { json: true }));
+    }
 }
 
 #[derive(Subcommand, Debug, Clone)]

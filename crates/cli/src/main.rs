@@ -34,7 +34,9 @@ async fn run(cli: Cli) -> Result<()> {
         ..
     } = cli;
     match command {
-        Commands::Version => commands::version::run(control_plane_config.as_deref()).await,
+        Commands::Version { json } => {
+            commands::version::run(control_plane_config.as_deref(), json).await
+        }
         Commands::Debug {
             component: _,
             command: Some(debug_command),
