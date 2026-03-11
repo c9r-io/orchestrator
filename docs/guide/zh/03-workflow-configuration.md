@@ -107,9 +107,11 @@ spec:
 运行时说明：
 
 - 在当前 macOS sandbox 后端上，`network_mode: deny` 既可能表现为连接失败，也可能表现为 DNS 解析失败；两者都会归类为 `sandbox_network_blocked`。
+- 在 Linux `linux_native` 后端上，只要 daemon 以 `root` 运行、系统存在 `ip`/`nft`，并且 profile 使用 `fs_mode: inherit`，`network_mode: allowlist` 就是受支持的真实边界。
 - sandbox 相关事件现在会携带稳定的 `reason_code`；自动化优先依赖该字段，再回退到 `stderr_excerpt`。
 - `network_target` 只是 best-effort 元数据，某些错误形态下可能为空。
-- `network_mode: allowlist` 在当前 macOS 后端还没有可验证的真实实现；系统会返回结构化拒绝，而不是静默降级到宽松网络访问。真实 allowlist backend 能力由 `FR-006` 跟踪。
+- `network_mode: allowlist` 在 macOS 上仍然不受支持；系统会返回 `reason_code=unsupported_backend_feature`，而不是静默降级到宽松网络访问。
+- `network_mode: allowlist` 的条目必须是精确 hostname/IP，可选端口，例如 `api.example.com`、`api.example.com:443`、`10.203.0.1` 或 `[::1]:8443`。
 
 ### 已知步骤 ID
 

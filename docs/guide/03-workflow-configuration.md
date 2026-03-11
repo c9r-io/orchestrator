@@ -101,9 +101,11 @@ spec:
 Runtime notes:
 
 - On the current macOS backend, `network_mode: deny` may surface as DNS failure or connection failure; both map to `sandbox_network_blocked`.
+- On Linux `linux_native`, `network_mode: allowlist` is supported when the daemon runs as `root`, `ip` and `nft` are present, and the profile uses `fs_mode: inherit`.
 - Sandbox events now carry a stable `reason_code`; use that for automation before falling back to free-form `stderr_excerpt`.
 - `network_target` is best-effort metadata and may be empty for some error shapes.
-- `network_mode: allowlist` is not yet implemented as a verifiable backend capability on macOS; it fails fast with a structured error instead of silently degrading. Real allowlist backend support is tracked in `FR-006`.
+- `network_mode: allowlist` still is not supported on macOS; it fails fast with `reason_code=unsupported_backend_feature` instead of silently degrading.
+- `network_mode: allowlist` entries must be exact hostname/IP values with an optional port, for example `api.example.com`, `api.example.com:443`, `10.203.0.1`, or `[::1]:8443`.
 
 ### Known Step IDs
 

@@ -29,6 +29,7 @@ pub mod qa_utils;
 pub mod resource;
 pub mod runner;
 pub mod runtime;
+pub mod sandbox_network;
 pub mod scheduler;
 pub mod scheduler_service;
 pub mod secret_store_crypto;

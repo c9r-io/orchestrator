@@ -200,6 +200,27 @@ pub enum SandboxProbeCommands {
         #[arg(long, default_value = "443")]
         port: u16,
     },
+    TcpConnect {
+        #[arg(long)]
+        host: String,
+
+        #[arg(long)]
+        port: u16,
+
+        #[arg(long, default_value = "3")]
+        timeout_secs: u64,
+    },
+    #[command(hide = true)]
+    TcpServe {
+        #[arg(long, default_value = "127.0.0.1")]
+        bind: String,
+
+        #[arg(long)]
+        port: u16,
+
+        #[arg(long)]
+        ready_file: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone)]

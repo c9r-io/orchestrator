@@ -5,31 +5,31 @@
 **Related Plan**: Close step-level execution isolation on the active backend with deterministic probe-based QA, structured sandbox events, and explicit allowlist backend gating
 **Related QA**: `docs/qa/orchestrator/56-sandbox-resource-network-enforcement.md`
 **Created**: 2026-03-10
-**Last Updated**: 2026-03-10
+**Last Updated**: 2026-03-11
 
 ## Background
 
-Step-level `ExecutionProfile` routing was already implemented. The remaining work was to make resource-limit and network outcomes deterministic enough to close execution-isolation work on the active macOS backend without pretending that true `network_mode=allowlist` enforcement already exists.
+Step-level `ExecutionProfile` routing was already implemented. The remaining work was to make resource-limit and network outcomes deterministic enough to close execution-isolation work while adding one backend that can enforce a real `network_mode=allowlist` boundary.
 
-The current macOS sandbox path already provides file-write isolation through `sandbox-exec`. This design completes the closure path by adding deterministic probe commands, stable event payloads, and a strict unsupported-backend contract for `network_mode=allowlist`.
+The macOS sandbox path still provides file-write isolation through `sandbox-exec` and keeps an explicit unsupported-backend contract for `network_mode=allowlist`. Linux now adds a `linux_native` backend for real allowlist enforcement under explicit host prerequisites.
 
 ## Goals
 
 - Enforce configured sandbox resource limits at process execution time
 - Classify sandbox failures into file, resource, and network violations with structured events
+- Enforce `network_mode=allowlist` on at least one backend with deterministic, testable behavior
 - Reject unsupported `network_mode=allowlist` usage explicitly instead of silently degrading
 - Preserve the existing step-level `ExecutionProfile` contract and backward compatibility for host execution
 
 ## Non-goals
 
-- Implement a full Linux sandbox backend in this change
 - Add a proxy-based or best-effort macOS network allowlist workaround
 - Change workflow or agent manifest shapes beyond existing `ExecutionProfile` fields
 
 ## Scope
 
-- In scope: runtime `setrlimit` enforcement, sandbox violation classification, `RunResult` diagnostic fields, task event visibility, QA coverage updates
-- Out of scope: builtin step isolation, command-step isolation, cluster/remote sandboxing, true allowlist enforcement backend
+- In scope: runtime `setrlimit` enforcement, sandbox violation classification, Linux native allowlist enforcement, `RunResult` diagnostic fields, task event visibility, QA coverage updates
+- Out of scope: builtin step isolation, command-step isolation, cluster/remote sandboxing
 
 ## Interfaces And Data
 
@@ -73,6 +73,8 @@ Additional fields when applicable:
 5. `network_mode=deny` classification still falls back to outbound-network failure signatures for non-probe commands; DNS-resolution failures remain valid network-block outcomes on macOS.
 6. Sandbox classification is centralized in the phase runner utility layer, so recorders and downstream task logic consume a single normalized result shape.
 7. `RunResult` now carries `sandbox_violation_kind`, `sandbox_resource_kind`, and `sandbox_network_target` for downstream diagnostics and future policy hooks.
+8. Linux `linux_native` builds a per-run network namespace and nftables ruleset. `allowlist` entries are resolved up front to exact IPs, with optional TCP port restriction. DNS egress is allowed only to the host resolver set when `network_mode=allowlist`.
+9. Linux `linux_native` is intentionally explicit about prerequisites: `root`, `ip`, and `nft` are required; `fs_mode=inherit` is required until a Linux filesystem boundary is implemented.
 
 ## Alternatives And Tradeoffs
 
@@ -105,7 +107,7 @@ Default recommendations:
 - Config: no new manifest fields
 - Compatibility: host mode and old workflows remain unchanged
 - Rollback: revert to the previous binary; persisted events and new result fields are additive
-- Platform note: true `network_mode=allowlist` remains a future backend feature tracked by `FR-006`
+- Platform note: `network_mode=allowlist` is now implemented on Linux `linux_native` and remains explicitly unsupported on macOS `macos_seatbelt`
 
 ## Test Plan
 
@@ -123,5 +125,6 @@ Default recommendations:
 
 - Sandbox resource limit fields produce real runtime enforcement for supported Unix paths
 - `sandbox_resource_exceeded` and `sandbox_network_blocked` events are emitted with structured payloads
+- Linux `network_mode=allowlist` can allow one destination and block another deterministically
 - Unsupported `network_mode=allowlist` does not silently degrade on macOS
 - Existing host-mode workflows continue to run without configuration changes

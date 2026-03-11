@@ -412,6 +412,28 @@ mod cases {
     }
 
     #[tokio::test]
+    async fn detect_sandbox_violation_preserves_probe_network_reason_code() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("stderr.log");
+        std::fs::write(
+            &path,
+            "SANDBOX_PROBE network=blocked reason_code=network_allowlist_blocked target=10.203.0.1:18080 error=timeout\n",
+        )
+        .expect("write stderr");
+
+        let mut profile = sandbox_profile();
+        profile.network_mode = ExecutionNetworkMode::Allowlist;
+        profile.network_allowlist = vec!["10.203.0.1:18080".to_string()];
+
+        let info = detect_sandbox_violation(&profile, &wait_result(1, None), &path).await;
+
+        assert!(info.denied);
+        assert_eq!(info.event_type, Some("sandbox_network_blocked"));
+        assert_eq!(info.reason_code, Some("network_allowlist_blocked"));
+        assert_eq!(info.network_target.as_deref(), Some("10.203.0.1:18080"));
+    }
+
+    #[tokio::test]
     async fn detect_sandbox_violation_keeps_network_target_empty_for_traceback_noise() {
         let dir = tempfile::tempdir().expect("create tempdir");
         let path = dir.path().join("stderr.log");
@@ -426,6 +448,27 @@ mod cases {
         assert!(info.denied);
         assert_eq!(info.event_type, Some("sandbox_network_blocked"));
         assert_eq!(info.network_target, None);
+    }
+
+    #[tokio::test]
+    async fn detect_sandbox_violation_classifies_allowlist_network_denial() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("stderr.log");
+        std::fs::write(
+            &path,
+            "curl: (28) Failed to connect to 10.203.0.1 port 18081\n",
+        )
+        .expect("write stderr");
+
+        let mut profile = sandbox_profile();
+        profile.network_mode = ExecutionNetworkMode::Allowlist;
+        profile.network_allowlist = vec!["10.203.0.1:18080".to_string()];
+
+        let info = detect_sandbox_violation(&profile, &wait_result(28, None), &path).await;
+
+        assert!(info.denied);
+        assert_eq!(info.event_type, Some("sandbox_network_blocked"));
+        assert_eq!(info.reason_code, Some("network_allowlist_blocked"));
     }
 
     #[test]

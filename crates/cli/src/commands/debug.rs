@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::Write;
-use std::net::ToSocketAddrs;
+use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use std::process::{self, Child, Command, Stdio};
 use std::time::Duration;
 
@@ -58,6 +58,16 @@ fn run_probe(probe: SandboxProbeCommands) -> Result<()> {
             spawn_children_probe(count, sleep_secs)
         }
         SandboxProbeCommands::DnsResolve { host, port } => dns_resolve_probe(&host, port),
+        SandboxProbeCommands::TcpConnect {
+            host,
+            port,
+            timeout_secs,
+        } => tcp_connect_probe(&host, port, timeout_secs),
+        SandboxProbeCommands::TcpServe {
+            bind,
+            port,
+            ready_file,
+        } => tcp_serve_probe(&bind, port, ready_file.as_deref()),
     }
 }
 
@@ -142,6 +152,40 @@ fn dns_resolve_probe(host: &str, port: u16) -> Result<()> {
             sanitize_value(&err.to_string())
         ));
     }
+    Ok(())
+}
+
+fn tcp_connect_probe(host: &str, port: u16, timeout_secs: u64) -> Result<()> {
+    let mut addrs = format!("{host}:{port}")
+        .to_socket_addrs()
+        .with_context(|| format!("resolve tcp probe target {host}:{port}"))?;
+    let Some(target) = addrs.next() else {
+        exit_with_probe_failure(&format!(
+            "{PROBE_PREFIX} network=blocked reason_code=network_allowlist_blocked target={} error=no_socket_address",
+            sanitize_value(&format!("{host}:{port}"))
+        ));
+    };
+    if let Err(err) = TcpStream::connect_timeout(&target, Duration::from_secs(timeout_secs)) {
+        exit_with_probe_failure(&format!(
+            "{PROBE_PREFIX} network=blocked reason_code=network_allowlist_blocked target={} error={}",
+            sanitize_value(&format!("{host}:{port}")),
+            sanitize_value(&err.to_string())
+        ));
+    }
+    Ok(())
+}
+
+fn tcp_serve_probe(bind: &str, port: u16, ready_file: Option<&str>) -> Result<()> {
+    let listener = TcpListener::bind((bind, port))
+        .with_context(|| format!("bind tcp server {bind}:{port}"))?;
+    if let Some(path) = ready_file {
+        std::fs::write(path, format!("{bind}:{port}"))
+            .with_context(|| format!("write ready file '{}'", path))?;
+    }
+    let (mut stream, _) = listener.accept().context("accept tcp client")?;
+    stream
+        .write_all(b"ok")
+        .context("write tcp probe response")?;
     Ok(())
 }
 

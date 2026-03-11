@@ -996,6 +996,34 @@ mod execution_profile_tests {
         assert!(resource.validate().is_ok());
     }
 
+    #[test]
+    fn validate_allowlist_with_wildcard_entry_fails() {
+        let manifest = OrchestratorResource {
+            api_version: super::super::API_VERSION.to_string(),
+            kind: ResourceKind::ExecutionProfile,
+            metadata: ResourceMetadata {
+                name: "bad-allowlist-wildcard".to_string(),
+                project: None,
+                labels: None,
+                annotations: None,
+            },
+            spec: ResourceSpec::ExecutionProfile(ExecutionProfileSpec {
+                mode: "sandbox".to_string(),
+                fs_mode: "inherit".to_string(),
+                writable_paths: vec![],
+                network_mode: "allowlist".to_string(),
+                network_allowlist: vec!["*.example.com".to_string()],
+                max_memory_mb: None,
+                max_cpu_seconds: None,
+                max_processes: None,
+                max_open_files: None,
+            }),
+        };
+        let resource = dispatch_resource(manifest).expect("dispatch");
+        let err = resource.validate().expect_err("wildcard should fail");
+        assert!(err.to_string().contains("wildcards"));
+    }
+
     // ── build_execution_profile ─────────────────────────────────
 
     #[test]

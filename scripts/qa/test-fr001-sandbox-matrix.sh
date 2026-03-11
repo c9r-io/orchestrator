@@ -20,20 +20,26 @@ run_task() {
   local resource_kind="${6:-}"
 
   local task_id
-  task_id=$(
+  local task_create_output
+  task_create_output=$(
     orchestrator task create \
       --project "${PROJECT}" \
       --workflow "${workflow}" \
       --name "${name}" \
       --goal "${goal}" \
-      --no-start | grep -oE '[0-9a-f-]{36}' | head -1
+      --no-start
+  )
+  task_id=$(
+    printf '%s\n' "${task_create_output}" | grep -oE '[0-9a-f-]{36}' | tail -1
   )
   orchestrator task start "${task_id}" || true
 
   for _ in {1..30}; do
-    if orchestrator task info "${task_id}" | grep -qiE 'status:[[:space:]]*(completed|failed)'; then
-      break
-    fi
+    local task_info_output
+    task_info_output=$(orchestrator task info "${task_id}")
+    case "${task_info_output}" in
+      *"Status: completed"*|*"Status: failed"*) break ;;
+    esac
     sleep 1
   done
 

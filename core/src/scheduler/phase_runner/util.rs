@@ -187,14 +187,20 @@ pub(super) async fn detect_sandbox_violation(
         };
     }
 
-    if execution_profile.network_mode == crate::config::ExecutionNetworkMode::Deny
-        && looks_like_network_denial(&lower_stderr)
+    if matches!(
+        execution_profile.network_mode,
+        crate::config::ExecutionNetworkMode::Deny | crate::config::ExecutionNetworkMode::Allowlist
+    ) && looks_like_network_denial(&lower_stderr)
     {
+        let reason_code = match execution_profile.network_mode {
+            crate::config::ExecutionNetworkMode::Allowlist => "network_allowlist_blocked",
+            _ => "network_blocked",
+        };
         return SandboxViolationInfo {
             denied: true,
             event_type: Some("sandbox_network_blocked"),
-            reason_code: Some("network_blocked"),
-            reason: Some("network_blocked".to_string()),
+            reason_code: Some(reason_code),
+            reason: Some(reason_code.to_string()),
             stderr_excerpt,
             resource_kind: None,
             network_target: detect_network_target(&stderr_tail),
@@ -263,8 +269,17 @@ fn detect_probe_marker(stderr_tail: &str) -> Option<SandboxProbeMarker> {
         }),
         _ if fields.get("network").copied() == Some("blocked") => Some(SandboxProbeMarker {
             kind: SandboxProbeKind::NetworkBlocked,
-            reason_code: "network_blocked",
-            reason: "network_blocked".to_string(),
+            reason_code: match fields.get("reason_code").copied() {
+                Some("network_allowlist_blocked") => "network_allowlist_blocked",
+                Some("unsupported_backend_feature") => "unsupported_backend_feature",
+                _ => "network_blocked",
+            },
+            reason: match fields.get("reason_code").copied() {
+                Some("network_allowlist_blocked") => "network_allowlist_blocked",
+                Some("unsupported_backend_feature") => "unsupported_backend_feature",
+                _ => "network_blocked",
+            }
+            .to_string(),
             network_target: fields.get("target").map(|value| (*value).to_string()),
         }),
         _ => None,

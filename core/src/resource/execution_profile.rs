@@ -1,5 +1,6 @@
 use crate::cli_types::{ExecutionProfileSpec, OrchestratorResource, ResourceKind, ResourceSpec};
 use crate::config::{ExecutionProfileConfig, OrchestratorConfig};
+use crate::sandbox_network::validate_network_allowlist;
 use anyhow::{anyhow, Result};
 
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
@@ -30,6 +31,9 @@ impl Resource for ExecutionProfileResource {
             return Err(anyhow!(
                 "executionprofile.spec.network_allowlist cannot be empty when network_mode=allowlist"
             ));
+        }
+        if self.spec.network_mode == "allowlist" {
+            validate_network_allowlist(&self.spec.network_allowlist)?;
         }
         Ok(())
     }
