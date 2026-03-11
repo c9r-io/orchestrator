@@ -1,9 +1,8 @@
-use crate::async_database::flatten_err;
 use crate::config_load::now_ts;
 use crate::events::insert_event;
+use crate::persistence::repository::{SchedulerRepository, SqliteSchedulerRepository};
 use crate::state::InnerState;
 use anyhow::Result;
-use rusqlite::OptionalExtension;
 use serde_json::json;
 use std::path::PathBuf;
 
@@ -25,73 +24,21 @@ pub async fn enqueue_task(state: &InnerState, task_id: &str) -> Result<()> {
 }
 
 pub async fn next_pending_task_id(state: &InnerState) -> Result<Option<String>> {
-    state
-        .async_database
-        .reader()
-        .call(|conn| {
-            let mut stmt = conn.prepare(
-                "SELECT id FROM tasks WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1",
-            )?;
-            let mut rows = stmt.query([])?;
-            if let Some(row) = rows.next()? {
-                return Ok(Some(row.get(0)?));
-            }
-            Ok(None)
-        })
+    SqliteSchedulerRepository::new(state.async_database.clone())
+        .next_pending_task_id()
         .await
-        .map_err(flatten_err)
 }
 
 pub async fn claim_next_pending_task(state: &InnerState) -> Result<Option<String>> {
-    state
-        .async_database
-        .writer()
-        .call(|conn| {
-            let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-
-            let task_id: Option<String> = tx
-                .query_row(
-                    "SELECT id FROM tasks WHERE status IN ('restart_pending', 'pending') ORDER BY CASE status WHEN 'restart_pending' THEN 0 ELSE 1 END, created_at ASC LIMIT 1",
-                    [],
-                    |row| row.get(0),
-                )
-                .optional()?;
-
-            let Some(task_id) = task_id else {
-                tx.commit()?;
-                return Ok(None);
-            };
-
-            let now = now_ts();
-            let updated = tx.execute(
-                "UPDATE tasks SET status = 'running', started_at = COALESCE(started_at, ?2), completed_at = NULL, updated_at = ?3 WHERE id = ?1 AND status IN ('restart_pending', 'pending')",
-                rusqlite::params![task_id, now, now_ts()],
-            )?;
-            tx.commit()?;
-            if updated == 1 {
-                Ok(Some(task_id))
-            } else {
-                Ok(None)
-            }
-        })
+    SqliteSchedulerRepository::new(state.async_database.clone())
+        .claim_next_pending_task()
         .await
-        .map_err(flatten_err)
 }
 
 pub async fn pending_task_count(state: &InnerState) -> Result<i64> {
-    state
-        .async_database
-        .reader()
-        .call(|conn| {
-            let count: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM tasks WHERE status = 'pending'",
-                [],
-                |row| row.get(0),
-            )?;
-            Ok(count)
-        })
+    SqliteSchedulerRepository::new(state.async_database.clone())
+        .pending_task_count()
         .await
-        .map_err(flatten_err)
 }
 
 pub fn worker_stop_signal_path(state: &InnerState) -> PathBuf {

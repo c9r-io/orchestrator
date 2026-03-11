@@ -82,72 +82,72 @@ pub fn registered_migrations() -> Vec<Migration> {
         Migration {
             version: 1,
             name: "m0001_baseline_schema",
-            up: crate::migration::m0001_baseline_schema,
+            up: crate::persistence::migration_steps::m0001_baseline_schema,
         },
         Migration {
             version: 2,
             name: "m0002_backfill_legacy_defaults",
-            up: crate::migration::m0002_backfill_historical_defaults,
+            up: crate::persistence::migration_steps::m0002_backfill_historical_defaults,
         },
         Migration {
             version: 3,
             name: "m0003_events_promote_columns",
-            up: crate::migration::m0003_events_promote_columns,
+            up: crate::persistence::migration_steps::m0003_events_promote_columns,
         },
         Migration {
             version: 4,
             name: "m0004_events_backfill_promoted",
-            up: crate::migration::m0004_events_backfill_promoted,
+            up: crate::persistence::migration_steps::m0004_events_backfill_promoted,
         },
         Migration {
             version: 5,
             name: "m0005_add_task_lookup_indexes",
-            up: crate::migration::m0005_add_task_lookup_indexes,
+            up: crate::persistence::migration_steps::m0005_add_task_lookup_indexes,
         },
         Migration {
             version: 6,
             name: "m0006_add_pipeline_vars_json",
-            up: crate::migration::m0006_add_pipeline_vars_json,
+            up: crate::persistence::migration_steps::m0006_add_pipeline_vars_json,
         },
         Migration {
             version: 7,
             name: "m0007_workflow_store_entries",
-            up: crate::migration::m0007_workflow_store_entries,
+            up: crate::persistence::migration_steps::m0007_workflow_store_entries,
         },
         Migration {
             version: 8,
             name: "m0008_workflow_primitives",
-            up: crate::migration::m0008_workflow_primitives,
+            up: crate::persistence::migration_steps::m0008_workflow_primitives,
         },
         Migration {
             version: 9,
             name: "m0009_normalize_unspecified_agent_ids",
-            up: crate::migration::m0009_normalize_unspecified_agent_ids,
+            up: crate::persistence::migration_steps::m0009_normalize_unspecified_agent_ids,
         },
         Migration {
             version: 10,
             name: "m0010_per_resource_persistence",
-            up: crate::migration::m0010_per_resource_persistence,
+            up: crate::persistence::migration_steps::m0010_per_resource_persistence,
         },
         Migration {
             version: 11,
             name: "m0011_finalize_resource_migration",
-            up: crate::migration::m0011_finalize_resource_migration,
+            up: crate::persistence::migration_steps::m0011_finalize_resource_migration,
         },
         Migration {
             version: 12,
             name: "m0012_drop_legacy_orchestrator_config_blob",
-            up: crate::migration::m0012_drop_legacy_orchestrator_config_blob,
+            up: crate::persistence::migration_steps::m0012_drop_legacy_orchestrator_config_blob,
         },
         Migration {
             version: 13,
             name: "m0013_control_plane_audit",
-            up: crate::migration::m0013_control_plane_audit,
+            up: crate::persistence::migration_steps::m0013_control_plane_audit,
         },
         Migration {
             version: 14,
             name: "m0014_task_graph_debug_tables",
-            up: crate::migration::m0014_task_graph_debug_tables,
+            up: crate::persistence::migration_steps::m0014_task_graph_debug_tables,
         },
     ]
 }

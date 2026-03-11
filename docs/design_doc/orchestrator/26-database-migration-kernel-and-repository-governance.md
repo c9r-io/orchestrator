@@ -15,7 +15,7 @@ FR-009 Phase 1 introduced a `persistence` infrastructure layer, moved schema boo
 
 That phase intentionally did not finish the broader database-governance problem:
 
-- migration step implementations still live in a single `core/src/migration.rs` file
+- migration step implementations have moved under `core/src/persistence/migration_steps.rs`, but runtime persistence is still not fully repository-owned
 - runtime task/scheduler/config persistence is still spread across direct SQL call sites
 - `core/src/db.rs` remains a compatibility facade with mixed business helpers
 - operator-facing schema status and migration listing must be added without breaking the CLI/core split
@@ -34,11 +34,12 @@ The next step must preserve the current SQLite + `rusqlite` execution model whil
 
 - Implemented in this phase:
   - `core/src/persistence/migration.rs` now owns `Migration`, registered catalog, `SchemaStatus`, runner, and applied-status helpers
-  - `core/src/migration.rs` now acts as a compatibility facade plus legacy migration step host
+  - `core/src/persistence/migration_steps.rs` now owns the migration step bodies
+  - `core/src/migration.rs` now acts as a compatibility facade plus migration regression-test host
   - gRPC and CLI now expose `db status` and `db migrations list`
+  - `SchedulerRepository` now owns scheduler pending/claim/count SQL used by `scheduler_service`
 - Still pending in this phase:
-  - move migration step bodies out of `core/src/migration.rs` into dedicated `steps/*`
-  - extract scheduler/config/task-write repository seams
+  - extract config/task-write repository seams
   - add historical SQLite fixture coverage
 
 ## Non-goals
@@ -84,7 +85,7 @@ The next step must preserve the current SQLite + `rusqlite` execution model whil
 - No immediate schema changes are required to split the migration kernel.
 - `schema_migrations` remains the source of truth for current schema version unless a later phase explicitly replaces it.
 - `SchemaStatus` remains the read-only status view and may be extended with additional metadata such as applied count or pending names.
-- New migration implementations must not be added to `core/src/migration.rs`; the remaining legacy step bodies are transitional and must later move into dedicated step files under `core/src/persistence/`.
+- New migration implementations must not be added to `core/src/migration.rs`; migration step bodies now live under `core/src/persistence/`.
 
 ## Key Design And Tradeoffs
 
@@ -184,7 +185,8 @@ The next step must preserve the current SQLite + `rusqlite` execution model whil
 
 - A dedicated persistence migration kernel owns catalog, runner, and status responsibilities.
 - `orchestrator db status` and `orchestrator db migrations list` are available through the existing daemon/client stack.
-- Migration implementations are no longer added directly to `core/src/migration.rs`; remaining legacy step bodies are transitional only.
+- Migration step bodies are no longer hosted in `core/src/migration.rs`.
+- `SchedulerRepository` now owns scheduler pending/claim/count SQL.
 - `core/src/db.rs` receives no new business SQL helpers.
 - Repository expansion plan is documented and bounded to task, scheduler, and config persistence.
 - Historical SQLite upgrade validation is documented and executable.

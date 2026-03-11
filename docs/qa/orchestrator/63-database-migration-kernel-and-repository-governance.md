@@ -46,16 +46,16 @@ Verify migration registration remains strictly ordered and safe after the kernel
    ```bash
    rg -n "pub fn registered_migrations|pub struct Migration" core/src/persistence/migration.rs
    ```
-3. Search for any new migration implementation still added directly in the old file:
+3. Search for any migration step implementation still added directly in the old file:
    ```bash
-   rg -n "fn m[0-9]{4}_" core/src/migration.rs
+   rg -n "pub\\(crate\\) fn m[0-9]{4}_" core/src/migration.rs
    ```
 
 ### Expected
 - All invariant tests pass.
 - `core/src/persistence/migration.rs` owns the registered migration catalog.
-- The legacy file only hosts transitional step bodies plus compatibility forwarding.
-- No newly added migration implementation bypasses the dedicated persistence migration area.
+- The legacy file only hosts compatibility forwarding and tests.
+- No migration step implementation remains in `core/src/migration.rs`.
 
 ### Expected Data State
 ```sql
@@ -118,7 +118,8 @@ Verify FR-009 follow-up does not allow new business SQL helpers to grow from com
 
 ### Expected
 - `core/src/db.rs` does not gain new schema helpers.
-- New work lands behind repository interfaces for task, scheduler, or config persistence.
+- `SchedulerRepository` exists and owns scheduler queue-selection SQL.
+- Remaining direct SQL is limited to still-open seams such as `db_write.rs` and config persistence.
 - Remaining direct SQL call sites are shrinking, not growing.
 
 ### Expected Data State
@@ -230,7 +231,7 @@ Verify migration-kernel and repository-boundary work does not regress orchestrat
 |---|----------|--------|-----------|--------|-------|
 | 1 | Migration Catalog Has Stable Governance Invariants | PASS | 2026-03-11 | Codex | Invariant tests passed; catalog ownership moved to `core/src/persistence/migration.rs` |
 | 2 | Pending Migration Execution Remains Idempotent And Safe | PASS | 2026-03-11 | Codex | Fresh-db, idempotency, and failed-migration regressions all passed |
-| 3 | Runtime Persistence Continues Moving Behind Repository Boundaries | TODO | 2026-03-11 | Codex | Source-level governance check for follow-up phases |
+| 3 | Runtime Persistence Continues Moving Behind Repository Boundaries | PASS | 2026-03-11 | Codex | `SchedulerRepository` landed; scheduler queue-selection SQL moved behind repository seam |
 | 4 | CLI Exposes Read-Only Schema And Migration Status | PASS | 2026-03-11 | Codex | Core service + CLI command regressions passed after `db` command rollout |
 | 5 | Historical SQLite Databases Upgrade Cleanly | TODO | 2026-03-11 | Codex | Requires curated fixture databases |
 | 6 | Full Package Regression Remains Green After FR-009 Follow-Up | PASS | 2026-03-11 | Codex | `cargo test -p agent-orchestrator` passed: 1809 unit + 24 integration |
