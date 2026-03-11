@@ -17,6 +17,8 @@ pub use cli::{
 };
 
 fn main() -> Result<()> {
+    configure_sigpipe();
+
     let cli = Cli::parse();
 
     let rt = tokio::runtime::Builder::new_multi_thread()
@@ -25,6 +27,15 @@ fn main() -> Result<()> {
         .context("failed to build tokio runtime")?;
 
     rt.block_on(run(cli))
+}
+
+fn configure_sigpipe() {
+    #[cfg(unix)]
+    unsafe {
+        // Restore default SIGPIPE handling so piped CLI output exits quietly
+        // when the downstream reader closes early (`head`, `grep -m1`, etc.).
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
 }
 
 async fn run(cli: Cli) -> Result<()> {
