@@ -1,11 +1,20 @@
 use super::continuation::*;
 use super::cycle_safety::*;
+use super::graph;
 use super::segment::*;
 use crate::config::{
-    LoopMode, PipelineVariables, StepScope, WorkflowLoopConfig, WorkflowLoopGuardConfig,
+    LoopMode, PipelineVariables, StepBehavior, StepHookEngine, StepPrehookConfig, StepScope,
+    WorkflowConfig, WorkflowExecutionConfig, WorkflowExecutionMode, WorkflowFinalizeConfig,
+    WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
 };
+use crate::db::open_conn;
+use crate::dto::CreateTaskPayload;
+use crate::dynamic_orchestration::{AdaptiveFallbackMode, AdaptivePlannerConfig};
 use crate::scheduler::item_executor::StepExecutionAccumulator;
+use crate::scheduler::{load_task_runtime_context, set_task_status, update_task_cycle_state};
+use crate::task_ops::create_task_impl;
 use crate::test_utils::TestState;
+use rusqlite::params;
 use std::collections::HashMap;
 
 fn make_loop_policy(mode: LoopMode, max_cycles: Option<u32>) -> WorkflowLoopConfig {
@@ -16,6 +25,156 @@ fn make_loop_policy(mode: LoopMode, max_cycles: Option<u32>) -> WorkflowLoopConf
             ..Default::default()
         },
     }
+}
+
+fn command_step(
+    id: &str,
+    scope: StepScope,
+    command: &str,
+    prehook: Option<StepPrehookConfig>,
+) -> WorkflowStepConfig {
+    WorkflowStepConfig {
+        id: id.to_string(),
+        description: None,
+        required_capability: None,
+        template: None,
+        execution_profile: None,
+        builtin: None,
+        enabled: true,
+        repeatable: true,
+        is_guard: false,
+        cost_preference: None,
+        prehook,
+        tty: false,
+        outputs: vec![],
+        pipe_to: None,
+        command: Some(command.to_string()),
+        chain_steps: vec![],
+        scope: Some(scope),
+        behavior: StepBehavior::default(),
+        max_parallel: None,
+        timeout_secs: None,
+        item_select_config: None,
+        store_inputs: vec![],
+        store_outputs: vec![],
+    }
+}
+
+fn loop_guard_step() -> WorkflowStepConfig {
+    WorkflowStepConfig {
+        id: "loop_guard".to_string(),
+        description: None,
+        required_capability: None,
+        template: None,
+        execution_profile: None,
+        builtin: Some("loop_guard".to_string()),
+        enabled: true,
+        repeatable: true,
+        is_guard: true,
+        cost_preference: None,
+        prehook: None,
+        tty: false,
+        outputs: vec![],
+        pipe_to: None,
+        command: None,
+        chain_steps: vec![],
+        scope: Some(StepScope::Task),
+        behavior: StepBehavior::default(),
+        max_parallel: None,
+        timeout_secs: None,
+        item_select_config: None,
+        store_inputs: vec![],
+        store_outputs: vec![],
+    }
+}
+
+fn dynamic_dag_workflow() -> WorkflowConfig {
+    WorkflowConfig {
+        steps: vec![
+            command_step("plan", StepScope::Task, "printf 'plan-ready'", None),
+            command_step("qa", StepScope::Item, "printf 'qa-ran'", None),
+            command_step(
+                "fix",
+                StepScope::Item,
+                "printf 'fix-ran'",
+                Some(StepPrehookConfig {
+                    engine: StepHookEngine::Cel,
+                    when: "false".to_string(),
+                    reason: Some("skip fix for graph coverage".to_string()),
+                    ui: None,
+                    extended: false,
+                }),
+            ),
+            loop_guard_step(),
+        ],
+        execution: WorkflowExecutionConfig {
+            mode: WorkflowExecutionMode::DynamicDag,
+            fallback_mode: crate::config::DagFallbackMode::DeterministicDag,
+            persist_graph_snapshots: true,
+        },
+        loop_policy: WorkflowLoopConfig {
+            mode: LoopMode::Once,
+            guard: WorkflowLoopGuardConfig {
+                enabled: true,
+                stop_when_no_unresolved: true,
+                max_cycles: Some(1),
+                agent_template: None,
+            },
+        },
+        finalize: WorkflowFinalizeConfig { rules: vec![] },
+        qa: None,
+        fix: None,
+        retest: None,
+        dynamic_steps: vec![],
+        adaptive: None,
+        safety: crate::config::SafetyConfig::default(),
+        max_parallel: None,
+    }
+}
+
+async fn seed_dynamic_graph_task() -> (TestState, std::sync::Arc<crate::state::InnerState>, String)
+{
+    let mut fixture = TestState::new().with_workflow("dynamic-graph", dynamic_dag_workflow());
+    let state = fixture.build();
+    let qa_file = state
+        .app_root
+        .join("workspace/default/docs/qa/dynamic_graph.md");
+    std::fs::write(&qa_file, "# dynamic graph\n").expect("seed qa file");
+    let created = create_task_impl(
+        &state,
+        CreateTaskPayload {
+            name: Some("dynamic-graph".to_string()),
+            goal: Some("exercise dynamic dag graph execution".to_string()),
+            workflow_id: Some("dynamic-graph".to_string()),
+            target_files: Some(vec!["docs/qa/dynamic_graph.md".to_string()]),
+            ..Default::default()
+        },
+    )
+    .expect("create dynamic graph task");
+
+    crate::scheduler::task_state::prepare_task_for_start(&state, &created.id)
+        .await
+        .expect("prepare task");
+    set_task_status(&state, &created.id, "running", false)
+        .await
+        .expect("mark task running");
+
+    (fixture, state, created.id)
+}
+
+async fn load_cycle_context(
+    state: &std::sync::Arc<crate::state::InnerState>,
+    task_id: &str,
+) -> crate::config::TaskRuntimeContext {
+    update_task_cycle_state(state, task_id, 1, true)
+        .await
+        .expect("set cycle state");
+    let mut task_ctx = load_task_runtime_context(state, task_id)
+        .await
+        .expect("load runtime context");
+    task_ctx.current_cycle = 1;
+    task_ctx.init_done = true;
+    task_ctx
 }
 
 #[test]
@@ -1329,4 +1488,186 @@ fn compute_rollback_tag_saturates_to_one() {
 fn compute_rollback_tag_exact_cycle_one() {
     let tag = super::cycle_safety::compute_rollback_tag("my-task", 3, 3);
     assert_eq!(tag, "checkpoint/my-task/1");
+}
+
+#[tokio::test]
+async fn execute_cycle_graph_persists_replay_and_skips_prehook_false_nodes() {
+    let (_fixture, state, task_id) = seed_dynamic_graph_task().await;
+    let mut task_ctx = load_cycle_context(&state, &task_id).await;
+
+    let outcome = graph::execute_cycle_graph(
+        &state,
+        &task_id,
+        &mut task_ctx,
+        &crate::scheduler::RunningTask::new(),
+    )
+    .await
+    .expect("graph cycle should succeed");
+    assert_eq!(outcome, graph::GraphCycleOutcome::Completed);
+
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let (source, status, node_count, edge_count): (String, String, i64, i64) = conn
+        .query_row(
+            "SELECT source, status, node_count, edge_count
+             FROM task_graph_runs
+             WHERE task_id = ?1
+             ORDER BY created_at DESC
+             LIMIT 1",
+            params![task_id.clone()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .expect("graph run should exist");
+    assert_eq!(source, "static_baseline");
+    assert_eq!(status, "completed");
+    assert_eq!(node_count, 3);
+    assert_eq!(edge_count, 2);
+
+    let snapshot_kinds: Vec<String> = {
+        let mut stmt = conn
+            .prepare(
+                "SELECT snapshot_kind
+                 FROM task_graph_snapshots
+                 WHERE task_id = ?1
+                 ORDER BY snapshot_kind",
+            )
+            .expect("prepare snapshot query");
+        stmt.query_map(params![task_id.clone()], |row| row.get(0))
+            .expect("query snapshots")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("collect snapshot kinds")
+    };
+    assert_eq!(snapshot_kinds, vec!["effective_graph".to_string()]);
+
+    let event_types: Vec<String> = {
+        let mut stmt = conn
+            .prepare(
+                "SELECT event_type
+                 FROM events
+                 WHERE task_id = ?1
+                   AND event_type LIKE 'dynamic_%'
+                 ORDER BY created_at, id",
+            )
+            .expect("prepare event query");
+        stmt.query_map(params![task_id.clone()], |row| row.get(0))
+            .expect("query dynamic events")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("collect dynamic events")
+    };
+    assert!(event_types.contains(&"dynamic_plan_materialized".to_string()));
+    assert!(event_types.contains(&"dynamic_node_started".to_string()));
+    assert!(event_types.contains(&"dynamic_node_finished".to_string()));
+    assert!(event_types.contains(&"dynamic_node_skipped".to_string()));
+    assert!(event_types.contains(&"dynamic_edge_evaluated".to_string()));
+
+    let phases: Vec<String> = {
+        let mut stmt = conn
+            .prepare(
+                "SELECT phase
+                 FROM command_runs
+                 WHERE task_item_id IN (
+                   SELECT id FROM task_items WHERE task_id = ?1
+                 )
+                 ORDER BY started_at, id",
+            )
+            .expect("prepare command run query");
+        stmt.query_map(params![task_id], |row| row.get(0))
+            .expect("query phases")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("collect phases")
+    };
+    assert_eq!(phases, vec!["plan".to_string(), "qa".to_string()]);
+}
+
+#[tokio::test]
+async fn execute_cycle_graph_returns_static_segment_fallback_on_fail_closed_planner_error() {
+    let (_fixture, state, task_id) = seed_dynamic_graph_task().await;
+    let mut task_ctx = load_cycle_context(&state, &task_id).await;
+    task_ctx.execution.fallback_mode = crate::config::DagFallbackMode::StaticSegment;
+    task_ctx.adaptive = Some(AdaptivePlannerConfig {
+        enabled: true,
+        planner_agent: None,
+        max_history: 10,
+        temperature: 0.7,
+        fallback_mode: AdaptiveFallbackMode::FailClosed,
+    });
+
+    let outcome = graph::execute_cycle_graph(
+        &state,
+        &task_id,
+        &mut task_ctx,
+        &crate::scheduler::RunningTask::new(),
+    )
+    .await
+    .expect("planner failure should fall back to static segments");
+    assert_eq!(outcome, graph::GraphCycleOutcome::FallbackToStaticSegment);
+
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let failed_events: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM events
+             WHERE task_id = ?1 AND event_type = 'dynamic_plan_failed'",
+            params![task_id.clone()],
+            |row| row.get(0),
+        )
+        .expect("count failure events");
+    assert_eq!(failed_events, 1);
+
+    let graph_runs: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM task_graph_runs WHERE task_id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .expect("count graph runs");
+    assert_eq!(graph_runs, 0);
+}
+
+#[tokio::test]
+async fn execute_cycle_graph_uses_deterministic_dag_fallback_graph_on_fail_closed_planner_error() {
+    let (_fixture, state, task_id) = seed_dynamic_graph_task().await;
+    let mut task_ctx = load_cycle_context(&state, &task_id).await;
+    task_ctx.execution.fallback_mode = crate::config::DagFallbackMode::DeterministicDag;
+    task_ctx.adaptive = Some(AdaptivePlannerConfig {
+        enabled: true,
+        planner_agent: None,
+        max_history: 10,
+        temperature: 0.7,
+        fallback_mode: AdaptiveFallbackMode::FailClosed,
+    });
+
+    let outcome = graph::execute_cycle_graph(
+        &state,
+        &task_id,
+        &mut task_ctx,
+        &crate::scheduler::RunningTask::new(),
+    )
+    .await
+    .expect("planner failure should fall back to deterministic dag");
+    assert_eq!(outcome, graph::GraphCycleOutcome::Completed);
+
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let (source, fallback_mode, planner_failure): (String, Option<String>, Option<String>) = conn
+        .query_row(
+            "SELECT source, fallback_mode, planner_failure_message
+             FROM task_graph_runs
+             WHERE task_id = ?1
+             ORDER BY created_at DESC
+             LIMIT 1",
+            params![task_id.clone()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("graph run should exist");
+    assert_eq!(source, "deterministic_fallback");
+    assert_eq!(fallback_mode.as_deref(), Some("deterministic_dag"));
+    assert!(!planner_failure.as_deref().unwrap_or_default().is_empty());
+
+    let failed_events: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM events
+             WHERE task_id = ?1 AND event_type = 'dynamic_plan_failed'",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .expect("count failure events");
+    assert_eq!(failed_events, 1);
 }
