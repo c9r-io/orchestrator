@@ -1,5 +1,5 @@
 use super::super::trait_def::TaskRepository;
-use super::super::types::TaskRepositorySource;
+use super::super::types::{NewTaskGraphRun, NewTaskGraphSnapshot, TaskRepositorySource};
 use super::super::SqliteTaskRepository;
 use super::fixtures::seed_task;
 use crate::db::open_conn;
@@ -223,6 +223,42 @@ fn load_task_detail_rows_includes_graph_debug_bundles() {
     assert_eq!(graph_debug[0].effective_graph_json, "{\"entry\":\"qa\"}");
 }
 
+#[test]
+fn load_task_detail_rows_falls_back_to_legacy_graph_events() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let ts = crate::config_load::now_ts();
+    conn.execute(
+        "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at)
+         VALUES (?1, NULL, 'dynamic_plan_materialized', ?2, ?3)",
+        params![
+            task_id,
+            r#"{"cycle":3,"source":"legacy_planner","fallback_mode":"static_segment","graph":{"entry":"qa","nodes":{"qa":{"id":"qa"}}}}"#,
+            ts
+        ],
+    )
+    .expect("insert legacy graph event");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let (_items, _runs, _events, graph_debug) = repo
+        .load_task_detail_rows(&task_id)
+        .expect("should load legacy graph debug");
+
+    assert_eq!(graph_debug.len(), 1);
+    assert_eq!(graph_debug[0].graph_run_id, "legacy-event-1");
+    assert_eq!(graph_debug[0].cycle, 3);
+    assert_eq!(graph_debug[0].source, "legacy_planner");
+    assert_eq!(
+        graph_debug[0].fallback_mode.as_deref(),
+        Some("static_segment")
+    );
+    assert_eq!(
+        graph_debug[0].effective_graph_json,
+        r#"{"entry":"qa","nodes":{"qa":{"id":"qa"}}}"#
+    );
+}
+
 // ── list_task_ids_ordered_by_created_desc ─────────────────────────────
 
 #[test]
@@ -326,6 +362,42 @@ fn list_task_log_runs_respects_limit() {
 }
 
 #[test]
+fn list_task_log_runs_orders_newest_first() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id: String = conn
+        .query_row(
+            "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
+            params![task_id.clone()],
+            |row| row.get(0),
+        )
+        .expect("task item exists");
+
+    conn.execute(
+        "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, workspace_id, agent_id, exit_code, stdout_path, stderr_path, output_json, artifacts_json, confidence, quality_score, validation_status, started_at, ended_at, interrupted)
+         VALUES ('cr-older', ?1, 'qa', 'echo old', '/tmp', 'default', 'agent', 0, '/tmp/out-old.log', '/tmp/err-old.log', '{}', '[]', NULL, NULL, 'unknown', '2026-01-01T00:00:00Z', '2026-01-01T00:00:01Z', 0)",
+        params![item_id.clone()],
+    )
+    .expect("insert older run");
+    conn.execute(
+        "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, workspace_id, agent_id, exit_code, stdout_path, stderr_path, output_json, artifacts_json, confidence, quality_score, validation_status, started_at, ended_at, interrupted)
+         VALUES ('cr-newer', ?1, 'fix', 'echo new', '/tmp', 'default', 'agent', 0, '/tmp/out-new.log', '/tmp/err-new.log', '{}', '[]', NULL, NULL, 'unknown', '2026-01-01T00:00:02Z', '2026-01-01T00:00:03Z', 0)",
+        params![item_id],
+    )
+    .expect("insert newer run");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let runs = repo
+        .list_task_log_runs(&task_id, 10)
+        .expect("should list runs");
+
+    assert_eq!(runs.len(), 2);
+    assert_eq!(runs[0].run_id, "cr-newer");
+    assert_eq!(runs[1].run_id, "cr-older");
+}
+
+#[test]
 fn load_task_summary_and_counts_are_consistent() {
     let mut fixture = TestState::new();
     let (state, task_id) = seed_task(&mut fixture);
@@ -344,6 +416,125 @@ fn load_task_summary_and_counts_are_consistent() {
     assert!(total >= 1);
     assert_eq!(finished, 0);
     assert_eq!(failed, 0);
+}
+
+#[test]
+fn load_task_item_counts_handles_finished_and_failed_statuses() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let ts = crate::config_load::now_ts();
+
+    conn.execute(
+        "UPDATE task_items SET status='verified' WHERE task_id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("update seeded item");
+    conn.execute(
+        "INSERT INTO task_items (id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, updated_at, created_at)
+         VALUES ('item-failed-count', ?1, 20, '/tmp/qa-failed.md', 'qa_failed', '[]', '[]', 0, 0, '', '', '', ?2, ?2)",
+        params![task_id.clone(), ts],
+    )
+    .expect("insert failed item");
+    conn.execute(
+        "INSERT INTO task_items (id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, updated_at, created_at)
+         VALUES ('item-unresolved-count', ?1, 21, '/tmp/qa-unresolved.md', 'unresolved', '[]', '[]', 0, 0, '', '', '', ?2, ?2)",
+        params![task_id.clone(), ts],
+    )
+    .expect("insert unresolved item");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let (total, finished, failed) = repo
+        .load_task_item_counts(&task_id)
+        .expect("item counts should load");
+
+    assert_eq!(total, 3);
+    assert_eq!(finished, 2);
+    assert_eq!(failed, 2);
+}
+
+#[test]
+fn graph_run_queries_insert_update_and_upsert_snapshots() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+
+    super::super::queries::insert_task_graph_run(
+        &conn,
+        &NewTaskGraphRun {
+            graph_run_id: "graph-upsert".to_string(),
+            task_id: task_id.clone(),
+            cycle: 7,
+            mode: "dynamic_dag".to_string(),
+            source: "adaptive_planner".to_string(),
+            status: "materialized".to_string(),
+            fallback_mode: Some("deterministic_dag".to_string()),
+            planner_failure_class: Some("invalid_json".to_string()),
+            planner_failure_message: Some("broken planner output".to_string()),
+            entry_node_id: Some("qa".to_string()),
+            node_count: 2,
+            edge_count: 1,
+        },
+    )
+    .expect("insert graph run");
+    super::super::queries::update_task_graph_run_status(&conn, "graph-upsert", "completed")
+        .expect("update graph run");
+    super::super::queries::insert_task_graph_snapshot(
+        &conn,
+        &NewTaskGraphSnapshot {
+            graph_run_id: "graph-upsert".to_string(),
+            task_id: task_id.clone(),
+            snapshot_kind: "effective_graph".to_string(),
+            payload_json: "{\"entry\":\"qa\"}".to_string(),
+        },
+    )
+    .expect("insert graph snapshot");
+    super::super::queries::insert_task_graph_snapshot(
+        &conn,
+        &NewTaskGraphSnapshot {
+            graph_run_id: "graph-upsert".to_string(),
+            task_id: task_id.clone(),
+            snapshot_kind: "effective_graph".to_string(),
+            payload_json: "{\"entry\":\"fix\"}".to_string(),
+        },
+    )
+    .expect("upsert graph snapshot");
+    super::super::queries::insert_task_graph_snapshot(
+        &conn,
+        &NewTaskGraphSnapshot {
+            graph_run_id: "graph-upsert".to_string(),
+            task_id: task_id.clone(),
+            snapshot_kind: "execution_replay".to_string(),
+            payload_json: "{\"node_execution_order\":[\"qa\"]}".to_string(),
+        },
+    )
+    .expect("insert replay snapshot");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let bundles = repo
+        .load_task_graph_debug_bundles(&task_id)
+        .expect("load graph bundles");
+
+    assert_eq!(bundles.len(), 1);
+    assert_eq!(bundles[0].graph_run_id, "graph-upsert");
+    assert_eq!(bundles[0].status, "completed");
+    assert_eq!(
+        bundles[0].fallback_mode.as_deref(),
+        Some("deterministic_dag")
+    );
+    assert_eq!(
+        bundles[0].planner_failure_class.as_deref(),
+        Some("invalid_json")
+    );
+    assert_eq!(
+        bundles[0].planner_failure_message.as_deref(),
+        Some("broken planner output")
+    );
+    assert_eq!(bundles[0].effective_graph_json, "{\"entry\":\"fix\"}");
+    assert_eq!(
+        bundles[0].execution_replay_json.as_deref(),
+        Some("{\"node_execution_order\":[\"qa\"]}")
+    );
 }
 
 // ── find_latest_resumable_task_id ──────────────────────────────────
