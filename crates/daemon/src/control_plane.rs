@@ -7,7 +7,7 @@ use agent_orchestrator::db::{insert_control_plane_audit, ControlPlaneAuditRecord
 use anyhow::{anyhow, bail, Context, Result};
 use clap::ValueEnum;
 use rcgen::{
-    BasicConstraints, Certificate, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair,
+    BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, Issuer, KeyPair,
     KeyUsagePurpose, SanType,
 };
 use serde::{Deserialize, Serialize};
@@ -576,7 +576,8 @@ fn preferred_endpoint(bind_addr: &SocketAddr) -> String {
 }
 
 fn generate_ca() -> Result<PemBundle> {
-    let mut params = CertificateParams::new(Vec::<String>::new());
+    let mut params = CertificateParams::new(Vec::<String>::new())
+        .context("failed to initialize CA certificate parameters")?;
     let mut dn = DistinguishedName::new();
     dn.push(DnType::CommonName, "orchestrator control-plane CA");
     params.distinguished_name = dn;
@@ -586,12 +587,13 @@ fn generate_ca() -> Result<PemBundle> {
         KeyUsagePurpose::DigitalSignature,
         KeyUsagePurpose::CrlSign,
     ];
-    let cert = Certificate::from_params(params).context("failed to build CA certificate")?;
+    let key_pair = KeyPair::generate().context("failed to generate CA private key")?;
+    let cert = params
+        .self_signed(&key_pair)
+        .context("failed to build CA certificate")?;
     Ok(PemBundle {
-        cert_pem: cert
-            .serialize_pem()
-            .context("failed to serialize CA cert")?,
-        key_pem: cert.serialize_private_key_pem(),
+        cert_pem: cert.pem(),
+        key_pem: key_pair.serialize_pem(),
     })
 }
 
@@ -601,7 +603,8 @@ fn sign_server_cert(
     bind_addr: &SocketAddr,
 ) -> Result<PemBundle> {
     let signer = signer_from_pem(ca_cert_pem, ca_key_pem)?;
-    let mut params = CertificateParams::new(Vec::<String>::new());
+    let mut params = CertificateParams::new(Vec::<String>::new())
+        .context("failed to initialize server certificate parameters")?;
     let mut dn = DistinguishedName::new();
     dn.push(DnType::CommonName, "orchestrator-control-plane");
     params.distinguished_name = dn;
@@ -610,21 +613,23 @@ fn sign_server_cert(
         KeyUsagePurpose::KeyEncipherment,
     ];
     params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
-    for san in server_sans(bind_addr) {
+    for san in server_sans(bind_addr)? {
         params.subject_alt_names.push(san);
     }
-    let cert = Certificate::from_params(params).context("failed to build server certificate")?;
+    let key_pair = KeyPair::generate().context("failed to generate server private key")?;
+    let cert = params
+        .signed_by(&key_pair, &signer)
+        .context("failed to build server certificate")?;
     Ok(PemBundle {
-        cert_pem: cert
-            .serialize_pem_with_signer(&signer)
-            .context("failed to sign server certificate")?,
-        key_pem: cert.serialize_private_key_pem(),
+        cert_pem: cert.pem(),
+        key_pem: key_pair.serialize_pem(),
     })
 }
 
 fn sign_client_cert(ca_cert_pem: &str, ca_key_pem: &str, subject_id: &str) -> Result<PemBundle> {
     let signer = signer_from_pem(ca_cert_pem, ca_key_pem)?;
-    let mut params = CertificateParams::new(Vec::<String>::new());
+    let mut params = CertificateParams::new(Vec::<String>::new())
+        .context("failed to initialize client certificate parameters")?;
     let mut dn = DistinguishedName::new();
     dn.push(DnType::CommonName, subject_id);
     params.distinguished_name = dn;
@@ -635,24 +640,23 @@ fn sign_client_cert(ca_cert_pem: &str, ca_key_pem: &str, subject_id: &str) -> Re
     params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ClientAuth];
     params
         .subject_alt_names
-        .push(SanType::URI(subject_id.to_string()));
-    let cert = Certificate::from_params(params).context("failed to build client certificate")?;
+        .push(SanType::URI(subject_id.to_string().try_into()?));
+    let key_pair = KeyPair::generate().context("failed to generate client private key")?;
+    let cert = params
+        .signed_by(&key_pair, &signer)
+        .context("failed to build client certificate")?;
     Ok(PemBundle {
-        cert_pem: cert
-            .serialize_pem_with_signer(&signer)
-            .context("failed to sign client certificate")?,
-        key_pem: cert.serialize_private_key_pem(),
+        cert_pem: cert.pem(),
+        key_pem: key_pair.serialize_pem(),
     })
 }
 
-fn signer_from_pem(ca_cert_pem: &str, ca_key_pem: &str) -> Result<Certificate> {
+fn signer_from_pem(ca_cert_pem: &str, ca_key_pem: &str) -> Result<Issuer<'static, KeyPair>> {
     let key_pair = KeyPair::from_pem(ca_key_pem).context("failed to parse CA key")?;
-    let params = CertificateParams::from_ca_cert_pem(ca_cert_pem, key_pair)
-        .context("failed to parse CA certificate")?;
-    Certificate::from_params(params).context("failed to rebuild CA signer")
+    Issuer::from_ca_cert_pem(ca_cert_pem, key_pair).context("failed to parse CA certificate")
 }
 
-fn server_sans(bind_addr: &SocketAddr) -> Vec<SanType> {
+fn server_sans(bind_addr: &SocketAddr) -> Result<Vec<SanType>> {
     let mut ip_sans = BTreeSet::new();
     ip_sans.insert(IpAddr::V4(std::net::Ipv4Addr::LOCALHOST));
     ip_sans.insert(IpAddr::V6(std::net::Ipv6Addr::LOCALHOST));
@@ -665,11 +669,11 @@ fn server_sans(bind_addr: &SocketAddr) -> Vec<SanType> {
     }
 
     let mut sans = vec![
-        SanType::DnsName("localhost".to_string()),
-        SanType::DnsName("orchestrator.local".to_string()),
+        SanType::DnsName("localhost".try_into()?),
+        SanType::DnsName("orchestrator.local".try_into()?),
     ];
     sans.extend(ip_sans.into_iter().map(SanType::IpAddress));
-    sans
+    Ok(sans)
 }
 
 fn required_role_for_rpc(rpc: &str) -> Role {
