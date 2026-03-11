@@ -20,7 +20,7 @@ This doc validates the contract introduced by FR-008 governance:
 
 ---
 
-## Scenario 1: Execution Plan Preserves Chain Shape
+## Scenario 1: Runtime Execution Preserves Chain Shape
 
 ### Preconditions
 
@@ -28,7 +28,7 @@ This doc validates the contract introduced by FR-008 governance:
 
 ### Steps
 
-1. Run the execution-plan regression:
+1. Run the runtime regression:
    ```bash
    cargo test -p agent-orchestrator smoke_chain_execution_plan_preserves_chain_steps_at_runtime -- --nocapture
    ```
@@ -36,7 +36,8 @@ This doc validates the contract introduced by FR-008 governance:
 ### Expected
 
 - The test passes
-- The serialized `execution_plan_json` contains `chain_steps`
+- The runtime command phases execute as `plan -> review -> qa_doc_gen`
+- The emitted `chain_step_started` / `chain_step_finished` events include `parent_step = smoke_chain`
 - The loaded runtime context resolves the parent step to `ExecutionMode::Chain`
 - The runtime plan still contains the expected child-step count
 
@@ -60,11 +61,17 @@ This doc validates the contract introduced by FR-008 governance:
    cargo test -p agent-orchestrator build_execution_plan_includes_chain_steps -- --nocapture
    ```
 
+3. Run the spec/config round-trip regression:
+   ```bash
+   cargo test -p agent-orchestrator workflow_chain_steps_round_trip_through_spec_conversion -- --nocapture
+   ```
+
 ### Expected
 
-- Both tests pass
+- All three tests pass
 - A parent chain step is accepted without its own direct agent requirement
 - Child command steps are preserved in the runtime execution plan
+- `chain_steps` survive resource spec/config conversion without being flattened away
 
 ---
 
