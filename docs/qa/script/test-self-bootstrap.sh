@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$REPO_ROOT"
 
-ORCH="orchestrator"
+ORCH="./target/release/orchestrator"
 DB="data/agent_orchestrator.db"
 PASS=0
 FAIL=0
@@ -220,19 +220,20 @@ echo ""
 bold "Scenario 5: Self-Bootstrap Manifest Applies Successfully"
 bold "--------------------------------------------------------------"
 
-S5_DRYRUN=$($ORCH apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}" --dry-run 2>&1) || true
-S5_APPLY=$($ORCH apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${QA_PROJECT}" 2>&1) || true
+S5_PROJECT="${QA_PROJECT}-s5"
+S5_DRYRUN=$($ORCH apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${S5_PROJECT}" --dry-run 2>&1) || true
+S5_APPLY=$($ORCH apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --project "${S5_PROJECT}" 2>&1) || true
 
 echo "  Dry-run output: $(echo "$S5_DRYRUN" | head -5)"
 
 # Check resources exist
-S5_WS=$($ORCH get workspaces --project "${QA_PROJECT}" 2>&1 | grep -c "self" || true)
-S5_AGENTS=$($ORCH get agents --project "${QA_PROJECT}" 2>&1)
+S5_WS=$($ORCH get workspaces --project "${S5_PROJECT}" 2>&1 | grep -c "self" || true)
+S5_AGENTS=$($ORCH get agents --project "${S5_PROJECT}" 2>&1)
 S5_ARCHITECT=$(echo "$S5_AGENTS" | grep -c "architect" || true)
 S5_CODER=$(echo "$S5_AGENTS" | grep -c "coder" || true)
 S5_TESTER=$(echo "$S5_AGENTS" | grep -c "tester" || true)
 S5_REVIEWER=$(echo "$S5_AGENTS" | grep -c "reviewer" || true)
-S5_WF=$($ORCH get workflows --project "${QA_PROJECT}" 2>&1 | grep -c "self-bootstrap" || true)
+S5_WF=$($ORCH get workflows --project "${S5_PROJECT}" 2>&1 | grep -c "self-bootstrap" || true)
 
 echo "  Workspace 'self': ${S5_WS}, agents: architect=${S5_ARCHITECT} coder=${S5_CODER} tester=${S5_TESTER} reviewer=${S5_REVIEWER}, workflow: ${S5_WF}"
 
@@ -240,13 +241,13 @@ if [ "$S5_WS" -ge 1 ] && [ "$S5_ARCHITECT" -ge 1 ] && [ "$S5_CODER" -ge 1 ] && [
   pass "S5: Self-bootstrap manifest applied — 4 agents (architect/coder/tester/reviewer) + workflow registered"
 else
   fail "S5" "Some resources missing after apply"
+  echo "  Apply output: $S5_APPLY"
 fi
 
-# Re-apply test fixture to reset state (S5 adds claude-code agent with multiline templates)
-bold "[Reset] Re-applying test fixture after S5..."
-$ORCH delete "project/${QA_PROJECT}" --force 2>/dev/null || true
-rm -rf "workspace/${QA_PROJECT}"
-$ORCH apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml --project "${QA_PROJECT}" > /dev/null 2>&1
+# Cleanup S5 project
+$ORCH delete "project/${S5_PROJECT}" --force >/dev/null 2>&1 || true
+
+# No need to re-apply test fixture here anymore as we used a separate project
 echo ""
 
 # ============================================================

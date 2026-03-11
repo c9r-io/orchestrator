@@ -63,9 +63,17 @@ if [[ -z "$TASK_ID" ]]; then
 fi
 "$BINARY" task start "$TASK_ID" >/dev/null 2>&1 || true
 
-RUN_STDOUT="$(sqlite3 "$REPO_ROOT/data/agent_orchestrator.db" "SELECT stdout_path FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='${TASK_ID}') ORDER BY started_at DESC LIMIT 1;")"
+# Wait for command_runs entry to appear
+for _ in $(seq 1 10); do
+  RUN_STDOUT="$(sqlite3 "$REPO_ROOT/data/agent_orchestrator.db" "SELECT stdout_path FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='${TASK_ID}') ORDER BY started_at DESC LIMIT 1;" 2>/dev/null)"
+  if [[ -n "$RUN_STDOUT" && -f "$RUN_STDOUT" ]]; then
+    break
+  fi
+  sleep 1
+done
+
 if [[ -z "$RUN_STDOUT" || ! -f "$RUN_STDOUT" ]]; then
-  qa_error "Failed to resolve run stdout path"
+  qa_error "Failed to resolve run stdout path after wait"
   exit 3
 fi
 
