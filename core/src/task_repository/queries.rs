@@ -6,6 +6,7 @@ use rusqlite::{params, OptionalExtension};
 use serde_json::Value;
 
 use super::types::{NewTaskGraphRun, NewTaskGraphSnapshot, TaskLogRunRow, TaskRuntimeRow};
+use super::TaskDetailRows;
 use rusqlite::Connection;
 
 pub fn resolve_task_id(conn: &Connection, task_id_or_prefix: &str) -> Result<String> {
@@ -73,15 +74,7 @@ pub fn load_task_summary(conn: &Connection, task_id: &str) -> Result<TaskSummary
     .with_context(|| format!("load task summary for task_id={task_id}"))
 }
 
-pub fn load_task_detail_rows(
-    conn: &Connection,
-    task_id: &str,
-) -> Result<(
-    Vec<TaskItemDto>,
-    Vec<CommandRunDto>,
-    Vec<EventDto>,
-    Vec<TaskGraphDebugBundle>,
-)> {
+pub fn load_task_detail_rows(conn: &Connection, task_id: &str) -> Result<TaskDetailRows> {
     let mut items_stmt = conn.prepare(
         "SELECT id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, updated_at FROM task_items WHERE task_id = ?1 ORDER BY order_no",
     )?;

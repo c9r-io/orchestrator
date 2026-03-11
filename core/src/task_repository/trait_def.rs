@@ -1,23 +1,14 @@
-use crate::dto::{
-    CommandRunDto, EventDto, TaskGraphDebugBundle, TaskItemDto, TaskItemRow, TaskSummary,
-};
+use crate::dto::{TaskGraphDebugBundle, TaskItemRow, TaskSummary};
 use anyhow::Result;
 
 use super::command_run::NewCommandRun;
 use super::types::{TaskLogRunRow, TaskRuntimeRow};
+use super::TaskDetailRows;
 
 pub trait TaskRepository {
     fn resolve_task_id(&self, task_id_or_prefix: &str) -> Result<String>;
     fn load_task_summary(&self, task_id: &str) -> Result<TaskSummary>;
-    fn load_task_detail_rows(
-        &self,
-        task_id: &str,
-    ) -> Result<(
-        Vec<TaskItemDto>,
-        Vec<CommandRunDto>,
-        Vec<EventDto>,
-        Vec<TaskGraphDebugBundle>,
-    )>;
+    fn load_task_detail_rows(&self, task_id: &str) -> Result<TaskDetailRows>;
     fn load_task_item_counts(&self, task_id: &str) -> Result<(i64, i64, i64)>;
     fn list_task_ids_ordered_by_created_desc(&self) -> Result<Vec<String>>;
     fn find_latest_resumable_task_id(&self, include_pending: bool) -> Result<Option<String>>;

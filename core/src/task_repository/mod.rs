@@ -21,8 +21,16 @@ pub use types::{
 };
 
 use crate::async_database::{flatten_err, AsyncDatabase};
+use crate::dto::{CommandRunDto, EventDto, TaskGraphDebugBundle, TaskItemDto};
 use anyhow::Result;
 use std::sync::Arc;
+
+pub type TaskDetailRows = (
+    Vec<TaskItemDto>,
+    Vec<CommandRunDto>,
+    Vec<EventDto>,
+    Vec<TaskGraphDebugBundle>,
+);
 
 pub struct SqliteTaskRepository {
     source: types::TaskRepositorySource,
@@ -54,15 +62,7 @@ impl TaskRepository for SqliteTaskRepository {
         queries::load_task_summary(&conn, task_id)
     }
 
-    fn load_task_detail_rows(
-        &self,
-        task_id: &str,
-    ) -> Result<(
-        Vec<crate::dto::TaskItemDto>,
-        Vec<crate::dto::CommandRunDto>,
-        Vec<crate::dto::EventDto>,
-        Vec<crate::dto::TaskGraphDebugBundle>,
-    )> {
+    fn load_task_detail_rows(&self, task_id: &str) -> Result<TaskDetailRows> {
         let conn = self.connection()?;
         queries::load_task_detail_rows(&conn, task_id)
     }
@@ -221,15 +221,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
-    pub async fn load_task_detail_rows(
-        &self,
-        task_id: &str,
-    ) -> Result<(
-        Vec<crate::dto::TaskItemDto>,
-        Vec<crate::dto::CommandRunDto>,
-        Vec<crate::dto::EventDto>,
-        Vec<crate::dto::TaskGraphDebugBundle>,
-    )> {
+    pub async fn load_task_detail_rows(&self, task_id: &str) -> Result<TaskDetailRows> {
         let task_id = task_id.to_owned();
         self.async_db
             .reader()
