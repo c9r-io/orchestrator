@@ -9,7 +9,7 @@
 | FR-002 | Daemon 控制面认证、鉴权与传输安全 | P0 | Proposed |
 | FR-005 | Daemon 生命周期治理与运行态指标补完 | P1 | Proposed |
 | FR-011 | validate/scheduler/runner 职责拆分与验证逻辑去重 | P1 | Proposed |
-| FR-013 | gRPC 控制面速率限制与 DoS 防护 | P0 | Proposed |
+| FR-013 | gRPC 控制面速率限制与 DoS 防护 | P0 | In Progress |
 | FR-014 | 关键路径 `expect()` 清退与错误语义收敛 | P1 | Proposed |
 | FR-015 | 高频 `clone()` 优化与共享所有权治理 | P2 | Proposed |
 | FR-016 | 异步上下文锁模型收敛到 `tokio::sync::RwLock` | P1 | Proposed |

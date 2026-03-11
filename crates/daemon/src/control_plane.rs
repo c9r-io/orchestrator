@@ -303,6 +303,10 @@ impl ControlPlaneSecurity {
                 reason: event.reason,
                 tls_fingerprint: event.tls_fingerprint,
                 rejection_stage: event.rejection_stage.map(|s| s.to_string()),
+                traffic_class: None,
+                limit_scope: None,
+                decision: None,
+                reason_code: None,
             },
         )
     }
@@ -713,6 +717,13 @@ fn subject_id_from_der(der: &[u8]) -> Result<String> {
         }
     }
     bail!("client certificate missing URI SAN")
+}
+
+pub(crate) fn subject_id_from_request<T>(request: &Request<T>) -> Option<String> {
+    request
+        .peer_certs()
+        .and_then(|certs| certs.first().cloned())
+        .and_then(|cert| subject_id_from_der(cert.as_ref()).ok())
 }
 
 fn sha256_fingerprint(bytes: &[u8]) -> String {

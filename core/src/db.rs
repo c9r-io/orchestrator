@@ -43,6 +43,10 @@ pub struct ControlPlaneAuditRecord {
     pub reason: Option<String>,
     pub tls_fingerprint: Option<String>,
     pub rejection_stage: Option<String>,
+    pub traffic_class: Option<String>,
+    pub limit_scope: Option<String>,
+    pub decision: Option<String>,
+    pub reason_code: Option<String>,
 }
 
 pub fn open_conn(db_path: &Path) -> Result<Connection> {
@@ -194,8 +198,9 @@ pub fn insert_control_plane_audit(db_path: &Path, record: &ControlPlaneAuditReco
     conn.execute(
         "INSERT INTO control_plane_audit (
             created_at, transport, remote_addr, rpc, subject_id, authn_result,
-            authz_result, role, reason, tls_fingerprint, rejection_stage
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            authz_result, role, reason, tls_fingerprint, rejection_stage,
+            traffic_class, limit_scope, decision, reason_code
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
         params![
             crate::config_load::now_ts(),
             record.transport,
@@ -208,6 +213,10 @@ pub fn insert_control_plane_audit(db_path: &Path, record: &ControlPlaneAuditReco
             record.reason,
             record.tls_fingerprint,
             record.rejection_stage,
+            record.traffic_class,
+            record.limit_scope,
+            record.decision,
+            record.reason_code,
         ],
     )?;
     Ok(())
@@ -806,6 +815,10 @@ mod tests {
             reason: Some("normal access".to_string()),
             tls_fingerprint: None,
             rejection_stage: None,
+            traffic_class: None,
+            limit_scope: None,
+            decision: None,
+            reason_code: None,
         };
         insert_control_plane_audit(&db_path, &record).expect("insert audit");
 
@@ -839,6 +852,10 @@ mod tests {
             reason: None,
             tls_fingerprint: None,
             rejection_stage: None,
+            traffic_class: None,
+            limit_scope: None,
+            decision: None,
+            reason_code: None,
         };
         insert_control_plane_audit(&db_path, &record).expect("insert audit with nones");
 

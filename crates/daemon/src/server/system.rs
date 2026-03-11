@@ -7,6 +7,7 @@ pub(crate) async fn ping(
     server: &OrchestratorServer,
     request: Request<PingRequest>,
 ) -> Result<Response<PingResponse>, Status> {
+    let _guard = server.protect_unary(&request, "Ping")?;
     super::authorize(server, &request, "Ping").map_err(Status::from)?;
     let runtime = agent_orchestrator::service::daemon::runtime_snapshot(&server.state);
     Ok(Response::new(PingResponse {
@@ -22,6 +23,7 @@ pub(crate) async fn shutdown(
     server: &OrchestratorServer,
     request: Request<ShutdownRequest>,
 ) -> Result<Response<ShutdownResponse>, Status> {
+    let _guard = server.protect_unary(&request, "Shutdown")?;
     super::authorize(server, &request, "Shutdown").map_err(Status::from)?;
     let req = request.into_inner();
     tracing::info!(graceful = req.graceful, "shutdown requested via RPC");
@@ -36,6 +38,7 @@ pub(crate) async fn config_debug(
     server: &OrchestratorServer,
     request: Request<ConfigDebugRequest>,
 ) -> Result<Response<ConfigDebugResponse>, Status> {
+    let _guard = server.protect_unary(&request, "ConfigDebug")?;
     super::authorize(server, &request, "ConfigDebug").map_err(Status::from)?;
     let req = request.into_inner();
     let content =
@@ -52,6 +55,7 @@ pub(crate) async fn worker_status(
     server: &OrchestratorServer,
     request: Request<WorkerStatusRequest>,
 ) -> Result<Response<WorkerStatusResponse>, Status> {
+    let _guard = server.protect_unary(&request, "WorkerStatus")?;
     super::authorize(server, &request, "WorkerStatus").map_err(Status::from)?;
     let status = agent_orchestrator::service::system::worker_status(&server.state)
         .await
@@ -64,6 +68,7 @@ pub(crate) async fn check(
     server: &OrchestratorServer,
     request: Request<CheckRequest>,
 ) -> Result<Response<CheckResponse>, Status> {
+    let _guard = server.protect_unary(&request, "Check")?;
     super::authorize(server, &request, "Check").map_err(Status::from)?;
     let req = request.into_inner();
     let report = agent_orchestrator::service::system::run_check(
@@ -91,6 +96,7 @@ pub(crate) async fn init(
     server: &OrchestratorServer,
     request: Request<InitRequest>,
 ) -> Result<Response<InitResponse>, Status> {
+    let _guard = server.protect_unary(&request, "Init")?;
     super::authorize(server, &request, "Init").map_err(Status::from)?;
     let req = request.into_inner();
     let message = agent_orchestrator::service::system::run_init(&server.state, req.root.as_deref())
@@ -102,6 +108,7 @@ pub(crate) async fn db_status(
     server: &OrchestratorServer,
     request: Request<DbStatusRequest>,
 ) -> Result<Response<DbStatusResponse>, Status> {
+    let _guard = server.protect_unary(&request, "DbStatus")?;
     super::authorize(server, &request, "DbStatus").map_err(Status::from)?;
     let status = agent_orchestrator::service::system::db_status(&server.state)
         .map_err(|e| Status::internal(format!("{e}")))?;
@@ -112,6 +119,7 @@ pub(crate) async fn db_migrations_list(
     server: &OrchestratorServer,
     request: Request<DbMigrationsListRequest>,
 ) -> Result<Response<DbMigrationsListResponse>, Status> {
+    let _guard = server.protect_unary(&request, "DbMigrationsList")?;
     super::authorize(server, &request, "DbMigrationsList").map_err(Status::from)?;
     let list = agent_orchestrator::service::system::db_migrations_list(&server.state)
         .map_err(|e| Status::internal(format!("{e}")))?;
@@ -122,6 +130,7 @@ pub(crate) async fn manifest_validate(
     server: &OrchestratorServer,
     request: Request<ManifestValidateRequest>,
 ) -> Result<Response<ManifestValidateResponse>, Status> {
+    let _guard = server.protect_unary(&request, "ManifestValidate")?;
     super::authorize(server, &request, "ManifestValidate").map_err(Status::from)?;
     let req = request.into_inner();
     let report = agent_orchestrator::service::system::validate_manifests(

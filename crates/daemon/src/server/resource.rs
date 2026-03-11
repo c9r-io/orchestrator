@@ -7,6 +7,7 @@ pub(crate) async fn apply(
     server: &OrchestratorServer,
     request: Request<ApplyRequest>,
 ) -> Result<Response<ApplyResponse>, Status> {
+    let _guard = server.protect_unary(&request, "Apply")?;
     super::authorize(server, &request, "Apply").map_err(Status::from)?;
     let req = request.into_inner();
     let result = agent_orchestrator::service::resource::apply_manifests(
@@ -25,6 +26,7 @@ pub(crate) async fn get(
     server: &OrchestratorServer,
     request: Request<GetRequest>,
 ) -> Result<Response<GetResponse>, Status> {
+    let _guard = server.protect_unary(&request, "Get")?;
     super::authorize(server, &request, "Get").map_err(Status::from)?;
     let req = request.into_inner();
     let content = agent_orchestrator::service::resource::get_resource(
@@ -46,6 +48,7 @@ pub(crate) async fn describe(
     server: &OrchestratorServer,
     request: Request<DescribeRequest>,
 ) -> Result<Response<DescribeResponse>, Status> {
+    let _guard = server.protect_unary(&request, "Describe")?;
     super::authorize(server, &request, "Describe").map_err(Status::from)?;
     let req = request.into_inner();
     let content = agent_orchestrator::service::resource::describe_resource(
@@ -66,6 +69,7 @@ pub(crate) async fn delete(
     server: &OrchestratorServer,
     request: Request<DeleteRequest>,
 ) -> Result<Response<DeleteResponse>, Status> {
+    let _guard = server.protect_unary(&request, "Delete")?;
     super::authorize(server, &request, "Delete").map_err(Status::from)?;
     let req = request.into_inner();
     agent_orchestrator::service::resource::delete_resource(
@@ -94,6 +98,7 @@ pub(crate) async fn manifest_export(
     server: &OrchestratorServer,
     request: Request<ManifestExportRequest>,
 ) -> Result<Response<ManifestExportResponse>, Status> {
+    let _guard = server.protect_unary(&request, "ManifestExport")?;
     super::authorize(server, &request, "ManifestExport").map_err(Status::from)?;
     let req = request.into_inner();
     let content =

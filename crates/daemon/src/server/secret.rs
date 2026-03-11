@@ -24,11 +24,11 @@ pub(crate) async fn secret_key_status(
     server: &OrchestratorServer,
     request: Request<SecretKeyStatusRequest>,
 ) -> Result<Response<SecretKeyStatusResponse>, Status> {
+    let _guard = server.protect_unary(&request, "SecretKeyStatus")?;
     authorize(server, &request, "SecretKeyStatus").map_err(Status::from)?;
 
-    let keyring =
-        secret_key_lifecycle::load_keyring(&server.state.app_root, &server.state.db_path)
-            .map_err(|e| Status::internal(e.to_string()))?;
+    let keyring = secret_key_lifecycle::load_keyring(&server.state.app_root, &server.state.db_path)
+        .map_err(|e| Status::internal(e.to_string()))?;
 
     let active_key = keyring.active_record().map(map_key_record);
     let all_keys = keyring.all_records().iter().map(map_key_record).collect();
@@ -43,11 +43,11 @@ pub(crate) async fn secret_key_list(
     server: &OrchestratorServer,
     request: Request<SecretKeyListRequest>,
 ) -> Result<Response<SecretKeyListResponse>, Status> {
+    let _guard = server.protect_unary(&request, "SecretKeyList")?;
     authorize(server, &request, "SecretKeyList").map_err(Status::from)?;
 
-    let keyring =
-        secret_key_lifecycle::load_keyring(&server.state.app_root, &server.state.db_path)
-            .map_err(|e| Status::internal(e.to_string()))?;
+    let keyring = secret_key_lifecycle::load_keyring(&server.state.app_root, &server.state.db_path)
+        .map_err(|e| Status::internal(e.to_string()))?;
 
     let keys = keyring.all_records().iter().map(map_key_record).collect();
     Ok(Response::new(SecretKeyListResponse { keys }))
@@ -57,6 +57,7 @@ pub(crate) async fn secret_key_rotate(
     server: &OrchestratorServer,
     request: Request<SecretKeyRotateRequest>,
 ) -> Result<Response<SecretKeyRotateResponse>, Status> {
+    let _guard = server.protect_unary(&request, "SecretKeyRotate")?;
     authorize(server, &request, "SecretKeyRotate").map_err(Status::from)?;
 
     let req = request.into_inner();
@@ -64,9 +65,8 @@ pub(crate) async fn secret_key_rotate(
         .map_err(|e| Status::internal(e.to_string()))?;
 
     if req.resume {
-        let report =
-            secret_key_lifecycle::resume_rotation(&conn, &server.state.app_root)
-                .map_err(|e| Status::internal(e.to_string()))?;
+        let report = secret_key_lifecycle::resume_rotation(&conn, &server.state.app_root)
+            .map_err(|e| Status::internal(e.to_string()))?;
         return Ok(Response::new(SecretKeyRotateResponse {
             message: if report.errors.is_empty() {
                 "rotation resumed and completed successfully".to_string()
@@ -80,26 +80,23 @@ pub(crate) async fn secret_key_rotate(
     }
 
     // Begin new rotation
-    let (new_rec, old_rec) =
-        secret_key_lifecycle::begin_rotation(&conn, &server.state.app_root)
-            .map_err(|e| Status::internal(e.to_string()))?;
+    let (new_rec, old_rec) = secret_key_lifecycle::begin_rotation(&conn, &server.state.app_root)
+        .map_err(|e| Status::internal(e.to_string()))?;
 
     // Re-encrypt with new key
-    let old_key_path = server
-        .state
-        .app_root
-        .join(&old_rec.file_path);
-    let new_key_path = server
-        .state
-        .app_root
-        .join(&new_rec.file_path);
+    let old_key_path = server.state.app_root.join(&old_rec.file_path);
+    let new_key_path = server.state.app_root.join(&new_rec.file_path);
 
-    let old_handle =
-        agent_orchestrator::secret_store_crypto::load_key_file_as_handle(&old_key_path, &old_rec.key_id)
-            .map_err(|e| Status::internal(e.to_string()))?;
-    let new_handle =
-        agent_orchestrator::secret_store_crypto::load_key_file_as_handle(&new_key_path, &new_rec.key_id)
-            .map_err(|e| Status::internal(e.to_string()))?;
+    let old_handle = agent_orchestrator::secret_store_crypto::load_key_file_as_handle(
+        &old_key_path,
+        &old_rec.key_id,
+    )
+    .map_err(|e| Status::internal(e.to_string()))?;
+    let new_handle = agent_orchestrator::secret_store_crypto::load_key_file_as_handle(
+        &new_key_path,
+        &new_rec.key_id,
+    )
+    .map_err(|e| Status::internal(e.to_string()))?;
 
     let report = secret_key_lifecycle::re_encrypt_all_secrets(
         &conn,
@@ -137,6 +134,7 @@ pub(crate) async fn secret_key_revoke(
     server: &OrchestratorServer,
     request: Request<SecretKeyRevokeRequest>,
 ) -> Result<Response<SecretKeyRevokeResponse>, Status> {
+    let _guard = server.protect_unary(&request, "SecretKeyRevoke")?;
     authorize(server, &request, "SecretKeyRevoke").map_err(Status::from)?;
 
     let req = request.into_inner();
@@ -155,6 +153,7 @@ pub(crate) async fn secret_key_history(
     server: &OrchestratorServer,
     request: Request<SecretKeyHistoryRequest>,
 ) -> Result<Response<SecretKeyHistoryResponse>, Status> {
+    let _guard = server.protect_unary(&request, "SecretKeyHistory")?;
     authorize(server, &request, "SecretKeyHistory").map_err(Status::from)?;
 
     let req = request.into_inner();

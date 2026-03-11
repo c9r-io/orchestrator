@@ -159,6 +159,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0016_secret_key_lifecycle",
             up: crate::persistence::migration_steps::m0016_secret_key_lifecycle,
         },
+        Migration {
+            version: 17,
+            name: "m0017_control_plane_protection_fields",
+            up: crate::persistence::migration_steps::m0017_control_plane_protection_fields,
+        },
     ]
 }
 

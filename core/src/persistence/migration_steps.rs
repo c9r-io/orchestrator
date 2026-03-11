@@ -603,7 +603,7 @@ pub(crate) fn m0015_control_plane_audit_rejection_stage(conn: &Connection) -> Re
     )?;
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_control_plane_audit_rejection_stage
-             ON control_plane_audit(rejection_stage, created_at);"
+             ON control_plane_audit(rejection_stage, created_at);",
     )?;
     Ok(())
 }
@@ -647,6 +647,42 @@ pub(crate) fn m0016_secret_key_lifecycle(conn: &Connection) -> Result<()> {
     //
     // Note: Legacy import during migration is attempted via a pragmatic heuristic.
     // The authoritative import happens in bootstrap when load_keyring is called.
+    Ok(())
+}
+
+pub(crate) fn m0017_control_plane_protection_fields(conn: &Connection) -> Result<()> {
+    ensure_column_exists(
+        conn,
+        "control_plane_audit",
+        "traffic_class",
+        "ALTER TABLE control_plane_audit ADD COLUMN traffic_class TEXT",
+    )?;
+    ensure_column_exists(
+        conn,
+        "control_plane_audit",
+        "limit_scope",
+        "ALTER TABLE control_plane_audit ADD COLUMN limit_scope TEXT",
+    )?;
+    ensure_column_exists(
+        conn,
+        "control_plane_audit",
+        "decision",
+        "ALTER TABLE control_plane_audit ADD COLUMN decision TEXT",
+    )?;
+    ensure_column_exists(
+        conn,
+        "control_plane_audit",
+        "reason_code",
+        "ALTER TABLE control_plane_audit ADD COLUMN reason_code TEXT",
+    )?;
+    conn.execute_batch(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_control_plane_audit_decision
+            ON control_plane_audit(decision, created_at);
+        CREATE INDEX IF NOT EXISTS idx_control_plane_audit_reason_code
+            ON control_plane_audit(reason_code, created_at);
+        "#,
+    )?;
     Ok(())
 }
 

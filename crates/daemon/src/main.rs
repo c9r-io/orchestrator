@@ -5,6 +5,7 @@
 
 mod control_plane;
 mod lifecycle;
+mod protection;
 mod server;
 
 use std::path::PathBuf;
@@ -141,10 +142,17 @@ fn main() -> Result<()> {
 
         let shutdown_notify = Arc::new(tokio::sync::Notify::new());
 
+        let protection = Arc::new(protection::ControlPlaneProtection::load_or_bootstrap(
+            &inner.app_root,
+            &inner.db_path,
+            args.control_plane_dir.as_deref(),
+        )?);
+
         let service = server::OrchestratorServer::new(
             inner.clone(),
             shutdown_notify.clone(),
             None,
+            protection.clone(),
         );
 
         // Shutdown future: listen for OS signals, restart request, or RPC shutdown
@@ -183,6 +191,7 @@ fn main() -> Result<()> {
                     inner.clone(),
                     shutdown_notify.clone(),
                     Some(secure.security),
+                    protection.clone(),
                 )))
                 .serve_with_shutdown(addr, shutdown_fut)
                 .await

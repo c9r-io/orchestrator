@@ -1,3 +1,6 @@
+use std::pin::Pin;
+
+use futures::Stream;
 use orchestrator_proto::*;
 use tonic::{Request, Response, Status};
 
@@ -5,18 +8,57 @@ use super::mapping::{
     event_to_proto, graph_debug_to_proto, item_to_proto, run_to_proto, summary_to_proto,
 };
 use super::OrchestratorServer;
+use crate::protection::ProtectionLease;
 
-pub(crate) type TaskLogsStream =
-    tokio_stream::wrappers::ReceiverStream<Result<TaskLogChunk, Status>>;
-pub(crate) type TaskFollowStream =
-    tokio_stream::wrappers::ReceiverStream<Result<TaskLogLine, Status>>;
+pub(crate) type TaskLogsStream = Pin<Box<dyn Stream<Item = Result<TaskLogChunk, Status>> + Send>>;
+pub(crate) type TaskFollowStream = Pin<Box<dyn Stream<Item = Result<TaskLogLine, Status>> + Send>>;
 pub(crate) type TaskWatchStream =
-    tokio_stream::wrappers::ReceiverStream<Result<TaskWatchSnapshot, Status>>;
+    Pin<Box<dyn Stream<Item = Result<TaskWatchSnapshot, Status>> + Send>>;
+
+struct GuardedStream<S> {
+    inner: S,
+    _lease: ProtectionLease,
+}
+
+impl<S, T> Stream for GuardedStream<S>
+where
+    S: Stream<Item = Result<T, Status>> + Unpin,
+{
+    type Item = Result<T, Status>;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        Pin::new(&mut self.inner).poll_next(cx)
+    }
+}
+
+fn boxed_stream<S, T>(stream: S) -> Pin<Box<dyn Stream<Item = Result<T, Status>> + Send>>
+where
+    S: Stream<Item = Result<T, Status>> + Send + 'static,
+{
+    Box::pin(stream)
+}
+
+fn guarded_stream<S, T>(
+    stream: S,
+    lease: ProtectionLease,
+) -> Pin<Box<dyn Stream<Item = Result<T, Status>> + Send>>
+where
+    S: Stream<Item = Result<T, Status>> + Send + Unpin + 'static,
+{
+    Box::pin(GuardedStream {
+        inner: stream,
+        _lease: lease,
+    })
+}
 
 pub(crate) async fn task_create(
     server: &OrchestratorServer,
     request: Request<TaskCreateRequest>,
 ) -> Result<Response<TaskCreateResponse>, Status> {
+    let _guard = server.protect_unary(&request, "TaskCreate")?;
     super::authorize(server, &request, "TaskCreate").map_err(Status::from)?;
     let req = request.into_inner();
     if !req.no_start {
@@ -64,6 +106,7 @@ pub(crate) async fn task_start(
     server: &OrchestratorServer,
     request: Request<TaskStartRequest>,
 ) -> Result<Response<TaskStartResponse>, Status> {
+    let _guard = server.protect_unary(&request, "TaskStart")?;
     super::authorize(server, &request, "TaskStart").map_err(Status::from)?;
     if let Some(status) = server.reject_new_work_during_shutdown("TaskStart") {
         return Err(status);
@@ -91,6 +134,7 @@ pub(crate) async fn task_pause(
     server: &OrchestratorServer,
     request: Request<TaskPauseRequest>,
 ) -> Result<Response<TaskPauseResponse>, Status> {
+    let _guard = server.protect_unary(&request, "TaskPause")?;
     super::authorize(server, &request, "TaskPause").map_err(Status::from)?;
     let req = request.into_inner();
     let id = agent_orchestrator::service::task::resolve_id(&server.state, &req.task_id)
@@ -109,6 +153,7 @@ pub(crate) async fn task_resume(
     server: &OrchestratorServer,
     request: Request<TaskResumeRequest>,
 ) -> Result<Response<TaskResumeResponse>, Status> {
+    let _guard = server.protect_unary(&request, "TaskResume")?;
     super::authorize(server, &request, "TaskResume").map_err(Status::from)?;
     if let Some(status) = server.reject_new_work_during_shutdown("TaskResume") {
         return Err(status);
@@ -132,6 +177,7 @@ pub(crate) async fn task_delete(
     server: &OrchestratorServer,
     request: Request<TaskDeleteRequest>,
 ) -> Result<Response<TaskDeleteResponse>, Status> {
+    let _guard = server.protect_unary(&request, "TaskDelete")?;
     super::authorize(server, &request, "TaskDelete").map_err(Status::from)?;
     let req = request.into_inner();
     if !req.force {
@@ -154,6 +200,7 @@ pub(crate) async fn task_retry(
     server: &OrchestratorServer,
     request: Request<TaskRetryRequest>,
 ) -> Result<Response<TaskRetryResponse>, Status> {
+    let _guard = server.protect_unary(&request, "TaskRetry")?;
     super::authorize(server, &request, "TaskRetry").map_err(Status::from)?;
     if let Some(status) = server.reject_new_work_during_shutdown("TaskRetry") {
         return Err(status);
@@ -182,6 +229,7 @@ pub(crate) async fn task_list(
     server: &OrchestratorServer,
     request: Request<TaskListRequest>,
 ) -> Result<Response<TaskListResponse>, Status> {
+    let _guard = server.protect_unary(&request, "TaskList")?;
     super::authorize(server, &request, "TaskList").map_err(Status::from)?;
     let req = request.into_inner();
     let tasks = agent_orchestrator::service::task::list_tasks(&server.state)
@@ -208,6 +256,7 @@ pub(crate) async fn task_info(
     server: &OrchestratorServer,
     request: Request<TaskInfoRequest>,
 ) -> Result<Response<TaskInfoResponse>, Status> {
+    let _guard = server.protect_unary(&request, "TaskInfo")?;
     super::authorize(server, &request, "TaskInfo").map_err(Status::from)?;
     let req = request.into_inner();
     let detail = agent_orchestrator::service::task::get_task_detail(&server.state, &req.task_id)
@@ -231,6 +280,7 @@ pub(crate) async fn task_logs(
     server: &OrchestratorServer,
     request: Request<TaskLogsRequest>,
 ) -> Result<Response<TaskLogsStream>, Status> {
+    let _guard = server.protect_unary(&request, "TaskLogs")?;
     super::authorize(server, &request, "TaskLogs").map_err(Status::from)?;
     let req = request.into_inner();
     let logs = agent_orchestrator::service::task::get_task_logs(
@@ -255,8 +305,8 @@ pub(crate) async fn task_logs(
         let _ = tx.send(Ok(proto)).await;
     }
 
-    Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
-        rx,
+    Ok(Response::new(boxed_stream(
+        tokio_stream::wrappers::ReceiverStream::new(rx),
     )))
 }
 
@@ -264,6 +314,7 @@ pub(crate) async fn task_follow(
     server: &OrchestratorServer,
     request: Request<TaskFollowRequest>,
 ) -> Result<Response<TaskFollowStream>, Status> {
+    let lease = server.protect_stream(&request, "TaskFollow")?;
     super::authorize(server, &request, "TaskFollow").map_err(Status::from)?;
     let req = request.into_inner();
     let state = server.state.clone();
@@ -290,8 +341,9 @@ pub(crate) async fn task_follow(
         .await;
     });
 
-    Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
-        rx,
+    Ok(Response::new(guarded_stream(
+        tokio_stream::wrappers::ReceiverStream::new(rx),
+        lease,
     )))
 }
 
@@ -299,6 +351,7 @@ pub(crate) async fn task_watch(
     server: &OrchestratorServer,
     request: Request<TaskWatchRequest>,
 ) -> Result<Response<TaskWatchStream>, Status> {
+    let lease = server.protect_stream(&request, "TaskWatch")?;
     super::authorize(server, &request, "TaskWatch").map_err(Status::from)?;
     let req = request.into_inner();
     let state = server.state.clone();
@@ -349,8 +402,9 @@ pub(crate) async fn task_watch(
         }
     });
 
-    Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
-        rx,
+    Ok(Response::new(guarded_stream(
+        tokio_stream::wrappers::ReceiverStream::new(rx),
+        lease,
     )))
 }
 
@@ -358,6 +412,7 @@ pub(crate) async fn task_trace(
     server: &OrchestratorServer,
     request: Request<TaskTraceRequest>,
 ) -> Result<Response<TaskTraceResponse>, Status> {
+    let _guard = server.protect_unary(&request, "TaskTrace")?;
     super::authorize(server, &request, "TaskTrace").map_err(Status::from)?;
     let req = request.into_inner();
     let result =
