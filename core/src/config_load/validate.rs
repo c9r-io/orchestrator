@@ -10,37 +10,46 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use tracing::warn;
 
-pub fn validate_workflow_config(
-    config: &OrchestratorConfig,
-    workflow: &WorkflowConfig,
-    workflow_id: &str,
-) -> Result<()> {
-    validate_workflow_config_for_project(config, workflow, workflow_id, None)
+// ---------------------------------------------------------------------------
+// AgentLookup trait: abstracts over owned vs borrowed agent maps
+// ---------------------------------------------------------------------------
+
+trait AgentLookup {
+    fn get_agent(&self, name: &str) -> Option<&crate::config::AgentConfig>;
+    fn has_capability(&self, capability: &str) -> bool;
 }
 
-/// Project-scoped workflow validation. `project_id` of `None` defaults to the
-/// default project.
-pub fn validate_workflow_config_for_project(
-    config: &OrchestratorConfig,
-    workflow: &WorkflowConfig,
-    workflow_id: &str,
-    project_id: Option<&str>,
-) -> Result<()> {
-    let pid = config.effective_project_id(project_id);
-    let project = config
-        .projects
-        .get(pid)
-        .ok_or_else(|| anyhow::anyhow!("project '{}' not found", pid))?;
-    let project_agents = &project.agents;
-    if workflow.steps.is_empty() {
-        anyhow::bail!("workflow '{}' must define at least one step", workflow_id);
+impl AgentLookup for HashMap<String, crate::config::AgentConfig> {
+    fn get_agent(&self, name: &str) -> Option<&crate::config::AgentConfig> {
+        self.get(name)
     }
-    validate_probe_workflow_shape(workflow, workflow_id)?;
-    validate_execution_profiles_for_project(config, workflow, workflow_id, pid)?;
+    fn has_capability(&self, capability: &str) -> bool {
+        self.values().any(|a| a.supports_capability(capability))
+    }
+}
 
+impl<'a> AgentLookup for HashMap<String, &'a crate::config::AgentConfig> {
+    fn get_agent(&self, name: &str) -> Option<&crate::config::AgentConfig> {
+        self.get(name).copied()
+    }
+    fn has_capability(&self, capability: &str) -> bool {
+        self.values().any(|a| a.supports_capability(capability))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Shared helpers (private)
+// ---------------------------------------------------------------------------
+
+/// Validate the step loop: duplicate IDs, semantic kind, agent capability, prehook.
+fn validate_workflow_steps<A: AgentLookup>(
+    steps: &[crate::config::WorkflowStepConfig],
+    workflow_id: &str,
+    agents: &A,
+) -> Result<usize> {
     let mut enabled_count = 0usize;
     let mut seen_ids: HashSet<String> = HashSet::new();
-    for step in &workflow.steps {
+    for step in steps {
         if !seen_ids.insert(step.id.clone()) {
             anyhow::bail!(
                 "workflow '{}' has duplicate step id '{}'",
@@ -72,7 +81,7 @@ pub fn validate_workflow_config_for_project(
             StepSemanticKind::Builtin { .. } | StepSemanticKind::Command | StepSemanticKind::Chain
         );
         if !is_self_contained {
-            let has_agent = project_agents.values().any(|a| a.supports_capability(key));
+            let has_agent = agents.has_capability(key);
             if !has_agent {
                 anyhow::bail!(
                     "no agent supports capability for step '{}' used by workflow '{}'",
@@ -88,21 +97,15 @@ pub fn validate_workflow_config_for_project(
     if enabled_count == 0 {
         anyhow::bail!("workflow '{}' has no enabled steps", workflow_id);
     }
-    for rule in &workflow.finalize.rules {
-        crate::prehook::validate_workflow_finalize_rule(rule, workflow_id)?;
-    }
-    for dynamic_step in &workflow.dynamic_steps {
-        if let Some(trigger) = dynamic_step.trigger.as_deref() {
-            let prehook = crate::config::StepPrehookConfig {
-                engine: crate::config::StepHookEngine::Cel,
-                when: trigger.to_string(),
-                reason: Some(format!("dynamic step '{}'", dynamic_step.id)),
-                ui: None,
-                extended: false,
-            };
-            crate::prehook::validate_step_prehook(&prehook, workflow_id, &dynamic_step.id)?;
-        }
-    }
+    Ok(enabled_count)
+}
+
+/// Validate loop policy: max_cycles, fixed mode, guard agent.
+fn validate_loop_policy<A: AgentLookup>(
+    workflow: &WorkflowConfig,
+    workflow_id: &str,
+    agents: &A,
+) -> Result<()> {
     if let Some(max_cycles) = workflow.loop_policy.guard.max_cycles {
         if max_cycles == 0 {
             anyhow::bail!(
@@ -122,17 +125,154 @@ pub fn validate_workflow_config_for_project(
     if workflow.loop_policy.guard.enabled
         && !matches!(workflow.loop_policy.mode, crate::config::LoopMode::Once)
     {
-        let has_loop_guard = project_agents
-            .values()
-            .any(|a| a.supports_capability("loop_guard"));
-        if !has_loop_guard {
+        if !agents.has_capability("loop_guard") {
             anyhow::bail!(
                 "workflow '{}' loop.guard enabled but no agent supports loop_guard capability",
                 workflow_id
             );
         }
     }
-    validate_adaptive_workflow_config(workflow, workflow_id, project_agents)?;
+    Ok(())
+}
+
+/// Validate finalize rules.
+fn validate_finalize_rules(workflow: &WorkflowConfig, workflow_id: &str) -> Result<()> {
+    for rule in &workflow.finalize.rules {
+        crate::prehook::validate_workflow_finalize_rule(rule, workflow_id)?;
+    }
+    Ok(())
+}
+
+/// Validate dynamic step triggers.
+fn validate_dynamic_steps(workflow: &WorkflowConfig, workflow_id: &str) -> Result<()> {
+    for dynamic_step in &workflow.dynamic_steps {
+        if let Some(trigger) = dynamic_step.trigger.as_deref() {
+            let prehook = crate::config::StepPrehookConfig {
+                engine: crate::config::StepHookEngine::Cel,
+                when: trigger.to_string(),
+                reason: Some(format!("dynamic step '{}'", dynamic_step.id)),
+                ui: None,
+                extended: false,
+            };
+            crate::prehook::validate_step_prehook(&prehook, workflow_id, &dynamic_step.id)?;
+        }
+    }
+    Ok(())
+}
+
+/// Validate adaptive workflow config generically over agent map type.
+fn validate_adaptive_workflow<A: AgentLookup>(
+    workflow: &WorkflowConfig,
+    workflow_id: &str,
+    agents: &A,
+) -> Result<()> {
+    let Some(adaptive) = workflow.adaptive.as_ref() else {
+        return Ok(());
+    };
+    if !adaptive.enabled {
+        return Ok(());
+    }
+
+    let planner_agent = adaptive
+        .planner_agent
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "workflow '{}' adaptive planner is enabled but adaptive.planner_agent is missing",
+                workflow_id
+            )
+        })?;
+
+    let agent = agents.get_agent(planner_agent).ok_or_else(|| {
+        anyhow::anyhow!(
+            "workflow '{}' adaptive planner references unknown agent '{}'",
+            workflow_id,
+            planner_agent
+        )
+    })?;
+
+    if !agent.supports_capability("adaptive_plan") {
+        anyhow::bail!(
+            "workflow '{}' adaptive planner agent '{}' must support capability 'adaptive_plan'",
+            workflow_id,
+            planner_agent
+        );
+    }
+
+    Ok(())
+}
+
+/// Validate env store refs for a set of agents within a single project.
+fn validate_env_store_refs_for_agents(
+    agents: &HashMap<String, crate::config::AgentConfig>,
+    env_stores: &HashMap<String, crate::config::EnvStoreConfig>,
+    project_id: &str,
+) -> Result<()> {
+    for (agent_name, agent_cfg) in agents {
+        if let Some(ref entries) = agent_cfg.env {
+            for entry in entries {
+                if let Some(ref store_name) = entry.from_ref {
+                    if !env_stores.contains_key(store_name.as_str()) {
+                        anyhow::bail!(
+                            "agent '{}'(project '{}') env fromRef '{}' references unknown store",
+                            agent_name,
+                            project_id,
+                            store_name
+                        );
+                    }
+                }
+                if let Some(ref rv) = entry.ref_value {
+                    if !env_stores.contains_key(&rv.name) {
+                        anyhow::bail!(
+                            "agent '{}'(project '{}') env refValue.name '{}' references unknown store",
+                            agent_name,
+                            project_id,
+                            rv.name
+                        );
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn validate_workflow_config(
+    config: &OrchestratorConfig,
+    workflow: &WorkflowConfig,
+    workflow_id: &str,
+) -> Result<()> {
+    validate_workflow_config_for_project(config, workflow, workflow_id, None)
+}
+
+/// Project-scoped workflow validation. `project_id` of `None` defaults to the
+/// default project.
+pub fn validate_workflow_config_for_project(
+    config: &OrchestratorConfig,
+    workflow: &WorkflowConfig,
+    workflow_id: &str,
+    project_id: Option<&str>,
+) -> Result<()> {
+    let pid = config.effective_project_id(project_id);
+    let project = config
+        .projects
+        .get(pid)
+        .ok_or_else(|| anyhow::anyhow!("project '{}' not found", pid))?;
+    let project_agents = &project.agents;
+    if workflow.steps.is_empty() {
+        anyhow::bail!("workflow '{}' must define at least one step", workflow_id);
+    }
+    validate_probe_workflow_shape(workflow, workflow_id)?;
+    validate_execution_profiles_for_project(config, workflow, workflow_id, pid)?;
+
+    validate_workflow_steps(&workflow.steps, workflow_id, project_agents)?;
+    validate_finalize_rules(workflow, workflow_id)?;
+    validate_dynamic_steps(workflow, workflow_id)?;
+    validate_loop_policy(workflow, workflow_id, project_agents)?;
+    validate_adaptive_workflow(workflow, workflow_id, project_agents)?;
+
     let self_referential_workspaces: Vec<_> = project
         .workspaces
         .iter()
@@ -217,176 +357,30 @@ pub(crate) fn validate_workflow_config_with_agents(
     }
     validate_probe_workflow_shape(workflow, workflow_id)?;
 
-    let mut enabled_count = 0usize;
-    let mut seen_ids: HashSet<String> = HashSet::new();
-    for step in &workflow.steps {
-        if !seen_ids.insert(step.id.clone()) {
-            anyhow::bail!(
-                "workflow '{}' has duplicate step id '{}'",
-                workflow_id,
-                step.id
-            );
-        }
-        let key = step
-            .builtin
-            .as_deref()
-            .or(step.required_capability.as_deref())
-            .unwrap_or(&step.id);
-        if !step.enabled {
-            continue;
-        }
-        enabled_count += 1;
-        let semantic = resolve_step_semantic_kind(step).map_err(anyhow::Error::msg)?;
-        if matches!(
-            semantic,
-            StepSemanticKind::Builtin { ref name } if name == "ticket_scan"
-        ) {
-            if let Some(prehook) = step.prehook.as_ref() {
-                crate::prehook::validate_step_prehook(prehook, workflow_id, key)?;
-            }
-            continue;
-        }
-        let is_self_contained = matches!(
-            semantic,
-            StepSemanticKind::Builtin { .. } | StepSemanticKind::Command | StepSemanticKind::Chain
-        );
-        if !is_self_contained {
-            let has_agent = all_agents.values().any(|a| a.supports_capability(key));
-            if !has_agent {
-                anyhow::bail!(
-                    "no agent supports capability for step '{}' used by workflow '{}'",
-                    key,
-                    workflow_id
-                );
-            }
-        }
-        if let Some(prehook) = step.prehook.as_ref() {
-            crate::prehook::validate_step_prehook(prehook, workflow_id, key)?;
-        }
-    }
-    if enabled_count == 0 {
-        anyhow::bail!("workflow '{}' has no enabled steps", workflow_id);
-    }
-    for rule in &workflow.finalize.rules {
-        crate::prehook::validate_workflow_finalize_rule(rule, workflow_id)?;
-    }
-    if let Some(max_cycles) = workflow.loop_policy.guard.max_cycles {
-        if max_cycles == 0 {
-            anyhow::bail!(
-                "workflow '{}' loop.guard.max_cycles must be > 0",
-                workflow_id
-            );
-        }
-    }
-    if matches!(workflow.loop_policy.mode, crate::config::LoopMode::Fixed)
-        && workflow.loop_policy.guard.max_cycles.is_none()
-    {
-        anyhow::bail!(
-            "workflow '{}' loop.mode=fixed requires guard.max_cycles > 0",
-            workflow_id
-        );
-    }
-    if workflow.loop_policy.guard.enabled
-        && !matches!(workflow.loop_policy.mode, crate::config::LoopMode::Once)
-    {
-        let has_loop_guard = all_agents
-            .values()
-            .any(|a| a.supports_capability("loop_guard"));
-        if !has_loop_guard {
-            anyhow::bail!(
-                "workflow '{}' loop.guard enabled but no agent supports loop_guard capability",
-                workflow_id
-            );
-        }
-    }
-    validate_adaptive_workflow_config_refs(workflow, workflow_id, all_agents)?;
+    validate_workflow_steps(&workflow.steps, workflow_id, all_agents)?;
+    validate_finalize_rules(workflow, workflow_id)?;
+    validate_loop_policy(workflow, workflow_id, all_agents)?;
+    validate_adaptive_workflow(workflow, workflow_id, all_agents)?;
     Ok(())
 }
 
+// Legacy entry points kept for test coverage; delegate to the generic helper.
+#[cfg(test)]
 fn validate_adaptive_workflow_config(
     workflow: &WorkflowConfig,
     workflow_id: &str,
     all_agents: &HashMap<String, crate::config::AgentConfig>,
 ) -> Result<()> {
-    let Some(adaptive) = workflow.adaptive.as_ref() else {
-        return Ok(());
-    };
-    if !adaptive.enabled {
-        return Ok(());
-    }
-
-    let planner_agent = adaptive
-        .planner_agent
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "workflow '{}' adaptive planner is enabled but adaptive.planner_agent is missing",
-                workflow_id
-            )
-        })?;
-
-    let agent = all_agents.get(planner_agent).ok_or_else(|| {
-        anyhow::anyhow!(
-            "workflow '{}' adaptive planner references unknown agent '{}'",
-            workflow_id,
-            planner_agent
-        )
-    })?;
-
-    if !agent.supports_capability("adaptive_plan") {
-        anyhow::bail!(
-            "workflow '{}' adaptive planner agent '{}' must support capability 'adaptive_plan'",
-            workflow_id,
-            planner_agent
-        );
-    }
-
-    Ok(())
+    validate_adaptive_workflow(workflow, workflow_id, all_agents)
 }
 
+#[cfg(test)]
 fn validate_adaptive_workflow_config_refs(
     workflow: &WorkflowConfig,
     workflow_id: &str,
     all_agents: &HashMap<String, &crate::config::AgentConfig>,
 ) -> Result<()> {
-    let Some(adaptive) = workflow.adaptive.as_ref() else {
-        return Ok(());
-    };
-    if !adaptive.enabled {
-        return Ok(());
-    }
-
-    let planner_agent = adaptive
-        .planner_agent
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "workflow '{}' adaptive planner is enabled but adaptive.planner_agent is missing",
-                workflow_id
-            )
-        })?;
-
-    let agent = all_agents.get(planner_agent).copied().ok_or_else(|| {
-        anyhow::anyhow!(
-            "workflow '{}' adaptive planner references unknown agent '{}'",
-            workflow_id,
-            planner_agent
-        )
-    })?;
-
-    if !agent.supports_capability("adaptive_plan") {
-        anyhow::bail!(
-            "workflow '{}' adaptive planner agent '{}' must support capability 'adaptive_plan'",
-            workflow_id,
-            planner_agent
-        );
-    }
-
-    Ok(())
+    validate_adaptive_workflow(workflow, workflow_id, all_agents)
 }
 
 pub(crate) fn validate_probe_workflow_shape(
@@ -438,32 +432,7 @@ pub fn validate_self_referential_safety(
 /// existing entries in config.env_stores.
 pub fn validate_agent_env_store_refs(config: &OrchestratorConfig) -> Result<()> {
     for (project_id, project) in &config.projects {
-        for (agent_name, agent_cfg) in &project.agents {
-            if let Some(ref entries) = agent_cfg.env {
-                for entry in entries {
-                    if let Some(ref store_name) = entry.from_ref {
-                        if !project.env_stores.contains_key(store_name.as_str()) {
-                            anyhow::bail!(
-                                "agent '{}'(project '{}') env fromRef '{}' references unknown store",
-                                agent_name,
-                                project_id,
-                                store_name
-                            );
-                        }
-                    }
-                    if let Some(ref rv) = entry.ref_value {
-                        if !project.env_stores.contains_key(&rv.name) {
-                            anyhow::bail!(
-                                "agent '{}'(project '{}') env refValue.name '{}' references unknown store",
-                                agent_name,
-                                project_id,
-                                rv.name
-                            );
-                        }
-                    }
-                }
-            }
-        }
+        validate_env_store_refs_for_agents(&project.agents, &project.env_stores, project_id)?;
     }
     Ok(())
 }
@@ -474,32 +443,7 @@ pub fn validate_agent_env_store_refs_for_project(
     project_id: &str,
 ) -> Result<()> {
     if let Some(project) = config.projects.get(project_id) {
-        for (agent_name, agent_cfg) in &project.agents {
-            if let Some(ref entries) = agent_cfg.env {
-                for entry in entries {
-                    if let Some(ref store_name) = entry.from_ref {
-                        if !project.env_stores.contains_key(store_name.as_str()) {
-                            anyhow::bail!(
-                                "agent '{}'(project '{}') env fromRef '{}' references unknown store",
-                                agent_name,
-                                project_id,
-                                store_name
-                            );
-                        }
-                    }
-                    if let Some(ref rv) = entry.ref_value {
-                        if !project.env_stores.contains_key(&rv.name) {
-                            anyhow::bail!(
-                                "agent '{}'(project '{}') env refValue.name '{}' references unknown store",
-                                agent_name,
-                                project_id,
-                                rv.name
-                            );
-                        }
-                    }
-                }
-            }
-        }
+        validate_env_store_refs_for_agents(&project.agents, &project.env_stores, project_id)?;
     }
     Ok(())
 }
@@ -2480,5 +2424,33 @@ mod tests {
             .insert("basic".to_string(), AgentConfig::default());
         let result = validate_agent_env_store_refs_for_project(&config, pid);
         assert!(result.is_ok(), "no env should pass: {:?}", result.err());
+    }
+
+    // ============================================================================
+    // Consistency: both workflow validators produce the same error
+    // ============================================================================
+
+    #[test]
+    fn consistency_test_both_validators_same_error() {
+        // A step requiring capability "fancy" with no agent providing it should
+        // produce the same error from both validate_workflow_config_for_project
+        // (via validate_workflow_config) and validate_workflow_config_with_agents.
+        let workflow = make_workflow(vec![make_step("fancy", true)]);
+
+        // Path 1: project-scoped validator (no agents in default project)
+        let config = make_config_with_default_project();
+        let err1 = validate_workflow_config(&config, &workflow, "wf-consistency")
+            .expect_err("should fail without agent");
+
+        // Path 2: agents-map validator (empty agents map)
+        let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+        let err2 = validate_workflow_config_with_agents(&agents, &workflow, "wf-consistency")
+            .expect_err("should fail without agent");
+
+        assert_eq!(
+            err1.to_string(),
+            err2.to_string(),
+            "both validators must produce identical error messages"
+        );
     }
 }
