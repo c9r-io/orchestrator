@@ -33,7 +33,7 @@ The orchestrator step execution model was refactored to remove the `WorkflowStep
 | `core/src/scheduler/item_executor.rs` | `StepExecutionAccumulator`, unified `process_item_filtered()` loop |
 | `core/src/config_load.rs` | `normalize_workflow_config()`, `validate_workflow_config()`, `build_execution_plan()` |
 | `core/src/resource/workflow/workflow_convert.rs` | `workflow_spec_to_config()` semantic normalization |
-| `core/src/scheduler/check.rs` | Static semantic consistency checks |
+| `core/src/scheduler/check/` | Static semantic consistency checks (split into workspace, capability, execution, workflow, safety sub-modules) |
 
 ---
 
