@@ -326,11 +326,15 @@ async fn worker_loop(
     let worker_num = worker_idx + 1;
 
     state.daemon_runtime.worker_started();
-    emit_daemon_event(&state, "worker_state_changed", serde_json::json!({
-        "worker_id": worker_num,
-        "from_state": "new",
-        "to_state": "idle",
-    }))
+    emit_daemon_event(
+        &state,
+        "worker_state_changed",
+        serde_json::json!({
+            "worker_id": worker_num,
+            "from_state": "new",
+            "to_state": "idle",
+        }),
+    )
     .await;
     info!(worker = worker_num, "worker started");
 
@@ -360,29 +364,34 @@ async fn worker_loop(
                 info!(worker = worker_num, %task_id, "claimed task");
                 let runtime = RunningTask::new();
                 state.daemon_runtime.worker_became_busy();
-                emit_daemon_event(&state, "worker_state_changed", serde_json::json!({
-                    "worker_id": worker_num,
-                    "from_state": "idle",
-                    "to_state": "busy",
-                    "task_id": task_id,
-                }))
+                emit_daemon_event(
+                    &state,
+                    "worker_state_changed",
+                    serde_json::json!({
+                        "worker_id": worker_num,
+                        "from_state": "idle",
+                        "to_state": "busy",
+                        "task_id": task_id,
+                    }),
+                )
                 .await;
                 let _ = register_running_task(&state, &task_id, runtime.clone()).await;
-                let run_result = std::panic::AssertUnwindSafe(run_task_loop(
-                    state.clone(),
-                    &task_id,
-                    runtime,
-                ))
-                .catch_unwind()
-                .await;
+                let run_result =
+                    std::panic::AssertUnwindSafe(run_task_loop(state.clone(), &task_id, runtime))
+                        .catch_unwind()
+                        .await;
                 unregister_running_task(&state, &task_id).await;
                 state.daemon_runtime.worker_became_idle();
-                emit_daemon_event(&state, "worker_state_changed", serde_json::json!({
-                    "worker_id": worker_num,
-                    "from_state": "busy",
-                    "to_state": "idle",
-                    "task_id": task_id,
-                }))
+                emit_daemon_event(
+                    &state,
+                    "worker_state_changed",
+                    serde_json::json!({
+                        "worker_id": worker_num,
+                        "from_state": "busy",
+                        "to_state": "idle",
+                        "task_id": task_id,
+                    }),
+                )
                 .await;
                 match run_result {
                     Ok(Ok(())) => {
@@ -430,11 +439,15 @@ async fn worker_loop(
     }
 
     state.daemon_runtime.worker_stopped(false);
-    emit_daemon_event(&state, "worker_state_changed", serde_json::json!({
-        "worker_id": worker_num,
-        "from_state": "idle",
-        "to_state": "stopped",
-    }))
+    emit_daemon_event(
+        &state,
+        "worker_state_changed",
+        serde_json::json!({
+            "worker_id": worker_num,
+            "from_state": "idle",
+            "to_state": "stopped",
+        }),
+    )
     .await;
     info!(worker = worker_num, "worker stopped");
 }

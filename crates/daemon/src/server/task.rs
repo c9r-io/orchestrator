@@ -20,7 +20,9 @@ pub(crate) async fn task_create(
     super::authorize(server, &request, "TaskCreate").map_err(Status::from)?;
     let req = request.into_inner();
     if !req.no_start {
-        server.reject_new_work_during_shutdown("TaskCreate")?;
+        if let Some(status) = server.reject_new_work_during_shutdown("TaskCreate") {
+            return Err(status);
+        }
     }
     let payload = agent_orchestrator::dto::CreateTaskPayload {
         name: req.name,
@@ -63,7 +65,9 @@ pub(crate) async fn task_start(
     request: Request<TaskStartRequest>,
 ) -> Result<Response<TaskStartResponse>, Status> {
     super::authorize(server, &request, "TaskStart").map_err(Status::from)?;
-    server.reject_new_work_during_shutdown("TaskStart")?;
+    if let Some(status) = server.reject_new_work_during_shutdown("TaskStart") {
+        return Err(status);
+    }
     let req = request.into_inner();
     let id = agent_orchestrator::service::task::resolve_start_id(
         &server.state,
@@ -106,7 +110,9 @@ pub(crate) async fn task_resume(
     request: Request<TaskResumeRequest>,
 ) -> Result<Response<TaskResumeResponse>, Status> {
     super::authorize(server, &request, "TaskResume").map_err(Status::from)?;
-    server.reject_new_work_during_shutdown("TaskResume")?;
+    if let Some(status) = server.reject_new_work_during_shutdown("TaskResume") {
+        return Err(status);
+    }
     let req = request.into_inner();
     let id = agent_orchestrator::service::task::resolve_id(&server.state, &req.task_id)
         .await
@@ -149,7 +155,9 @@ pub(crate) async fn task_retry(
     request: Request<TaskRetryRequest>,
 ) -> Result<Response<TaskRetryResponse>, Status> {
     super::authorize(server, &request, "TaskRetry").map_err(Status::from)?;
-    server.reject_new_work_during_shutdown("TaskRetry")?;
+    if let Some(status) = server.reject_new_work_during_shutdown("TaskRetry") {
+        return Err(status);
+    }
     let req = request.into_inner();
     if !req.force {
         return Err(Status::failed_precondition(

@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::time::Instant;
 
 const STATE_SERVING: u8 = 0;
@@ -97,7 +97,8 @@ impl DaemonRuntimeState {
     }
 
     pub fn set_configured_workers(&self, count: usize) {
-        self.configured_workers.store(count as u64, Ordering::SeqCst);
+        self.configured_workers
+            .store(count as u64, Ordering::SeqCst);
     }
 
     pub fn request_shutdown(&self) -> bool {

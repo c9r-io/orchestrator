@@ -82,7 +82,11 @@ pub async fn spawn_task_runner(state: Arc<InnerState>, task_id: String) -> Resul
     Ok(())
 }
 
-pub async fn register_running_task(state: &InnerState, task_id: &str, runtime: RunningTask) -> bool {
+pub async fn register_running_task(
+    state: &InnerState,
+    task_id: &str,
+    runtime: RunningTask,
+) -> bool {
     let mut running = state.running.lock().await;
     if running.contains_key(task_id) {
         return false;

@@ -34,15 +34,15 @@ impl OrchestratorServer {
         }
     }
 
-    pub(crate) fn reject_new_work_during_shutdown(&self, rpc: &'static str) -> Result<(), Status> {
+    pub(crate) fn reject_new_work_during_shutdown(&self, rpc: &'static str) -> Option<Status> {
         let snapshot = agent_orchestrator::service::daemon::runtime_snapshot(&self.state);
         if snapshot.shutdown_requested {
-            return Err(Status::unavailable(format!(
+            return Some(Status::unavailable(format!(
                 "{rpc} rejected: daemon is {}",
                 snapshot.lifecycle_state.as_str()
             )));
         }
-        Ok(())
+        None
     }
 }
 
