@@ -251,6 +251,20 @@ impl OrchestratorService for OrchestratorServer {
         system::init(self, request).await
     }
 
+    async fn db_status(
+        &self,
+        request: Request<DbStatusRequest>,
+    ) -> Result<Response<DbStatusResponse>, Status> {
+        system::db_status(self, request).await
+    }
+
+    async fn db_migrations_list(
+        &self,
+        request: Request<DbMigrationsListRequest>,
+    ) -> Result<Response<DbMigrationsListResponse>, Status> {
+        system::db_migrations_list(self, request).await
+    }
+
     async fn manifest_validate(
         &self,
         request: Request<ManifestValidateRequest>,

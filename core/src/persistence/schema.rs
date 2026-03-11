@@ -1,21 +1,8 @@
-use crate::migration;
+use crate::persistence::migration as schema_migration;
+pub use crate::persistence::migration::SchemaStatus;
 use crate::persistence::sqlite::open_conn;
 use anyhow::{Context, Result};
 use std::path::Path;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SchemaStatus {
-    pub current_version: u32,
-    pub target_version: u32,
-    pub pending_versions: Vec<u32>,
-    pub pending_names: Vec<&'static str>,
-}
-
-impl SchemaStatus {
-    pub fn is_current(&self) -> bool {
-        self.pending_versions.is_empty()
-    }
-}
 
 pub struct PersistenceBootstrap;
 
@@ -30,46 +17,22 @@ impl PersistenceBootstrap {
         )
         .context("failed to configure sqlite wal mode")?;
 
-        let migrations = migration::all_migrations();
-        let applied = migration::run_pending(&conn, &migrations)?;
-        if applied > 0 {
-            tracing::info!(applied, "schema migrations applied");
+        let migrations = schema_migration::registered_migrations();
+        let applied = schema_migration::run_pending(&conn, &migrations)?;
+        if !applied.is_empty() {
+            tracing::info!(
+                applied = applied.count(),
+                versions = ?applied.applied.iter().map(|migration| migration.version).collect::<Vec<_>>(),
+                "schema migrations applied"
+            );
         }
 
-        Self::status_with_conn(&conn, &migrations)
+        schema_migration::status(&conn, &migrations)
     }
 
     pub fn status(db_path: &Path) -> Result<SchemaStatus> {
         let conn = open_conn(db_path)?;
-        let migrations = migration::all_migrations();
-        Self::status_with_conn(&conn, &migrations)
-    }
-
-    fn status_with_conn(
-        conn: &rusqlite::Connection,
-        migrations: &[migration::Migration],
-    ) -> Result<SchemaStatus> {
-        let current_version = migration::current_version(conn)?;
-        let pending_versions = migrations
-            .iter()
-            .filter(|migration| migration.version > current_version)
-            .map(|migration| migration.version)
-            .collect::<Vec<_>>();
-        let pending_names = migrations
-            .iter()
-            .filter(|migration| migration.version > current_version)
-            .map(|migration| migration.name)
-            .collect::<Vec<_>>();
-
-        Ok(SchemaStatus {
-            current_version,
-            target_version: migrations
-                .last()
-                .map(|migration| migration.version)
-                .unwrap_or(0),
-            pending_versions,
-            pending_names,
-        })
+        schema_migration::registered_status(&conn)
     }
 }
 

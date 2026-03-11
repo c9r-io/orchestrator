@@ -1,0 +1,236 @@
+# Orchestrator - Database Migration Kernel and Repository Governance
+
+**Module**: orchestrator
+**Scope**: FR-009 follow-up governance for migration kernel split, repository expansion boundaries, and DB operations visibility
+**Scenarios**: 6
+**Priority**: High
+
+---
+
+## Background
+
+This document defines the QA surface for the next FR-009 phases after persistence bootstrap extraction:
+
+- migration logic moves from the single `core/src/migration.rs` implementation into a dedicated persistence migration kernel
+- runtime task/scheduler/config SQL paths continue migrating behind repository boundaries
+- `core/src/db.rs` remains compatibility-only and must not grow new business helpers
+- operators gain read-only DB visibility through explicit CLI commands
+- historical SQLite upgrade validation becomes a first-class regression path
+
+Entry points:
+
+- `cargo test -p agent-orchestrator ...`
+- `orchestrator db status`
+- `orchestrator db migrations list`
+- `rg -n ... core/src docs`
+
+---
+
+## Scenario 1: Migration Catalog Has Stable Governance Invariants
+
+### Preconditions
+- Repository root is the current working directory.
+- Rust toolchain is available.
+
+### Goal
+Verify migration registration remains strictly ordered and safe after the kernel split.
+
+### Steps
+1. Run focused migration invariant tests:
+   ```bash
+   cargo test -p agent-orchestrator migration::tests::all_migrations_versions_are_ascending -- --exact
+   cargo test -p agent-orchestrator migration::tests::all_migrations_versions_are_contiguous -- --exact
+   cargo test -p agent-orchestrator migration::tests::all_migrations_names_are_unique -- --exact
+   ```
+2. Search for catalog ownership in the new migration kernel:
+   ```bash
+   rg -n "pub fn registered_migrations|pub struct Migration" core/src/persistence/migration.rs
+   ```
+3. Search for any new migration implementation still added directly in the old file:
+   ```bash
+   rg -n "fn m[0-9]{4}_" core/src/migration.rs
+   ```
+
+### Expected
+- All invariant tests pass.
+- `core/src/persistence/migration.rs` owns the registered migration catalog.
+- The legacy file only hosts transitional step bodies plus compatibility forwarding.
+- No newly added migration implementation bypasses the dedicated persistence migration area.
+
+### Expected Data State
+```sql
+-- N/A: source and test governance validation.
+```
+
+---
+
+## Scenario 2: Pending Migration Execution Remains Idempotent And Safe
+
+### Preconditions
+- Repository root is the current working directory.
+- Rust toolchain is available.
+
+### Goal
+Verify the migration runner still behaves correctly after responsibility split.
+
+### Steps
+1. Run focused migration execution regressions:
+   ```bash
+   cargo test -p agent-orchestrator migration::tests::run_pending_applies_all_on_fresh_db -- --exact
+   cargo test -p agent-orchestrator migration::tests::run_pending_is_idempotent -- --exact
+   cargo test -p agent-orchestrator migration::tests::failed_migration_does_not_advance_version -- --exact
+   ```
+
+### Expected
+- First run applies pending migrations.
+- Second run applies zero migrations.
+- A failing migration does not advance the recorded schema version.
+
+### Expected Data State
+```sql
+SELECT version, name FROM schema_migrations ORDER BY version;
+-- Rows appear once per applied migration version, with no gaps caused by failed migrations.
+```
+
+---
+
+## Scenario 3: Runtime Persistence Continues Moving Behind Repository Boundaries
+
+### Preconditions
+- Repository root is the current working directory.
+
+### Goal
+Verify FR-009 follow-up does not allow new business SQL helpers to grow from compatibility modules.
+
+### Steps
+1. Search for direct additions to the DB facade:
+   ```bash
+   rg -n "^pub fn " core/src/db.rs
+   ```
+2. Search for raw connection access in targeted follow-up areas:
+   ```bash
+   rg -n "open_conn\\(|Connection::open|rusqlite::params!" core/src/db_write.rs core/src/scheduler* core/src/config_load
+   ```
+3. Search for repository traits and implementations covering the intended aggregates:
+   ```bash
+   rg -n "trait (TaskRepository|SchedulerRepository|ConfigRepository)" core/src/persistence core/src
+   ```
+
+### Expected
+- `core/src/db.rs` does not gain new schema helpers.
+- New work lands behind repository interfaces for task, scheduler, or config persistence.
+- Remaining direct SQL call sites are shrinking, not growing.
+
+### Expected Data State
+```sql
+-- N/A: source-level governance check.
+```
+
+---
+
+## Scenario 4: CLI Exposes Read-Only Schema And Migration Status
+
+### Preconditions
+- A runnable `orchestrator` binary is available.
+- Test database path is available or the default local DB exists.
+
+### Goal
+Verify operators can inspect schema state without mutating the database.
+
+### Steps
+1. Run:
+   ```bash
+   orchestrator db status
+   ```
+2. Run:
+   ```bash
+   orchestrator db migrations list
+   ```
+3. Run focused regression coverage:
+   ```bash
+   cargo test -p agent-orchestrator service::system::tests::db_status_reports_current_schema -- --exact
+   cargo test -p agent-orchestrator service::system::tests::db_migrations_list_marks_all_migrations_applied_on_seeded_state -- --exact
+   cargo test -p orchestrator-cli cli::tests::db_status_subcommand_accepts_json_flag -- --exact
+   cargo test -p orchestrator-cli commands::db::tests::print_migrations_accepts_table_output -- --exact
+   ```
+
+### Expected
+- `db status` prints current version, target version, and pending state clearly.
+- `db migrations list` shows applied and/or pending migration descriptors in a readable form.
+- Neither command mutates application state.
+- Focused core and CLI regressions for the DB commands pass.
+
+### Expected Data State
+```sql
+SELECT COALESCE(MAX(version), 0) AS current_version FROM schema_migrations;
+-- Read-only inspection should match the CLI-reported current version.
+```
+
+---
+
+## Scenario 5: Historical SQLite Databases Upgrade Cleanly
+
+### Preconditions
+- Historical SQLite fixture databases exist for empty, old-version, partial-upgrade, and current states.
+- Rust toolchain is available.
+
+### Goal
+Verify the migration kernel can safely upgrade representative historical databases.
+
+### Steps
+1. Run the historical upgrade regression suite:
+   ```bash
+   cargo test -p agent-orchestrator migration::tests:: -- --nocapture
+   ```
+2. Run any dedicated fixture-based upgrade tests added for historical DB samples.
+
+### Expected
+- Empty databases upgrade to the latest schema.
+- Older databases upgrade in place without losing version tracking.
+- Partially upgraded databases recover and converge to latest.
+- Current databases report zero pending migrations.
+
+### Expected Data State
+```sql
+SELECT version, name FROM schema_migrations ORDER BY version;
+-- Every upgraded sample ends at the latest registered version.
+```
+
+---
+
+## Scenario 6: Full Package Regression Remains Green After FR-009 Follow-Up
+
+### Preconditions
+- Repository root is the current working directory.
+- Rust toolchain is available.
+
+### Goal
+Verify migration-kernel and repository-boundary work does not regress orchestrator behavior.
+
+### Steps
+1. Run:
+   ```bash
+   cargo test -p agent-orchestrator
+   ```
+
+### Expected
+- The full package test suite passes.
+- No regressions appear in bootstrap, scheduler, repository, session, store, or migration paths.
+
+### Expected Data State
+```sql
+-- N/A: package-level regression suite.
+```
+
+---
+
+## Checklist
+
+| # | Scenario | Status | Test Date | Tester | Notes |
+|---|----------|--------|-----------|--------|-------|
+| 1 | Migration Catalog Has Stable Governance Invariants | PASS | 2026-03-11 | Codex | Invariant tests passed; catalog ownership moved to `core/src/persistence/migration.rs` |
+| 2 | Pending Migration Execution Remains Idempotent And Safe | PASS | 2026-03-11 | Codex | Fresh-db, idempotency, and failed-migration regressions all passed |
+| 3 | Runtime Persistence Continues Moving Behind Repository Boundaries | TODO | 2026-03-11 | Codex | Source-level governance check for follow-up phases |
+| 4 | CLI Exposes Read-Only Schema And Migration Status | PASS | 2026-03-11 | Codex | Core service + CLI command regressions passed after `db` command rollout |
+| 5 | Historical SQLite Databases Upgrade Cleanly | TODO | 2026-03-11 | Codex | Requires curated fixture databases |
+| 6 | Full Package Regression Remains Green After FR-009 Follow-Up | PASS | 2026-03-11 | Codex | `cargo test -p agent-orchestrator` passed: 1809 unit + 24 integration |

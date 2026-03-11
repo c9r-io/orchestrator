@@ -3,11 +3,7 @@ use rusqlite::Connection;
 
 const HISTORICAL_AGENT_PLACEHOLDER: &str = "legacy";
 
-pub struct Migration {
-    pub version: u32,
-    pub name: &'static str,
-    pub up: fn(&Connection) -> Result<()>,
-}
+pub use crate::persistence::migration::Migration;
 
 fn ensure_column_exists(conn: &Connection, table: &str, column: &str, ddl: &str) -> Result<()> {
     let mut stmt = conn
@@ -27,134 +23,22 @@ fn ensure_column_exists(conn: &Connection, table: &str, column: &str, ddl: &str)
 
 /// Returns the current schema version (0 if no migrations have run).
 pub fn current_version(conn: &Connection) -> Result<u32> {
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS schema_migrations (
-            version INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            applied_at TEXT NOT NULL
-        )",
-    )
-    .context("failed to create schema_migrations table")?;
-
-    let version: u32 = conn
-        .query_row(
-            "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
-            [],
-            |row| row.get(0),
-        )
-        .context("failed to read current schema version")?;
-    Ok(version)
+    crate::persistence::migration::current_version(conn)
 }
 
 /// Run all pending migrations. Returns the number of migrations applied.
 pub fn run_pending(conn: &Connection, migrations: &[Migration]) -> Result<u32> {
-    let current = current_version(conn)?;
-    let mut applied = 0u32;
-
-    for m in migrations {
-        if m.version <= current {
-            continue;
-        }
-        let tx = conn
-            .unchecked_transaction()
-            .with_context(|| format!("failed to begin transaction for migration {}", m.name))?;
-
-        (m.up)(&tx).with_context(|| format!("migration {} failed", m.name))?;
-
-        tx.execute(
-            "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?1, ?2, datetime('now'))",
-            rusqlite::params![m.version, m.name],
-        )
-        .with_context(|| format!("failed to record migration version {}", m.version))?;
-
-        tx.commit()
-            .with_context(|| format!("failed to commit migration {}", m.name))?;
-
-        applied += 1;
-    }
-
-    Ok(applied)
+    crate::persistence::migration::run_pending(conn, migrations).map(|summary| summary.count())
 }
 
 /// All registered migrations in version order.
 pub fn all_migrations() -> Vec<Migration> {
-    vec![
-        Migration {
-            version: 1,
-            name: "m0001_baseline_schema",
-            up: m0001_baseline_schema,
-        },
-        Migration {
-            version: 2,
-            name: "m0002_backfill_legacy_defaults",
-            up: m0002_backfill_historical_defaults,
-        },
-        Migration {
-            version: 3,
-            name: "m0003_events_promote_columns",
-            up: m0003_events_promote_columns,
-        },
-        Migration {
-            version: 4,
-            name: "m0004_events_backfill_promoted",
-            up: m0004_events_backfill_promoted,
-        },
-        Migration {
-            version: 5,
-            name: "m0005_add_task_lookup_indexes",
-            up: m0005_add_task_lookup_indexes,
-        },
-        Migration {
-            version: 6,
-            name: "m0006_add_pipeline_vars_json",
-            up: m0006_add_pipeline_vars_json,
-        },
-        Migration {
-            version: 7,
-            name: "m0007_workflow_store_entries",
-            up: m0007_workflow_store_entries,
-        },
-        Migration {
-            version: 8,
-            name: "m0008_workflow_primitives",
-            up: m0008_workflow_primitives,
-        },
-        Migration {
-            version: 9,
-            name: "m0009_normalize_unspecified_agent_ids",
-            up: m0009_normalize_unspecified_agent_ids,
-        },
-        Migration {
-            version: 10,
-            name: "m0010_per_resource_persistence",
-            up: m0010_per_resource_persistence,
-        },
-        Migration {
-            version: 11,
-            name: "m0011_finalize_resource_migration",
-            up: m0011_finalize_resource_migration,
-        },
-        Migration {
-            version: 12,
-            name: "m0012_drop_legacy_orchestrator_config_blob",
-            up: m0012_drop_legacy_orchestrator_config_blob,
-        },
-        Migration {
-            version: 13,
-            name: "m0013_control_plane_audit",
-            up: m0013_control_plane_audit,
-        },
-        Migration {
-            version: 14,
-            name: "m0014_task_graph_debug_tables",
-            up: m0014_task_graph_debug_tables,
-        },
-    ]
+    crate::persistence::migration::registered_migrations()
 }
 
 // ── Migration 1: Baseline Schema ──
 
-fn m0001_baseline_schema(conn: &Connection) -> Result<()> {
+pub(crate) fn m0001_baseline_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS tasks (
@@ -458,7 +342,7 @@ fn m0001_baseline_schema(conn: &Connection) -> Result<()> {
 
 // ── Migration 2: One-Time Historical Backfills ──
 
-fn m0002_backfill_historical_defaults(conn: &Connection) -> Result<()> {
+pub(crate) fn m0002_backfill_historical_defaults(conn: &Connection) -> Result<()> {
     // Config-independent backfill: assign a neutral placeholder for old empty agent IDs.
     conn.execute(
         "UPDATE command_runs SET agent_id = 'unspecified' WHERE agent_id = ''",
@@ -513,7 +397,7 @@ fn m0002_backfill_historical_defaults(conn: &Connection) -> Result<()> {
 
 // ── Migration 3: Events Column Promotion ──
 
-fn m0003_events_promote_columns(conn: &Connection) -> Result<()> {
+pub(crate) fn m0003_events_promote_columns(conn: &Connection) -> Result<()> {
     ensure_column_exists(
         conn,
         "events",
@@ -544,7 +428,7 @@ fn m0003_events_promote_columns(conn: &Connection) -> Result<()> {
 
 // ── Migration 4: Backfill Promoted Event Columns ──
 
-fn m0004_events_backfill_promoted(conn: &Connection) -> Result<()> {
+pub(crate) fn m0004_events_backfill_promoted(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
         UPDATE events SET step = json_extract(payload_json, '$.step')
@@ -568,7 +452,7 @@ fn m0004_events_backfill_promoted(conn: &Connection) -> Result<()> {
 
 // ── Migration 5: Task Lookup Indexes ──
 
-fn m0005_add_task_lookup_indexes(conn: &Connection) -> Result<()> {
+pub(crate) fn m0005_add_task_lookup_indexes(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
          CREATE INDEX IF NOT EXISTS idx_tasks_workspace_id ON tasks(workspace_id);
@@ -580,7 +464,7 @@ fn m0005_add_task_lookup_indexes(conn: &Connection) -> Result<()> {
 
 // ── Migration 6: Pipeline Variables JSON Column ──
 
-fn m0006_add_pipeline_vars_json(conn: &Connection) -> Result<()> {
+pub(crate) fn m0006_add_pipeline_vars_json(conn: &Connection) -> Result<()> {
     ensure_column_exists(
         conn,
         "tasks",
@@ -592,7 +476,7 @@ fn m0006_add_pipeline_vars_json(conn: &Connection) -> Result<()> {
 
 // ── Migration 7: Workflow Store Entries Table ──
 
-fn m0007_workflow_store_entries(conn: &Connection) -> Result<()> {
+pub(crate) fn m0007_workflow_store_entries(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS workflow_store_entries (
@@ -619,7 +503,7 @@ fn m0007_workflow_store_entries(conn: &Connection) -> Result<()> {
 
 // ── Migration 8: Workflow Primitives (WP02 + WP03) ──
 
-fn m0008_workflow_primitives(conn: &Connection) -> Result<()> {
+pub(crate) fn m0008_workflow_primitives(conn: &Connection) -> Result<()> {
     // WP02: Task lineage
     ensure_column_exists(
         conn,
@@ -667,7 +551,7 @@ fn m0008_workflow_primitives(conn: &Connection) -> Result<()> {
 
 // ── Migration 10: Per-Resource Persistence ──
 
-fn m0010_per_resource_persistence(conn: &Connection) -> Result<()> {
+pub(crate) fn m0010_per_resource_persistence(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS resources (
@@ -705,18 +589,18 @@ fn m0010_per_resource_persistence(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-fn m0011_finalize_resource_migration(conn: &Connection) -> Result<()> {
+pub(crate) fn m0011_finalize_resource_migration(conn: &Connection) -> Result<()> {
     let _ = conn;
     Ok(())
 }
 
-fn m0012_drop_legacy_orchestrator_config_blob(conn: &Connection) -> Result<()> {
+pub(crate) fn m0012_drop_legacy_orchestrator_config_blob(conn: &Connection) -> Result<()> {
     conn.execute_batch("DROP TABLE IF EXISTS orchestrator_config;")
         .context("m0012: failed to drop orchestrator_config")?;
     Ok(())
 }
 
-fn m0013_control_plane_audit(conn: &Connection) -> Result<()> {
+pub(crate) fn m0013_control_plane_audit(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS control_plane_audit (
@@ -743,7 +627,7 @@ fn m0013_control_plane_audit(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-fn m0014_task_graph_debug_tables(conn: &Connection) -> Result<()> {
+pub(crate) fn m0014_task_graph_debug_tables(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS task_graph_runs (
@@ -784,7 +668,7 @@ fn m0014_task_graph_debug_tables(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-fn m0009_normalize_unspecified_agent_ids(conn: &Connection) -> Result<()> {
+pub(crate) fn m0009_normalize_unspecified_agent_ids(conn: &Connection) -> Result<()> {
     conn.execute(
         "UPDATE command_runs SET agent_id = 'unspecified' WHERE agent_id = ?1 OR agent_id = ''",
         rusqlite::params![HISTORICAL_AGENT_PLACEHOLDER],

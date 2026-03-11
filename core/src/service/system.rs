@@ -1,5 +1,6 @@
 use super::daemon::runtime_snapshot;
 use crate::config_load::read_active_config;
+use crate::persistence::migration;
 use crate::scheduler::check::{run_checks, CheckReport, CheckResult};
 use crate::scheduler_service::{pending_task_count, worker_stop_signal_path};
 use crate::state::InnerState;
@@ -123,6 +124,45 @@ pub fn run_init(state: &InnerState, root: Option<&str>) -> Result<String> {
         state.app_root.display(),
         state.db_path.display()
     ))
+}
+
+pub fn db_status(state: &InnerState) -> Result<orchestrator_proto::DbStatusResponse> {
+    let status = crate::persistence::schema::PersistenceBootstrap::status(&state.db_path)?;
+    let is_current = status.is_current();
+    Ok(orchestrator_proto::DbStatusResponse {
+        db_path: state.db_path.display().to_string(),
+        current_version: status.current_version,
+        target_version: status.target_version,
+        pending_versions: status.pending_versions,
+        pending_names: status
+            .pending_names
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
+        is_current,
+    })
+}
+
+pub fn db_migrations_list(
+    state: &InnerState,
+) -> Result<orchestrator_proto::DbMigrationsListResponse> {
+    let conn = crate::db::open_conn(&state.db_path)?;
+    let status = migration::registered_status(&conn)?;
+    let migrations = migration::registered_migration_statuses(&conn)?
+        .into_iter()
+        .map(|migration| orchestrator_proto::DbMigration {
+            version: migration.version,
+            name: migration.name.to_string(),
+            applied: migration.applied,
+        })
+        .collect();
+
+    Ok(orchestrator_proto::DbMigrationsListResponse {
+        db_path: state.db_path.display().to_string(),
+        current_version: status.current_version,
+        target_version: status.target_version,
+        migrations,
+    })
 }
 
 /// Reset the database.
@@ -455,6 +495,31 @@ mod tests {
         let message = run_init(&state, Some("workspace/new-root")).expect("run init");
         assert!(message.contains("Orchestrator initialized at"));
         assert!(state.app_root.join("workspace/new-root").exists());
+    }
+
+    #[test]
+    fn db_status_reports_current_schema() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let status = db_status(&state).expect("db status");
+        assert!(status.db_path.ends_with("agent_orchestrator.db"));
+        assert!(status.is_current);
+        assert_eq!(status.current_version, status.target_version);
+        assert!(status.pending_versions.is_empty());
+        assert!(status.pending_names.is_empty());
+    }
+
+    #[test]
+    fn db_migrations_list_marks_all_migrations_applied_on_seeded_state() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+
+        let list = db_migrations_list(&state).expect("db migrations list");
+        assert!(list.db_path.ends_with("agent_orchestrator.db"));
+        assert_eq!(list.current_version, list.target_version);
+        assert!(!list.migrations.is_empty());
+        assert!(list.migrations.iter().all(|migration| migration.applied));
     }
 
     #[test]

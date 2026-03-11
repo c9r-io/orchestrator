@@ -126,6 +126,10 @@ pub enum Commands {
     /// Initialize orchestrator runtime
     Init { root: Option<String> },
 
+    /// Database operations
+    #[command(subcommand)]
+    Db(DbCommands),
+
     /// Manifest operations
     #[command(subcommand)]
     Manifest(ManifestCommands),
@@ -139,7 +143,7 @@ pub enum Commands {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cli, Commands};
+    use super::{Cli, Commands, DbCommands, DbMigrationCommands};
     use clap::Parser;
 
     #[test]
@@ -147,6 +151,26 @@ mod tests {
         let cli = Cli::try_parse_from(["orchestrator", "version", "--json"])
             .expect("version --json should parse");
         assert!(matches!(cli.command, Commands::Version { json: true }));
+    }
+
+    #[test]
+    fn db_status_subcommand_accepts_json_flag() {
+        let cli = Cli::try_parse_from(["orchestrator", "db", "status", "--output", "json"])
+            .expect("db status should parse");
+        assert!(matches!(
+            cli.command,
+            Commands::Db(DbCommands::Status { .. })
+        ));
+    }
+
+    #[test]
+    fn db_migrations_list_subcommand_parses() {
+        let cli = Cli::try_parse_from(["orchestrator", "db", "migrations", "list"])
+            .expect("db migrations list should parse");
+        assert!(matches!(
+            cli.command,
+            Commands::Db(DbCommands::Migrations(DbMigrationCommands::List { .. }))
+        ));
     }
 }
 
@@ -237,6 +261,29 @@ pub enum ManifestCommands {
     /// Export all resources as manifest documents
     Export {
         #[arg(short, long, default_value = "yaml")]
+        output: OutputFormat,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum DbCommands {
+    /// Show schema status for the local database
+    Status {
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+
+    /// Database migration operations
+    #[command(subcommand)]
+    Migrations(DbMigrationCommands),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum DbMigrationCommands {
+    /// List registered migrations and their applied state
+    #[command(alias = "ls")]
+    List {
+        #[arg(short, long, default_value = "table")]
         output: OutputFormat,
     },
 }

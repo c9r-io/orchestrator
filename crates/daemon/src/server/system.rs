@@ -98,6 +98,26 @@ pub(crate) async fn init(
     Ok(Response::new(InitResponse { message }))
 }
 
+pub(crate) async fn db_status(
+    server: &OrchestratorServer,
+    request: Request<DbStatusRequest>,
+) -> Result<Response<DbStatusResponse>, Status> {
+    super::authorize(server, &request, "DbStatus").map_err(Status::from)?;
+    let status = agent_orchestrator::service::system::db_status(&server.state)
+        .map_err(|e| Status::internal(format!("{e}")))?;
+    Ok(Response::new(status))
+}
+
+pub(crate) async fn db_migrations_list(
+    server: &OrchestratorServer,
+    request: Request<DbMigrationsListRequest>,
+) -> Result<Response<DbMigrationsListResponse>, Status> {
+    super::authorize(server, &request, "DbMigrationsList").map_err(Status::from)?;
+    let list = agent_orchestrator::service::system::db_migrations_list(&server.state)
+        .map_err(|e| Status::internal(format!("{e}")))?;
+    Ok(Response::new(list))
+}
+
 pub(crate) async fn manifest_validate(
     server: &OrchestratorServer,
     request: Request<ManifestValidateRequest>,

@@ -41,6 +41,8 @@ service OrchestratorService {
   rpc WorkerStatus(WorkerStatusRequest) returns (WorkerStatusResponse);
   rpc Check(CheckRequest)             returns (CheckResponse);
   rpc Init(InitRequest)               returns (InitResponse);
+  rpc DbStatus(DbStatusRequest)       returns (DbStatusResponse);
+  rpc DbMigrationsList(DbMigrationsListRequest) returns (DbMigrationsListResponse);
   rpc ManifestValidate(ManifestValidateRequest) returns (ManifestValidateResponse);
   rpc ManifestExport(ManifestExportRequest) returns (ManifestExportResponse);
   rpc TaskTrace(TaskTraceRequest)     returns (TaskTraceResponse);
@@ -445,6 +447,32 @@ message InitRequest {
 
 message InitResponse {
   string message = 1;
+}
+
+message DbStatusRequest {}
+
+message DbStatusResponse {
+  string db_path = 1;
+  uint32 current_version = 2;
+  uint32 target_version = 3;
+  repeated uint32 pending_versions = 4;
+  repeated string pending_names = 5;
+  bool is_current = 6;
+}
+
+message DbMigration {
+  uint32 version = 1;
+  string name = 2;
+  bool applied = 3;
+}
+
+message DbMigrationsListRequest {}
+
+message DbMigrationsListResponse {
+  string db_path = 1;
+  uint32 current_version = 2;
+  uint32 target_version = 3;
+  repeated DbMigration migrations = 4;
 }
 
 message ManifestValidateRequest {
