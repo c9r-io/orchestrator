@@ -6,7 +6,7 @@ use crate::db::open_conn;
 use crate::dto::CreateTaskPayload;
 use crate::task_ops::create_task_impl;
 use crate::test_utils::TestState;
-use rusqlite::params;
+use rusqlite::{params, Connection};
 
 #[test]
 fn resolve_task_id_supports_exact_and_prefix() {
@@ -76,6 +76,24 @@ fn load_task_summary_errors_for_missing_task() {
 
     let result = repo.load_task_summary("nonexistent-id");
     assert!(result.is_err());
+}
+
+#[test]
+fn load_task_summary_errors_for_invalid_target_files_json() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    conn.execute(
+        "UPDATE tasks SET target_files_json = 'not-json' WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("corrupt target files json");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let err = repo
+        .load_task_summary(&task_id)
+        .expect_err("invalid target files json should fail");
+    assert!(err.to_string().contains("load task summary"));
 }
 
 // ── load_task_detail_rows ─────────────────────────────────────────────
@@ -257,6 +275,54 @@ fn load_task_detail_rows_falls_back_to_legacy_graph_events() {
         graph_debug[0].effective_graph_json,
         r#"{"entry":"qa","nodes":{"qa":{"id":"qa"}}}"#
     );
+}
+
+#[test]
+fn load_task_detail_rows_tolerates_invalid_json_and_interrupted_runs() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id: String = conn
+        .query_row(
+            "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
+            params![task_id.clone()],
+            |row| row.get(0),
+        )
+        .expect("task item exists");
+
+    conn.execute(
+        "UPDATE task_items
+         SET ticket_files_json = 'broken-files',
+             ticket_content_json = 'broken-content'
+         WHERE id = ?1",
+        params![item_id.clone()],
+    )
+    .expect("corrupt item json");
+    conn.execute(
+        "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, workspace_id, agent_id, exit_code, stdout_path, stderr_path, output_json, artifacts_json, confidence, quality_score, validation_status, started_at, ended_at, interrupted)
+         VALUES ('cr-interrupted', ?1, 'qa', 'echo stop', '/tmp', 'default', 'agent', 130, '/tmp/out-stop.log', '/tmp/err-stop.log', '{}', '[]', NULL, NULL, 'unknown', '2026-01-01T00:00:00Z', NULL, 1)",
+        params![item_id],
+    )
+    .expect("insert interrupted run");
+    conn.execute(
+        "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at)
+         VALUES (?1, NULL, 'status_change', 'not-json', '2026-01-01T00:00:01Z')",
+        params![task_id.clone()],
+    )
+    .expect("insert invalid event payload");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let (items, runs, events, _graph_debug) = repo
+        .load_task_detail_rows(&task_id)
+        .expect("detail rows should still load");
+
+    assert_eq!(items[0].ticket_files, Vec::<String>::new());
+    assert_eq!(items[0].ticket_content, Vec::<serde_json::Value>::new());
+    assert_eq!(runs.len(), 1);
+    assert!(runs[0].interrupted);
+    assert!(runs[0].ended_at.is_none());
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].payload, serde_json::json!({}));
 }
 
 // ── list_task_ids_ordered_by_created_desc ─────────────────────────────
@@ -535,6 +601,31 @@ fn graph_run_queries_insert_update_and_upsert_snapshots() {
         bundles[0].execution_replay_json.as_deref(),
         Some("{\"node_execution_order\":[\"qa\"]}")
     );
+}
+
+#[test]
+fn load_task_graph_debug_bundles_uses_defaults_for_invalid_legacy_events() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    conn.execute(
+        "INSERT INTO events (id, task_id, task_item_id, event_type, payload_json, created_at)
+         VALUES (77, ?1, NULL, 'dynamic_plan_materialized', 'not-json', '2026-01-01T00:00:00Z')",
+        params![task_id.clone()],
+    )
+    .expect("insert invalid legacy event");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let bundles = repo
+        .load_task_graph_debug_bundles(&task_id)
+        .expect("legacy fallback should succeed");
+
+    assert_eq!(bundles.len(), 1);
+    assert_eq!(bundles[0].graph_run_id, "legacy-event-77");
+    assert_eq!(bundles[0].cycle, 0);
+    assert_eq!(bundles[0].source, "unknown");
+    assert!(bundles[0].fallback_mode.is_none());
+    assert_eq!(bundles[0].effective_graph_json, "{}");
 }
 
 // ── find_latest_resumable_task_id ──────────────────────────────────
@@ -868,6 +959,115 @@ fn list_task_items_for_cycle_returns_empty_for_unknown_task() {
         .list_task_items_for_cycle("nonexistent-task-id")
         .expect("list should succeed even for unknown task");
     assert!(items.is_empty());
+}
+
+#[test]
+fn list_task_items_for_cycle_preserves_dynamic_metadata() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let ts = crate::config_load::now_ts();
+    conn.execute(
+        "INSERT INTO task_items (id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, updated_at, created_at, dynamic_vars_json, label, source)
+         VALUES ('item-dynamic-meta', ?1, 50, '/tmp/dynamic.md', 'pending', '[]', '[]', 0, 0, '', '', '', ?2, ?2, '{\"ticket\":\"A-1\"}', 'Generated item', 'dynamic')",
+        params![task_id.clone(), ts],
+    )
+    .expect("insert dynamic item");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let items = repo
+        .list_task_items_for_cycle(&task_id)
+        .expect("list should succeed");
+    let dynamic = items
+        .into_iter()
+        .find(|item| item.id == "item-dynamic-meta")
+        .expect("dynamic item should be present");
+    assert_eq!(
+        dynamic.dynamic_vars_json.as_deref(),
+        Some("{\"ticket\":\"A-1\"}")
+    );
+    assert_eq!(dynamic.label.as_deref(), Some("Generated item"));
+    assert_eq!(dynamic.source, "dynamic");
+}
+
+#[test]
+fn query_helpers_error_on_missing_schema() {
+    let conn = Connection::open_in_memory().expect("open in-memory sqlite");
+
+    assert!(super::super::queries::load_task_summary(&conn, "missing").is_err());
+    assert!(super::super::queries::load_task_detail_rows(&conn, "missing").is_err());
+    assert!(super::super::queries::list_task_items_for_cycle(&conn, "missing").is_err());
+    assert!(super::super::queries::list_task_log_runs(&conn, "missing", 5).is_err());
+    assert!(super::super::queries::insert_task_graph_run(
+        &conn,
+        &NewTaskGraphRun {
+            graph_run_id: "graph-missing".to_string(),
+            task_id: "task-missing".to_string(),
+            cycle: 1,
+            mode: "dynamic_dag".to_string(),
+            source: "adaptive_planner".to_string(),
+            status: "materialized".to_string(),
+            fallback_mode: None,
+            planner_failure_class: None,
+            planner_failure_message: None,
+            entry_node_id: None,
+            node_count: 0,
+            edge_count: 0,
+        },
+    )
+    .is_err());
+    assert!(super::super::queries::update_task_graph_run_status(
+        &conn,
+        "graph-missing",
+        "completed",
+    )
+    .is_err());
+    assert!(super::super::queries::insert_task_graph_snapshot(
+        &conn,
+        &NewTaskGraphSnapshot {
+            graph_run_id: "graph-missing".to_string(),
+            task_id: "task-missing".to_string(),
+            snapshot_kind: "effective_graph".to_string(),
+            payload_json: "{}".to_string(),
+        },
+    )
+    .is_err());
+}
+
+#[test]
+fn load_task_graph_debug_bundles_errors_when_event_table_is_missing() {
+    let conn = Connection::open_in_memory().expect("open in-memory sqlite");
+    conn.execute_batch(
+        "CREATE TABLE task_graph_runs (
+            graph_run_id TEXT PRIMARY KEY,
+            task_id TEXT NOT NULL,
+            cycle INTEGER NOT NULL,
+            mode TEXT NOT NULL,
+            source TEXT NOT NULL,
+            status TEXT NOT NULL,
+            fallback_mode TEXT,
+            planner_failure_class TEXT,
+            planner_failure_message TEXT,
+            entry_node_id TEXT,
+            node_count INTEGER NOT NULL,
+            edge_count INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE task_graph_snapshots (
+            graph_run_id TEXT NOT NULL,
+            task_id TEXT NOT NULL,
+            snapshot_kind TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (graph_run_id, snapshot_kind)
+        );",
+    )
+    .expect("create graph tables");
+
+    let err = super::super::queries::load_task_graph_debug_bundles(&conn, "missing")
+        .expect_err("missing events table should fail during legacy fallback");
+    assert!(err.to_string().contains("no such table"));
 }
 
 // ── load_task_name ─────────────────────────────────────────────────

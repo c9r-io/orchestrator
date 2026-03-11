@@ -100,3 +100,47 @@ pub(super) mod test_fixtures {
         .expect("task item should exist")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_transient_query_error_matches_known_messages() {
+        let err = anyhow::anyhow!("failed to read log file: missing");
+        assert!(is_transient_query_error(&err));
+
+        let err = anyhow::anyhow!("database is locked");
+        assert!(is_transient_query_error(&err));
+
+        let err = anyhow::anyhow!("permanent failure");
+        assert!(!is_transient_query_error(&err));
+    }
+
+    #[test]
+    fn emit_anomaly_warning_updates_throttle_timestamp() {
+        let mut last_warning_at = None;
+        emit_anomaly_warning(
+            &AnomalyRule::TransientReadError,
+            "temporary read failure",
+            &mut last_warning_at,
+        );
+        assert!(last_warning_at.is_some());
+
+        let first = last_warning_at;
+        emit_anomaly_warning(
+            &AnomalyRule::TransientReadError,
+            "temporary read failure",
+            &mut last_warning_at,
+        );
+        assert_eq!(last_warning_at, first);
+
+        last_warning_at = Some(Instant::now() - Duration::from_secs(FOLLOW_WARNING_THROTTLE_SECS));
+        emit_anomaly_warning(
+            &AnomalyRule::TransientReadError,
+            "temporary read failure",
+            &mut last_warning_at,
+        );
+        assert!(last_warning_at.unwrap().elapsed() < Duration::from_secs(1));
+    }
+}

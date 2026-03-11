@@ -762,4 +762,92 @@ mod async_wrapper_tests {
             .iter()
             .any(|path| path.ends_with("async-wrapper-stdout.log")));
     }
+
+    #[test]
+    fn sqlite_repository_graph_debug_wrappers_round_trip() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let repo =
+            SqliteTaskRepository::new(types::TaskRepositorySource::from(state.db_path.clone()));
+
+        repo.insert_task_graph_run(&NewTaskGraphRun {
+            graph_run_id: "sync-graph-run".to_string(),
+            task_id: task_id.clone(),
+            cycle: 4,
+            mode: "dynamic_dag".to_string(),
+            source: "adaptive_planner".to_string(),
+            status: "materialized".to_string(),
+            fallback_mode: Some("static_segment".to_string()),
+            planner_failure_class: None,
+            planner_failure_message: None,
+            entry_node_id: Some("qa".to_string()),
+            node_count: 2,
+            edge_count: 1,
+        })
+        .expect("insert graph run");
+        repo.update_task_graph_run_status("sync-graph-run", "completed")
+            .expect("update graph run");
+        repo.insert_task_graph_snapshot(&NewTaskGraphSnapshot {
+            graph_run_id: "sync-graph-run".to_string(),
+            task_id: task_id.clone(),
+            snapshot_kind: "effective_graph".to_string(),
+            payload_json: "{\"entry\":\"qa\"}".to_string(),
+        })
+        .expect("insert graph snapshot");
+
+        let bundles = repo
+            .load_task_graph_debug_bundles(&task_id)
+            .expect("load graph bundles");
+        assert_eq!(bundles.len(), 1);
+        assert_eq!(bundles[0].graph_run_id, "sync-graph-run");
+        assert_eq!(bundles[0].status, "completed");
+        assert_eq!(bundles[0].effective_graph_json, "{\"entry\":\"qa\"}");
+    }
+
+    #[tokio::test]
+    async fn async_repository_graph_debug_wrappers_round_trip() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let repo = &state.task_repo;
+
+        repo.insert_task_graph_run(NewTaskGraphRun {
+            graph_run_id: "async-graph-run".to_string(),
+            task_id: task_id.clone(),
+            cycle: 5,
+            mode: "dynamic_dag".to_string(),
+            source: "adaptive_planner".to_string(),
+            status: "materialized".to_string(),
+            fallback_mode: Some("deterministic_dag".to_string()),
+            planner_failure_class: Some("invalid_json".to_string()),
+            planner_failure_message: Some("planner output broken".to_string()),
+            entry_node_id: Some("fix".to_string()),
+            node_count: 3,
+            edge_count: 2,
+        })
+        .await
+        .expect("insert graph run");
+        repo.update_task_graph_run_status("async-graph-run", "completed")
+            .await
+            .expect("update graph run");
+        repo.insert_task_graph_snapshot(NewTaskGraphSnapshot {
+            graph_run_id: "async-graph-run".to_string(),
+            task_id: task_id.clone(),
+            snapshot_kind: "effective_graph".to_string(),
+            payload_json: "{\"entry\":\"fix\"}".to_string(),
+        })
+        .await
+        .expect("insert graph snapshot");
+
+        let bundles = repo
+            .load_task_graph_debug_bundles(&task_id)
+            .await
+            .expect("load graph bundles");
+        assert_eq!(bundles.len(), 1);
+        assert_eq!(bundles[0].graph_run_id, "async-graph-run");
+        assert_eq!(
+            bundles[0].fallback_mode.as_deref(),
+            Some("deterministic_dag")
+        );
+        assert_eq!(bundles[0].effective_graph_json, "{\"entry\":\"fix\"}");
+    }
 }
