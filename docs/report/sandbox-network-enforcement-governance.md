@@ -2,7 +2,6 @@
 
 **Module**: orchestrator  
 **Date**: 2026-03-11  
-**Related FR**: `docs/feature_request/FR-006-sandbox-network-allowlist-backend.md`  
 **Related Design Doc**: `docs/design_doc/orchestrator/21-sandbox-resource-network-enforcement.md`  
 **Related QA**: `docs/qa/orchestrator/56-sandbox-resource-network-enforcement.md`
 
@@ -19,7 +18,7 @@ This governance note records how sandbox network-enforcement behavior should be 
 
 ## Governance Decisions
 
-1. Design intent lives in FR + design doc.
+1. Design intent lives in the design doc.
 2. QA validates behavior, not one exact stderr phrase.
 3. Guides must describe backend semantics explicitly.
 4. `network_target` is best-effort metadata; `stderr_excerpt` is the mandatory fallback.
@@ -29,11 +28,10 @@ This governance note records how sandbox network-enforcement behavior should be 
 
 When sandbox-network behavior changes, update these artifacts together:
 
-1. `docs/feature_request/FR-006-sandbox-network-allowlist-backend.md`
-2. `docs/design_doc/orchestrator/21-sandbox-resource-network-enforcement.md`
-3. `docs/qa/orchestrator/56-sandbox-resource-network-enforcement.md`
-4. `docs/guide/03-workflow-configuration.md`
-5. `docs/guide/zh/03-workflow-configuration.md`
+1. `docs/design_doc/orchestrator/21-sandbox-resource-network-enforcement.md`
+2. `docs/qa/orchestrator/56-sandbox-resource-network-enforcement.md`
+3. `docs/guide/03-workflow-configuration.md`
+4. `docs/guide/zh/03-workflow-configuration.md`
 
 ## Drift Prevention Rules
 
