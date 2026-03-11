@@ -24,7 +24,6 @@ pub(crate) async fn secret_key_status(
     server: &OrchestratorServer,
     request: Request<SecretKeyStatusRequest>,
 ) -> Result<Response<SecretKeyStatusResponse>, Status> {
-    let _guard = server.protect_unary(&request, "SecretKeyStatus")?;
     authorize(server, &request, "SecretKeyStatus").map_err(Status::from)?;
 
     let keyring = secret_key_lifecycle::load_keyring(&server.state.app_root, &server.state.db_path)
@@ -43,7 +42,6 @@ pub(crate) async fn secret_key_list(
     server: &OrchestratorServer,
     request: Request<SecretKeyListRequest>,
 ) -> Result<Response<SecretKeyListResponse>, Status> {
-    let _guard = server.protect_unary(&request, "SecretKeyList")?;
     authorize(server, &request, "SecretKeyList").map_err(Status::from)?;
 
     let keyring = secret_key_lifecycle::load_keyring(&server.state.app_root, &server.state.db_path)
@@ -57,7 +55,6 @@ pub(crate) async fn secret_key_rotate(
     server: &OrchestratorServer,
     request: Request<SecretKeyRotateRequest>,
 ) -> Result<Response<SecretKeyRotateResponse>, Status> {
-    let _guard = server.protect_unary(&request, "SecretKeyRotate")?;
     authorize(server, &request, "SecretKeyRotate").map_err(Status::from)?;
 
     let req = request.into_inner();
@@ -134,7 +131,6 @@ pub(crate) async fn secret_key_revoke(
     server: &OrchestratorServer,
     request: Request<SecretKeyRevokeRequest>,
 ) -> Result<Response<SecretKeyRevokeResponse>, Status> {
-    let _guard = server.protect_unary(&request, "SecretKeyRevoke")?;
     authorize(server, &request, "SecretKeyRevoke").map_err(Status::from)?;
 
     let req = request.into_inner();
@@ -153,7 +149,6 @@ pub(crate) async fn secret_key_history(
     server: &OrchestratorServer,
     request: Request<SecretKeyHistoryRequest>,
 ) -> Result<Response<SecretKeyHistoryResponse>, Status> {
-    let _guard = server.protect_unary(&request, "SecretKeyHistory")?;
     authorize(server, &request, "SecretKeyHistory").map_err(Status::from)?;
 
     let req = request.into_inner();

@@ -152,7 +152,6 @@ fn main() -> Result<()> {
             inner.clone(),
             shutdown_notify.clone(),
             None,
-            protection.clone(),
         );
 
         // Shutdown future: listen for OS signals, restart request, or RPC shutdown
@@ -186,12 +185,12 @@ fn main() -> Result<()> {
             )?;
             info!(%addr, "listening on TCP");
             Server::builder()
+                .layer(protection.clone().layer())
                 .tls_config(secure.tls)?
                 .add_service(OrchestratorServiceServer::new(server::OrchestratorServer::new(
                     inner.clone(),
                     shutdown_notify.clone(),
                     Some(secure.security),
-                    protection.clone(),
                 )))
                 .serve_with_shutdown(addr, shutdown_fut)
                 .await
@@ -207,6 +206,7 @@ fn main() -> Result<()> {
                 info!(%addr, "listening on insecure TCP");
                 tracing::warn!("insecure TCP control-plane enabled; use only for local development");
                 Server::builder()
+                    .layer(protection.clone().layer())
                     .add_service(OrchestratorServiceServer::new(service))
                     .serve_with_shutdown(addr, shutdown_fut)
                     .await
@@ -222,6 +222,7 @@ fn main() -> Result<()> {
 
                 info!(socket = %socket_path.display(), "listening on UDS");
                 Server::builder()
+                    .layer(protection.clone().layer())
                     .add_service(OrchestratorServiceServer::new(service))
                     .serve_with_incoming_shutdown(uds_stream, shutdown_fut)
                     .await

@@ -12,6 +12,7 @@ use rcgen::{
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use tonic::transport::server::{TcpConnectInfo, TlsConnectInfo};
 use tonic::transport::{Certificate as TonicCertificate, Identity, ServerTlsConfig};
 use tonic::{Request, Status};
 use x509_parser::extensions::GeneralName;
@@ -719,9 +720,22 @@ fn subject_id_from_der(der: &[u8]) -> Result<String> {
     bail!("client certificate missing URI SAN")
 }
 
-pub(crate) fn subject_id_from_request<T>(request: &Request<T>) -> Option<String> {
-    request
-        .peer_certs()
+pub(crate) fn remote_addr_from_extensions(extensions: &http::Extensions) -> Option<String> {
+    extensions
+        .get::<TcpConnectInfo>()
+        .and_then(|info| info.remote_addr())
+        .or_else(|| {
+            extensions
+                .get::<TlsConnectInfo<TcpConnectInfo>>()
+                .and_then(|info| info.get_ref().remote_addr())
+        })
+        .map(|addr| addr.to_string())
+}
+
+pub(crate) fn subject_id_from_extensions(extensions: &http::Extensions) -> Option<String> {
+    extensions
+        .get::<TlsConnectInfo<TcpConnectInfo>>()
+        .and_then(|info| info.peer_certs())
         .and_then(|certs| certs.first().cloned())
         .and_then(|cert| subject_id_from_der(cert.as_ref()).ok())
 }

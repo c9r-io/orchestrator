@@ -26,8 +26,8 @@ The secure TCP control plane already enforced mTLS, subject mapping, and RPC aut
 
 ## Scope
 
-- In scope: daemon-side request classification, subject/global token buckets, in-flight guards, active stream guards, protection config bootstrap, audit persistence.
-- Out of scope: `tower`-native transport middleware migration, metrics exporter, load-test automation.
+- In scope: daemon-side request classification, subject/global token buckets, in-flight guards, active stream guards, `tower` transport middleware composition, protection config bootstrap, and audit persistence.
+- Out of scope: metrics exporter, distributed rate limiting, and network-layer DDoS mitigation.
 
 ## Interfaces And Data
 
@@ -47,14 +47,15 @@ The secure TCP control plane already enforced mTLS, subject mapping, and RPC aut
 ## Key Design
 
 1. `ControlPlaneProtection` is loaded during daemon startup and bootstraps `data/control-plane/protection.yaml` when absent.
-2. RPCs are classified into `read`, `write`, `stream`, and `admin`; per-RPC overrides can replace the class or budget.
-3. Protection resolves caller identity with this priority: `mTLS subject_id` -> `remote_addr` -> `local-process`.
-4. Every request hits both a subject-scoped budget and a global budget so one noisy client and many noisy clients are both bounded.
-5. `TaskFollow` and `TaskWatch` keep a stream lease for the full connection lifetime so long-running watchers consume active-stream capacity until disconnect.
+2. A dedicated `tower` layer is attached at `Server::builder()` so all gRPC RPCs pass through one transport-level protection path before typed handlers run.
+3. RPCs are classified into `read`, `write`, `stream`, and `admin`; per-RPC overrides can replace the class or budget.
+4. Protection resolves caller identity with this priority: `mTLS subject_id` -> `remote_addr` -> `local-process`.
+5. Every request hits both a subject-scoped budget and a global budget so one noisy client and many noisy clients are both bounded.
+6. `TaskFollow` and `TaskWatch` keep a stream lease on the wrapped HTTP response body for the full connection lifetime so long-running watchers consume active-stream capacity until disconnect.
 
 ## Alternatives And Tradeoffs
 
-- `tower` middleware would align better with the original FR wording, but the current daemon already centralizes authorization in RPC entrypoints. Reusing the same entrypoint pattern delivered the safety boundary faster with less service-layer churn.
+- A handler-entrypoint implementation was simpler for phase 1, but transport middleware is the cleaner long-term shape because it removes per-RPC protection boilerplate and keeps business handlers focused on authz and service translation.
 - A separate protection audit table would isolate semantics, but extending `control_plane_audit` keeps all control-plane decisions queryable in one place.
 - Skipping UDS protection would preserve more local headroom, but it would leave the default local mode exposed to accidental DoS from misconfigured clients.
 
@@ -83,9 +84,9 @@ The secure TCP control plane already enforced mTLS, subject mapping, and RPC aut
 
 ## Test Plan
 
-- Unit tests: RPC classification, token bucket exhaustion, override merge behavior.
+- Unit tests: RPC classification, route mapping, token bucket exhaustion, override merge behavior.
 - Integration tests: secure bootstrap generates `protection.yaml`, read traffic gets rate limited, `TaskWatch` enforces active-stream limits, audit rows contain the new protection fields.
-- E2E: run daemon in isolated app root and home, use mock fixtures only, verify secure TCP and UDS rejection paths.
+- Pressure QA: `scripts/qa/test-fr013-control-plane-protection.sh` drives repeated `TaskList`, `TaskWatch`, and `Apply` pressure against secure TCP and verifies the daemon remains responsive.
 
 ## QA Docs
 

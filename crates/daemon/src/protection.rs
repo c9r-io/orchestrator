@@ -1,12 +1,19 @@
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::task::{Context as TaskContext, Poll};
 use std::time::Instant;
 
 use agent_orchestrator::db::{insert_control_plane_audit, ControlPlaneAuditRecord};
 use anyhow::{Context, Result};
+use http::{Request as HttpRequest, Response as HttpResponse};
+use http_body::Body as HttpBody;
+use pin_project_lite::pin_project;
 use serde::{Deserialize, Serialize};
-use tonic::{Request, Status};
+use tonic::Status;
+use tower::{Layer, Service};
 
 use crate::control_plane;
 
@@ -232,29 +239,34 @@ impl ControlPlaneProtection {
         })
     }
 
-    pub fn protect_unary<T>(
+    pub fn protect_http<B>(
         &self,
-        request: &Request<T>,
+        request: &HttpRequest<B>,
         rpc: &'static str,
     ) -> Result<ProtectionLease, Status> {
-        self.acquire(request, rpc, false)
+        self.acquire_http(request, rpc, is_streaming_rpc(rpc))
     }
 
-    pub fn protect_stream<T>(
-        &self,
-        request: &Request<T>,
-        rpc: &'static str,
-    ) -> Result<ProtectionLease, Status> {
-        self.acquire(request, rpc, true)
+    pub fn layer(self: Arc<Self>) -> ControlPlaneProtectionLayer {
+        ControlPlaneProtectionLayer { protection: self }
     }
 
-    fn acquire<T>(
+    fn acquire_http<B>(
         &self,
-        request: &Request<T>,
+        request: &HttpRequest<B>,
         rpc: &'static str,
         stream_mode: bool,
     ) -> Result<ProtectionLease, Status> {
-        let resolved = self.resolve_context(request);
+        let resolved = self.resolve_http_context(request);
+        self.acquire_with_context(resolved, rpc, stream_mode)
+    }
+
+    fn acquire_with_context(
+        &self,
+        resolved: ResolvedContext,
+        rpc: &'static str,
+        stream_mode: bool,
+    ) -> Result<ProtectionLease, Status> {
         let effective = self.effective_policy(rpc);
         let limiter = self.states.for_class(effective.class);
 
@@ -331,9 +343,18 @@ impl ControlPlaneProtection {
         })
     }
 
-    fn resolve_context<T>(&self, request: &Request<T>) -> ResolvedContext {
-        let remote_addr = request.remote_addr().map(|addr| addr.to_string());
-        let subject_id = control_plane::subject_id_from_request(request);
+    fn resolve_http_context<B>(&self, request: &HttpRequest<B>) -> ResolvedContext {
+        self.build_resolved_context(
+            control_plane::remote_addr_from_extensions(request.extensions()),
+            control_plane::subject_id_from_extensions(request.extensions()),
+        )
+    }
+
+    fn build_resolved_context(
+        &self,
+        remote_addr: Option<String>,
+        subject_id: Option<String>,
+    ) -> ResolvedContext {
         let transport = if remote_addr.is_some() { "tcp" } else { "uds" };
         let subject_key = if let Some(subject_id) = &subject_id {
             format!("subject:{subject_id}")
@@ -504,6 +525,143 @@ impl ControlPlaneProtection {
     }
 }
 
+#[derive(Clone)]
+pub struct ControlPlaneProtectionLayer {
+    protection: Arc<ControlPlaneProtection>,
+}
+
+impl<S> Layer<S> for ControlPlaneProtectionLayer {
+    type Service = ControlPlaneProtectionService<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        ControlPlaneProtectionService {
+            inner,
+            protection: self.protection.clone(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct ControlPlaneProtectionService<S> {
+    inner: S,
+    protection: Arc<ControlPlaneProtection>,
+}
+
+impl<S, ReqBody, ResBody> Service<HttpRequest<ReqBody>> for ControlPlaneProtectionService<S>
+where
+    S: Service<HttpRequest<ReqBody>, Response = HttpResponse<ResBody>> + Clone + Send + 'static,
+    S::Future: Send + 'static,
+    ReqBody: Send + 'static,
+    ResBody: HttpBody + Send + 'static,
+    ResBody::Error: Send + 'static,
+{
+    type Response = HttpResponse<ProtectedBody<ResBody>>;
+    type Error = S::Error;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, cx: &mut TaskContext<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, request: HttpRequest<ReqBody>) -> Self::Future {
+        let decision = rpc_from_path(request.uri().path()).map(|rpc| {
+            self.protection
+                .protect_http(&request, rpc)
+                .map(|lease| (rpc, lease))
+        });
+
+        match decision {
+            Some(Err(status)) => {
+                let (parts, ()) = status.into_http::<()>().into_parts();
+                let response = HttpResponse::from_parts(parts, ProtectedBody::empty());
+                Box::pin(async move { Ok(response) })
+            }
+            Some(Ok((_rpc, lease))) => {
+                let future = self.inner.call(request);
+                Box::pin(async move {
+                    future
+                        .await
+                        .map(|response| response.map(|body| ProtectedBody::new(body, Some(lease))))
+                })
+            }
+            None => {
+                let future = self.inner.call(request);
+                Box::pin(async move {
+                    future
+                        .await
+                        .map(|response| response.map(|body| ProtectedBody::new(body, None)))
+                })
+            }
+        }
+    }
+}
+
+pin_project! {
+    #[derive(Debug)]
+    pub struct ProtectedBody<B> {
+        #[pin]
+        kind: ProtectedBodyKind<B>,
+        _lease: Option<ProtectionLease>,
+    }
+}
+
+pin_project! {
+    #[derive(Debug)]
+    #[project = ProtectedBodyKindProj]
+    enum ProtectedBodyKind<B> {
+        Empty,
+        Wrap { #[pin] body: B },
+    }
+}
+
+impl<B> ProtectedBody<B> {
+    fn new(body: B, lease: Option<ProtectionLease>) -> Self {
+        Self {
+            kind: ProtectedBodyKind::Wrap { body },
+            _lease: lease,
+        }
+    }
+
+    fn empty() -> Self {
+        Self {
+            kind: ProtectedBodyKind::Empty,
+            _lease: None,
+        }
+    }
+}
+
+impl<B> HttpBody for ProtectedBody<B>
+where
+    B: HttpBody,
+{
+    type Data = B::Data;
+    type Error = B::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut TaskContext<'_>,
+    ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+        match self.project().kind.project() {
+            ProtectedBodyKindProj::Empty => Poll::Ready(None),
+            ProtectedBodyKindProj::Wrap { body } => body.poll_frame(cx),
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        match &self.kind {
+            ProtectedBodyKind::Empty => true,
+            ProtectedBodyKind::Wrap { body } => body.is_end_stream(),
+        }
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        match &self.kind {
+            ProtectedBodyKind::Empty => http_body::SizeHint::with_exact(0),
+            ProtectedBodyKind::Wrap { body } => body.size_hint(),
+        }
+    }
+}
+
 impl LimiterStates {
     fn for_class(&self, class: TrafficClass) -> &LimiterState {
         match class {
@@ -650,6 +808,52 @@ fn classify_rpc(rpc: &str) -> TrafficClass {
     }
 }
 
+fn is_streaming_rpc(rpc: &str) -> bool {
+    matches!(rpc, "TaskFollow" | "TaskWatch")
+}
+
+fn rpc_from_path(path: &str) -> Option<&'static str> {
+    match path {
+        "/orchestrator.OrchestratorService/TaskCreate" => Some("TaskCreate"),
+        "/orchestrator.OrchestratorService/TaskStart" => Some("TaskStart"),
+        "/orchestrator.OrchestratorService/TaskPause" => Some("TaskPause"),
+        "/orchestrator.OrchestratorService/TaskResume" => Some("TaskResume"),
+        "/orchestrator.OrchestratorService/TaskDelete" => Some("TaskDelete"),
+        "/orchestrator.OrchestratorService/TaskRetry" => Some("TaskRetry"),
+        "/orchestrator.OrchestratorService/TaskList" => Some("TaskList"),
+        "/orchestrator.OrchestratorService/TaskInfo" => Some("TaskInfo"),
+        "/orchestrator.OrchestratorService/TaskLogs" => Some("TaskLogs"),
+        "/orchestrator.OrchestratorService/TaskFollow" => Some("TaskFollow"),
+        "/orchestrator.OrchestratorService/TaskWatch" => Some("TaskWatch"),
+        "/orchestrator.OrchestratorService/Apply" => Some("Apply"),
+        "/orchestrator.OrchestratorService/Get" => Some("Get"),
+        "/orchestrator.OrchestratorService/Describe" => Some("Describe"),
+        "/orchestrator.OrchestratorService/Delete" => Some("Delete"),
+        "/orchestrator.OrchestratorService/StoreGet" => Some("StoreGet"),
+        "/orchestrator.OrchestratorService/StorePut" => Some("StorePut"),
+        "/orchestrator.OrchestratorService/StoreDelete" => Some("StoreDelete"),
+        "/orchestrator.OrchestratorService/StoreList" => Some("StoreList"),
+        "/orchestrator.OrchestratorService/StorePrune" => Some("StorePrune"),
+        "/orchestrator.OrchestratorService/Ping" => Some("Ping"),
+        "/orchestrator.OrchestratorService/Shutdown" => Some("Shutdown"),
+        "/orchestrator.OrchestratorService/ConfigDebug" => Some("ConfigDebug"),
+        "/orchestrator.OrchestratorService/WorkerStatus" => Some("WorkerStatus"),
+        "/orchestrator.OrchestratorService/Check" => Some("Check"),
+        "/orchestrator.OrchestratorService/Init" => Some("Init"),
+        "/orchestrator.OrchestratorService/DbStatus" => Some("DbStatus"),
+        "/orchestrator.OrchestratorService/DbMigrationsList" => Some("DbMigrationsList"),
+        "/orchestrator.OrchestratorService/ManifestValidate" => Some("ManifestValidate"),
+        "/orchestrator.OrchestratorService/ManifestExport" => Some("ManifestExport"),
+        "/orchestrator.OrchestratorService/TaskTrace" => Some("TaskTrace"),
+        "/orchestrator.OrchestratorService/SecretKeyStatus" => Some("SecretKeyStatus"),
+        "/orchestrator.OrchestratorService/SecretKeyList" => Some("SecretKeyList"),
+        "/orchestrator.OrchestratorService/SecretKeyRotate" => Some("SecretKeyRotate"),
+        "/orchestrator.OrchestratorService/SecretKeyRevoke" => Some("SecretKeyRevoke"),
+        "/orchestrator.OrchestratorService/SecretKeyHistory" => Some("SecretKeyHistory"),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -689,5 +893,21 @@ mod tests {
         assert_eq!(merged.rate_per_sec, 5);
         assert_eq!(merged.burst, 2);
         assert_eq!(merged.max_in_flight, Some(7));
+    }
+
+    #[test]
+    fn route_mapping_is_stable() {
+        assert_eq!(
+            rpc_from_path("/orchestrator.OrchestratorService/TaskList"),
+            Some("TaskList")
+        );
+        assert_eq!(
+            rpc_from_path("/orchestrator.OrchestratorService/TaskWatch"),
+            Some("TaskWatch")
+        );
+        assert_eq!(
+            rpc_from_path("/orchestrator.OrchestratorService/Unknown"),
+            None
+        );
     }
 }

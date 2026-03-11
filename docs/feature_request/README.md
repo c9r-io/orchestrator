@@ -9,7 +9,6 @@
 | FR-002 | Daemon 控制面认证、鉴权与传输安全 | P0 | Proposed |
 | FR-005 | Daemon 生命周期治理与运行态指标补完 | P1 | Proposed |
 | FR-011 | validate/scheduler/runner 职责拆分与验证逻辑去重 | P1 | Proposed |
-| FR-013 | gRPC 控制面速率限制与 DoS 防护 | P0 | In Progress |
 | FR-014 | 关键路径 `expect()` 清退与错误语义收敛 | P1 | Proposed |
 | FR-015 | 高频 `clone()` 优化与共享所有权治理 | P2 | Proposed |
 | FR-016 | 异步上下文锁模型收敛到 `tokio::sync::RwLock` | P1 | Proposed |
@@ -24,7 +23,7 @@
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
 - FR-011 聚焦内核复杂度治理，不直接引入用户可见新能力
 - FR-012 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/27-secretstore-key-lifecycle.md` 与 `docs/qa/orchestrator/64-secretstore-key-lifecycle.md` 承载
-- FR-013 聚焦 gRPC 控制面资源保护，优先降低恶意或异常客户端造成的拒绝服务风险
+- FR-013 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/27-grpc-control-plane-protection.md`、`docs/qa/orchestrator/65-grpc-control-plane-protection.md` 与 `scripts/qa/test-fr013-control-plane-protection.sh` 承载
 - FR-014 聚焦关键路径错误处理收敛，减少因 `expect()` 触发的非预期终止
 - FR-015 聚焦字符串与配置对象的重复分配问题，优先治理高频热路径
 - FR-016 聚焦异步上下文中的锁语义一致性，降低阻塞式锁带来的调度风险

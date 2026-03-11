@@ -1,8 +1,8 @@
 # Orchestrator - gRPC Control Plane Protection
 
 **Module**: orchestrator
-**Scope**: Validate gRPC control-plane protection config bootstrap, secure-TCP subject rate limiting, stream occupancy limits, and UDS fallback protection
-**Scenarios**: 4
+**Scope**: Validate gRPC control-plane protection config bootstrap, secure-TCP subject rate limiting, stream occupancy limits, UDS fallback protection, and repeatable pressure validation
+**Scenarios**: 5
 **Priority**: High
 
 ---
@@ -14,9 +14,10 @@ The gRPC control plane now applies daemon-side protection budgets in addition to
 Related paths:
 
 - `crates/daemon/src/protection.rs`
-- `crates/daemon/src/server/task.rs`
+- `crates/daemon/src/main.rs`
 - `crates/daemon/src/control_plane.rs`
 - `core/src/db.rs`
+- `scripts/qa/test-fr013-control-plane-protection.sh`
 
 ---
 
@@ -258,6 +259,45 @@ Verify `TaskWatch` consumes a stream permit until disconnect and the second conc
 ### Expected
 - The first `task watch` stays open.
 - The second `task watch` fails with a gRPC `RESOURCE_EXHAUSTED` style error containing `reason_code=stream_limit_exceeded`.
+
+---
+
+## Scenario 5: Secure TCP Pressure Script Rejects Fast And Preserves Daemon Availability
+
+### Preconditions
+- Repository root: `/Volumes/Yotta/ai_native_sdlc`
+- Release binaries built:
+  ```bash
+  cargo build --release -p orchestratord -p orchestrator-cli
+  ```
+
+### Goal
+Verify the middleware-based protection stack rejects excess `TaskList`, `TaskWatch`, and `Apply` traffic under repeated concurrent pressure without crashing the daemon.
+
+### Steps
+1. Run the pressure script:
+   ```bash
+   cd /Volumes/Yotta/ai_native_sdlc
+   scripts/qa/test-fr013-control-plane-protection.sh
+   ```
+2. Observe the emitted audit sample at the end of the script.
+
+### Expected
+- The script exits `0`.
+- The script records at least one rejected `TaskList` row with `reason_code='rate_limited'`.
+- The script records at least one rejected `TaskWatch` row with `reason_code='stream_limit_exceeded'`.
+- The script records at least one rejected `Apply` row with `reason_code='rate_limited'` or `reason_code='concurrency_limited'`.
+- The final daemon health probe (`orchestrator debug`) succeeds, proving non-exhausted traffic can still reach the control plane.
+
+### Expected Data State
+```sql
+SELECT rpc, traffic_class, limit_scope, decision, reason_code
+FROM control_plane_audit
+WHERE rpc IN ('TaskList', 'TaskWatch', 'Apply')
+ORDER BY id DESC
+LIMIT 20;
+-- Expected: rejected rows are present for all three RPC groups with stable reason_code values.
+```
 - Audit rows for `TaskWatch` show `traffic_class='stream'` and `reason_code='stream_limit_exceeded'`.
 
 ### Expected Data State

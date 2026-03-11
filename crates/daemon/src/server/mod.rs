@@ -13,7 +13,6 @@ use tokio::sync::Notify;
 use tonic::{Request, Response, Status};
 
 use crate::control_plane::{AuthzError, ControlPlaneSecurity};
-use crate::protection::{ControlPlaneProtection, ProtectionLease};
 
 /// gRPC service implementation — thin translation layer from gRPC requests
 /// to core service calls.
@@ -21,7 +20,6 @@ pub struct OrchestratorServer {
     pub(crate) state: Arc<InnerState>,
     pub(crate) shutdown_notify: Arc<Notify>,
     pub(crate) control_plane: Option<Arc<ControlPlaneSecurity>>,
-    pub(crate) protection: Arc<ControlPlaneProtection>,
 }
 
 impl OrchestratorServer {
@@ -29,13 +27,11 @@ impl OrchestratorServer {
         state: Arc<InnerState>,
         shutdown_notify: Arc<Notify>,
         control_plane: Option<Arc<ControlPlaneSecurity>>,
-        protection: Arc<ControlPlaneProtection>,
     ) -> Self {
         Self {
             state,
             shutdown_notify,
             control_plane,
-            protection,
         }
     }
 
@@ -48,22 +44,6 @@ impl OrchestratorServer {
             )));
         }
         None
-    }
-
-    pub(crate) fn protect_unary<T>(
-        &self,
-        request: &Request<T>,
-        rpc: &'static str,
-    ) -> Result<ProtectionLease, Status> {
-        self.protection.protect_unary(request, rpc)
-    }
-
-    pub(crate) fn protect_stream<T>(
-        &self,
-        request: &Request<T>,
-        rpc: &'static str,
-    ) -> Result<ProtectionLease, Status> {
-        self.protection.protect_stream(request, rpc)
     }
 }
 
