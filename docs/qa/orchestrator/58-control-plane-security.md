@@ -384,10 +384,10 @@ Verify that the `rejection_stage` column in `control_plane_audit` is populated f
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
 | 1 | Secure TCP Bootstrap Generates Server And Client Materials | ✅ | 2026-03-12 | Claude | PKI + policy + client materials all bootstrapped correctly |
-| 2 | CLI Auto-Discovery Uses Generated Secure Client Config | ⚠️ | 2026-03-12 | Claude | Blocked by pre-existing rustls CryptoProvider issue in CLI TLS client; unit tests pass |
-| 3 | Additional Operator Client Is Denied On Admin RPC | ⚠️ | 2026-03-12 | Claude | Operator cert issued OK; RPC test blocked by CLI CryptoProvider issue; role mapping unit tests pass |
+| 2 | CLI Auto-Discovery Uses Generated Secure Client Config | ✅ | 2026-03-12 | Claude | version + task list succeed over auto-discovered secure TCP config |
+| 3 | Additional Operator Client Is Denied On Admin RPC | ✅ | 2026-03-12 | Claude | Operator task list allowed; debug denied with "permission denied" |
 | 4 | Insecure TCP Requires Explicit Unsafe Flag And dev-insecure Feature | ✅ | 2026-03-12 | Claude | dev-insecure build logs warning; default build rejects flag |
 | 5 | UDS Mode Remains Available Without Client Certificates | ✅ | 2026-03-12 | Claude | Socket created, CLI connects, task list returns data, cleanup on shutdown |
-| 6 | Mandatory mTLS Rejects Connections Without Client Certificate | ✅ | 2026-03-12 | Claude | `client_auth_optional(false)` verified in code; unit test confirms secure server bootstrap |
+| 6 | Mandatory mTLS Rejects Connections Without Client Certificate | ✅ | 2026-03-12 | Claude | curl without client cert gets connection reset (exit 56); no audit row written |
 | 7 | Default Build Does Not Provide --insecure-bind | ✅ | 2026-03-12 | Claude | clap returns "unexpected argument" with exit code 2 |
-| 8 | Audit Records Contain rejection_stage Classification | ✅ | 2026-03-12 | Claude | All 4 rejection stages verified in code + INSERT SQL; migration m0015 + unit tests pass |
+| 8 | Audit Records Contain rejection_stage Classification | ✅ | 2026-03-12 | Claude | role_insufficient=2, allowed(null)=3; distribution matches expected denial/allow pattern |
