@@ -156,6 +156,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/61-chain-steps-execution.md` | 4 | FR-008: chain_steps runtime contract, runtime plan preservation, parent/child failure ordering, and trace compatibility |
 | orchestrator | `docs/qa/orchestrator/62-database-persistence-bootstrap-repositories.md` | 5 | FR-009 Phase 1: persistence bootstrap ownership, public ensure_column removal, and repository-backed session/store boundaries |
 | orchestrator | `docs/qa/orchestrator/64-secretstore-key-lifecycle.md` | 5 | FR-012: SecretStore key lifecycle — legacy migration, rotation, resume, revocation, audit history |
+| orchestrator | `docs/qa/orchestrator/65-grpc-control-plane-protection.md` | 4 | FR-013 phase 1: protection config bootstrap, secure-TCP subject rate limit, TaskWatch active-stream limit, and UDS fallback protection |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
 | script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |

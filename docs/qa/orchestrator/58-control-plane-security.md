@@ -17,6 +17,8 @@ The control-plane security change makes `orchestratord --bind <addr>` secure by 
 - Applies RPC role checks from `data/control-plane/policy.yaml`
 - Persists decisions to `control_plane_audit`
 
+For request-rate, concurrency, and stream-occupancy protections added after the initial security hardening, see `docs/qa/orchestrator/65-grpc-control-plane-protection.md`.
+
 Related paths:
 
 - `crates/daemon/src/control_plane.rs`

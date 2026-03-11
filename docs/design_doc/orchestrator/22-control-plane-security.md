@@ -92,6 +92,7 @@
 ## QA Docs
 
 - `docs/qa/orchestrator/58-control-plane-security.md`
+- `docs/qa/orchestrator/65-grpc-control-plane-protection.md` (follow-up resource protection coverage)
 
 ## FR-010 Hardening
 

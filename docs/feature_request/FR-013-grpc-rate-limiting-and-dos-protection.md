@@ -144,5 +144,5 @@ gRPC 控制面目前更像“可信客户端使用前提下的功能面”，还
 
 ## 后续产物
 
-- 设计文档：`TBD`（未完成）
-- QA 文档：`TBD`（未完成）
+- 设计文档：`docs/design_doc/orchestrator/27-grpc-control-plane-protection.md`
+- QA 文档：`docs/qa/orchestrator/65-grpc-control-plane-protection.md`
