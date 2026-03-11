@@ -1,4 +1,4 @@
-use orchestrator_proto::{CommandRun, Event, TaskItem, TaskSummary};
+use orchestrator_proto::{CommandRun, Event, TaskGraphDebugBundle, TaskItem, TaskSummary};
 
 pub(super) fn summary_to_proto(t: &agent_orchestrator::dto::TaskSummary) -> TaskSummary {
     TaskSummary {
@@ -67,5 +67,25 @@ pub(super) fn event_to_proto(e: agent_orchestrator::dto::EventDto) -> Event {
         event_type: e.event_type,
         payload_json: serde_json::to_string(&e.payload).unwrap_or_default(),
         created_at: e.created_at,
+    }
+}
+
+pub(super) fn graph_debug_to_proto(
+    bundle: agent_orchestrator::dto::TaskGraphDebugBundle,
+) -> TaskGraphDebugBundle {
+    TaskGraphDebugBundle {
+        graph_run_id: bundle.graph_run_id,
+        cycle: bundle.cycle,
+        source: bundle.source,
+        status: bundle.status,
+        fallback_mode: bundle.fallback_mode,
+        planner_failure_class: bundle.planner_failure_class,
+        planner_failure_message: bundle.planner_failure_message,
+        effective_graph_json: bundle.effective_graph_json,
+        planner_raw_output_json: bundle.planner_raw_output_json,
+        normalized_plan_json: bundle.normalized_plan_json,
+        execution_replay_json: bundle.execution_replay_json,
+        created_at: bundle.created_at,
+        updated_at: bundle.updated_at,
     }
 }

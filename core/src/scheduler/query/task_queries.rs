@@ -7,13 +7,15 @@ use anyhow::Result;
 /// Load a full task detail snapshot (summary + items + runs + events).
 pub async fn load_task_detail_snapshot(state: &InnerState, task_id: &str) -> Result<TaskDetail> {
     let task = load_task_summary(state, task_id).await?;
-    let (items, runs, events) = state.task_repo.load_task_detail_rows(&task.id).await?;
+    let (items, runs, events, graph_debug) =
+        state.task_repo.load_task_detail_rows(&task.id).await?;
 
     Ok(TaskDetail {
         task,
         items,
         runs,
         events,
+        graph_debug,
     })
 }
 

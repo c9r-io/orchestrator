@@ -45,3 +45,25 @@ pub struct TaskLogRunRow {
     pub stderr_path: String,
     pub started_at: Option<String>,
 }
+
+pub struct NewTaskGraphRun {
+    pub graph_run_id: String,
+    pub task_id: String,
+    pub cycle: i64,
+    pub mode: String,
+    pub source: String,
+    pub status: String,
+    pub fallback_mode: Option<String>,
+    pub planner_failure_class: Option<String>,
+    pub planner_failure_message: Option<String>,
+    pub entry_node_id: Option<String>,
+    pub node_count: i64,
+    pub edge_count: i64,
+}
+
+pub struct NewTaskGraphSnapshot {
+    pub graph_run_id: String,
+    pub task_id: String,
+    pub snapshot_kind: String,
+    pub payload_json: String,
+}

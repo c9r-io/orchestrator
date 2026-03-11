@@ -206,6 +206,8 @@ pub fn reset_db_by_path(db_path: &Path, include_history: bool, include_config: b
     }
 
     conn.execute("DELETE FROM events", [])?;
+    let _ = conn.execute("DELETE FROM task_graph_snapshots", []);
+    let _ = conn.execute("DELETE FROM task_graph_runs", []);
     conn.execute("DELETE FROM command_runs", [])?;
     conn.execute("DELETE FROM task_items", [])?;
     conn.execute("DELETE FROM tasks", [])?;
@@ -296,6 +298,14 @@ pub fn reset_project_data(
         |row| row.get(0),
     )?;
 
+    tx.execute(
+        "DELETE FROM task_graph_snapshots WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?1)",
+        params![project_id],
+    )?;
+    tx.execute(
+        "DELETE FROM task_graph_runs WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?1)",
+        params![project_id],
+    )?;
     tx.execute(
         "DELETE FROM command_runs WHERE task_item_id IN (
             SELECT ti.id FROM task_items ti

@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use serde_json::json;
+use uuid::Uuid;
 
 use crate::config::{DagFallbackMode, StepScope, TaskRuntimeContext};
 use crate::dynamic_orchestration::{
@@ -54,7 +55,7 @@ pub(super) async fn execute_cycle_graph(
         items.iter().map(|item| item.qa_file_path.clone()).collect();
     let mut item_state: HashMap<String, StepExecutionAccumulator> = HashMap::new();
 
-    let graph = match materialize_graph(state, task_id, task_ctx, runtime, &items).await {
+    let materialized = match materialize_graph(state, task_id, task_ctx, runtime, &items).await {
         Ok(graph) => graph,
         Err(err) => match task_ctx.execution.fallback_mode {
             DagFallbackMode::StaticSegment => {
@@ -78,37 +79,88 @@ pub(super) async fn execute_cycle_graph(
                     json!({"mode":"dynamic_dag","fallback_mode":"deterministic_dag","error":err.to_string()}),
                 )
                 .await?;
-                build_static_execution_graph(task_ctx)?
+                let materialized = GraphMaterialization {
+                    graph: build_static_execution_graph(task_ctx)?,
+                    graph_run_id: Uuid::new_v4().to_string(),
+                    source: "deterministic_fallback".to_string(),
+                    cycle: task_ctx.current_cycle as i64,
+                    fallback_mode: Some("deterministic_dag".to_string()),
+                    planner_failure_class: None,
+                    planner_failure_message: Some(err.to_string()),
+                    planner_raw_output_json: None,
+                    normalized_plan_json: None,
+                };
+                insert_graph_run(state, task_id, &materialized).await?;
+                materialized
             }
         },
     };
+    let graph = &materialized.graph;
 
-    insert_event(
+    emit_graph_event(
         state,
         task_id,
         None,
         "dynamic_plan_materialized",
+        &materialized,
         json!({
-            "mode":"dynamic_dag",
-            "source": graph.source,
             "node_count": graph.nodes.len(),
             "edge_count": graph.edges.len(),
             "graph": graph,
         }),
     )
     .await?;
+    persist_graph_snapshot(
+        state,
+        task_id,
+        &materialized.graph_run_id,
+        "effective_graph",
+        graph,
+    )
+    .await?;
+    state
+        .task_repo
+        .update_task_graph_run_status(&materialized.graph_run_id, "running")
+        .await?;
 
-    execute_graph_nodes(
+    let execution_replay = execute_graph_nodes(
         state,
         task_id,
         task_ctx,
         runtime,
-        &graph,
+        graph,
+        &materialized,
         &mut items,
         &mut item_state,
         &mut task_item_paths,
     )
-    .await?;
+    .await;
+
+    match execution_replay {
+        Ok(replay) => {
+            if task_ctx.execution.persist_graph_snapshots {
+                persist_graph_snapshot(
+                    state,
+                    task_id,
+                    &materialized.graph_run_id,
+                    "execution_replay",
+                    &replay,
+                )
+                .await?;
+            }
+            state
+                .task_repo
+                .update_task_graph_run_status(&materialized.graph_run_id, "completed")
+                .await?;
+        }
+        Err(err) => {
+            state
+                .task_repo
+                .update_task_graph_run_status(&materialized.graph_run_id, "failed")
+                .await?;
+            return Err(err);
+        }
+    }
 
     segment::finalize_items(state, task_id, task_ctx, &items, &mut item_state).await?;
     Ok(GraphCycleOutcome::Completed)
@@ -121,26 +173,90 @@ pub(super) enum GraphCycleOutcome {
     FallbackToStaticSegment,
 }
 
+#[derive(Debug, Clone)]
+struct GraphMaterialization {
+    graph: EffectiveExecutionGraph,
+    graph_run_id: String,
+    source: String,
+    cycle: i64,
+    fallback_mode: Option<String>,
+    planner_failure_class: Option<String>,
+    planner_failure_message: Option<String>,
+    planner_raw_output_json: Option<String>,
+    normalized_plan_json: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct NodeExecutionRecord {
+    node_id: String,
+    success: bool,
+    skipped: bool,
+    reason: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct EdgeDecisionRecord {
+    from: String,
+    to: String,
+    condition: Option<String>,
+    taken: bool,
+    reason: String,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize)]
+struct GraphExecutionReplay {
+    node_execution_order: Vec<String>,
+    node_results: Vec<NodeExecutionRecord>,
+    edge_decisions: Vec<EdgeDecisionRecord>,
+}
+
 async fn materialize_graph(
     state: &Arc<InnerState>,
     task_id: &str,
     task_ctx: &TaskRuntimeContext,
     runtime: &RunningTask,
     items: &[crate::dto::TaskItemRow],
-) -> Result<EffectiveExecutionGraph> {
+) -> Result<GraphMaterialization> {
+    let graph_run_id = Uuid::new_v4().to_string();
     let Some(anchor_item) = items.first() else {
-        return build_static_execution_graph(task_ctx);
+        let graph = build_static_execution_graph(task_ctx)?;
+        let materialized = GraphMaterialization {
+            graph,
+            graph_run_id,
+            source: "static_baseline".to_string(),
+            cycle: task_ctx.current_cycle as i64,
+            fallback_mode: None,
+            planner_failure_class: None,
+            planner_failure_message: None,
+            planner_raw_output_json: None,
+            normalized_plan_json: None,
+        };
+        insert_graph_run(state, task_id, &materialized).await?;
+        return Ok(materialized);
     };
 
     if let Some(adaptive_config) = task_ctx.adaptive.clone().filter(|cfg| cfg.enabled) {
-        insert_event(
+        let generation_ctx = GraphMaterialization {
+            graph: EffectiveExecutionGraph::default(),
+            graph_run_id: graph_run_id.clone(),
+            source: "adaptive_planner".to_string(),
+            cycle: task_ctx.current_cycle as i64,
+            fallback_mode: Some(
+                dag_fallback_mode_name(task_ctx.execution.fallback_mode).to_string(),
+            ),
+            planner_failure_class: None,
+            planner_failure_message: None,
+            planner_raw_output_json: None,
+            normalized_plan_json: None,
+        };
+        emit_graph_event(
             state,
             task_id,
             Some(anchor_item.id.as_str()),
             "dynamic_plan_generated",
+            &generation_ctx,
             json!({
                 "planner_agent": adaptive_config.planner_agent,
-                "cycle": task_ctx.current_cycle,
                 "fallback_mode": adaptive_config.fallback_mode,
             }),
         )
@@ -163,38 +279,95 @@ async fn materialize_graph(
             }
         };
         let graph = build_adaptive_execution_graph(&outcome.plan, source)?;
-        insert_event(
+        let materialized = GraphMaterialization {
+            graph,
+            graph_run_id,
+            source: execution_graph_source_name(source).to_string(),
+            cycle: task_ctx.current_cycle as i64,
+            fallback_mode: Some(
+                dag_fallback_mode_name(task_ctx.execution.fallback_mode).to_string(),
+            ),
+            planner_failure_class: outcome
+                .metadata
+                .error_class
+                .map(adaptive_failure_class_name)
+                .map(ToString::to_string),
+            planner_failure_message: outcome.metadata.error_message.clone(),
+            planner_raw_output_json: outcome.raw_output.clone(),
+            normalized_plan_json: Some(
+                serde_json::to_string(&outcome.plan)
+                    .map_err(|err| anyhow!("serialize normalized plan: {err}"))?,
+            ),
+        };
+        insert_graph_run(state, task_id, &materialized).await?;
+        if task_ctx.execution.persist_graph_snapshots {
+            if let Some(raw_output) = materialized.planner_raw_output_json.as_ref() {
+                state
+                    .task_repo
+                    .insert_task_graph_snapshot(crate::task_repository::NewTaskGraphSnapshot {
+                        graph_run_id: materialized.graph_run_id.clone(),
+                        task_id: task_id.to_string(),
+                        snapshot_kind: "planner_raw_output".to_string(),
+                        payload_json: raw_output.clone(),
+                    })
+                    .await?;
+            }
+            if let Some(normalized_plan_json) = materialized.normalized_plan_json.as_ref() {
+                state
+                    .task_repo
+                    .insert_task_graph_snapshot(crate::task_repository::NewTaskGraphSnapshot {
+                        graph_run_id: materialized.graph_run_id.clone(),
+                        task_id: task_id.to_string(),
+                        snapshot_kind: "normalized_plan".to_string(),
+                        payload_json: normalized_plan_json.clone(),
+                    })
+                    .await?;
+            }
+        }
+        emit_graph_event(
             state,
             task_id,
             Some(anchor_item.id.as_str()),
             "dynamic_plan_validated",
+            &materialized,
             json!({
-                "source": source,
                 "used_fallback": outcome.metadata.used_fallback,
                 "error_class": outcome.metadata.error_class.map(adaptive_failure_class_name),
-                "node_count": graph.nodes.len(),
-                "edge_count": graph.edges.len(),
+                "node_count": materialized.graph.nodes.len(),
+                "edge_count": materialized.graph.edges.len(),
             }),
         )
         .await?;
-        return Ok(graph);
+        return Ok(materialized);
     }
 
     let graph = build_static_execution_graph(task_ctx)?;
-    insert_event(
+    let materialized = GraphMaterialization {
+        graph,
+        graph_run_id,
+        source: "static_baseline".to_string(),
+        cycle: task_ctx.current_cycle as i64,
+        fallback_mode: None,
+        planner_failure_class: None,
+        planner_failure_message: None,
+        planner_raw_output_json: None,
+        normalized_plan_json: None,
+    };
+    insert_graph_run(state, task_id, &materialized).await?;
+    emit_graph_event(
         state,
         task_id,
         Some(anchor_item.id.as_str()),
         "dynamic_plan_validated",
+        &materialized,
         json!({
-            "source": "static_baseline",
             "used_fallback": false,
-            "node_count": graph.nodes.len(),
-            "edge_count": graph.edges.len(),
+            "node_count": materialized.graph.nodes.len(),
+            "edge_count": materialized.graph.edges.len(),
         }),
     )
     .await?;
-    Ok(graph)
+    Ok(materialized)
 }
 
 fn adaptive_failure_class_name(class: AdaptiveFailureClass) -> &'static str {
@@ -276,10 +449,12 @@ async fn execute_graph_nodes(
     task_ctx: &mut TaskRuntimeContext,
     runtime: &RunningTask,
     graph: &EffectiveExecutionGraph,
+    graph_run: &GraphMaterialization,
     items: &mut [crate::dto::TaskItemRow],
     item_state: &mut HashMap<String, StepExecutionAccumulator>,
     task_item_paths: &mut Vec<String>,
-) -> Result<()> {
+) -> Result<GraphExecutionReplay> {
+    let mut replay = GraphExecutionReplay::default();
     let mut resolved_incoming: HashMap<String, usize> = graph
         .nodes
         .keys()
@@ -309,35 +484,45 @@ async fn execute_graph_nodes(
             continue;
         }
         if runtime.stop_flag.load(Ordering::SeqCst) || is_task_paused_in_db(state, task_id).await? {
-            return Ok(());
+            return Ok(replay);
         }
         let node = graph
             .get_node(&node_id)
             .ok_or_else(|| anyhow!("graph node '{}' disappeared", node_id))?;
-        insert_event(
+        emit_graph_event(
             state,
             task_id,
             None,
             "dynamic_node_ready",
+            graph_run,
             json!({"node_id": node.id, "scope": node.scope}),
         )
         .await?;
         if should_skip_node(task_id, task_ctx, items, item_state, node)? {
             executed.insert(node_id.clone());
-            insert_event(
+            replay.node_execution_order.push(node.id.clone());
+            replay.node_results.push(NodeExecutionRecord {
+                node_id: node.id.clone(),
+                success: true,
+                skipped: true,
+                reason: Some("prehook_false".to_string()),
+            });
+            emit_graph_event(
                 state,
                 task_id,
                 None,
                 "dynamic_node_skipped",
+                graph_run,
                 json!({"node_id": node.id, "reason": "prehook_false"}),
             )
             .await?;
         } else {
-            insert_event(
+            emit_graph_event(
                 state,
                 task_id,
                 None,
                 "dynamic_node_started",
+                graph_run,
                 json!({"node_id": node.id, "scope": node.scope}),
             )
             .await?;
@@ -352,11 +537,19 @@ async fn execute_graph_nodes(
                 task_item_paths,
             )
             .await?;
-            insert_event(
+            replay.node_execution_order.push(node.id.clone());
+            replay.node_results.push(NodeExecutionRecord {
+                node_id: node.id.clone(),
+                success: true,
+                skipped: false,
+                reason: None,
+            });
+            emit_graph_event(
                 state,
                 task_id,
                 None,
                 "dynamic_node_finished",
+                graph_run,
                 json!({"node_id": node.id, "scope": node.scope, "success": true}),
             )
             .await?;
@@ -366,6 +559,7 @@ async fn execute_graph_nodes(
                 task_id,
                 task_ctx,
                 runtime,
+                graph_run,
                 node,
                 items,
                 item_state,
@@ -383,22 +577,36 @@ async fn execute_graph_nodes(
                 item_state,
                 edge.condition.as_deref(),
             )?;
-            insert_event(
+            let reason = match edge.condition.as_deref() {
+                None => "unconditional".to_string(),
+                Some(_) if taken => "cel_true".to_string(),
+                Some(_) => "cel_false".to_string(),
+            };
+            replay.edge_decisions.push(EdgeDecisionRecord {
+                from: edge.from.clone(),
+                to: edge.to.clone(),
+                condition: edge.condition.clone(),
+                taken,
+                reason: reason.clone(),
+            });
+            emit_graph_event(
                 state,
                 task_id,
                 None,
                 "dynamic_edge_evaluated",
-                json!({"from": edge.from, "to": edge.to, "condition": edge.condition, "taken": taken}),
+                graph_run,
+                json!({"from": edge.from, "to": edge.to, "condition": edge.condition, "taken": taken, "reason": reason}),
             )
             .await?;
             *resolved_incoming.entry(edge.to.clone()).or_insert(0) += 1;
             if taken {
                 has_taken_incoming.insert(edge.to.clone());
-                insert_event(
+                emit_graph_event(
                     state,
                     task_id,
                     None,
                     "dynamic_edge_taken",
+                    graph_run,
                     json!({"from": edge.from, "to": edge.to}),
                 )
                 .await?;
@@ -414,7 +622,7 @@ async fn execute_graph_nodes(
         }
     }
 
-    Ok(())
+    Ok(replay)
 }
 
 fn should_skip_node(
@@ -566,6 +774,7 @@ async fn inject_dynamic_pool_steps(
     task_id: &str,
     task_ctx: &TaskRuntimeContext,
     runtime: &RunningTask,
+    graph_run: &GraphMaterialization,
     node: &ExecutionGraphNode,
     items: &[crate::dto::TaskItemRow],
     item_state: &mut HashMap<String, StepExecutionAccumulator>,
@@ -589,11 +798,12 @@ async fn inject_dynamic_pool_steps(
             if !injected_dynamic_ids.insert(injection_key) {
                 continue;
             }
-            insert_event(
+            emit_graph_event(
                 state,
                 task_id,
                 Some(item.id.as_str()),
                 "dynamic_steps_injected",
+                graph_run,
                 json!({"source_node_id": node.id, "dynamic_step_id": dynamic_step.id}),
             )
             .await?;
@@ -603,4 +813,90 @@ async fn inject_dynamic_pool_steps(
         let _ = task_item_paths;
     }
     Ok(())
+}
+
+async fn insert_graph_run(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    materialized: &GraphMaterialization,
+) -> Result<()> {
+    state
+        .task_repo
+        .insert_task_graph_run(crate::task_repository::NewTaskGraphRun {
+            graph_run_id: materialized.graph_run_id.clone(),
+            task_id: task_id.to_string(),
+            cycle: materialized.cycle,
+            mode: "dynamic_dag".to_string(),
+            source: materialized.source.clone(),
+            status: "materialized".to_string(),
+            fallback_mode: materialized.fallback_mode.clone(),
+            planner_failure_class: materialized.planner_failure_class.clone(),
+            planner_failure_message: materialized.planner_failure_message.clone(),
+            entry_node_id: materialized.graph.entry.clone(),
+            node_count: materialized.graph.nodes.len() as i64,
+            edge_count: materialized.graph.edges.len() as i64,
+        })
+        .await
+}
+
+async fn persist_graph_snapshot<T: serde::Serialize>(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    graph_run_id: &str,
+    snapshot_kind: &str,
+    payload: &T,
+) -> Result<()> {
+    state
+        .task_repo
+        .insert_task_graph_snapshot(crate::task_repository::NewTaskGraphSnapshot {
+            graph_run_id: graph_run_id.to_string(),
+            task_id: task_id.to_string(),
+            snapshot_kind: snapshot_kind.to_string(),
+            payload_json: serde_json::to_string(payload)
+                .map_err(|err| anyhow!("serialize {snapshot_kind} snapshot: {err}"))?,
+        })
+        .await
+}
+
+async fn emit_graph_event(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    task_item_id: Option<&str>,
+    event_type: &str,
+    graph_run: &GraphMaterialization,
+    payload: serde_json::Value,
+) -> Result<()> {
+    let mut payload_obj = payload.as_object().cloned().unwrap_or_default();
+    payload_obj.insert("mode".to_string(), json!("dynamic_dag"));
+    payload_obj.insert("cycle".to_string(), json!(graph_run.cycle));
+    if !graph_run.graph_run_id.is_empty() {
+        payload_obj.insert("graph_run_id".to_string(), json!(graph_run.graph_run_id));
+    }
+    if !graph_run.source.is_empty() {
+        payload_obj.insert("source".to_string(), json!(graph_run.source));
+    }
+    insert_event(
+        state,
+        task_id,
+        task_item_id,
+        event_type,
+        serde_json::Value::Object(payload_obj),
+    )
+    .await
+}
+
+fn execution_graph_source_name(source: ExecutionGraphSource) -> &'static str {
+    match source {
+        ExecutionGraphSource::StaticBaseline => "static_baseline",
+        ExecutionGraphSource::AdaptivePlanner => "adaptive_planner",
+        ExecutionGraphSource::DeterministicFallback => "deterministic_fallback",
+    }
+}
+
+fn dag_fallback_mode_name(mode: DagFallbackMode) -> &'static str {
+    match mode {
+        DagFallbackMode::DeterministicDag => "deterministic_dag",
+        DagFallbackMode::StaticSegment => "static_segment",
+        DagFallbackMode::FailClosed => "fail_closed",
+    }
 }

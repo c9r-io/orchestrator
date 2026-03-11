@@ -108,6 +108,8 @@ pub struct AdaptivePlanMetadata {
 pub struct AdaptivePlanOutcome {
     pub plan: DynamicExecutionPlan,
     pub metadata: AdaptivePlanMetadata,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_output: Option<String>,
 }
 
 #[async_trait]
@@ -165,6 +167,7 @@ impl AdaptivePlanner {
                 AdaptiveFailureClass::Misconfigured,
                 anyhow!("adaptive planner is enabled but planner_agent is not configured"),
                 context,
+                None,
             );
         }
 
@@ -172,7 +175,12 @@ impl AdaptivePlanner {
         let response = match executor.execute(&prompt, &self.config).await {
             Ok(response) => response,
             Err(err) => {
-                return self.handle_failure(AdaptiveFailureClass::ExecutorFailure, err, context);
+                return self.handle_failure(
+                    AdaptiveFailureClass::ExecutorFailure,
+                    err,
+                    context,
+                    None,
+                );
             }
         };
 
@@ -183,12 +191,18 @@ impl AdaptivePlanner {
                     AdaptiveFailureClass::InvalidJson,
                     anyhow!("adaptive planner returned invalid JSON: {}", err),
                     context,
+                    Some(response),
                 );
             }
         };
 
         if let Err(err) = validate_generated_plan(&plan) {
-            return self.handle_failure(AdaptiveFailureClass::InvalidPlan, err, context);
+            return self.handle_failure(
+                AdaptiveFailureClass::InvalidPlan,
+                err,
+                context,
+                Some(response),
+            );
         }
 
         Ok(AdaptivePlanOutcome {
@@ -199,6 +213,7 @@ impl AdaptivePlanner {
                 error_class: None,
                 error_message: None,
             },
+            raw_output: Some(response),
         })
     }
 
@@ -207,6 +222,7 @@ impl AdaptivePlanner {
         class: AdaptiveFailureClass,
         err: anyhow::Error,
         context: &StepPrehookContext,
+        raw_output: Option<String>,
     ) -> Result<AdaptivePlanOutcome> {
         match self.config.fallback_mode {
             AdaptiveFallbackMode::SoftFallback => {
@@ -225,6 +241,7 @@ impl AdaptivePlanner {
                         error_class: Some(class),
                         error_message: Some(err.to_string()),
                     },
+                    raw_output,
                 })
             }
             AdaptiveFallbackMode::FailClosed => Err(err.context(format!(

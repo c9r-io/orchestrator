@@ -62,6 +62,14 @@ pub(super) fn print(resp: &TaskInfoResponse, format: OutputFormat) {
                     event.id, event.event_type, item_id, event.created_at
                 );
             }
+            if let Some(graph) = resp.graph_debug.first() {
+                println!(
+                    "  Graph: cycle={} source={} status={}",
+                    graph.cycle, graph.source, graph.status
+                );
+            } else {
+                println!("  Graph: none");
+            }
         }
     }
 }

@@ -128,6 +128,11 @@ pub fn all_migrations() -> Vec<Migration> {
             name: "m0013_control_plane_audit",
             up: m0013_control_plane_audit,
         },
+        Migration {
+            version: 14,
+            name: "m0014_task_graph_debug_tables",
+            up: m0014_task_graph_debug_tables,
+        },
     ]
 }
 
@@ -722,6 +727,47 @@ fn m0013_control_plane_audit(conn: &Connection) -> Result<()> {
 
         CREATE INDEX IF NOT EXISTS idx_control_plane_audit_rpc
             ON control_plane_audit(rpc, created_at);
+        "#,
+    )?;
+    Ok(())
+}
+
+fn m0014_task_graph_debug_tables(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS task_graph_runs (
+            graph_run_id TEXT PRIMARY KEY,
+            task_id TEXT NOT NULL,
+            cycle INTEGER NOT NULL DEFAULT 0,
+            mode TEXT NOT NULL DEFAULT 'dynamic_dag',
+            source TEXT NOT NULL DEFAULT 'unknown',
+            status TEXT NOT NULL DEFAULT 'materialized',
+            fallback_mode TEXT,
+            planner_failure_class TEXT,
+            planner_failure_message TEXT,
+            entry_node_id TEXT,
+            node_count INTEGER NOT NULL DEFAULT 0,
+            edge_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS task_graph_snapshots (
+            graph_run_id TEXT NOT NULL,
+            task_id TEXT NOT NULL,
+            snapshot_kind TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY(graph_run_id, snapshot_kind),
+            FOREIGN KEY(graph_run_id) REFERENCES task_graph_runs(graph_run_id) ON DELETE CASCADE,
+            FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_task_graph_runs_task_cycle
+            ON task_graph_runs(task_id, cycle DESC, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_task_graph_snapshots_task
+            ON task_graph_snapshots(task_id, graph_run_id);
         "#,
     )?;
     Ok(())
@@ -1417,8 +1463,8 @@ mod tests {
         let migrations = all_migrations();
         assert_eq!(
             migrations.len(),
-            13,
-            "expected 13 migrations, got {}",
+            14,
+            "expected 14 migrations, got {}",
             migrations.len()
         );
     }

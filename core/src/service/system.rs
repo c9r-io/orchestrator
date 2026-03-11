@@ -25,7 +25,7 @@ pub fn debug_info(state: &InnerState, component: Option<&str>) -> Result<String>
     let comp = component.unwrap_or("state");
     match comp {
         "state" => Ok(
-            "Debug Information\n=================\n\nAvailable: state, config, messagebus\n"
+            "Debug Information\n=================\n\nAvailable: state, config, dag, messagebus\n"
                 .to_string(),
         ),
         "config" => {
@@ -35,12 +35,57 @@ pub fn debug_info(state: &InnerState, component: Option<&str>) -> Result<String>
                 serde_yml::to_string(&config.config).unwrap_or_default()
             ))
         }
+        "dag" => debug_dag_info(state),
         "messagebus" => Ok(
             "MessageBus Debug Information\n============================\n\nMessageBus is an internal component.\n"
                 .to_string(),
         ),
-        _ => Ok(format!("Unknown debug component: {}\nAvailable: state, config, messagebus\n", comp)),
+        _ => Ok(format!(
+            "Unknown debug component: {}\nAvailable: state, config, dag, messagebus\n",
+            comp
+        )),
     }
+}
+
+fn debug_dag_info(state: &InnerState) -> Result<String> {
+    let active = read_active_config(state)?;
+    let mut lines = vec![
+        "DAG Debug Information".to_string(),
+        "=====================".to_string(),
+        String::new(),
+    ];
+
+    for (project_id, project) in &active.projects {
+        for (workflow_id, workflow) in &project.workflows {
+            let planner_agent = workflow
+                .adaptive
+                .as_ref()
+                .and_then(|cfg| cfg.planner_agent.clone())
+                .unwrap_or_else(|| "-".to_string());
+            let planner_enabled = workflow
+                .adaptive
+                .as_ref()
+                .map(|cfg| cfg.enabled)
+                .unwrap_or(false);
+            lines.push(format!(
+                "project={} workflow={} mode={:?} fallback={:?} persist_graph_snapshots={} adaptive_enabled={} planner_agent={} dynamic_steps={}",
+                project_id,
+                workflow_id,
+                workflow.execution.mode,
+                workflow.execution.fallback_mode,
+                workflow.execution.persist_graph_snapshots,
+                planner_enabled,
+                planner_agent,
+                workflow.dynamic_steps.len(),
+            ));
+        }
+    }
+
+    if lines.len() == 3 {
+        lines.push("no workflows loaded".to_string());
+    }
+
+    Ok(lines.join("\n"))
 }
 
 /// Get worker status.
@@ -341,10 +386,13 @@ mod tests {
         let state = fixture.build();
 
         let state_info = debug_info(&state, None).expect("default debug info");
-        assert!(state_info.contains("Available: state, config, messagebus"));
+        assert!(state_info.contains("Available: state, config, dag, messagebus"));
 
         let config_info = debug_info(&state, Some("config")).expect("config debug info");
         assert!(config_info.contains("Active Configuration"));
+
+        let dag_info = debug_info(&state, Some("dag")).expect("dag debug info");
+        assert!(dag_info.contains("DAG Debug Information"));
 
         let messagebus_info =
             debug_info(&state, Some("messagebus")).expect("messagebus debug info");

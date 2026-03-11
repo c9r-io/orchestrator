@@ -94,6 +94,24 @@ pub struct TaskDetail {
     pub items: Vec<TaskItemDto>,
     pub runs: Vec<CommandRunDto>,
     pub events: Vec<EventDto>,
+    pub graph_debug: Vec<TaskGraphDebugBundle>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TaskGraphDebugBundle {
+    pub graph_run_id: String,
+    pub cycle: i64,
+    pub source: String,
+    pub status: String,
+    pub fallback_mode: Option<String>,
+    pub planner_failure_class: Option<String>,
+    pub planner_failure_message: Option<String>,
+    pub effective_graph_json: String,
+    pub planner_raw_output_json: Option<String>,
+    pub normalized_plan_json: Option<String>,
+    pub execution_replay_json: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Serialize)]

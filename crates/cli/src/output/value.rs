@@ -1,4 +1,6 @@
-use orchestrator_proto::{CommandRun, Event, TaskInfoResponse, TaskItem, TaskSummary};
+use orchestrator_proto::{
+    CommandRun, Event, TaskGraphDebugBundle, TaskInfoResponse, TaskItem, TaskSummary,
+};
 use serde_json::{json, Value};
 
 pub(super) fn task_detail_value(task: &TaskSummary, resp: &TaskInfoResponse) -> Value {
@@ -7,6 +9,11 @@ pub(super) fn task_detail_value(task: &TaskSummary, resp: &TaskInfoResponse) -> 
         "items": resp.items.iter().map(task_item_value).collect::<Vec<_>>(),
         "runs": resp.runs.iter().map(command_run_value).collect::<Vec<_>>(),
         "events": resp.events.iter().map(event_value).collect::<Vec<_>>(),
+        "graph_debug": resp
+            .graph_debug
+            .iter()
+            .map(task_graph_debug_value)
+            .collect::<Vec<_>>(),
     })
 }
 
@@ -74,5 +81,30 @@ pub(super) fn event_value(event: &Event) -> Value {
         "event_type": event.event_type,
         "payload": payload,
         "created_at": event.created_at,
+    })
+}
+
+pub(super) fn task_graph_debug_value(bundle: &TaskGraphDebugBundle) -> Value {
+    json!({
+        "graph_run_id": bundle.graph_run_id,
+        "cycle": bundle.cycle,
+        "source": bundle.source,
+        "status": bundle.status,
+        "fallback_mode": bundle.fallback_mode,
+        "planner_failure_class": bundle.planner_failure_class,
+        "planner_failure_message": bundle.planner_failure_message,
+        "effective_graph": serde_json::from_str::<Value>(&bundle.effective_graph_json)
+            .unwrap_or_else(|_| Value::String(bundle.effective_graph_json.clone())),
+        "planner_raw_output": bundle.planner_raw_output_json.as_ref().map(|json| {
+            serde_json::from_str::<Value>(json).unwrap_or_else(|_| Value::String(json.clone()))
+        }),
+        "normalized_plan": bundle.normalized_plan_json.as_ref().map(|json| {
+            serde_json::from_str::<Value>(json).unwrap_or_else(|_| Value::String(json.clone()))
+        }),
+        "execution_replay": bundle.execution_replay_json.as_ref().map(|json| {
+            serde_json::from_str::<Value>(json).unwrap_or_else(|_| Value::String(json.clone()))
+        }),
+        "created_at": bundle.created_at,
+        "updated_at": bundle.updated_at,
     })
 }

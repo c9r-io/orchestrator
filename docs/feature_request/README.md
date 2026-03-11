@@ -7,7 +7,6 @@
 | ID | 标题 | 优先级 | 状态 |
 |----|------|--------|------|
 | FR-002 | Daemon 控制面认证、鉴权与传输安全 | P0 | Proposed |
-| FR-004 | DAG / 动态编排主路径化与可观测化 | P1 | Proposed |
 | FR-005 | Daemon 生命周期治理与运行态指标补完 | P1 | Proposed |
 | FR-006 | Sandbox Network Allowlist Backend | P1 | Proposed |
 
@@ -17,3 +16,4 @@
 - `P1`: 对系统一致性、平台成熟度、生产可用性有显著影响
 - `Proposed`: 已形成正式需求，尚未进入实现阶段
 - `Implemented`: 需求已完成并进入维护阶段
+- 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息

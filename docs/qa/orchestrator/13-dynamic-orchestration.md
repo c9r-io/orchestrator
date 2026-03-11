@@ -15,6 +15,7 @@ This document tests the dynamic orchestration feature set:
 - explicit `dynamic_dag` mainline execution mode
 - Conditional edge evaluation
 - AdaptivePlanner runtime execution, validation, and fallback behavior
+- task-level graph persistence and `task info` / `debug dag` observability for dynamic DAG runs
 
 For FR-004 mainline execution and graph-aware trace coverage, also execute:
 - `docs/qa/orchestrator/59-dynamic-dag-mainline-execution.md`

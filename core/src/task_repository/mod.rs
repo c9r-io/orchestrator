@@ -15,7 +15,10 @@ mod tests;
 
 pub use command_run::NewCommandRun;
 pub use trait_def::TaskRepository;
-pub use types::{TaskLogRunRow, TaskRepositoryConn, TaskRepositorySource, TaskRuntimeRow};
+pub use types::{
+    NewTaskGraphRun, NewTaskGraphSnapshot, TaskLogRunRow, TaskRepositoryConn, TaskRepositorySource,
+    TaskRuntimeRow,
+};
 
 use crate::async_database::{flatten_err, AsyncDatabase};
 use anyhow::Result;
@@ -58,6 +61,7 @@ impl TaskRepository for SqliteTaskRepository {
         Vec<crate::dto::TaskItemDto>,
         Vec<crate::dto::CommandRunDto>,
         Vec<crate::dto::EventDto>,
+        Vec<crate::dto::TaskGraphDebugBundle>,
     )> {
         let conn = self.connection()?;
         queries::load_task_detail_rows(&conn, task_id)
@@ -148,6 +152,29 @@ impl TaskRepository for SqliteTaskRepository {
         queries::list_task_log_runs(&conn, task_id, limit)
     }
 
+    fn insert_task_graph_run(&self, run: &NewTaskGraphRun) -> Result<()> {
+        let conn = self.connection()?;
+        queries::insert_task_graph_run(&conn, run)
+    }
+
+    fn update_task_graph_run_status(&self, graph_run_id: &str, status: &str) -> Result<()> {
+        let conn = self.connection()?;
+        queries::update_task_graph_run_status(&conn, graph_run_id, status)
+    }
+
+    fn insert_task_graph_snapshot(&self, snapshot: &NewTaskGraphSnapshot) -> Result<()> {
+        let conn = self.connection()?;
+        queries::insert_task_graph_snapshot(&conn, snapshot)
+    }
+
+    fn load_task_graph_debug_bundles(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<crate::dto::TaskGraphDebugBundle>> {
+        let conn = self.connection()?;
+        queries::load_task_graph_debug_bundles(&conn, task_id)
+    }
+
     fn delete_task_and_collect_log_paths(&self, task_id: &str) -> Result<Vec<String>> {
         let conn = self.connection()?;
         items::delete_task_and_collect_log_paths(&conn, task_id)
@@ -201,6 +228,7 @@ impl AsyncSqliteTaskRepository {
         Vec<crate::dto::TaskItemDto>,
         Vec<crate::dto::CommandRunDto>,
         Vec<crate::dto::EventDto>,
+        Vec<crate::dto::TaskGraphDebugBundle>,
     )> {
         let task_id = task_id.to_owned();
         self.async_db
@@ -341,6 +369,21 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    pub async fn load_task_graph_debug_bundles(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<crate::dto::TaskGraphDebugBundle>> {
+        let task_id = task_id.to_owned();
+        self.async_db
+            .reader()
+            .call(move |conn| {
+                queries::load_task_graph_debug_bundles(conn, &task_id)
+                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
     // ── Write operations (use writer) ──
 
     pub async fn set_task_status(
@@ -449,6 +492,45 @@ impl AsyncSqliteTaskRepository {
             .writer()
             .call(move |conn| {
                 items::insert_command_run(conn, &run)
+                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    pub async fn insert_task_graph_run(&self, run: NewTaskGraphRun) -> Result<()> {
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                queries::insert_task_graph_run(conn, &run)
+                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    pub async fn update_task_graph_run_status(
+        &self,
+        graph_run_id: &str,
+        status: &str,
+    ) -> Result<()> {
+        let graph_run_id = graph_run_id.to_owned();
+        let status = status.to_owned();
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                queries::update_task_graph_run_status(conn, &graph_run_id, &status)
+                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    pub async fn insert_task_graph_snapshot(&self, snapshot: NewTaskGraphSnapshot) -> Result<()> {
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                queries::insert_task_graph_snapshot(conn, &snapshot)
                     .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
             })
             .await

@@ -2,7 +2,7 @@
 
 **Module**: orchestrator
 **Scope**: Explicit `dynamic_dag` workflow mode, CEL-based dynamic trigger validation, graph materialization, runtime fallback, and graph-aware trace output
-**Scenarios**: 4
+**Scenarios**: 5
 **Priority**: High
 
 ---
@@ -17,7 +17,7 @@ FR-004 promotes DAG orchestration from a side capability into an explicit execut
 - CEL-based validation for `dynamic_steps.trigger` and conditional edges
 - graph-aware task trace output via `graph_runs` and `dynamic_*` events
 
-This QA document focuses on deterministic, reproducible verification using unit tests and CLI-safe commands only.
+This QA document focuses on deterministic, reproducible verification using unit tests and CLI-safe commands only. In addition to scheduler correctness, it verifies the closure work for task-level graph persistence and DAG debug surfaces.
 
 ---
 
@@ -105,29 +105,65 @@ Verify the trace builder emits graph-level execution information for dynamic DAG
 
 ---
 
-## Scenario 4: Full Crate Compiles With Dynamic DAG Mainline Wiring
+## Scenario 4: Task Info Exposes Persisted Graph Debug Bundles
+
+### Preconditions
+- Latest code is compiled
+
+### Goal
+Verify task detail queries can return persisted graph debug bundles without reconstructing everything from trace events.
+
+### Steps
+1. Run the focused repository regression:
+   ```bash
+   cargo test -p agent-orchestrator load_task_detail_rows_includes_graph_debug_bundles -- --nocapture
+   ```
+2. Run the service-level detail regression:
+   ```bash
+   cargo test -p agent-orchestrator get_task_details_impl_returns_items_and_empty_runs -- --nocapture
+   ```
+3. Inspect the query and proto wiring:
+   ```bash
+   rg -n "task_graph_runs|task_graph_snapshots|graph_debug|TaskGraphDebugBundle" core/src crates proto
+   ```
+
+### Expected
+- The repository regression passes
+- `task info` has a dedicated `graph_debug` payload
+- Graph bundles come from task-level snapshot tables when available
+- Legacy event-only tasks still retain best-effort graph visibility via query fallback
+
+---
+
+## Scenario 5: DAG Debug View And Workspace Compile Validation
 
 ### Preconditions
 - Repository has no unresolved local compile breakage unrelated to this feature
 
 ### Goal
-Verify the implementation integrates cleanly across config, runtime, scheduler, trace, and tests.
+Verify the implementation integrates cleanly across config, runtime, scheduler, trace, task query, and CLI debug surfaces.
 
 ### Steps
 1. Run a package-wide compile-only validation:
    ```bash
    cargo test -p agent-orchestrator --no-run
    ```
-2. Inspect the loop-engine dispatch split:
+2. Run the DAG debug regression:
    ```bash
-   rg -n "StaticSegment|DynamicDag|execute_cycle_graph|FallbackToStaticSegment" core/src/scheduler/loop_engine core/src/config
+   cargo test -p agent-orchestrator debug_info_covers_known_and_unknown_components -- --nocapture
+   ```
+3. Inspect the loop-engine dispatch split and debug surface:
+   ```bash
+   rg -n "StaticSegment|DynamicDag|execute_cycle_graph|FallbackToStaticSegment|debug_dag_info" core/src/scheduler/loop_engine core/src/config core/src/service
    ```
 
 ### Expected
 - `cargo test -p agent-orchestrator --no-run` succeeds
+- `debug_info_covers_known_and_unknown_components` passes
 - The scheduler contains an explicit execution-mode branch
 - `dynamic_dag` supports graph execution with fallback
 - Config/runtime structs compile cleanly with the new execution mode field
+- `debug --component dag` is backed by a workflow-aware diagnostic view instead of a raw config dump
 
 ---
 
@@ -138,4 +174,5 @@ Verify the implementation integrates cleanly across config, runtime, scheduler, 
 | 1 | Static Workflow Steps Materialize Into A Mainline Graph | ☐ | | | |
 | 2 | Invalid Dynamic Step Triggers Fail CEL Validation | ☐ | | | |
 | 3 | Task Trace Captures Graph Runs And Dynamic Events | ☐ | | | |
-| 4 | Full Crate Compiles With Dynamic DAG Mainline Wiring | ☐ | | | |
+| 4 | Task Info Exposes Persisted Graph Debug Bundles | ☐ | | | |
+| 5 | DAG Debug View And Workspace Compile Validation | ☐ | | | |

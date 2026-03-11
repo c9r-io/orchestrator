@@ -1,7 +1,9 @@
 use orchestrator_proto::*;
 use tonic::{Request, Response, Status};
 
-use super::mapping::{event_to_proto, item_to_proto, run_to_proto, summary_to_proto};
+use super::mapping::{
+    event_to_proto, graph_debug_to_proto, item_to_proto, run_to_proto, summary_to_proto,
+};
 use super::OrchestratorServer;
 
 pub(crate) type TaskLogsStream =
@@ -203,6 +205,11 @@ pub(crate) async fn task_info(
         items: detail.items.into_iter().map(item_to_proto).collect(),
         runs: detail.runs.into_iter().map(run_to_proto).collect(),
         events: detail.events.into_iter().map(event_to_proto).collect(),
+        graph_debug: detail
+            .graph_debug
+            .into_iter()
+            .map(graph_debug_to_proto)
+            .collect(),
     }))
 }
 

@@ -86,7 +86,7 @@ fn load_task_detail_rows_returns_items_runs_and_events() {
     let (state, task_id) = seed_task(&mut fixture);
     let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
 
-    let (items, runs, events) = repo
+    let (items, runs, events, graph_debug) = repo
         .load_task_detail_rows(&task_id)
         .expect("should load detail rows");
 
@@ -94,6 +94,10 @@ fn load_task_detail_rows_returns_items_runs_and_events() {
     assert!(!items.is_empty(), "should have task items");
     assert!(runs.is_empty(), "should have no command runs initially");
     assert!(events.is_empty(), "should have no events initially");
+    assert!(
+        graph_debug.is_empty(),
+        "should have no graph debug initially"
+    );
 
     // Verify item fields
     let first_item = &items[0];
@@ -124,13 +128,14 @@ fn load_task_detail_rows_includes_command_runs() {
     .expect("insert command run");
 
     let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
-    let (items, runs, events) = repo
+    let (items, runs, events, graph_debug) = repo
         .load_task_detail_rows(&task_id)
         .expect("should load detail rows");
 
     assert!(!items.is_empty());
     assert_eq!(runs.len(), 1, "should have one command run");
     assert!(events.is_empty());
+    assert!(graph_debug.is_empty());
 
     let run = &runs[0];
     assert_eq!(run.id, "cr-1");
@@ -154,13 +159,14 @@ fn load_task_detail_rows_includes_events() {
     .expect("insert event");
 
     let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
-    let (items, runs, events) = repo
+    let (items, runs, events, graph_debug) = repo
         .load_task_detail_rows(&task_id)
         .expect("should load detail rows");
 
     assert!(!items.is_empty());
     assert!(runs.is_empty());
     assert_eq!(events.len(), 1, "should have one event");
+    assert!(graph_debug.is_empty());
 
     let event = &events[0];
     assert_eq!(event.event_type, "status_change");
@@ -173,13 +179,48 @@ fn load_task_detail_rows_returns_empty_for_unknown_task() {
     let (state, _task_id) = seed_task(&mut fixture);
     let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
 
-    let (items, runs, events) = repo
+    let (items, runs, events, graph_debug) = repo
         .load_task_detail_rows("nonexistent-task-id")
         .expect("should succeed even for unknown task");
 
     assert!(items.is_empty());
     assert!(runs.is_empty());
     assert!(events.is_empty());
+    assert!(graph_debug.is_empty());
+}
+
+#[test]
+fn load_task_detail_rows_includes_graph_debug_bundles() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let ts = crate::config_load::now_ts();
+    conn.execute(
+        "INSERT INTO task_graph_runs (
+            graph_run_id, task_id, cycle, mode, source, status, fallback_mode,
+            planner_failure_class, planner_failure_message, entry_node_id,
+            node_count, edge_count, created_at, updated_at
+        ) VALUES ('graph-1', ?1, 2, 'dynamic_dag', 'adaptive_planner', 'completed', NULL, NULL, NULL, 'qa', 2, 1, ?2, ?2)",
+        params![task_id, ts],
+    )
+    .expect("insert graph run");
+    conn.execute(
+        "INSERT INTO task_graph_snapshots (graph_run_id, task_id, snapshot_kind, payload_json, created_at)
+         VALUES ('graph-1', ?1, 'effective_graph', '{\"entry\":\"qa\"}', ?2)",
+        params![task_id, ts],
+    )
+    .expect("insert graph snapshot");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let (_items, _runs, _events, graph_debug) = repo
+        .load_task_detail_rows(&task_id)
+        .expect("should load detail rows");
+
+    assert_eq!(graph_debug.len(), 1);
+    assert_eq!(graph_debug[0].graph_run_id, "graph-1");
+    assert_eq!(graph_debug[0].cycle, 2);
+    assert_eq!(graph_debug[0].source, "adaptive_planner");
+    assert_eq!(graph_debug[0].effective_graph_json, "{\"entry\":\"qa\"}");
 }
 
 // ── list_task_ids_ordered_by_created_desc ─────────────────────────────

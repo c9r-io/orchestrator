@@ -1,9 +1,11 @@
-use crate::dto::{CommandRunDto, EventDto, TaskItemDto, TaskItemRow, TaskSummary};
+use crate::dto::{
+    CommandRunDto, EventDto, TaskGraphDebugBundle, TaskItemDto, TaskItemRow, TaskSummary,
+};
 use anyhow::{Context, Result};
 use rusqlite::{params, OptionalExtension};
 use serde_json::Value;
 
-use super::types::{TaskLogRunRow, TaskRuntimeRow};
+use super::types::{NewTaskGraphRun, NewTaskGraphSnapshot, TaskLogRunRow, TaskRuntimeRow};
 use rusqlite::Connection;
 
 pub fn resolve_task_id(conn: &Connection, task_id_or_prefix: &str) -> Result<String> {
@@ -74,7 +76,12 @@ pub fn load_task_summary(conn: &Connection, task_id: &str) -> Result<TaskSummary
 pub fn load_task_detail_rows(
     conn: &Connection,
     task_id: &str,
-) -> Result<(Vec<TaskItemDto>, Vec<CommandRunDto>, Vec<EventDto>)> {
+) -> Result<(
+    Vec<TaskItemDto>,
+    Vec<CommandRunDto>,
+    Vec<EventDto>,
+    Vec<TaskGraphDebugBundle>,
+)> {
     let mut items_stmt = conn.prepare(
         "SELECT id, task_id, order_no, qa_file_path, status, ticket_files_json, ticket_content_json, fix_required, fixed, last_error, started_at, completed_at, updated_at FROM task_items WHERE task_id = ?1 ORDER BY order_no",
     )?;
@@ -151,7 +158,9 @@ pub fn load_task_detail_rows(
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
 
-    Ok((items, runs, events))
+    let graph_debug = load_task_graph_debug_bundles(conn, task_id)?;
+
+    Ok((items, runs, events, graph_debug))
 }
 
 pub fn load_task_item_counts(conn: &Connection, task_id: &str) -> Result<(i64, i64, i64)> {
@@ -309,4 +318,167 @@ pub fn list_task_log_runs(
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     Ok(rows)
+}
+
+pub fn insert_task_graph_run(conn: &Connection, run: &NewTaskGraphRun) -> Result<()> {
+    conn.execute(
+        "INSERT INTO task_graph_runs (
+            graph_run_id, task_id, cycle, mode, source, status, fallback_mode,
+            planner_failure_class, planner_failure_message, entry_node_id,
+            node_count, edge_count, created_at, updated_at
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+        params![
+            run.graph_run_id,
+            run.task_id,
+            run.cycle,
+            run.mode,
+            run.source,
+            run.status,
+            run.fallback_mode,
+            run.planner_failure_class,
+            run.planner_failure_message,
+            run.entry_node_id,
+            run.node_count,
+            run.edge_count,
+            crate::config_load::now_ts(),
+            crate::config_load::now_ts(),
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn update_task_graph_run_status(
+    conn: &Connection,
+    graph_run_id: &str,
+    status: &str,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE task_graph_runs SET status = ?2, updated_at = ?3 WHERE graph_run_id = ?1",
+        params![graph_run_id, status, crate::config_load::now_ts()],
+    )?;
+    Ok(())
+}
+
+pub fn insert_task_graph_snapshot(
+    conn: &Connection,
+    snapshot: &NewTaskGraphSnapshot,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO task_graph_snapshots (
+            graph_run_id, task_id, snapshot_kind, payload_json, created_at
+         ) VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(graph_run_id, snapshot_kind) DO UPDATE SET
+            payload_json = excluded.payload_json,
+            created_at = excluded.created_at",
+        params![
+            snapshot.graph_run_id,
+            snapshot.task_id,
+            snapshot.snapshot_kind,
+            snapshot.payload_json,
+            crate::config_load::now_ts(),
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn load_task_graph_debug_bundles(
+    conn: &Connection,
+    task_id: &str,
+) -> Result<Vec<TaskGraphDebugBundle>> {
+    let mut stmt = conn.prepare(
+        "SELECT
+            r.graph_run_id,
+            r.cycle,
+            r.source,
+            r.status,
+            r.fallback_mode,
+            r.planner_failure_class,
+            r.planner_failure_message,
+            COALESCE(MAX(CASE WHEN s.snapshot_kind = 'effective_graph' THEN s.payload_json END), '{}') AS effective_graph_json,
+            MAX(CASE WHEN s.snapshot_kind = 'planner_raw_output' THEN s.payload_json END) AS planner_raw_output_json,
+            MAX(CASE WHEN s.snapshot_kind = 'normalized_plan' THEN s.payload_json END) AS normalized_plan_json,
+            MAX(CASE WHEN s.snapshot_kind = 'execution_replay' THEN s.payload_json END) AS execution_replay_json,
+            r.created_at,
+            r.updated_at
+         FROM task_graph_runs r
+         LEFT JOIN task_graph_snapshots s ON s.graph_run_id = r.graph_run_id
+         WHERE r.task_id = ?1
+         GROUP BY
+            r.graph_run_id, r.cycle, r.source, r.status, r.fallback_mode,
+            r.planner_failure_class, r.planner_failure_message, r.created_at, r.updated_at
+         ORDER BY r.cycle DESC, r.created_at DESC",
+    )?;
+    let rows = stmt
+        .query_map(params![task_id], |row| {
+            Ok(TaskGraphDebugBundle {
+                graph_run_id: row.get(0)?,
+                cycle: row.get(1)?,
+                source: row.get(2)?,
+                status: row.get(3)?,
+                fallback_mode: row.get(4)?,
+                planner_failure_class: row.get(5)?,
+                planner_failure_message: row.get(6)?,
+                effective_graph_json: row.get(7)?,
+                planner_raw_output_json: row.get(8)?,
+                normalized_plan_json: row.get(9)?,
+                execution_replay_json: row.get(10)?,
+                created_at: row.get(11)?,
+                updated_at: row.get(12)?,
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    if !rows.is_empty() {
+        return Ok(rows);
+    }
+    load_task_graph_debug_bundles_from_events(conn, task_id)
+}
+
+fn load_task_graph_debug_bundles_from_events(
+    conn: &Connection,
+    task_id: &str,
+) -> Result<Vec<TaskGraphDebugBundle>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, payload_json, created_at
+         FROM events
+         WHERE task_id = ?1 AND event_type = 'dynamic_plan_materialized'
+         ORDER BY id DESC",
+    )?;
+    let rows = stmt.query_map(params![task_id], |row| {
+        let event_id: i64 = row.get(0)?;
+        let payload_json: String = row.get(1)?;
+        let created_at: String = row.get(2)?;
+        let payload: Value = serde_json::from_str(&payload_json).unwrap_or_default();
+        let graph_json = payload
+            .get("graph")
+            .cloned()
+            .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
+        Ok(TaskGraphDebugBundle {
+            graph_run_id: format!("legacy-event-{event_id}"),
+            cycle: payload
+                .get("cycle")
+                .and_then(|value| value.as_i64())
+                .unwrap_or(0),
+            source: payload
+                .get("source")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown")
+                .to_string(),
+            status: "completed".to_string(),
+            fallback_mode: payload
+                .get("fallback_mode")
+                .and_then(|value| value.as_str())
+                .map(ToString::to_string),
+            planner_failure_class: None,
+            planner_failure_message: None,
+            effective_graph_json: serde_json::to_string(&graph_json)
+                .unwrap_or_else(|_| "{}".to_string()),
+            planner_raw_output_json: None,
+            normalized_plan_json: None,
+            execution_replay_json: None,
+            created_at: created_at.clone(),
+            updated_at: created_at,
+        })
+    })?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(Into::into)
 }
