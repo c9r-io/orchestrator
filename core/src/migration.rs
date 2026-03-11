@@ -25,11 +25,20 @@ mod tests {
     use crate::persistence::migration_steps::{
         m0001_baseline_schema, m0009_normalize_unspecified_agent_ids, HISTORICAL_AGENT_PLACEHOLDER,
     };
+    use tempfile::tempdir;
 
     fn mem_conn() -> Connection {
         let conn = Connection::open_in_memory().expect("open in-memory sqlite");
         configure_conn(&conn).expect("configure conn");
         conn
+    }
+
+    fn file_conn(name: &str) -> (tempfile::TempDir, std::path::PathBuf, Connection) {
+        let temp = tempdir().expect("create tempdir");
+        let db_path = temp.path().join(name);
+        let conn = Connection::open(&db_path).expect("open sqlite db file");
+        configure_conn(&conn).expect("configure conn");
+        (temp, db_path, conn)
     }
 
     #[test]
@@ -49,6 +58,82 @@ mod tests {
         run_pending(&conn, &migrations).expect("first run");
         let applied = run_pending(&conn, &migrations).expect("second run");
         let latest_version = migrations.last().expect("at least one migration").version;
+        assert_eq!(applied, 0);
+        assert_eq!(current_version(&conn).expect("version"), latest_version);
+    }
+
+    #[test]
+    fn file_backed_blank_database_upgrades_to_latest() {
+        let (_temp, _db_path, conn) = file_conn("blank-upgrade.db");
+        let migrations = all_migrations();
+
+        let applied = run_pending(&conn, &migrations).expect("upgrade blank db");
+        let latest_version = migrations.last().expect("latest migration").version;
+
+        assert_eq!(applied, latest_version);
+        assert_eq!(current_version(&conn).expect("version"), latest_version);
+    }
+
+    #[test]
+    fn file_backed_mid_schema_database_upgrades_to_latest() {
+        let (_temp, _db_path, conn) = file_conn("mid-schema-upgrade.db");
+        let migrations = all_migrations();
+        let mid: Vec<Migration> = migrations
+            .iter()
+            .filter(|migration| migration.version <= 8)
+            .map(|migration| Migration {
+                version: migration.version,
+                name: migration.name,
+                up: migration.up,
+            })
+            .collect();
+        run_pending(&conn, &mid).expect("seed mid-schema db");
+        assert_eq!(current_version(&conn).expect("mid version"), 8);
+
+        let applied = run_pending(&conn, &migrations).expect("upgrade mid-schema db");
+        let latest_version = migrations.last().expect("latest migration").version;
+
+        assert_eq!(applied, latest_version - 8);
+        assert_eq!(
+            current_version(&conn).expect("latest version"),
+            latest_version
+        );
+    }
+
+    #[test]
+    fn file_backed_partial_upgrade_database_recovers_to_latest() {
+        let (_temp, _db_path, conn) = file_conn("partial-upgrade.db");
+        let migrations = all_migrations();
+        run_pending(&conn, &migrations).expect("seed latest schema");
+        let latest_version = migrations.last().expect("latest migration").version;
+        conn.execute(
+            "DELETE FROM schema_migrations WHERE version = ?1",
+            rusqlite::params![latest_version],
+        )
+        .expect("rewind latest schema record only");
+
+        assert_eq!(
+            current_version(&conn).expect("partial version"),
+            latest_version - 1
+        );
+
+        let applied = run_pending(&conn, &migrations).expect("recover partial upgrade");
+        assert_eq!(applied, 1);
+        assert_eq!(
+            current_version(&conn).expect("recovered version"),
+            latest_version
+        );
+    }
+
+    #[test]
+    fn file_backed_current_database_is_noop() {
+        let (_temp, _db_path, conn) = file_conn("current-schema.db");
+        let migrations = all_migrations();
+        run_pending(&conn, &migrations).expect("seed latest schema");
+        let latest_version = migrations.last().expect("latest migration").version;
+
+        let applied = run_pending(&conn, &migrations).expect("rerun current db");
+
         assert_eq!(applied, 0);
         assert_eq!(current_version(&conn).expect("version"), latest_version);
     }

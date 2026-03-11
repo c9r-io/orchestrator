@@ -1,8 +1,7 @@
 # Orchestrator - Database Migration Kernel and Repository Governance
 
 **Module**: orchestrator
-**Status**: In Progress
-**Related FR**: `docs/feature_request/FR-009-database-migration-framework.md`
+**Status**: Implemented
 **Related QA**: `docs/qa/orchestrator/63-database-migration-kernel-and-repository-governance.md`
 **Created**: 2026-03-11
 **Last Updated**: 2026-03-11
@@ -10,6 +9,8 @@
 ## Background And Goals
 
 ## Background
+
+This document remains the long-term design record after FR-009 closure.
 
 FR-009 Phase 1 introduced a `persistence` infrastructure layer, moved schema bootstrap into `PersistenceBootstrap`, removed the public `ensure_column` helper, and routed session/workflow-store runtime access through repository traits.
 
@@ -38,9 +39,10 @@ The next step must preserve the current SQLite + `rusqlite` execution model whil
   - `core/src/migration.rs` now acts as a compatibility facade plus migration regression-test host
   - gRPC and CLI now expose `db status` and `db migrations list`
   - `SchedulerRepository` now owns scheduler pending/claim/count SQL used by `scheduler_service`
-- Still pending in this phase:
-  - extract config/task-write repository seams
-  - add historical SQLite fixture coverage
+  - `SqliteConfigRepository` now owns config snapshot, heal-log, and resource persistence database access
+  - `TaskRepository` / `AsyncSqliteTaskRepository` now own event writes, command-run updates, phase-result persistence, and related task write helpers
+  - `DbWriteCoordinator` now acts as a thin adapter over `AsyncSqliteTaskRepository`
+  - historical upgrade validation now exists as file-backed SQLite regression tests for blank, mid-schema, partial-upgrade, and current states
 
 ## Non-goals
 
@@ -59,7 +61,7 @@ The next step must preserve the current SQLite + `rusqlite` execution model whil
   - compatibility forwarding from `core/src/migration.rs`
   - repository expansion policy for task, scheduler, and config persistence
   - read-only CLI visibility for DB status and migration listing
-  - upgrade-validation strategy for historical SQLite samples
+- upgrade-validation strategy for historical SQLite samples created as file-backed test databases
 
 - Out of scope:
   - new remote APIs
@@ -133,7 +135,7 @@ The next step must preserve the current SQLite + `rusqlite` execution model whil
   - Mitigation: document read-only visibility separately from rollback promises; default to backup restore and forward-fix.
 
 - Risk: historical database samples drift from real field usage.
-  - Mitigation: maintain a small curated set of upgrade fixtures: empty, old, partial-upgrade, current.
+  - Mitigation: keep explicit file-backed upgrade scenarios for empty, old, partial-upgrade, and current states in migration regression tests.
 
 ## Observability And Operations (Required)
 
@@ -169,9 +171,10 @@ The next step must preserve the current SQLite + `rusqlite` execution model whil
   - failed migration does not advance schema version
   - `SchemaStatus` for empty, outdated, and current databases
 - Integration tests:
-  - upgrade from baseline to latest
+  - upgrade from baseline to latest using a file-backed SQLite database
   - upgrade from intermediate versions to latest
   - recover from partially-upgraded databases
+  - verify current databases remain no-op on rerun
   - daemon/bootstrap startup remains green
 - CLI tests:
   - `db status` output for empty/current/outdated DBs
@@ -186,7 +189,7 @@ The next step must preserve the current SQLite + `rusqlite` execution model whil
 - A dedicated persistence migration kernel owns catalog, runner, and status responsibilities.
 - `orchestrator db status` and `orchestrator db migrations list` are available through the existing daemon/client stack.
 - Migration step bodies are no longer hosted in `core/src/migration.rs`.
-- `SchedulerRepository` now owns scheduler pending/claim/count SQL.
+- `SchedulerRepository`, `ConfigRepository`, and `TaskRepository` own the intended runtime persistence seams.
+- `DbWriteCoordinator` no longer owns write-path SQL.
 - `core/src/db.rs` receives no new business SQL helpers.
-- Repository expansion plan is documented and bounded to task, scheduler, and config persistence.
-- Historical SQLite upgrade validation is documented and executable.
+- Historical SQLite upgrade validation is documented and executable through file-backed regression tests.

@@ -1,18 +1,19 @@
 use crate::config::{ActiveConfig, OrchestratorConfig, TaskExecutionPlan, WorkflowConfig};
 use crate::db::{
     count_non_terminal_tasks_by_workflow, count_non_terminal_tasks_by_workspace,
-    list_non_terminal_tasks_by_workflow, list_non_terminal_tasks_by_workspace, open_conn,
+    list_non_terminal_tasks_by_workflow, list_non_terminal_tasks_by_workspace,
 };
+use crate::persistence::repository::{ConfigRepository, SqliteConfigRepository};
 use anyhow::{Context, Result};
 use std::path::Path;
 
 use super::{
     apply_self_heal_pass, normalize_config, normalize_step_execution_mode_recursive,
-    persist_config_versioned, persist_heal_log, resolve_and_validate_projects,
-    resolve_and_validate_workspaces, resolve_and_validate_workspaces_for_project,
-    serialize_config_snapshot, validate_agent_env_store_refs,
-    validate_agent_env_store_refs_for_project, validate_execution_profiles_for_project,
-    validate_workflow_config, validate_workflow_config_with_agents, ConfigSelfHealReport,
+    resolve_and_validate_projects, resolve_and_validate_workspaces,
+    resolve_and_validate_workspaces_for_project, serialize_config_snapshot,
+    validate_agent_env_store_refs, validate_agent_env_store_refs_for_project,
+    validate_execution_profiles_for_project, validate_workflow_config,
+    validate_workflow_config_with_agents, ConfigSelfHealReport,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,15 +78,9 @@ pub fn build_active_config_with_self_heal(
             };
             let normalized = healed_active.config.clone();
             let (yaml, json_raw) = serialize_config_snapshot(&normalized)?;
-            let conn = open_conn(db_path)?;
-            let tx = conn.unchecked_transaction()?;
-            let (healed_version, healed_at) =
-                persist_config_versioned(&tx, &yaml, &json_raw, "self-heal")
-                    .context("failed to persist self-healed config")?;
-            persist_heal_log(&tx, healed_version, &original_error, &changes)
-                .context("failed to persist self-heal log entries")?;
-            tx.commit()
-                .context("failed to commit self-healed config version")?;
+            let (healed_version, healed_at) = SqliteConfigRepository::new(db_path)
+                .persist_self_heal_snapshot(&yaml, &json_raw, &original_error, &changes)
+                .context("failed to persist self-healed config")?;
 
             Ok((
                 healed_active,
@@ -399,7 +394,7 @@ mod tests {
 
         let report = report.expect("expected self-heal report");
         assert_eq!(report.healed_version, seeded.version + 1);
-        let conn = open_conn(&db_path).expect("open sqlite connection");
+        let conn = crate::db::open_conn(&db_path).expect("open sqlite connection");
         let latest_author: String = conn
             .query_row(
                 "SELECT author FROM orchestrator_config_versions ORDER BY version DESC LIMIT 1",
@@ -469,7 +464,7 @@ mod tests {
             err.to_string().contains("root_path not found"),
             "expected original error to be preserved, got: {err}"
         );
-        let conn = open_conn(&db_path).expect("open sqlite connection");
+        let conn = crate::db::open_conn(&db_path).expect("open sqlite connection");
         let version_count: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM orchestrator_config_versions",

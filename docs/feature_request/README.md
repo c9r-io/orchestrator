@@ -8,7 +8,6 @@
 |----|------|--------|------|
 | FR-002 | Daemon 控制面认证、鉴权与传输安全 | P0 | Proposed |
 | FR-005 | Daemon 生命周期治理与运行态指标补完 | P1 | Proposed |
-| FR-009 | 数据库迁移治理与持久化边界收敛 | P2 | In Progress |
 
 ## 说明
 
@@ -18,7 +17,7 @@
 - `In Progress`: 已有部分阶段落地，剩余阶段仍在治理中
 - `Implemented`: 需求已完成并进入维护阶段
 - 已闭环并删除的 FR，应由对应 `docs/design_doc/**` 与 `docs/qa/**` 继续承载设计和验证信息
-- FR-009 已完成 Phase 1（persistence bootstrap / initial repository boundaries），后续 migration kernel、repository 扩展与运维能力仍处于推进中
+- FR-009 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/25-database-persistence-bootstrap-repositories.md`、`docs/design_doc/orchestrator/26-database-migration-kernel-and-repository-governance.md`、`docs/qa/orchestrator/62-database-persistence-bootstrap-repositories.md` 与 `docs/qa/orchestrator/63-database-migration-kernel-and-repository-governance.md` 承载
 - FR-008 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/13-unified-step-execution-model.md`、`docs/guide/**` 与 `docs/qa/orchestrator/61-chain-steps-execution.md` 承载
 - FR-007 已闭环删除；其收口结果由 `docs/architecture.md`、`docs/guide/**`、`skills/orchestrator-guide/**` 与 `docs/qa/**` 持续承载
 - FR-006 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/21-sandbox-resource-network-enforcement.md` 与 `docs/qa/orchestrator/56-sandbox-resource-network-enforcement.md` 承载

@@ -9,13 +9,13 @@
 
 ## Background
 
-This document defines the QA surface for the next FR-009 phases after persistence bootstrap extraction:
+This document defines the QA surface for FR-009 closure after persistence bootstrap extraction:
 
 - migration logic moves from the single `core/src/migration.rs` implementation into a dedicated persistence migration kernel
-- runtime task/scheduler/config SQL paths continue migrating behind repository boundaries
+- runtime task/scheduler/config SQL paths are governed behind repository boundaries
 - `core/src/db.rs` remains compatibility-only and must not grow new business helpers
 - operators gain read-only DB visibility through explicit CLI commands
-- historical SQLite upgrade validation becomes a first-class regression path
+- historical SQLite upgrade validation is a first-class regression path
 
 Entry points:
 
@@ -100,7 +100,7 @@ SELECT version, name FROM schema_migrations ORDER BY version;
 - Repository root is the current working directory.
 
 ### Goal
-Verify FR-009 follow-up does not allow new business SQL helpers to grow from compatibility modules.
+Verify FR-009 closure did not allow new business SQL helpers to grow from compatibility modules.
 
 ### Steps
 1. Search for direct additions to the DB facade:
@@ -119,8 +119,8 @@ Verify FR-009 follow-up does not allow new business SQL helpers to grow from com
 ### Expected
 - `core/src/db.rs` does not gain new schema helpers.
 - `SchedulerRepository` exists and owns scheduler queue-selection SQL.
-- Remaining direct SQL is limited to still-open seams such as `db_write.rs` and config persistence.
-- Remaining direct SQL call sites are shrinking, not growing.
+- `ConfigRepository` exists and owns config snapshot/heal-log/resource persistence database access.
+- `DbWriteCoordinator` no longer owns runtime write-path SQL; task write SQL lives in `TaskRepository`.
 
 ### Expected Data State
 ```sql
@@ -172,18 +172,20 @@ SELECT COALESCE(MAX(version), 0) AS current_version FROM schema_migrations;
 ## Scenario 5: Historical SQLite Databases Upgrade Cleanly
 
 ### Preconditions
-- Historical SQLite fixture databases exist for empty, old-version, partial-upgrade, and current states.
+- File-backed historical SQLite sample tests exist for empty, old-version, partial-upgrade, and current states.
 - Rust toolchain is available.
 
 ### Goal
 Verify the migration kernel can safely upgrade representative historical databases.
 
 ### Steps
-1. Run the historical upgrade regression suite:
+1. Run the focused historical upgrade regressions:
    ```bash
-   cargo test -p agent-orchestrator migration::tests:: -- --nocapture
+   cargo test -p agent-orchestrator migration::tests::file_backed_blank_database_upgrades_to_latest -- --exact
+   cargo test -p agent-orchestrator migration::tests::file_backed_mid_schema_database_upgrades_to_latest -- --exact
+   cargo test -p agent-orchestrator migration::tests::file_backed_partial_upgrade_database_recovers_to_latest -- --exact
+   cargo test -p agent-orchestrator migration::tests::file_backed_current_database_is_noop -- --exact
    ```
-2. Run any dedicated fixture-based upgrade tests added for historical DB samples.
 
 ### Expected
 - Empty databases upgrade to the latest schema.
@@ -231,7 +233,7 @@ Verify migration-kernel and repository-boundary work does not regress orchestrat
 |---|----------|--------|-----------|--------|-------|
 | 1 | Migration Catalog Has Stable Governance Invariants | PASS | 2026-03-11 | Codex | Invariant tests passed; catalog ownership moved to `core/src/persistence/migration.rs` |
 | 2 | Pending Migration Execution Remains Idempotent And Safe | PASS | 2026-03-11 | Codex | Fresh-db, idempotency, and failed-migration regressions all passed |
-| 3 | Runtime Persistence Continues Moving Behind Repository Boundaries | PASS | 2026-03-11 | Codex | `SchedulerRepository` landed; scheduler queue-selection SQL moved behind repository seam |
+| 3 | Runtime Persistence Continues Moving Behind Repository Boundaries | PASS | 2026-03-11 | Codex | `SchedulerRepository`、`ConfigRepository` 和 task write repository seam 已落地；`DbWriteCoordinator` 不再持有 SQL |
 | 4 | CLI Exposes Read-Only Schema And Migration Status | PASS | 2026-03-11 | Codex | Core service + CLI command regressions passed after `db` command rollout |
-| 5 | Historical SQLite Databases Upgrade Cleanly | TODO | 2026-03-11 | Codex | Requires curated fixture databases |
-| 6 | Full Package Regression Remains Green After FR-009 Follow-Up | PASS | 2026-03-11 | Codex | `cargo test -p agent-orchestrator` passed: 1809 unit + 24 integration |
+| 5 | Historical SQLite Databases Upgrade Cleanly | PASS | 2026-03-11 | Codex | File-backed blank/mid-schema/partial-upgrade/current regression tests all passed |
+| 6 | Full Package Regression Remains Green After FR-009 Follow-Up | PASS | 2026-03-11 | Codex | `cargo test -p agent-orchestrator` passed |

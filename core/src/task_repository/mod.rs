@@ -9,6 +9,7 @@ mod queries;
 mod state;
 mod trait_def;
 mod types;
+mod write_ops;
 
 #[cfg(test)]
 mod tests;
@@ -16,8 +17,8 @@ mod tests;
 pub use command_run::NewCommandRun;
 pub use trait_def::TaskRepository;
 pub use types::{
-    NewTaskGraphRun, NewTaskGraphSnapshot, TaskLogRunRow, TaskRepositoryConn, TaskRepositorySource,
-    TaskRuntimeRow,
+    DbEventRecord, NewTaskGraphRun, NewTaskGraphSnapshot, TaskLogRunRow, TaskRepositoryConn,
+    TaskRepositorySource, TaskRuntimeRow,
 };
 
 use crate::async_database::{flatten_err, AsyncDatabase};
@@ -183,6 +184,64 @@ impl TaskRepository for SqliteTaskRepository {
     fn insert_command_run(&self, run: &NewCommandRun) -> Result<()> {
         let conn = self.connection()?;
         items::insert_command_run(&conn, run)
+    }
+
+    fn insert_event(&self, event: &DbEventRecord) -> Result<()> {
+        let conn = self.connection()?;
+        write_ops::insert_event(&conn, event)
+    }
+
+    fn update_command_run(&self, run: &NewCommandRun) -> Result<()> {
+        let conn = self.connection()?;
+        write_ops::update_command_run(&conn, run)
+    }
+
+    fn update_command_run_with_events(
+        &self,
+        run: &NewCommandRun,
+        events: &[DbEventRecord],
+    ) -> Result<()> {
+        let conn = self.connection()?;
+        write_ops::update_command_run_with_events(&conn, run, events)
+    }
+
+    fn persist_phase_result_with_events(
+        &self,
+        run: &NewCommandRun,
+        events: &[DbEventRecord],
+    ) -> Result<()> {
+        let conn = self.connection()?;
+        write_ops::persist_phase_result_with_events(&conn, run, events)
+    }
+
+    fn update_command_run_pid(&self, run_id: &str, pid: i64) -> Result<()> {
+        let conn = self.connection()?;
+        write_ops::update_command_run_pid(&conn, run_id, pid)
+    }
+
+    fn find_active_child_pids(&self, task_id: &str) -> Result<Vec<i64>> {
+        let conn = self.connection()?;
+        write_ops::find_active_child_pids(&conn, task_id)
+    }
+
+    fn update_task_pipeline_vars(&self, task_id: &str, pipeline_vars_json: &str) -> Result<()> {
+        let conn = self.connection()?;
+        write_ops::update_task_pipeline_vars(&conn, task_id, pipeline_vars_json)
+    }
+
+    fn update_task_item_tickets(
+        &self,
+        task_item_id: &str,
+        ticket_files_json: &str,
+        ticket_content_json: &str,
+    ) -> Result<()> {
+        let conn = self.connection()?;
+        write_ops::update_task_item_tickets(
+            &conn,
+            task_item_id,
+            ticket_files_json,
+            ticket_content_json,
+        )
     }
 }
 
@@ -485,6 +544,123 @@ impl AsyncSqliteTaskRepository {
             .call(move |conn| {
                 items::insert_command_run(conn, &run)
                     .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    pub async fn insert_event(&self, event: DbEventRecord) -> Result<()> {
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                write_ops::insert_event(conn, &event)
+                    .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    pub async fn update_command_run(&self, run: NewCommandRun) -> Result<()> {
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                write_ops::update_command_run(conn, &run)
+                    .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    pub async fn update_command_run_with_events(
+        &self,
+        run: NewCommandRun,
+        events: Vec<DbEventRecord>,
+    ) -> Result<()> {
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                write_ops::update_command_run_with_events(conn, &run, &events)
+                    .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    pub async fn persist_phase_result_with_events(
+        &self,
+        run: NewCommandRun,
+        events: Vec<DbEventRecord>,
+    ) -> Result<()> {
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                write_ops::persist_phase_result_with_events(conn, &run, &events)
+                    .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    pub async fn update_command_run_pid(&self, run_id: &str, pid: i64) -> Result<()> {
+        let run_id = run_id.to_owned();
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                write_ops::update_command_run_pid(conn, &run_id, pid)
+                    .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    pub async fn find_active_child_pids(&self, task_id: &str) -> Result<Vec<i64>> {
+        let task_id = task_id.to_owned();
+        self.async_db
+            .reader()
+            .call(move |conn| {
+                write_ops::find_active_child_pids(conn, &task_id)
+                    .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    pub async fn update_task_pipeline_vars(
+        &self,
+        task_id: &str,
+        pipeline_vars_json: &str,
+    ) -> Result<()> {
+        let task_id = task_id.to_owned();
+        let pipeline_vars_json = pipeline_vars_json.to_owned();
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                write_ops::update_task_pipeline_vars(conn, &task_id, &pipeline_vars_json)
+                    .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    pub async fn update_task_item_tickets(
+        &self,
+        task_item_id: &str,
+        ticket_files_json: &str,
+        ticket_content_json: &str,
+    ) -> Result<()> {
+        let task_item_id = task_item_id.to_owned();
+        let ticket_files_json = ticket_files_json.to_owned();
+        let ticket_content_json = ticket_content_json.to_owned();
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                write_ops::update_task_item_tickets(
+                    conn,
+                    &task_item_id,
+                    &ticket_files_json,
+                    &ticket_content_json,
+                )
+                .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
             })
             .await
             .map_err(flatten_err)

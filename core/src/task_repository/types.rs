@@ -46,6 +46,14 @@ pub struct TaskLogRunRow {
     pub started_at: Option<String>,
 }
 
+#[derive(Clone)]
+pub struct DbEventRecord {
+    pub task_id: String,
+    pub task_item_id: Option<String>,
+    pub event_type: String,
+    pub payload_json: String,
+}
+
 pub struct NewTaskGraphRun {
     pub graph_run_id: String,
     pub task_id: String,

@@ -2,7 +2,7 @@ use crate::dto::{TaskGraphDebugBundle, TaskItemRow, TaskSummary};
 use anyhow::Result;
 
 use super::command_run::NewCommandRun;
-use super::types::{TaskLogRunRow, TaskRuntimeRow};
+use super::types::{DbEventRecord, TaskLogRunRow, TaskRuntimeRow};
 use super::TaskDetailRows;
 
 pub trait TaskRepository {
@@ -39,4 +39,25 @@ pub trait TaskRepository {
     fn load_task_graph_debug_bundles(&self, task_id: &str) -> Result<Vec<TaskGraphDebugBundle>>;
     fn delete_task_and_collect_log_paths(&self, task_id: &str) -> Result<Vec<String>>;
     fn insert_command_run(&self, run: &NewCommandRun) -> Result<()>;
+    fn insert_event(&self, event: &DbEventRecord) -> Result<()>;
+    fn update_command_run(&self, run: &NewCommandRun) -> Result<()>;
+    fn update_command_run_with_events(
+        &self,
+        run: &NewCommandRun,
+        events: &[DbEventRecord],
+    ) -> Result<()>;
+    fn persist_phase_result_with_events(
+        &self,
+        run: &NewCommandRun,
+        events: &[DbEventRecord],
+    ) -> Result<()>;
+    fn update_command_run_pid(&self, run_id: &str, pid: i64) -> Result<()>;
+    fn find_active_child_pids(&self, task_id: &str) -> Result<Vec<i64>>;
+    fn update_task_pipeline_vars(&self, task_id: &str, pipeline_vars_json: &str) -> Result<()>;
+    fn update_task_item_tickets(
+        &self,
+        task_item_id: &str,
+        ticket_files_json: &str,
+        ticket_content_json: &str,
+    ) -> Result<()>;
 }
