@@ -21,6 +21,25 @@ pub async fn run_local(command: DebugCommands) -> Result<()> {
     }
 }
 
+pub fn print_daemon_status(
+    ping: orchestrator_proto::PingResponse,
+    status: orchestrator_proto::WorkerStatusResponse,
+) {
+    println!("Daemon");
+    println!("======");
+    println!("version:            {}", ping.version);
+    println!("git_hash:           {}", ping.git_hash);
+    println!("uptime_secs:        {}", ping.uptime_secs);
+    println!("lifecycle_state:    {}", ping.lifecycle_state);
+    println!("shutdown_requested: {}", ping.shutdown_requested);
+    println!("configured_workers: {}", status.configured_workers);
+    println!("active_workers:     {}", status.active_workers);
+    println!("idle_workers:       {}", status.idle_workers);
+    println!("running_tasks:      {}", status.running_tasks);
+    println!("pending_tasks:      {}", status.pending_tasks);
+    println!("stop_signal:        {}", status.stop_signal);
+}
+
 fn run_probe(probe: SandboxProbeCommands) -> Result<()> {
     match probe {
         SandboxProbeCommands::WriteFile { path, contents } => {

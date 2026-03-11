@@ -47,7 +47,7 @@ pub fn cleanup(socket_path: &Path, pid_path: &Path) {
 }
 
 /// Wait for SIGTERM or SIGINT, then initiate graceful shutdown.
-pub async fn shutdown_signal(_state: Arc<InnerState>) -> Result<()> {
+pub async fn shutdown_signal(state: Arc<InnerState>) -> Result<()> {
     let ctrl_c = tokio::signal::ctrl_c();
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .context("failed to install SIGTERM handler")?;
@@ -55,9 +55,11 @@ pub async fn shutdown_signal(_state: Arc<InnerState>) -> Result<()> {
     tokio::select! {
         _ = ctrl_c => {
             tracing::info!("received SIGINT, shutting down");
+            state.daemon_runtime.request_shutdown();
         }
         _ = sigterm.recv() => {
             tracing::info!("received SIGTERM, shutting down");
+            state.daemon_runtime.request_shutdown();
         }
     }
 

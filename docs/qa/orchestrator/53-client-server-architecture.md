@@ -263,7 +263,7 @@ Verify embedded daemon workers consume pending tasks concurrently and atomically
 - All 6 tasks transition from `pending` through `running` to `completed` or `failed`.
 - Workers log `claimed task` and `task finished` for each task.
 - No task is executed more than once (atomic claim via `claim_next_pending_task`).
-- Daemon shuts down cleanly after SIGTERM, waiting for in-progress tasks to finish (up to 30s drain timeout).
+- Daemon shuts down cleanly after SIGTERM, stops claiming new work, and pauses any still-running task after the daemon drain grace window.
 
 ### Expected Data State
 ```sql
@@ -358,5 +358,5 @@ Verify resource apply (from file and stdin), store CRUD, and project-scoped reso
 | 1 | Daemon Startup and Shutdown | ✅ | 2026-03-09 | Claude | PID/socket create+cleanup, startup/shutdown logs |
 | 2 | CLI-to-Daemon gRPC Communication | ✅ | 2026-03-09 | Claude | version, get, check all pass via gRPC |
 | 3 | Task Lifecycle via gRPC | ✅ | 2026-03-09 | Claude | create→list→info→start(detach)→logs→delete |
-| 4 | Embedded Worker Queue Consumption | ✅ | 2026-03-09 | Claude | 3 workers consumed 6 tasks concurrently |
+| 4 | Embedded Worker Queue Consumption | ✅ | 2026-03-09 | Claude | 3 workers consumed 6 tasks concurrently; shutdown wording superseded by doc 60 for FR-005 drain semantics |
 | 5 | Resource Management and Project Isolation via gRPC | ✅ | 2026-03-09 | Claude | apply file/stdin/dry-run + store CRUD + --project isolation + delete project |

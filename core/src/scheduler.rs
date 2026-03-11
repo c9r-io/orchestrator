@@ -21,8 +21,8 @@ pub use query::{
     resolve_task_id, stream_task_logs_impl, watch_task,
 };
 pub use runtime::{
-    kill_current_child, load_task_runtime_context, shutdown_running_tasks, spawn_task_runner,
-    stop_task_runtime, stop_task_runtime_for_delete,
+    kill_current_child, load_task_runtime_context, register_running_task, shutdown_running_tasks,
+    spawn_task_runner, stop_task_runtime, stop_task_runtime_for_delete, unregister_running_task,
 };
 pub use safety::{
     create_checkpoint, execute_self_test_step, restore_binary_snapshot, rollback_to_checkpoint,
@@ -1127,6 +1127,7 @@ mod tests {
                 async_database,
                 project_root.to_path_buf(),
             ),
+            daemon_runtime: crate::runtime::DaemonRuntimeState::new(),
         });
 
         state.emit_event(

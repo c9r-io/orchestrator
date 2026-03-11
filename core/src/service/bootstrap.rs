@@ -141,6 +141,7 @@ fn build_managed_state(
             session_store,
             task_repo,
             store_manager,
+            daemon_runtime: crate::runtime::DaemonRuntimeState::new(),
         }),
     })
 }

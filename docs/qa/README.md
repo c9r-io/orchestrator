@@ -152,6 +152,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/57-sandbox-resource-limits-extended.md` | 3 | Sandbox resource limits for CPU, memory, processes |
 | orchestrator | `docs/qa/orchestrator/58-control-plane-security.md` | 5 | Secure TCP control plane: mTLS bootstrap, host-user client config, role-based RPC authorization, audit persistence |
 | orchestrator | `docs/qa/orchestrator/59-dynamic-dag-mainline-execution.md` | 5 | FR-004: explicit `dynamic_dag` mode, CEL trigger validation, graph materialization, persisted graph debug bundles, and DAG debug view |
+| orchestrator | `docs/qa/orchestrator/60-daemon-lifecycle-runtime-metrics.md` | 4 | FR-005: daemon runtime snapshot, live worker/task counters, graceful drain, and restart-state reset |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
 | script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |

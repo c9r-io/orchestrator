@@ -82,6 +82,23 @@ pub async fn spawn_task_runner(state: Arc<InnerState>, task_id: String) -> Resul
     Ok(())
 }
 
+pub async fn register_running_task(state: &InnerState, task_id: &str, runtime: RunningTask) -> bool {
+    let mut running = state.running.lock().await;
+    if running.contains_key(task_id) {
+        return false;
+    }
+    running.insert(task_id.to_string(), runtime);
+    state.daemon_runtime.running_task_started();
+    true
+}
+
+pub async fn unregister_running_task(state: &InnerState, task_id: &str) {
+    let mut running = state.running.lock().await;
+    if running.remove(task_id).is_some() {
+        state.daemon_runtime.running_task_finished();
+    }
+}
+
 pub async fn stop_task_runtime(state: Arc<InnerState>, task_id: &str, status: &str) -> Result<()> {
     let runtime = {
         let running = state.running.lock().await;
@@ -153,7 +170,9 @@ pub async fn shutdown_running_tasks(state: Arc<InnerState>) {
 
     let mut running = state.running.lock().await;
     for (task_id, _) in runtimes {
-        running.remove(&task_id);
+        if running.remove(&task_id).is_some() {
+            state.daemon_runtime.running_task_finished();
+        }
     }
 }
 
@@ -658,6 +677,7 @@ mod tests {
                 base.async_database.clone(),
                 base.app_root.clone(),
             ),
+            daemon_runtime: crate::runtime::DaemonRuntimeState::new(),
         })
     }
 

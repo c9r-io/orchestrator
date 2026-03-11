@@ -8,10 +8,13 @@ pub(crate) async fn ping(
     request: Request<PingRequest>,
 ) -> Result<Response<PingResponse>, Status> {
     super::authorize(server, &request, "Ping").map_err(Status::from)?;
+    let runtime = agent_orchestrator::service::daemon::runtime_snapshot(&server.state);
     Ok(Response::new(PingResponse {
         version: env!("CARGO_PKG_VERSION").to_string(),
         git_hash: env!("BUILD_GIT_HASH").to_string(),
-        uptime_secs: server.startup_instant.elapsed().as_secs().to_string(),
+        uptime_secs: runtime.uptime_secs.to_string(),
+        shutdown_requested: runtime.shutdown_requested,
+        lifecycle_state: runtime.lifecycle_state.as_str().to_string(),
     }))
 }
 
@@ -22,6 +25,7 @@ pub(crate) async fn shutdown(
     super::authorize(server, &request, "Shutdown").map_err(Status::from)?;
     let req = request.into_inner();
     tracing::info!(graceful = req.graceful, "shutdown requested via RPC");
+    server.state.daemon_runtime.request_shutdown();
     server.shutdown_notify.notify_one();
     Ok(Response::new(ShutdownResponse {
         message: "shutdown initiated".to_string(),

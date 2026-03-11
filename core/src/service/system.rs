@@ -1,3 +1,4 @@
+use super::daemon::runtime_snapshot;
 use crate::config_load::read_active_config;
 use crate::scheduler::check::{run_checks, CheckReport, CheckResult};
 use crate::scheduler_service::{pending_task_count, worker_stop_signal_path};
@@ -92,11 +93,17 @@ fn debug_dag_info(state: &InnerState) -> Result<String> {
 pub async fn worker_status(state: &InnerState) -> Result<orchestrator_proto::WorkerStatusResponse> {
     let pending = pending_task_count(state).await?;
     let stop_signal = worker_stop_signal_path(state).exists();
+    let runtime = runtime_snapshot(state);
 
     Ok(orchestrator_proto::WorkerStatusResponse {
         pending_tasks: pending,
         stop_signal,
-        active_workers: 0, // TODO: track active worker count
+        active_workers: runtime.active_workers as i64,
+        idle_workers: runtime.idle_workers as i64,
+        running_tasks: runtime.running_tasks as i64,
+        configured_workers: runtime.configured_workers as i64,
+        shutdown_requested: runtime.shutdown_requested,
+        lifecycle_state: runtime.lifecycle_state.as_str().to_string(),
     })
 }
 
@@ -415,6 +422,23 @@ mod tests {
         let status = worker_status(&state).await.expect("worker status");
         assert_eq!(status.pending_tasks, 1);
         assert!(!status.stop_signal);
+        assert_eq!(status.active_workers, 0);
+        assert_eq!(status.idle_workers, 0);
+        assert_eq!(status.running_tasks, 0);
+        assert_eq!(status.lifecycle_state, "serving");
+        assert!(!status.shutdown_requested);
+
+        state.daemon_runtime.set_configured_workers(2);
+        state.daemon_runtime.worker_started();
+        state.daemon_runtime.worker_started();
+        state.daemon_runtime.worker_became_busy();
+        state.daemon_runtime.running_task_started();
+
+        let busy = worker_status(&state).await.expect("worker status busy");
+        assert_eq!(busy.active_workers, 1);
+        assert_eq!(busy.idle_workers, 1);
+        assert_eq!(busy.running_tasks, 1);
+        assert_eq!(busy.configured_workers, 2);
 
         std::fs::write(worker_stop_signal_path(&state), "stop").expect("seed stop signal");
         let stopped = worker_status(&state)

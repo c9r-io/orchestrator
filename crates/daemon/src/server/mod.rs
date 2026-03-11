@@ -5,7 +5,6 @@ mod system;
 mod task;
 
 use std::sync::Arc;
-use std::time::Instant;
 
 use agent_orchestrator::state::InnerState;
 use orchestrator_proto::*;
@@ -18,7 +17,6 @@ use crate::control_plane::{AuthzError, ControlPlaneSecurity};
 /// to core service calls.
 pub struct OrchestratorServer {
     pub(crate) state: Arc<InnerState>,
-    pub(crate) startup_instant: Instant,
     pub(crate) shutdown_notify: Arc<Notify>,
     pub(crate) control_plane: Option<Arc<ControlPlaneSecurity>>,
 }
@@ -26,16 +24,25 @@ pub struct OrchestratorServer {
 impl OrchestratorServer {
     pub fn new(
         state: Arc<InnerState>,
-        startup_instant: Instant,
         shutdown_notify: Arc<Notify>,
         control_plane: Option<Arc<ControlPlaneSecurity>>,
     ) -> Self {
         Self {
             state,
-            startup_instant,
             shutdown_notify,
             control_plane,
         }
+    }
+
+    pub(crate) fn reject_new_work_during_shutdown(&self, rpc: &'static str) -> Result<(), Status> {
+        let snapshot = agent_orchestrator::service::daemon::runtime_snapshot(&self.state);
+        if snapshot.shutdown_requested {
+            return Err(Status::unavailable(format!(
+                "{rpc} rejected: daemon is {}",
+                snapshot.lifecycle_state.as_str()
+            )));
+        }
+        Ok(())
     }
 }
 

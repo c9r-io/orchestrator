@@ -30,6 +30,18 @@ pub async fn dispatch(
             component,
             command: None,
         } => {
+            if component.as_deref() == Some("daemon") {
+                let ping = client
+                    .ping(orchestrator_proto::PingRequest {})
+                    .await?
+                    .into_inner();
+                let status = client
+                    .worker_status(orchestrator_proto::WorkerStatusRequest {})
+                    .await?
+                    .into_inner();
+                debug::print_daemon_status(ping, status);
+                return Ok(());
+            }
             let resp = client
                 .config_debug(orchestrator_proto::ConfigDebugRequest { component })
                 .await?

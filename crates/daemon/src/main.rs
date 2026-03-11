@@ -12,11 +12,16 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use futures::FutureExt;
 use tonic::transport::Server;
 use tracing::{error, info};
 
+use agent_orchestrator::events::insert_event;
 use agent_orchestrator::scheduler::safety::RestartRequestedError;
-use agent_orchestrator::scheduler::{load_task_summary, run_task_loop, RunningTask};
+use agent_orchestrator::scheduler::{
+    load_task_summary, register_running_task, run_task_loop, shutdown_running_tasks,
+    unregister_running_task, RunningTask,
+};
 use agent_orchestrator::scheduler_service::{
     claim_next_pending_task, clear_worker_stop_signal, worker_stop_signal_path,
     worker_wake_signal_path,
@@ -92,12 +97,11 @@ fn main() -> Result<()> {
     }
 
     rt.block_on(async move {
-        let startup_instant = std::time::Instant::now();
-
         let state = agent_orchestrator::service::bootstrap::init_state_async(false)
             .await
             .context("failed to initialize orchestrator state")?;
         let inner = state.inner.clone();
+        inner.daemon_runtime.set_configured_workers(args.workers);
 
         let socket_path = lifecycle::socket_path(&inner.app_root);
         let pid_path = lifecycle::pid_path(&inner.app_root);
@@ -138,7 +142,6 @@ fn main() -> Result<()> {
 
         let service = server::OrchestratorServer::new(
             inner.clone(),
-            startup_instant,
             shutdown_notify.clone(),
             None,
         );
@@ -177,7 +180,6 @@ fn main() -> Result<()> {
                 .tls_config(secure.tls)?
                 .add_service(OrchestratorServiceServer::new(server::OrchestratorServer::new(
                     inner.clone(),
-                    startup_instant,
                     shutdown_notify.clone(),
                     Some(secure.security),
                 )))
@@ -210,9 +212,35 @@ fn main() -> Result<()> {
                 .context("gRPC server error")?;
         }
 
+        emit_daemon_event(&inner, "daemon_shutdown_requested", serde_json::json!({
+            "reason": shutdown_reason(&inner, restart_rx.borrow().as_ref()),
+        }))
+        .await;
+
         // Server has shut down — notify workers to stop
         info!("signalling workers to shut down");
+        inner.daemon_runtime.request_shutdown();
         let _ = shutdown_tx.send(true);
+        let _ = clear_worker_stop_signal(&inner);
+
+        let draining_tasks = agent_orchestrator::service::daemon::runtime_snapshot(&inner).running_tasks;
+        if draining_tasks > 0 {
+            emit_daemon_event(&inner, "task_drain_started", serde_json::json!({
+                "running_tasks": draining_tasks,
+                "timeout_ms": 5_000_u64,
+            }))
+            .await;
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            let remaining = agent_orchestrator::service::daemon::runtime_snapshot(&inner).running_tasks;
+            if remaining > 0 {
+                shutdown_running_tasks(inner.clone()).await;
+            }
+            emit_daemon_event(&inner, "task_drain_completed", serde_json::json!({
+                "remaining_after_grace": remaining,
+                "forced_task_count": remaining,
+            }))
+            .await;
+        }
 
         // Wait for all workers to finish (with a timeout)
         let drain = futures::future::join_all(worker_handles);
@@ -245,7 +273,12 @@ fn main() -> Result<()> {
         }
 
         // Normal shutdown
+        inner.daemon_runtime.mark_stopped();
         lifecycle::cleanup(&socket_path, &pid_path);
+        emit_daemon_event(&inner, "daemon_shutdown_completed", serde_json::json!({
+            "reason": shutdown_reason(&inner, restart_rx.borrow().as_ref()),
+        }))
+        .await;
         info!("orchestratord stopped");
         Ok(())
     })
@@ -292,6 +325,13 @@ async fn worker_loop(
     let poll_interval = std::time::Duration::from_millis(2000);
     let worker_num = worker_idx + 1;
 
+    state.daemon_runtime.worker_started();
+    emit_daemon_event(&state, "worker_state_changed", serde_json::json!({
+        "worker_id": worker_num,
+        "from_state": "new",
+        "to_state": "idle",
+    }))
+    .await;
     info!(worker = worker_num, "worker started");
 
     loop {
@@ -319,20 +359,50 @@ async fn worker_loop(
             Ok(Some(task_id)) => {
                 info!(worker = worker_num, %task_id, "claimed task");
                 let runtime = RunningTask::new();
-                match run_task_loop(state.clone(), &task_id, runtime).await {
-                    Ok(()) => {
+                state.daemon_runtime.worker_became_busy();
+                emit_daemon_event(&state, "worker_state_changed", serde_json::json!({
+                    "worker_id": worker_num,
+                    "from_state": "idle",
+                    "to_state": "busy",
+                    "task_id": task_id,
+                }))
+                .await;
+                let _ = register_running_task(&state, &task_id, runtime.clone()).await;
+                let run_result = std::panic::AssertUnwindSafe(run_task_loop(
+                    state.clone(),
+                    &task_id,
+                    runtime,
+                ))
+                .catch_unwind()
+                .await;
+                unregister_running_task(&state, &task_id).await;
+                state.daemon_runtime.worker_became_idle();
+                emit_daemon_event(&state, "worker_state_changed", serde_json::json!({
+                    "worker_id": worker_num,
+                    "from_state": "busy",
+                    "to_state": "idle",
+                    "task_id": task_id,
+                }))
+                .await;
+                match run_result {
+                    Ok(Ok(())) => {
                         if let Ok(summary) = load_task_summary(&state, &task_id).await {
                             info!(worker = worker_num, %task_id, status = %summary.status, "task finished");
                         }
                     }
-                    Err(e) => {
-                        // Check if this is a restart request (not a real error)
+                    Ok(Err(e)) => {
                         if let Some(restart) = e.downcast_ref::<RestartRequestedError>() {
                             info!(worker = worker_num, "restart requested, signalling daemon");
+                            state.daemon_runtime.request_shutdown();
                             let _ = restart_tx.send(Some(restart.binary_path.clone()));
-                            return; // worker exits cleanly
+                            break;
                         }
                         error!(worker = worker_num, %task_id, error = %e, "task failed");
+                    }
+                    Err(panic) => {
+                        error!(worker = worker_num, %task_id, "task panicked");
+                        drop(panic);
+                        break;
                     }
                 }
                 drop(permit);
@@ -359,6 +429,13 @@ async fn worker_loop(
         }
     }
 
+    state.daemon_runtime.worker_stopped(false);
+    emit_daemon_event(&state, "worker_state_changed", serde_json::json!({
+        "worker_id": worker_num,
+        "from_state": "idle",
+        "to_state": "stopped",
+    }))
+    .await;
     info!(worker = worker_num, "worker stopped");
 }
 
@@ -371,5 +448,25 @@ async fn wait_for_wake_signal(path: &std::path::Path) {
             return;
         }
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+}
+
+async fn emit_daemon_event(state: &InnerState, event_type: &str, payload: serde_json::Value) {
+    let _ = insert_event(state, "", None, event_type, payload.clone()).await;
+    state.emit_event("", None, event_type, payload);
+}
+
+fn shutdown_reason(
+    state: &InnerState,
+    restart_binary: Option<&std::path::PathBuf>,
+) -> &'static str {
+    if restart_binary.is_some() {
+        "restart"
+    } else if worker_stop_signal_path(state).exists() {
+        "external_stop_signal"
+    } else if state.daemon_runtime.snapshot().shutdown_requested {
+        "shutdown"
+    } else {
+        "unknown"
     }
 }

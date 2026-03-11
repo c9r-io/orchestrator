@@ -375,6 +375,8 @@ message PingResponse {
   string version = 1;
   string git_hash = 2;
   string uptime_secs = 3;
+  bool shutdown_requested = 4;
+  string lifecycle_state = 5;
 }
 
 message ShutdownRequest {
@@ -400,6 +402,11 @@ message WorkerStatusResponse {
   int64 pending_tasks = 1;
   bool stop_signal = 2;
   int64 active_workers = 3;
+  int64 idle_workers = 4;
+  int64 running_tasks = 5;
+  int64 configured_workers = 6;
+  bool shutdown_requested = 7;
+  string lifecycle_state = 8;
 }
 
 message DiagnosticEntry {

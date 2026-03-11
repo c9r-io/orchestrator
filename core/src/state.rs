@@ -3,6 +3,7 @@ use crate::config::ActiveConfig;
 use crate::config_load::ConfigSelfHealReport;
 use crate::events::{EventSink, TracingEventSink};
 use crate::metrics::{AgentHealthState, AgentMetrics};
+use crate::runtime::DaemonRuntimeState;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -43,6 +44,7 @@ pub struct InnerState {
     pub session_store: Arc<crate::session_store::AsyncSessionStore>,
     pub task_repo: Arc<crate::task_repository::AsyncSqliteTaskRepository>,
     pub store_manager: crate::store::StoreManager,
+    pub daemon_runtime: DaemonRuntimeState,
 }
 
 impl InnerState {
