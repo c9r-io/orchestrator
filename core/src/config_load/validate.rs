@@ -28,7 +28,7 @@ impl AgentLookup for HashMap<String, crate::config::AgentConfig> {
     }
 }
 
-impl<'a> AgentLookup for HashMap<String, &'a crate::config::AgentConfig> {
+impl AgentLookup for HashMap<String, &crate::config::AgentConfig> {
     fn get_agent(&self, name: &str) -> Option<&crate::config::AgentConfig> {
         self.get(name).copied()
     }
@@ -124,13 +124,12 @@ fn validate_loop_policy<A: AgentLookup>(
     }
     if workflow.loop_policy.guard.enabled
         && !matches!(workflow.loop_policy.mode, crate::config::LoopMode::Once)
+        && !agents.has_capability("loop_guard")
     {
-        if !agents.has_capability("loop_guard") {
-            anyhow::bail!(
-                "workflow '{}' loop.guard enabled but no agent supports loop_guard capability",
-                workflow_id
-            );
-        }
+        anyhow::bail!(
+            "workflow '{}' loop.guard enabled but no agent supports loop_guard capability",
+            workflow_id
+        );
     }
     Ok(())
 }
