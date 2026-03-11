@@ -409,6 +409,7 @@ fn make_task_ctx(
             finalize: Default::default(),
             max_parallel: None,
         },
+        execution: Default::default(),
         current_cycle,
         init_done: false,
         dynamic_steps: vec![],

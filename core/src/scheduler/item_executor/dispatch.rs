@@ -1127,7 +1127,7 @@ async fn execute_adaptive_plan(
     Ok(())
 }
 
-async fn execute_dynamic_step_config(
+pub(crate) async fn execute_dynamic_step_config(
     state: &Arc<InnerState>,
     task_id: &str,
     item: &crate::dto::TaskItemRow,

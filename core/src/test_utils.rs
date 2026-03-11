@@ -99,6 +99,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                                     store_inputs: vec![],
                                     store_outputs: vec![],
                                 }],
+                                execution: Default::default(),
                                 loop_policy: WorkflowLoopConfig {
                                     mode: LoopMode::Once,
                                     guard: WorkflowLoopGuardConfig {

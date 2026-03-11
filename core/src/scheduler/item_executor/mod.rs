@@ -14,6 +14,7 @@ pub use dispatch::{
     execute_builtin_step, process_item, process_item_filtered, process_item_filtered_owned,
     OwnedProcessItemRequest, ProcessItemRequest,
 };
+pub(crate) use dispatch::execute_dynamic_step_config;
 pub use finalize::finalize_item_execution;
 pub use guard::{execute_guard_step, GuardResult};
 // Re-exported for tests in parent scheduler module

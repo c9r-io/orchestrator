@@ -422,6 +422,7 @@ mod tests {
                     store_outputs: vec![],
                 },
             ],
+            execution: Default::default(),
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Fixed,
                 guard: WorkflowLoopGuardConfig {
@@ -465,6 +466,7 @@ mod tests {
         };
         let config = WorkflowConfig {
             steps: vec![],
+            execution: Default::default(),
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Fixed,
                 guard: WorkflowLoopGuardConfig::default(),

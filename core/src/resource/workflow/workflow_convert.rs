@@ -123,6 +123,7 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
 
     Ok(WorkflowConfig {
         steps,
+        execution: Default::default(),
         loop_policy,
         finalize,
         qa: None,
@@ -964,6 +965,7 @@ mod tests {
                     store_outputs: vec![],
                 },
             ],
+            execution: Default::default(),
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
                 guard: WorkflowLoopGuardConfig {
@@ -1019,6 +1021,7 @@ mod tests {
                 store_inputs: vec![],
                 store_outputs: vec![],
             }],
+            execution: Default::default(),
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Infinite,
                 guard: WorkflowLoopGuardConfig {
@@ -1088,6 +1091,7 @@ mod tests {
                 store_inputs: vec![],
                 store_outputs: vec![],
             }],
+            execution: Default::default(),
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
                 guard: WorkflowLoopGuardConfig {
@@ -1145,6 +1149,7 @@ mod tests {
                 store_inputs: vec![],
                 store_outputs: vec![],
             }],
+            execution: Default::default(),
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
                 guard: WorkflowLoopGuardConfig {
@@ -1328,6 +1333,7 @@ mod tests {
                 store_inputs: vec![],
                 store_outputs: vec![],
             }],
+            execution: Default::default(),
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
                 guard: WorkflowLoopGuardConfig {

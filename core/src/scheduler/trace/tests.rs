@@ -1440,3 +1440,34 @@ fn render_trace_terminal_does_not_panic() {
     render_trace_terminal(&trace, false);
     render_trace_terminal(&trace, true);
 }
+
+#[test]
+fn build_trace_includes_dynamic_graph_events() {
+    let events = vec![
+        make_event(
+            1,
+            "dynamic_plan_materialized",
+            json!({"cycle": 1, "source": "adaptive_planner", "node_count": 2, "edge_count": 1}),
+            "2025-01-01T10:00:00+00:00",
+        ),
+        make_event(
+            2,
+            "dynamic_node_started",
+            json!({"cycle": 1, "node_id": "qa"}),
+            "2025-01-01T10:00:01+00:00",
+        ),
+        make_event(
+            3,
+            "dynamic_edge_taken",
+            json!({"cycle": 1, "from": "qa", "to": "fix"}),
+            "2025-01-01T10:00:02+00:00",
+        ),
+    ];
+    let trace = build_trace("test-task", "running", &events, &[]);
+    assert_eq!(trace.graph_runs.len(), 1);
+    assert_eq!(trace.graph_runs[0].source.as_deref(), Some("adaptive_planner"));
+    assert_eq!(trace.graph_runs[0].node_count, 2);
+    assert_eq!(trace.graph_runs[0].events.len(), 3);
+    assert_eq!(trace.graph_runs[0].events[1].node_id.as_deref(), Some("qa"));
+    assert_eq!(trace.graph_runs[0].events[2].to.as_deref(), Some("fix"));
+}

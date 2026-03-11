@@ -71,11 +71,40 @@ fn default_true() -> bool {
     true
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowExecutionMode {
+    #[default]
+    StaticSegment,
+    DynamicDag,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DagFallbackMode {
+    #[default]
+    DeterministicDag,
+    StaticSegment,
+    FailClosed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WorkflowExecutionConfig {
+    #[serde(default)]
+    pub mode: WorkflowExecutionMode,
+    #[serde(default)]
+    pub fallback_mode: DagFallbackMode,
+    #[serde(default = "default_true")]
+    pub persist_graph_snapshots: bool,
+}
+
 /// Workflow configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowConfig {
     #[serde(default)]
     pub steps: Vec<WorkflowStepConfig>,
+    #[serde(default)]
+    pub execution: WorkflowExecutionConfig,
     #[serde(rename = "loop", default)]
     pub loop_policy: WorkflowLoopConfig,
     #[serde(default)]

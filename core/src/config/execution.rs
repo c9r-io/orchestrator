@@ -7,6 +7,7 @@ use super::{
     ExecutionMode, ExecutionProfileConfig, InvariantConfig, ItemSelectConfig, OrchestratorConfig,
     PipelineVariables, SafetyConfig, StepBehavior, StepPrehookConfig, StepScope, StoreInputConfig,
     StoreOutputConfig, WorkflowConfig, WorkflowFinalizeConfig, WorkflowLoopConfig,
+    WorkflowExecutionConfig,
 };
 
 fn default_true() -> bool {
@@ -158,6 +159,7 @@ pub struct TaskRuntimeContext {
     pub workspace_root: std::path::PathBuf,
     pub ticket_dir: String,
     pub execution_plan: TaskExecutionPlan,
+    pub execution: WorkflowExecutionConfig,
     pub current_cycle: u32,
     pub init_done: bool,
     pub dynamic_steps: Vec<crate::dynamic_orchestration::DynamicStepConfig>,

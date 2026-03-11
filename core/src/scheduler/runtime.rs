@@ -270,6 +270,7 @@ pub async fn load_task_runtime_context(
 
     let dynamic_steps = workflow.dynamic_steps.clone();
     let adaptive = workflow.adaptive.clone();
+    let execution = workflow.execution.clone();
     let safety = workflow.safety.clone();
 
     if !state.unsafe_mode {
@@ -311,6 +312,7 @@ pub async fn load_task_runtime_context(
         workspace_root,
         ticket_dir,
         execution_plan,
+        execution,
         current_cycle: current_cycle.max(0) as u32,
         init_done: init_done == 1,
         dynamic_steps,

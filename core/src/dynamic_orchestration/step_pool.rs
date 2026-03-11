@@ -34,7 +34,7 @@ impl DynamicStepConfig {
     /// Check if this step matches the current context
     pub fn matches(&self, context: &StepPrehookContext) -> bool {
         if let Some(ref trigger) = self.trigger {
-            return evaluate_simple_condition(trigger, context);
+            return evaluate_trigger_condition(trigger, context).unwrap_or(false);
         }
         false
     }
@@ -80,47 +80,11 @@ impl DynamicStepPool {
     }
 }
 
-/// Simple condition evaluator for basic triggers
-pub(crate) fn evaluate_simple_condition(condition: &str, context: &StepPrehookContext) -> bool {
-    if condition.contains("active_ticket_count") {
-        if condition.contains("> 0") && context.active_ticket_count > 0 {
-            return true;
-        }
-        if condition.contains("== 0") && context.active_ticket_count == 0 {
-            return true;
-        }
-    }
-
-    if condition.contains("qa_exit_code") {
-        if condition.contains("!= 0") && context.qa_exit_code.is_some_and(|c| c != 0) {
-            return true;
-        }
-        if condition.contains("== 0") && (context.qa_exit_code == Some(0)) {
-            return true;
-        }
-    }
-
-    if condition.contains("qa_confidence") {
-        if let Some(confidence) = context.qa_confidence {
-            if condition.contains("> 0.8") && confidence > 0.8 {
-                return true;
-            }
-            if condition.contains("> 0.5") && confidence > 0.5 {
-                return true;
-            }
-        }
-    }
-
-    if condition.contains("cycle") {
-        if condition.contains("> 2") && context.cycle > 2 {
-            return true;
-        }
-        if condition.contains("> 0") && context.cycle > 0 {
-            return true;
-        }
-    }
-
-    false
+pub(crate) fn evaluate_trigger_condition(
+    condition: &str,
+    context: &StepPrehookContext,
+) -> anyhow::Result<bool> {
+    crate::prehook::evaluate_step_prehook_expression(condition, context)
 }
 
 #[cfg(test)]

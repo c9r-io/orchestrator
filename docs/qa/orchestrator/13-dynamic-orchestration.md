@@ -1,7 +1,7 @@
 # Orchestrator - Dynamic Orchestration & Adaptive Workflow
 
 **Module**: orchestrator
-**Scope**: Validate dynamic prehook decisions, DAG execution, dynamic step pool, and adaptive runtime planning
+**Scope**: Validate dynamic prehook decisions, explicit `dynamic_dag` execution mode, dynamic step pool, and adaptive runtime planning
 **Scenarios**: 5
 **Priority**: High
 
@@ -9,12 +9,15 @@
 
 ## Background
 
-This document tests the new dynamic orchestration features:
+This document tests the dynamic orchestration feature set:
 - PrehookDecision with extended decision types (Run/Skip/Branch/DynamicAdd/Transform)
 - DynamicStepPool for runtime step selection
-- DAG execution engine with topological sort and cycle detection
+- explicit `dynamic_dag` mainline execution mode
 - Conditional edge evaluation
 - AdaptivePlanner runtime execution, validation, and fallback behavior
+
+For FR-004 mainline execution and graph-aware trace coverage, also execute:
+- `docs/qa/orchestrator/59-dynamic-dag-mainline-execution.md`
 
 Entry point: `orchestrator` CLI, config file modifications, Rust unit tests
 
@@ -84,7 +87,7 @@ N/A - Unit test verification
 ### Expected
 
 - DynamicStepPool.find_matching_steps() returns steps matching context
-- Trigger conditions evaluated correctly (e.g., `active_ticket_count > 0`)
+- Trigger conditions are evaluated through CEL (for example, `active_ticket_count > 0`)
 - Priority sorting works (higher priority first)
 
 ### DB Checks

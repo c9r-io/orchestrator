@@ -69,6 +69,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                             store_inputs: vec![],
                             store_outputs: vec![],
                         }],
+                        execution: Default::default(),
                         loop_policy: WorkflowLoopConfig {
                             mode: LoopMode::Once,
                             guard: WorkflowLoopGuardConfig::default(),
@@ -829,6 +830,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                                 store_outputs: vec![],
                             },
                         ],
+                        execution: Default::default(),
                         loop_policy: WorkflowLoopConfig {
                             mode: LoopMode::Once,
                             guard: WorkflowLoopGuardConfig::default(),
@@ -989,6 +991,7 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
                 store_outputs: vec![],
             },
         ],
+        execution: Default::default(),
         loop_policy: WorkflowLoopConfig {
             mode: LoopMode::Once,
             guard: WorkflowLoopGuardConfig::default(),

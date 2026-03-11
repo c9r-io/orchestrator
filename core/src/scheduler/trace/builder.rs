@@ -82,6 +82,7 @@ pub fn build_trace_with_meta(
     let events = &sorted_refs;
 
     let cycles = build_cycles(&task_meta, events, command_runs);
+    let graph_runs = build_graph_runs(events);
     let mut anomalies = Vec::new();
 
     detect_duplicate_runner(events, &mut anomalies);
@@ -127,10 +128,72 @@ pub fn build_trace_with_meta(
         task_id: task_meta.task_id.to_string(),
         status: task_meta.status.to_string(),
         cycles,
+        graph_runs,
         anomalies,
         summary,
         build_version: get_build_version(),
     }
+}
+
+fn build_graph_runs(events: &[EventDto]) -> Vec<GraphTrace> {
+    let mut by_cycle: HashMap<u32, GraphTrace> = HashMap::new();
+    for event in events {
+        if !event.event_type.starts_with("dynamic_") {
+            continue;
+        }
+        let cycle = event
+            .payload
+            .get("cycle")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0) as u32;
+        let entry = by_cycle.entry(cycle).or_insert_with(|| GraphTrace {
+            cycle,
+            source: None,
+            node_count: 0,
+            edge_count: 0,
+            events: Vec::new(),
+        });
+        if event.event_type == "dynamic_plan_materialized" {
+            entry.source = event
+                .payload
+                .get("source")
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_string());
+            entry.node_count = event
+                .payload
+                .get("node_count")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0) as u32;
+            entry.edge_count = event
+                .payload
+                .get("edge_count")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0) as u32;
+        }
+        entry.events.push(GraphEventTrace {
+            event_type: event.event_type.clone(),
+            node_id: event
+                .payload
+                .get("node_id")
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_string()),
+            from: event
+                .payload
+                .get("from")
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_string()),
+            to: event
+                .payload
+                .get("to")
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_string()),
+            taken: event.payload.get("taken").and_then(|value| value.as_bool()),
+            created_at: event.created_at.clone(),
+        });
+    }
+    let mut runs: Vec<GraphTrace> = by_cycle.into_values().collect();
+    runs.sort_by_key(|run| run.cycle);
+    runs
 }
 
 // ── Timeline reconstruction ──────────────────────────────────────────

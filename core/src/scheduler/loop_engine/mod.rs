@@ -1,5 +1,6 @@
 mod continuation;
 mod cycle_safety;
+mod graph;
 mod segment;
 #[cfg(test)]
 mod tests;
@@ -127,7 +128,20 @@ async fn run_task_loop_core(
             json!({"cycle": task_ctx.current_cycle, "max_cycles": max_cycles}),
         );
 
-        let outcome = execute_cycle_segments(&state, task_id, &mut task_ctx, &runtime).await?;
+        let outcome = match task_ctx.execution.mode {
+            crate::config::WorkflowExecutionMode::StaticSegment => {
+                execute_cycle_segments(&state, task_id, &mut task_ctx, &runtime).await?
+            }
+            crate::config::WorkflowExecutionMode::DynamicDag => {
+                match graph::execute_cycle_graph(&state, task_id, &mut task_ctx, &runtime).await? {
+                    graph::GraphCycleOutcome::Completed => CycleSegmentOutcome::Completed,
+                    graph::GraphCycleOutcome::RestartCycle => CycleSegmentOutcome::RestartCycle,
+                    graph::GraphCycleOutcome::FallbackToStaticSegment => {
+                        execute_cycle_segments(&state, task_id, &mut task_ctx, &runtime).await?
+                    }
+                }
+            }
+        };
         if matches!(outcome, CycleSegmentOutcome::RestartCycle) {
             continue 'cycle;
         }

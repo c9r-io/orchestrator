@@ -1098,6 +1098,7 @@ mod tests {
                 "wf".to_string(),
                 crate::config::WorkflowConfig {
                     steps: vec![],
+                    execution: Default::default(),
                     loop_policy: crate::config::WorkflowLoopConfig {
                         mode: crate::config::LoopMode::Once,
                         guard: crate::config::WorkflowLoopGuardConfig::default(),

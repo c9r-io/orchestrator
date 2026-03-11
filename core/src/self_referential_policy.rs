@@ -463,6 +463,7 @@ mod tests {
     fn workflow() -> WorkflowConfig {
         WorkflowConfig {
             steps: vec![command_step("implement"), builtin_self_test()],
+            execution: Default::default(),
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
                 guard: WorkflowLoopGuardConfig::default(),

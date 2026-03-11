@@ -5,7 +5,7 @@ use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::step_pool::evaluate_simple_condition;
+use super::step_pool::evaluate_trigger_condition;
 
 /// A node in the workflow DAG
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -240,7 +240,7 @@ impl DynamicExecutionPlan {
 
         for edge in self.get_outgoing_edges(current_node_id) {
             if let Some(ref condition) = edge.condition {
-                if evaluate_simple_condition(condition, context) {
+                if evaluate_trigger_condition(condition, context).unwrap_or(false) {
                     next_nodes.push(edge.to.clone());
                 }
             } else {

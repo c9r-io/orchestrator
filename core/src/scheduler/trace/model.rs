@@ -15,6 +15,7 @@ pub struct TaskTrace {
     pub task_id: String,
     pub status: String,
     pub cycles: Vec<CycleTrace>,
+    pub graph_runs: Vec<GraphTrace>,
     pub anomalies: Vec<Anomaly>,
     pub summary: TraceSummary,
     pub build_version: Option<BuildVersion>,
@@ -41,6 +42,25 @@ pub struct StepTrace {
     pub duration_secs: Option<f64>,
     pub skipped: bool,
     pub skip_reason: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GraphTrace {
+    pub cycle: u32,
+    pub source: Option<String>,
+    pub node_count: u32,
+    pub edge_count: u32,
+    pub events: Vec<GraphEventTrace>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GraphEventTrace {
+    pub event_type: String,
+    pub node_id: Option<String>,
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub taken: Option<bool>,
+    pub created_at: String,
 }
 
 #[derive(Debug, Serialize)]

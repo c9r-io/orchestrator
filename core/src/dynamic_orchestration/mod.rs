@@ -7,10 +7,12 @@ pub use crate::config::StepPrehookContext;
 
 mod adaptive;
 mod dag;
+mod graph;
 mod prehook;
 mod step_pool;
 
 pub use adaptive::*;
 pub use dag::*;
+pub use graph::*;
 pub use prehook::*;
 pub use step_pool::*;

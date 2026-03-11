@@ -268,6 +268,7 @@ mod tests {
     fn make_workflow(steps: Vec<WorkflowStepConfig>) -> WorkflowConfig {
         WorkflowConfig {
             steps,
+            execution: Default::default(),
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
                 guard: WorkflowLoopGuardConfig {

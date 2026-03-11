@@ -96,9 +96,10 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 ### Expected
 
 - Output is valid JSON
-- Top-level keys: `task_id`, `status`, `cycles`, `anomalies`, `summary`
+- Top-level keys: `task_id`, `status`, `cycles`, `graph_runs`, `anomalies`, `summary`
 - `cycles` is an array; each element has `cycle`, `started_at`, `ended_at`, `steps`
 - `summary` contains `total_cycles`, `total_steps`, `total_commands`, `failed_commands`, `anomaly_counts`, `wall_time_secs`
+- `graph_runs` is present; it may be empty for non-DAG tasks
 - `anomalies` is an array (may be empty for clean runs)
 - For a normal completed multi-cycle task, every cycle has non-null `ended_at`
 - For a normal completed multi-cycle task, `.anomalies[] | select(.rule == "overlapping_cycles")` returns no rows
@@ -126,6 +127,7 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 ### Expected
 
 - Every verbose step prints an indented scope line
+- When a task emits `dynamic_*` graph events, JSON trace output preserves them under `graph_runs`
 - `probe_item_scoped` steps show `scope=item item={item_id}`
 - `probe_task_scoped` steps show `scope=task`, and if an execution anchor exists it is rendered as `anchor_item={item_id}`
 - Legacy tasks without explicit scope metadata show `scope=legacy` (not `scope=unknown`); they must not silently relabel the anchor as a true `item=...`

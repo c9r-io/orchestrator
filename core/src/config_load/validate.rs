@@ -91,6 +91,18 @@ pub fn validate_workflow_config_for_project(
     for rule in &workflow.finalize.rules {
         crate::prehook::validate_workflow_finalize_rule(rule, workflow_id)?;
     }
+    for dynamic_step in &workflow.dynamic_steps {
+        if let Some(trigger) = dynamic_step.trigger.as_deref() {
+            let prehook = crate::config::StepPrehookConfig {
+                engine: crate::config::StepHookEngine::Cel,
+                when: trigger.to_string(),
+                reason: Some(format!("dynamic step '{}'", dynamic_step.id)),
+                ui: None,
+                extended: false,
+            };
+            crate::prehook::validate_step_prehook(&prehook, workflow_id, &dynamic_step.id)?;
+        }
+    }
     if let Some(max_cycles) = workflow.loop_policy.guard.max_cycles {
         if max_cycles == 0 {
             anyhow::bail!(
@@ -581,6 +593,7 @@ mod tests {
                     store_outputs: vec![],
                 },
             ],
+            execution: Default::default(),
             loop_policy: crate::config::WorkflowLoopConfig {
                 mode: LoopMode::Once,
                 guard: crate::config::WorkflowLoopGuardConfig {
@@ -661,6 +674,7 @@ mod tests {
                     store_outputs: vec![],
                 },
             ],
+            execution: Default::default(),
             loop_policy: crate::config::WorkflowLoopConfig {
                 mode: LoopMode::Once,
                 guard: crate::config::WorkflowLoopGuardConfig {
@@ -741,6 +755,7 @@ mod tests {
                     store_outputs: vec![],
                 },
             ],
+            execution: Default::default(),
             loop_policy: crate::config::WorkflowLoopConfig {
                 mode: LoopMode::Once,
                 guard: crate::config::WorkflowLoopGuardConfig {
@@ -800,6 +815,7 @@ mod tests {
                 store_inputs: vec![],
                 store_outputs: vec![],
             }],
+            execution: Default::default(),
             loop_policy: crate::config::WorkflowLoopConfig {
                 mode: LoopMode::Once,
                 guard: crate::config::WorkflowLoopGuardConfig::default(),
@@ -885,6 +901,7 @@ mod tests {
                     store_outputs: vec![],
                 },
             ],
+            execution: Default::default(),
             loop_policy: crate::config::WorkflowLoopConfig {
                 mode: LoopMode::Once,
                 guard: crate::config::WorkflowLoopGuardConfig::default(),
@@ -915,6 +932,7 @@ mod tests {
     fn validate_self_referential_safety_errors_without_checkpoint_strategy() {
         let workflow = WorkflowConfig {
             steps: vec![],
+            execution: Default::default(),
             loop_policy: crate::config::WorkflowLoopConfig {
                 mode: LoopMode::Once,
                 guard: crate::config::WorkflowLoopGuardConfig::default(),
@@ -1204,6 +1222,24 @@ mod tests {
         };
         let result = validate_self_referential_safety(&workflow, "test-workflow", "test-ws", true);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_workflow_config_rejects_invalid_dynamic_step_trigger_cel() {
+        let mut workflow = make_workflow(vec![make_step("qa", true)]);
+        workflow.dynamic_steps.push(crate::dynamic_orchestration::DynamicStepConfig {
+            id: "dyn".to_string(),
+            description: None,
+            step_type: "fix".to_string(),
+            agent_id: None,
+            template: None,
+            trigger: Some("active_ticket_count >".to_string()),
+            priority: 0,
+            max_runs: None,
+        });
+        let config = make_config_with_default_project();
+        validate_workflow_config(&config, &workflow, "wf-cel")
+            .expect_err("invalid CEL trigger should fail");
     }
 
     #[test]
