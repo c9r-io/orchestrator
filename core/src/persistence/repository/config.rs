@@ -600,25 +600,27 @@ impl ConfigRepository for SqliteConfigRepository {
         deleted_resources: &[ResourceRemoval],
     ) -> Result<ConfigOverview> {
         let app_root = resolve_app_root_from_db_path(&self.db_path)?;
-        let has_secret_stores =
-            !normalized.resource_store.list_by_kind("SecretStore").is_empty();
-        let secret_encryption =
-            match crate::secret_key_lifecycle::load_keyring(&app_root, &self.db_path) {
-                Ok(keyring) => {
-                    if keyring.has_active_key() {
-                        SecretEncryption::from_keyring(&keyring)?
-                    } else if has_secret_stores {
-                        anyhow::bail!(
+        let has_secret_stores = !normalized
+            .resource_store
+            .list_by_kind("SecretStore")
+            .is_empty();
+        let secret_encryption = match crate::secret_key_lifecycle::load_keyring(
+            &app_root,
+            &self.db_path,
+        ) {
+            Ok(keyring) => {
+                if keyring.has_active_key() {
+                    SecretEncryption::from_keyring(&keyring)?
+                } else if has_secret_stores {
+                    anyhow::bail!(
                             "SecretStore write blocked: no active encryption key (all keys revoked or retired)"
                         );
-                    } else {
-                        SecretEncryption::from_key(ensure_secret_key(&app_root, &self.db_path)?)
-                    }
-                }
-                Err(_) => {
+                } else {
                     SecretEncryption::from_key(ensure_secret_key(&app_root, &self.db_path)?)
                 }
-            };
+            }
+            Err(_) => SecretEncryption::from_key(ensure_secret_key(&app_root, &self.db_path)?),
+        };
         let conn = self.open_conn()?;
         let tx = conn.unchecked_transaction()?;
         crate::config_load::enforce_deletion_guards_for_removals(&tx, deleted_resources)?;

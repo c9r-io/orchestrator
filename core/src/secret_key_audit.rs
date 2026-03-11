@@ -210,7 +210,10 @@ mod tests {
             KeyAuditEventKind::DecryptFailed,
             KeyAuditEventKind::MissingKeyDiagnostic,
         ] {
-            assert_eq!(KeyAuditEventKind::from_str_value(kind.as_str()).unwrap(), kind);
+            assert_eq!(
+                KeyAuditEventKind::from_str_value(kind.as_str()).unwrap(),
+                kind
+            );
         }
     }
 }

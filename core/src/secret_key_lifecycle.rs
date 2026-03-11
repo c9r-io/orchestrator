@@ -74,9 +74,11 @@ pub struct KeyRing {
 
 impl KeyRing {
     pub fn active_key(&self) -> Result<&SecretKeyHandle> {
-        self.active_key
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("SecretStore write blocked: no active encryption key (all keys revoked or retired)"))
+        self.active_key.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "SecretStore write blocked: no active encryption key (all keys revoked or retired)"
+            )
+        })
     }
 
     pub fn decrypt_key(&self, key_id: &str) -> Result<&SecretKeyHandle> {
@@ -107,9 +109,7 @@ impl KeyRing {
     }
 
     pub fn decrypt_keys_iter(&self) -> impl Iterator<Item = (&str, &SecretKeyHandle)> {
-        self.decrypt_keys
-            .iter()
-            .map(|(k, v)| (k.as_str(), v))
+        self.decrypt_keys.iter().map(|(k, v)| (k.as_str(), v))
     }
 }
 
@@ -229,7 +229,17 @@ pub fn query_all_key_records(conn: &Connection) -> Result<Vec<KeyRecord>> {
 
     let mut records = Vec::new();
     for row in rows {
-        let (key_id, state_str, fingerprint, file_path, created_at, activated_at, rotated_out_at, retired_at, revoked_at) = row?;
+        let (
+            key_id,
+            state_str,
+            fingerprint,
+            file_path,
+            created_at,
+            activated_at,
+            rotated_out_at,
+            retired_at,
+            revoked_at,
+        ) = row?;
         records.push(KeyRecord {
             key_id,
             state: KeyState::from_str_value(&state_str)?,
@@ -284,7 +294,8 @@ pub fn begin_rotation(conn: &Connection, app_root: &Path) -> Result<(KeyRecord, 
     }
 
     let new_key_path = keys_dir.join(format!("{new_key_id}.key"));
-    let handle = crate::secret_store_crypto::generate_and_write_key_file(&new_key_path, &new_key_id)?;
+    let handle =
+        crate::secret_store_crypto::generate_and_write_key_file(&new_key_path, &new_key_id)?;
     let now = now_ts();
 
     let new_file_path = format!("data/secrets/keys/{new_key_id}.key");
@@ -397,12 +408,7 @@ pub fn re_encrypt_all_secrets(
         )?;
         let rows: Vec<(i64, String, String, String)> = stmt
             .query_map([], |row| {
-                Ok((
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                ))
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
@@ -431,12 +437,7 @@ pub fn re_encrypt_all_secrets(
         )?;
         let rows: Vec<(i64, String, String, String)> = stmt
             .query_map([], |row| {
-                Ok((
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                ))
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
@@ -450,9 +451,9 @@ pub fn re_encrypt_all_secrets(
                     report.versions_updated += 1;
                 }
                 Err(e) => {
-                    report
-                        .errors
-                        .push(format!("resource_versions SecretStore/{project}/{name}: {e}"));
+                    report.errors.push(format!(
+                        "resource_versions SecretStore/{project}/{name}: {e}"
+                    ));
                 }
             }
         }
@@ -540,7 +541,9 @@ pub fn resume_rotation(conn: &Connection, app_root: &Path) -> Result<ReEncryptio
     let old_record = records
         .iter()
         .find(|r| r.state == KeyState::DecryptOnly)
-        .ok_or_else(|| anyhow::anyhow!("no incomplete rotation found (no key in decrypt_only state)"))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!("no incomplete rotation found (no key in decrypt_only state)")
+        })?;
     let new_record = records
         .iter()
         .find(|r| r.state == KeyState::Active)
@@ -549,8 +552,10 @@ pub fn resume_rotation(conn: &Connection, app_root: &Path) -> Result<ReEncryptio
     let old_key_path = resolve_key_file_path(app_root, &old_record.file_path);
     let new_key_path = resolve_key_file_path(app_root, &new_record.file_path);
 
-    let old_handle = crate::secret_store_crypto::load_key_file_as_handle(&old_key_path, &old_record.key_id)?;
-    let new_handle = crate::secret_store_crypto::load_key_file_as_handle(&new_key_path, &new_record.key_id)?;
+    let old_handle =
+        crate::secret_store_crypto::load_key_file_as_handle(&old_key_path, &old_record.key_id)?;
+    let new_handle =
+        crate::secret_store_crypto::load_key_file_as_handle(&new_key_path, &new_record.key_id)?;
 
     let old_encryption = SecretEncryption::from_key(old_handle);
     let new_encryption = SecretEncryption::from_key(new_handle);
@@ -607,10 +612,7 @@ pub fn revoke_key(conn: &Connection, key_id: &str, force: bool) -> Result<()> {
 
 // ─── Migration helper: import legacy key ─────────────────────────
 
-pub fn import_legacy_key_record(
-    conn: &Connection,
-    app_root: &Path,
-) -> Result<Option<KeyRecord>> {
+pub fn import_legacy_key_record(conn: &Connection, app_root: &Path) -> Result<Option<KeyRecord>> {
     let legacy_path = crate::secret_store_crypto::secret_key_path(app_root);
     if !legacy_path.exists() {
         return Ok(None);
@@ -756,10 +758,8 @@ mod tests {
         let (new_rec, old_rec) = begin_rotation(&conn, temp.path()).expect("begin rotation");
 
         // Build encryptions for re-encryption
-        let old_key_path =
-            resolve_key_file_path(temp.path(), &old_rec.file_path);
-        let new_key_path =
-            resolve_key_file_path(temp.path(), &new_rec.file_path);
+        let old_key_path = resolve_key_file_path(temp.path(), &old_rec.file_path);
+        let new_key_path = resolve_key_file_path(temp.path(), &new_rec.file_path);
         let old_handle =
             crate::secret_store_crypto::load_key_file_as_handle(&old_key_path, &old_rec.key_id)
                 .expect("load old");
@@ -780,7 +780,10 @@ mod tests {
         complete_rotation(&conn, &old_rec.key_id).expect("complete rotation");
 
         let records = query_all_key_records(&conn).expect("query");
-        let old = records.iter().find(|r| r.key_id == old_rec.key_id).expect("find old");
+        let old = records
+            .iter()
+            .find(|r| r.key_id == old_rec.key_id)
+            .expect("find old");
         assert_eq!(old.state, KeyState::Retired);
 
         // Verify data is readable with new key

@@ -115,12 +115,17 @@ fn print_status(
                 println!();
                 println!("{:<24} {:<14} {:<18}", "KEY_ID", "STATE", "FINGERPRINT");
                 for key in &resp.all_keys {
-                    println!("{:<24} {:<14} {:<18}", key.key_id, key.state, key.fingerprint);
+                    println!(
+                        "{:<24} {:<14} {:<18}",
+                        key.key_id, key.state, key.fingerprint
+                    );
                 }
             }
             Ok(())
         }
-        OutputFormat::Yaml => anyhow::bail!("secret key commands support only table or json output"),
+        OutputFormat::Yaml => {
+            anyhow::bail!("secret key commands support only table or json output")
+        }
     }
 }
 
@@ -131,7 +136,10 @@ fn print_list(
     match output {
         OutputFormat::Json => {
             let keys: Vec<_> = resp.keys.iter().map(key_record_to_json).collect();
-            println!("{}", serde_json::to_string_pretty(&json!({ "keys": keys }))?);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({ "keys": keys }))?
+            );
             Ok(())
         }
         OutputFormat::Table => {
@@ -147,7 +155,9 @@ fn print_list(
             }
             Ok(())
         }
-        OutputFormat::Yaml => anyhow::bail!("secret key commands support only table or json output"),
+        OutputFormat::Yaml => {
+            anyhow::bail!("secret key commands support only table or json output")
+        }
     }
 }
 
@@ -190,7 +200,9 @@ fn print_history(
             }
             Ok(())
         }
-        OutputFormat::Yaml => anyhow::bail!("secret key commands support only table or json output"),
+        OutputFormat::Yaml => {
+            anyhow::bail!("secret key commands support only table or json output")
+        }
     }
 }
 

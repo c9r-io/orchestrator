@@ -1,7 +1,7 @@
 use super::profile::ResolvedExecutionProfile;
-use crate::config::{ExecutionNetworkMode, ExecutionProfileMode, RunnerConfig};
 #[cfg(target_os = "linux")]
 use crate::config::ExecutionFsMode;
+use crate::config::{ExecutionNetworkMode, ExecutionProfileMode, RunnerConfig};
 use anyhow::Result;
 use std::io;
 
@@ -337,9 +337,7 @@ pub(crate) fn build_command_for_profile(
             cmd.arg(&runner.shell_arg).arg(command);
             cmd
         }
-        ExecutionProfileMode::Sandbox => {
-            build_sandbox_command(runner, command, execution_profile)?
-        }
+        ExecutionProfileMode::Sandbox => build_sandbox_command(runner, command, execution_profile)?,
     };
     cmd.current_dir(cwd);
     Ok(cmd)
@@ -388,8 +386,6 @@ pub(crate) fn build_sandbox_command(
                 )
             }
         }
-        _ => {
-            Err(SandboxBackendError::backend_unavailable(execution_profile, backend, None).into())
-        }
+        _ => Err(SandboxBackendError::backend_unavailable(execution_profile, backend, None).into()),
     }
 }

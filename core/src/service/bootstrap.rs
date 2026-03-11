@@ -221,11 +221,7 @@ fn import_legacy_key_if_needed(app_root: &Path, db_path: &Path) -> Result<()> {
     if !table_exists {
         return Ok(());
     }
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM secret_keys",
-        [],
-        |row| row.get(0),
-    )?;
+    let count: i64 = conn.query_row("SELECT COUNT(*) FROM secret_keys", [], |row| row.get(0))?;
     if count == 0 {
         if let Some(record) =
             crate::secret_key_lifecycle::import_legacy_key_record(&conn, app_root)?

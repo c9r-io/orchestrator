@@ -1,7 +1,7 @@
 #[cfg(unix)]
-use super::profile::UnixResourceLimits;
-#[cfg(unix)]
 use super::profile::ResolvedExecutionProfile;
+#[cfg(unix)]
+use super::profile::UnixResourceLimits;
 #[cfg(unix)]
 use anyhow::{anyhow, Result};
 #[cfg(unix)]

@@ -17,8 +17,8 @@ pub use sandbox::{
     SandboxBackendError, SandboxResourceKind,
 };
 pub use spawn::{
-    spawn_with_runner, spawn_with_runner_and_capture, CapturedChild, RunnerExecutor,
-    RunnerStdioMode, ShellRunnerExecutor, SpawnParams, kill_child_process_group,
+    kill_child_process_group, spawn_with_runner, spawn_with_runner_and_capture, CapturedChild,
+    RunnerExecutor, RunnerStdioMode, ShellRunnerExecutor, SpawnParams,
 };
 
 #[cfg(test)]
@@ -380,6 +380,9 @@ mod tests {
     fn test_sandbox_backend_label_for_current_platform() {
         let profile = ResolvedExecutionProfile::host();
         let label = sandbox_backend_label(&profile);
-        assert_eq!(label, "host", "host profile should always return 'host' backend label");
+        assert_eq!(
+            label, "host",
+            "host profile should always return 'host' backend label"
+        );
     }
 }

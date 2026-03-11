@@ -161,7 +161,12 @@ impl SecretEncryption {
                     aad: &aad_json,
                 },
             )
-            .map_err(|_| anyhow!("failed to decrypt secret store spec (key_id: {})", envelope.key_id))?;
+            .map_err(|_| {
+                anyhow!(
+                    "failed to decrypt secret store spec (key_id: {})",
+                    envelope.key_id
+                )
+            })?;
         serde_json::from_slice(&plain).context("failed to parse decrypted secret store spec")
     }
 
@@ -218,8 +223,9 @@ pub fn load_key_file_as_handle(path: &Path, key_id: &str) -> Result<SecretKeyHan
     validate_secret_key_permissions(path)?;
     let encoded = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read key file {}", path.display()))?;
-    let decoded = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, encoded.trim())
-        .context("failed to decode key file")?;
+    let decoded =
+        base64::Engine::decode(&base64::engine::general_purpose::STANDARD, encoded.trim())
+            .context("failed to decode key file")?;
     if decoded.len() != KEY_SIZE_BYTES {
         bail!(
             "invalid key length in {}: expected {} bytes",
