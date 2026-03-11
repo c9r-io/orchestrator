@@ -1465,7 +1465,10 @@ fn build_trace_includes_dynamic_graph_events() {
     ];
     let trace = build_trace("test-task", "running", &events, &[]);
     assert_eq!(trace.graph_runs.len(), 1);
-    assert_eq!(trace.graph_runs[0].source.as_deref(), Some("adaptive_planner"));
+    assert_eq!(
+        trace.graph_runs[0].source.as_deref(),
+        Some("adaptive_planner")
+    );
     assert_eq!(trace.graph_runs[0].node_count, 2);
     assert_eq!(trace.graph_runs[0].events.len(), 3);
     assert_eq!(trace.graph_runs[0].events[1].node_id.as_deref(), Some("qa"));

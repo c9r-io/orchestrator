@@ -190,6 +190,33 @@ pub(super) fn build_step_prehook_cel_context(
             )
         })?;
     cel_context
+        .add_variable("qa_confidence", context.qa_confidence)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("qa_quality_score", context.qa_quality_score)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("fix_has_changes", context.fix_has_changes)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
         .add_variable("build_errors", context.build_error_count)
         .map_err(|err| {
             anyhow::anyhow!(
@@ -218,6 +245,15 @@ pub(super) fn build_step_prehook_cel_context(
         })?;
     cel_context
         .add_variable("test_exit_code", context.test_exit_code)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("self_test_exit_code", context.self_test_exit_code)
         .map_err(|err| {
             anyhow::anyhow!(
                 "step '{}' prehook context build failed: {}",
@@ -334,6 +370,30 @@ pub(super) fn build_finalize_cel_context(context: &ItemFinalizeContext) -> Resul
         .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
     cel_context
         .add_variable("retest_success", context.retest_success)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("qa_confidence", context.qa_confidence)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("qa_quality_score", context.qa_quality_score)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("fix_confidence", context.fix_confidence)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("fix_quality_score", context.fix_quality_score)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("total_artifacts", context.total_artifacts)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("has_ticket_artifacts", context.has_ticket_artifacts)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable(
+            "has_code_change_artifacts",
+            context.has_code_change_artifacts,
+        )
         .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
     cel_context
         .add_variable("is_last_cycle", context.is_last_cycle)

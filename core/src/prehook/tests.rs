@@ -1878,6 +1878,34 @@ fn test_prehook_cel_context_retest_exit_code_variable() {
     assert!(result.unwrap());
 }
 
+#[test]
+fn test_prehook_cel_context_qa_confidence_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("qa_confidence > 0.8", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_qa_quality_score_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("qa_quality_score > 0.89", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_fix_has_changes_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("fix_has_changes == true", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_cel_context_self_test_exit_code_variable() {
+    let ctx = make_prehook_ctx();
+    let result = evaluate_step_prehook_expression("self_test_exit_code == 0", &ctx);
+    assert!(result.unwrap());
+}
+
 // ── CEL finalize context coverage: exercise ItemFinalizeContext variables ──
 
 fn make_finalize_ctx() -> ItemFinalizeContext {
@@ -2011,6 +2039,55 @@ fn test_finalize_cel_context_retest_ran_variable() {
 fn test_finalize_cel_context_retest_success_variable() {
     let ctx = make_finalize_ctx();
     let rule = make_rule("r1", "retest_success == false", "unresolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_qa_confidence_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "qa_confidence > 0.8", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_qa_quality_score_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "qa_quality_score > 0.89", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_fix_confidence_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "fix_confidence > 0.69", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_fix_quality_score_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "fix_quality_score > 0.79", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_total_artifacts_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "total_artifacts == 5", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_has_ticket_artifacts_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "has_ticket_artifacts == true", "resolved", None);
+    assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+#[test]
+fn test_finalize_cel_context_has_code_change_artifacts_variable() {
+    let ctx = make_finalize_ctx();
+    let rule = make_rule("r1", "has_code_change_artifacts == true", "resolved", None);
     assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
 }
 

@@ -85,7 +85,10 @@ impl EffectiveExecutionGraph {
     }
 
     pub fn outgoing_edges(&self, node_id: &str) -> Vec<&ExecutionGraphEdge> {
-        self.edges.iter().filter(|edge| edge.from == node_id).collect()
+        self.edges
+            .iter()
+            .filter(|edge| edge.from == node_id)
+            .collect()
     }
 
     pub fn incoming_count(&self, node_id: &str) -> usize {
@@ -98,11 +101,17 @@ impl EffectiveExecutionGraph {
         }
         if let Some(entry) = self.entry.as_deref() {
             if !self.nodes.contains_key(entry) {
-                return Err(anyhow!("effective execution graph entry '{}' is missing", entry));
+                return Err(anyhow!(
+                    "effective execution graph entry '{}' is missing",
+                    entry
+                ));
             }
         }
-        let mut in_degree: HashMap<&str, usize> =
-            self.nodes.keys().map(|node_id| (node_id.as_str(), 0usize)).collect();
+        let mut in_degree: HashMap<&str, usize> = self
+            .nodes
+            .keys()
+            .map(|node_id| (node_id.as_str(), 0usize))
+            .collect();
         for edge in &self.edges {
             let Some(degree) = in_degree.get_mut(edge.to.as_str()) else {
                 return Err(anyhow!("graph edge target '{}' is missing", edge.to));
@@ -149,7 +158,9 @@ fn static_step_node(step: &TaskExecutionStep) -> Option<ExecutionGraphNode> {
     })
 }
 
-pub fn build_static_execution_graph(task_ctx: &TaskRuntimeContext) -> Result<EffectiveExecutionGraph> {
+pub fn build_static_execution_graph(
+    task_ctx: &TaskRuntimeContext,
+) -> Result<EffectiveExecutionGraph> {
     let mut graph = EffectiveExecutionGraph {
         source: ExecutionGraphSource::StaticBaseline,
         ..EffectiveExecutionGraph::default()
@@ -357,8 +368,10 @@ mod tests {
 
     #[test]
     fn build_adaptive_execution_graph_preserves_conditions() {
-        let mut plan = super::super::DynamicExecutionPlan::default();
-        plan.entry = Some("qa".to_string());
+        let mut plan = super::super::DynamicExecutionPlan {
+            entry: Some("qa".to_string()),
+            ..Default::default()
+        };
         plan.add_node(super::super::WorkflowNode {
             id: "qa".to_string(),
             step_type: "qa".to_string(),
@@ -390,6 +403,9 @@ mod tests {
             .expect("graph");
         assert_eq!(graph.source, ExecutionGraphSource::AdaptivePlanner);
         assert_eq!(graph.entry.as_deref(), Some("qa"));
-        assert_eq!(graph.edges[0].condition.as_deref(), Some("active_ticket_count > 0"));
+        assert_eq!(
+            graph.edges[0].condition.as_deref(),
+            Some("active_ticket_count > 0")
+        );
     }
 }

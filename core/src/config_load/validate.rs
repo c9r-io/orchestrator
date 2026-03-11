@@ -1227,16 +1227,18 @@ mod tests {
     #[test]
     fn validate_workflow_config_rejects_invalid_dynamic_step_trigger_cel() {
         let mut workflow = make_workflow(vec![make_step("qa", true)]);
-        workflow.dynamic_steps.push(crate::dynamic_orchestration::DynamicStepConfig {
-            id: "dyn".to_string(),
-            description: None,
-            step_type: "fix".to_string(),
-            agent_id: None,
-            template: None,
-            trigger: Some("active_ticket_count >".to_string()),
-            priority: 0,
-            max_runs: None,
-        });
+        workflow
+            .dynamic_steps
+            .push(crate::dynamic_orchestration::DynamicStepConfig {
+                id: "dyn".to_string(),
+                description: None,
+                step_type: "fix".to_string(),
+                agent_id: None,
+                template: None,
+                trigger: Some("active_ticket_count >".to_string()),
+                priority: 0,
+                max_runs: None,
+            });
         let config = make_config_with_default_project();
         validate_workflow_config(&config, &workflow, "wf-cel")
             .expect_err("invalid CEL trigger should fail");

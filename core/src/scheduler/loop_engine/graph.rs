@@ -13,10 +13,13 @@ use crate::dynamic_orchestration::{
 };
 use crate::events::insert_event;
 use crate::scheduler::item_executor::{
-    execute_dynamic_step_config, process_item_filtered, ProcessItemRequest, StepExecutionAccumulator,
+    execute_dynamic_step_config, process_item_filtered, ProcessItemRequest,
+    StepExecutionAccumulator,
 };
 use crate::scheduler::phase_runner::{run_phase_with_selected_agent, SelectedPhaseRunRequest};
-use crate::scheduler::task_state::{is_task_paused_in_db, list_task_items_for_cycle, set_task_status};
+use crate::scheduler::task_state::{
+    is_task_paused_in_db, list_task_items_for_cycle, set_task_status,
+};
 use crate::scheduler::RunningTask;
 use crate::state::InnerState;
 
@@ -47,7 +50,8 @@ pub(super) async fn execute_cycle_graph(
     }
 
     let mut items = list_task_items_for_cycle(state, task_id).await?;
-    let mut task_item_paths: Vec<String> = items.iter().map(|item| item.qa_file_path.clone()).collect();
+    let mut task_item_paths: Vec<String> =
+        items.iter().map(|item| item.qa_file_path.clone()).collect();
     let mut item_state: HashMap<String, StepExecutionAccumulator> = HashMap::new();
 
     let graph = match materialize_graph(state, task_id, task_ctx, runtime, &items).await {
@@ -154,7 +158,9 @@ async fn materialize_graph(
         let outcome = planner.generate_plan(&executor, &planner_ctx).await?;
         let source = match outcome.metadata.source {
             AdaptivePlanSource::Planner => ExecutionGraphSource::AdaptivePlanner,
-            AdaptivePlanSource::DeterministicFallback => ExecutionGraphSource::DeterministicFallback,
+            AdaptivePlanSource::DeterministicFallback => {
+                ExecutionGraphSource::DeterministicFallback
+            }
         };
         let graph = build_adaptive_execution_graph(&outcome.plan, source)?;
         insert_event(
@@ -263,13 +269,14 @@ impl AdaptivePlanExecutor for GraphAdaptiveExecutor<'_> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn execute_graph_nodes(
     state: &Arc<InnerState>,
     task_id: &str,
     task_ctx: &mut TaskRuntimeContext,
     runtime: &RunningTask,
     graph: &EffectiveExecutionGraph,
-    items: &mut Vec<crate::dto::TaskItemRow>,
+    items: &mut [crate::dto::TaskItemRow],
     item_state: &mut HashMap<String, StepExecutionAccumulator>,
     task_item_paths: &mut Vec<String>,
 ) -> Result<()> {
@@ -369,7 +376,13 @@ async fn execute_graph_nodes(
         }
 
         for edge in graph.outgoing_edges(&node_id) {
-            let taken = evaluate_edge(task_id, task_ctx, items, item_state, edge.condition.as_deref())?;
+            let taken = evaluate_edge(
+                task_id,
+                task_ctx,
+                items,
+                item_state,
+                edge.condition.as_deref(),
+            )?;
             insert_event(
                 state,
                 task_id,
@@ -417,12 +430,16 @@ fn should_skip_node(
     let Some(anchor_item) = items.first() else {
         return Ok(false);
     };
-    let prehook_ctx = match item_state.get(&anchor_item.id) {
-        Some(acc) => acc.to_prehook_context(task_id, anchor_item, task_ctx, &node.id),
-        None => StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone())
-            .to_prehook_context(task_id, anchor_item, task_ctx, &node.id),
-    };
-    Ok(!crate::prehook::evaluate_step_prehook_expression(&prehook.when, &prehook_ctx)?)
+    let prehook_ctx =
+        match item_state.get(&anchor_item.id) {
+            Some(acc) => acc.to_prehook_context(task_id, anchor_item, task_ctx, &node.id),
+            None => StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone())
+                .to_prehook_context(task_id, anchor_item, task_ctx, &node.id),
+        };
+    Ok(!crate::prehook::evaluate_step_prehook_expression(
+        &prehook.when,
+        &prehook_ctx,
+    )?)
 }
 
 fn evaluate_edge(
@@ -438,21 +455,23 @@ fn evaluate_edge(
     let Some(anchor_item) = items.first() else {
         return Ok(false);
     };
-    let ctx = match item_state.get(&anchor_item.id) {
-        Some(acc) => acc.to_prehook_context(task_id, anchor_item, task_ctx, "dynamic_edge"),
-        None => StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone())
-            .to_prehook_context(task_id, anchor_item, task_ctx, "dynamic_edge"),
-    };
+    let ctx =
+        match item_state.get(&anchor_item.id) {
+            Some(acc) => acc.to_prehook_context(task_id, anchor_item, task_ctx, "dynamic_edge"),
+            None => StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone())
+                .to_prehook_context(task_id, anchor_item, task_ctx, "dynamic_edge"),
+        };
     crate::prehook::evaluate_step_prehook_expression(condition, &ctx)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn execute_graph_node(
     state: &Arc<InnerState>,
     task_id: &str,
     task_ctx: &mut TaskRuntimeContext,
     runtime: &RunningTask,
     node: &ExecutionGraphNode,
-    items: &mut Vec<crate::dto::TaskItemRow>,
+    items: &mut [crate::dto::TaskItemRow],
     item_state: &mut HashMap<String, StepExecutionAccumulator>,
     task_item_paths: &mut Vec<String>,
 ) -> Result<()> {
@@ -465,7 +484,8 @@ async fn execute_graph_node(
                     let Some(anchor_item) = items.first() else {
                         return Ok(());
                     };
-                    let mut task_acc = StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone());
+                    let mut task_acc =
+                        StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone());
                     process_item_filtered(
                         state,
                         ProcessItemRequest {
@@ -482,17 +502,17 @@ async fn execute_graph_node(
                     .await?;
                     task_ctx.pipeline_vars = task_acc.pipeline_vars.clone();
                     for item in items.iter() {
-                        let acc = item_state
-                            .entry(item.id.clone())
-                            .or_insert_with(|| StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone()));
+                        let acc = item_state.entry(item.id.clone()).or_insert_with(|| {
+                            StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone())
+                        });
                         acc.merge_task_pipeline_vars(&task_acc.pipeline_vars);
                     }
                 }
                 StepScope::Item => {
                     for item in items.iter() {
-                        let acc = item_state
-                            .entry(item.id.clone())
-                            .or_insert_with(|| StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone()));
+                        let acc = item_state.entry(item.id.clone()).or_insert_with(|| {
+                            StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone())
+                        });
                         process_item_filtered(
                             state,
                             ProcessItemRequest {
@@ -527,11 +547,13 @@ async fn execute_graph_node(
                 max_runs: None,
             };
             for item in items.iter() {
-                let acc = item_state
-                    .entry(item.id.clone())
-                    .or_insert_with(|| StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone()));
-                execute_dynamic_step_config(state, task_id, item, task_ctx, runtime, acc, &dyn_step)
-                    .await?;
+                let acc = item_state.entry(item.id.clone()).or_insert_with(|| {
+                    StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone())
+                });
+                execute_dynamic_step_config(
+                    state, task_id, item, task_ctx, runtime, acc, &dyn_step,
+                )
+                .await?;
             }
         }
     }

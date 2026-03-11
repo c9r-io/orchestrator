@@ -1,10 +1,10 @@
 # FR-004 - DAG / 动态编排主路径化与可观测化
 
 **Module**: orchestrator  
-**Status**: Proposed  
+**Status**: In Progress  
 **Priority**: P1  
 **Created**: 2026-03-09  
-**Last Updated**: 2026-03-09  
+**Last Updated**: 2026-03-11  
 **Source**: 深度项目评估报告最高优先级改进建议 #4
 
 ## Background
@@ -54,6 +54,47 @@
 
 ## Proposed Design
 
+## Implementation Status
+
+### Implemented on 2026-03-11
+
+- 新增显式 workflow execution mode：
+  - `static_segment`
+  - `dynamic_dag`
+- `dynamic_dag` 已进入主执行路径，主循环会在 segment engine 与 graph engine 间按 mode 分派
+- 静态 workflow steps 可物化为 runtime execution graph，并作为 deterministic DAG fallback 使用
+- adaptive planner 输出可转换为统一 graph model 并进入 graph executor
+- `DynamicStepConfig.trigger` 与 DAG edge condition 已统一到 CEL 求值路径，不再依赖简化字符串匹配
+- 新增 graph-aware 事件：
+  - `dynamic_plan_generated`
+  - `dynamic_plan_validated`
+  - `dynamic_plan_materialized`
+  - `dynamic_node_ready`
+  - `dynamic_node_started`
+  - `dynamic_node_finished`
+  - `dynamic_node_skipped`
+  - `dynamic_edge_evaluated`
+  - `dynamic_edge_taken`
+  - `dynamic_steps_injected`
+- `task trace` 已支持 `graph_runs` 视角，用于展示动态图执行事件
+- QA 文档已补充：
+  - `docs/qa/orchestrator/59-dynamic-dag-mainline-execution.md`
+  - 同步更新 `docs/qa/orchestrator/13-dynamic-orchestration.md`
+  - 同步更新 `docs/qa/orchestrator/32-task-trace.md`
+
+### Remaining Gaps Before Closure
+
+- `task_info` 尚未返回当前 effective execution graph
+- graph snapshot 还未独立持久化到 task 级数据结构，仅通过 events/trace 间接可见
+- 尚未持久化以下调试材料：
+  - 原始 planner 输出
+  - 规范化 DAG JSON
+  - 节点执行顺序快照
+  - 条件命中原因
+- `persist_graph_snapshots` 配置已存在，但尚未形成真正的落库/回放能力
+- `config debug` 尚未增加 DAG mode 生效配置与 graph materialization 详情输出
+- 当前 graph engine 为 deterministic sequential v1，尚未覆盖更完整的 branch / transform / replay 调试面
+
 ### 1. 执行模型分层
 
 定义两类明确模式：
@@ -94,6 +135,11 @@
 - 规范化 DAG JSON
 - 节点执行顺序
 - 条件命中原因
+
+说明：
+
+- `task_trace` 与 `dynamic_*` events 已部分实现
+- `task_info` effective graph 与独立调试快照持久化尚未完成
 
 ## Alternatives And Tradeoffs
 
@@ -136,3 +182,12 @@
 - 动态 step 与 planner plan 能进入主执行路径
 - 动态计划具备持久化、trace 和事件可观测性
 - trigger / prehook 条件语义明显收敛
+
+## Current Evaluation
+
+- `明确、可启用的执行模式`: 已完成
+- `动态 step 与 planner plan 进入主执行路径`: 已完成
+- `trigger / prehook 条件语义收敛`: 已完成
+- `动态计划具备持久化、trace 和事件可观测性`: 部分完成
+
+未完成项集中在“持久化与调试快照”以及 `task_info` graph 输出，因此本 FR 暂不关闭。
