@@ -147,7 +147,7 @@ pub enum Commands {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cli, Commands, DbCommands, DbMigrationCommands, SecretCommands, SecretKeyCommands};
+    use super::{Cli, Commands, DbCommands, DbMigrationCommands};
     use clap::Parser;
 
     #[test]
