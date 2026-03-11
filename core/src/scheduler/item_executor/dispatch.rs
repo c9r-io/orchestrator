@@ -13,8 +13,10 @@ use crate::store::{StoreOp, StoreOpResult};
 use crate::ticket::scan_active_tickets_for_task_items;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::collections::{HashSet, VecDeque};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use tracing::warn;
 
@@ -123,7 +125,6 @@ pub async fn process_item_filtered(
         step_filter,
         run_dynamic_steps,
     } = request;
-    let item_id = item.id.as_str();
     let should_run_step =
         |step_id: &str| -> bool { step_filter.map_or(true, |f| f.contains(step_id)) };
     acc.merge_task_pipeline_vars(&task_ctx.pipeline_vars);
@@ -166,108 +167,21 @@ pub async fn process_item_filtered(
             continue;
         }
 
-        let phase = &step.id;
-
-        // 1. Evaluate prehook
-        let prehook_ctx = acc.to_prehook_context(task_id, item, task_ctx, &step.id);
-        let should_run = evaluate_step_prehook(state, step.prehook.as_ref(), &prehook_ctx).await?;
-        if !should_run {
-            acc.step_skipped.insert(step.id.clone(), true);
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                "step_skipped",
-                json!({"step": phase, "step_id": &step.id, "step_scope": step.resolved_scope(), "reason": "prehook_false"}),
-            ).await?;
-            continue;
-        }
-
-        // 1b. Resolve store_inputs
-        if !step.store_inputs.is_empty() {
-            resolve_store_inputs(state, &task_ctx.project_id, &step.store_inputs, acc).await?;
-        }
-
-        // 2. Execute
-        if acc.step_ran.is_empty() {
-            state.db_writer.mark_task_item_running(item_id).await?;
-        }
-        let pipeline_var_keys: Vec<&String> = acc.pipeline_vars.vars.keys().collect();
-        insert_event(
+        match execute_step(
             state,
             task_id,
-            Some(item_id),
-            "step_started",
-            json!({"step": phase, "step_id": &step.id, "step_scope": step.resolved_scope(), "cycle": task_ctx.current_cycle, "pipeline_var_keys": pipeline_var_keys}),
-        ).await?;
-
-        // Layer 2 defense: delegate to the consolidated method on TaskExecutionStep.
-        // If `step.builtin` names a known builtin, the method returns Builtin regardless
-        // of what `behavior.execution` says, making dispatch robust against stale JSON.
-        let effective_execution = step.effective_execution_mode();
-
-        // Dispatch builtin steps (self_test, self_restart, ticket_scan) which handle
-        // their own result capture and use `continue` semantics.
-        let builtin_outcome = execute_builtin_step_dispatch(
-            state,
-            task_id,
-            item_id,
-            phase,
-            step,
-            &effective_execution,
-            task_ctx,
+            item,
             task_item_paths,
-            &item.qa_file_path,
-            acc,
-        )
-        .await?;
-
-        match builtin_outcome {
-            BuiltinStepOutcome::Handled => continue,
-            BuiltinStepOutcome::EarlyReturn => return Ok(()),
-            BuiltinStepOutcome::NotBuiltin => {}
-            BuiltinStepOutcome::RestartRequested { binary_path } => {
-                return Err(RestartRequestedError { binary_path }.into());
-            }
-        }
-
-        // Execute chain or agent/generic steps, producing a RunResult.
-        let agent_outcome = execute_agent_step(
-            state,
-            task_id,
-            item_id,
-            phase,
+            StepEventContext::top_level(),
             step,
-            &effective_execution,
             task_ctx,
             runtime,
-            &item.qa_file_path,
             acc,
         )
-        .await?;
-
-        match agent_outcome {
-            AgentStepOutcome::Handled => continue,
-            AgentStepOutcome::Result(result) => {
-                // Apply step results: capture, status transitions, post-actions,
-                // artifact collection, events, and hard-failure check.
-                let should_return = apply_step_results(
-                    state,
-                    task_id,
-                    item_id,
-                    phase,
-                    step,
-                    task_ctx,
-                    task_item_paths,
-                    &item.qa_file_path,
-                    &result,
-                    acc,
-                )
-                .await?;
-                if should_return {
-                    return Ok(());
-                }
-            }
+        .await?
+        {
+            StepExecutionOutcome::Completed { .. } => {}
+            StepExecutionOutcome::EarlyReturn => return Ok(()),
         }
     }
 
@@ -283,13 +197,243 @@ pub async fn process_item_filtered(
 /// Outcome of dispatching a builtin step (self_test, self_restart, ticket_scan).
 enum BuiltinStepOutcome {
     /// The builtin was recognized and fully handled; caller should `continue`.
-    Handled,
+    Handled { success: bool },
     /// The builtin triggered an early return from the outer function.
     EarlyReturn,
     /// Not a recognized builtin dispatch; fall through to agent/generic execution.
     NotBuiltin,
     /// Self-restart succeeded; daemon should exec the new binary.
     RestartRequested { binary_path: std::path::PathBuf },
+}
+
+#[derive(Clone, Copy)]
+struct StepEventContext<'a> {
+    started_event_type: &'static str,
+    finished_event_type: &'static str,
+    parent_step: Option<&'a str>,
+}
+
+impl<'a> StepEventContext<'a> {
+    fn top_level() -> Self {
+        Self {
+            started_event_type: "step_started",
+            finished_event_type: "step_finished",
+            parent_step: None,
+        }
+    }
+
+    fn chain_child(parent_step: &'a str) -> Self {
+        Self {
+            started_event_type: "chain_step_started",
+            finished_event_type: "chain_step_finished",
+            parent_step: Some(parent_step),
+        }
+    }
+}
+
+enum StepExecutionOutcome {
+    Completed { success: bool },
+    EarlyReturn,
+}
+
+fn build_step_event_payload(
+    step: &TaskExecutionStep,
+    cycle: u32,
+    pipeline_var_keys: Vec<String>,
+    parent_step: Option<&str>,
+) -> Value {
+    let mut payload = json!({
+        "step": step.id,
+        "step_id": step.id,
+        "step_scope": step.resolved_scope(),
+        "cycle": cycle,
+        "pipeline_var_keys": pipeline_var_keys,
+    });
+    if let Some(parent_step) = parent_step {
+        payload["parent_step"] = json!(parent_step);
+    }
+    payload
+}
+
+fn build_step_skipped_payload(
+    step: &TaskExecutionStep,
+    reason: &str,
+    parent_step: Option<&str>,
+) -> Value {
+    let mut payload = json!({
+        "step": step.id,
+        "step_id": step.id,
+        "step_scope": step.resolved_scope(),
+        "reason": reason,
+    });
+    if let Some(parent_step) = parent_step {
+        payload["parent_step"] = json!(parent_step);
+    }
+    payload
+}
+
+fn synthetic_chain_result(
+    step: &TaskExecutionStep,
+    success: bool,
+) -> crate::dto::RunResult {
+    let output = crate::collab::AgentOutput::new(
+        uuid::Uuid::new_v4(),
+        "chain".to_string(),
+        step.id.clone(),
+        if success { 0 } else { 1 },
+        String::new(),
+        String::new(),
+    );
+    crate::dto::RunResult {
+        success,
+        exit_code: if success { 0 } else { 1 },
+        stdout_path: String::new(),
+        stderr_path: String::new(),
+        timed_out: false,
+        duration_ms: None,
+        output: Some(output),
+        validation_status: "passed".to_string(),
+        agent_id: "chain".to_string(),
+        run_id: String::new(),
+        execution_profile: "chain".to_string(),
+        execution_mode: "chain".to_string(),
+        sandbox_denied: false,
+        sandbox_denial_reason: None,
+        sandbox_violation_kind: None,
+        sandbox_resource_kind: None,
+        sandbox_network_target: None,
+    }
+}
+
+fn execute_step<'a>(
+    state: &'a Arc<InnerState>,
+    task_id: &'a str,
+    item: &'a crate::dto::TaskItemRow,
+    task_item_paths: &'a [String],
+    event_ctx: StepEventContext<'a>,
+    step: &'a TaskExecutionStep,
+    task_ctx: &'a TaskRuntimeContext,
+    runtime: &'a RunningTask,
+    acc: &'a mut StepExecutionAccumulator,
+) -> Pin<Box<dyn Future<Output = Result<StepExecutionOutcome>> + Send + 'a>> {
+    Box::pin(async move {
+        let item_id = item.id.as_str();
+        let phase = step.id.as_str();
+
+        if runtime.stop_flag.load(std::sync::atomic::Ordering::SeqCst)
+            || super::super::task_state::is_task_paused_in_db(state, task_id).await?
+            || acc.terminal
+        {
+            return Ok(StepExecutionOutcome::EarlyReturn);
+        }
+
+        let prehook_ctx = acc.to_prehook_context(task_id, item, task_ctx, &step.id);
+        let should_run = evaluate_step_prehook(state, step.prehook.as_ref(), &prehook_ctx).await?;
+        if !should_run {
+            acc.step_skipped.insert(step.id.clone(), true);
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "step_skipped",
+                build_step_skipped_payload(step, "prehook_false", event_ctx.parent_step),
+            )
+            .await?;
+            return Ok(StepExecutionOutcome::Completed { success: true });
+        }
+
+        if !step.store_inputs.is_empty() {
+            resolve_store_inputs(state, &task_ctx.project_id, &step.store_inputs, acc).await?;
+        }
+
+        if acc.step_ran.is_empty() {
+            state.db_writer.mark_task_item_running(item_id).await?;
+        }
+
+        let pipeline_var_keys: Vec<String> = acc.pipeline_vars.vars.keys().cloned().collect();
+        insert_event(
+            state,
+            task_id,
+            Some(item_id),
+            event_ctx.started_event_type,
+            build_step_event_payload(
+                step,
+                task_ctx.current_cycle,
+                pipeline_var_keys,
+                event_ctx.parent_step,
+            ),
+        )
+        .await?;
+
+        let effective_execution = step.effective_execution_mode();
+        let builtin_outcome = execute_builtin_step_dispatch(
+            state,
+            task_id,
+            item_id,
+            phase,
+            step,
+            &effective_execution,
+            event_ctx.finished_event_type,
+            event_ctx.parent_step,
+            task_ctx,
+            task_item_paths,
+            &item.qa_file_path,
+            acc,
+        )
+        .await?;
+
+        match builtin_outcome {
+            BuiltinStepOutcome::Handled { success } => {
+                return Ok(StepExecutionOutcome::Completed { success });
+            }
+            BuiltinStepOutcome::EarlyReturn => return Ok(StepExecutionOutcome::EarlyReturn),
+            BuiltinStepOutcome::NotBuiltin => {}
+            BuiltinStepOutcome::RestartRequested { binary_path } => {
+                return Err(RestartRequestedError { binary_path }.into());
+            }
+        }
+
+        let agent_outcome = execute_agent_step(
+            state,
+            task_id,
+            item,
+            task_item_paths,
+            step,
+            &effective_execution,
+            event_ctx,
+            task_ctx,
+            runtime,
+            acc,
+        )
+        .await?;
+
+        match agent_outcome {
+            AgentStepOutcome::EarlyReturn => Ok(StepExecutionOutcome::EarlyReturn),
+            AgentStepOutcome::Result(result) => {
+                let should_return = apply_step_results(
+                    state,
+                    task_id,
+                    item_id,
+                    phase,
+                    step,
+                    event_ctx.finished_event_type,
+                    event_ctx.parent_step,
+                    task_ctx,
+                    task_item_paths,
+                    &item.qa_file_path,
+                    &result,
+                    acc,
+                )
+                .await?;
+                if should_return {
+                    return Ok(StepExecutionOutcome::EarlyReturn);
+                }
+                Ok(StepExecutionOutcome::Completed {
+                    success: result.is_success(),
+                })
+            }
+        }
+    })
 }
 
 /// Dispatch self_test, self_restart, and ticket_scan builtin steps.
@@ -302,6 +446,8 @@ async fn execute_builtin_step_dispatch(
     phase: &str,
     step: &TaskExecutionStep,
     effective_execution: &ExecutionMode,
+    finish_event_type: &str,
+    parent_step: Option<&str>,
     task_ctx: &TaskRuntimeContext,
     task_item_paths: &[String],
     qa_file_path: &str,
@@ -327,13 +473,24 @@ async fn execute_builtin_step_dispatch(
                 .vars
                 .insert("self_test_passed".to_string(), passed.to_string());
 
+            let mut payload = json!({
+                "step": phase,
+                "step_id": step.id,
+                "step_scope": step.resolved_scope(),
+                "exit_code": exit_code,
+                "success": passed
+            });
+            if let Some(parent_step) = parent_step {
+                payload["parent_step"] = json!(parent_step);
+            }
             insert_event(
                 state,
                 task_id,
                 Some(item_id),
-                "step_finished",
-                json!({"step": phase, "step_scope": step.resolved_scope(), "exit_code": exit_code, "success": passed}),
-            ).await?;
+                finish_event_type,
+                payload,
+            )
+            .await?;
 
             // Apply behavior-driven status transitions for self_test
             if !passed {
@@ -372,7 +529,7 @@ async fn execute_builtin_step_dispatch(
                 sandbox_network_target: None,
             };
             acc.apply_captures(&step.behavior.captures, &step.id, &synth_result);
-            Ok(BuiltinStepOutcome::Handled)
+            Ok(BuiltinStepOutcome::Handled { success: passed })
         }
 
         ExecutionMode::Builtin { name } if name == "self_restart" => {
@@ -389,13 +546,24 @@ async fn execute_builtin_step_dispatch(
                         .vars
                         .insert("self_restart_exit_code".to_string(), exit_code.to_string());
 
+                    let mut payload = json!({
+                        "step": phase,
+                        "step_id": step.id,
+                        "step_scope": step.resolved_scope(),
+                        "exit_code": exit_code,
+                        "restart": true
+                    });
+                    if let Some(parent_step) = parent_step {
+                        payload["parent_step"] = json!(parent_step);
+                    }
                     insert_event(
                         state,
                         task_id,
                         Some(item_id),
-                        "step_finished",
-                        json!({"step": phase, "step_scope": step.resolved_scope(), "exit_code": exit_code, "restart": true}),
-                    ).await?;
+                        finish_event_type,
+                        payload,
+                    )
+                    .await?;
 
                     // Invariant checkpoint: before_restart
                     let inv_results = crate::scheduler::invariant::evaluate_invariants(
@@ -444,13 +612,24 @@ async fn execute_builtin_step_dispatch(
                         .vars
                         .insert("self_restart_exit_code".to_string(), exit_code.to_string());
 
+                    let mut payload = json!({
+                        "step": phase,
+                        "step_id": step.id,
+                        "step_scope": step.resolved_scope(),
+                        "exit_code": exit_code,
+                        "restart": false
+                    });
+                    if let Some(parent_step) = parent_step {
+                        payload["parent_step"] = json!(parent_step);
+                    }
                     insert_event(
                         state,
                         task_id,
                         Some(item_id),
-                        "step_finished",
-                        json!({"step": phase, "step_scope": step.resolved_scope(), "exit_code": exit_code, "restart": false}),
-                    ).await?;
+                        finish_event_type,
+                        payload,
+                    )
+                    .await?;
 
                     // Build or verification failed — apply on_failure behavior
                     if exit_code != 0 {
@@ -468,7 +647,9 @@ async fn execute_builtin_step_dispatch(
                     }
                     acc.step_ran.insert(step.id.clone(), true);
                     acc.exit_codes.insert(step.id.clone(), exit_code);
-                    Ok(BuiltinStepOutcome::Handled)
+                    Ok(BuiltinStepOutcome::Handled {
+                        success: exit_code == 0,
+                    })
                 }
             }
         }
@@ -479,28 +660,47 @@ async fn execute_builtin_step_dispatch(
             acc.active_tickets = tickets.get(qa_file_path).cloned().unwrap_or_default();
             acc.new_ticket_count = acc.active_tickets.len() as i64;
             acc.step_ran.insert(step.id.clone(), true);
+            let mut payload = json!({
+                "step": phase,
+                "step_id": step.id,
+                "step_scope": step.resolved_scope(),
+                "tickets": acc.active_tickets.len()
+            });
+            if let Some(parent_step) = parent_step {
+                payload["parent_step"] = json!(parent_step);
+            }
             insert_event(
                 state,
                 task_id,
                 Some(item_id),
-                "step_finished",
-                json!({"step": "ticket_scan", "step_scope": step.resolved_scope(), "tickets": acc.active_tickets.len()}),
-            ).await?;
-            Ok(BuiltinStepOutcome::Handled)
+                finish_event_type,
+                payload,
+            )
+            .await?;
+            Ok(BuiltinStepOutcome::Handled { success: true })
         }
 
         ExecutionMode::Builtin { name } if name == "item_select" => {
             // Selection orchestrated at loop_engine level; this is a marker step
             acc.step_ran.insert(step.id.clone(), true);
+            let mut payload = json!({
+                "step": phase,
+                "step_id": step.id,
+                "step_scope": step.resolved_scope(),
+                "builtin": "item_select"
+            });
+            if let Some(parent_step) = parent_step {
+                payload["parent_step"] = json!(parent_step);
+            }
             insert_event(
                 state,
                 task_id,
                 Some(item_id),
-                "step_finished",
-                json!({"step": phase, "step_scope": step.resolved_scope(), "builtin": "item_select"}),
+                finish_event_type,
+                payload,
             )
             .await?;
-            Ok(BuiltinStepOutcome::Handled)
+            Ok(BuiltinStepOutcome::Handled { success: true })
         }
 
         _ => Ok(BuiltinStepOutcome::NotBuiltin),
@@ -510,8 +710,8 @@ async fn execute_builtin_step_dispatch(
 /// Outcome of executing a chain or agent/generic step.
 #[allow(clippy::large_enum_variant)]
 enum AgentStepOutcome {
-    /// Chain step was fully handled (including event emission); caller should `continue`.
-    Handled,
+    /// The step requested an early return from the item execution loop.
+    EarlyReturn,
     /// A RunResult was produced and needs post-processing via `apply_step_results`.
     Result(crate::dto::RunResult),
 }
@@ -522,106 +722,48 @@ enum AgentStepOutcome {
 async fn execute_agent_step(
     state: &Arc<InnerState>,
     task_id: &str,
-    item_id: &str,
-    phase: &str,
+    item: &crate::dto::TaskItemRow,
+    task_item_paths: &[String],
     step: &TaskExecutionStep,
     effective_execution: &ExecutionMode,
+    event_ctx: StepEventContext<'_>,
     task_ctx: &TaskRuntimeContext,
     runtime: &RunningTask,
-    qa_file_path: &str,
     acc: &mut StepExecutionAccumulator,
 ) -> Result<AgentStepOutcome> {
     match effective_execution {
         ExecutionMode::Chain => {
-            // Chain execution: run sub-steps in sequence
             let mut chain_passed = true;
             for chain_step in &step.chain_steps {
-                insert_event(
-                    state,
-                    task_id,
-                    Some(item_id),
-                    "chain_step_started",
-                    json!({"step": phase, "step_scope": step.resolved_scope(), "chain_step": chain_step.id}),
-                ).await?;
-
                 let mut step_ctx = task_ctx.clone();
                 step_ctx.pipeline_vars = acc.pipeline_vars.clone();
-
-                let chain_exec = execute_builtin_step(
+                match execute_step(
                     state,
                     task_id,
-                    item_id,
+                    item,
+                    task_item_paths,
+                    StepEventContext::chain_child(&step.id),
                     chain_step,
                     &step_ctx,
                     runtime,
-                    qa_file_path,
+                    acc,
                 )
-                .await;
-
-                let (chain_result, new_pipeline) = match chain_exec {
-                    Ok(val) => val,
-                    Err(e) => {
-                        let _ = insert_event(
-                            state,
-                            task_id,
-                            Some(item_id),
-                            "chain_step_finished",
-                            json!({"step": phase, "step_scope": step.resolved_scope(), "chain_step": chain_step.id, "error": e.to_string(), "success": false}),
-                        ).await;
-                        let _ = insert_event(
-                            state,
-                            task_id,
-                            Some(item_id),
-                            "step_finished",
-                            json!({"step": phase, "step_scope": step.resolved_scope(), "error": e.to_string(), "success": false}),
-                        ).await;
-                        return Err(e);
+                .await? {
+                    StepExecutionOutcome::Completed { success } => {
+                        if !success {
+                            chain_passed = false;
+                            break;
+                        }
                     }
-                };
-                acc.pipeline_vars = new_pipeline;
-
-                if let Some(ref output) = chain_result.output {
-                    if !output.stdout.is_empty() {
-                        spill_large_var(
-                            &state.logs_dir,
-                            task_id,
-                            "plan_output",
-                            output.stdout.clone(),
-                            &mut acc.pipeline_vars,
-                        );
+                    StepExecutionOutcome::EarlyReturn => {
+                        return Ok(AgentStepOutcome::EarlyReturn);
                     }
-                }
-
-                insert_event(
-                    state,
-                    task_id,
-                    Some(item_id),
-                    "chain_step_finished",
-                    json!({
-                        "step": phase,
-                        "step_scope": step.resolved_scope(),
-                        "chain_step": chain_step.id,
-                        "exit_code": chain_result.exit_code,
-                        "success": chain_result.is_success()
-                    }),
-                )
-                .await?;
-
-                if !chain_result.is_success() {
-                    chain_passed = false;
-                    acc.item_status = format!("{}_failed", chain_step.id);
-                    break;
                 }
             }
-            acc.step_ran.insert(step.id.clone(), true);
-            insert_event(
-                state,
-                task_id,
-                Some(item_id),
-                "step_finished",
-                json!({"step": phase, "step_scope": step.resolved_scope(), "success": chain_passed}),
-            ).await?;
-            Ok(AgentStepOutcome::Handled)
+            Ok(AgentStepOutcome::Result(synthetic_chain_result(
+                step,
+                chain_passed,
+            )))
         }
 
         // ExecutionMode::Agent or ExecutionMode::Builtin for generic builtins
@@ -632,24 +774,35 @@ async fn execute_agent_step(
             let exec_result = execute_builtin_step(
                 state,
                 task_id,
-                item_id,
+                item.id.as_str(),
                 step,
                 &step_ctx,
                 runtime,
-                qa_file_path,
+                &item.qa_file_path,
             )
             .await;
 
             let (result, new_pipeline) = match exec_result {
                 Ok(val) => val,
-                Err(e) => {
+                    Err(e) => {
+                    let mut payload = json!({
+                        "step": step.id,
+                        "step_id": step.id,
+                        "step_scope": step.resolved_scope(),
+                        "error": e.to_string(),
+                        "success": false
+                    });
+                    if let Some(parent_step) = event_ctx.parent_step {
+                        payload["parent_step"] = json!(parent_step);
+                    }
                     let _ = insert_event(
                         state,
                         task_id,
-                        Some(item_id),
-                        "step_finished",
-                        json!({"step": phase, "step_id": step.id, "step_scope": step.resolved_scope(), "error": e.to_string(), "success": false}),
-                    ).await;
+                        Some(item.id.as_str()),
+                        event_ctx.finished_event_type,
+                        payload,
+                    )
+                    .await;
                     return Err(e);
                 }
             };
@@ -657,7 +810,7 @@ async fn execute_agent_step(
 
             if let Some(ref output) = result.output {
                 if !output.stdout.is_empty() {
-                    let output_key = format!("{}_output", phase);
+                    let output_key = format!("{}_output", step.id);
                     spill_large_var(
                         &state.logs_dir,
                         task_id,

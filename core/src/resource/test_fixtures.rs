@@ -82,6 +82,7 @@ pub fn workflow_manifest(name: &str) -> OrchestratorResource {
                 prehook: None,
                 tty: false,
                 command: None,
+                chain_steps: vec![],
                 scope: None,
                 max_parallel: None,
                 timeout_secs: None,

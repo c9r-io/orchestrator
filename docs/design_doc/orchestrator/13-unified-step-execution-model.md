@@ -5,7 +5,7 @@
 **Related Plan**: Unified Step Execution Model — Clean Rewrite (delete hardcoded step logic, one generic loop, behaviors declared as data)
 **Related QA**: `docs/qa/orchestrator/30-unified-step-execution-model.md`
 **Created**: 2026-02-28
-**Last Updated**: 2026-02-28
+**Last Updated**: 2026-03-11
 
 ---
 
@@ -116,6 +116,19 @@ for step in execution_plan.steps:
 ```
 
 ~200 lines replaces ~900 lines.
+
+### 5. Chain Execution Contract
+
+`ExecutionMode::Chain` is a parent-step container, not a second-class custom runner.
+
+- The parent step enters the unified loop like any other step and emits the normal parent `step_started` / `step_finished` lifecycle.
+- Each child in `chain_steps` executes serially and reuses the same execution semantics as ordinary steps: prehook, store inputs, captures, post-actions, diagnostics, and pipeline variable updates.
+- Child steps emit `chain_step_started` / `chain_step_finished` with their own step id plus `parent_step` so trace reconstruction can retain the parent-child relationship.
+- The child step applies its own `on_failure` behavior first.
+- If a child triggers `EarlyReturn`, the entire chain aborts immediately and the terminal state bubbles out of the current item execution.
+- If a child fails without `EarlyReturn`, the chain stops executing later children, then the parent step applies its own `on_failure` behavior to the aggregated chain result.
+- Pipeline variables flow into the chain from the parent context, then from child to child, and finally back out to the outer accumulator after the chain completes.
+- Chain execution must not rely on hardcoded implicit variables such as unconditional `plan_output` injection; outputs are promoted through normal capture declarations and pipeline variable storage.
 
 ## Alternatives And Tradeoffs
 

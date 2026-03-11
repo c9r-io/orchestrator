@@ -527,6 +527,10 @@ pub struct WorkflowStepSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
 
+    /// Serial child steps for chain execution containers.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chain_steps: Vec<WorkflowStepSpec>,
+
     /// Execution scope: "task" (once per cycle) or "item" (per QA file)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,

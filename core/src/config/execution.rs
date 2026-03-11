@@ -94,14 +94,22 @@ impl TaskExecutionStep {
 
     /// Returns the authoritative execution mode for this step.
     ///
-    /// If `self.builtin` names a known builtin, this always returns
-    /// `Builtin { name }` regardless of what `behavior.execution` says.
+    /// If the step shape implies a specific mode, this always returns it
+    /// regardless of what `behavior.execution` says:
+    ///
+    /// - `chain_steps` => `Chain`
+    /// - known `builtin` => `Builtin { name }`
+    /// - `command` => `Builtin { name: self.id }`
+    ///
     /// This is the single consolidated entry point for dispatch decisions.
     ///
     /// Unlike [`renormalize_execution_mode`] which mutates stored state,
     /// this method is read-only and is always authoritative at dispatch time,
     /// even if renormalization hasn't run yet.
     pub fn effective_execution_mode(&self) -> std::borrow::Cow<'_, ExecutionMode> {
+        if !self.chain_steps.is_empty() {
+            return std::borrow::Cow::Owned(ExecutionMode::Chain);
+        }
         if let Some(ref bname) = self.builtin {
             if is_known_builtin_step_name(bname) {
                 return std::borrow::Cow::Owned(ExecutionMode::Builtin {
@@ -109,25 +117,49 @@ impl TaskExecutionStep {
                 });
             }
         }
+        if self.command.is_some() {
+            return std::borrow::Cow::Owned(ExecutionMode::Builtin {
+                name: self.id.clone(),
+            });
+        }
         std::borrow::Cow::Borrowed(&self.behavior.execution)
     }
 
-    /// Corrects `behavior.execution` when `builtin` disagrees with it.
+    /// Corrects `behavior.execution` when stored state drifts from the step shape.
     ///
     /// After deserializing from SQLite the `behavior.execution` field may carry
     /// the serde `#[default]` value (`ExecutionMode::Agent`) even though
     /// `self.builtin` names a known builtin step.  This method is the single
     /// source of truth for healing that mismatch:
     ///
+    /// - If the step contains `chain_steps`, force `behavior.execution` to `Chain`.
     /// - If `self.builtin` names a known builtin, force `behavior.execution`
     ///   to `Builtin { name }` and clear `required_capability`.
-    /// - Otherwise leave the step unchanged.
+    /// - If the step is a command step, force `behavior.execution` to
+    ///   `Builtin { name: self.id }` so dispatch uses the command path.
+    /// - Recurse into child chain steps.
     pub fn renormalize_execution_mode(&mut self) {
+        for chain_step in &mut self.chain_steps {
+            chain_step.renormalize_execution_mode();
+        }
+
+        if !self.chain_steps.is_empty() {
+            self.behavior.execution = ExecutionMode::Chain;
+            return;
+        }
+
         if let Some(ref name) = self.builtin.clone() {
             if is_known_builtin_step_name(name) {
                 self.behavior.execution = ExecutionMode::Builtin { name: name.clone() };
                 self.required_capability = None;
+                return;
             }
+        }
+
+        if self.command.is_some() {
+            self.behavior.execution = ExecutionMode::Builtin {
+                name: self.id.clone(),
+            };
         }
     }
 }
@@ -566,6 +598,26 @@ mod tests {
         // stays Agent, capability unchanged
         assert_eq!(step.behavior.execution, ExecutionMode::Agent);
         assert_eq!(step.required_capability, Some("plan".to_string()));
+    }
+
+    #[test]
+    fn renormalize_restores_chain_execution_recursively() {
+        let mut step = make_agent_step("smoke_chain", None, Some("smoke_chain"));
+        step.chain_steps = vec![TaskExecutionStep {
+            id: "chain_plan".to_string(),
+            command: Some("printf 'CHAIN_PLAN'".to_string()),
+            ..make_agent_step("chain_plan", None, None)
+        }];
+
+        step.renormalize_execution_mode();
+
+        assert_eq!(step.behavior.execution, ExecutionMode::Chain);
+        assert_eq!(
+            step.chain_steps[0].behavior.execution,
+            ExecutionMode::Builtin {
+                name: "chain_plan".to_string()
+            }
+        );
     }
 
     #[test]

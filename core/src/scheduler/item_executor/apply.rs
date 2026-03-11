@@ -26,6 +26,8 @@ pub(super) async fn apply_step_results(
     item_id: &str,
     phase: &str,
     step: &TaskExecutionStep,
+    finish_event_type: &str,
+    parent_step: Option<&str>,
     task_ctx: &TaskRuntimeContext,
     task_item_paths: &[String],
     qa_file_path: &str,
@@ -52,28 +54,32 @@ pub(super) async fn apply_step_results(
             OnFailureAction::EarlyReturn { status } => {
                 acc.item_status = status.clone();
                 acc.terminal = true;
+                let mut payload = json!({
+                    "step": phase,
+                    "step_id": step.id,
+                    "step_scope": step.resolved_scope(),
+                    "agent_id": result.agent_id,
+                    "run_id": result.run_id,
+                    "early_return": true,
+                    "exit_code": result.exit_code,
+                    "success": false,
+                    "execution_profile": result.execution_profile,
+                    "execution_mode": result.execution_mode,
+                    "sandbox_denied": result.sandbox_denied,
+                    "sandbox_denial_reason": result.sandbox_denial_reason,
+                    "sandbox_violation_kind": result.sandbox_violation_kind,
+                    "sandbox_resource_kind": result.sandbox_resource_kind,
+                    "sandbox_network_target": result.sandbox_network_target,
+                });
+                if let Some(parent_step) = parent_step {
+                    payload["parent_step"] = json!(parent_step);
+                }
                 insert_event(
                     state,
                     task_id,
                     Some(item_id),
-                    "step_finished",
-                    json!({
-                        "step": phase,
-                        "step_id": step.id,
-                        "step_scope": step.resolved_scope(),
-                        "agent_id": result.agent_id,
-                        "run_id": result.run_id,
-                        "early_return": true,
-                        "exit_code": result.exit_code,
-                        "success": false,
-                        "execution_profile": result.execution_profile,
-                        "execution_mode": result.execution_mode,
-                        "sandbox_denied": result.sandbox_denied,
-                        "sandbox_denial_reason": result.sandbox_denial_reason,
-                        "sandbox_violation_kind": result.sandbox_violation_kind,
-                        "sandbox_resource_kind": result.sandbox_resource_kind,
-                        "sandbox_network_target": result.sandbox_network_target,
-                    }),
+                    finish_event_type,
+                    payload,
                 )
                 .await?;
                 return Ok(true);
@@ -268,18 +274,13 @@ pub(super) async fn apply_step_results(
         _ => {}
     }
 
-    insert_event(
-        state,
-        task_id,
-        Some(item_id),
-        "step_finished",
-        json!({
-            "step": phase,
-            "step_id": step.id,
-            "step_scope": step.resolved_scope(),
-            "agent_id": result.agent_id,
-            "run_id": result.run_id,
-            "exit_code": result.exit_code,
+    let mut payload = json!({
+        "step": phase,
+        "step_id": step.id,
+        "step_scope": step.resolved_scope(),
+        "agent_id": result.agent_id,
+        "run_id": result.run_id,
+        "exit_code": result.exit_code,
         "success": result.is_success(),
         "timed_out": result.timed_out,
         "duration_ms": result.duration_ms,
@@ -287,17 +288,19 @@ pub(super) async fn apply_step_results(
         "test_failures": acc.pipeline_vars.test_failures.len(),
         "confidence": confidence,
         "quality_score": quality,
-            "validation_status": result.validation_status,
-            "execution_profile": result.execution_profile,
-            "execution_mode": result.execution_mode,
-            "sandbox_denied": result.sandbox_denied,
-            "sandbox_denial_reason": result.sandbox_denial_reason,
-            "sandbox_violation_kind": result.sandbox_violation_kind,
-            "sandbox_resource_kind": result.sandbox_resource_kind,
-            "sandbox_network_target": result.sandbox_network_target,
-        }),
-    )
-    .await?;
+        "validation_status": result.validation_status,
+        "execution_profile": result.execution_profile,
+        "execution_mode": result.execution_mode,
+        "sandbox_denied": result.sandbox_denied,
+        "sandbox_denial_reason": result.sandbox_denial_reason,
+        "sandbox_violation_kind": result.sandbox_violation_kind,
+        "sandbox_resource_kind": result.sandbox_resource_kind,
+        "sandbox_network_target": result.sandbox_network_target,
+    });
+    if let Some(parent_step) = parent_step {
+        payload["parent_step"] = json!(parent_step);
+    }
+    insert_event(state, task_id, Some(item_id), finish_event_type, payload).await?;
 
     if is_execution_hard_failure(result) {
         acc.item_status = "unresolved".to_string();

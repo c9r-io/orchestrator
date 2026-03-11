@@ -56,12 +56,19 @@ spec:
 | **Builtin（内置）** | `builtin: self_test` 或已知 id | 由引擎内部处理 |
 | **Agent（代理）** | `required_capability: plan` | 分派给匹配的代理 |
 | **Command（命令）** | `command: "cargo check"` | 直接 shell 执行，无需代理 |
-| **Chain（链式）** | `chain_steps: [...]` | 顺序子步骤执行 |
+| **Chain（链式）** | `chain_steps: [...]` | 顺序子步骤容器，并继承当前 `pipeline_vars` |
 
 如果未指定 `builtin` 或 `required_capability`，引擎从步骤 `id` 推断：
 
 - 已知内置 ID（`init_once`、`loop_guard`、`ticket_scan`、`self_test`、`self_restart`、`item_select`）→ 自动内置
 - 已知代理 ID（`plan`、`implement`、`qa`、`fix` 等）→ 自动能力匹配
+
+Chain 运行契约：
+
+- 当步骤声明了 `chain_steps` 后，父步骤本身作为容器存在，不再直接运行自己的 agent 或 command。
+- 子步骤按顺序执行，并继承当前 `pipeline_vars`。
+- 子步骤输出应通过正常的 `captures` / pipeline variables 提升，不依赖隐式特殊变量。
+- 子步骤先应用自己的 `behavior.on_failure`；父步骤随后再对整条链的汇总结果应用自己的 `behavior.on_failure`。
 
 ### 执行 Profile
 

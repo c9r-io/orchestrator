@@ -38,9 +38,10 @@ mod tests {
     use super::*;
     use crate::collab::MessageBus;
     use crate::config::{
-        AgentConfig, AgentMetadata, AgentSelectionConfig, LoopMode, OnFailureAction,
-        PromptDelivery, StepBehavior, StepScope, WorkflowConfig, WorkflowFinalizeConfig,
-        WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig, PIPELINE_VAR_INLINE_LIMIT,
+        AgentConfig, AgentMetadata, AgentSelectionConfig, CaptureDecl, CaptureSource, LoopMode,
+        OnFailureAction, PromptDelivery, StepBehavior, StepScope, WorkflowConfig,
+        WorkflowFinalizeConfig, WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
+        PIPELINE_VAR_INLINE_LIMIT,
     };
     use crate::db::open_conn;
     use crate::dto::CreateTaskPayload;
@@ -355,11 +356,301 @@ mod tests {
         );
     }
 
-    // TODO: smoke_chain_propagates_plan_output_through_chain_steps
-    // Removed incomplete integration test introduced by smoke-chain agent run.
-    // The SmokeChain chain_steps execution path in item_executor.rs needs
-    // proper wiring before this test can pass. Re-add when SmokeChain feature
-    // is intentionally developed.
+    fn command_capture_step(id: &str, command: &str, capture_var: &str) -> WorkflowStepConfig {
+        WorkflowStepConfig {
+            id: id.to_string(),
+            description: None,
+            builtin: None,
+            required_capability: None,
+            execution_profile: None,
+            enabled: true,
+            repeatable: false,
+            is_guard: false,
+            cost_preference: None,
+            prehook: None,
+            tty: false,
+            template: None,
+            outputs: vec![],
+            pipe_to: None,
+            command: Some(command.to_string()),
+            chain_steps: vec![],
+            scope: None,
+            behavior: StepBehavior {
+                captures: vec![CaptureDecl {
+                    var: capture_var.to_string(),
+                    source: CaptureSource::Stdout,
+                }],
+                ..StepBehavior::default()
+            },
+            max_parallel: None,
+            timeout_secs: None,
+            item_select_config: None,
+            store_inputs: vec![],
+            store_outputs: vec![],
+        }
+    }
+
+    fn loop_guard_step() -> WorkflowStepConfig {
+        WorkflowStepConfig {
+            id: "loop_guard".to_string(),
+            description: None,
+            builtin: Some("loop_guard".to_string()),
+            required_capability: None,
+            execution_profile: None,
+            enabled: true,
+            repeatable: true,
+            is_guard: true,
+            cost_preference: None,
+            prehook: None,
+            tty: false,
+            template: None,
+            outputs: vec![],
+            pipe_to: None,
+            command: None,
+            chain_steps: vec![],
+            scope: None,
+            behavior: StepBehavior::default(),
+            max_parallel: None,
+            timeout_secs: None,
+            item_select_config: None,
+            store_inputs: vec![],
+            store_outputs: vec![],
+        }
+    }
+
+    #[tokio::test]
+    async fn smoke_chain_execution_plan_preserves_chain_steps_at_runtime() {
+        let mut fixture = TestState::new()
+            .with_agent(
+                "planner",
+                AgentConfig {
+                    metadata: AgentMetadata {
+                        name: "planner".to_string(),
+                        description: Some("smoke chain propagation test agent".to_string()),
+                        version: None,
+                        cost: Some(1),
+                    },
+                    capabilities: vec!["qa_doc_gen".to_string(), "smoke_chain".to_string()],
+                    command: "echo {prompt}".to_string(),
+                    selection: AgentSelectionConfig::default(),
+                    env: None,
+                    prompt_delivery: PromptDelivery::default(),
+                },
+            )
+            .with_step_template(
+                "qa_doc_gen",
+                crate::config::StepTemplateConfig {
+                    prompt: "QA_DOC_FROM_CHAIN:{chain_output}".to_string(),
+                    description: None,
+                },
+            )
+            .with_workflow(
+                "smoke-chain-propagation",
+                WorkflowConfig {
+                    steps: vec![
+                        WorkflowStepConfig {
+                            id: "smoke_chain".to_string(),
+                            description: None,
+                            builtin: None,
+                            required_capability: None,
+                            execution_profile: None,
+                            enabled: true,
+                            repeatable: false,
+                            is_guard: false,
+                            cost_preference: None,
+                            prehook: None,
+                            tty: false,
+                            template: None,
+                            outputs: vec![],
+                            pipe_to: None,
+                            command: None,
+                            chain_steps: vec![
+                                command_capture_step("plan", "printf 'CHAIN_PLAN'", "plan_output"),
+                                command_capture_step(
+                                    "review",
+                                    "printf 'CHAIN_DOC:{plan_output}'",
+                                    "chain_output",
+                                ),
+                            ],
+                            scope: None,
+                            behavior: StepBehavior::default(),
+                            max_parallel: None,
+                            timeout_secs: None,
+                            item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
+                        },
+                        WorkflowStepConfig {
+                            id: "qa_doc_gen".to_string(),
+                            description: None,
+                            builtin: None,
+                            required_capability: Some("qa_doc_gen".to_string()),
+                            execution_profile: None,
+                            enabled: true,
+                            repeatable: false,
+                            is_guard: false,
+                            cost_preference: None,
+                            prehook: None,
+                            tty: false,
+                            template: Some("qa_doc_gen".to_string()),
+                            outputs: vec![],
+                            pipe_to: None,
+                            command: None,
+                            chain_steps: vec![],
+                            scope: None,
+                            behavior: StepBehavior::default(),
+                            max_parallel: None,
+                            timeout_secs: None,
+                            item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
+                        },
+                        loop_guard_step(),
+                    ],
+                    execution: Default::default(),
+                    loop_policy: WorkflowLoopConfig {
+                        mode: LoopMode::Once,
+                        guard: WorkflowLoopGuardConfig {
+                            enabled: true,
+                            stop_when_no_unresolved: true,
+                            max_cycles: Some(1),
+                            agent_template: None,
+                        },
+                    },
+                    finalize: WorkflowFinalizeConfig { rules: vec![] },
+                    qa: None,
+                    fix: None,
+                    retest: None,
+                    dynamic_steps: vec![],
+                    adaptive: None,
+                    safety: crate::config::SafetyConfig::default(),
+                    max_parallel: None,
+                },
+            );
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/smoke_chain_propagation.md");
+        std::fs::write(&qa_file, "# smoke chain propagation\n").expect("seed qa file");
+
+        let created = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("smoke-chain-propagation".to_string()),
+                goal: Some("verify chain pipeline vars".to_string()),
+                workflow_id: Some("smoke-chain-propagation".to_string()),
+                target_files: Some(vec!["docs/qa/smoke_chain_propagation.md".to_string()]),
+                ..Default::default()
+            },
+        )
+        .expect("task should be created");
+
+        prepare_task_for_start(&state, &created.id)
+            .await
+            .expect("prepare task");
+        run_task_loop(state.clone(), &created.id, RunningTask::new())
+            .await
+            .expect("task should run");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let phases: Vec<String> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT phase
+                     FROM command_runs
+                     WHERE task_item_id = (
+                       SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1
+                     )
+                     ORDER BY started_at ASC",
+                )
+                .expect("prepare command_runs query");
+            let rows = stmt
+                .query_map(params![created.id.clone()], |row| row.get(0))
+                .expect("query command_runs phases");
+            rows.collect::<rusqlite::Result<Vec<String>>>()
+                .expect("collect command_runs phases")
+        };
+        assert_eq!(
+            phases,
+            vec![
+                "plan".to_string(),
+                "review".to_string(),
+                "qa_doc_gen".to_string()
+            ]
+        );
+
+        let qa_command: String = conn
+            .query_row(
+                "SELECT command
+                 FROM command_runs
+                 WHERE task_item_id = (
+                   SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1
+                 ) AND phase = 'qa_doc_gen'
+                 ORDER BY started_at DESC LIMIT 1",
+                params![created.id.clone()],
+                |row| row.get(0),
+            )
+            .expect("qa_doc_gen run should exist");
+        assert!(qa_command.contains("CHAIN_DOC:CHAIN_PLAN"));
+        assert!(!qa_command.contains("{chain_output}"));
+
+        let runtime_ctx = load_task_runtime_context(&state, &created.id)
+            .await
+            .expect("runtime context should load");
+        assert_eq!(
+            runtime_ctx.execution_plan.steps[0].behavior.execution,
+            crate::config::ExecutionMode::Chain
+        );
+        assert_eq!(runtime_ctx.execution_plan.steps[0].chain_steps.len(), 2);
+
+        let event_rows: Vec<(String, String, Option<String>)> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT event_type,
+                            json_extract(payload_json, '$.step'),
+                            json_extract(payload_json, '$.parent_step')
+                     FROM events
+                     WHERE task_id = ?1
+                       AND event_type IN ('chain_step_started', 'chain_step_finished')
+                     ORDER BY created_at ASC, id ASC",
+                )
+                .expect("prepare event query");
+            let rows = stmt
+                .query_map(params![created.id.clone()], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                })
+                .expect("query chain step events");
+            rows.collect::<rusqlite::Result<Vec<(String, String, Option<String>)>>>()
+                .expect("collect chain step events")
+        };
+        assert_eq!(
+            event_rows,
+            vec![
+                (
+                    "chain_step_started".to_string(),
+                    "plan".to_string(),
+                    Some("smoke_chain".to_string()),
+                ),
+                (
+                    "chain_step_finished".to_string(),
+                    "plan".to_string(),
+                    Some("smoke_chain".to_string()),
+                ),
+                (
+                    "chain_step_started".to_string(),
+                    "review".to_string(),
+                    Some("smoke_chain".to_string()),
+                ),
+                (
+                    "chain_step_finished".to_string(),
+                    "review".to_string(),
+                    Some("smoke_chain".to_string()),
+                ),
+            ]
+        );
+
+    }
 
     #[tokio::test]
     async fn large_plan_output_spills_to_file() {

@@ -14,86 +14,7 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
     let steps = spec
         .steps
         .iter()
-        .map(|step| {
-            crate::config::validate_step_type(&step.step_type).map_err(|e| anyhow!(e))?;
-            let is_guard = step.step_type == "loop_guard";
-            let builtin = if matches!(
-                step.step_type.as_str(),
-                "init_once" | "loop_guard" | "self_test" | "self_restart"
-            ) {
-                Some(step.step_type.clone())
-            } else {
-                None
-            };
-            let prehook = match step.prehook.as_ref() {
-                Some(prehook) => Some(StepPrehookConfig {
-                    engine: parse_hook_engine(&prehook.engine),
-                    when: prehook.when.clone(),
-                    reason: prehook.reason.clone(),
-                    ui: prehook
-                        .ui
-                        .as_ref()
-                        .map(|ui| serde_json::from_value::<StepPrehookUiConfig>(ui.clone()))
-                        .transpose()
-                        .map_err(|e| anyhow!("invalid prehook ui: {}", e))?,
-                    extended: prehook.extended,
-                }),
-                None => None,
-            };
-            let scope = match step.scope.as_deref() {
-                Some("task") => Some(StepScope::Task),
-                Some("item") => Some(StepScope::Item),
-                _ => None,
-            };
-            let is_builtin_type = matches!(
-                step.step_type.as_str(),
-                "init_once"
-                    | "loop_guard"
-                    | "ticket_scan"
-                    | "self_test"
-                    | "self_restart"
-                    | "item_select"
-            );
-            let required_capability = step.required_capability.clone().or_else(|| {
-                if is_builtin_type || step.builtin.is_some() {
-                    None
-                } else {
-                    Some(step.step_type.clone())
-                }
-            });
-            let builtin = if is_builtin_type {
-                Some(step.step_type.clone())
-            } else {
-                builtin
-            };
-            let mut config_step = WorkflowStepConfig {
-                id: step.id.clone(),
-                description: None,
-                required_capability,
-                execution_profile: step.execution_profile.clone(),
-                builtin: step.builtin.clone().or(builtin),
-                enabled: step.enabled,
-                repeatable: step.repeatable,
-                is_guard: step.is_guard || is_guard,
-                cost_preference: parse_cost_preference(step.cost_preference.as_deref())?,
-                prehook,
-                tty: step.tty,
-                template: step.template.clone(),
-                outputs: Vec::new(),
-                pipe_to: None,
-                command: step.command.clone(),
-                chain_steps: vec![],
-                scope,
-                behavior: step.behavior.clone(),
-                max_parallel: step.max_parallel,
-                timeout_secs: step.timeout_secs,
-                item_select_config: step.item_select_config.clone(),
-                store_inputs: step.store_inputs.clone(),
-                store_outputs: step.store_outputs.clone(),
-            };
-            normalize_step_execution_mode(&mut config_step).map_err(|e| anyhow!(e))?;
-            Ok(config_step)
-        })
+        .map(workflow_step_spec_to_config)
         .collect::<Result<Vec<_>>>()?;
 
     let loop_policy = WorkflowLoopConfig {
@@ -170,56 +91,7 @@ pub(crate) fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
     let steps = config
         .steps
         .iter()
-        .map(|step| WorkflowStepSpec {
-            id: step.id.clone(),
-            step_type: step
-                .builtin
-                .clone()
-                .or_else(|| step.required_capability.clone())
-                .unwrap_or_else(|| step.id.clone()),
-            required_capability: step.required_capability.clone(),
-            builtin: step.builtin.clone(),
-            enabled: step.enabled,
-            repeatable: step.repeatable,
-            is_guard: step.is_guard,
-            cost_preference: step.cost_preference.as_ref().map(|c| match c {
-                CostPreference::Performance => "performance".to_string(),
-                CostPreference::Quality => "quality".to_string(),
-                CostPreference::Balance => "balance".to_string(),
-            }),
-            prehook: step.prehook.as_ref().map(|prehook| WorkflowPrehookSpec {
-                engine: hook_engine_as_str(&prehook.engine).to_string(),
-                when: prehook.when.clone(),
-                reason: prehook.reason.clone(),
-                ui: prehook
-                    .ui
-                    .as_ref()
-                    .map(|value| serde_json::to_value(value).unwrap_or(serde_json::Value::Null)),
-                extended: prehook.extended,
-            }),
-            tty: step.tty,
-            template: step.template.clone(),
-            execution_profile: step.execution_profile.clone(),
-            command: step.command.clone(),
-            scope: step.scope.and_then(|s| {
-                // Only serialize when it differs from default
-                let default = crate::config::default_scope_for_step_id(&step.id);
-                if s != default {
-                    Some(match s {
-                        StepScope::Task => "task".to_string(),
-                        StepScope::Item => "item".to_string(),
-                    })
-                } else {
-                    None
-                }
-            }),
-            max_parallel: step.max_parallel,
-            timeout_secs: step.timeout_secs,
-            behavior: step.behavior.clone(),
-            item_select_config: step.item_select_config.clone(),
-            store_inputs: step.store_inputs.clone(),
-            store_outputs: step.store_outputs.clone(),
-        })
+        .map(workflow_step_config_to_spec)
         .collect();
 
     let loop_policy = WorkflowLoopSpec {
@@ -266,6 +138,143 @@ pub(crate) fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
         adaptive: config.adaptive.clone(),
         safety: safety_config_to_spec(&config.safety),
         max_parallel: config.max_parallel,
+    }
+}
+
+fn workflow_step_spec_to_config(step: &WorkflowStepSpec) -> Result<WorkflowStepConfig> {
+    crate::config::validate_step_type(&step.step_type).map_err(|e| anyhow!(e))?;
+    let is_guard = step.step_type == "loop_guard";
+    let builtin = if matches!(
+        step.step_type.as_str(),
+        "init_once" | "loop_guard" | "self_test" | "self_restart"
+    ) {
+        Some(step.step_type.clone())
+    } else {
+        None
+    };
+    let prehook = match step.prehook.as_ref() {
+        Some(prehook) => Some(StepPrehookConfig {
+            engine: parse_hook_engine(&prehook.engine),
+            when: prehook.when.clone(),
+            reason: prehook.reason.clone(),
+            ui: prehook
+                .ui
+                .as_ref()
+                .map(|ui| serde_json::from_value::<StepPrehookUiConfig>(ui.clone()))
+                .transpose()
+                .map_err(|e| anyhow!("invalid prehook ui: {}", e))?,
+            extended: prehook.extended,
+        }),
+        None => None,
+    };
+    let scope = match step.scope.as_deref() {
+        Some("task") => Some(StepScope::Task),
+        Some("item") => Some(StepScope::Item),
+        _ => None,
+    };
+    let is_builtin_type = matches!(
+        step.step_type.as_str(),
+        "init_once" | "loop_guard" | "ticket_scan" | "self_test" | "self_restart" | "item_select"
+    );
+    let required_capability = step.required_capability.clone().or_else(|| {
+        if is_builtin_type || step.builtin.is_some() || !step.chain_steps.is_empty() {
+            None
+        } else {
+            Some(step.step_type.clone())
+        }
+    });
+    let builtin = if is_builtin_type {
+        Some(step.step_type.clone())
+    } else {
+        builtin
+    };
+    let mut config_step = WorkflowStepConfig {
+        id: step.id.clone(),
+        description: None,
+        required_capability,
+        execution_profile: step.execution_profile.clone(),
+        builtin: step.builtin.clone().or(builtin),
+        enabled: step.enabled,
+        repeatable: step.repeatable,
+        is_guard: step.is_guard || is_guard,
+        cost_preference: parse_cost_preference(step.cost_preference.as_deref())?,
+        prehook,
+        tty: step.tty,
+        template: step.template.clone(),
+        outputs: Vec::new(),
+        pipe_to: None,
+        command: step.command.clone(),
+        chain_steps: step
+            .chain_steps
+            .iter()
+            .map(workflow_step_spec_to_config)
+            .collect::<Result<Vec<_>>>()?,
+        scope,
+        behavior: step.behavior.clone(),
+        max_parallel: step.max_parallel,
+        timeout_secs: step.timeout_secs,
+        item_select_config: step.item_select_config.clone(),
+        store_inputs: step.store_inputs.clone(),
+        store_outputs: step.store_outputs.clone(),
+    };
+    normalize_step_execution_mode(&mut config_step).map_err(|e| anyhow!(e))?;
+    Ok(config_step)
+}
+
+fn workflow_step_config_to_spec(step: &WorkflowStepConfig) -> WorkflowStepSpec {
+    WorkflowStepSpec {
+        id: step.id.clone(),
+        step_type: step
+            .builtin
+            .clone()
+            .or_else(|| step.required_capability.clone())
+            .unwrap_or_else(|| step.id.clone()),
+        required_capability: step.required_capability.clone(),
+        builtin: step.builtin.clone(),
+        enabled: step.enabled,
+        repeatable: step.repeatable,
+        is_guard: step.is_guard,
+        cost_preference: step.cost_preference.as_ref().map(|c| match c {
+            CostPreference::Performance => "performance".to_string(),
+            CostPreference::Quality => "quality".to_string(),
+            CostPreference::Balance => "balance".to_string(),
+        }),
+        prehook: step.prehook.as_ref().map(|prehook| WorkflowPrehookSpec {
+            engine: hook_engine_as_str(&prehook.engine).to_string(),
+            when: prehook.when.clone(),
+            reason: prehook.reason.clone(),
+            ui: prehook
+                .ui
+                .as_ref()
+                .map(|value| serde_json::to_value(value).unwrap_or(serde_json::Value::Null)),
+            extended: prehook.extended,
+        }),
+        tty: step.tty,
+        template: step.template.clone(),
+        execution_profile: step.execution_profile.clone(),
+        command: step.command.clone(),
+        chain_steps: step
+            .chain_steps
+            .iter()
+            .map(workflow_step_config_to_spec)
+            .collect(),
+        scope: step.scope.and_then(|s| {
+            let default = crate::config::default_scope_for_step_id(&step.id);
+            if s != default {
+                Some(match s {
+                    StepScope::Task => "task".to_string(),
+                    StepScope::Item => "item".to_string(),
+                })
+            } else {
+                None
+            }
+        }),
+        max_parallel: step.max_parallel,
+        timeout_secs: step.timeout_secs,
+        behavior: step.behavior.clone(),
+        item_select_config: step.item_select_config.clone(),
+        store_inputs: step.store_inputs.clone(),
+        store_outputs: step.store_outputs.clone(),
     }
 }
 
@@ -450,6 +459,7 @@ mod tests {
                 }),
                 tty: true,
                 command: Some("cargo test".to_string()),
+                chain_steps: vec![],
                 scope: Some("task".to_string()),
                 max_parallel: None,
                 timeout_secs: None,
@@ -524,6 +534,107 @@ mod tests {
     }
 
     #[test]
+    fn workflow_chain_steps_round_trip_through_spec_conversion() {
+        let spec = WorkflowSpec {
+            steps: vec![WorkflowStepSpec {
+                id: "smoke_chain".to_string(),
+                step_type: "smoke_chain".to_string(),
+                required_capability: None,
+                template: None,
+                execution_profile: None,
+                builtin: None,
+                enabled: true,
+                repeatable: false,
+                is_guard: false,
+                cost_preference: None,
+                prehook: None,
+                tty: false,
+                command: None,
+                chain_steps: vec![
+                    WorkflowStepSpec {
+                        id: "plan".to_string(),
+                        step_type: "plan".to_string(),
+                        required_capability: None,
+                        template: None,
+                        execution_profile: None,
+                        builtin: None,
+                        enabled: true,
+                        repeatable: false,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        command: Some("printf 'CHAIN_PLAN'".to_string()),
+                        chain_steps: vec![],
+                        scope: None,
+                        max_parallel: None,
+                        timeout_secs: None,
+                        behavior: Default::default(),
+                        item_select_config: None,
+                        store_inputs: vec![],
+                        store_outputs: vec![],
+                    },
+                    WorkflowStepSpec {
+                        id: "review".to_string(),
+                        step_type: "review".to_string(),
+                        required_capability: None,
+                        template: None,
+                        execution_profile: None,
+                        builtin: None,
+                        enabled: true,
+                        repeatable: false,
+                        is_guard: false,
+                        cost_preference: None,
+                        prehook: None,
+                        tty: false,
+                        command: Some("printf 'CHAIN_DOC:{plan_output}'".to_string()),
+                        chain_steps: vec![],
+                        scope: None,
+                        max_parallel: None,
+                        timeout_secs: None,
+                        behavior: Default::default(),
+                        item_select_config: None,
+                        store_inputs: vec![],
+                        store_outputs: vec![],
+                    },
+                ],
+                scope: None,
+                max_parallel: None,
+                timeout_secs: None,
+                behavior: Default::default(),
+                item_select_config: None,
+                store_inputs: vec![],
+                store_outputs: vec![],
+            }],
+            loop_policy: WorkflowLoopSpec {
+                mode: "once".to_string(),
+                max_cycles: Some(1),
+                enabled: true,
+                stop_when_no_unresolved: true,
+                agent_template: None,
+            },
+            finalize: WorkflowFinalizeSpec { rules: vec![] },
+            dynamic_steps: vec![],
+            adaptive: None,
+            safety: SafetySpec::default(),
+            max_parallel: None,
+        };
+
+        let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
+        assert_eq!(config.steps[0].chain_steps.len(), 2);
+        assert_eq!(config.steps[0].behavior.execution, crate::config::ExecutionMode::Chain);
+        assert_eq!(
+            config.steps[0].chain_steps[0].command.as_deref(),
+            Some("printf 'CHAIN_PLAN'")
+        );
+
+        let roundtrip = workflow_config_to_spec(&config);
+        assert_eq!(roundtrip.steps[0].chain_steps.len(), 2);
+        assert_eq!(roundtrip.steps[0].chain_steps[0].step_type, "plan");
+        assert_eq!(roundtrip.steps[0].chain_steps[1].step_type, "review");
+    }
+
+    #[test]
     fn workflow_spec_to_config_init_once_sets_builtin() {
         let spec = WorkflowSpec {
             steps: vec![WorkflowStepSpec {
@@ -540,6 +651,7 @@ mod tests {
                 prehook: None,
                 tty: false,
                 command: None,
+                chain_steps: vec![],
                 scope: None,
                 max_parallel: None,
                 timeout_secs: None,
@@ -588,6 +700,7 @@ mod tests {
                 prehook: None,
                 tty: false,
                 command: None,
+                chain_steps: vec![],
                 scope: None,
                 max_parallel: None,
                 timeout_secs: None,
@@ -639,6 +752,7 @@ mod tests {
                 prehook: None,
                 tty: false,
                 command: None,
+                chain_steps: vec![],
                 scope: None,
                 max_parallel: None,
                 timeout_secs: None,
@@ -682,6 +796,7 @@ mod tests {
                 prehook: None,
                 tty: false,
                 command: None,
+                chain_steps: vec![],
                 scope: Some("item".to_string()),
                 max_parallel: None,
                 timeout_secs: None,
@@ -724,6 +839,7 @@ mod tests {
                 prehook: None,
                 tty: false,
                 command: None,
+                chain_steps: vec![],
                 scope: None,
                 max_parallel: None,
                 timeout_secs: None,
@@ -788,6 +904,7 @@ mod tests {
                 prehook: None,
                 tty: false,
                 command: None,
+                chain_steps: vec![],
                 scope: None,
                 max_parallel: None,
                 timeout_secs: None,
@@ -844,6 +961,7 @@ mod tests {
                 prehook: None,
                 tty: false,
                 command: None,
+                chain_steps: vec![],
                 scope: None,
                 max_parallel: None,
                 timeout_secs: None,
@@ -1260,6 +1378,7 @@ mod tests {
                 prehook: None,
                 tty: false,
                 command: None,
+                chain_steps: vec![],
                 scope: None,
                 max_parallel: None,
                 timeout_secs: None,

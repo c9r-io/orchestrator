@@ -55,12 +55,19 @@ A step can execute in one of four modes, resolved automatically:
 | **Builtin** | `builtin: self_test` or known id | Handled by the engine internally |
 | **Agent** | `required_capability: plan` | Dispatched to a matching agent |
 | **Command** | `command: "cargo check"` | Direct shell execution, no agent |
-| **Chain** | `chain_steps: [...]` | Sequential sub-step execution |
+| **Chain** | `chain_steps: [...]` | Sequential child-step container with inherited pipeline vars |
 
 If you don't specify `builtin` or `required_capability`, the engine infers from the step `id`:
 
 - Known builtin IDs (`init_once`, `loop_guard`, `ticket_scan`, `self_test`, `self_restart`, `item_select`) → auto-builtin
 - Known agent IDs (`plan`, `implement`, `qa`, `fix`, etc.) → auto-capability
+
+Chain runtime contract:
+
+- The parent step is a container; it does not directly run its own agent or command once `chain_steps` is present.
+- Child steps run serially and inherit the current `pipeline_vars`.
+- Child outputs should be promoted via normal `captures` and pipeline variables, not hidden special cases.
+- A child step applies its own `behavior.on_failure` first; the parent step then applies its own `behavior.on_failure` to the aggregated chain result.
 
 ### Execution Profiles
 
