@@ -42,6 +42,7 @@ pub struct ControlPlaneAuditRecord {
     pub role: Option<String>,
     pub reason: Option<String>,
     pub tls_fingerprint: Option<String>,
+    pub rejection_stage: Option<String>,
 }
 
 pub fn open_conn(db_path: &Path) -> Result<Connection> {
@@ -193,8 +194,8 @@ pub fn insert_control_plane_audit(db_path: &Path, record: &ControlPlaneAuditReco
     conn.execute(
         "INSERT INTO control_plane_audit (
             created_at, transport, remote_addr, rpc, subject_id, authn_result,
-            authz_result, role, reason, tls_fingerprint
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            authz_result, role, reason, tls_fingerprint, rejection_stage
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         params![
             crate::config_load::now_ts(),
             record.transport,
@@ -206,6 +207,7 @@ pub fn insert_control_plane_audit(db_path: &Path, record: &ControlPlaneAuditReco
             record.role,
             record.reason,
             record.tls_fingerprint,
+            record.rejection_stage,
         ],
     )?;
     Ok(())
@@ -803,6 +805,7 @@ mod tests {
             role: Some("admin".to_string()),
             reason: Some("normal access".to_string()),
             tls_fingerprint: None,
+            rejection_stage: None,
         };
         insert_control_plane_audit(&db_path, &record).expect("insert audit");
 
@@ -835,6 +838,7 @@ mod tests {
             role: None,
             reason: None,
             tls_fingerprint: None,
+            rejection_stage: None,
         };
         insert_control_plane_audit(&db_path, &record).expect("insert audit with nones");
 

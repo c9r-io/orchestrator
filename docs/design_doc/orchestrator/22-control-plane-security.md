@@ -1,7 +1,7 @@
 # Orchestrator - Control Plane Security
 
 **Module**: orchestrator
-**Status**: Approved
+**Status**: Implemented
 **Related Plan**: Secure TCP control plane with default mTLS, local host client bootstrap, role-based RPC authorization, and dedicated audit storage
 **Related QA**: `docs/qa/orchestrator/58-control-plane-security.md`
 **Created**: 2026-03-10
@@ -93,6 +93,14 @@
 
 - `docs/qa/orchestrator/58-control-plane-security.md`
 
+## FR-010 Hardening
+
+FR-010 tightens the security baseline established by FR-002:
+
+1. **Cargo feature gate for `--insecure-bind`**: The `--insecure-bind` CLI argument is gated behind the `dev-insecure` Cargo feature. Default release builds do not expose insecure TCP at all; passing `--insecure-bind` without the feature results in a clap "unexpected argument" error.
+2. **Mandatory mTLS**: Secure TCP mode now uses `client_auth_optional(false)`, meaning connections without a valid client certificate fail at the TLS handshake layer before reaching any RPC handler.
+3. **Audit rejection classification**: The `control_plane_audit` table gains a `rejection_stage` column that categorizes denials into `cert_validation_failed`, `subject_not_found`, `subject_disabled`, and `role_insufficient`. TLS handshake rejections are captured only in tracing logs (connection never enters application layer).
+
 ## Acceptance Criteria
 
 - `--bind` starts a TLS-protected control plane and rejects unauthenticated TCP clients.
@@ -100,3 +108,6 @@
 - High-privilege RPCs are independently authorization-gated.
 - Authentication and authorization decisions are auditable in SQLite.
 - UDS remains available as the low-friction local control-plane path.
+- Default builds do not expose `--insecure-bind` (FR-010).
+- Secure TCP enforces mTLS at the handshake layer (FR-010).
+- Audit records carry `rejection_stage` classification (FR-010).

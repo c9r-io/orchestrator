@@ -2,7 +2,7 @@
 
 **Module**: orchestrator
 **Scope**: Validate secure TCP daemon bootstrap, host-user client config generation, role-based RPC authorization, insecure TCP escape hatch, and control-plane audit persistence
-**Scenarios**: 5
+**Scenarios**: 8
 **Priority**: Critical
 
 ---
@@ -42,6 +42,7 @@ Related paths:
 | role | TEXT | Effective subject role when known |
 | reason | TEXT | Failure/decision note |
 | tls_fingerprint | TEXT | SHA256 fingerprint of peer certificate |
+| rejection_stage | TEXT | Classification: `cert_validation_failed`, `subject_not_found`, `subject_disabled`, `role_insufficient`, or NULL for allowed |
 
 ---
 
@@ -218,16 +219,19 @@ LIMIT 5;
 
 ---
 
-## Scenario 4: Insecure TCP Requires Explicit Unsafe Flag
+## Scenario 4: Insecure TCP Requires Explicit Unsafe Flag And dev-insecure Feature
 
 ### Preconditions
-- Release binaries built
+- Release binaries built with `dev-insecure` feature:
+  ```bash
+  cargo build --release -p orchestratord --features dev-insecure
+  ```
 
 ### Goal
-Verify insecure TCP is no longer the default meaning of `--bind` and only starts when `--insecure-bind` is used explicitly.
+Verify insecure TCP is no longer the default meaning of `--bind` and only starts when `--insecure-bind` is used explicitly with a `dev-insecure` feature build.
 
 ### Steps
-1. Start the daemon in insecure TCP mode:
+1. Start the daemon in insecure TCP mode (requires `dev-insecure` build):
    ```bash
    ./target/release/orchestratord --foreground --insecure-bind 127.0.0.1:50052 --workers 1 > /tmp/orchestrator-insecure.log 2>&1 &
    DAEMON_PID=$!
@@ -292,6 +296,90 @@ Verify UDS mode still works as the low-friction local path without client-certif
 
 ---
 
+## Scenario 6: Mandatory mTLS Rejects Connections Without Client Certificate
+
+### Preconditions
+- Secure daemon running on `127.0.0.1:50051` (started via Scenario 1 steps)
+
+### Goal
+Verify that connections without a valid client certificate fail at the TLS handshake layer, not at the RPC layer.
+
+### Steps
+1. Start the secure daemon:
+   ```bash
+   ./target/release/orchestratord --foreground --bind 127.0.0.1:50051 --workers 1 &
+   DAEMON_PID=$!
+   sleep 3
+   ```
+2. Attempt a connection without a client certificate:
+   ```bash
+   curl -k https://127.0.0.1:50051 2>&1
+   ```
+3. Stop the daemon:
+   ```bash
+   kill "$DAEMON_PID"
+   wait "$DAEMON_PID" 2>/dev/null
+   ```
+
+### Expected
+- `curl` reports a TLS handshake error (e.g., `SSL peer handshake failed`).
+- The connection never reaches the gRPC layer.
+- No audit row is written for the rejected connection (handshake-layer rejection is outside application scope; covered by tracing logs only).
+
+---
+
+## Scenario 7: Default Build Does Not Provide --insecure-bind
+
+### Preconditions
+- Release binary built without `dev-insecure` feature:
+  ```bash
+  cargo build --release -p orchestratord
+  ```
+
+### Goal
+Verify that the default build rejects `--insecure-bind` at the CLI argument parsing level.
+
+### Steps
+1. Attempt to start the daemon with `--insecure-bind`:
+   ```bash
+   ./target/release/orchestratord --insecure-bind 127.0.0.1:9999 2>&1
+   ```
+
+### Expected
+- The command exits with a non-zero exit code.
+- Output contains clap error text such as `unexpected argument '--insecure-bind'`.
+- No daemon process is started.
+
+---
+
+## Scenario 8: Audit Records Contain rejection_stage Classification
+
+### Preconditions
+- Secure daemon running with valid PKI (from Scenario 1)
+- At least one denied RPC attempt has been performed (from Scenario 3)
+
+### Goal
+Verify that the `rejection_stage` column in `control_plane_audit` is populated for denial events.
+
+### Steps
+1. Query audit records:
+   ```bash
+   sqlite3 data/agent_orchestrator.db \
+     "SELECT rejection_stage, COUNT(*) FROM control_plane_audit GROUP BY rejection_stage;"
+   ```
+2. Verify specific denial classifications:
+   ```bash
+   sqlite3 data/agent_orchestrator.db \
+     "SELECT rpc, rejection_stage, reason FROM control_plane_audit WHERE rejection_stage IS NOT NULL ORDER BY id DESC LIMIT 5;"
+   ```
+
+### Expected
+- Allowed requests have `rejection_stage = NULL`.
+- Denied requests show one of: `cert_validation_failed`, `subject_not_found`, `subject_disabled`, `role_insufficient`.
+- The `role_insufficient` stage corresponds to operator-calls-admin-RPC denials from Scenario 3.
+
+---
+
 ## Checklist
 
 | # | Scenario | Status | Test Date | Tester | Notes |
@@ -299,5 +387,8 @@ Verify UDS mode still works as the low-friction local path without client-certif
 | 1 | Secure TCP Bootstrap Generates Server And Client Materials | ☐ | | | |
 | 2 | CLI Auto-Discovery Uses Generated Secure Client Config | ☐ | | | |
 | 3 | Additional Operator Client Is Denied On Admin RPC | ☐ | | | |
-| 4 | Insecure TCP Requires Explicit Unsafe Flag | ☐ | | | |
+| 4 | Insecure TCP Requires Explicit Unsafe Flag And dev-insecure Feature | ☐ | | | |
 | 5 | UDS Mode Remains Available Without Client Certificates | ☐ | | | |
+| 6 | Mandatory mTLS Rejects Connections Without Client Certificate | ☐ | | | |
+| 7 | Default Build Does Not Provide --insecure-bind | ☐ | | | |
+| 8 | Audit Records Contain rejection_stage Classification | ☐ | | | |

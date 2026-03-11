@@ -38,6 +38,7 @@ struct Args {
     #[arg(long = "bind")]
     bind: Option<String>,
 
+    #[cfg(feature = "dev-insecure")]
     #[arg(long = "insecure-bind")]
     insecure_bind: Option<String>,
 
@@ -186,30 +187,37 @@ fn main() -> Result<()> {
                 .serve_with_shutdown(addr, shutdown_fut)
                 .await
                 .context("gRPC server error")?;
-        } else if let Some(addr) = args.insecure_bind.as_deref() {
-            let addr = addr.parse().context("invalid insecure bind address")?;
-            info!(%addr, "listening on insecure TCP");
-            tracing::warn!("insecure TCP control-plane enabled; use only for local development");
-            Server::builder()
-                .add_service(OrchestratorServiceServer::new(service))
-                .serve_with_shutdown(addr, shutdown_fut)
-                .await
-                .context("gRPC server error")?;
         } else {
-            // UDS transport
-            use tokio::net::UnixListener;
+            #[cfg(feature = "dev-insecure")]
+            let insecure_addr = args.insecure_bind.as_deref();
+            #[cfg(not(feature = "dev-insecure"))]
+            let insecure_addr: Option<&str> = None;
 
-            // Remove stale socket
-            let _ = std::fs::remove_file(&socket_path);
-            let uds = UnixListener::bind(&socket_path).context("failed to bind UDS")?;
-            let uds_stream = tokio_stream::wrappers::UnixListenerStream::new(uds);
+            if let Some(addr) = insecure_addr {
+                let addr = addr.parse().context("invalid insecure bind address")?;
+                info!(%addr, "listening on insecure TCP");
+                tracing::warn!("insecure TCP control-plane enabled; use only for local development");
+                Server::builder()
+                    .add_service(OrchestratorServiceServer::new(service))
+                    .serve_with_shutdown(addr, shutdown_fut)
+                    .await
+                    .context("gRPC server error")?;
+            } else {
+                // UDS transport
+                use tokio::net::UnixListener;
 
-            info!(socket = %socket_path.display(), "listening on UDS");
-            Server::builder()
-                .add_service(OrchestratorServiceServer::new(service))
-                .serve_with_incoming_shutdown(uds_stream, shutdown_fut)
-                .await
-                .context("gRPC server error")?;
+                // Remove stale socket
+                let _ = std::fs::remove_file(&socket_path);
+                let uds = UnixListener::bind(&socket_path).context("failed to bind UDS")?;
+                let uds_stream = tokio_stream::wrappers::UnixListenerStream::new(uds);
+
+                info!(socket = %socket_path.display(), "listening on UDS");
+                Server::builder()
+                    .add_service(OrchestratorServiceServer::new(service))
+                    .serve_with_incoming_shutdown(uds_stream, shutdown_fut)
+                    .await
+                    .context("gRPC server error")?;
+            }
         }
 
         emit_daemon_event(&inner, "daemon_shutdown_requested", serde_json::json!({

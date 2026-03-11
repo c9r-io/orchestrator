@@ -594,6 +594,20 @@ pub(crate) fn m0013_control_plane_audit(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn m0015_control_plane_audit_rejection_stage(conn: &Connection) -> Result<()> {
+    ensure_column_exists(
+        conn,
+        "control_plane_audit",
+        "rejection_stage",
+        "ALTER TABLE control_plane_audit ADD COLUMN rejection_stage TEXT",
+    )?;
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_control_plane_audit_rejection_stage
+             ON control_plane_audit(rejection_stage, created_at);"
+    )?;
+    Ok(())
+}
+
 pub(crate) fn m0014_task_graph_debug_tables(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"

@@ -149,6 +149,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0014_task_graph_debug_tables",
             up: crate::persistence::migration_steps::m0014_task_graph_debug_tables,
         },
+        Migration {
+            version: 15,
+            name: "m0015_control_plane_audit_rejection_stage",
+            up: crate::persistence::migration_steps::m0015_control_plane_audit_rejection_stage,
+        },
     ]
 }
 

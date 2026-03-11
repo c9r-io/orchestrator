@@ -56,6 +56,7 @@ struct AuditEvent<'a> {
     role: Option<String>,
     reason: Option<String>,
     tls_fingerprint: Option<String>,
+    rejection_stage: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
@@ -170,6 +171,7 @@ impl ControlPlaneSecurity {
                     role: None,
                     reason: Some("client certificate required".to_string()),
                     tls_fingerprint: None,
+                    rejection_stage: Some("cert_validation_failed"),
                 });
                 AuthzError::Unauthenticated("client certificate required")
             })?;
@@ -188,6 +190,7 @@ impl ControlPlaneSecurity {
                     role: None,
                     reason: Some(error.to_string()),
                     tls_fingerprint: Some(fingerprint.clone()),
+                    rejection_stage: Some("cert_validation_failed"),
                 });
                 return Err(AuthzError::Unauthenticated(
                     "client certificate missing URI SAN",
@@ -215,6 +218,7 @@ impl ControlPlaneSecurity {
                     role: None,
                     reason: Some("subject disabled".to_string()),
                     tls_fingerprint: Some(fingerprint),
+                    rejection_stage: Some("subject_disabled"),
                 });
                 return Err(AuthzError::PermissionDenied("subject disabled"));
             }
@@ -229,6 +233,7 @@ impl ControlPlaneSecurity {
                     role: None,
                     reason: Some("subject not present in policy".to_string()),
                     tls_fingerprint: Some(fingerprint),
+                    rejection_stage: Some("subject_not_found"),
                 });
                 return Err(AuthzError::PermissionDenied("subject not authorized"));
             }
@@ -249,6 +254,7 @@ impl ControlPlaneSecurity {
                     rpc
                 )),
                 tls_fingerprint: Some(fingerprint),
+                rejection_stage: Some("role_insufficient"),
             });
             return Err(AuthzError::PermissionDenied("permission denied"));
         }
@@ -263,6 +269,7 @@ impl ControlPlaneSecurity {
             role: Some(subject.role.as_str().to_string()),
             reason: None,
             tls_fingerprint: Some(fingerprint),
+            rejection_stage: None,
         });
         if required == Role::Admin {
             let _ = self.audit(AuditEvent {
@@ -275,6 +282,7 @@ impl ControlPlaneSecurity {
                 role: Some(subject.role.as_str().to_string()),
                 reason: None,
                 tls_fingerprint: None,
+                rejection_stage: None,
             });
         }
 
@@ -294,6 +302,7 @@ impl ControlPlaneSecurity {
                 role: event.role,
                 reason: event.reason,
                 tls_fingerprint: event.tls_fingerprint,
+                rejection_stage: event.rejection_stage.map(|s| s.to_string()),
             },
         )
     }
@@ -322,7 +331,7 @@ pub fn prepare_secure_server(
     let tls = ServerTlsConfig::new()
         .identity(Identity::from_pem(server_cert, server_key))
         .client_ca_root(TonicCertificate::from_pem(ca_cert))
-        .client_auth_optional(true);
+        .client_auth_optional(false);
 
     Ok(SecureServerConfig {
         tls,
