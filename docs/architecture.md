@@ -54,32 +54,11 @@ The project structure is organized as follows:
 
 ## 3. System Architecture
 
-The system supports two execution modes:
+The system uses a single supported execution model:
 
-1. **Standalone mode**: A monolithic CLI that embeds the engine directly.
-2. **Client/Server mode**: A long-running daemon (`orchestratord`) that holds all state and exposes a gRPC API, plus a lightweight CLI client (`orchestrator`) that communicates over Unix Domain Socket.
+1. **Client/Server mode**: A long-running daemon (`orchestratord`) that holds all state and exposes a gRPC API, plus a lightweight CLI client (`orchestrator`) that communicates over Unix Domain Socket or secure TCP.
 
 ### 3.1 High-Level Design
-
-#### Standalone Mode (legacy)
-
-```mermaid
-flowchart TB
-    User[Developer]
-    CLI[Agent Orchestrator CLI]
-    DB[(SQLite DB)]
-    FS[File System]
-    Agent[Agent Process]
-
-    User -->|Commands| CLI
-    CLI -->|Read/Write State| DB
-    CLI -->|Read/Write Config| FS
-    CLI -->|Spawn/Monitor| Agent
-    Agent -->|Modify| FS
-    Agent -->|Logs| FS
-```
-
-#### Client/Server Mode
 
 ```mermaid
 flowchart TB
@@ -119,9 +98,8 @@ proto/
 ### 3.2 Core Components
 
 1.  **CLI Interface**:
-    *   **Standalone** (`core/src/cli.rs`): Parses user commands and executes directly.
-    *   **C/S Client** (`crates/cli/`): Lightweight gRPC client that sends commands to the daemon.
-    *   **C/S Daemon** (`crates/daemon/`): gRPC server that translates RPC calls into service layer calls.
+    *   **Client** (`crates/cli/`): Lightweight gRPC client that sends commands to the daemon.
+    *   **Daemon** (`crates/daemon/`): gRPC server that translates RPC calls into service layer calls.
     *   Displays output (tables, JSON, YAML).
 
 2.  **Orchestrator Engine (`core/src/lib.rs`, `scheduler.rs`)**:
@@ -181,8 +159,7 @@ A **Task** is the unit of execution, binding a Workspace and Workflow to a set o
   - `task create/start/resume/retry` enqueue work for daemon workers in C/S mode.
   - Foreground waiting is handled by explicit observer commands such as `task watch` and `task logs --follow`, not lifecycle flags.
 - **Worker Models**:
-  - Standalone: `task worker start --workers N` runs a separate worker loop.
-  - C/S: `orchestratord --workers N` embeds workers directly in the daemon process.
+  - `orchestratord --workers N` embeds workers directly in the daemon process.
 - **Queue State**:
   - Pending tasks are tracked via task status (`pending`) in SQLite.
   - Worker emits scheduling lifecycle events such as `scheduler_enqueued`.
@@ -190,7 +167,7 @@ A **Task** is the unit of execution, binding a Workspace and Workflow to a set o
 
 #### Service Layer (`core/src/service/`)
 
-Pure business logic extracted from `cli_handler/`, used by both the standalone CLI and the daemon's gRPC server:
+Pure business logic embedded by the daemon and exposed through the gRPC server:
 
 - `task.rs` — create, start, pause, resume, delete, retry, list, info, logs
 - `resource.rs` — apply manifests, get/describe/delete resources
@@ -218,7 +195,7 @@ The Agent Orchestrator is distributed as a Cargo workspace with a core library a
 | `crates/daemon` (`orchestratord`) | Binary | Daemon — gRPC server + embedded workers |
 | `crates/cli` (`orchestrator`) | Binary | CLI client — lightweight gRPC client |
 
-- **C/S mode** (primary): Daemon (`orchestratord`) runs persistently, CLI client (`orchestrator`) connects via Unix Domain Socket (`data/orchestrator.sock`) or TCP (`--bind`).
+- **C/S mode**: Daemon (`orchestratord`) runs persistently, CLI client (`orchestrator`) connects via Unix Domain Socket (`data/orchestrator.sock`) or TCP (`--bind`).
 - Both binaries require `sqlite3` and standard shell utilities (`bash`, `grep`, etc.) if used by agents.
 
 ## 6. Observability

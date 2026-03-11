@@ -23,9 +23,9 @@ The orchestrator auto-heals persisted config drift on startup (e.g., removing `r
 | `core/src/config_load/persist.rs` | `persist_heal_log`, `query_heal_log_entries`, `query_latest_heal_summary` |
 | `core/src/config_load/build.rs` | `build_active_config_with_self_heal` writes heal log in same transaction |
 | `core/src/config_load/self_heal.rs` | `ConfigSelfHealRule` with Display + Serialize |
-| `core/src/cli.rs` | `ConfigLifecycleCommands::HealLog` |
-| `core/src/cli_handler/config_lifecycle.rs` | heal-log table/JSON rendering |
-| `core/src/cli_handler/check.rs` | persisted heal notice fallback |
+| `crates/cli/src/cli.rs` | current public CLI surface reference |
+| `core/src/config_load/persist.rs` | heal-log persistence and query paths |
+| `core/src/service/system.rs` | persisted heal notice fallback used by daemon-backed checks |
 
 ---
 

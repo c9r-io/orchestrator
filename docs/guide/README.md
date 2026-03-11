@@ -18,7 +18,7 @@ This guide helps you understand and use the Agent Orchestrator — a CLI tool fo
 | [04 - CEL Prehooks](04-cel-prehooks.md) | Dynamic step gating with CEL expressions | Intermediate |
 | [05 - Advanced Features](05-advanced-features.md) | CRDs, Persistent Store, Task Spawning, Invariants | Advanced |
 | [06 - Self-Bootstrap](06-self-bootstrap.md) | Self-modifying workflows and survival mechanisms | Advanced |
-| [07 - CLI Reference](07-cli-reference.md) | Command quick-reference (standalone + C/S) | Reference |
+| [07 - CLI Reference](07-cli-reference.md) | Command quick-reference for the C/S runtime | Reference |
 
 ## Complementary Resources
 
@@ -29,15 +29,7 @@ This guide helps you understand and use the Agent Orchestrator — a CLI tool fo
 
 ## Entry Points
 
-### Standalone Mode (legacy)
-
-```bash
-orchestrator <command>
-```
-
-### Client/Server Mode (recommended)
-
-The orchestrator supports a C/S architecture where a long-running daemon holds all state and the CLI is a lightweight gRPC client:
+The orchestrator uses a C/S architecture where a long-running daemon holds all state and the CLI is a lightweight gRPC client:
 
 ```bash
 # Start daemon (background workers auto-consume enqueued tasks)

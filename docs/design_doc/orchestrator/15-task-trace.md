@@ -209,7 +209,7 @@ All tests in `core/src/scheduler/trace.rs` via `#[cfg(test)]`:
 |------|--------|-------------|
 | `core/src/scheduler/trace.rs` | Created | Core trace logic, anomaly detection, terminal rendering, 17 unit tests |
 | `core/src/scheduler.rs` | Modified | Added `pub mod trace;` |
-| `core/src/cli.rs` | Modified | Added `Trace { task_id, json, verbose }` to `TaskCommands` |
-| `core/src/cli_handler/task.rs` | Modified | Added trace handler: load → build_trace → render/serialize |
+| `crates/cli/src/cli.rs` | Modified | Added `Trace { task_id, json, verbose }` to `TaskCommands` |
+| `crates/cli/src/commands/task.rs` | Modified | Added trace handler: RPC load → render/serialize |
 | `core/src/scheduler/loop_engine.rs` | Modified | Enriched `cycle_started` payload with `max_cycles` |
 | `core/src/scheduler/item_executor.rs` | Modified | Enriched `step_started` payload with `cycle`, `pipeline_var_keys` |

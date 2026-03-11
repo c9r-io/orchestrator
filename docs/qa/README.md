@@ -20,7 +20,7 @@ This directory contains reproducible, verifiable QA test documents.
 
 1. Keep each document to at most **5 scenarios**.
 2. Every scenario must include Preconditions, Steps, and Expected Result.
-3. Commands must align with actual CLI surface from `core/src/cli.rs`.
+3. Commands must align with the actual CLI surface in `crates/cli/src/cli.rs`.
 4. Use `workspace info <workspace-id>` positional argument (no `--workspace-id`).
 5. Do not use removed path assumptions like `cd orchestrator`.
 

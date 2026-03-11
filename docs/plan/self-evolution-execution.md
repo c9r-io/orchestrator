@@ -104,10 +104,8 @@ orchestrator task list -o json
 ### 3.2 初始化数据库并加载资源
 
 ```bash
-# 使用旧单体 CLI 执行 db/init/apply（这些命令直接操作本地 SQLite，不依赖 daemon）
-# 如果 daemon 已在运行，也可以用新 CLI 的 orchestrator db/init/apply
 orchestrator delete project/self-evolution --force
-orchestrator init -f
+orchestrator init
 orchestrator apply -f docs/workflow/claude-secret.yaml --project self-evolution
 orchestrator apply -f docs/workflow/minimax-secret.yaml --project self-evolution
 # ⚠️  必须使用 --project，否则真实 AI agent 会注册到全局空间

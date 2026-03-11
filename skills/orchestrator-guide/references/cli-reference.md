@@ -42,7 +42,7 @@
 
 ## Daemon Lifecycle
 
-The daemon is a **standalone binary** (`orchestratord`), not a CLI subcommand.
+The daemon is a separate binary (`orchestratord`), not a CLI subcommand.
 
 ```bash
 # Start daemon
@@ -52,7 +52,7 @@ orchestratord --bind 0.0.0.0:9090 --workers 4   # TCP instead of UDS
 
 # Monitor
 ps aux | grep orchestratord | grep -v grep       # check process
-orchestrator task worker status                   # worker queue state
+orchestrator debug                                # verify CLI-to-daemon connectivity
 
 # Stop
 kill <pid>                                        # graceful SIGTERM
@@ -105,14 +105,11 @@ orchestrator check
 ## Task Lifecycle
 
 ```bash
-# Create (defaults to --detach: auto-enqueues to daemon worker, returns immediately)
+# Create (enqueues work for daemon workers and returns immediately)
 orchestrator task create \
   --name "task-name" --goal "description" \
   --workflow self-bootstrap --project my-project \
   --target-file docs/qa/01.md   # repeatable; -t shorthand
-
-# Create with blocking wait (foreground execution)
-orchestrator task create --name X --goal Y --attach
 
 # Control
 orchestrator task pause <id>
@@ -127,18 +124,13 @@ orchestrator task logs <id>
 orchestrator task watch <id>              # real-time auto-refreshing panel
 orchestrator task trace <id>              # execution timeline with anomaly detection
 
-# Worker management
-orchestrator task worker status           # queue state: pending tasks, stop signal
-orchestrator task worker start            # start standalone worker loop (non-daemon mode)
-orchestrator task worker stop             # signal worker to stop
-
 # Delete
 orchestrator task delete <id> --force
 ```
 
-> **Note**: In C/S mode, `task create` defaults to `--detach` (enqueue to daemon worker).
-> Tasks start executing immediately when a worker picks them up.
-> Use `--attach` for blocking inline execution.
+> **Note**: Tasks are executed only by daemon-embedded workers.
+> `task create` enqueues work for the running daemon, and observer commands such as
+> `task watch` / `task logs` are the supported way to follow progress.
 
 ## Persistent Store
 

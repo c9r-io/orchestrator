@@ -171,7 +171,7 @@ orchestratord --foreground --workers 2
 # Core workflow
 orchestrator init
 orchestrator apply -f manifest.yaml
-orchestrator task create --goal "QA run" --detach
+orchestrator task create --goal "QA run"
 orchestrator task list
 orchestrator task logs <task_id>
 orchestrator get workspaces -o json
@@ -331,7 +331,7 @@ cargo build --workspace --release
 orchestratord --foreground --workers 2 &
 orchestrator init
 orchestrator apply -f fixtures/capability-test.yaml
-orchestrator task create --goal "My first QA run" --detach
+orchestrator task create --goal "My first QA run"
 orchestrator task list
 ```
 

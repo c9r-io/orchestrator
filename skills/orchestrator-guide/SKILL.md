@@ -27,14 +27,14 @@ Binary locations after `cargo build --release -p orchestratord -p orchestrator-c
 Start the daemon first, then use the CLI:
 
 ```bash
-# Start daemon (standalone binary, not a CLI subcommand)
+# Start daemon (separate binary, not a CLI subcommand)
 orchestratord --foreground --workers 2           # foreground (recommended for monitoring)
 nohup orchestratord --foreground --workers 2 &   # background via nohup
 orchestratord --bind 0.0.0.0:9090 --workers 4   # TCP instead of UDS
 
 # Monitor daemon
 ps aux | grep orchestratord | grep -v grep       # check process
-orchestrator task worker status                   # check worker queue state
+orchestrator debug                                # verify CLI-to-daemon connectivity
 
 # Stop daemon
 kill <pid>                                        # graceful SIGTERM

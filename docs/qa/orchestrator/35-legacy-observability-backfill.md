@@ -25,9 +25,9 @@ Events created before the scope-aware observability feature lack `step_scope` in
 | `core/src/events.rs` | `observed_step_scope_label(None)` → `"legacy"` |
 | `core/src/scheduler/trace.rs` | `split_observed_item_binding` None → `"legacy"`, verbose annotation |
 | `core/src/scheduler/query.rs` | Watch frame `"~"` for legacy scope |
-| `core/src/main.rs` | Startup backfill integration in `backfill_legacy_data` |
-| `core/src/cli.rs` | `ConfigLifecycleCommands::BackfillEvents` |
-| `core/src/cli_handler/config_lifecycle.rs` | Backfill CLI handler |
+| `crates/daemon/src/main.rs` | Startup backfill integration in the daemon bootstrap path |
+| `crates/cli/src/cli.rs` | current public CLI surface reference |
+| `core/src/service/system.rs` | daemon-exposed observability and maintenance entrypoints |
 
 ---
 

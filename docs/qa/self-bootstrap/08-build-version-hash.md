@@ -16,9 +16,9 @@ The build version hash feature embeds compile-time metadata into the binary via 
 This enables quick identification of which build is running via `--version` or the `version` subcommand, and enriches `self_restart_ready` / `binary_verification` events with build provenance.
 
 Key files:
-- `core/build.rs` — Build script capturing git hash and timestamp
-- `core/src/cli.rs` — `Version` subcommand and enriched `--version` string
-- `core/src/main.rs` — Preflight handler for `version` (no DB required)
+- `crates/cli/build.rs` — Build script capturing git hash and timestamp for the CLI binary
+- `crates/cli/src/cli.rs` — `Version` subcommand and enriched `--version` string
+- `crates/cli/src/main.rs` — Preflight handler for `version` (no daemon required)
 - `core/src/scheduler/safety.rs` — Enriched event payloads
 
 ---
