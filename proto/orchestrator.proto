@@ -47,6 +47,13 @@ service OrchestratorService {
   rpc ManifestExport(ManifestExportRequest) returns (ManifestExportResponse);
   rpc TaskTrace(TaskTraceRequest)     returns (TaskTraceResponse);
 
+  // Secret key lifecycle
+  rpc SecretKeyStatus(SecretKeyStatusRequest)   returns (SecretKeyStatusResponse);
+  rpc SecretKeyList(SecretKeyListRequest)       returns (SecretKeyListResponse);
+  rpc SecretKeyRotate(SecretKeyRotateRequest)   returns (SecretKeyRotateResponse);
+  rpc SecretKeyRevoke(SecretKeyRevokeRequest)   returns (SecretKeyRevokeResponse);
+  rpc SecretKeyHistory(SecretKeyHistoryRequest) returns (SecretKeyHistoryResponse);
+
 }
 
 // ─── Task messages ────────────────────────────────────────────
@@ -522,4 +529,69 @@ message Anomaly {
   string message = 3;
   optional string at = 4;
   string escalation = 5;
+}
+
+// ─── Secret Key Lifecycle ────────────────────────────────────────
+
+message SecretKeyRecord {
+  string key_id = 1;
+  string state = 2;
+  string fingerprint = 3;
+  string file_path = 4;
+  string created_at = 5;
+  optional string activated_at = 6;
+  optional string rotated_out_at = 7;
+  optional string retired_at = 8;
+  optional string revoked_at = 9;
+}
+
+message SecretKeyStatusRequest {}
+
+message SecretKeyStatusResponse {
+  optional SecretKeyRecord active_key = 1;
+  repeated SecretKeyRecord all_keys = 2;
+}
+
+message SecretKeyListRequest {}
+
+message SecretKeyListResponse {
+  repeated SecretKeyRecord keys = 1;
+}
+
+message SecretKeyRotateRequest {
+  bool resume = 1;
+}
+
+message SecretKeyRotateResponse {
+  string message = 1;
+  uint64 resources_updated = 2;
+  uint64 versions_updated = 3;
+  repeated string errors = 4;
+}
+
+message SecretKeyRevokeRequest {
+  string key_id = 1;
+  bool force = 2;
+}
+
+message SecretKeyRevokeResponse {
+  string message = 1;
+}
+
+message SecretKeyAuditEvent {
+  string event_kind = 1;
+  string key_id = 2;
+  string key_fingerprint = 3;
+  string actor = 4;
+  string detail_json = 5;
+  string created_at = 6;
+}
+
+message SecretKeyHistoryRequest {
+  uint64 limit = 1;
+  optional string key_id = 2;
+}
+
+message SecretKeyHistoryResponse {
+  repeated SecretKeyAuditEvent events = 1;
 }

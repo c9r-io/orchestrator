@@ -154,6 +154,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0015_control_plane_audit_rejection_stage",
             up: crate::persistence::migration_steps::m0015_control_plane_audit_rejection_stage,
         },
+        Migration {
+            version: 16,
+            name: "m0016_secret_key_lifecycle",
+            up: crate::persistence::migration_steps::m0016_secret_key_lifecycle,
+        },
     ]
 }
 

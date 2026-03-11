@@ -33,6 +33,8 @@ pub mod runtime;
 pub mod sandbox_network;
 pub mod scheduler;
 pub mod scheduler_service;
+pub mod secret_key_audit;
+pub mod secret_key_lifecycle;
 pub mod secret_store_crypto;
 pub mod secure_files;
 pub mod selection;

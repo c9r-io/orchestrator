@@ -106,6 +106,31 @@ fn sanitized_config_snapshot(config: &OrchestratorConfig) -> OrchestratorConfig 
     sanitized
 }
 
+fn emit_decrypt_failed_audit(
+    conn: &rusqlite::Connection,
+    project: &str,
+    name: &str,
+    error: &anyhow::Error,
+) {
+    // Best-effort: if the audit table doesn't exist yet, skip silently
+    let _ = crate::secret_key_audit::insert_key_audit_event(
+        conn,
+        &crate::secret_key_audit::KeyAuditEvent {
+            event_kind: crate::secret_key_audit::KeyAuditEventKind::DecryptFailed,
+            key_id: "unknown".to_string(),
+            key_fingerprint: "unknown".to_string(),
+            actor: "system:load_resources".to_string(),
+            detail_json: serde_json::json!({
+                "project": project,
+                "name": name,
+                "error": error.to_string(),
+            })
+            .to_string(),
+            created_at: now_ts(),
+        },
+    );
+}
+
 pub(crate) fn persist_config_versioned(
     tx: &Transaction<'_>,
     yaml: &str,
@@ -282,7 +307,17 @@ fn load_all_resources(
     HashMap<String, crate::crd::types::CustomResourceDefinition>,
 )> {
     let app_root = resolve_app_root_from_db_path(db_path)?;
-    let secret_encryption = load_existing_secret_key(&app_root)?.map(SecretEncryption::from_key);
+    // Try loading via KeyRing for multi-key support; fall back to single-key
+    let secret_encryption = match crate::secret_key_lifecycle::load_keyring(&app_root, db_path) {
+        Ok(keyring) => {
+            if keyring.has_active_key() {
+                SecretEncryption::from_keyring(&keyring).ok()
+            } else {
+                load_existing_secret_key(&app_root)?.map(SecretEncryption::from_key)
+            }
+        }
+        Err(_) => load_existing_secret_key(&app_root)?.map(SecretEncryption::from_key),
+    };
     let conn = crate::db::open_conn(db_path)?;
     let table_exists: bool = conn
         .query_row(
@@ -336,14 +371,23 @@ fn load_all_resources(
             continue;
         }
 
-        let spec = decrypt_resource_spec_json(
+        let spec = match decrypt_resource_spec_json(
             secret_encryption.as_ref(),
             &kind,
             &project,
             &name,
             &spec_json,
-        )
-        .with_context(|| format!("failed to load resource {kind}/{project}/{name}"))?;
+        ) {
+            Ok(v) => v,
+            Err(e) => {
+                // Write DecryptFailed audit event (best-effort)
+                if kind == "SecretStore" {
+                    emit_decrypt_failed_audit(&conn, &project, &name, &e);
+                }
+                return Err(e)
+                    .with_context(|| format!("failed to load resource {kind}/{project}/{name}"));
+            }
+        };
 
         let metadata: crate::cli_types::ResourceMetadata = serde_json::from_str(&metadata_json)
             .unwrap_or_else(|_| crate::cli_types::ResourceMetadata {

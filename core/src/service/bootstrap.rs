@@ -200,8 +200,103 @@ fn initialize_runtime(app_root: &Path) -> Result<(std::path::PathBuf, std::path:
         .with_context(|| format!("failed to create logs dir {}", logs_dir.display()))?;
     let db_path = data_dir.join("agent_orchestrator.db");
     PersistenceBootstrap::ensure_current(&db_path)?;
+    // Ensure legacy key exists (backward compat)
     crate::secret_store_crypto::ensure_secret_key(app_root, &db_path)?;
+    // Import legacy key into secret_keys table if not already present
+    import_legacy_key_if_needed(app_root, &db_path)?;
+    // Startup diagnostics for key lifecycle
+    run_key_lifecycle_diagnostics(app_root, &db_path);
     Ok((db_path, logs_dir))
+}
+
+fn import_legacy_key_if_needed(app_root: &Path, db_path: &Path) -> Result<()> {
+    let conn = crate::db::open_conn(db_path)?;
+    let table_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='secret_keys'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+    if !table_exists {
+        return Ok(());
+    }
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM secret_keys",
+        [],
+        |row| row.get(0),
+    )?;
+    if count == 0 {
+        if let Some(record) =
+            crate::secret_key_lifecycle::import_legacy_key_record(&conn, app_root)?
+        {
+            let now = crate::config_load::now_ts();
+            // Write audit events for the imported key
+            let _ = crate::secret_key_audit::insert_key_audit_event(
+                &conn,
+                &crate::secret_key_audit::KeyAuditEvent {
+                    event_kind: crate::secret_key_audit::KeyAuditEventKind::KeyCreated,
+                    key_id: record.key_id.clone(),
+                    key_fingerprint: record.fingerprint.clone(),
+                    actor: "system:migration".to_string(),
+                    detail_json: "{\"source\":\"legacy_import\"}".to_string(),
+                    created_at: now.clone(),
+                },
+            );
+            let _ = crate::secret_key_audit::insert_key_audit_event(
+                &conn,
+                &crate::secret_key_audit::KeyAuditEvent {
+                    event_kind: crate::secret_key_audit::KeyAuditEventKind::KeyActivated,
+                    key_id: record.key_id,
+                    key_fingerprint: record.fingerprint,
+                    actor: "system:migration".to_string(),
+                    detail_json: "{\"source\":\"legacy_import\"}".to_string(),
+                    created_at: now,
+                },
+            );
+        }
+    }
+    Ok(())
+}
+
+fn run_key_lifecycle_diagnostics(app_root: &Path, db_path: &Path) {
+    let keyring = match crate::secret_key_lifecycle::load_keyring(app_root, db_path) {
+        Ok(kr) => kr,
+        Err(e) => {
+            tracing::error!("failed to load keyring for diagnostics: {e}");
+            return;
+        }
+    };
+
+    // Warn about incomplete rotations
+    let decrypt_only = keyring.decrypt_only_records();
+    if !decrypt_only.is_empty() {
+        for rec in &decrypt_only {
+            tracing::warn!(
+                key_id = %rec.key_id,
+                "incomplete key rotation detected: key is in decrypt_only state; run `secret key rotate --resume` to complete"
+            );
+        }
+    }
+
+    // Check for missing active key when encrypted data may exist
+    if !keyring.has_active_key() {
+        tracing::warn!("no active encryption key available; SecretStore writes will be blocked");
+        // Write diagnostic audit event (best-effort)
+        if let Ok(conn) = crate::db::open_conn(db_path) {
+            let _ = crate::secret_key_audit::insert_key_audit_event(
+                &conn,
+                &crate::secret_key_audit::KeyAuditEvent {
+                    event_kind: crate::secret_key_audit::KeyAuditEventKind::MissingKeyDiagnostic,
+                    key_id: "none".to_string(),
+                    key_fingerprint: "none".to_string(),
+                    actor: "system:bootstrap".to_string(),
+                    detail_json: "{\"reason\":\"no_active_key\"}".to_string(),
+                    created_at: crate::config_load::now_ts(),
+                },
+            );
+        }
+    }
 }
 
 #[cfg(test)]

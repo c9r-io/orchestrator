@@ -1,5 +1,6 @@
 mod mapping;
 mod resource;
+mod secret;
 mod store;
 mod system;
 mod task;
@@ -284,5 +285,40 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<TaskTraceRequest>,
     ) -> Result<Response<TaskTraceResponse>, Status> {
         task::task_trace(self, request).await
+    }
+
+    async fn secret_key_status(
+        &self,
+        request: Request<SecretKeyStatusRequest>,
+    ) -> Result<Response<SecretKeyStatusResponse>, Status> {
+        secret::secret_key_status(self, request).await
+    }
+
+    async fn secret_key_list(
+        &self,
+        request: Request<SecretKeyListRequest>,
+    ) -> Result<Response<SecretKeyListResponse>, Status> {
+        secret::secret_key_list(self, request).await
+    }
+
+    async fn secret_key_rotate(
+        &self,
+        request: Request<SecretKeyRotateRequest>,
+    ) -> Result<Response<SecretKeyRotateResponse>, Status> {
+        secret::secret_key_rotate(self, request).await
+    }
+
+    async fn secret_key_revoke(
+        &self,
+        request: Request<SecretKeyRevokeRequest>,
+    ) -> Result<Response<SecretKeyRevokeResponse>, Status> {
+        secret::secret_key_revoke(self, request).await
+    }
+
+    async fn secret_key_history(
+        &self,
+        request: Request<SecretKeyHistoryRequest>,
+    ) -> Result<Response<SecretKeyHistoryResponse>, Status> {
+        secret::secret_key_history(self, request).await
     }
 }

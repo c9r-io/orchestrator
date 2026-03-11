@@ -45,11 +45,30 @@ impl SecretKeyHandle {
 #[derive(Debug, Clone)]
 pub struct SecretEncryption {
     key: SecretKeyHandle,
+    /// Additional keys available for decryption (key_id → handle).
+    /// When constructed via `from_key`, this is empty (single-key mode).
+    decrypt_keys: std::collections::HashMap<String, SecretKeyHandle>,
 }
 
 impl SecretEncryption {
     pub fn from_key(key: SecretKeyHandle) -> Self {
-        Self { key }
+        Self {
+            key,
+            decrypt_keys: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Build from a KeyRing — active key for encryption, all non-terminal keys for decryption.
+    pub fn from_keyring(keyring: &crate::secret_key_lifecycle::KeyRing) -> Result<Self> {
+        let active = keyring.active_key()?.clone();
+        let mut decrypt_keys = std::collections::HashMap::new();
+        for (kid, handle) in keyring.decrypt_keys_iter() {
+            decrypt_keys.insert(kid.to_string(), handle.clone());
+        }
+        Ok(Self {
+            key: active,
+            decrypt_keys,
+        })
     }
 
     pub fn encrypt_secret_store_spec(
@@ -117,6 +136,10 @@ impl SecretEncryption {
                 name
             );
         }
+
+        // Multi-key dispatch: look up the key matching envelope.key_id
+        let decrypt_handle = self.resolve_decrypt_key(&envelope.key_id)?;
+
         let nonce_bytes = base64::engine::general_purpose::STANDARD
             .decode(&envelope.nonce)
             .context("failed to decode secret envelope nonce")?;
@@ -126,7 +149,7 @@ impl SecretEncryption {
         let ciphertext = base64::engine::general_purpose::STANDARD
             .decode(&envelope.ciphertext)
             .context("failed to decode secret envelope ciphertext")?;
-        let cipher = Aes256GcmSiv::new_from_slice(self.key.key_bytes())
+        let cipher = Aes256GcmSiv::new_from_slice(decrypt_handle.key_bytes())
             .map_err(|_| anyhow!("failed to initialize secret store cipher"))?;
         let aad_json =
             serde_json::to_vec(&envelope.aad).context("failed to serialize envelope AAD")?;
@@ -138,8 +161,28 @@ impl SecretEncryption {
                     aad: &aad_json,
                 },
             )
-            .map_err(|_| anyhow!("failed to decrypt secret store spec"))?;
+            .map_err(|_| anyhow!("failed to decrypt secret store spec (key_id: {})", envelope.key_id))?;
         serde_json::from_slice(&plain).context("failed to parse decrypted secret store spec")
+    }
+
+    /// Resolve which key handle to use for decryption.
+    /// Checks decrypt_keys map first, then falls back to the primary key.
+    fn resolve_decrypt_key(&self, key_id: &str) -> Result<&SecretKeyHandle> {
+        if let Some(handle) = self.decrypt_keys.get(key_id) {
+            return Ok(handle);
+        }
+        if self.key.key_id() == key_id {
+            return Ok(&self.key);
+        }
+        bail!(
+            "no decryption key available for key_id '{}'; available keys: [{}]",
+            key_id,
+            {
+                let mut ids: Vec<&str> = self.decrypt_keys.keys().map(|s| s.as_str()).collect();
+                ids.push(self.key.key_id());
+                ids.join(", ")
+            }
+        )
     }
 }
 
@@ -168,6 +211,47 @@ struct SecretEnvelope {
     nonce: String,
     ciphertext: String,
     aad: SecretEnvelopeAad,
+}
+
+/// Load a key file and return a SecretKeyHandle with the given key_id.
+pub fn load_key_file_as_handle(path: &Path, key_id: &str) -> Result<SecretKeyHandle> {
+    validate_secret_key_permissions(path)?;
+    let encoded = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read key file {}", path.display()))?;
+    let decoded = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, encoded.trim())
+        .context("failed to decode key file")?;
+    if decoded.len() != KEY_SIZE_BYTES {
+        bail!(
+            "invalid key length in {}: expected {} bytes",
+            path.display(),
+            KEY_SIZE_BYTES
+        );
+    }
+    let mut key_bytes = [0_u8; KEY_SIZE_BYTES];
+    key_bytes.copy_from_slice(&decoded);
+    let fingerprint = key_fingerprint(&key_bytes);
+    Ok(SecretKeyHandle {
+        key_bytes,
+        key_id: key_id.to_string(),
+        fingerprint,
+        path: path.to_path_buf(),
+    })
+}
+
+/// Generate a new random key and write it to the given path with proper permissions.
+/// Returns the SecretKeyHandle for the new key.
+pub fn generate_and_write_key_file(path: &Path, key_id: &str) -> Result<SecretKeyHandle> {
+    let mut key_bytes = [0_u8; KEY_SIZE_BYTES];
+    rand::rngs::OsRng.fill_bytes(&mut key_bytes);
+    let encoded = base64::engine::general_purpose::STANDARD.encode(key_bytes);
+    write_atomic_secret_file(path, encoded.as_bytes())?;
+    let fingerprint = key_fingerprint(&key_bytes);
+    Ok(SecretKeyHandle {
+        key_bytes,
+        key_id: key_id.to_string(),
+        fingerprint,
+        path: path.to_path_buf(),
+    })
 }
 
 pub fn secret_key_path(app_root: &Path) -> PathBuf {

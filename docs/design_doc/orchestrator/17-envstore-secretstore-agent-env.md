@@ -33,7 +33,8 @@ Agents currently have no way to receive custom environment variables. The runner
 ## Scope
 
 - In scope: resource CRUD (apply/get/delete/export), YAML parsing, agent env resolution, runner injection, config validation, redaction
-- Out of scope: UI, external secret backends, per-step env, key rotation
+- Out of scope: UI, external secret backends, per-step env
+- Key rotation: now covered by FR-012 (see `docs/design_doc/orchestrator/27-secretstore-key-lifecycle.md`)
 
 ---
 
@@ -124,7 +125,7 @@ A flat struct with optional fields (`name`, `value`, `fromRef`, `refValue`) is u
 ## Risks and Mitigations
 
 - **Risk**: Secrets stored in plaintext in SQLite.
-  - **Mitigation**: Out of scope for v1. SecretStore values are redacted in logs via `collect_sensitive_values()` + `redact_text()`.
+  - **Mitigation**: SecretStore values are encrypted at rest (AES-256-GCM-SIV) and redacted in logs via `collect_sensitive_values()` + `redact_text()`. Key rotation, revocation, and audit are governed by FR-012 (`docs/design_doc/orchestrator/27-secretstore-key-lifecycle.md`).
 - **Risk**: Store deletion while agents still reference it.
   - **Mitigation**: Build-time validation catches dangling references. Runtime resolution returns an error with a clear message.
 

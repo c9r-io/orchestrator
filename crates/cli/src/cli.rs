@@ -126,6 +126,10 @@ pub enum Commands {
     /// Initialize orchestrator runtime
     Init { root: Option<String> },
 
+    /// Secret key management
+    #[command(subcommand)]
+    Secret(SecretCommands),
+
     /// Database operations
     #[command(subcommand)]
     Db(DbCommands),
@@ -143,7 +147,7 @@ pub enum Commands {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cli, Commands, DbCommands, DbMigrationCommands};
+    use super::{Cli, Commands, DbCommands, DbMigrationCommands, SecretCommands, SecretKeyCommands};
     use clap::Parser;
 
     #[test]
@@ -438,6 +442,53 @@ pub enum StoreCommands {
         store: String,
         #[arg(short, long, default_value = "")]
         project: String,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum SecretCommands {
+    /// Secret key operations
+    #[command(subcommand)]
+    Key(SecretKeyCommands),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum SecretKeyCommands {
+    /// Show active key status
+    Status {
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+    /// List all keys
+    #[command(alias = "ls")]
+    List {
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+    /// Rotate the active key
+    Rotate {
+        /// Resume an incomplete rotation
+        #[arg(long)]
+        resume: bool,
+    },
+    /// Revoke a key
+    Revoke {
+        /// Key ID to revoke
+        key_id: String,
+        /// Force revocation of the active key
+        #[arg(long)]
+        force: bool,
+    },
+    /// Show key audit history
+    History {
+        /// Maximum events to show
+        #[arg(short = 'n', long, default_value = "50")]
+        limit: usize,
+        /// Filter by key ID
+        #[arg(long)]
+        key_id: Option<String>,
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
     },
 }
 

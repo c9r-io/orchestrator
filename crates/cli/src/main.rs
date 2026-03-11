@@ -13,7 +13,7 @@ use clap::Parser;
 
 pub use cli::{
     Cli, Commands, DbCommands, DbMigrationCommands, DebugCommands, ManifestCommands, OutputFormat,
-    SandboxProbeCommands, StoreCommands, TaskCommands,
+    SandboxProbeCommands, SecretCommands, SecretKeyCommands, StoreCommands, TaskCommands,
 };
 
 fn main() -> Result<()> {

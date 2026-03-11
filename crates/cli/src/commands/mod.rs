@@ -2,6 +2,7 @@ mod common;
 mod db;
 mod manifest;
 mod resource;
+mod secret;
 mod store;
 mod task;
 
@@ -27,6 +28,7 @@ pub async fn dispatch(
     match command {
         Commands::Task(cmd) => task::dispatch(client, cmd).await,
         Commands::Store(cmd) => store::dispatch(client, cmd).await,
+        Commands::Secret(cmd) => secret::dispatch(client, cmd).await,
         Commands::Db(cmd) => db::dispatch(client, cmd).await,
         Commands::Debug {
             component,
