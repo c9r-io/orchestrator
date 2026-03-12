@@ -9,6 +9,8 @@
 | FR-002 | Daemon 控制面认证、鉴权与传输安全 | P0 | Proposed |
 | FR-005 | Daemon 生命周期治理与运行态指标补完 | P1 | Proposed |
 | FR-011 | validate/scheduler/runner 职责拆分与验证逻辑去重 | P1 | Proposed |
+| FR-017 | Agent Drain 与 Enabled 开关 | P1 | Proposed |
+| FR-018 | 用户指南编译验证对齐 | P1 | Proposed |
 
 ## 说明
 
