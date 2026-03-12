@@ -4,19 +4,30 @@ use uuid::Uuid;
 
 use super::artifact::Artifact;
 
-/// Agent output with structured data (replaces exit_code-only results)
+/// Structured output emitted by an agent run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentOutput {
+    /// Run identifier associated with the output.
     pub run_id: Uuid,
+    /// Agent identifier that produced the output.
     pub agent_id: String,
+    /// Phase name for the run.
     pub phase: String,
+    /// Process exit code.
     pub exit_code: i64,
+    /// Captured stdout text.
     pub stdout: String,
+    /// Captured stderr text.
     pub stderr: String,
+    /// Structured artifacts parsed from the run.
     pub artifacts: Vec<Artifact>,
+    /// Execution metrics collected for the run.
     pub metrics: ExecutionMetrics,
+    /// Confidence score normalized to `[0.0, 1.0]`.
     pub confidence: f32,
+    /// Quality score normalized to `[0.0, 1.0]`.
     pub quality_score: f32,
+    /// Timestamp when the structured output was created.
     pub created_at: DateTime<Utc>,
     /// Structured build errors (populated for build/lint phases)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -27,6 +38,7 @@ pub struct AgentOutput {
 }
 
 impl AgentOutput {
+    /// Creates a new output record with default metrics and scores.
     pub fn new(
         run_id: Uuid,
         agent_id: String,
@@ -52,37 +64,46 @@ impl AgentOutput {
         }
     }
 
+    /// Replaces the artifact list on the output.
     pub fn with_artifacts(mut self, artifacts: Vec<Artifact>) -> Self {
         self.artifacts = artifacts;
         self
     }
 
+    /// Replaces execution metrics on the output.
     pub fn with_metrics(mut self, metrics: ExecutionMetrics) -> Self {
         self.metrics = metrics;
         self
     }
 
+    /// Sets the confidence score, clamping to `[0.0, 1.0]`.
     pub fn with_confidence(mut self, confidence: f32) -> Self {
         self.confidence = confidence.clamp(0.0, 1.0);
         self
     }
 
+    /// Sets the quality score, clamping to `[0.0, 1.0]`.
     pub fn with_quality_score(mut self, score: f32) -> Self {
         self.quality_score = score.clamp(0.0, 1.0);
         self
     }
 
+    /// Returns `true` when the run exited successfully.
     pub fn is_success(&self) -> bool {
         self.exit_code == 0
     }
 }
 
-/// Execution metrics from agent run
+/// Execution metrics recorded for an agent run.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ExecutionMetrics {
+    /// Total wall-clock duration in milliseconds.
     pub duration_ms: u64,
+    /// Optional token count consumed by the agent backend.
     pub tokens_consumed: Option<u64>,
+    /// Optional API call count issued by the agent backend.
     pub api_calls: Option<u32>,
+    /// Number of retries performed before completion.
     pub retry_count: u32,
 }
 

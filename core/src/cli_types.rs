@@ -115,14 +115,23 @@ impl OrchestratorResource {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 pub enum ResourceKind {
+    /// Workspace manifest.
     Workspace,
+    /// Agent manifest.
     Agent,
+    /// Workflow manifest.
     Workflow,
+    /// Project manifest.
     Project,
+    /// Runtime-policy manifest.
     RuntimePolicy,
+    /// Step-template manifest.
     StepTemplate,
+    /// Execution-profile manifest.
     ExecutionProfile,
+    /// Environment-store manifest.
     EnvStore,
+    /// Secret-store manifest.
     SecretStore,
 }
 
@@ -181,6 +190,7 @@ pub enum ResourceSpec {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectSpec {
+    /// Optional human-readable project description.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
@@ -188,27 +198,39 @@ pub struct ProjectSpec {
 /// Runtime policy specification containing runner + resume + observability behavior.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RuntimePolicySpec {
+    /// Runner policy applied to spawned commands.
     pub runner: RunnerSpec,
+    /// Resume behavior used by long-running tasks.
     pub resume: ResumeSpec,
+    /// Optional untyped observability settings forwarded to runtime config.
     #[serde(default)]
     pub observability: Option<serde_json::Value>,
 }
 
+/// Runner-policy manifest payload.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RunnerSpec {
+    /// Shell binary used to execute command templates.
     pub shell: String,
+    /// Shell flag used to pass a command string.
     #[serde(default = "default_shell_arg")]
     pub shell_arg: String,
+    /// Runner policy mode such as `allowlist`.
     #[serde(default = "default_runner_policy")]
     pub policy: String,
+    /// Executor implementation kind.
     #[serde(default = "default_runner_executor")]
     pub executor: String,
+    /// Allowed shell binaries when allowlist enforcement is enabled.
     #[serde(default = "default_allowed_shells")]
     pub allowed_shells: Vec<String>,
+    /// Allowed shell arguments when allowlist enforcement is enabled.
     #[serde(default = "default_allowed_shell_args")]
     pub allowed_shell_args: Vec<String>,
+    /// Environment variables propagated into child processes.
     #[serde(default = "default_env_allowlist")]
     pub env_allowlist: Vec<String>,
+    /// Case-insensitive substrings used to redact secrets from logs.
     #[serde(default = "default_redaction_patterns")]
     pub redaction_patterns: Vec<String>,
 }
@@ -257,8 +279,10 @@ fn default_redaction_patterns() -> Vec<String> {
     ]
 }
 
+/// Resume-policy manifest payload.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ResumeSpec {
+    /// Enables automatic resume behavior after restart or interruption.
     pub auto: bool,
 }
 
@@ -298,22 +322,31 @@ pub struct StepTemplateSpec {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ExecutionProfileSpec {
+    /// Execution backend mode such as `host` or sandboxed execution.
     #[serde(default = "default_execution_profile_mode")]
     pub mode: String,
+    /// Filesystem isolation mode.
     #[serde(default = "default_execution_fs_mode")]
     pub fs_mode: String,
+    /// Additional writable paths allowed by the profile.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub writable_paths: Vec<String>,
+    /// Network isolation mode.
     #[serde(default = "default_execution_network_mode")]
     pub network_mode: String,
+    /// Explicit outbound network allowlist entries.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub network_allowlist: Vec<String>,
+    /// Optional memory limit in MiB.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_memory_mb: Option<u64>,
+    /// Optional CPU time limit in seconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_cpu_seconds: Option<u64>,
+    /// Optional process-count limit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_processes: Option<u64>,
+    /// Optional open-file-descriptor limit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_open_files: Option<u64>,
 }
@@ -335,6 +368,7 @@ fn default_execution_network_mode() -> String {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct EnvStoreSpec {
+    /// Key-value environment pairs exposed by the store.
     pub data: HashMap<String, String>,
 }
 
@@ -345,12 +379,16 @@ pub struct EnvStoreSpec {
 /// - `name` + `refValue`: import a single key from a named store
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgentEnvEntry {
+    /// Environment variable name for direct values or single-key imports.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// Literal environment-variable value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
+    /// Store reference used to import all keys from an EnvStore or SecretStore.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "fromRef")]
     pub from_ref: Option<String>,
+    /// Store reference used to import a single key from an EnvStore or SecretStore.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "refValue")]
     pub ref_value: Option<AgentEnvRefValue>,
 }
@@ -358,7 +396,9 @@ pub struct AgentEnvEntry {
 /// Reference to a specific key within an EnvStore or SecretStore.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgentEnvRefValue {
+    /// Name of the source EnvStore or SecretStore.
     pub name: String,
+    /// Key within the referenced store.
     pub key: String,
 }
 
@@ -411,10 +451,13 @@ pub struct AgentMetadataSpec {
     pub description: Option<String>,
 }
 
+/// Agent-selection policy embedded in declarative manifests.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AgentSelectionSpec {
+    /// Selection strategy used to choose among candidate agents.
     #[serde(default)]
     pub strategy: SelectionStrategy,
+    /// Optional scoring weights for adaptive selection.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub weights: Option<SelectionWeights>,
 }
@@ -456,10 +499,13 @@ pub struct WorkflowSpec {
 /// Safety configuration specification for YAML
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct SafetySpec {
+    /// Maximum consecutive failures before safety actions trigger.
     #[serde(default = "default_max_consecutive_failures")]
     pub max_consecutive_failures: u32,
+    /// Enables automatic rollback when configured safety conditions are met.
     #[serde(default)]
     pub auto_rollback: bool,
+    /// Checkpoint strategy identifier.
     #[serde(default)]
     pub checkpoint_strategy: String,
     /// Per-step timeout in seconds (default: 1800 = 30 min)
@@ -468,6 +514,7 @@ pub struct SafetySpec {
     /// Snapshot the release binary at cycle start for rollback
     #[serde(default)]
     pub binary_snapshot: bool,
+    /// Optional named safety profile.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
     /// WP04: Invariant constraints
@@ -491,11 +538,14 @@ fn default_max_consecutive_failures() -> u32 {
 /// Workflow step specification.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WorkflowStepSpec {
+    /// Stable step identifier unique within the workflow.
     pub id: String,
 
+    /// Logical step type used for builtin defaults and scheduling semantics.
     #[serde(rename = "type")]
     pub step_type: String,
 
+    /// Capability required when the step is dispatched to an agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required_capability: Option<String>,
 
@@ -507,24 +557,31 @@ pub struct WorkflowStepSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution_profile: Option<String>,
 
+    /// Optional builtin handler name used instead of agent dispatch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub builtin: Option<String>,
 
+    /// Whether the step is enabled.
     #[serde(default = "default_true")]
     pub enabled: bool,
 
+    /// Whether the step repeats in later cycles.
     #[serde(default = "default_true")]
     pub repeatable: bool,
 
+    /// Marks this step as a loop guard.
     #[serde(default)]
     pub is_guard: bool,
 
+    /// Optional cost preference used during agent selection.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cost_preference: Option<String>,
 
+    /// Optional prehook executed before the step runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prehook: Option<WorkflowPrehookSpec>,
 
+    /// Requests a TTY for interactive commands.
     #[serde(default)]
     pub tty: bool,
 
@@ -572,16 +629,21 @@ fn default_true() -> bool {
 /// Workflow prehook specification for conditional execution.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WorkflowPrehookSpec {
+    /// Prehook engine identifier.
     #[serde(default = "default_hook_engine")]
     pub engine: String,
+    /// Expression evaluated by the prehook engine.
     pub when: String,
 
+    /// Optional reason surfaced in events or UI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 
+    /// Optional untyped UI metadata for the prehook.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ui: Option<serde_json::Value>,
 
+    /// Enables extended prehook decisions beyond boolean run/skip.
     #[serde(default)]
     pub extended: bool,
 }
@@ -593,18 +655,23 @@ fn default_hook_engine() -> String {
 /// Workflow loop policy specification.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkflowLoopSpec {
+    /// Loop mode such as `once`, `fixed`, or `infinite`.
     #[serde(default)]
     pub mode: String,
 
+    /// Optional maximum number of cycles for fixed/infinite loops.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_cycles: Option<u32>,
 
+    /// Master switch for loop execution.
     #[serde(default = "default_true")]
     pub enabled: bool,
 
+    /// Stops execution early when no unresolved items remain.
     #[serde(default = "default_true")]
     pub stop_when_no_unresolved: bool,
 
+    /// Optional agent template used for generated loop steps.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_template: Option<String>,
 }
@@ -624,6 +691,7 @@ impl Default for WorkflowLoopSpec {
 /// Workflow finalization rules specification.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct WorkflowFinalizeSpec {
+    /// Ordered finalization rules evaluated after workflow execution.
     #[serde(default)]
     pub rules: Vec<WorkflowFinalizeRuleSpec>,
 }
@@ -631,15 +699,20 @@ pub struct WorkflowFinalizeSpec {
 /// Individual finalization rule.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WorkflowFinalizeRuleSpec {
+    /// Stable rule identifier.
     pub id: String,
 
+    /// Rule engine identifier.
     #[serde(default = "default_hook_engine")]
     pub engine: String,
 
+    /// Expression evaluated to activate the rule.
     pub when: String,
 
+    /// Final task status applied when the rule matches.
     pub status: String,
 
+    /// Optional human-readable explanation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
@@ -647,18 +720,26 @@ pub struct WorkflowFinalizeRuleSpec {
 /// Dynamic step configuration carried by workflow manifests.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DynamicStepSpec {
+    /// Stable dynamic-step identifier.
     pub id: String,
+    /// Optional operator-facing description.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Logical step type emitted at runtime.
     pub step_type: String,
+    /// Optional fixed agent identifier.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<String>,
+    /// Optional step-template reference.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<String>,
+    /// Optional trigger expression controlling activation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trigger: Option<String>,
+    /// Priority used to order dynamic steps.
     #[serde(default)]
     pub priority: i32,
+    /// Optional execution cap for the dynamic step.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_runs: Option<u32>,
 }

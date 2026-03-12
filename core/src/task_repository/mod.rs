@@ -26,6 +26,7 @@ use crate::dto::{CommandRunDto, EventDto, TaskGraphDebugBundle, TaskItemDto};
 use anyhow::Result;
 use std::sync::Arc;
 
+/// Tuple returned by detail queries: items, runs, events, and graph bundles.
 pub type TaskDetailRows = (
     Vec<TaskItemDto>,
     Vec<CommandRunDto>,
@@ -33,11 +34,13 @@ pub type TaskDetailRows = (
     Vec<TaskGraphDebugBundle>,
 );
 
+/// Synchronous SQLite-backed implementation of [`TaskRepository`].
 pub struct SqliteTaskRepository {
     source: types::TaskRepositorySource,
 }
 
 impl SqliteTaskRepository {
+    /// Creates a repository backed by the given connection source.
     pub fn new<T>(source: T) -> Self
     where
         T: Into<types::TaskRepositorySource>,
@@ -245,17 +248,20 @@ impl TaskRepository for SqliteTaskRepository {
     }
 }
 
+/// Async wrapper around [`SqliteTaskRepository`] built on [`AsyncDatabase`].
 pub struct AsyncSqliteTaskRepository {
     async_db: Arc<AsyncDatabase>,
 }
 
 impl AsyncSqliteTaskRepository {
+    /// Creates a new async repository wrapper.
     pub fn new(async_db: Arc<AsyncDatabase>) -> Self {
         Self { async_db }
     }
 
     // ── Read operations (use reader) ──
 
+    /// Resolves a full task identifier from an ID prefix.
     pub async fn resolve_task_id(&self, prefix: &str) -> Result<String> {
         let prefix = prefix.to_owned();
         self.async_db
@@ -268,6 +274,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Loads a summary row for a task.
     pub async fn load_task_summary(&self, task_id: &str) -> Result<crate::dto::TaskSummary> {
         let task_id = task_id.to_owned();
         self.async_db
@@ -280,6 +287,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Loads the full detail bundle for a task.
     pub async fn load_task_detail_rows(&self, task_id: &str) -> Result<TaskDetailRows> {
         let task_id = task_id.to_owned();
         self.async_db
@@ -292,6 +300,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Loads `(total, resolved, unresolved)` item counts for a task.
     pub async fn load_task_item_counts(&self, task_id: &str) -> Result<(i64, i64, i64)> {
         let task_id = task_id.to_owned();
         self.async_db
@@ -304,6 +313,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Lists task identifiers ordered by creation time descending.
     pub async fn list_task_ids_ordered_by_created_desc(&self) -> Result<Vec<String>> {
         self.async_db
             .reader()
@@ -315,6 +325,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Returns the latest resumable task, optionally including pending tasks.
     pub async fn find_latest_resumable_task_id(
         &self,
         include_pending: bool,
@@ -329,6 +340,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Loads execution state required to resume a task.
     pub async fn load_task_runtime_row(&self, task_id: &str) -> Result<TaskRuntimeRow> {
         let task_id = task_id.to_owned();
         self.async_db
@@ -341,6 +353,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Returns the first task-item identifier for a task, if present.
     pub async fn first_task_item_id(&self, task_id: &str) -> Result<Option<String>> {
         let task_id = task_id.to_owned();
         self.async_db
@@ -353,6 +366,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Counts unresolved task items.
     pub async fn count_unresolved_items(&self, task_id: &str) -> Result<i64> {
         let task_id = task_id.to_owned();
         self.async_db
@@ -365,6 +379,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Lists task items participating in the current cycle.
     pub async fn list_task_items_for_cycle(
         &self,
         task_id: &str,
@@ -380,6 +395,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Loads the current task status string.
     pub async fn load_task_status(&self, task_id: &str) -> Result<Option<String>> {
         let task_id = task_id.to_owned();
         self.async_db
@@ -392,6 +408,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Loads the human-readable task name.
     pub async fn load_task_name(&self, task_id: &str) -> Result<Option<String>> {
         let task_id = task_id.to_owned();
         self.async_db
@@ -404,6 +421,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Lists recent command runs used for log inspection.
     pub async fn list_task_log_runs(
         &self,
         task_id: &str,
@@ -420,6 +438,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Loads graph-planning debug bundles for a task.
     pub async fn load_task_graph_debug_bundles(
         &self,
         task_id: &str,
@@ -437,6 +456,7 @@ impl AsyncSqliteTaskRepository {
 
     // ── Write operations (use writer) ──
 
+    /// Updates a task status and optionally marks completion.
     pub async fn set_task_status(
         &self,
         task_id: &str,
@@ -455,6 +475,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Resets a task into a fresh batch-start state.
     pub async fn prepare_task_for_start_batch(&self, task_id: &str) -> Result<()> {
         let task_id = task_id.to_owned();
         self.async_db
@@ -467,6 +488,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Persists cycle counters and `init_once` state.
     pub async fn update_task_cycle_state(
         &self,
         task_id: &str,
@@ -484,6 +506,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Marks a task item as running.
     pub async fn mark_task_item_running(&self, task_item_id: &str) -> Result<()> {
         let task_item_id = task_item_id.to_owned();
         self.async_db
@@ -496,6 +519,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Sets a terminal status for a task item.
     pub async fn set_task_item_terminal_status(
         &self,
         task_item_id: &str,
@@ -513,6 +537,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Updates a task item to an arbitrary status.
     pub async fn update_task_item_status(&self, task_item_id: &str, status: &str) -> Result<()> {
         let task_item_id = task_item_id.to_owned();
         let status = status.to_owned();
@@ -526,6 +551,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Deletes a task and returns log paths that should be removed.
     pub async fn delete_task_and_collect_log_paths(&self, task_id: &str) -> Result<Vec<String>> {
         let task_id = task_id.to_owned();
         self.async_db
@@ -538,6 +564,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Inserts a command-run record.
     pub async fn insert_command_run(&self, run: NewCommandRun) -> Result<()> {
         self.async_db
             .writer()
@@ -549,6 +576,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Inserts an event record.
     pub async fn insert_event(&self, event: DbEventRecord) -> Result<()> {
         self.async_db
             .writer()
@@ -560,6 +588,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Updates an existing command-run record.
     pub async fn update_command_run(&self, run: NewCommandRun) -> Result<()> {
         self.async_db
             .writer()
@@ -571,6 +600,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Updates a command run and appends emitted events.
     pub async fn update_command_run_with_events(
         &self,
         run: NewCommandRun,
@@ -586,6 +616,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Persists a completed phase result together with emitted events.
     pub async fn persist_phase_result_with_events(
         &self,
         run: NewCommandRun,
@@ -601,6 +632,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Updates the PID associated with a running command.
     pub async fn update_command_run_pid(&self, run_id: &str, pid: i64) -> Result<()> {
         let run_id = run_id.to_owned();
         self.async_db
@@ -613,6 +645,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Returns active child PIDs for a task.
     pub async fn find_active_child_pids(&self, task_id: &str) -> Result<Vec<i64>> {
         let task_id = task_id.to_owned();
         self.async_db
@@ -625,6 +658,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Persists the serialized pipeline-variable map for a task.
     pub async fn update_task_pipeline_vars(
         &self,
         task_id: &str,
@@ -642,6 +676,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Persists active ticket paths and preview content for a task item.
     pub async fn update_task_item_tickets(
         &self,
         task_item_id: &str,
@@ -666,6 +701,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Inserts a task-graph planning run.
     pub async fn insert_task_graph_run(&self, run: NewTaskGraphRun) -> Result<()> {
         self.async_db
             .writer()
@@ -677,6 +713,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Updates the status of a task-graph planning run.
     pub async fn update_task_graph_run_status(
         &self,
         graph_run_id: &str,
@@ -694,6 +731,7 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Persists one task-graph snapshot payload.
     pub async fn insert_task_graph_snapshot(&self, snapshot: NewTaskGraphSnapshot) -> Result<()> {
         self.async_db
             .writer()

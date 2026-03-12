@@ -6,50 +6,90 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+/// Persisted interactive session row.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionRow {
+    /// Session identifier.
     pub id: String,
+    /// Parent task identifier.
     pub task_id: String,
+    /// Optional task-item identifier.
     pub task_item_id: Option<String>,
+    /// Step identifier associated with the session.
     pub step_id: String,
+    /// Phase name associated with the session.
     pub phase: String,
+    /// Agent identifier that owns the session.
     pub agent_id: String,
+    /// Session state string.
     pub state: String,
+    /// PTY child PID.
     pub pid: i64,
+    /// PTY backend identifier.
     pub pty_backend: String,
+    /// Working directory for the child process.
     pub cwd: String,
+    /// Rendered command line.
     pub command: String,
+    /// FIFO path used for input streaming.
     pub input_fifo_path: String,
+    /// Captured stdout path.
     pub stdout_path: String,
+    /// Captured stderr path.
     pub stderr_path: String,
+    /// Transcript file path.
     pub transcript_path: String,
+    /// Optional structured output JSON spill path.
     pub output_json_path: Option<String>,
+    /// Client currently holding the writer lease.
     pub writer_client_id: Option<String>,
+    /// Creation timestamp.
     pub created_at: String,
+    /// Last update timestamp.
     pub updated_at: String,
+    /// Optional end timestamp.
     pub ended_at: Option<String>,
+    /// Optional process exit code.
     pub exit_code: Option<i64>,
 }
 
+/// Borrowed insert payload for a new interactive session.
 pub struct NewSession<'a> {
+    /// Session identifier.
     pub id: &'a str,
+    /// Parent task identifier.
     pub task_id: &'a str,
+    /// Optional task-item identifier.
     pub task_item_id: Option<&'a str>,
+    /// Step identifier associated with the session.
     pub step_id: &'a str,
+    /// Phase name associated with the session.
     pub phase: &'a str,
+    /// Agent identifier that owns the session.
     pub agent_id: &'a str,
+    /// Initial session state.
     pub state: &'a str,
+    /// PTY child PID.
     pub pid: i64,
+    /// PTY backend identifier.
     pub pty_backend: &'a str,
+    /// Working directory for the child process.
     pub cwd: &'a str,
+    /// Rendered command line.
     pub command: &'a str,
+    /// FIFO path used for input streaming.
     pub input_fifo_path: &'a str,
+    /// Captured stdout path.
     pub stdout_path: &'a str,
+    /// Captured stderr path.
     pub stderr_path: &'a str,
+    /// Transcript file path.
     pub transcript_path: &'a str,
+    /// Optional structured output JSON spill path.
     pub output_json_path: Option<&'a str>,
 }
 
+/// Inserts a new interactive session row.
 pub fn insert_session(conn: &Connection, s: &NewSession<'_>) -> Result<()> {
     let now = now_ts();
     conn.execute(
@@ -77,6 +117,7 @@ pub fn insert_session(conn: &Connection, s: &NewSession<'_>) -> Result<()> {
     Ok(())
 }
 
+/// Updates session state, exit code, and optional end time.
 pub fn update_session_state(
     conn: &Connection,
     session_id: &str,
@@ -93,6 +134,7 @@ pub fn update_session_state(
     Ok(())
 }
 
+/// Updates the PID associated with an existing session.
 pub fn update_session_pid(conn: &Connection, session_id: &str, pid: i64) -> Result<()> {
     conn.execute(
         "UPDATE agent_sessions SET pid = ?2, updated_at = ?3 WHERE id = ?1",
@@ -129,6 +171,7 @@ fn row_to_session(r: &rusqlite::Row<'_>) -> rusqlite::Result<SessionRow> {
 
 const SESSION_COLUMNS: &str = "id, task_id, task_item_id, step_id, phase, agent_id, state, pid, pty_backend, cwd, command, input_fifo_path, stdout_path, stderr_path, transcript_path, output_json_path, writer_client_id, created_at, updated_at, ended_at, exit_code";
 
+/// Loads a session row by session identifier.
 pub fn load_session(conn: &Connection, session_id: &str) -> Result<Option<SessionRow>> {
     conn.query_row(
         &format!(
@@ -142,6 +185,7 @@ pub fn load_session(conn: &Connection, session_id: &str) -> Result<Option<Sessio
     .context("load session")
 }
 
+/// Loads the latest active or detached session for a task step.
 pub fn load_active_session_for_task_step(
     conn: &Connection,
     task_id: &str,
@@ -163,6 +207,7 @@ pub fn load_active_session_for_task_step(
     .context("load active session for task step")
 }
 
+/// Lists all sessions for a task ordered from newest to oldest.
 pub fn list_task_sessions(conn: &Connection, task_id: &str) -> Result<Vec<SessionRow>> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {}
@@ -177,6 +222,7 @@ pub fn list_task_sessions(conn: &Connection, task_id: &str) -> Result<Vec<Sessio
     Ok(rows)
 }
 
+/// Attempts to acquire the writer lease for a session.
 pub fn acquire_writer(conn: &Connection, session_id: &str, client_id: &str) -> Result<bool> {
     let existing: Option<String> = conn
         .query_row(
@@ -202,6 +248,7 @@ pub fn acquire_writer(conn: &Connection, session_id: &str, client_id: &str) -> R
     Ok(true)
 }
 
+/// Attaches a read-only client to a session.
 pub fn attach_reader(conn: &Connection, session_id: &str, client_id: &str) -> Result<()> {
     conn.execute(
         "INSERT INTO session_attachments (session_id, client_id, mode, attached_at, detached_at, reason) VALUES (?1, ?2, 'reader', ?3, NULL, NULL)",
@@ -210,6 +257,7 @@ pub fn attach_reader(conn: &Connection, session_id: &str, client_id: &str) -> Re
     Ok(())
 }
 
+/// Deletes old terminal sessions and returns the number removed.
 pub fn cleanup_stale_sessions(conn: &Connection, max_age_hours: u64) -> Result<usize> {
     let cutoff = chrono::Utc::now() - chrono::Duration::hours(max_age_hours as i64);
     let deleted = conn.execute(
@@ -219,6 +267,7 @@ pub fn cleanup_stale_sessions(conn: &Connection, max_age_hours: u64) -> Result<u
     Ok(deleted)
 }
 
+/// Releases a reader or writer attachment for a client.
 pub fn release_attachment(
     conn: &Connection,
     session_id: &str,
@@ -238,21 +287,37 @@ pub fn release_attachment(
 
 /// Owned version of `NewSession` for async closures (`'static + Send`).
 pub struct OwnedNewSession {
+    /// Session identifier.
     pub id: String,
+    /// Parent task identifier.
     pub task_id: String,
+    /// Optional task-item identifier.
     pub task_item_id: Option<String>,
+    /// Step identifier associated with the session.
     pub step_id: String,
+    /// Phase name associated with the session.
     pub phase: String,
+    /// Agent identifier that owns the session.
     pub agent_id: String,
+    /// Initial session state.
     pub state: String,
+    /// PTY child PID.
     pub pid: i64,
+    /// PTY backend identifier.
     pub pty_backend: String,
+    /// Working directory for the child process.
     pub cwd: String,
+    /// Rendered command line.
     pub command: String,
+    /// FIFO path used for input streaming.
     pub input_fifo_path: String,
+    /// Captured stdout path.
     pub stdout_path: String,
+    /// Captured stderr path.
     pub stderr_path: String,
+    /// Transcript file path.
     pub transcript_path: String,
+    /// Optional structured output JSON spill path.
     pub output_json_path: Option<String>,
 }
 
@@ -279,23 +344,28 @@ impl<'a> From<&NewSession<'a>> for OwnedNewSession {
     }
 }
 
+/// Async facade around a [`SessionRepository`] implementation.
 pub struct AsyncSessionStore {
     repository: Arc<dyn SessionRepository>,
 }
 
 impl AsyncSessionStore {
+    /// Creates a SQLite-backed async session store.
     pub fn new(async_db: Arc<AsyncDatabase>) -> Self {
         Self::with_repository(Arc::new(SqliteSessionRepository::new(async_db)))
     }
 
+    /// Creates an async session store from a repository implementation.
     pub fn with_repository(repository: Arc<dyn SessionRepository>) -> Self {
         Self { repository }
     }
 
+    /// Inserts a new session row.
     pub async fn insert_session(&self, s: OwnedNewSession) -> Result<()> {
         self.repository.insert_session(s).await
     }
 
+    /// Updates session state, exit code, and optional end time.
     pub async fn update_session_state(
         &self,
         session_id: &str,
@@ -308,14 +378,17 @@ impl AsyncSessionStore {
             .await
     }
 
+    /// Updates the PID associated with a session.
     pub async fn update_session_pid(&self, session_id: &str, pid: i64) -> Result<()> {
         self.repository.update_session_pid(session_id, pid).await
     }
 
+    /// Loads a session row by identifier.
     pub async fn load_session(&self, session_id: &str) -> Result<Option<SessionRow>> {
         self.repository.load_session(session_id).await
     }
 
+    /// Loads the latest active or detached session for a task step.
     pub async fn load_active_session_for_task_step(
         &self,
         task_id: &str,
@@ -326,22 +399,27 @@ impl AsyncSessionStore {
             .await
     }
 
+    /// Lists all sessions for a task.
     pub async fn list_task_sessions(&self, task_id: &str) -> Result<Vec<SessionRow>> {
         self.repository.list_task_sessions(task_id).await
     }
 
+    /// Attempts to acquire the writer lease for a session.
     pub async fn acquire_writer(&self, session_id: &str, client_id: &str) -> Result<bool> {
         self.repository.acquire_writer(session_id, client_id).await
     }
 
+    /// Attaches a read-only client to a session.
     pub async fn attach_reader(&self, session_id: &str, client_id: &str) -> Result<()> {
         self.repository.attach_reader(session_id, client_id).await
     }
 
+    /// Deletes stale terminal sessions and returns the number removed.
     pub async fn cleanup_stale_sessions(&self, max_age_hours: u64) -> Result<usize> {
         self.repository.cleanup_stale_sessions(max_age_hours).await
     }
 
+    /// Releases a reader or writer attachment for a client.
     pub async fn release_attachment(
         &self,
         session_id: &str,

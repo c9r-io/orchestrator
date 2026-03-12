@@ -11,14 +11,19 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PromptDelivery {
+    /// Write the rendered prompt to stdin.
     Stdin,
+    /// Write the rendered prompt to a temporary file.
     File,
+    /// Pass the rendered prompt via environment variable.
     Env,
+    /// Substitute the rendered prompt into the command arguments.
     #[default]
     Arg,
 }
 
 impl PromptDelivery {
+    /// Returns `true` when this is the default prompt-delivery mode.
     pub fn is_default(&self) -> bool {
         *self == Self::Arg
     }
@@ -27,10 +32,14 @@ impl PromptDelivery {
 /// Agent metadata
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AgentMetadata {
+    /// Stable agent name.
     pub name: String,
+    /// Optional human-readable description.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Optional agent version string.
     pub version: Option<String>,
+    /// Optional static cost hint.
     pub cost: Option<u8>,
 }
 
@@ -38,17 +47,20 @@ pub struct AgentMetadata {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
     #[serde(default)]
+    /// Metadata that describes the agent.
     pub metadata: AgentMetadata,
     /// Whether this agent is enabled for scheduling.
     /// Disabled agents are skipped during task dispatch.
     #[serde(default = "default_true")]
     pub enabled: bool,
     #[serde(default)]
+    /// Capabilities advertised by the agent.
     pub capabilities: Vec<String>,
     /// Command to execute (must contain {prompt} placeholder)
     #[serde(default)]
     pub command: String,
     #[serde(default)]
+    /// Agent-selection policy and weights.
     pub selection: AgentSelectionConfig,
     /// Environment variable entries (direct values and store references).
     /// Resolution happens at runtime via `resolve_agent_env()`.
@@ -64,6 +76,7 @@ fn default_true() -> bool {
 }
 
 impl AgentConfig {
+    /// Creates an empty enabled agent configuration with defaults.
     pub fn new() -> Self {
         Self {
             metadata: AgentMetadata::default(),
@@ -76,6 +89,7 @@ impl AgentConfig {
         }
     }
 
+    /// Returns `true` when the agent advertises the requested capability.
     pub fn supports_capability(&self, capability: &str) -> bool {
         self.capabilities.contains(&capability.to_string())
     }
@@ -87,11 +101,13 @@ impl Default for AgentConfig {
     }
 }
 
-/// Agent selection configuration
+/// Agent selection configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AgentSelectionConfig {
+    /// Candidate-selection strategy.
     #[serde(default = "default_selection_strategy")]
     pub strategy: SelectionStrategy,
+    /// Optional scoring weights for adaptive selection.
     #[serde(default)]
     pub weights: Option<SelectionWeights>,
 }

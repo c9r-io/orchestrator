@@ -4,18 +4,25 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Artifact produced by an agent (replaces ticket file scanning)
+/// Artifact produced by an agent run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Artifact {
+    /// Stable artifact identifier generated at creation time.
     pub id: Uuid,
+    /// Semantic category of the artifact payload.
     pub kind: ArtifactKind,
+    /// Optional filesystem path associated with the artifact.
     pub path: Option<String>,
+    /// Optional structured payload embedded directly in the artifact.
     pub content: Option<serde_json::Value>,
+    /// Optional checksum used to deduplicate or verify the artifact body.
     pub checksum: String,
+    /// Timestamp when the artifact was created.
     pub created_at: DateTime<Utc>,
 }
 
 impl Artifact {
+    /// Creates a new artifact with a generated identifier and current timestamp.
     pub fn new(kind: ArtifactKind) -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -27,70 +34,102 @@ impl Artifact {
         }
     }
 
+    /// Attaches a filesystem path to the artifact.
     pub fn with_path(mut self, path: String) -> Self {
         self.path = Some(path);
         self
     }
 
+    /// Attaches structured JSON content to the artifact.
     pub fn with_content(mut self, content: serde_json::Value) -> Self {
         self.content = Some(content);
         self
     }
 
+    /// Records a checksum for the artifact.
     pub fn with_checksum(mut self, checksum: String) -> Self {
         self.checksum = checksum;
         self
     }
 }
 
-/// Types of artifacts an agent can produce
+/// Types of artifacts an agent can produce.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ArtifactKind {
+    /// A QA or governance ticket raised by an agent.
     Ticket {
+        /// Severity assigned to the ticket.
         severity: Severity,
+        /// Logical category such as `bug`, `qa`, or `security`.
         category: String,
     },
+    /// A code change touching one or more files.
     CodeChange {
+        /// Repository-relative files affected by the change.
         files: Vec<String>,
     },
+    /// A summarized test execution result.
     TestResult {
+        /// Number of passing tests.
         passed: u32,
+        /// Number of failing tests.
         failed: u32,
     },
+    /// An analytical artifact containing findings.
     Analysis {
+        /// Findings captured during analysis.
         findings: Vec<Finding>,
     },
+    /// A persisted decision with rationale.
     Decision {
+        /// Selected option or action.
         choice: String,
+        /// Reasoning that explains the choice.
         rationale: String,
     },
+    /// A generic data payload with a declared schema name.
     Data {
+        /// Schema or format identifier for the payload.
         schema: String,
     },
+    /// A custom artifact type not covered by builtin variants.
     Custom {
+        /// User-defined artifact name.
         name: String,
     },
 }
 
+/// Severity level used by tickets and findings.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Severity {
+    /// Requires immediate operator attention.
     Critical,
+    /// High-priority issue with significant impact.
     High,
+    /// Medium-priority issue that should be addressed soon.
     Medium,
+    /// Low-priority issue or minor defect.
     Low,
+    /// Informational note without immediate action required.
     Info,
 }
 
+/// Structured finding emitted by an analysis artifact.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Finding {
+    /// Short finding title.
     pub title: String,
+    /// Detailed description of the finding.
     pub description: String,
+    /// Severity assigned to the finding.
     pub severity: Severity,
+    /// Optional source location or file reference.
     pub location: Option<String>,
+    /// Optional remediation guidance.
     pub suggestion: Option<String>,
 }
 
-/// Registry of artifacts available in current context
+/// Registry of artifacts available in the current execution context.
 #[derive(Debug, Default)]
 pub struct ArtifactRegistry {
     artifacts: HashMap<String, Vec<Artifact>>,
@@ -105,10 +144,12 @@ impl Clone for ArtifactRegistry {
 }
 
 impl ArtifactRegistry {
+    /// Registers a new artifact under the given phase key.
     pub fn register(&mut self, phase: String, artifact: Artifact) {
         self.artifacts.entry(phase).or_default().push(artifact);
     }
 
+    /// Returns all artifacts recorded for a single phase.
     pub fn get_by_phase(&self, phase: &str) -> Vec<&Artifact> {
         self.artifacts
             .get(phase)
@@ -116,6 +157,7 @@ impl ArtifactRegistry {
             .unwrap_or_default()
     }
 
+    /// Returns all artifacts whose kind matches the requested variant.
     pub fn get_by_kind(&self, kind: &ArtifactKind) -> Vec<&Artifact> {
         self.artifacts
             .values()
@@ -124,14 +166,17 @@ impl ArtifactRegistry {
             .collect()
     }
 
+    /// Returns the most recent artifact recorded for a phase.
     pub fn get_latest(&self, phase: &str) -> Option<&Artifact> {
         self.artifacts.get(phase).and_then(|v| v.last())
     }
 
+    /// Counts all artifacts across all phases.
     pub fn count(&self) -> usize {
         self.artifacts.values().map(|v| v.len()).sum()
     }
 
+    /// Returns a phase-keyed view of the entire registry.
     pub fn all(&self) -> HashMap<String, Vec<&Artifact>> {
         self.artifacts
             .iter()
@@ -140,25 +185,29 @@ impl ArtifactRegistry {
     }
 }
 
-/// Key-value store for shared state between agents
+/// Key-value store for shared state shared between collaborating agents.
 #[derive(Debug, Default, Clone)]
 pub struct SharedState {
     data: HashMap<String, serde_json::Value>,
 }
 
 impl SharedState {
+    /// Stores or replaces a value under the provided key.
     pub fn set(&mut self, key: impl Into<String>, value: serde_json::Value) {
         self.data.insert(key.into(), value);
     }
 
+    /// Returns a shared reference to a stored value.
     pub fn get(&self, key: &str) -> Option<&serde_json::Value> {
         self.data.get(key)
     }
 
+    /// Removes a stored value and returns it if present.
     pub fn remove(&mut self, key: &str) -> Option<serde_json::Value> {
         self.data.remove(key)
     }
 
+    /// Replaces `{key}` placeholders in the template using stored values.
     pub fn render_template(&self, template: &str) -> String {
         let mut result = template.to_string();
         for (key, value) in &self.data {
@@ -173,7 +222,7 @@ impl SharedState {
     }
 }
 
-/// Parse artifacts from agent stdout/stderr output
+/// Parses artifact payloads from agent stdout or stderr output.
 pub fn parse_artifacts_from_output(output: &str) -> Vec<Artifact> {
     let mut artifacts = Vec::new();
 

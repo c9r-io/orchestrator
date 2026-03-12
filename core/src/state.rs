@@ -13,27 +13,36 @@ use std::sync::{Arc, OnceLock};
 use tokio::process::Child;
 use tokio::sync::Mutex;
 
+/// Maximum number of tasks that may run concurrently in-process.
 pub const MAX_CONCURRENT_TASKS: usize = 10;
 
 static TASK_SEMAPHORE: OnceLock<Arc<tokio::sync::Semaphore>> = OnceLock::new();
 
+/// Returns the global task-execution semaphore.
 pub fn task_semaphore() -> &'static Arc<tokio::sync::Semaphore> {
     TASK_SEMAPHORE.get_or_init(|| Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_TASKS)))
 }
 
+/// Owned wrapper returned by bootstrap helpers.
 #[derive(Clone)]
 pub struct ManagedState {
+    /// Shared inner runtime state.
     pub inner: Arc<InnerState>,
 }
 
+/// Snapshot of the currently active configuration and its status.
 #[derive(Clone)]
 pub struct ConfigRuntimeSnapshot {
+    /// Active runtime configuration.
     pub active_config: Arc<ActiveConfig>,
+    /// Optional validation or load error for the active config.
     pub active_config_error: Option<String>,
+    /// Optional self-heal notice associated with the active config.
     pub active_config_notice: Option<ConfigSelfHealReport>,
 }
 
 impl ConfigRuntimeSnapshot {
+    /// Creates a runtime snapshot from configuration and status values.
     pub fn new(
         active_config: ActiveConfig,
         active_config_error: Option<String>,
@@ -47,30 +56,49 @@ impl ConfigRuntimeSnapshot {
     }
 }
 
+/// Shared daemon state referenced by services and scheduler code.
 pub struct InnerState {
+    /// Application root directory.
     pub app_root: PathBuf,
+    /// SQLite database path.
     pub db_path: PathBuf,
+    /// Whether unsafe mode is enabled.
     pub unsafe_mode: bool,
+    /// Async database handle.
     pub async_database: Arc<crate::async_database::AsyncDatabase>,
+    /// Directory containing task and command logs.
     pub logs_dir: PathBuf,
+    /// Atomically swappable configuration snapshot.
     pub config_runtime: ArcSwap<ConfigRuntimeSnapshot>,
+    /// Currently running tasks keyed by task ID.
     pub running: Mutex<HashMap<String, RunningTask>>,
+    /// Runtime agent-health map.
     pub agent_health: tokio::sync::RwLock<HashMap<String, AgentHealthState>>,
+    /// Runtime agent metrics map.
     pub agent_metrics: tokio::sync::RwLock<HashMap<String, AgentMetrics>>,
+    /// Runtime agent lifecycle map.
     pub agent_lifecycle: tokio::sync::RwLock<HashMap<String, AgentRuntimeState>>,
+    /// Collaboration message bus.
     pub message_bus: Arc<MessageBus>,
     // FR-016 sync exception: event emission must remain callable from sync and async
     // paths without making the EventSink interface async. This lock is an
     // observability boundary, not async main-path shared business state.
+    /// Event sink used by synchronous and asynchronous execution paths.
     pub event_sink: std::sync::RwLock<Arc<dyn EventSink>>,
+    /// Serialized database write coordinator.
     pub db_writer: Arc<crate::db_write::DbWriteCoordinator>,
+    /// Interactive session store.
     pub session_store: Arc<crate::session_store::AsyncSessionStore>,
+    /// Async task repository wrapper.
     pub task_repo: Arc<crate::task_repository::AsyncSqliteTaskRepository>,
+    /// Workflow store manager.
     pub store_manager: crate::store::StoreManager,
+    /// Runtime daemon lifecycle state.
     pub daemon_runtime: DaemonRuntimeState,
 }
 
 impl InnerState {
+    /// Emits an event through the currently configured event sink.
     pub fn emit_event(
         &self,
         task_id: &str,
@@ -83,9 +111,12 @@ impl InnerState {
     }
 }
 
+/// Mutable runtime handle for a task process.
 #[derive(Clone)]
 pub struct RunningTask {
+    /// Shared stop flag observed by all forked execution branches.
     pub stop_flag: Arc<AtomicBool>,
+    /// Handle to the currently running child process, if any.
     pub child: Arc<Mutex<Option<Child>>>,
 }
 
@@ -96,6 +127,7 @@ impl Default for RunningTask {
 }
 
 impl RunningTask {
+    /// Creates an empty running-task handle.
     pub fn new() -> Self {
         Self {
             stop_flag: Arc::new(AtomicBool::new(false)),
@@ -114,14 +146,17 @@ impl RunningTask {
     }
 }
 
+/// Loads the current configuration snapshot.
 pub fn config_runtime_snapshot(state: &InnerState) -> Arc<ConfigRuntimeSnapshot> {
     state.config_runtime.load_full()
 }
 
+/// Replaces the current configuration snapshot atomically.
 pub fn set_config_runtime_snapshot(state: &InnerState, snapshot: ConfigRuntimeSnapshot) {
     state.config_runtime.store(Arc::new(snapshot));
 }
 
+/// Updates the configuration snapshot using a read-modify-write closure.
 pub fn update_config_runtime<R>(
     state: &InnerState,
     f: impl FnOnce(&ConfigRuntimeSnapshot) -> (ConfigRuntimeSnapshot, R),
@@ -132,6 +167,7 @@ pub fn update_config_runtime<R>(
     result
 }
 
+/// Replaces only the active config while preserving status fields.
 pub fn replace_active_config(state: &InnerState, active_config: ActiveConfig) {
     update_config_runtime(state, |current| {
         (
@@ -145,6 +181,7 @@ pub fn replace_active_config(state: &InnerState, active_config: ActiveConfig) {
     });
 }
 
+/// Replaces the active config status fields while preserving the config itself.
 pub fn replace_active_config_status(
     state: &InnerState,
     active_config_error: Option<String>,
@@ -162,10 +199,12 @@ pub fn replace_active_config_status(
     });
 }
 
+/// Clears active-config error and notice state.
 pub fn clear_active_config_status(state: &InnerState) {
     replace_active_config_status(state, None, None);
 }
 
+/// Resets the active config to an empty default snapshot.
 pub fn reset_active_config_to_default(state: &InnerState) {
     set_config_runtime_snapshot(
         state,
@@ -181,6 +220,7 @@ pub fn reset_active_config_to_default(state: &InnerState) {
     );
 }
 
+/// Clones the current event sink, recovering from poisoning if needed.
 pub fn clone_event_sink(state: &InnerState) -> Arc<dyn EventSink> {
     match state.event_sink.read() {
         Ok(guard) => guard.clone(),
@@ -197,6 +237,7 @@ pub fn clone_event_sink(state: &InnerState) -> Arc<dyn EventSink> {
     }
 }
 
+/// Replaces the current event sink, recovering from poisoning if needed.
 pub fn replace_event_sink(state: &InnerState, sink: Arc<dyn EventSink>) {
     match state.event_sink.write() {
         Ok(mut guard) => *guard = sink,

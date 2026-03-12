@@ -8,33 +8,50 @@ use super::artifact::{ArtifactRegistry, SharedState};
 use super::escape_for_bash_dquote;
 use super::output::AgentOutput;
 
-/// Lightweight reference to agent context (for message payloads)
+/// Lightweight reference to agent context for serialized message payloads.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentContextRef {
+    /// Parent task identifier.
     pub task_id: String,
+    /// Current task-item identifier.
     pub item_id: String,
+    /// Execution cycle number.
     pub cycle: u32,
+    /// Optional phase name when known.
     pub phase: Option<String>,
+    /// Workspace root serialized as a string path.
     pub workspace_root: String,
+    /// Workspace identifier from configuration.
     pub workspace_id: String,
 }
 
-/// Full agent context available during execution
+/// Full agent context available during phase execution.
 #[derive(Debug, Clone)]
 pub struct AgentContext {
+    /// Parent task identifier.
     pub task_id: String,
+    /// Current task-item identifier.
     pub item_id: String,
+    /// Execution cycle number.
     pub cycle: u32,
+    /// Current phase name.
     pub phase: String,
+    /// Absolute workspace root used for command execution.
     pub workspace_root: PathBuf,
+    /// Workspace identifier from configuration.
     pub workspace_id: String,
+    /// Historical phase executions accumulated so far.
     pub execution_history: Vec<PhaseRecord>,
+    /// Outputs produced by upstream phases.
     pub upstream_outputs: Vec<AgentOutput>,
+    /// Artifact registry accumulated across phases.
     pub artifacts: ArtifactRegistry,
+    /// Shared key-value state available to templates and follow-up steps.
     pub shared_state: SharedState,
 }
 
 impl AgentContext {
+    /// Creates a fresh execution context for an agent phase.
     pub fn new(
         task_id: String,
         item_id: String,
@@ -57,7 +74,7 @@ impl AgentContext {
         }
     }
 
-    /// Add upstream output to context
+    /// Adds an upstream output and merges its artifacts into the registry.
     pub fn add_upstream_output(&mut self, output: AgentOutput) {
         self.upstream_outputs.push(output.clone());
 
@@ -66,7 +83,7 @@ impl AgentContext {
         }
     }
 
-    /// Render template with context variables
+    /// Renders a template using context variables only.
     ///
     /// Note: Pipeline variable values are escaped for safe use inside
     /// bash double-quoted strings. This prevents content like markdown
@@ -75,7 +92,7 @@ impl AgentContext {
         self.render_template_with_pipeline(template, None)
     }
 
-    /// Render template with context variables and optional pipeline variables
+    /// Renders a template using context variables and optional pipeline values.
     pub fn render_template_with_pipeline(
         &self,
         template: &str,
@@ -159,7 +176,7 @@ impl AgentContext {
         result
     }
 
-    /// Convert to lightweight reference for message payloads
+    /// Converts the full context into a lightweight serializable reference.
     pub fn to_ref(&self) -> AgentContextRef {
         AgentContextRef {
             task_id: self.task_id.clone(),
@@ -172,15 +189,22 @@ impl AgentContext {
     }
 }
 
-/// Record of a single phase execution
+/// Record of a single completed or attempted phase execution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PhaseRecord {
+    /// Phase identifier.
     pub phase: String,
+    /// Agent identifier selected for the phase.
     pub agent_id: String,
+    /// Run identifier for the phase execution.
     pub run_id: Uuid,
+    /// Process exit code returned by the agent command.
     pub exit_code: i64,
+    /// Optional structured output captured from the run.
     pub output: Option<AgentOutput>,
+    /// Start timestamp.
     pub started_at: DateTime<Utc>,
+    /// End timestamp.
     pub ended_at: DateTime<Utc>,
 }
 

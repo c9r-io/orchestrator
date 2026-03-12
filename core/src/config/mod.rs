@@ -47,13 +47,16 @@ use crate::crd::types::{CustomResource, CustomResourceDefinition};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Builtin project identifier used when callers omit an explicit project.
 pub const DEFAULT_PROJECT_ID: &str = "default";
 
 /// Main orchestrator configuration
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OrchestratorConfig {
+    /// Project-scoped builtin resources keyed by project identifier.
     #[serde(default)]
     pub projects: HashMap<String, ProjectConfig>,
+    /// Registered custom resource definitions keyed by CRD kind.
     #[serde(default)]
     pub custom_resource_definitions: HashMap<String, CustomResourceDefinition>,
     /// Custom resource instances (CRD-defined resources).
@@ -83,25 +86,30 @@ impl OrchestratorConfig {
             .unwrap_or_default()
     }
 
+    /// Resolves a caller-supplied project ID to the effective project namespace.
     pub fn effective_project_id<'a>(&'a self, project_id: Option<&'a str>) -> &'a str {
         project_id
             .filter(|value| !value.trim().is_empty())
             .unwrap_or(DEFAULT_PROJECT_ID)
     }
 
+    /// Returns the project config for the effective project ID.
     pub fn project(&self, project_id: Option<&str>) -> Option<&ProjectConfig> {
         self.projects.get(self.effective_project_id(project_id))
     }
 
+    /// Returns a mutable project config for the effective project ID.
     pub fn project_mut(&mut self, project_id: Option<&str>) -> Option<&mut ProjectConfig> {
         let project_id = self.effective_project_id(project_id).to_string();
         self.projects.get_mut(&project_id)
     }
 
+    /// Returns the builtin default project, if present.
     pub fn default_project(&self) -> Option<&ProjectConfig> {
         self.project(Some(DEFAULT_PROJECT_ID))
     }
 
+    /// Ensures the effective project exists and returns a mutable reference to it.
     pub fn ensure_project(&mut self, project_id: Option<&str>) -> &mut ProjectConfig {
         let project_id = self.effective_project_id(project_id).to_string();
         self.projects.entry(project_id).or_default()
@@ -111,10 +119,13 @@ impl OrchestratorConfig {
 /// Persisted metadata for declarative resources.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ResourceMetadataStore {
+    /// Persisted metadata for workspace resources.
     #[serde(default)]
     pub workspaces: HashMap<String, ResourceStoredMetadata>,
+    /// Persisted metadata for agent resources.
     #[serde(default)]
     pub agents: HashMap<String, ResourceStoredMetadata>,
+    /// Persisted metadata for workflow resources.
     #[serde(default)]
     pub workflows: HashMap<String, ResourceStoredMetadata>,
 }
@@ -122,8 +133,10 @@ pub struct ResourceMetadataStore {
 /// Labels and annotations persisted independently from resource specs.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ResourceStoredMetadata {
+    /// Labels stored independently from the resource spec.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub labels: Option<HashMap<String, String>>,
+    /// Annotations stored independently from the resource spec.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub annotations: Option<HashMap<String, String>>,
 }

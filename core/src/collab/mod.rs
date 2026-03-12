@@ -3,10 +3,15 @@
 //! Provides structured agent-to-agent communication, message bus,
 //! shared context, and DAG-based workflow execution.
 
+/// Artifact models and shared-state helpers for multi-agent execution.
 pub mod artifact;
+/// Agent execution context types and template-rendering helpers.
 pub mod context;
+/// DAG primitives used by collaboration planning flows.
 pub mod dag;
+/// Message envelope types exchanged between collaborating agents.
 pub mod message;
+/// Structured agent output payloads and metrics.
 pub mod output;
 
 pub use artifact::*;

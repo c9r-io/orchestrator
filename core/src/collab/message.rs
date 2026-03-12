@@ -12,21 +12,31 @@ use super::artifact::Artifact;
 use super::context::AgentContextRef;
 use super::output::AgentOutput;
 
-/// Message envelope for agent communication
+/// Message envelope exchanged between collaborating agents.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentMessage {
+    /// Unique message identifier.
     pub id: Uuid,
+    /// Delivery semantic of the message.
     pub msg_type: MessageType,
+    /// Sending endpoint.
     pub sender: AgentEndpoint,
+    /// Intended receiving endpoints.
     pub receivers: Vec<AgentEndpoint>,
+    /// Message body.
     pub payload: MessagePayload,
+    /// Correlation identifier used to tie responses to requests.
     pub correlation_id: Option<Uuid>,
+    /// Creation timestamp.
     pub timestamp: DateTime<Utc>,
+    /// Time-to-live before the message should be discarded.
     pub ttl: Duration,
+    /// Delivery guarantees requested for the transport.
     pub delivery_mode: DeliveryMode,
 }
 
 impl AgentMessage {
+    /// Creates a request message addressed to one or more receivers.
     pub fn new(
         sender: AgentEndpoint,
         receivers: Vec<AgentEndpoint>,
@@ -45,6 +55,7 @@ impl AgentMessage {
         }
     }
 
+    /// Builds a response message for a prior request.
     pub fn response_to(original: &AgentMessage, payload: MessagePayload) -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -63,6 +74,7 @@ impl AgentMessage {
         }
     }
 
+    /// Builds a broadcast-style publish message.
     pub fn publish(sender: AgentEndpoint, payload: MessagePayload) -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -78,15 +90,21 @@ impl AgentMessage {
     }
 }
 
+/// Address of an agent or a specific agent execution scope.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct AgentEndpoint {
+    /// Agent identifier.
     pub agent_id: String,
+    /// Optional phase scope.
     pub phase: Option<String>,
+    /// Optional task scope.
     pub task_id: Option<String>,
+    /// Optional task-item scope.
     pub item_id: Option<String>,
 }
 
 impl AgentEndpoint {
+    /// Creates an endpoint scoped only to an agent identifier.
     pub fn agent(agent_id: &str) -> Self {
         Self {
             agent_id: agent_id.to_string(),
@@ -96,6 +114,7 @@ impl AgentEndpoint {
         }
     }
 
+    /// Creates an endpoint scoped to a specific agent phase.
     pub fn for_phase(agent_id: &str, phase: &str) -> Self {
         Self {
             agent_id: agent_id.to_string(),
@@ -105,6 +124,7 @@ impl AgentEndpoint {
         }
     }
 
+    /// Creates an endpoint scoped to a specific task item.
     pub fn for_task_item(agent_id: &str, task_id: &str, item_id: &str) -> Self {
         Self {
             agent_id: agent_id.to_string(),
@@ -115,98 +135,153 @@ impl AgentEndpoint {
     }
 }
 
+/// High-level message intent.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MessageType {
+    /// Request expecting a follow-up response.
     Request,
+    /// Response correlated to a request.
     Response,
+    /// Acknowledgement without a payload-specific result.
     Ack,
+    /// Publish/subscribe broadcast.
     Publish,
+    /// Relay or delegated message.
     Forward,
 }
 
+/// Delivery guarantees requested by the sender.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DeliveryMode {
+    /// No delivery confirmation required.
     FireAndForget,
+    /// Message may be delivered more than once but should not be lost.
     AtLeastOnce,
+    /// Transport should avoid duplicate delivery.
     ExactlyOnce,
+    /// Broadcast to all interested subscribers.
     Broadcast,
 }
 
+/// Message body variants supported by the collaboration layer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MessagePayload {
+    /// Command or phase execution request.
     ExecutionRequest(ExecutionRequest),
+    /// Result of an execution request.
     ExecutionResult(ExecutionResult),
+    /// Standalone artifact transmission.
     Artifact(Artifact),
+    /// Shared-context mutation event.
     ContextUpdate(ContextUpdate),
+    /// Runtime control signal.
     ControlSignal(ControlSignal),
+    /// Extensible custom JSON payload.
     Custom(serde_json::Value),
 }
 
+/// Request payload that asks another agent to perform work.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionRequest {
+    /// Command or prompt to execute.
     pub command: String,
+    /// Serialized execution context.
     pub context: AgentContextRef,
+    /// Input artifacts made available to the receiver.
     pub input_artifacts: Vec<Artifact>,
+    /// Optional expectations for validation and scoring.
     pub expectations: Option<ExecutionExpectations>,
 }
 
+/// Response payload carrying execution output.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionResult {
+    /// Run identifier of the delegated execution.
     pub run_id: Uuid,
+    /// Structured output produced by the execution.
     pub output: AgentOutput,
+    /// Success flag derived from validation and exit status.
     pub success: bool,
+    /// Optional error message when execution failed.
     pub error: Option<String>,
 }
 
+/// Validation expectations associated with an execution request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionExpectations {
+    /// Optional JSON schema used to validate structured output.
     pub output_schema: Option<serde_json::Value>,
+    /// Additional validation rules evaluated by the caller.
     pub validation_rules: Vec<ValidationRule>,
+    /// Minimum acceptable quality score.
     pub quality_threshold: f32,
 }
 
+/// A single named validation rule.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationRule {
+    /// Rule identifier.
     pub name: String,
+    /// Expression or predicate body.
     pub expression: String,
+    /// Error message emitted when validation fails.
     pub error_message: String,
 }
 
+/// Shared-context mutation payload.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContextUpdate {
+    /// Shared-state key being updated.
     pub key: String,
+    /// Value applied by the operation.
     pub value: serde_json::Value,
+    /// Mutation operation kind.
     pub operation: ContextUpdateOp,
 }
 
+/// Supported shared-context mutation operations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ContextUpdateOp {
+    /// Replace the current value.
     Set,
+    /// Append to an existing collection-like value.
     Append,
+    /// Remove the key entirely.
     Remove,
 }
 
+/// Control-plane signal sent between agents.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ControlSignal {
+    /// Signal verb.
     pub signal: Signal,
+    /// Optional human-readable reason.
     pub reason: Option<String>,
 }
 
+/// Runtime control actions understood by the collaboration layer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Signal {
+    /// Cancel work in progress.
     Cancel,
+    /// Pause work in progress.
     Pause,
+    /// Resume paused work.
     Resume,
+    /// Request a retry.
     Retry,
+    /// Skip the current work item.
     Skip,
 }
 
+/// In-memory message bus used by collaboration flows.
 pub struct MessageBus {
     tx: mpsc::Sender<AgentMessage>,
     message_store: Arc<RwLock<HashMap<Uuid, AgentMessage>>>,
 }
 
 impl MessageBus {
+    /// Creates an empty message bus.
     pub fn new() -> Self {
         let (tx, _rx) = mpsc::channel(1000);
         Self {
