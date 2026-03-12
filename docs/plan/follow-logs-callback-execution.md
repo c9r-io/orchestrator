@@ -114,6 +114,7 @@ orchestrator delete project/self-bootstrap --force
 orchestrator init
 orchestrator apply -f docs/workflow/claude-secret.yaml --project self-bootstrap
 orchestrator apply -f docs/workflow/minimax-secret.yaml --project self-bootstrap
+orchestrator apply -f docs/workflow/execution-profiles.yaml --project self-bootstrap
 orchestrator apply -f docs/workflow/self-bootstrap.yaml --project self-bootstrap
 ```
 

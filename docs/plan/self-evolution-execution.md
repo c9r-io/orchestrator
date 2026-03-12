@@ -109,6 +109,7 @@ orchestrator init
 orchestrator apply -f docs/workflow/claude-secret.yaml --project self-evolution
 orchestrator apply -f docs/workflow/minimax-secret.yaml --project self-evolution
 # ⚠️  必须使用 --project，否则真实 AI agent 会注册到全局空间
+orchestrator apply -f docs/workflow/execution-profiles.yaml --project self-evolution
 orchestrator apply -f docs/workflow/self-evolution.yaml --project self-evolution
 ```
 
