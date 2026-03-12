@@ -98,6 +98,8 @@ spec:
   network_mode: deny
 ```
 
+> **Defaults when omitted:** `mode: host`, `fs_mode: inherit`, `network_mode: inherit`.
+
 ```yaml
 - id: implement
   type: implement
@@ -228,7 +230,7 @@ loop:
   mode: fixed             # run exactly N cycles
   max_cycles: 2
   enabled: true
-  stop_when_no_unresolved: false   # false = always run all cycles
+  stop_when_no_unresolved: false   # false = always run all cycles (default: true)
 ```
 
 ```yaml

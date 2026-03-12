@@ -1,6 +1,6 @@
 # 02 - 资源模型
 
-编排器管理四种核心资源类型，以及可扩展的自定义资源定义（CRD）。所有资源遵循 Kubernetes 风格的清单格式。
+编排器管理九种核心资源类型，以及可扩展的自定义资源定义（CRD）。所有资源遵循 Kubernetes 风格的清单格式。
 
 ## 清单结构
 
@@ -13,6 +13,8 @@ metadata:
   name: <unique-name>
   description: "可选描述"          # 可选
   labels:                          # 可选
+    key: value
+  annotations:                     # 可选
     key: value
 spec:
   # 特定于 kind 的字段
@@ -63,6 +65,18 @@ spec:
     claude --print -p '{prompt}'
   metadata:              # 可选元数据，用于选择评分
     cost: 100
+    description: "主代码生成代理"
+  selection:             # 可选选择策略覆盖
+    strategy: CapabilityAware    # 默认值
+  env:                   # 可选环境变量
+    - name: LOG_LEVEL
+      value: "debug"
+    - fromRef: shared-config     # 从 EnvStore 导入所有键
+    - name: MY_API_KEY
+      refValue:                  # 从 SecretStore 导入单个键
+        name: api-keys
+        key: OPENAI_API_KEY
+  promptDelivery: arg    # 提示词如何传递给代理（默认：arg）
 ```
 
 | 字段 | 必填 | 说明 |
@@ -70,14 +84,30 @@ spec:
 | `capabilities` | 是 | 此代理能做什么（与步骤的 `required_capability` 匹配） |
 | `command` | 是 | shell 命令模板。支持 `{prompt}` 占位符（由 StepTemplate 填充） |
 | `metadata.cost` | 否 | 用于代理选择策略的成本感知路由 |
+| `metadata.description` | 否 | 代理的人类可读描述 |
+| `selection` | 否 | 代理选择策略覆盖（见下文） |
+| `env` | 否 | 环境变量：直接值、`fromRef`（从存储导入全部）、或 `refValue`（从存储导入单个键） |
+| `promptDelivery` | 否 | 提示词传递方式：`stdin`、`file`、`env` 或 `arg`（默认：`arg`） |
 
 ### 代理选择
 
 当一个步骤需要某种能力（例如 `required_capability: implement`）时，编排器会选择声明了该能力的代理。如果多个代理匹配，选择会考虑：
 
 - 能力匹配（必须）
+- 选择策略评分（每个代理可配置）
 - 成本元数据（越低越优先）
 - 项目级代理（通过 `--project` 应用）覆盖全局代理
+
+#### 选择策略
+
+| 策略 | 说明 |
+|------|------|
+| `CostBased` | 静态成本排序 |
+| `SuccessRateWeighted` | 按历史成功率加权 |
+| `PerformanceFirst` | 延迟优先选择 |
+| `Adaptive` | 可配置权重，综合成本、成功率、性能和负载 |
+| `LoadBalanced` | 偏好当前负载较低的代理 |
+| `CapabilityAware` | 自适应评分 + 健康感知能力追踪 **（默认值）** |
 
 ## 3. StepTemplate（步骤模板）
 
@@ -158,6 +188,81 @@ spec:
 
 工作流配置详见[第 03 章](03-workflow-configuration.md)。
 
+## 5. Project（项目）
+
+Project 提供资源隔离域。所有资源命令支持 `--project` 参数限定作用域。
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: Project
+metadata:
+  name: my-project
+spec:
+  description: "前端重写项目"
+```
+
+## 6. RuntimePolicy（运行时策略）
+
+RuntimePolicy 配置运行器行为、恢复策略和可观测性。
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: RuntimePolicy
+metadata:
+  name: default
+spec:
+  runner: { ... }
+  resume: { ... }
+  observability: { ... }
+```
+
+## 7. ExecutionProfile（执行 Profile）
+
+ExecutionProfile 定义代理步骤的沙盒/宿主执行边界。默认值：`mode: host`、`fs_mode: inherit`、`network_mode: inherit`。
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: sandbox_write
+spec:
+  mode: sandbox                    # host | sandbox
+  fs_mode: workspace_rw_scoped     # inherit | workspace_rw_scoped
+  writable_paths: [src, docs]
+  network_mode: deny               # inherit | deny | allowlist
+```
+
+## 8. EnvStore（环境变量存储）
+
+EnvStore 存放可复用的环境变量集，代理可通过 `env.fromRef` 引用。
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: EnvStore
+metadata:
+  name: shared-config
+spec:
+  data:
+    DATABASE_URL: "postgres://localhost/mydb"
+    LOG_LEVEL: "debug"
+```
+
+## 9. SecretStore（加密存储）
+
+SecretStore 与 EnvStore 结构相同，但用于敏感值。通过 `kind` 字段在资源层面区分。
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: SecretStore
+metadata:
+  name: api-keys
+spec:
+  data:
+    OPENAI_API_KEY: "sk-..."
+```
+
+代理通过 `env` 条目引用存储（参见上文 Agent spec）。
+
 ## 资源生命周期
 
 ### 应用（创建/更新）
@@ -182,8 +287,7 @@ orchestrator get agents
 orchestrator get workflows
 
 # 详情视图
-orchestrator describe workspace default
-orchestrator workspace info default
+orchestrator describe workspace/default
 
 # 输出格式
 orchestrator get agents -o json
@@ -198,9 +302,6 @@ orchestrator get workspaces -l env=dev
 ```bash
 # 导出所有配置为 YAML
 orchestrator manifest export
-
-# 交互式编辑
-orchestrator edit workspace default
 ```
 
 ## 多文档清单

@@ -60,6 +60,14 @@
 | `self_test_exit_code` | `int?` | 上次 self_test 步骤的退出码 |
 | `self_test_passed` | `bool` | 上次 self_test 是否通过 |
 
+### 代理输出状态
+
+| 变量 | 类型 | 说明 |
+|------|------|------|
+| `qa_confidence` | `float?` | 代理 QA 置信度分数（可空；来自 `AgentOutput.confidence`） |
+| `qa_quality_score` | `float?` | 代理质量评估分数（可空；来自 `AgentOutput.quality_score`） |
+| `fix_confidence` | `float?` | 修复代理置信度分数（可空） |
+
 ### 安全
 
 | 变量 | 类型 | 说明 |
@@ -184,6 +192,9 @@ qa_exit_code != null && qa_exit_code == 0
 | `retest_ran` | `bool` | Retest 已执行 |
 | `retest_success` | `bool` | Retest 通过 |
 | `is_last_cycle` | `bool` | 是否为最后一个循环 |
+| `qa_confidence` | `float?` | 代理 QA 置信度（预钩子上下文中同样可用） |
+| `qa_quality_score` | `float?` | 代理质量评分（预钩子上下文中同样可用） |
+| `fix_confidence` | `float?` | 修复代理置信度（预钩子上下文中同样可用） |
 
 ### 默认终结规则
 

@@ -18,6 +18,7 @@ The daemon holds all state (engine, DB, task queue). The CLI is a thin RPC clien
 | `-v, --verbose` | Enable verbose output |
 | `-h, --help` | Print help |
 | `-V, --version` | Print version |
+| `--control-plane-config <path>` | Override control-plane client config (env: `ORCHESTRATOR_CONTROL_PLANE_CONFIG`) |
 
 ## Command Aliases
 
@@ -179,7 +180,7 @@ orchestrator task trace <task_id>
 Retry a failed task item.
 
 ```bash
-orchestrator task retry <task_id> --item <item_id> --force
+orchestrator task retry <task_item_id> [--force]
 ```
 
 ### task delete
@@ -193,6 +194,26 @@ orchestrator task delete <task_id> --force
 ```bash
 # Validate a manifest file
 orchestrator manifest validate -f manifest.yaml
+
+# Export all resources as manifest documents
+orchestrator manifest export [-o yaml|json]
+```
+
+## Secret Key Management
+
+```bash
+orchestrator secret key status [-o json]
+orchestrator secret key list [-o json]
+orchestrator secret key rotate [--resume]
+orchestrator secret key revoke <key_id> [--force]
+orchestrator secret key history [-n <limit>] [--key-id <id>] [-o json]
+```
+
+## Database Operations
+
+```bash
+orchestrator db status [-o json]
+orchestrator db migrations list [-o json]
 ```
 
 ## Project Cleanup
@@ -277,6 +298,16 @@ The daemon binary that runs the gRPC server and embedded background workers.
 | `--foreground`, `-f` | Run in foreground (don't daemonize) |
 | `--bind <addr>` | TCP bind address (default: Unix socket) |
 | `--workers <N>` | Number of background workers (default: 1) |
+| `--insecure-bind <addr>` | Insecure TCP bind for development (feature-gated: `dev-insecure`) |
+
+### control-plane issue-client
+
+Issue client TLS materials for connecting to the daemon's control plane:
+
+```bash
+orchestratord control-plane issue-client \
+  --bind <addr> --subject <name> [--role <role>]
+```
 
 Files created:
 - PID: `data/daemon.pid`
@@ -324,12 +355,36 @@ orchestrator store list <store> [-o json] [--project <id>]
 orchestrator store delete <store> <key> [--project <id>]
 orchestrator store prune <store> [--project <id>]
 
+# Manifest
+orchestrator manifest validate -f <file>
+orchestrator manifest export [-o yaml|json]
+
+# Secret key management
+orchestrator secret key status|list|rotate|revoke|history
+
+# Database
+orchestrator db status [-o json]
+orchestrator db migrations list [-o json]
+
 # System
 orchestrator version
 orchestrator debug [--component config]
 orchestrator check [-o json] [--workflow <w>]
 orchestrator init [<root>]
-orchestrator manifest validate -f <file>
+```
+
+## Resource Metadata
+
+All resources support `metadata.labels` (key-value pairs for categorization and label-selector queries) and `metadata.annotations` (arbitrary key-value metadata). Both are optional.
+
+```yaml
+metadata:
+  name: my-resource
+  labels:
+    env: dev
+    team: platform
+  annotations:
+    note: "created for sprint 12"
 ```
 
 ## Structured Agent Output

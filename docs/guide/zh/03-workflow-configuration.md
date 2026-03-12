@@ -99,6 +99,8 @@ spec:
   network_mode: deny
 ```
 
+> **省略时的默认值：** `mode: host`、`fs_mode: inherit`、`network_mode: inherit`。
+
 ```yaml
 - id: implement
   type: implement
@@ -234,7 +236,7 @@ loop:
   mode: fixed             # 精确运行 N 个循环
   max_cycles: 2
   enabled: true
-  stop_when_no_unresolved: false   # false = 始终运行所有循环
+  stop_when_no_unresolved: false   # false = 始终运行所有循环（默认值：true）
 ```
 
 ```yaml

@@ -18,6 +18,7 @@ Agent Orchestrator CLI 全部命令速查。
 | `-v, --verbose` | 启用详细输出 |
 | `-h, --help` | 打印帮助 |
 | `-V, --version` | 打印版本 |
+| `--control-plane-config <path>` | 覆盖控制面板客户端配置（环境变量：`ORCHESTRATOR_CONTROL_PLANE_CONFIG`） |
 
 ## 命令别名
 
@@ -179,7 +180,7 @@ orchestrator task trace <task_id>
 重试失败的任务项。
 
 ```bash
-orchestrator task retry <task_id> --item <item_id> --force
+orchestrator task retry <task_item_id> [--force]
 ```
 
 ### task delete
@@ -193,6 +194,26 @@ orchestrator task delete <task_id> --force
 ```bash
 # 验证清单文件
 orchestrator manifest validate -f manifest.yaml
+
+# 导出所有资源为清单文档
+orchestrator manifest export [-o yaml|json]
+```
+
+## 密钥管理
+
+```bash
+orchestrator secret key status [-o json]
+orchestrator secret key list [-o json]
+orchestrator secret key rotate [--resume]
+orchestrator secret key revoke <key_id> [--force]
+orchestrator secret key history [-n <limit>] [--key-id <id>] [-o json]
+```
+
+## 数据库操作
+
+```bash
+orchestrator db status [-o json]
+orchestrator db migrations list [-o json]
 ```
 
 ## 项目清理
@@ -276,6 +297,16 @@ orchestrator check -o json           # 结构化检查输出
 | `--foreground`, `-f` | 前台运行（不后台化） |
 | `--bind <addr>` | TCP 绑定地址（默认：Unix 套接字） |
 | `--workers <N>` | 后台工作器数量（默认：1） |
+| `--insecure-bind <addr>` | 用于开发的不安全 TCP 绑定（feature-gated：`dev-insecure`） |
+
+### control-plane issue-client
+
+为连接守护进程控制面板颁发客户端 TLS 证书材料：
+
+```bash
+orchestratord control-plane issue-client \
+  --bind <addr> --subject <name> [--role <role>]
+```
 
 ### 守护进程管理
 
@@ -319,12 +350,36 @@ orchestrator store list <store> [-o json] [--project <id>]
 orchestrator store delete <store> <key> [--project <id>]
 orchestrator store prune <store> [--project <id>]
 
+# 清单
+orchestrator manifest validate -f <file>
+orchestrator manifest export [-o yaml|json]
+
+# 密钥管理
+orchestrator secret key status|list|rotate|revoke|history
+
+# 数据库
+orchestrator db status [-o json]
+orchestrator db migrations list [-o json]
+
 # 系统
 orchestrator version
 orchestrator debug [--component config]
 orchestrator check [-o json] [--workflow <w>]
 orchestrator init [<root>]
-orchestrator manifest validate -f <file>
+```
+
+## 资源元数据
+
+所有资源支持 `metadata.labels`（用于分类和标签选择器查询的键值对）和 `metadata.annotations`（任意键值元数据）。两者均为可选。
+
+```yaml
+metadata:
+  name: my-resource
+  labels:
+    env: dev
+    team: platform
+  annotations:
+    note: "created for sprint 12"
 ```
 
 ## 结构化代理输出

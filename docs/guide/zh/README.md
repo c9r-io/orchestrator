@@ -23,21 +23,13 @@
 ## 补充资源
 
 - **架构文档**：`docs/architecture.md` —— 系统设计与内部原理
-- **QA 测试文档**：`docs/qa/` —— 场景化验证（51+ 份文档）
+- **QA 测试文档**：`docs/qa/` —— 场景化验证（87+ 份文档）
 - **设计文档**：`docs/design_doc/` —— 详细特性设计
 - **Fixture 清单**：`fixtures/manifests/bundles/` —— 真实 YAML 示例
 
 ## 入口
 
-### 单体模式（传统）
-
-```bash
-orchestrator <command>
-```
-
-### 客户端/服务端模式（推荐）
-
-编排器支持 C/S 架构，守护进程长期运行持有所有状态，CLI 作为轻量 gRPC 客户端：
+编排器使用 C/S 架构，守护进程长期运行持有所有状态，CLI 作为轻量 gRPC 客户端：
 
 ```bash
 # 启动守护进程（内嵌后台工作器自动消费排队任务）
@@ -57,7 +49,7 @@ kill $(cat data/daemon.pid)
 本指南的精简版以 Claude Code Skill 形式提供，安装后 Claude 将自动掌握编排器的配置与命令知识：
 
 ```bash
-/install-skill skills/orchestrator-guide.skill
+/install-skill .claude/skills/orchestrator-guide
 ```
 
 安装后，Claude 在处理编排器清单、工作流、CEL 表达式或 CLI 命令时会自动参考该指南。

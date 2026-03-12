@@ -89,6 +89,41 @@ CRD 支持两级验证：
 - **JSON Schema**：`schema` 定义结构验证（类型、必填字段、最小/最大值）
 - **CEL 规则**：`cel_rules` 定义语义验证（跨字段约束）
 
+## EnvStore 与 SecretStore
+
+EnvStore 和 SecretStore 是可复用的变量集，代理可以引用。它们共享相同的 `data` 结构；`SecretStore` 在语义上专用于敏感值。
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: EnvStore
+metadata:
+  name: shared-config
+spec:
+  data:
+    DATABASE_URL: "postgres://localhost/mydb"
+    LOG_LEVEL: "debug"
+---
+apiVersion: orchestrator.dev/v2
+kind: SecretStore
+metadata:
+  name: api-keys
+spec:
+  data:
+    OPENAI_API_KEY: "sk-..."
+```
+
+代理通过 `env` 字段引用存储：
+
+```yaml
+spec:
+  env:
+    - fromRef: shared-config              # 从 EnvStore 导入所有键
+    - name: MY_API_KEY
+      refValue:                           # 从 SecretStore 导入单个键
+        name: api-keys
+        key: OPENAI_API_KEY
+```
+
 ## 持久化存储（WP01）
 
 持久化存储通过 `WorkflowStore` CRD 提供跨任务记忆。数据在任务之间持久化，支持从历史运行中学习。

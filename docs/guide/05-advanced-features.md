@@ -89,6 +89,41 @@ CRDs support two levels of validation:
 - **JSON Schema**: `schema` defines structural validation (types, required fields, min/max)
 - **CEL Rules**: `cel_rules` define semantic validation (cross-field constraints)
 
+## EnvStore & SecretStore
+
+EnvStore and SecretStore are reusable variable sets that agents can reference. They share the same `data` structure; `SecretStore` is semantically designated for sensitive values.
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: EnvStore
+metadata:
+  name: shared-config
+spec:
+  data:
+    DATABASE_URL: "postgres://localhost/mydb"
+    LOG_LEVEL: "debug"
+---
+apiVersion: orchestrator.dev/v2
+kind: SecretStore
+metadata:
+  name: api-keys
+spec:
+  data:
+    OPENAI_API_KEY: "sk-..."
+```
+
+Agents reference stores via the `env` field:
+
+```yaml
+spec:
+  env:
+    - fromRef: shared-config              # import all keys from EnvStore
+    - name: MY_API_KEY
+      refValue:                           # import a single key from SecretStore
+        name: api-keys
+        key: OPENAI_API_KEY
+```
+
 ## Persistent Store (WP01)
 
 The Persistent Store provides cross-task memory via a `WorkflowStore` CRD. Data persists across tasks, enabling learning from past runs.

@@ -1,6 +1,6 @@
 # 02 - Resource Model
 
-The orchestrator manages four core resource kinds, plus extensible Custom Resource Definitions (CRDs). All resources follow a Kubernetes-style manifest format.
+The orchestrator manages nine core resource kinds, plus extensible Custom Resource Definitions (CRDs). All resources follow a Kubernetes-style manifest format.
 
 ## Manifest Structure
 
@@ -13,6 +13,8 @@ metadata:
   name: <unique-name>
   description: "optional description"   # optional
   labels:                               # optional
+    key: value
+  annotations:                          # optional
     key: value
 spec:
   # kind-specific fields
@@ -63,6 +65,18 @@ spec:
     claude --print -p '{prompt}'
   metadata:              # optional metadata for selection scoring
     cost: 100
+    description: "Primary code generation agent"
+  selection:             # optional selection strategy override
+    strategy: CapabilityAware    # default
+  env:                   # optional environment variables
+    - name: LOG_LEVEL
+      value: "debug"
+    - fromRef: shared-config     # import all keys from an EnvStore
+    - name: MY_API_KEY
+      refValue:                  # import a single key from a SecretStore
+        name: api-keys
+        key: OPENAI_API_KEY
+  promptDelivery: arg    # how the prompt reaches the agent (default: arg)
 ```
 
 | Field | Required | Description |
@@ -70,14 +84,30 @@ spec:
 | `capabilities` | Yes | What this agent can do (matched against step `required_capability`) |
 | `command` | Yes | Shell command template. Supports `{prompt}` placeholder (filled from StepTemplate) |
 | `metadata.cost` | No | Used by agent selection strategy for cost-aware routing |
+| `metadata.description` | No | Human-readable description of the agent |
+| `selection` | No | Agent selection strategy override (see below) |
+| `env` | No | Environment variables: direct values, `fromRef` (import all from store), or `refValue` (single key from store) |
+| `promptDelivery` | No | How the rendered prompt reaches the agent: `stdin`, `file`, `env`, or `arg` (default: `arg`) |
 
 ### Agent Selection
 
 When a step requires a capability (e.g., `required_capability: implement`), the orchestrator selects an agent that declares that capability. If multiple agents match, selection considers:
 
 - Capability match (required)
+- Selection strategy scoring (configurable per agent)
 - Cost metadata (lower is preferred)
 - Project-scoped agents (applied with `--project`) are used exclusively — no fallback to global agents
+
+#### Selection Strategies
+
+| Strategy | Description |
+|----------|-------------|
+| `CostBased` | Static cost-based sorting |
+| `SuccessRateWeighted` | Weighted by historical success rate |
+| `PerformanceFirst` | Latency-focused selection |
+| `Adaptive` | Configurable weights across cost, success rate, performance, and load |
+| `LoadBalanced` | Favors agents with lower current load |
+| `CapabilityAware` | Adaptive scoring with health-aware capability tracking **(default)** |
 
 ## 3. StepTemplate
 
@@ -158,6 +188,81 @@ spec:
 
 Workflow configuration is detailed in [Chapter 03](03-workflow-configuration.md).
 
+## 5. Project
+
+A Project provides an isolation domain for resources. All resource commands accept `--project` to scope operations.
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: Project
+metadata:
+  name: my-project
+spec:
+  description: "Frontend rewrite project"
+```
+
+## 6. RuntimePolicy
+
+A RuntimePolicy configures runner behavior, resume strategy, and observability.
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: RuntimePolicy
+metadata:
+  name: default
+spec:
+  runner: { ... }
+  resume: { ... }
+  observability: { ... }
+```
+
+## 7. ExecutionProfile
+
+An ExecutionProfile defines the sandbox/host execution boundary for agent steps. Defaults: `mode: host`, `fs_mode: inherit`, `network_mode: inherit`.
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: sandbox_write
+spec:
+  mode: sandbox                    # host | sandbox
+  fs_mode: workspace_rw_scoped     # inherit | workspace_rw_scoped
+  writable_paths: [src, docs]
+  network_mode: deny               # inherit | deny | allowlist
+```
+
+## 8. EnvStore
+
+An EnvStore holds reusable environment variable sets that agents can reference via `env.fromRef`.
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: EnvStore
+metadata:
+  name: shared-config
+spec:
+  data:
+    DATABASE_URL: "postgres://localhost/mydb"
+    LOG_LEVEL: "debug"
+```
+
+## 9. SecretStore
+
+A SecretStore has the same structure as EnvStore but is intended for sensitive values. The `kind` field distinguishes them at the resource level.
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: SecretStore
+metadata:
+  name: api-keys
+spec:
+  data:
+    OPENAI_API_KEY: "sk-..."
+```
+
+Agents reference stores via `env` entries (see Agent spec above).
+
 ## Resource Lifecycle
 
 ### Apply (Create / Update)
@@ -182,8 +287,7 @@ orchestrator get agents
 orchestrator get workflows
 
 # Detail view
-orchestrator describe workspace default
-orchestrator workspace info default
+orchestrator describe workspace/default
 
 # Output formats
 orchestrator get agents -o json
@@ -198,9 +302,6 @@ orchestrator get workspaces -l env=dev
 ```bash
 # Export all config as YAML
 orchestrator manifest export
-
-# Edit interactively
-orchestrator edit workspace default
 ```
 
 ## Multi-Document Manifests

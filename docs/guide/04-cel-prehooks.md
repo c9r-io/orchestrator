@@ -60,6 +60,14 @@ These variables are available inside prehook `when` expressions:
 | `self_test_exit_code` | `int?` | Exit code of the last self_test step |
 | `self_test_passed` | `bool` | Whether the last self_test passed |
 
+### Agent Output State
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `qa_confidence` | `float?` | Agent QA confidence score (nullable; from `AgentOutput.confidence`) |
+| `qa_quality_score` | `float?` | Agent quality assessment (nullable; from `AgentOutput.quality_score`) |
+| `fix_confidence` | `float?` | Fix agent confidence score (nullable) |
+
 ### Safety
 
 | Variable | Type | Description |
@@ -184,6 +192,9 @@ Finalize rules use the same CEL engine but with an extended variable set. In add
 | `retest_ran` | `bool` | Retest executed |
 | `retest_success` | `bool` | Retest passed |
 | `is_last_cycle` | `bool` | Whether this is the final cycle |
+| `qa_confidence` | `float?` | Agent QA confidence (also available in prehook context) |
+| `qa_quality_score` | `float?` | Agent quality score (also available in prehook context) |
+| `fix_confidence` | `float?` | Fix agent confidence (also available in prehook context) |
 
 ### Default Finalize Rules
 
