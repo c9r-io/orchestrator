@@ -38,6 +38,10 @@ The daemon holds all state (engine, DB, task queue). The CLI is a thin RPC clien
 | `check` | `ck` |
 | `debug` | `dbg` |
 | `store list` | `store ls` |
+| `agent` | `ag` |
+| `agent list` | `agent ls` |
+| `secret key list` | `secret key ls` |
+| `db migrations list` | `db migrations ls` |
 
 ## Initialization & Configuration
 
@@ -73,7 +77,16 @@ Preflight validation: cross-reference agents, workflows, and templates.
 
 ```bash
 orchestrator check
+orchestrator check --workflow self-bootstrap
+orchestrator check --project my-project
+orchestrator check -o json
 ```
+
+| Flag | Description |
+|------|-------------|
+| `--workflow <WORKFLOW>` | Check a specific workflow |
+| `-o, --output` | Output format: table (default), json, yaml |
+| `-p, --project` | Project filter |
 
 ## Resource Queries
 
@@ -92,7 +105,16 @@ orchestrator get agents -o yaml
 
 # Project-scoped query
 orchestrator get agents --project my-project
+
+# Label selector
+orchestrator get agents -l env=dev
 ```
+
+| Flag | Description |
+|------|-------------|
+| `-o, --output` | Output format: table (default), json, yaml |
+| `-l, --selector` | Label selector filter |
+| `-p, --project` | Project filter |
 
 ### describe
 
@@ -114,9 +136,18 @@ Delete a resource by kind/name.
 orchestrator delete workspace/my-ws --force
 orchestrator delete agent/old-agent --force
 
+# Dry-run
+orchestrator delete agent/old-agent --dry-run
+
 # Project-scoped
 orchestrator delete agent/old --force --project my-project
 ```
+
+| Flag | Description |
+|------|-------------|
+| `-f, --force` | Force delete without confirmation |
+| `--dry-run` | Show what would be deleted |
+| `-p, --project` | Project filter |
 
 ## Task Lifecycle
 
@@ -148,32 +179,65 @@ orchestrator task create \
 orchestrator task list
 orchestrator task list -o json
 orchestrator task list --project my-project    # filter by project
+orchestrator task list --status running        # filter by status
+orchestrator task list -v                      # verbose output
 
 orchestrator task info <task_id>
 orchestrator task info <task_id> -o yaml
 ```
 
+| Flag (list) | Description |
+|-------------|-------------|
+| `-s, --status` | Filter by task status |
+| `-p, --project` | Project filter |
+| `-o, --output` | Output format: table (default), json, yaml |
+| `-v, --verbose` | Verbose output |
+
 ### task start / pause / resume
 
 ```bash
 orchestrator task start <task_id>
+orchestrator task start --latest             # start the most recent task
 
 orchestrator task pause <task_id>
 orchestrator task resume <task_id>
 ```
+
+| Flag (start) | Description |
+|--------------|-------------|
+| `-l, --latest` | Start the latest task |
 
 ### task logs / watch / trace
 
 ```bash
 # View execution logs
 orchestrator task logs <task_id>
+orchestrator task logs <task_id> --follow --timestamps
+orchestrator task logs <task_id> --tail 50
 
 # Live watch (auto-refreshing status panel)
 orchestrator task watch <task_id>
+orchestrator task watch <task_id> --interval 5
 
 # Execution trace with anomaly detection
 orchestrator task trace <task_id>
+orchestrator task trace <task_id> --verbose --json
 ```
+
+| Flag (logs) | Description |
+|-------------|-------------|
+| `-f, --follow` | Follow logs in real-time |
+| `-n, --tail` | Number of lines to show (default: 100) |
+| `--timestamps` | Include timestamps |
+
+| Flag (watch) | Description |
+|--------------|-------------|
+| `--interval` | Update interval in seconds (default: 2) |
+
+| Flag (trace) | Description |
+|--------------|-------------|
+| `--verbose` | Verbose trace output |
+| `--json` | JSON output format |
 
 ### task retry
 
@@ -194,10 +258,16 @@ orchestrator task delete <task_id> --force
 ```bash
 # Validate a manifest file
 orchestrator manifest validate -f manifest.yaml
+orchestrator manifest validate -f manifest.yaml --project my-project
 
 # Export all resources as manifest documents
 orchestrator manifest export [-o yaml|json]
 ```
+
+| Flag (validate) | Description |
+|-----------------|-------------|
+| `-f, --file` | Manifest file (required) |
+| `-p, --project` | Project filter |
 
 ## Secret Key Management
 
@@ -247,8 +317,10 @@ within the target project.
 ```bash
 orchestrator store get <store_name> <key>
 orchestrator store put <store_name> <key> <value>
+orchestrator store put <store_name> <key> <value> --task-id <id>
 orchestrator store delete <store_name> <key>
 orchestrator store list <store_name>
+orchestrator store list <store_name> --limit 50 --offset 10
 orchestrator store prune <store_name>
 
 # Project-scoped store
@@ -256,12 +328,59 @@ orchestrator store get <store_name> <key> --project my-project
 orchestrator store put <store_name> <key> <value> --project my-project
 ```
 
+| Flag (list) | Description |
+|-------------|-------------|
+| `-l, --limit` | Result limit (default: 100) |
+| `--offset` | Result offset (default: 0) |
+| `-o, --output` | Output format: table (default), json, yaml |
+| `-p, --project` | Project filter |
+
+| Flag (put) | Description |
+|------------|-------------|
+| `-t, --task-id` | Associated task ID |
+| `-p, --project` | Project filter |
+
+## Agent Lifecycle
+
+Manage agent scheduling state (cordon, drain, uncordon).
+
+```bash
+# List agents with lifecycle state
+orchestrator agent list
+orchestrator agent list --project my-project -o json
+
+# Cordon: mark agent as unschedulable (no new work dispatched)
+orchestrator agent cordon <agent_name>
+orchestrator agent cordon <agent_name> --project my-project
+
+# Uncordon: mark a cordoned agent as schedulable again
+orchestrator agent uncordon <agent_name>
+
+# Drain: cordon + wait for in-flight work to complete
+orchestrator agent drain <agent_name>
+orchestrator agent drain <agent_name> --timeout 60
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | List agents and their lifecycle state |
+| `cordon` | Mark an agent as unschedulable |
+| `uncordon` | Mark a cordoned agent as schedulable again |
+| `drain` | Cordon + wait for in-flight work to complete |
+
+| Flag | Description |
+|------|-------------|
+| `-p, --project` | Project filter |
+| `-o, --output` (list only) | Output format: table (default), json, yaml |
+| `--timeout` (drain only) | Timeout in seconds; force-drain after this duration |
+
 ## Debug & System
 
 ```bash
 orchestrator debug                   # inspect internal state
 orchestrator debug --component config  # show active config
 orchestrator version                 # build version + git hash
+orchestrator version --json          # JSON version output
 orchestrator check                   # preflight validation
 orchestrator check -o json           # structured check output
 ```
@@ -344,6 +463,12 @@ orchestrator task watch <id>
 orchestrator task trace <id> [--verbose]
 orchestrator task retry <item_id> [--force]
 orchestrator task delete <id> --force
+
+# Agent lifecycle
+orchestrator agent list [--project <id>] [-o json|yaml]
+orchestrator agent cordon <agent_name> [--project <id>]
+orchestrator agent uncordon <agent_name> [--project <id>]
+orchestrator agent drain <agent_name> [--project <id>] [--timeout <secs>]
 
 # Project cleanup
 orchestrator delete project/<id> --force

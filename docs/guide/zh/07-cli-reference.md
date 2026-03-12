@@ -38,6 +38,10 @@ Agent Orchestrator CLI 全部命令速查。
 | `check` | `ck` |
 | `debug` | `dbg` |
 | `store list` | `store ls` |
+| `agent` | `ag` |
+| `agent list` | `agent ls` |
+| `secret key list` | `secret key ls` |
+| `db migrations list` | `db migrations ls` |
 
 ## 初始化与配置
 
@@ -73,7 +77,16 @@ orchestrator apply -f manifest.yaml --project my-project
 
 ```bash
 orchestrator check
+orchestrator check --workflow self-bootstrap
+orchestrator check --project my-project
+orchestrator check -o json
 ```
+
+| 标志 | 说明 |
+|------|------|
+| `--workflow <WORKFLOW>` | 检查指定工作流 |
+| `-o, --output` | 输出格式：table（默认）、json、yaml |
+| `-p, --project` | 项目筛选 |
 
 ## 资源查询
 
@@ -92,7 +105,16 @@ orchestrator get agents -o yaml
 
 # 项目作用域查询
 orchestrator get agents --project my-project
+
+# 标签选择器
+orchestrator get agents -l env=dev
 ```
+
+| 标志 | 说明 |
+|------|------|
+| `-o, --output` | 输出格式：table（默认）、json、yaml |
+| `-l, --selector` | 标签选择器过滤 |
+| `-p, --project` | 项目筛选 |
 
 ### describe
 
@@ -114,9 +136,18 @@ orchestrator describe agent/my-agent --project my-project
 orchestrator delete workspace/my-ws --force
 orchestrator delete agent/old-agent --force
 
+# 试运行
+orchestrator delete agent/old-agent --dry-run
+
 # 项目作用域
 orchestrator delete agent/old --force --project my-project
 ```
+
+| 标志 | 说明 |
+|------|------|
+| `-f, --force` | 强制删除，无需确认 |
+| `--dry-run` | 显示将被删除的内容 |
+| `-p, --project` | 项目筛选 |
 
 ## 任务生命周期
 
@@ -148,32 +179,65 @@ orchestrator task create \
 orchestrator task list
 orchestrator task list -o json
 orchestrator task list --project my-project    # 按项目筛选
+orchestrator task list --status running        # 按状态筛选
+orchestrator task list -v                      # 详细输出
 
 orchestrator task info <task_id>
 orchestrator task info <task_id> -o yaml
 ```
 
+| 标志 (list) | 说明 |
+|-------------|------|
+| `-s, --status` | 按任务状态筛选 |
+| `-p, --project` | 项目筛选 |
+| `-o, --output` | 输出格式：table（默认）、json、yaml |
+| `-v, --verbose` | 详细输出 |
+
 ### task start / pause / resume
 
 ```bash
 orchestrator task start <task_id>
+orchestrator task start --latest             # 启动最近的任务
 
 orchestrator task pause <task_id>
 orchestrator task resume <task_id>
 ```
+
+| 标志 (start) | 说明 |
+|--------------|------|
+| `-l, --latest` | 启动最近的任务 |
 
 ### task logs / watch / trace
 
 ```bash
 # 查看执行日志
 orchestrator task logs <task_id>
+orchestrator task logs <task_id> --follow --timestamps
+orchestrator task logs <task_id> --tail 50
 
 # 实时监控（自动刷新状态面板）
 orchestrator task watch <task_id>
+orchestrator task watch <task_id> --interval 5
 
 # 执行追踪与异常检测
 orchestrator task trace <task_id>
+orchestrator task trace <task_id> --verbose --json
 ```
+
+| 标志 (logs) | 说明 |
+|-------------|------|
+| `-f, --follow` | 实时跟踪日志 |
+| `-n, --tail` | 显示行数（默认：100） |
+| `--timestamps` | 包含时间戳 |
+
+| 标志 (watch) | 说明 |
+|--------------|------|
+| `--interval` | 刷新间隔秒数（默认：2） |
+
+| 标志 (trace) | 说明 |
+|--------------|------|
+| `--verbose` | 详细追踪输出 |
+| `--json` | JSON 格式输出 |
 
 ### task retry
 
@@ -194,10 +258,16 @@ orchestrator task delete <task_id> --force
 ```bash
 # 验证清单文件
 orchestrator manifest validate -f manifest.yaml
+orchestrator manifest validate -f manifest.yaml --project my-project
 
 # 导出所有资源为清单文档
 orchestrator manifest export [-o yaml|json]
 ```
+
+| 标志 (validate) | 说明 |
+|-----------------|------|
+| `-f, --file` | 清单文件（必填） |
+| `-p, --project` | 项目筛选 |
 
 ## 密钥管理
 
@@ -246,8 +316,10 @@ orchestrator delete project/<project> --force
 ```bash
 orchestrator store get <store_name> <key>
 orchestrator store put <store_name> <key> <value>
+orchestrator store put <store_name> <key> <value> --task-id <id>
 orchestrator store delete <store_name> <key>
 orchestrator store list <store_name>
+orchestrator store list <store_name> --limit 50 --offset 10
 orchestrator store prune <store_name>
 
 # 项目作用域存储
@@ -255,12 +327,59 @@ orchestrator store get <store_name> <key> --project my-project
 orchestrator store put <store_name> <key> <value> --project my-project
 ```
 
+| 标志 (list) | 说明 |
+|-------------|------|
+| `-l, --limit` | 结果限制（默认：100） |
+| `--offset` | 结果偏移（默认：0） |
+| `-o, --output` | 输出格式：table（默认）、json、yaml |
+| `-p, --project` | 项目筛选 |
+
+| 标志 (put) | 说明 |
+|------------|------|
+| `-t, --task-id` | 关联任务 ID |
+| `-p, --project` | 项目筛选 |
+
+## 代理生命周期
+
+管理代理调度状态（cordon、drain、uncordon）。
+
+```bash
+# 列出代理及其生命周期状态
+orchestrator agent list
+orchestrator agent list --project my-project -o json
+
+# Cordon：标记代理为不可调度（不再分派新任务）
+orchestrator agent cordon <agent_name>
+orchestrator agent cordon <agent_name> --project my-project
+
+# Uncordon：将已 cordon 的代理恢复为可调度
+orchestrator agent uncordon <agent_name>
+
+# Drain：cordon + 等待进行中的任务完成
+orchestrator agent drain <agent_name>
+orchestrator agent drain <agent_name> --timeout 60
+```
+
+| 子命令 | 说明 |
+|--------|------|
+| `list` | 列出代理及其生命周期状态 |
+| `cordon` | 标记代理为不可调度 |
+| `uncordon` | 将已 cordon 的代理恢复为可调度 |
+| `drain` | Cordon + 等待进行中的任务完成 |
+
+| 标志 | 说明 |
+|------|------|
+| `-p, --project` | 项目筛选 |
+| `-o, --output`（仅 list） | 输出格式：table（默认）、json、yaml |
+| `--timeout`（仅 drain） | 超时秒数；超时后强制 drain |
+
 ## 调试与系统
 
 ```bash
 orchestrator debug                   # 检查内部状态
 orchestrator debug --component config  # 显示活跃配置
 orchestrator version                 # 构建版本 + git 哈希
+orchestrator version --json          # JSON 格式版本输出
 orchestrator check                   # 预检验证
 orchestrator check -o json           # 结构化检查输出
 ```
@@ -339,6 +458,12 @@ orchestrator task watch <id>
 orchestrator task trace <id> [--verbose]
 orchestrator task retry <item_id> [--force]
 orchestrator task delete <id> --force
+
+# 代理生命周期
+orchestrator agent list [--project <id>] [-o json|yaml]
+orchestrator agent cordon <agent_name> [--project <id>]
+orchestrator agent uncordon <agent_name> [--project <id>]
+orchestrator agent drain <agent_name> [--project <id>] [--timeout <secs>]
 
 # 项目清理
 orchestrator delete project/<id> --force
