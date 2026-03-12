@@ -6,17 +6,26 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+/// Enumerates audit events emitted during SecretStore key lifecycle operations.
 pub enum KeyAuditEventKind {
+    /// A new key file was generated and registered.
     KeyCreated,
+    /// A key became the active encryption key.
     KeyActivated,
+    /// Rotation started and the previous active key was demoted.
     RotateStarted,
+    /// Rotation completed and the old key was retired.
     RotateCompleted,
+    /// A key was revoked from further use.
     KeyRevoked,
+    /// Decryption failed because a matching key could not process ciphertext.
     DecryptFailed,
+    /// Audit record describing a missing key or similar diagnostic condition.
     MissingKeyDiagnostic,
 }
 
 impl KeyAuditEventKind {
+    /// Returns the stable storage label used in persistence rows and JSON payloads.
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::KeyCreated => "key_created",
@@ -29,6 +38,7 @@ impl KeyAuditEventKind {
         }
     }
 
+    /// Parses a persisted audit-event label.
     pub fn from_str_value(s: &str) -> Result<Self> {
         match s {
             "key_created" => Ok(Self::KeyCreated),
@@ -52,17 +62,25 @@ impl std::fmt::Display for KeyAuditEventKind {
 // ─── Audit Event ─────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Represents one persisted audit event for SecretStore key lifecycle activity.
 pub struct KeyAuditEvent {
+    /// Kind of lifecycle event that occurred.
     pub event_kind: KeyAuditEventKind,
+    /// Identifier of the key affected by the event.
     pub key_id: String,
+    /// Fingerprint of the affected key at the time of the event.
     pub key_fingerprint: String,
+    /// Actor label that initiated or reported the event.
     pub actor: String,
+    /// JSON payload with event-specific details.
     pub detail_json: String,
+    /// Timestamp when the event was recorded.
     pub created_at: String,
 }
 
 // ─── DB Operations ───────────────────────────────────────────────
 
+/// Inserts a SecretStore key audit event into the database.
 pub fn insert_key_audit_event(conn: &Connection, event: &KeyAuditEvent) -> Result<()> {
     conn.execute(
         "INSERT INTO secret_key_audit (event_kind, key_id, key_fingerprint, actor, detail_json, created_at)
@@ -80,6 +98,7 @@ pub fn insert_key_audit_event(conn: &Connection, event: &KeyAuditEvent) -> Resul
     Ok(())
 }
 
+/// Returns the most recent SecretStore key audit events across all keys.
 pub fn query_key_audit_events(conn: &Connection, limit: usize) -> Result<Vec<KeyAuditEvent>> {
     let mut stmt = conn.prepare(
         "SELECT event_kind, key_id, key_fingerprint, actor, detail_json, created_at
@@ -88,6 +107,7 @@ pub fn query_key_audit_events(conn: &Connection, limit: usize) -> Result<Vec<Key
     collect_audit_rows(&mut stmt, params![limit])
 }
 
+/// Returns the most recent SecretStore key audit events for a single key.
 pub fn query_key_audit_events_for_key(
     conn: &Connection,
     key_id: &str,

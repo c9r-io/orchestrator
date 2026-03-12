@@ -1,12 +1,22 @@
+/// Builtin CRD definitions shipped with the orchestrator.
 pub mod builtin_defs;
+/// Lifecycle hook execution for CRD-backed resources.
 pub mod hooks;
+/// Helpers that project CRD resources into CLI-facing views.
 pub mod projection;
+/// Lookup helpers for CRDs and custom resources.
 pub mod resolve;
+/// JSON schema helpers used by CRD validation.
 pub mod schema;
+/// Scope model for custom resource definitions.
 pub mod scope;
+/// In-memory stores and persistence helpers for CRD data.
 pub mod store;
+/// Public CRD and custom-resource data types.
 pub mod types;
+/// Validation logic for CRD definitions and instances.
 pub mod validate;
+/// Writeback helpers that materialize config changes into resource manifests.
 pub mod writeback;
 
 use crate::cli_types::OrchestratorResource;

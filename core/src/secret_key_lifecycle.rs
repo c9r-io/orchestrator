@@ -11,14 +11,20 @@ use crate::secret_store_crypto::{SecretEncryption, SecretKeyHandle};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+/// Lifecycle states for SecretStore encryption keys.
 pub enum KeyState {
+    /// Active encryption key used for both encrypt and decrypt operations.
     Active,
+    /// Legacy key retained only for decryption during or after rotation.
     DecryptOnly,
+    /// Key revoked from further use because it should no longer decrypt data.
     Revoked,
+    /// Key retired after all encrypted payloads were migrated away from it.
     Retired,
 }
 
 impl KeyState {
+    /// Returns the stable persisted label for the state.
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -28,6 +34,7 @@ impl KeyState {
         }
     }
 
+    /// Parses a persisted key-state label.
     pub fn from_str_value(s: &str) -> Result<Self> {
         match s {
             "active" => Ok(Self::Active),
@@ -38,6 +45,7 @@ impl KeyState {
         }
     }
 
+    /// Returns `true` when the state should never be used for encryption or decryption again.
     pub fn is_terminal(&self) -> bool {
         matches!(self, Self::Revoked | Self::Retired)
     }
@@ -52,20 +60,31 @@ impl std::fmt::Display for KeyState {
 // ─── Key Record ──────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Persisted metadata for one SecretStore key.
 pub struct KeyRecord {
+    /// Stable identifier of the key.
     pub key_id: String,
+    /// Lifecycle state currently assigned to the key.
     pub state: KeyState,
+    /// Fingerprint derived from the key material.
     pub fingerprint: String,
+    /// Relative or absolute path to the key file.
     pub file_path: String,
+    /// Timestamp when the key record was created.
     pub created_at: String,
+    /// Timestamp when the key became active, if applicable.
     pub activated_at: Option<String>,
+    /// Timestamp when the key left the active state during rotation.
     pub rotated_out_at: Option<String>,
+    /// Timestamp when the key was fully retired.
     pub retired_at: Option<String>,
+    /// Timestamp when the key was revoked.
     pub revoked_at: Option<String>,
 }
 
 // ─── KeyRing ─────────────────────────────────────────────────────
 
+/// Loaded key material plus lifecycle metadata used by SecretStore operations.
 pub struct KeyRing {
     records: Vec<KeyRecord>,
     active_key: Option<SecretKeyHandle>,
@@ -73,6 +92,7 @@ pub struct KeyRing {
 }
 
 impl KeyRing {
+    /// Returns the active key used for new encryption operations.
     pub fn active_key(&self) -> Result<&SecretKeyHandle> {
         self.active_key.as_ref().ok_or_else(|| {
             anyhow::anyhow!(
@@ -81,6 +101,7 @@ impl KeyRing {
         })
     }
 
+    /// Returns a decryption key for the requested key identifier.
     pub fn decrypt_key(&self, key_id: &str) -> Result<&SecretKeyHandle> {
         self.decrypt_keys.get(key_id).ok_or_else(|| {
             anyhow::anyhow!(
@@ -89,18 +110,22 @@ impl KeyRing {
         })
     }
 
+    /// Returns every persisted key record in load order.
     pub fn all_records(&self) -> &[KeyRecord] {
         &self.records
     }
 
+    /// Returns the active key record, if any.
     pub fn active_record(&self) -> Option<&KeyRecord> {
         self.records.iter().find(|r| r.state == KeyState::Active)
     }
 
+    /// Returns `true` when an active encryption key is available.
     pub fn has_active_key(&self) -> bool {
         self.active_key.is_some()
     }
 
+    /// Returns all records currently in the decrypt-only state.
     pub fn decrypt_only_records(&self) -> Vec<&KeyRecord> {
         self.records
             .iter()
@@ -108,6 +133,7 @@ impl KeyRing {
             .collect()
     }
 
+    /// Iterates over key identifiers and handles that can decrypt existing payloads.
     pub fn decrypt_keys_iter(&self) -> impl Iterator<Item = (&str, &SecretKeyHandle)> {
         self.decrypt_keys.iter().map(|(k, v)| (k.as_str(), v))
     }
@@ -132,6 +158,7 @@ fn audit_event_for_record(
 
 // ─── Load KeyRing ────────────────────────────────────────────────
 
+/// Loads the SecretStore keyring from the lifecycle tables or legacy single-key storage.
 pub fn load_keyring(app_root: &Path, db_path: &Path) -> Result<KeyRing> {
     let conn = crate::db::open_conn(db_path)?;
     let table_exists: bool = conn
@@ -225,6 +252,7 @@ fn load_key_file(path: &Path, key_id: &str) -> Result<Option<SecretKeyHandle>> {
 
 // ─── DB queries ──────────────────────────────────────────────────
 
+/// Queries every stored SecretStore key record ordered by creation time.
 pub fn query_all_key_records(conn: &Connection) -> Result<Vec<KeyRecord>> {
     let mut stmt = conn.prepare(
         "SELECT key_id, state, fingerprint, file_path, created_at, activated_at, rotated_out_at, retired_at, revoked_at
@@ -396,9 +424,13 @@ pub fn begin_rotation(conn: &Connection, app_root: &Path) -> Result<(KeyRecord, 
 // ─── Re-encryption ──────────────────────────────────────────────
 
 #[derive(Debug, Clone, Default)]
+/// Reports how many SecretStore payloads were re-encrypted during rotation recovery.
 pub struct ReEncryptionReport {
+    /// Number of current resources updated in the `resources` table.
     pub resources_updated: usize,
+    /// Number of historical versions updated in `resource_versions`.
     pub versions_updated: usize,
+    /// Per-resource errors encountered while re-encrypting payloads.
     pub errors: Vec<String>,
 }
 
@@ -550,6 +582,7 @@ pub fn complete_rotation(conn: &Connection, old_key_id: &str) -> Result<()> {
 // ─── Resume Rotation ─────────────────────────────────────────────
 
 /// Resume an incomplete rotation: find decrypt_only key and re-encrypt remaining data.
+/// Resume an incomplete rotation: find decrypt_only key and re-encrypt remaining data.
 pub fn resume_rotation(conn: &Connection, app_root: &Path) -> Result<ReEncryptionReport> {
     let records = query_all_key_records(conn)?;
     let old_record = records
@@ -585,6 +618,7 @@ pub fn resume_rotation(conn: &Connection, app_root: &Path) -> Result<ReEncryptio
 
 // ─── Revoke ──────────────────────────────────────────────────────
 
+/// Revokes a key and optionally allows revoking the currently active key.
 pub fn revoke_key(conn: &Connection, key_id: &str, force: bool) -> Result<()> {
     let records = query_all_key_records(conn)?;
     let record = records
@@ -626,6 +660,7 @@ pub fn revoke_key(conn: &Connection, key_id: &str, force: bool) -> Result<()> {
 
 // ─── Migration helper: import legacy key ─────────────────────────
 
+/// Imports the legacy primary key file into the lifecycle table if present.
 pub fn import_legacy_key_record(conn: &Connection, app_root: &Path) -> Result<Option<KeyRecord>> {
     let legacy_path = crate::secret_store_crypto::secret_key_path(app_root);
     if !legacy_path.exists() {

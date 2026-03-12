@@ -1,6 +1,7 @@
 use crate::config::{EnvStoreConfig, ExecutionProfileConfig, OrchestratorConfig};
 use crate::crd::projection::{CrdProjectable, RuntimePolicyProjection, SecretStoreProjection};
 
+/// Reconciles one builtin kind from the resource store back into legacy config fields.
 pub fn reconcile_builtin_kind(config: &mut OrchestratorConfig, kind: &str) {
     match kind {
         "Project" => {
@@ -21,6 +22,7 @@ pub fn reconcile_builtin_kind(config: &mut OrchestratorConfig, kind: &str) {
     }
 }
 
+/// Seeds the resource store from a legacy config snapshot for one builtin resource.
 pub fn seed_store_from_config_snapshot(
     config: &mut OrchestratorConfig,
     kind: &str,
@@ -150,6 +152,7 @@ pub fn seed_store_from_config_snapshot(
     }
 }
 
+/// Reconciles one builtin resource instance from the resource store into config fields.
 pub fn reconcile_single_resource(
     config: &mut OrchestratorConfig,
     kind: &str,
@@ -247,6 +250,7 @@ pub fn reconcile_single_resource(
     }
 }
 
+/// Removes one builtin resource from the legacy config snapshot.
 pub fn remove_from_config_snapshot(
     config: &mut OrchestratorConfig,
     kind: &str,
@@ -339,11 +343,13 @@ pub fn remove_from_config_snapshot(
     }
 }
 
+/// Reconciles every builtin resource kind from the store into legacy config fields.
 pub fn reconcile_all_builtins(config: &mut OrchestratorConfig) {
     reconcile_builtin_kind(config, "Project");
     reconcile_builtin_kind(config, "RuntimePolicy");
 }
 
+/// Restores metadata from a previous resource store snapshot when available.
 pub fn restore_metadata_from_previous_store(
     config: &mut OrchestratorConfig,
     old_store: &crate::crd::store::ResourceStore,
@@ -373,6 +379,7 @@ pub fn restore_metadata_from_previous_store(
     }
 }
 
+/// Rebuilds the resource store from the current legacy config snapshot.
 pub fn sync_config_snapshot_to_store(config: &mut OrchestratorConfig) {
     use crate::cli_types::ResourceMetadata;
     use crate::crd::types::CustomResource;

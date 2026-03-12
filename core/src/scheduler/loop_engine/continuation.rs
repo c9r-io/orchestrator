@@ -160,6 +160,7 @@ pub(super) async fn evaluate_loop_continuation(
     Ok(should_continue)
 }
 
+/// Evaluates loop-guard policy and returns the next continue/stop decision when resolvable.
 pub fn evaluate_loop_guard_rules(
     loop_policy: &crate::config::WorkflowLoopConfig,
     current_cycle: u32,

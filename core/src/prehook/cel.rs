@@ -4,6 +4,7 @@ use cel_interpreter::{Program, Value as CelValue};
 
 use super::context::{build_finalize_cel_context, build_step_prehook_cel_context};
 
+/// Evaluates a step prehook CEL expression against the provided context.
 pub fn evaluate_step_prehook_expression(
     expression: &str,
     context: &StepPrehookContext,
@@ -33,6 +34,7 @@ pub fn evaluate_step_prehook_expression(
     }
 }
 
+/// Evaluates a finalize-rule CEL expression against the provided context.
 pub fn evaluate_finalize_rule_expression(
     rule: &WorkflowFinalizeRule,
     context: &ItemFinalizeContext,

@@ -26,73 +26,89 @@ pub struct ControlPlaneProtection {
 }
 
 /// Root configuration persisted for control-plane traffic protection.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProtectionConfig {
     #[serde(default)]
+    /// Baseline policies used when no class-specific settings exist.
     pub defaults: TrafficPolicies,
     #[serde(default)]
+    /// Global policies applied across all subjects.
     pub global: TrafficPolicies,
     #[serde(default)]
+    /// Per-RPC override map.
     pub overrides: HashMap<String, RpcProtectionOverride>,
 }
 
 /// Budget families applied to read, write, streaming, and admin traffic.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrafficPolicies {
+    /// Policy applied to read-only RPCs.
     pub read: BudgetPolicy,
+    /// Policy applied to write RPCs.
     pub write: BudgetPolicy,
+    /// Policy applied to streaming RPCs.
     pub stream: BudgetPolicy,
+    /// Policy applied to admin RPCs.
     pub admin: BudgetPolicy,
 }
 
 /// Token-bucket and concurrency settings for one traffic class.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BudgetPolicy {
+    /// Token refill rate per second.
     pub rate_per_sec: u32,
+    /// Maximum token burst size.
     pub burst: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Optional cap on concurrent in-flight unary requests.
     pub max_in_flight: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Optional cap on concurrent active streams.
     pub max_active_streams: Option<u32>,
 }
 
 /// Per-RPC overrides layered on top of the default protection policy.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RpcProtectionOverride {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Optional traffic class override.
     pub class: Option<TrafficClass>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Optional subject-scoped budget override.
     pub subject: Option<BudgetPolicyOverride>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Optional global budget override.
     pub global: Option<BudgetPolicyOverride>,
 }
 
 /// Partial override for an existing budget policy.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BudgetPolicyOverride {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Optional replacement token refill rate.
     pub rate_per_sec: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Optional replacement burst size.
     pub burst: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Optional replacement in-flight request cap.
     pub max_in_flight: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Optional replacement active-stream cap.
     pub max_active_streams: Option<u32>,
 }
 
 /// Traffic buckets used to map RPCs onto budget families.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TrafficClass {
+    /// Read-only RPC traffic.
     Read,
+    /// Mutating RPC traffic.
     Write,
+    /// Streaming RPC traffic.
     Stream,
+    /// Administrative RPC traffic.
     Admin,
 }
 

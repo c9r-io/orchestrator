@@ -9,8 +9,11 @@ use anyhow::{anyhow, Result};
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 
 #[derive(Debug, Clone)]
+/// Builtin manifest adapter for the global `RuntimePolicy` singleton.
 pub struct RuntimePolicyResource {
+    /// Resource metadata from the manifest.
     pub metadata: ResourceMetadata,
+    /// Manifest spec payload for runtime policy.
     pub spec: RuntimePolicySpec,
 }
 
@@ -98,6 +101,7 @@ impl Resource for RuntimePolicyResource {
     }
 }
 
+/// Builds a typed `RuntimePolicyResource` from a generic manifest wrapper.
 pub(super) fn build_runtime_policy(resource: OrchestratorResource) -> Result<RegisteredResource> {
     let OrchestratorResource {
         kind,
@@ -119,6 +123,7 @@ pub(super) fn build_runtime_policy(resource: OrchestratorResource) -> Result<Reg
     }
 }
 
+/// Converts a runtime-policy manifest runner spec into runtime config.
 pub(crate) fn runner_spec_to_config(spec: &RunnerSpec) -> RunnerConfig {
     RunnerConfig {
         shell: spec.shell.clone(),
@@ -138,6 +143,7 @@ pub(crate) fn runner_spec_to_config(spec: &RunnerSpec) -> RunnerConfig {
     }
 }
 
+/// Converts runtime runner config into its manifest spec representation.
 pub(crate) fn runner_config_to_spec(config: &RunnerConfig) -> RunnerSpec {
     RunnerSpec {
         shell: config.shell.clone(),

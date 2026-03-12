@@ -8,6 +8,7 @@ use super::{
     validate_workflow_config_for_project,
 };
 
+/// Resolves a workspace-relative path and ensures it stays inside the workspace root.
 pub fn resolve_workspace_path(
     workspace_root: &Path,
     rel_path: &str,
@@ -25,6 +26,7 @@ pub fn resolve_workspace_path(
     Ok(joined)
 }
 
+/// Resolves and validates workspaces for the default project.
 pub fn resolve_and_validate_workspaces(
     app_root: &Path,
     config: &OrchestratorConfig,
@@ -101,6 +103,7 @@ pub fn resolve_and_validate_workspaces_for_project(
     Ok(resolved)
 }
 
+/// Resolves lightweight project snapshots without canonicalizing workspace paths.
 pub fn resolve_and_validate_projects(
     app_root: &Path,
     config: &OrchestratorConfig,

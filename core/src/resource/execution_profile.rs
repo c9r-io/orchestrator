@@ -6,8 +6,11 @@ use anyhow::{anyhow, Result};
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 
 #[derive(Debug, Clone)]
+/// Builtin manifest adapter for `ExecutionProfile` resources.
 pub struct ExecutionProfileResource {
+    /// Resource metadata from the manifest.
     pub metadata: ResourceMetadata,
+    /// Manifest spec payload for the execution profile.
     pub spec: ExecutionProfileSpec,
 }
 
@@ -86,6 +89,7 @@ impl Resource for ExecutionProfileResource {
     }
 }
 
+/// Builds a typed `ExecutionProfileResource` from a generic manifest wrapper.
 pub(super) fn build_execution_profile(
     resource: OrchestratorResource,
 ) -> Result<RegisteredResource> {
@@ -106,6 +110,7 @@ pub(super) fn build_execution_profile(
     }
 }
 
+/// Converts an execution-profile manifest spec into runtime config.
 pub(crate) fn execution_profile_spec_to_config(
     spec: &ExecutionProfileSpec,
 ) -> ExecutionProfileConfig {
@@ -133,6 +138,7 @@ pub(crate) fn execution_profile_spec_to_config(
     }
 }
 
+/// Converts runtime execution-profile config into its manifest spec representation.
 pub(crate) fn execution_profile_config_to_spec(
     config: &ExecutionProfileConfig,
 ) -> ExecutionProfileSpec {

@@ -114,10 +114,13 @@ impl CrdProjectable for ProjectConfig {
 #[derive(Debug, Clone, Default, Serialize, serde::Deserialize)]
 pub struct RuntimePolicyProjection {
     #[serde(default)]
+    /// Runner policy configuration.
     pub runner: RunnerConfig,
     #[serde(default)]
+    /// Resume policy configuration.
     pub resume: ResumeConfig,
     #[serde(default)]
+    /// Observability policy configuration.
     pub observability: crate::config::ObservabilityConfig,
 }
 
@@ -214,6 +217,7 @@ impl CrdProjectable for EnvStoreConfig {
 
 /// Wrapper type for SecretStore projection (EnvStoreConfig with sensitive=true).
 #[derive(Debug, Clone, Serialize, serde::Deserialize)]
+/// Wrapper that projects a sensitive env store as a SecretStore resource.
 pub struct SecretStoreProjection(pub EnvStoreConfig);
 
 impl CrdProjectable for SecretStoreProjection {

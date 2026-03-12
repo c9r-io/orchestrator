@@ -4,15 +4,22 @@ use async_trait::async_trait;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// One workflow store entry returned from persistence.
 pub struct WorkflowStoreEntryRow {
+    /// Entry key within the named workflow store.
     pub key: String,
+    /// Serialized JSON value stored for the key.
     pub value_json: String,
+    /// Timestamp when the entry was last updated.
     pub updated_at: String,
 }
 
 #[async_trait]
+/// Persistence interface for workflow store key-value data.
 pub trait WorkflowStoreRepository: Send + Sync {
+    /// Loads one workflow store entry by key.
     async fn get(&self, store_name: &str, project_id: &str, key: &str) -> Result<Option<String>>;
+    /// Inserts or updates one workflow store entry.
     async fn put(
         &self,
         store_name: &str,
@@ -21,7 +28,9 @@ pub trait WorkflowStoreRepository: Send + Sync {
         value: &str,
         task_id: &str,
     ) -> Result<()>;
+    /// Deletes one workflow store entry by key.
     async fn delete(&self, store_name: &str, project_id: &str, key: &str) -> Result<()>;
+    /// Lists workflow store entries ordered by most recent update time.
     async fn list(
         &self,
         store_name: &str,
@@ -29,6 +38,7 @@ pub trait WorkflowStoreRepository: Send + Sync {
         limit: u64,
         offset: u64,
     ) -> Result<Vec<WorkflowStoreEntryRow>>;
+    /// Prunes workflow store entries using TTL and/or maximum-entry retention rules.
     async fn prune(
         &self,
         store_name: &str,
@@ -38,11 +48,13 @@ pub trait WorkflowStoreRepository: Send + Sync {
     ) -> Result<()>;
 }
 
+/// SQLite-backed workflow store repository.
 pub struct SqliteWorkflowStoreRepository {
     async_db: Arc<AsyncDatabase>,
 }
 
 impl SqliteWorkflowStoreRepository {
+    /// Creates a repository backed by the provided async database handle.
     pub fn new(async_db: Arc<AsyncDatabase>) -> Self {
         Self { async_db }
     }

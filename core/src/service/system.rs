@@ -400,6 +400,7 @@ pub fn run_check(
     })
 }
 
+/// Converts a preflight check result into the protobuf diagnostic entry shape.
 pub fn diagnostic_entry_from_check(check: &CheckResult) -> orchestrator_proto::DiagnosticEntry {
     orchestrator_proto::DiagnosticEntry {
         source: check.source.clone(),

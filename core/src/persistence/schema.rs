@@ -4,9 +4,11 @@ use crate::persistence::sqlite::open_conn;
 use anyhow::{Context, Result};
 use std::path::Path;
 
+/// Bootstraps the persistence schema and exposes status helpers.
 pub struct PersistenceBootstrap;
 
 impl PersistenceBootstrap {
+    /// Opens the database, applies pending migrations, and returns the resulting schema status.
     pub fn ensure_current(db_path: &Path) -> Result<SchemaStatus> {
         let conn = open_conn(db_path)?;
         conn.execute_batch(
@@ -30,6 +32,7 @@ impl PersistenceBootstrap {
         schema_migration::status(&conn, &migrations)
     }
 
+    /// Returns the current schema status without applying migrations.
     pub fn status(db_path: &Path) -> Result<SchemaStatus> {
         let conn = open_conn(db_path)?;
         schema_migration::registered_status(&conn)

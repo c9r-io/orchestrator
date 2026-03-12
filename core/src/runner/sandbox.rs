@@ -37,14 +37,20 @@ impl LinuxSandboxSupport {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Resource limits that can trigger sandbox spawn failures.
 pub enum SandboxResourceKind {
+    /// Memory limit exhaustion.
     Memory,
+    /// CPU time limit exhaustion.
     Cpu,
+    /// Process-count limit exhaustion.
     Processes,
+    /// File-descriptor limit exhaustion.
     OpenFiles,
 }
 
 impl SandboxResourceKind {
+    /// Returns the stable event payload label for the resource kind.
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Memory => "memory",
@@ -56,11 +62,17 @@ impl SandboxResourceKind {
 }
 
 #[derive(Debug)]
+/// Structured error emitted when sandbox backend selection or execution fails.
 pub struct SandboxBackendError {
+    /// Name of the execution profile that triggered the error.
     pub execution_profile: String,
+    /// Label of the selected or attempted sandbox backend.
     pub backend: &'static str,
+    /// Event type emitted to observability and callers.
     pub event_type: &'static str,
+    /// Stable reason code for programmatic handling.
     pub reason_code: &'static str,
+    /// Resource limit kind when the error was caused by resource exhaustion.
     pub resource_kind: Option<SandboxResourceKind>,
     message: String,
 }
@@ -141,10 +153,12 @@ impl std::fmt::Display for SandboxBackendError {
 
 impl std::error::Error for SandboxBackendError {}
 
+/// Returns the effective sandbox backend label for an execution profile.
 pub fn sandbox_backend_label(execution_profile: &ResolvedExecutionProfile) -> &'static str {
     select_sandbox_backend(execution_profile).label()
 }
 
+/// Validates that the current host can satisfy the requested execution profile.
 pub fn validate_execution_profile_support(
     execution_profile: &ResolvedExecutionProfile,
 ) -> Result<()> {
@@ -183,6 +197,7 @@ pub fn validate_execution_profile_support(
     }
 }
 
+/// Returns non-fatal preflight issues for the execution profile's sandbox backend.
 pub fn sandbox_backend_preflight_issues(
     execution_profile: &ResolvedExecutionProfile,
 ) -> Vec<String> {

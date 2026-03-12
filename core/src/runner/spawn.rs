@@ -8,26 +8,45 @@ use std::fs::File;
 use std::path::Path;
 use std::process::Stdio;
 
+/// Groups the inputs required to spawn a runner command.
 pub struct SpawnParams<'a> {
+    /// Runner configuration describing shell and policy settings.
     pub runner: &'a RunnerConfig,
+    /// Command string to execute.
     pub command: &'a str,
+    /// Working directory for the spawned process.
     pub cwd: &'a Path,
+    /// StdIO wiring strategy to apply to the child process.
     pub stdio_mode: RunnerStdioMode,
+    /// Extra environment variables resolved for the selected agent.
     pub extra_env: &'a std::collections::HashMap<String, String>,
+    /// Whether stdin should be piped to the child.
     pub pipe_stdin: bool,
+    /// Resolved execution profile controlling sandbox behavior.
     pub execution_profile: &'a ResolvedExecutionProfile,
 }
 
+/// Selects how the runner child's stdout and stderr are wired.
 pub enum RunnerStdioMode {
-    Files { stdout: File, stderr: File },
+    /// Redirects stdout and stderr into provided files.
+    Files {
+        /// File receiving stdout bytes.
+        stdout: File,
+        /// File receiving stderr bytes.
+        stderr: File,
+    },
+    /// Captures stdout and stderr through Tokio pipes.
     Piped,
 }
 
+/// Abstraction over runner process spawning backends.
 pub trait RunnerExecutor {
+    /// Spawns a runner child process using the supplied parameters.
     fn spawn(&self, params: SpawnParams<'_>) -> Result<tokio::process::Child>;
 }
 
 #[derive(Debug, Default)]
+/// Default runner executor that shells out through the configured shell binary.
 pub struct ShellRunnerExecutor;
 
 impl RunnerExecutor for ShellRunnerExecutor {
@@ -103,6 +122,7 @@ impl RunnerExecutor for ShellRunnerExecutor {
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Spawns a runner process and routes output directly to files.
 pub fn spawn_with_runner(
     runner: &RunnerConfig,
     command: &str,
@@ -126,12 +146,16 @@ pub fn spawn_with_runner(
     }
 }
 
+/// Bundles a spawned child process with its asynchronous output capture handles.
 pub struct CapturedChild {
+    /// Spawned child process.
     pub child: tokio::process::Child,
+    /// Background tasks that sanitize and persist captured output streams.
     pub output_capture: OutputCaptureHandles,
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Spawns a runner process with piped output and starts redacted output capture.
 pub fn spawn_with_runner_and_capture(
     runner: &RunnerConfig,
     command: &str,

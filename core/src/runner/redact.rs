@@ -1,3 +1,4 @@
+/// Redacts every configured pattern from the provided text.
 pub fn redact_text(raw: &str, patterns: &[String]) -> String {
     let mut out = raw.to_string();
     for token in patterns {

@@ -16,6 +16,7 @@ fn project_metadata(project_id: &str, name: &str) -> crate::cli_types::ResourceM
     }
 }
 
+/// Exports all builtin resources from config as typed manifest resources.
 pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredResource> {
     let mut resources = Vec::new();
     if let Some(runtime_policy) = RuntimePolicyResource::get_from(config, "runtime") {
@@ -157,6 +158,7 @@ pub fn export_crd_documents(config: &OrchestratorConfig) -> Vec<serde_yml::Value
     docs
 }
 
+/// Exports all builtin resources from config as plain manifest documents.
 pub fn export_manifest_documents(config: &OrchestratorConfig) -> Vec<OrchestratorResource> {
     export_manifest_resources(config)
         .into_iter()

@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use std::path::Path;
 
+/// Creates a checkpoint for the current workspace state.
 pub async fn create_checkpoint(workspace_root: &Path, task_id: &str, cycle: u32) -> Result<String> {
     let tag_name = format!("checkpoint/{}/{}", task_id, cycle);
     let output = tokio::process::Command::new("git")
@@ -16,6 +17,7 @@ pub async fn create_checkpoint(workspace_root: &Path, task_id: &str, cycle: u32)
     Ok(tag_name)
 }
 
+/// Rolls the workspace back to a previously created checkpoint.
 pub async fn rollback_to_checkpoint(workspace_root: &Path, tag_name: &str) -> Result<()> {
     let output = tokio::process::Command::new("git")
         .args(["reset", "--hard", tag_name])

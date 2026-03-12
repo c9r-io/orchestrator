@@ -4,20 +4,32 @@ use crate::config::{
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
+/// Execution profile after resolving workspace-relative paths and inherited defaults.
 pub struct ResolvedExecutionProfile {
+    /// Name of the execution profile that produced this resolved view.
     pub name: String,
+    /// Whether commands run on the host or inside a sandbox backend.
     pub mode: ExecutionProfileMode,
+    /// Filesystem policy enforced by the execution backend.
     pub fs_mode: ExecutionFsMode,
+    /// Paths that remain writable when sandboxing is enabled.
     pub writable_paths: Vec<PathBuf>,
+    /// Network policy enforced by the execution backend.
     pub network_mode: ExecutionNetworkMode,
+    /// Raw allowlist entries used when `network_mode=allowlist`.
     pub network_allowlist: Vec<String>,
+    /// Optional memory limit in MiB.
     pub max_memory_mb: Option<u64>,
+    /// Optional CPU time limit in seconds.
     pub max_cpu_seconds: Option<u64>,
+    /// Optional maximum process count.
     pub max_processes: Option<u64>,
+    /// Optional file-descriptor limit.
     pub max_open_files: Option<u64>,
 }
 
 impl ResolvedExecutionProfile {
+    /// Returns the built-in host execution profile with no sandbox limits.
     pub fn host() -> Self {
         Self {
             name: "host".to_string(),
@@ -33,6 +45,7 @@ impl ResolvedExecutionProfile {
         }
     }
 
+    /// Resolves a configured execution profile against the workspace root.
     pub fn from_config(
         name: &str,
         config: &ExecutionProfileConfig,

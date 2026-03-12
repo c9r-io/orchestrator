@@ -13,24 +13,38 @@ use super::{
 };
 
 #[derive(Debug, Clone)]
+/// Tagged union over every builtin manifest resource type supported by the importer.
 pub enum RegisteredResource {
+    /// Workspace resource.
     Workspace(WorkspaceResource),
+    /// Agent resource.
     Agent(Box<AgentResource>),
+    /// Workflow resource.
     Workflow(WorkflowResource),
+    /// Project resource.
     Project(ProjectResource),
+    /// Runtime policy resource.
     RuntimePolicy(RuntimePolicyResource),
+    /// Step template resource.
     StepTemplate(StepTemplateResource),
+    /// Execution profile resource.
     ExecutionProfile(ExecutionProfileResource),
+    /// Environment store resource.
     EnvStore(EnvStoreResource),
+    /// Secret store resource.
     SecretStore(SecretStoreResource),
 }
 
 #[derive(Debug, Clone, Copy)]
+/// Registry entry mapping a manifest kind to its constructor.
 pub struct ResourceRegistration {
+    /// Resource kind dispatched by this entry.
     pub kind: ResourceKind,
+    /// Builder that validates and converts a generic manifest into a typed resource.
     pub build: fn(OrchestratorResource) -> Result<RegisteredResource>,
 }
 
+/// Returns the static registry for builtin manifest resource kinds.
 pub fn resource_registry() -> [ResourceRegistration; 9] {
     [
         ResourceRegistration {
@@ -90,6 +104,7 @@ impl RegisteredResource {
     }
 }
 
+/// Converts a generic manifest resource into the corresponding typed builtin resource.
 pub fn dispatch_resource(resource: OrchestratorResource) -> Result<RegisteredResource> {
     let kind = resource.kind;
     if let Some(registration) = resource_registry().iter().find(|entry| entry.kind == kind) {

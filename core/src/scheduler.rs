@@ -1,15 +1,22 @@
+/// Preflight config and workflow checks.
 pub mod check;
+/// Runtime invariant enforcement helpers.
 pub mod invariant;
 mod item_executor;
+/// Dynamic task-item generation helpers.
 pub mod item_generate;
+/// Task-item selection helpers.
 pub mod item_select;
 mod loop_engine;
 mod phase_runner;
 mod query;
 mod runtime;
+/// Safety features such as checkpoints and binary snapshots.
 pub mod safety;
+/// Child-task spawning helpers.
 pub mod spawn;
 mod task_state;
+/// Task trace construction and rendering.
 pub mod trace;
 
 pub use crate::state::RunningTask;

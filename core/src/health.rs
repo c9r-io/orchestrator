@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 const DISEASE_DURATION_HOURS: i64 = 5;
 
+/// Returns whether an agent is currently considered healthy.
 pub fn is_agent_healthy(health_map: &HashMap<String, AgentHealthState>, agent_id: &str) -> bool {
     match health_map.get(agent_id) {
         None => true,
@@ -15,6 +16,7 @@ pub fn is_agent_healthy(health_map: &HashMap<String, AgentHealthState>, agent_id
     }
 }
 
+/// Returns whether an agent is healthy enough for a specific capability.
 pub fn is_capability_healthy(
     health_map: &HashMap<String, AgentHealthState>,
     agent_id: &str,
@@ -36,6 +38,7 @@ pub fn is_capability_healthy(
     }
 }
 
+/// Marks an agent as diseased for the default cooldown window.
 pub async fn mark_agent_diseased(state: &InnerState, agent_id: &str) {
     let mut health = state.agent_health.write().await;
     let entry = health
@@ -63,6 +66,7 @@ pub async fn mark_agent_diseased(state: &InnerState, agent_id: &str) {
     );
 }
 
+/// Increments consecutive error counters for an agent and returns the new count.
 pub async fn increment_consecutive_errors(state: &InnerState, agent_id: &str) -> u32 {
     let mut health = state.agent_health.write().await;
     let entry = health
@@ -96,6 +100,7 @@ pub async fn increment_consecutive_errors(state: &InnerState, agent_id: &str) ->
     consecutive_errors
 }
 
+/// Resets the consecutive-error counter for an agent.
 pub async fn reset_consecutive_errors(state: &InnerState, agent_id: &str) {
     let mut health = state.agent_health.write().await;
     if let Some(entry) = health.get_mut(agent_id) {
@@ -123,6 +128,7 @@ pub async fn reset_consecutive_errors(state: &InnerState, agent_id: &str) {
     }
 }
 
+/// Updates per-capability health statistics for an agent after a step completes.
 pub async fn update_capability_health(
     state: &InnerState,
     agent_id: &str,

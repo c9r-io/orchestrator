@@ -5,8 +5,11 @@ use anyhow::{anyhow, Result};
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 
 #[derive(Debug, Clone)]
+/// Builtin manifest adapter for `StepTemplate` resources.
 pub struct StepTemplateResource {
+    /// Resource metadata from the manifest.
     pub metadata: ResourceMetadata,
+    /// Manifest spec payload for the step template.
     pub spec: StepTemplateSpec,
 }
 
@@ -78,6 +81,7 @@ impl Resource for StepTemplateResource {
     }
 }
 
+/// Builds a typed `StepTemplateResource` from a generic manifest wrapper.
 pub(super) fn build_step_template(resource: OrchestratorResource) -> Result<RegisteredResource> {
     let OrchestratorResource {
         kind,

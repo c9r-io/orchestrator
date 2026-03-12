@@ -17,7 +17,10 @@ pub const EXIT_RESTART: i64 = 75;
 #[derive(Debug)]
 pub enum SelfRestartOutcome {
     /// Build, verify, and snapshot succeeded. Daemon should exec the new binary.
-    RestartReady { binary_path: PathBuf },
+    RestartReady {
+        /// Path to the verified release binary that should be executed next.
+        binary_path: PathBuf,
+    },
     /// A phase failed. The returned code is the step exit code (non-75).
     Failed(i64),
 }
@@ -26,6 +29,7 @@ pub enum SelfRestartOutcome {
 /// Daemon layer catches this via `downcast_ref` and performs `exec()`.
 #[derive(Debug)]
 pub struct RestartRequestedError {
+    /// Path to the verified release binary that should replace the current process.
     pub binary_path: PathBuf,
 }
 

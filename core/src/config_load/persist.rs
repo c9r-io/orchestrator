@@ -68,6 +68,7 @@ pub fn query_heal_log_entries(db_path: &Path, limit: usize) -> Result<Vec<HealLo
     SqliteConfigRepository::new(db_path).query_heal_log_entries(limit)
 }
 
+/// Loads the latest config snapshot or seeds the initial snapshot when absent.
 pub fn load_or_seed_config(db_path: &Path) -> Result<(OrchestratorConfig, String, i64, String)> {
     SqliteConfigRepository::new(db_path).load_or_seed_config()
 }
@@ -77,6 +78,7 @@ pub fn load_config(db_path: &Path) -> Result<Option<(OrchestratorConfig, i64, St
     SqliteConfigRepository::new(db_path).load_config()
 }
 
+/// Persists a validated config snapshot and returns its overview metadata.
 pub fn persist_raw_config(
     db_path: &Path,
     config: OrchestratorConfig,
@@ -88,6 +90,7 @@ pub fn persist_raw_config(
     SqliteConfigRepository::new(db_path).persist_raw_config(normalized, &yaml, &json_raw, author)
 }
 
+/// Persists a config update, rebuilds active state, and refreshes the runtime snapshot.
 pub fn persist_config_and_reload(
     state: &crate::state::InnerState,
     config: OrchestratorConfig,

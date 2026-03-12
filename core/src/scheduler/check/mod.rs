@@ -35,38 +35,59 @@ const KNOWN_SYSTEM_VARS: &[&str] = &[
 // ── Data structures ─────────────────────────────────────────────────
 
 #[derive(Debug, Serialize, Clone)]
+/// Full preflight report containing every emitted check and aggregate counts.
 pub struct CheckReport {
+    /// Individual validation results emitted by the preflight engine.
     pub checks: Vec<CheckResult>,
+    /// Aggregate counts grouped by outcome severity.
     pub summary: CheckSummary,
 }
 
 #[derive(Debug, Serialize, Clone)]
+/// One preflight validation result.
 pub struct CheckResult {
+    /// Source subsystem that emitted the result.
     pub source: String,
+    /// Stable rule identifier.
     pub rule: String,
+    /// Severity assigned to the rule.
     pub severity: Severity,
+    /// Whether the rule passed.
     pub passed: bool,
+    /// Whether a failing result should block execution.
     pub blocking: bool,
+    /// Human-readable result message.
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional contextual details for the result.
     pub context: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional scope label such as workflow or resource name.
     pub scope: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional actual value observed by the rule.
     pub actual: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional expected value communicated by the rule.
     pub expected: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional risk statement attached to the result.
     pub risk: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional remediation hint for the failing result.
     pub suggested_fix: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
+/// Aggregate counts for a batch of preflight checks.
 pub struct CheckSummary {
+    /// Total number of emitted checks.
     pub total: u32,
+    /// Number of checks that passed.
     pub passed: u32,
+    /// Number of failing checks with error severity.
     pub errors: u32,
+    /// Number of failing checks with warning severity.
     pub warnings: u32,
 }
 

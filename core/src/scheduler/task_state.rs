@@ -65,6 +65,7 @@ pub(crate) async fn record_task_execution_metric(
     persist_task_execution_metric(state, task_id, status, current_cycle, unresolved_items).await
 }
 
+/// Updates the persisted task status and optionally stamps completion fields.
 pub async fn set_task_status(
     state: &InnerState,
     task_id: &str,
@@ -77,6 +78,7 @@ pub async fn set_task_status(
         .await
 }
 
+/// Prepares a task for execution and records a `task_started` event.
 pub async fn prepare_task_for_start(state: &InnerState, task_id: &str) -> Result<()> {
     state
         .task_repo
@@ -93,6 +95,7 @@ pub async fn prepare_task_for_start(state: &InnerState, task_id: &str) -> Result
     Ok(())
 }
 
+/// Finds the latest resumable task identifier.
 pub async fn find_latest_resumable_task_id(
     state: &InnerState,
     include_pending: bool,
@@ -103,14 +106,17 @@ pub async fn find_latest_resumable_task_id(
         .await
 }
 
+/// Returns the first task item identifier for a task, if any.
 pub async fn first_task_item_id(state: &InnerState, task_id: &str) -> Result<Option<String>> {
     state.task_repo.first_task_item_id(task_id).await
 }
 
+/// Counts unresolved task items for a task.
 pub async fn count_unresolved_items(state: &InnerState, task_id: &str) -> Result<i64> {
     state.task_repo.count_unresolved_items(task_id).await
 }
 
+/// Lists task items for the current cycle.
 pub async fn list_task_items_for_cycle(
     state: &InnerState,
     task_id: &str,
@@ -118,6 +124,7 @@ pub async fn list_task_items_for_cycle(
     state.task_repo.list_task_items_for_cycle(task_id).await
 }
 
+/// Persists the current cycle number and init state for a task.
 pub async fn update_task_cycle_state(
     state: &InnerState,
     task_id: &str,

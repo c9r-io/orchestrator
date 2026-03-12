@@ -293,6 +293,7 @@ async fn handle_sandbox_backend_error(
     }))
 }
 
+/// Runs one phase command with the standard timeout and capture pipeline.
 pub async fn run_phase(
     state: &Arc<InnerState>,
     request: PhaseRunRequest<'_>,
@@ -300,6 +301,7 @@ pub async fn run_phase(
     run_phase_with_timeout(state, request).await
 }
 
+/// Runs one phase command while coordinating with self-restart rotation safeguards.
 pub async fn run_phase_with_rotation(
     state: &Arc<InnerState>,
     request: RotatingPhaseRunRequest<'_>,

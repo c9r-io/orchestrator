@@ -3,6 +3,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
 
+/// Creates a directory and enforces the requested permissions when supported.
 pub fn ensure_dir(path: &Path, mode: u32) -> Result<()> {
     std::fs::create_dir_all(path)
         .with_context(|| format!("failed to create directory {}", path.display()))?;
@@ -15,6 +16,7 @@ pub fn ensure_dir(path: &Path, mode: u32) -> Result<()> {
     Ok(())
 }
 
+/// Atomically writes a file and applies the requested permissions when supported.
 pub fn write_atomic(path: &Path, contents: &[u8], mode: u32) -> Result<()> {
     if let Some(parent) = path.parent() {
         ensure_dir(parent, 0o700)?;

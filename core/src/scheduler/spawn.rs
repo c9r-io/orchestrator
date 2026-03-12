@@ -9,12 +9,19 @@ use tracing::{info, warn};
 
 /// Bundled context for spawn operations.
 pub struct SpawnContext<'a> {
+    /// Shared orchestrator state.
     pub state: &'a InnerState,
+    /// Parent task identifier.
     pub parent_task_id: &'a str,
+    /// Parent project identifier.
     pub parent_project_id: &'a str,
+    /// Parent workspace identifier.
     pub parent_workspace_id: &'a str,
+    /// Parent workflow identifier.
     pub parent_workflow_id: &'a str,
+    /// Current spawn depth of the parent task.
     pub parent_spawn_depth: i64,
+    /// Pipeline variables available for templating spawn payloads.
     pub pipeline_vars: &'a HashMap<String, String>,
 }
 

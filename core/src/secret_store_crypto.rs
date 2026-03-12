@@ -16,10 +16,13 @@ const KEY_META_RELATIVE_PATH: &str = "data/secrets/secretstore.key.meta.json";
 const KEY_ID_PRIMARY: &str = "primary";
 const KEY_SIZE_BYTES: usize = 32;
 const NONCE_SIZE_BYTES: usize = 12;
+/// SecretStore envelope scheme label persisted in encrypted specs.
 pub const SECRETSTORE_ENCRYPTION_SCHEME: &str = "secretstore.aead.v1";
+/// Redaction placeholder written when secret values must be hidden.
 pub const ENCRYPTED_PLACEHOLDER: &str = "[ENCRYPTED]";
 
 #[derive(Debug, Clone)]
+/// In-memory handle for one loaded SecretStore encryption key.
 pub struct SecretKeyHandle {
     key_bytes: [u8; KEY_SIZE_BYTES],
     key_id: String,
@@ -29,10 +32,12 @@ pub struct SecretKeyHandle {
 }
 
 impl SecretKeyHandle {
+    /// Returns the stable identifier associated with this key handle.
     pub fn key_id(&self) -> &str {
         &self.key_id
     }
 
+    /// Returns the stable fingerprint derived from the key material.
     pub fn fingerprint(&self) -> &str {
         &self.fingerprint
     }
@@ -43,6 +48,7 @@ impl SecretKeyHandle {
 }
 
 #[derive(Debug, Clone)]
+/// Encrypts and decrypts SecretStore specs using one active key plus optional decrypt-only keys.
 pub struct SecretEncryption {
     key: SecretKeyHandle,
     /// Additional keys available for decryption (key_id → handle).
@@ -51,6 +57,7 @@ pub struct SecretEncryption {
 }
 
 impl SecretEncryption {
+    /// Creates a single-key encryptor and decryptor from one key handle.
     pub fn from_key(key: SecretKeyHandle) -> Self {
         Self {
             key,
@@ -71,6 +78,7 @@ impl SecretEncryption {
         })
     }
 
+    /// Encrypts a SecretStore spec into an authenticated envelope bound to resource identity.
     pub fn encrypt_secret_store_spec(
         &self,
         project: &str,
@@ -109,6 +117,7 @@ impl SecretEncryption {
         serde_json::to_string(&envelope).context("failed to serialize encrypted secret envelope")
     }
 
+    /// Decrypts a SecretStore envelope and verifies its authenticated resource identity.
     pub fn decrypt_secret_store_spec(
         &self,
         project: &str,
@@ -260,14 +269,17 @@ pub fn generate_and_write_key_file(path: &Path, key_id: &str) -> Result<SecretKe
     })
 }
 
+/// Resolves the canonical path of the primary SecretStore key file.
 pub fn secret_key_path(app_root: &Path) -> PathBuf {
     app_root.join(KEY_RELATIVE_PATH)
 }
 
+/// Resolves the path of the metadata file associated with the primary SecretStore key.
 pub fn secret_key_meta_path(app_root: &Path) -> PathBuf {
     app_root.join(KEY_META_RELATIVE_PATH)
 }
 
+/// Resolves the application root from a database path in either nested or flat layouts.
 pub fn resolve_app_root_from_db_path(db_path: &Path) -> Result<PathBuf> {
     let parent = db_path
         .parent()
@@ -282,6 +294,7 @@ pub fn resolve_app_root_from_db_path(db_path: &Path) -> Result<PathBuf> {
     }
 }
 
+/// Loads the existing primary key or initializes one when no encrypted SecretStore data exists.
 pub fn ensure_secret_key(app_root: &Path, db_path: &Path) -> Result<SecretKeyHandle> {
     if let Some(existing) = load_existing_secret_key(app_root)? {
         return Ok(existing);
@@ -295,6 +308,7 @@ pub fn ensure_secret_key(app_root: &Path, db_path: &Path) -> Result<SecretKeyHan
     initialize_secret_key(app_root)
 }
 
+/// Loads the primary SecretStore key if it already exists on disk.
 pub fn load_existing_secret_key(app_root: &Path) -> Result<Option<SecretKeyHandle>> {
     let path = secret_key_path(app_root);
     if !path.exists() {
@@ -323,11 +337,13 @@ pub fn load_existing_secret_key(app_root: &Path) -> Result<Option<SecretKeyHandl
     }))
 }
 
+/// Returns `true` when the serialized spec looks like an encrypted SecretStore envelope.
 pub fn is_encrypted_secret_store_json(spec_json: &str) -> bool {
     spec_json.contains("\"scheme\":\"secretstore.aead.v1\"")
         || spec_json.contains("\"_encrypted\":true")
 }
 
+/// Replaces every secret value in a `data` map with the standard redaction marker.
 pub fn redact_secret_data_map(map: &mut serde_json::Map<String, Value>) {
     for value in map.values_mut() {
         *value = Value::String(ENCRYPTED_PLACEHOLDER.to_string());
@@ -500,6 +516,7 @@ fn key_fingerprint(key_bytes: &[u8; KEY_SIZE_BYTES]) -> String {
         .collect()
 }
 
+/// Decodes a stored resource spec, decrypting SecretStore payloads when needed.
 pub fn decrypt_resource_spec_json(
     encryption: Option<&SecretEncryption>,
     kind: &str,
@@ -524,6 +541,7 @@ pub fn decrypt_resource_spec_json(
     encryption.decrypt_secret_store_spec(project, name, spec_json)
 }
 
+/// Encodes a resource spec, encrypting SecretStore payloads and plain-serializing others.
 pub fn encrypt_resource_spec_json(
     encryption: &SecretEncryption,
     kind: &str,
@@ -538,6 +556,7 @@ pub fn encrypt_resource_spec_json(
     }
 }
 
+/// Returns the provided project identifier or the system project when missing.
 pub fn secret_project_or_default(project: Option<&str>) -> &str {
     project
         .filter(|value| !value.trim().is_empty())

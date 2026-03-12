@@ -26,19 +26,22 @@ pub struct ControlPlaneSecurity {
 }
 
 /// TLS server materials and authorization state for the secure gRPC listener.
-#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct SecureServerConfig {
+    /// TLS server configuration bound to the gRPC listener.
     pub tls: ServerTlsConfig,
+    /// Shared authorization state used for request validation.
     pub security: Arc<ControlPlaneSecurity>,
 }
 
 /// Authorization failures returned while validating an incoming control-plane request.
-#[allow(missing_docs)]
 #[derive(Debug)]
 pub enum AuthzError {
+    /// Client authentication failed.
     Unauthenticated(&'static str),
+    /// Authenticated client lacks the required role.
     PermissionDenied(&'static str),
+    /// Internal authorization error.
     Internal(String),
 }
 
@@ -66,7 +69,6 @@ struct AuditEvent<'a> {
 }
 
 /// Built-in control-plane roles ordered from least to most privileged.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
@@ -76,6 +78,7 @@ pub enum Role {
 }
 
 impl Role {
+    /// Returns the stable storage label for the role.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ReadOnly => "read_only",
@@ -92,86 +95,99 @@ impl Role {
         }
     }
 
+    /// Returns `true` when `self` satisfies the required role.
     pub fn allows(self, required: Self) -> bool {
         self.rank() >= required.rank()
     }
 }
 
 /// A single authenticated subject that is allowed to call control-plane RPCs.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicySubject {
+    /// Subject identifier bound to the client certificate SAN.
     pub id: String,
+    /// Role granted to the subject.
     pub role: Role,
     #[serde(default)]
+    /// Optional human-readable description of the subject.
     pub description: Option<String>,
     #[serde(default)]
+    /// Whether the subject is disabled.
     pub disabled: bool,
 }
 
 /// Authorization policy persisted on disk for the control-plane listener.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AuthzPolicy {
     #[serde(default)]
+    /// Subjects allowed to access the control-plane listener.
     pub subjects: Vec<PolicySubject>,
 }
 
 /// Kubeconfig-like client bundle written for remote control-plane access.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ControlPlaneConfig {
+    /// Name of the currently selected context.
     pub current_context: String,
+    /// Cluster entries available in the bundle.
     pub clusters: Vec<NamedCluster>,
+    /// User entries available in the bundle.
     pub users: Vec<NamedUser>,
+    /// Context entries available in the bundle.
     pub contexts: Vec<NamedContext>,
 }
 
 /// Named cluster entry inside a generated control-plane config file.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NamedCluster {
+    /// Cluster entry name.
     pub name: String,
+    /// Cluster reference payload.
     pub cluster: ClusterRef,
 }
 
 /// Server endpoint and CA bundle reference for a named cluster entry.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClusterRef {
+    /// Server URL for the control-plane endpoint.
     pub server: String,
+    /// Path to the CA bundle file.
     pub certificate_authority: String,
 }
 
 /// Named user entry inside a generated control-plane config file.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NamedUser {
+    /// User entry name.
     pub name: String,
+    /// User reference payload.
     pub user: UserRef,
 }
 
 /// Client certificate and key locations for a named user entry.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserRef {
+    /// Path to the client certificate file.
     pub client_certificate: String,
+    /// Path to the client private-key file.
     pub client_key: String,
 }
 
 /// Named context entry that binds a cluster and user together.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NamedContext {
+    /// Context entry name.
     pub name: String,
+    /// Context reference payload.
     pub context: ContextRef,
 }
 
 /// Cluster and user references selected by a named context entry.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContextRef {
+    /// Cluster name selected by the context.
     pub cluster: String,
+    /// User name selected by the context.
     pub user: String,
 }
 

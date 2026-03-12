@@ -8,6 +8,7 @@ use std::path::Path;
 use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Step scope inferred from persisted event payloads.
 pub enum ObservedStepScope {
     /// Event belongs to a task-scoped step.
     Task,
@@ -36,6 +37,7 @@ pub fn observed_step_scope_label(scope: Option<ObservedStepScope>) -> &'static s
 /// Trait for emitting real-time events to listeners (UI, logging, etc.)
 /// Separate from `insert_event` which persists to DB.
 pub trait EventSink: Send + Sync {
+    /// Emits an in-memory event to real-time listeners.
     fn emit(&self, task_id: &str, task_item_id: Option<&str>, event_type: &str, payload: Value);
 }
 

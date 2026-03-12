@@ -8,28 +8,42 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::Layer;
 
 #[derive(Debug, Clone, Copy, Default)]
+/// CLI flags that override logging configuration resolved from runtime policy.
 pub struct CliLoggingOverrides {
+    /// Forces at least debug-level logging when set.
     pub verbose: bool,
+    /// Explicit log level override.
     pub level: Option<LogLevel>,
+    /// Explicit console log format override.
     pub format: Option<LoggingFormat>,
 }
 
 #[derive(Debug, Clone)]
+/// Fully resolved logging configuration used to initialize tracing subscribers.
 pub struct ResolvedLoggingConfig {
+    /// Effective minimum log level.
     pub level: LogLevel,
+    /// Whether console logging is enabled.
     pub console_enabled: bool,
+    /// Console log output format.
     pub console_format: LoggingFormat,
+    /// Whether ANSI styling is enabled for console output.
     pub console_ansi: bool,
+    /// Whether file logging is enabled.
     pub file_enabled: bool,
+    /// File log output format.
     pub file_format: LoggingFormat,
+    /// Directory where rolling log files are written.
     pub file_dir: PathBuf,
 }
 
 #[derive(Debug, Default)]
+/// Holds background logging guards that must live for the lifetime of observability.
 pub struct ObservabilityGuard {
     _file_guard: Option<tracing_appender::non_blocking::WorkerGuard>,
 }
 
+/// Initializes tracing subscribers using config and CLI/environment overrides.
 pub fn init_observability(
     app_root: &Path,
     config: Option<&OrchestratorConfig>,
@@ -168,6 +182,7 @@ pub fn init_observability(
     })
 }
 
+/// Resolves the effective logging configuration before subscriber initialization.
 pub fn resolve_logging_config(
     app_root: &Path,
     config: Option<&OrchestratorConfig>,

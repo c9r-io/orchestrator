@@ -33,27 +33,40 @@ pub struct PipelineVariables {
 /// Build error with source location
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BuildError {
+    /// Source file that emitted the error, when available.
     pub file: Option<String>,
+    /// 1-based source line for the error, when available.
     pub line: Option<u32>,
+    /// 1-based source column for the error, when available.
     pub column: Option<u32>,
+    /// Human-readable compiler or build-system message.
     pub message: String,
+    /// Severity assigned to the build diagnostic.
     pub level: BuildErrorLevel,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+/// Severity levels recorded for build diagnostics.
 pub enum BuildErrorLevel {
+    /// A failing diagnostic that should block the pipeline.
     Error,
+    /// A non-fatal diagnostic surfaced to the workflow.
     Warning,
 }
 
 /// Test failure with source location
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestFailure {
+    /// Test case or suite name that failed.
     pub test_name: String,
+    /// Source file associated with the failure, when available.
     pub file: Option<String>,
+    /// 1-based source line associated with the failure, when available.
     pub line: Option<u32>,
+    /// Human-readable failure message.
     pub message: String,
+    /// Captured stdout emitted by the failing test, when available.
     pub stdout: Option<String>,
 }
 

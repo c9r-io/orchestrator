@@ -2,15 +2,22 @@ use anyhow::{Context, Result};
 use rusqlite::Connection;
 use std::collections::HashSet;
 
+/// Describes a schema migration that can be applied to a persistence database.
 pub struct Migration {
+    /// Monotonic schema version assigned to the migration.
     pub version: u32,
+    /// Stable migration identifier recorded in `schema_migrations`.
     pub name: &'static str,
+    /// Migration function executed inside a transaction.
     pub up: fn(&Connection) -> Result<()>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Public metadata for a registered migration.
 pub struct MigrationDescriptor {
+    /// Schema version introduced by the migration.
     pub version: u32,
+    /// Stable migration identifier.
     pub name: &'static str,
 }
 
@@ -24,29 +31,39 @@ impl MigrationDescriptor {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Reports current and target schema versions plus the migrations still pending.
 pub struct SchemaStatus {
+    /// Highest schema version already applied to the database.
     pub current_version: u32,
+    /// Highest schema version known to the running binary.
     pub target_version: u32,
+    /// Ordered list of pending schema versions.
     pub pending_versions: Vec<u32>,
+    /// Ordered list of pending migration names.
     pub pending_names: Vec<&'static str>,
 }
 
 impl SchemaStatus {
+    /// Returns `true` when the database is already at the latest registered version.
     pub fn is_current(&self) -> bool {
         self.pending_versions.is_empty()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+/// Summarizes which migrations were applied during a `run_pending` invocation.
 pub struct AppliedMigrationSummary {
+    /// Ordered descriptors for migrations applied in the current run.
     pub applied: Vec<MigrationDescriptor>,
 }
 
 impl AppliedMigrationSummary {
+    /// Returns the number of migrations applied in the current run.
     pub fn count(&self) -> u32 {
         self.applied.len() as u32
     }
 
+    /// Returns `true` when no migrations were applied.
     pub fn is_empty(&self) -> bool {
         self.applied.is_empty()
     }
@@ -64,6 +81,7 @@ fn ensure_schema_migrations_table(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Returns the highest applied schema version for the given database.
 pub fn current_version(conn: &Connection) -> Result<u32> {
     ensure_schema_migrations_table(conn)?;
 
@@ -77,6 +95,7 @@ pub fn current_version(conn: &Connection) -> Result<u32> {
     Ok(version)
 }
 
+/// Returns the full ordered list of schema migrations known to this binary.
 pub fn registered_migrations() -> Vec<Migration> {
     vec![
         Migration {
@@ -167,6 +186,7 @@ pub fn registered_migrations() -> Vec<Migration> {
     ]
 }
 
+/// Converts migration definitions into lightweight public descriptors.
 pub fn descriptors(migrations: &[Migration]) -> Vec<MigrationDescriptor> {
     migrations
         .iter()
@@ -174,10 +194,12 @@ pub fn descriptors(migrations: &[Migration]) -> Vec<MigrationDescriptor> {
         .collect()
 }
 
+/// Returns descriptors for every registered migration.
 pub fn registered_descriptors() -> Vec<MigrationDescriptor> {
     descriptors(&registered_migrations())
 }
 
+/// Computes the database schema status against the provided migration set.
 pub fn status(conn: &Connection, migrations: &[Migration]) -> Result<SchemaStatus> {
     let current_version = current_version(conn)?;
     let descriptors = descriptors(migrations);
@@ -198,11 +220,13 @@ pub fn status(conn: &Connection, migrations: &[Migration]) -> Result<SchemaStatu
     })
 }
 
+/// Computes the database schema status against all registered migrations.
 pub fn registered_status(conn: &Connection) -> Result<SchemaStatus> {
     let migrations = registered_migrations();
     status(conn, &migrations)
 }
 
+/// Returns every schema version already recorded in `schema_migrations`.
 pub fn applied_versions(conn: &Connection) -> Result<Vec<u32>> {
     ensure_schema_migrations_table(conn)?;
 
@@ -218,12 +242,17 @@ pub fn applied_versions(conn: &Connection) -> Result<Vec<u32>> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Indicates whether each registered migration has already been applied.
 pub struct RegisteredMigrationStatus {
+    /// Schema version represented by this row.
     pub version: u32,
+    /// Stable migration identifier.
     pub name: &'static str,
+    /// Whether the version is present in `schema_migrations`.
     pub applied: bool,
 }
 
+/// Returns the applied status for every registered migration.
 pub fn registered_migration_statuses(conn: &Connection) -> Result<Vec<RegisteredMigrationStatus>> {
     let applied = applied_versions(conn)?.into_iter().collect::<HashSet<_>>();
     Ok(registered_descriptors()
@@ -236,6 +265,7 @@ pub fn registered_migration_statuses(conn: &Connection) -> Result<Vec<Registered
         .collect())
 }
 
+/// Applies every migration newer than the current schema version.
 pub fn run_pending(conn: &Connection, migrations: &[Migration]) -> Result<AppliedMigrationSummary> {
     let current = current_version(conn)?;
     let mut applied = Vec::new();

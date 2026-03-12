@@ -10,8 +10,11 @@ use anyhow::{anyhow, Result};
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 
 #[derive(Debug, Clone)]
+/// Builtin manifest adapter for `Agent` resources.
 pub struct AgentResource {
+    /// Resource metadata from the manifest.
     pub metadata: ResourceMetadata,
+    /// Manifest spec payload for the agent.
     pub spec: AgentSpec,
 }
 
@@ -80,6 +83,7 @@ impl Resource for AgentResource {
     }
 }
 
+/// Builds a typed `AgentResource` from a generic manifest wrapper.
 pub(super) fn build_agent(resource: OrchestratorResource) -> Result<RegisteredResource> {
     let OrchestratorResource {
         kind,
@@ -99,6 +103,7 @@ pub(super) fn build_agent(resource: OrchestratorResource) -> Result<RegisteredRe
     }
 }
 
+/// Converts an `AgentSpec` manifest payload into runtime config.
 pub(crate) fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
     let capabilities = spec.capabilities.clone().unwrap_or_default();
 
@@ -125,6 +130,7 @@ pub(crate) fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
     }
 }
 
+/// Converts runtime agent config into its manifest spec representation.
 pub(crate) fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
     AgentSpec {
         command: config.command.clone(),

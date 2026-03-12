@@ -1,5 +1,6 @@
 mod cel;
 mod context;
+/// Finalize-rule and prehook evaluation helpers.
 pub mod finalize;
 
 #[cfg(test)]
@@ -16,6 +17,7 @@ pub use finalize::{
     resolve_workflow_finalize_outcome,
 };
 
+/// Validates one step prehook expression and its engine configuration.
 pub fn validate_step_prehook(
     prehook: &StepPrehookConfig,
     workflow_id: &str,
@@ -52,6 +54,7 @@ pub fn validate_step_prehook(
     Ok(())
 }
 
+/// Validates one workflow finalize rule expression and metadata.
 pub fn validate_workflow_finalize_rule(
     rule: &WorkflowFinalizeRule,
     workflow_id: &str,

@@ -13,6 +13,7 @@ pub enum PrehookDecision {
     /// Skip the step with a reason
     Skip {
         #[serde(default)]
+        /// Reason explaining why the step was skipped.
         reason: String,
     },
     /// Branch to a different step

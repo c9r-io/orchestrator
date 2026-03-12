@@ -5,8 +5,11 @@ use async_trait::async_trait;
 use std::sync::Arc;
 
 #[async_trait]
+/// Async persistence interface for PTY-backed session lifecycle records.
 pub trait SessionRepository: Send + Sync {
+    /// Inserts a newly created session record.
     async fn insert_session(&self, session: OwnedNewSession) -> Result<()>;
+    /// Updates the session state and optionally stores exit information.
     async fn update_session_state(
         &self,
         session_id: &str,
@@ -14,17 +17,25 @@ pub trait SessionRepository: Send + Sync {
         exit_code: Option<i64>,
         ended: bool,
     ) -> Result<()>;
+    /// Updates the OS process identifier associated with a session.
     async fn update_session_pid(&self, session_id: &str, pid: i64) -> Result<()>;
+    /// Loads one session by identifier.
     async fn load_session(&self, session_id: &str) -> Result<Option<SessionRow>>;
+    /// Loads the active session for a task step, if one is attached.
     async fn load_active_session_for_task_step(
         &self,
         task_id: &str,
         step_id: &str,
     ) -> Result<Option<SessionRow>>;
+    /// Lists all sessions associated with a task.
     async fn list_task_sessions(&self, task_id: &str) -> Result<Vec<SessionRow>>;
+    /// Attempts to acquire exclusive writer attachment for a client.
     async fn acquire_writer(&self, session_id: &str, client_id: &str) -> Result<bool>;
+    /// Attaches a read-only client to a session.
     async fn attach_reader(&self, session_id: &str, client_id: &str) -> Result<()>;
+    /// Cleans up sessions considered stale according to the given age threshold.
     async fn cleanup_stale_sessions(&self, max_age_hours: u64) -> Result<usize>;
+    /// Releases a writer or reader attachment from a session.
     async fn release_attachment(
         &self,
         session_id: &str,
@@ -33,11 +44,13 @@ pub trait SessionRepository: Send + Sync {
     ) -> Result<()>;
 }
 
+/// SQLite-backed session repository implementation.
 pub struct SqliteSessionRepository {
     async_db: Arc<AsyncDatabase>,
 }
 
 impl SqliteSessionRepository {
+    /// Creates a repository backed by the provided async database handle.
     pub fn new(async_db: Arc<AsyncDatabase>) -> Self {
         Self { async_db }
     }

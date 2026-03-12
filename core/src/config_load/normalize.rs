@@ -6,6 +6,7 @@ use crate::config::{
 use anyhow::Result;
 use std::collections::HashSet;
 
+/// Normalizes one workflow config in place to align legacy and implicit defaults.
 pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
     let had_ticket_scan_step = workflow.steps.iter().any(|step| step.id == "ticket_scan");
     if workflow.steps.is_empty() {

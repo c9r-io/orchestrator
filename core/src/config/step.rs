@@ -141,9 +141,15 @@ pub enum ExecutionMode {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StepSemanticKind {
     /// A builtin step resolved by name.
-    Builtin { name: String },
+    Builtin {
+        /// Builtin implementation name.
+        name: String,
+    },
     /// An agent-backed step resolved by capability.
-    Agent { capability: String },
+    Agent {
+        /// Capability required from the selected agent.
+        capability: String,
+    },
     /// A command-backed builtin step.
     Command,
     /// A chain step containing nested child steps.

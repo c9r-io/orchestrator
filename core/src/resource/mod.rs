@@ -59,17 +59,27 @@ pub(crate) use crate::cli_types::ResourceMetadata;
 // ── Core types ────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Result of applying a manifest resource into an `OrchestratorConfig`.
 pub enum ApplyResult {
+    /// Resource did not exist and was created.
     Created,
+    /// Resource existed and its stored representation changed.
     Configured,
+    /// Resource already matched the requested representation.
     Unchanged,
 }
 
+/// Common behavior implemented by builtin manifest resource adapters.
 pub trait Resource: Sized {
+    /// Returns the builtin resource kind.
     fn kind(&self) -> ResourceKind;
+    /// Returns the resource name.
     fn name(&self) -> &str;
+    /// Validates the resource contents before apply.
     fn validate(&self) -> Result<()>;
+    /// Applies the resource into the provided config.
     fn apply(&self, config: &mut OrchestratorConfig) -> Result<ApplyResult>;
+    /// Serializes the resource back into manifest YAML.
     fn to_yaml(&self) -> Result<String>;
 
     /// Project-scoped resource lookup. `project_id` of `None` defaults to the

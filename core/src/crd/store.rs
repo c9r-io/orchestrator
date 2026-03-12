@@ -130,6 +130,7 @@ impl ResourceStore {
         None
     }
 
+    /// Removes one project-scoped resource by kind, project, and name.
     pub fn remove_namespaced(
         &mut self,
         kind: &str,

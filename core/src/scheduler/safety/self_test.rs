@@ -4,6 +4,7 @@ use serde_json::json;
 use std::path::Path;
 use tracing::error;
 
+/// Executes the builtin self-test step against the orchestrator workspace.
 pub async fn execute_self_test_step(
     workspace_root: &Path,
     state: &InnerState,

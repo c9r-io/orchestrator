@@ -6,6 +6,7 @@ use anyhow::Result;
 use serde_json::json;
 use std::path::PathBuf;
 
+/// Marks a task as pending and wakes the background worker.
 pub async fn enqueue_task(state: &InnerState, task_id: &str) -> Result<()> {
     state
         .db_writer
@@ -23,32 +24,38 @@ pub async fn enqueue_task(state: &InnerState, task_id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Returns the next pending task identifier without claiming it.
 pub async fn next_pending_task_id(state: &InnerState) -> Result<Option<String>> {
     SqliteSchedulerRepository::new(state.async_database.clone())
         .next_pending_task_id()
         .await
 }
 
+/// Claims the next pending task and transitions it to running.
 pub async fn claim_next_pending_task(state: &InnerState) -> Result<Option<String>> {
     SqliteSchedulerRepository::new(state.async_database.clone())
         .claim_next_pending_task()
         .await
 }
 
+/// Returns the number of tasks currently in the pending state.
 pub async fn pending_task_count(state: &InnerState) -> Result<i64> {
     SqliteSchedulerRepository::new(state.async_database.clone())
         .pending_task_count()
         .await
 }
 
+/// Returns the marker-file path used to request worker shutdown.
 pub fn worker_stop_signal_path(state: &InnerState) -> PathBuf {
     state.app_root.join("data").join("worker.stop")
 }
 
+/// Returns the marker-file path used to wake the worker loop.
 pub fn worker_wake_signal_path(state: &InnerState) -> PathBuf {
     state.app_root.join("data").join("worker.wakeup")
 }
 
+/// Touches the wake-signal file so the worker loop notices pending work.
 pub fn touch_worker_wake_signal(state: &InnerState) -> Result<()> {
     let path = worker_wake_signal_path(state);
     if let Some(parent) = path.parent() {
@@ -58,6 +65,7 @@ pub fn touch_worker_wake_signal(state: &InnerState) -> Result<()> {
     Ok(())
 }
 
+/// Removes the worker stop marker if it exists.
 pub fn clear_worker_stop_signal(state: &InnerState) -> Result<()> {
     let path = worker_stop_signal_path(state);
     if path.exists() {
@@ -66,6 +74,7 @@ pub fn clear_worker_stop_signal(state: &InnerState) -> Result<()> {
     Ok(())
 }
 
+/// Writes the worker stop marker and wakes the worker loop.
 pub fn signal_worker_stop(state: &InnerState) -> Result<()> {
     let path = worker_stop_signal_path(state);
     if let Some(parent) = path.parent() {

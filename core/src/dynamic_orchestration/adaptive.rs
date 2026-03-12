@@ -28,10 +28,12 @@ pub struct AdaptivePlannerConfig {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
+/// Fallback behavior used when adaptive planning fails.
 pub enum AdaptiveFallbackMode {
     /// Fall back to deterministic planning when the adaptive planner fails.
     #[default]
     SoftFallback,
+    /// Treat adaptive planner failures as hard errors.
     /// Treat adaptive planner failures as hard errors.
     FailClosed,
 }
@@ -148,6 +150,7 @@ pub struct AdaptivePlanOutcome {
 }
 
 #[async_trait]
+/// Injected executor used by `AdaptivePlanner` to obtain raw planner output.
 pub trait AdaptivePlanExecutor: Send + Sync {
     /// Executes the planner prompt and returns raw JSON output.
     async fn execute(&self, prompt: &str, config: &AdaptivePlannerConfig) -> Result<String>;
@@ -395,6 +398,7 @@ Recent execution history:
     }
 }
 
+/// Returns the stable label for an adaptive failure class.
 pub fn adaptive_failure_class_name(class: AdaptiveFailureClass) -> &'static str {
     match class {
         AdaptiveFailureClass::Disabled => "disabled",
@@ -405,6 +409,7 @@ pub fn adaptive_failure_class_name(class: AdaptiveFailureClass) -> &'static str 
     }
 }
 
+/// Returns the deterministic fallback plan used when adaptive planning degrades.
 pub fn deterministic_fallback_plan(_context: &StepPrehookContext) -> DynamicExecutionPlan {
     let mut plan = DynamicExecutionPlan::new();
 
@@ -443,6 +448,7 @@ pub fn deterministic_fallback_plan(_context: &StepPrehookContext) -> DynamicExec
     plan
 }
 
+/// Validates the structure of a generated adaptive execution plan.
 pub fn validate_generated_plan(plan: &DynamicExecutionPlan) -> Result<()> {
     if plan.nodes.is_empty() {
         anyhow::bail!("adaptive plan must define at least one node");

@@ -136,6 +136,7 @@ impl std::error::Error for OrchestratorError {
     }
 }
 
+/// Standard result type used by the public orchestrator API.
 pub type Result<T> = std::result::Result<T, OrchestratorError>;
 
 impl From<anyhow::Error> for OrchestratorError {

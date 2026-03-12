@@ -6,17 +6,23 @@ use rusqlite::OptionalExtension;
 use std::sync::Arc;
 
 #[async_trait]
+/// Persistence interface for claiming and counting schedulable tasks.
 pub trait SchedulerRepository: Send + Sync {
+    /// Returns the next pending task identifier without mutating state.
     async fn next_pending_task_id(&self) -> Result<Option<String>>;
+    /// Claims the next schedulable task and transitions it to running.
     async fn claim_next_pending_task(&self) -> Result<Option<String>>;
+    /// Returns the number of tasks currently waiting to run.
     async fn pending_task_count(&self) -> Result<i64>;
 }
 
+/// SQLite-backed scheduler repository.
 pub struct SqliteSchedulerRepository {
     async_db: Arc<AsyncDatabase>,
 }
 
 impl SqliteSchedulerRepository {
+    /// Creates a repository backed by the provided async database handle.
     pub fn new(async_db: Arc<AsyncDatabase>) -> Self {
         Self { async_db }
     }

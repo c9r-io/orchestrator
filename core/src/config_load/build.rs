@@ -17,12 +17,17 @@ use super::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// One resource that would be removed by a config update.
 pub struct ResourceRemoval {
+    /// Resource kind being removed.
     pub kind: String,
+    /// Project owning the removed resource.
     pub project_id: String,
+    /// Resource name being removed.
     pub name: String,
 }
 
+/// Builds the fully resolved active config for the whole workspace.
 pub fn build_active_config(app_root: &Path, config: OrchestratorConfig) -> Result<ActiveConfig> {
     let config = normalize_config(config);
     let workspaces = resolve_and_validate_workspaces(app_root, &config)?;
@@ -55,6 +60,7 @@ pub fn build_active_config_for_project(
     })
 }
 
+/// Attempts to build active config and persists a healed snapshot when self-heal succeeds.
 pub fn build_active_config_with_self_heal(
     app_root: &Path,
     db_path: &Path,
@@ -95,6 +101,7 @@ pub fn build_active_config_with_self_heal(
     }
 }
 
+/// Builds a validated execution plan for a workflow using global agent validation.
 pub fn build_execution_plan(
     config: &OrchestratorConfig,
     workflow: &WorkflowConfig,
@@ -178,6 +185,7 @@ pub(crate) fn task_step_from_workflow_step(
     })
 }
 
+/// Enforces deletion guards for all resources removed between two config snapshots.
 pub fn enforce_deletion_guards(
     conn: &rusqlite::Connection,
     previous: &OrchestratorConfig,
@@ -225,6 +233,7 @@ pub fn enforce_deletion_guards(
     enforce_deletion_guards_for_removals(conn, &removals)
 }
 
+/// Enforces deletion guards for an explicit list of removed resources.
 pub fn enforce_deletion_guards_for_removals(
     conn: &rusqlite::Connection,
     removals: &[ResourceRemoval],

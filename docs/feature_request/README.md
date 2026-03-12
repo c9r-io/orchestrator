@@ -14,7 +14,6 @@
 | FR-019 | 修复 libc 类型编译错误 | P0 | Implemented |
 | FR-020 | 自动化 protoc 依赖安装 | P0 | Implemented |
 | FR-021 | 审计并减少 expect() 调用 | P1 | Implemented |
-| FR-022 | 补充公共 API 文档注释 | P1 | In Progress |
 | FR-023 | 增加集成测试覆盖 | P2 | Closed |
 | FR-024 | 审计 unsafe 块 | P2 | Closed |
 
@@ -42,5 +41,6 @@
 - FR-010 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/22-control-plane-security.md` 与 `docs/qa/orchestrator/58-control-plane-security.md` 承载
 - FR-020 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/32-automate-protoc-dependency.md` 与 `docs/qa/orchestrator/71-automate-protoc-dependency.md` 承载
 - FR-021 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/33-audit-reduce-expect-calls.md` 与 `docs/qa/orchestrator/72-audit-reduce-expect-calls.md` 承载
+- FR-022 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/36-public-api-doc-comments.md` 与 `docs/qa/orchestrator/75-public-api-doc-comments.md` 承载
 - FR-023 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/34-integration-test-coverage.md` 与 `docs/qa/orchestrator/73-integration-test-coverage.md` 承载
 - FR-024 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/35-audit-unsafe-blocks.md` 与 `docs/qa/orchestrator/74-audit-unsafe-blocks.md` 承载

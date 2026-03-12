@@ -2,12 +2,16 @@ use anyhow::{anyhow, Result};
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Parsed host portion of a network allowlist entry.
 pub enum NetworkAllowlistHost {
+    /// DNS hostname entry.
     Hostname(String),
+    /// Literal IP address entry.
     Ip(IpAddr),
 }
 
 impl NetworkAllowlistHost {
+    /// Renders the host in a human-readable form.
     pub fn display(&self) -> String {
         match self {
             Self::Hostname(value) => value.clone(),
@@ -17,13 +21,18 @@ impl NetworkAllowlistHost {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Parsed representation of one `network_allowlist` entry.
 pub struct NetworkAllowlistEntry {
+    /// Original untrimmed entry after normalization.
     pub original: String,
+    /// Parsed host component.
     pub host: NetworkAllowlistHost,
+    /// Optional TCP port restriction.
     pub port: Option<u16>,
 }
 
 impl NetworkAllowlistEntry {
+    /// Returns the host or `host:port` label used in diagnostics.
     pub fn target_label(&self) -> String {
         match self.port {
             Some(port) => format!("{}:{port}", self.host.display()),
@@ -31,6 +40,7 @@ impl NetworkAllowlistEntry {
         }
     }
 
+    /// Resolves the entry into concrete socket addresses.
     pub fn resolve_socket_addrs(&self) -> Result<Vec<SocketAddr>> {
         match &self.host {
             NetworkAllowlistHost::Ip(ip) => {
@@ -61,6 +71,7 @@ impl NetworkAllowlistEntry {
     }
 }
 
+/// Parses one `network_allowlist` entry.
 pub fn parse_network_allowlist_entry(raw: &str) -> Result<NetworkAllowlistEntry> {
     let value = raw.trim();
     if value.is_empty() {
@@ -132,6 +143,7 @@ pub fn parse_network_allowlist_entry(raw: &str) -> Result<NetworkAllowlistEntry>
     })
 }
 
+/// Parses and validates every configured `network_allowlist` entry.
 pub fn validate_network_allowlist(entries: &[String]) -> Result<Vec<NetworkAllowlistEntry>> {
     entries
         .iter()

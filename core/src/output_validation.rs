@@ -4,9 +4,13 @@ use anyhow::Result;
 use serde_json::Value;
 use uuid::Uuid;
 
+/// Outcome of validating one agent phase output payload.
 pub struct ValidationOutcome {
+    /// Parsed and enriched agent output.
     pub output: AgentOutput,
+    /// Validation status string reported to the scheduler.
     pub status: &'static str,
+    /// Optional validation error message.
     pub error: Option<String>,
 }
 
@@ -54,6 +58,7 @@ fn is_test_phase(phase: &str) -> bool {
     phase == "test"
 }
 
+/// Validates one phase output payload and extracts structured diagnostics.
 pub fn validate_phase_output(
     phase: &str,
     run_id: Uuid,

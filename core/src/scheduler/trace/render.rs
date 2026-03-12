@@ -2,6 +2,7 @@ use crate::anomaly::{Escalation, Severity};
 
 use super::model::TaskTrace;
 
+/// Renders a task trace to the terminal in human-readable form.
 pub fn render_trace_terminal(trace: &TaskTrace, verbose: bool) {
     // Header
     println!(

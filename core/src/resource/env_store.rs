@@ -5,8 +5,11 @@ use anyhow::{anyhow, Result};
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 
 #[derive(Debug, Clone)]
+/// Builtin manifest adapter for non-sensitive `EnvStore` resources.
 pub struct EnvStoreResource {
+    /// Resource metadata from the manifest.
     pub metadata: ResourceMetadata,
+    /// Manifest spec payload for the env store.
     pub spec: EnvStoreSpec,
 }
 
@@ -83,6 +86,7 @@ impl Resource for EnvStoreResource {
     }
 }
 
+/// Builds a typed `EnvStoreResource` from a generic manifest wrapper.
 pub(super) fn build_env_store(resource: OrchestratorResource) -> Result<RegisteredResource> {
     let OrchestratorResource {
         kind,

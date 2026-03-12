@@ -5,6 +5,7 @@ use anyhow::Result;
 
 use super::cel::{evaluate_finalize_rule_expression, evaluate_step_prehook_expression};
 
+/// Evaluates workflow finalize rules and returns the first matching outcome.
 pub fn resolve_workflow_finalize_outcome(
     finalize: &WorkflowFinalizeConfig,
     context: &ItemFinalizeContext,
@@ -26,6 +27,7 @@ pub fn resolve_workflow_finalize_outcome(
     Ok(None)
 }
 
+/// Evaluates whether a step prehook allows execution for the provided context.
 pub async fn evaluate_step_prehook(
     state: &crate::state::InnerState,
     prehook: Option<&StepPrehookConfig>,
@@ -67,6 +69,7 @@ pub async fn evaluate_step_prehook(
     Ok(should_run)
 }
 
+/// Emits an event describing a step prehook evaluation decision.
 pub async fn emit_step_prehook_event(
     state: &crate::state::InnerState,
     context: &StepPrehookContext,
@@ -109,6 +112,7 @@ pub async fn emit_step_prehook_event(
     Ok(())
 }
 
+/// Emits an event describing the selected item-finalize outcome.
 pub async fn emit_item_finalize_event(
     state: &crate::state::InnerState,
     context: &ItemFinalizeContext,

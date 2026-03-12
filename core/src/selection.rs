@@ -7,6 +7,7 @@ use anyhow::{anyhow, Result};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 
+/// Selects the best healthy agent for a capability using metrics-aware scoring.
 pub fn select_agent_advanced(
     capability: &str,
     agents: &HashMap<String, AgentConfig>,
@@ -95,6 +96,7 @@ pub fn select_agent_advanced(
     ))
 }
 
+/// Selects an agent by configured preference when no capability filter is required.
 pub fn select_agent_by_preference(
     agents: &HashMap<String, AgentConfig>,
 ) -> Result<(String, String, PromptDelivery)> {

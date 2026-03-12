@@ -1,9 +1,13 @@
 use anyhow::Result;
 use std::path::Path;
 
+/// Counts returned by the legacy event backfill command.
 pub struct BackfillStats {
+    /// Number of rows inspected.
     pub scanned: u64,
+    /// Number of rows updated.
     pub updated: u64,
+    /// Number of rows skipped.
     pub skipped: u64,
 }
 

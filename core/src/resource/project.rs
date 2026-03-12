@@ -5,8 +5,11 @@ use anyhow::{anyhow, Result};
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 
 #[derive(Debug, Clone)]
+/// Builtin manifest adapter for global `Project` resources.
 pub struct ProjectResource {
+    /// Resource metadata from the manifest.
     pub metadata: ResourceMetadata,
+    /// Manifest spec payload for the project.
     pub spec: ProjectSpec,
 }
 
@@ -76,6 +79,7 @@ impl Resource for ProjectResource {
     }
 }
 
+/// Builds a typed `ProjectResource` from a generic manifest wrapper.
 pub(super) fn build_project(resource: OrchestratorResource) -> Result<RegisteredResource> {
     let OrchestratorResource {
         kind,

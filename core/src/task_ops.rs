@@ -107,6 +107,7 @@ fn resolve_task_targets(
     }
 }
 
+/// Creates a task, its execution plan snapshot, and initial task items.
 pub fn create_task_impl(
     state: &crate::state::InnerState,
     payload: CreateTaskPayload,
@@ -236,6 +237,7 @@ fn resolve_default_resource_id<T>(
     )
 }
 
+/// Resets one failed task item back to the pending state and returns its parent task id.
 pub fn reset_task_item_for_retry(
     state: &crate::state::InnerState,
     task_item_id: &str,

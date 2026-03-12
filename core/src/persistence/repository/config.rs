@@ -13,24 +13,38 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, serde::Serialize)]
+/// One persisted config self-heal log entry.
 pub struct HealLogEntry {
+    /// Config version associated with the heal event.
     pub version: i64,
+    /// Original validation error that triggered the heal.
     pub original_error: String,
+    /// Workflow identifier containing the healed step.
     pub workflow_id: String,
+    /// Step identifier affected by the heal.
     pub step_id: String,
+    /// Stable self-heal rule label.
     pub rule: String,
+    /// Human-readable change detail.
     pub detail: String,
+    /// Timestamp when the heal log row was created.
     pub created_at: String,
 }
 
+/// Persistence interface for versioned orchestrator configuration snapshots.
 pub trait ConfigRepository: Send + Sync {
+    /// Loads the latest config snapshot or seeds the initial one when absent.
     fn load_or_seed_config(&self) -> Result<(OrchestratorConfig, String, i64, String)>;
+    /// Loads the latest persisted config snapshot without seeding.
     fn load_config(&self) -> Result<Option<(OrchestratorConfig, i64, String)>>;
+    /// Returns aggregate information about the latest self-heal run for the current version.
     fn query_latest_heal_summary(
         &self,
         current_config_version: i64,
     ) -> Result<Option<(i64, String, usize, String)>>;
+    /// Returns recent self-heal log entries.
     fn query_heal_log_entries(&self, limit: usize) -> Result<Vec<HealLogEntry>>;
+    /// Persists a self-healed config snapshot and its detailed change log.
     fn persist_self_heal_snapshot(
         &self,
         yaml: &str,
@@ -38,6 +52,7 @@ pub trait ConfigRepository: Send + Sync {
         original_error: &str,
         changes: &[ConfigSelfHealChange],
     ) -> Result<(i64, String)>;
+    /// Persists a normalized config snapshot without resource deletions.
     fn persist_raw_config(
         &self,
         normalized: OrchestratorConfig,
@@ -45,6 +60,7 @@ pub trait ConfigRepository: Send + Sync {
         json_raw: &str,
         author: &str,
     ) -> Result<ConfigOverview>;
+    /// Persists a normalized config snapshot and records resource deletions.
     fn persist_config_with_deletions(
         &self,
         normalized: OrchestratorConfig,
@@ -55,11 +71,13 @@ pub trait ConfigRepository: Send + Sync {
     ) -> Result<ConfigOverview>;
 }
 
+/// SQLite-backed implementation of the config repository.
 pub struct SqliteConfigRepository {
     db_path: PathBuf,
 }
 
 impl SqliteConfigRepository {
+    /// Creates a config repository that reads and writes the given SQLite database.
     pub fn new(db_path: impl AsRef<Path>) -> Self {
         Self {
             db_path: db_path.as_ref().to_path_buf(),

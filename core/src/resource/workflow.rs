@@ -11,8 +11,11 @@ pub(crate) use workflow_convert::workflow_config_to_spec;
 pub(crate) use workflow_convert::workflow_spec_to_config;
 
 #[derive(Debug, Clone)]
+/// Builtin manifest adapter for `Workflow` resources.
 pub struct WorkflowResource {
+    /// Resource metadata from the manifest.
     pub metadata: ResourceMetadata,
+    /// Manifest spec payload for the workflow.
     pub spec: WorkflowSpec,
 }
 
@@ -104,6 +107,7 @@ impl Resource for WorkflowResource {
     }
 }
 
+/// Builds a typed `WorkflowResource` from a generic manifest wrapper.
 pub(super) fn build_workflow(resource: OrchestratorResource) -> Result<RegisteredResource> {
     let OrchestratorResource {
         kind,

@@ -21,11 +21,16 @@ pub struct StoreBackendProviderConfig {
 /// STORE_NAME, PROJECT_ID, KEY, VALUE, TASK_ID, LIMIT, OFFSET, MAX_ENTRIES, TTL_DAYS.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoreBackendCommands {
+    /// Shell command that reads one value by key.
     pub get: String,
+    /// Shell command that writes one value by key.
     pub put: String,
+    /// Shell command that deletes one value by key.
     pub delete: String,
+    /// Shell command that lists values with pagination.
     pub list: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Optional shell command that prunes entries by retention policy.
     pub prune: Option<String>,
 }
 

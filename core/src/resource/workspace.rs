@@ -5,8 +5,11 @@ use anyhow::{anyhow, Result};
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 
 #[derive(Debug, Clone)]
+/// Builtin manifest adapter for `Workspace` resources.
 pub struct WorkspaceResource {
+    /// Resource metadata from the manifest.
     pub metadata: ResourceMetadata,
+    /// Manifest spec payload for the workspace.
     pub spec: WorkspaceSpec,
 }
 
@@ -78,6 +81,7 @@ impl Resource for WorkspaceResource {
     }
 }
 
+/// Builds a typed `WorkspaceResource` from a generic manifest wrapper.
 pub(super) fn build_workspace(resource: OrchestratorResource) -> Result<RegisteredResource> {
     let OrchestratorResource {
         kind,
@@ -97,6 +101,7 @@ pub(super) fn build_workspace(resource: OrchestratorResource) -> Result<Register
     }
 }
 
+/// Converts a workspace manifest spec into runtime config.
 pub(crate) fn workspace_spec_to_config(spec: &WorkspaceSpec) -> WorkspaceConfig {
     WorkspaceConfig {
         root_path: spec.root_path.clone(),
@@ -106,6 +111,7 @@ pub(crate) fn workspace_spec_to_config(spec: &WorkspaceSpec) -> WorkspaceConfig 
     }
 }
 
+/// Converts runtime workspace config into its manifest spec representation.
 pub(crate) fn workspace_config_to_spec(config: &WorkspaceConfig) -> WorkspaceSpec {
     WorkspaceSpec {
         root_path: config.root_path.clone(),

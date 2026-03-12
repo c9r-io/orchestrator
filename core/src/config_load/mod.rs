@@ -21,10 +21,12 @@ pub(crate) use validate::validate_workflow_config_with_agents;
 
 use std::path::PathBuf;
 
+/// Returns the current UTC timestamp encoded as RFC 3339.
 pub fn now_ts() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 
+/// Detects the application root from the current working directory.
 pub fn detect_app_root() -> PathBuf {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 

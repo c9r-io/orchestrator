@@ -147,7 +147,9 @@ where
 
 /// Result of a task trace query.
 pub struct TaskTraceResult {
+    /// Timeline entries selected for rendering.
     pub entries: Vec<TraceEntry>,
+    /// Anomalies detected while building the structured trace.
     pub anomalies: Vec<crate::anomaly::Anomaly>,
     /// Full structured trace (built via build_trace with complete anomaly detection).
     pub full_trace: Option<crate::scheduler::trace::TaskTrace>,
@@ -155,10 +157,15 @@ pub struct TaskTraceResult {
 
 /// A single entry in a task trace timeline.
 pub struct TraceEntry {
+    /// Timestamp when the event was emitted.
     pub timestamp: String,
+    /// Event type identifier.
     pub event_type: String,
+    /// Step identifier associated with the event, if any.
     pub step: String,
+    /// Task item identifier associated with the event, if any.
     pub item_id: Option<String>,
+    /// Serialized event payload.
     pub payload_json: String,
 }
 

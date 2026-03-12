@@ -87,6 +87,7 @@ pub enum AgentLifecycleState {
 }
 
 impl AgentLifecycleState {
+    /// Returns the stable string label used in status output.
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Active => "Active",
@@ -105,9 +106,13 @@ impl AgentLifecycleState {
 /// Runtime state for agent lifecycle tracking (drain/cordon).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentRuntimeState {
+    /// Current lifecycle state for the agent.
     pub lifecycle: AgentLifecycleState,
+    /// Timestamp when draining was requested, if any.
     pub drain_requested_at: Option<DateTime<Utc>>,
+    /// Optional timeout for waiting on drain completion.
     pub drain_timeout_secs: Option<u64>,
+    /// Number of workflow items currently assigned to the agent.
     pub in_flight_items: u32,
 }
 
@@ -197,13 +202,21 @@ impl Default for SelectionRequirement {
 
 /// Result of agent scoring
 #[derive(Debug, Clone)]
+/// Score breakdown for a candidate agent during selection.
 pub struct AgentScore {
+    /// Candidate agent identifier.
     pub agent_id: String,
+    /// Final composite score after weights and penalties.
     pub total_score: f32,
+    /// Cost contribution to the total score.
     pub cost_score: f32,
+    /// Reliability contribution to the total score.
     pub success_rate_score: f32,
+    /// Performance contribution to the total score.
     pub performance_score: f32,
+    /// Penalty applied for current load.
     pub load_penalty: f32,
+    /// Penalty applied for health or lifecycle constraints.
     pub health_penalty: f32,
 }
 

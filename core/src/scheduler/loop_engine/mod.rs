@@ -25,6 +25,7 @@ use super::task_state::{
 };
 use super::RunningTask;
 
+/// Runs the main workflow loop for a task until completion, pause, or failure.
 pub async fn run_task_loop(
     state: Arc<InnerState>,
     task_id: &str,

@@ -7,12 +7,16 @@ use serde::Serialize;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+/// Enumerates automatic config rewrite rules applied during self-healing.
 pub enum ConfigSelfHealRule {
+    /// Removes deprecated `required_capability` from builtin steps.
     DropRequiredCapabilityFromBuiltinStep,
+    /// Aligns `behavior.execution` with the effective step shape.
     NormalizeStepExecutionMode,
 }
 
 impl ConfigSelfHealRule {
+    /// Returns the stable label used in heal logs and API responses.
     pub fn as_label(&self) -> &'static str {
         match self {
             Self::DropRequiredCapabilityFromBuiltinStep => "DropRequiredCapabilityFromBuiltinStep",
@@ -28,18 +32,28 @@ impl fmt::Display for ConfigSelfHealRule {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Records one mutation applied by the config self-heal pass.
 pub struct ConfigSelfHealChange {
+    /// Fully scoped workflow identifier that contained the healed step.
     pub workflow_id: String,
+    /// Step identifier affected by the rewrite.
     pub step_id: String,
+    /// Rewrite rule that produced this change.
     pub rule: ConfigSelfHealRule,
+    /// Human-readable explanation of the rewrite.
     pub detail: String,
 }
 
 #[derive(Debug, Clone)]
+/// Summary returned when config loading succeeds after an automatic self-heal pass.
 pub struct ConfigSelfHealReport {
+    /// Original validation error that triggered the self-heal attempt.
     pub original_error: String,
+    /// Version assigned to the healed config snapshot.
     pub healed_version: i64,
+    /// Timestamp when the healed snapshot was persisted.
     pub healed_at: String,
+    /// Individual changes applied during the self-heal pass.
     pub changes: Vec<ConfigSelfHealChange>,
 }
 

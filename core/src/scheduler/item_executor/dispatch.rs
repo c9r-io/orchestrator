@@ -77,6 +77,7 @@ pub async fn process_item_filtered_owned(
     .await
 }
 
+/// Processes one task item through all configured steps and finalizes its outcome.
 pub async fn process_item(
     state: &Arc<InnerState>,
     task_id: &str,

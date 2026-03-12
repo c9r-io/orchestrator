@@ -36,6 +36,7 @@ pub(super) fn split_observed_item_binding(
     }
 }
 
+/// Builds a structured task trace from event and command-run DTOs.
 pub fn build_trace(
     task_id: &str,
     status: &str,
@@ -61,6 +62,7 @@ pub fn build_trace(
     )
 }
 
+/// Builds a structured task trace using explicit task metadata.
 pub fn build_trace_with_meta(
     task_meta: TraceTaskMeta<'_>,
     events: &[EventDto],

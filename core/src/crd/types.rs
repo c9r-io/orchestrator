@@ -63,10 +63,13 @@ pub struct CelValidationRule {
 /// Lifecycle hooks for custom resources.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct CrdHooks {
+    /// Optional command executed after a resource is created.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_create: Option<String>,
+    /// Optional command executed after a resource is updated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_update: Option<String>,
+    /// Optional command executed before or after a resource is deleted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_delete: Option<String>,
 }
@@ -74,12 +77,19 @@ pub struct CrdHooks {
 /// A custom resource instance stored in config.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CustomResource {
+    /// Kind name of the resource instance.
     pub kind: String,
+    /// Fully qualified API version such as `group/v1`.
     pub api_version: String,
+    /// Resource metadata including name and optional project.
     pub metadata: ResourceMetadata,
+    /// Untyped resource specification payload.
     pub spec: serde_json::Value,
+    /// Monotonic generation incremented on each persisted update.
     pub generation: u64,
+    /// Timestamp when the resource was first created.
     pub created_at: String,
+    /// Timestamp when the resource was most recently updated.
     pub updated_at: String,
 }
 
@@ -87,9 +97,13 @@ pub struct CustomResource {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CustomResourceManifest {
     #[serde(rename = "apiVersion")]
+    /// Fully qualified API version such as `group/v1`.
     pub api_version: String,
+    /// Kind name of the resource instance.
     pub kind: String,
+    /// Resource metadata including name and optional project.
     pub metadata: ResourceMetadata,
+    /// Untyped resource specification payload.
     pub spec: serde_json::Value,
 }
 
@@ -97,25 +111,36 @@ pub struct CustomResourceManifest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CrdManifest {
     #[serde(rename = "apiVersion")]
+    /// API version of the CRD manifest schema.
     pub api_version: String,
+    /// Manifest metadata such as the CRD name.
     pub metadata: ResourceMetadata,
+    /// Declared CRD specification.
     pub spec: CrdSpec,
 }
 
 /// The spec portion of a CRD manifest (maps to CustomResourceDefinition fields).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CrdSpec {
+    /// Kind name produced by this CRD.
     pub kind: String,
+    /// Plural CLI/resource name for the custom kind.
     pub plural: String,
     #[serde(default)]
+    /// Optional short aliases accepted by the CLI.
     pub short_names: Vec<String>,
+    /// API group for served resource versions.
     pub group: String,
+    /// Version definitions served by the CRD.
     pub versions: Vec<CrdVersion>,
     #[serde(default)]
+    /// Lifecycle hooks applied to custom resource operations.
     pub hooks: CrdHooks,
     #[serde(default)]
+    /// Scope used for instances of this CRD.
     pub scope: CrdScope,
     #[serde(default)]
+    /// Whether the CRD is builtin and protected from user deletion.
     pub builtin: bool,
 }
 

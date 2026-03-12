@@ -3,12 +3,14 @@ use anyhow::{Context, Result};
 use std::fs::File;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
+/// Join handles for background tasks that redact and persist child output streams.
 pub struct OutputCaptureHandles {
     stdout_task: tokio::task::JoinHandle<Result<()>>,
     stderr_task: tokio::task::JoinHandle<Result<()>>,
 }
 
 impl OutputCaptureHandles {
+    /// Waits for both capture tasks to finish and propagates any failure.
     pub async fn wait(self) -> Result<()> {
         self.stdout_task
             .await
@@ -20,6 +22,7 @@ impl OutputCaptureHandles {
     }
 }
 
+/// Spawns background tasks that redact stdout and stderr into separate files.
 pub fn spawn_sanitized_output_capture<
     Stdout: AsyncRead + Unpin + Send + 'static,
     Stderr: AsyncRead + Unpin + Send + 'static,

@@ -9,11 +9,15 @@ use super::super::phase_runner::{run_phase, shell_escape, PhaseRunRequest};
 use super::super::task_state::count_unresolved_items;
 use super::super::RunningTask;
 
+/// Result returned by a guard step evaluation.
 pub struct GuardResult {
+    /// Whether workflow execution should stop after the guard.
     pub should_stop: bool,
+    /// Human-readable reason or machine-friendly label for the decision.
     pub reason: String,
 }
 
+/// Executes a guard step and returns its stop/continue decision.
 pub async fn execute_guard_step(
     state: &Arc<InnerState>,
     task_id: &str,

@@ -5,8 +5,11 @@ use anyhow::{anyhow, Result};
 use super::{ApplyResult, RegisteredResource, Resource, ResourceMetadata};
 
 #[derive(Debug, Clone)]
+/// Builtin manifest adapter for sensitive `SecretStore` resources.
 pub struct SecretStoreResource {
+    /// Resource metadata from the manifest.
     pub metadata: ResourceMetadata,
+    /// Manifest spec payload for the secret store.
     pub spec: EnvStoreSpec,
 }
 
@@ -83,6 +86,7 @@ impl Resource for SecretStoreResource {
     }
 }
 
+/// Builds a typed `SecretStoreResource` from a generic manifest wrapper.
 pub(super) fn build_secret_store(resource: OrchestratorResource) -> Result<RegisteredResource> {
     let OrchestratorResource {
         kind,

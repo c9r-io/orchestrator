@@ -231,6 +231,7 @@ impl DynamicExecutionPlan {
         Ok(result)
     }
 
+    /// Returns the next nodes whose edge conditions pass for the current context.
     pub fn find_next_nodes(
         &self,
         current_node_id: &str,
@@ -251,10 +252,12 @@ impl DynamicExecutionPlan {
         next_nodes
     }
 
+    /// Returns one node by identifier.
     pub fn get_node(&self, node_id: &str) -> Option<&WorkflowNode> {
         self.nodes.get(node_id)
     }
 
+    /// Returns `true` when every exit node is marked completed in the execution state.
     pub fn is_completed(&self, state: &DagExecutionState) -> bool {
         let exit_nodes = self.get_exit_nodes();
         for node in exit_nodes {
@@ -285,12 +288,18 @@ pub struct DagExecutionState {
     pub branch_history: Vec<BranchRecord>,
 }
 
+/// Record of one branch decision taken while traversing the DAG.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BranchRecord {
+    /// Source node of the traversed edge.
     pub from_node: String,
+    /// Target node chosen or evaluated.
     pub to_node: String,
+    /// Edge condition that was evaluated, if any.
     pub condition: Option<String>,
+    /// Whether the branch condition evaluated to true.
     pub result: bool,
+    /// Timestamp when the branch decision was recorded.
     pub timestamp: DateTime<Utc>,
 }
 

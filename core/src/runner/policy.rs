@@ -1,6 +1,7 @@
 use crate::config::{RunnerConfig, RunnerPolicy};
 use anyhow::{anyhow, Result};
 
+/// Enforces runner shell-policy allowlists before command execution.
 pub fn enforce_runner_policy(runner: &RunnerConfig, command: &str) -> Result<()> {
     if command.trim().is_empty() {
         return Err(anyhow!("runner command cannot be empty"));

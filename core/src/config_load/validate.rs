@@ -42,6 +42,7 @@ impl AgentLookup for HashMap<String, &crate::config::AgentConfig> {
 // ---------------------------------------------------------------------------
 
 /// Validate the step loop: duplicate IDs, semantic kind, agent capability, prehook.
+/// Validates a workflow using the globally configured agent set.
 fn validate_workflow_steps<A: AgentLookup>(
     steps: &[crate::config::WorkflowStepConfig],
     workflow_id: &str,
@@ -238,6 +239,7 @@ fn validate_env_store_refs_for_agents(
     Ok(())
 }
 
+/// Validates a workflow against the globally configured projects and agents.
 pub fn validate_workflow_config(
     config: &OrchestratorConfig,
     workflow: &WorkflowConfig,
@@ -447,6 +449,7 @@ pub fn validate_agent_env_store_refs_for_project(
     Ok(())
 }
 
+/// Ensures `target` stays within `root`, returning a validation error otherwise.
 pub fn ensure_within_root(root: &Path, target: &Path, field: &str) -> Result<()> {
     let root_canon = root
         .canonicalize()

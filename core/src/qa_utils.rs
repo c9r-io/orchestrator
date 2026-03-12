@@ -11,15 +11,22 @@ pub trait TemplateEngine {
 
 /// Basic template context for simple replacements
 pub struct BasicTemplateContext {
+    /// Relative path bound to `{rel_path}`.
     pub rel_path: Option<String>,
+    /// Ticket path list bound to `{ticket_paths}`.
     pub ticket_paths: Option<Vec<String>>,
+    /// Phase name bound to `{phase}`.
     pub phase: Option<String>,
+    /// Task identifier bound to `{task_id}`.
     pub task_id: Option<String>,
+    /// Cycle number bound to `{cycle}`.
     pub cycle: Option<u32>,
+    /// Unresolved item count bound to `{unresolved_items}`.
     pub unresolved_items: Option<i64>,
 }
 
 impl BasicTemplateContext {
+    /// Returns an empty template context.
     pub fn new() -> Self {
         Self {
             rel_path: None,
@@ -31,31 +38,37 @@ impl BasicTemplateContext {
         }
     }
 
+    /// Sets the relative path placeholder value.
     pub fn with_rel_path(mut self, path: impl Into<String>) -> Self {
         self.rel_path = Some(path.into());
         self
     }
 
+    /// Sets the ticket path placeholder value.
     pub fn with_ticket_paths(mut self, paths: Vec<String>) -> Self {
         self.ticket_paths = Some(paths);
         self
     }
 
+    /// Sets the phase placeholder value.
     pub fn with_phase(mut self, phase: impl Into<String>) -> Self {
         self.phase = Some(phase.into());
         self
     }
 
+    /// Sets the task identifier placeholder value.
     pub fn with_task_id(mut self, id: impl Into<String>) -> Self {
         self.task_id = Some(id.into());
         self
     }
 
+    /// Sets the cycle placeholder value.
     pub fn with_cycle(mut self, cycle: u32) -> Self {
         self.cycle = Some(cycle);
         self
     }
 
+    /// Sets the unresolved item count placeholder value.
     pub fn with_unresolved_items(mut self, count: i64) -> Self {
         self.unresolved_items = Some(count);
         self
@@ -98,11 +111,14 @@ impl TemplateEngine for BasicTemplateContext {
 /// Advanced template context with upstream outputs and shared state
 pub struct AdvancedTemplateContext {
     basic: BasicTemplateContext,
+    /// Upstream step outputs addressable through `upstream[i].*` placeholders.
     pub upstream_outputs: Vec<serde_json::Value>,
+    /// Shared workflow state rendered through `{key}` placeholders.
     pub shared_state: HashMap<String, serde_json::Value>,
 }
 
 impl AdvancedTemplateContext {
+    /// Returns an empty advanced context.
     pub fn new() -> Self {
         Self {
             basic: BasicTemplateContext::new(),
@@ -111,16 +127,19 @@ impl AdvancedTemplateContext {
         }
     }
 
+    /// Replaces the embedded basic placeholder set.
     pub fn with_basic(mut self, basic: BasicTemplateContext) -> Self {
         self.basic = basic;
         self
     }
 
+    /// Sets upstream outputs visible to advanced placeholders.
     pub fn with_upstream_outputs(mut self, outputs: Vec<serde_json::Value>) -> Self {
         self.upstream_outputs = outputs;
         self
     }
 
+    /// Sets shared workflow state visible to advanced placeholders.
     pub fn with_shared_state(mut self, state: HashMap<String, serde_json::Value>) -> Self {
         self.shared_state = state;
         self
@@ -174,6 +193,7 @@ impl TemplateEngine for AdvancedTemplateContext {
     }
 }
 
+/// Validates that a workspace-relative path stays within the workspace tree.
 pub fn validate_workspace_rel_path(raw: &str, field: &str) -> Result<()> {
     let path = raw.trim();
     if path.is_empty() {
@@ -195,6 +215,7 @@ pub fn validate_workspace_rel_path(raw: &str, field: &str) -> Result<()> {
     Ok(())
 }
 
+/// Returns the ticket paths newly added between two snapshots.
 pub fn new_ticket_diff(before: &[String], after: &[String]) -> Vec<String> {
     let before_set: HashSet<&String> = before.iter().collect();
     after
@@ -204,12 +225,14 @@ pub fn new_ticket_diff(before: &[String], after: &[String]) -> Vec<String> {
         .collect()
 }
 
+/// Renders a template using only `rel_path` and `ticket_paths` placeholders.
 pub fn render_template(template: &str, rel_path: &str, ticket_paths: &[String]) -> String {
     template
         .replace("{rel_path}", rel_path)
         .replace("{ticket_paths}", &ticket_paths.join(" "))
 }
 
+/// Renders a template using basic placeholders plus upstream outputs and shared state.
 pub fn render_template_with_context(
     template: &str,
     rel_path: &str,

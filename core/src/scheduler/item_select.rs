@@ -6,7 +6,9 @@ use tracing::info;
 /// Per-item state collected after evaluation, used for selection.
 #[derive(Debug, Clone)]
 pub struct ItemEvalState {
+    /// Candidate item identifier.
     pub item_id: String,
+    /// Pipeline variables captured for the candidate item.
     pub pipeline_vars: HashMap<String, String>,
 }
 

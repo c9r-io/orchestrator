@@ -18,6 +18,7 @@ use super::task_state::set_task_status;
 use super::{run_task_loop, RunningTask};
 use crate::runner::kill_child_process_group;
 
+/// Kills the currently tracked child process for a running task, if present.
 pub async fn kill_current_child(runtime: &RunningTask) {
     let mut child_lock = runtime.child.lock().await;
     if let Some(ref mut child) = *child_lock {
@@ -26,6 +27,7 @@ pub async fn kill_current_child(runtime: &RunningTask) {
     *child_lock = None;
 }
 
+/// Registers and spawns the async runner loop for a task.
 pub async fn spawn_task_runner(state: Arc<InnerState>, task_id: String) -> Result<()> {
     {
         let mut running = state.running.lock().await;
@@ -82,6 +84,7 @@ pub async fn spawn_task_runner(state: Arc<InnerState>, task_id: String) -> Resul
     Ok(())
 }
 
+/// Inserts a task into the in-memory running-task registry.
 pub async fn register_running_task(
     state: &InnerState,
     task_id: &str,
@@ -96,6 +99,7 @@ pub async fn register_running_task(
     true
 }
 
+/// Removes a task from the in-memory running-task registry.
 pub async fn unregister_running_task(state: &InnerState, task_id: &str) {
     let mut running = state.running.lock().await;
     if running.remove(task_id).is_some() {
@@ -103,6 +107,7 @@ pub async fn unregister_running_task(state: &InnerState, task_id: &str) {
     }
 }
 
+/// Stops a running task, falling back to DB-based child lookup when needed.
 pub async fn stop_task_runtime(state: Arc<InnerState>, task_id: &str, status: &str) -> Result<()> {
     let runtime = {
         let running = state.running.lock().await;
@@ -130,6 +135,7 @@ pub async fn stop_task_runtime(state: Arc<InnerState>, task_id: &str, status: &s
     Ok(())
 }
 
+/// Stops a task in preparation for deleting its records.
 pub async fn stop_task_runtime_for_delete(state: Arc<InnerState>, task_id: &str) -> Result<()> {
     let runtime = {
         let mut running = state.running.lock().await;
@@ -142,6 +148,7 @@ pub async fn stop_task_runtime_for_delete(state: Arc<InnerState>, task_id: &str)
     Ok(())
 }
 
+/// Stops all running tasks during daemon shutdown.
 pub async fn shutdown_running_tasks(state: Arc<InnerState>) {
     let runtimes: Vec<(String, RunningTask)> = {
         let running = state.running.lock().await;
@@ -199,6 +206,7 @@ async fn kill_active_children_from_db(state: &InnerState, task_id: &str) {
     }
 }
 
+/// Loads the runtime context required to resume or continue task execution.
 pub async fn load_task_runtime_context(
     state: &InnerState,
     task_id: &str,

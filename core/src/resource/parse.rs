@@ -66,6 +66,7 @@ pub fn parse_manifests_from_yaml(content: &str) -> Result<Vec<ParsedManifest>> {
     Ok(manifests)
 }
 
+/// Deletes one resource from config by its CLI kind string and name.
 pub fn delete_resource_by_kind(
     config: &mut OrchestratorConfig,
     kind: &str,
@@ -105,6 +106,7 @@ pub fn delete_resource_by_kind(
     }
 }
 
+/// Returns the canonical CLI string for a `ResourceKind`.
 pub fn kind_as_str(kind: ResourceKind) -> &'static str {
     match kind {
         ResourceKind::Workspace => "workspace",
