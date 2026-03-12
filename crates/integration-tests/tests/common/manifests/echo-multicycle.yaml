@@ -1,0 +1,32 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: echo
+spec:
+  capabilities:
+    - qa
+    - loop_guard
+  command: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"pass\",\"description\":\"ok\",\"severity\":\"info\"}]}]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: qa_only
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: fixed
+    max_cycles: 3

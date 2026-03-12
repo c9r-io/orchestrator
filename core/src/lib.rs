@@ -13,7 +13,7 @@
 //! assert!(guard.stop_when_no_unresolved);
 //! ```
 #![cfg_attr(
-    not(test),
+    not(any(test, feature = "test-harness")),
     deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)
 )]
 #![warn(missing_docs)]
@@ -103,7 +103,8 @@ pub mod task_repository;
 /// Ticket discovery, preview, and creation helpers.
 pub mod ticket;
 
-#[cfg(test)]
+/// Test utilities and fixtures for building isolated orchestrator state.
+#[cfg(any(test, feature = "test-harness"))]
 pub mod test_utils;
 
 /// Re-export of the public workflow loop guard configuration type.

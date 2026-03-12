@@ -1236,6 +1236,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "orchestrator-integration-tests"
+version = "0.1.0"
+dependencies = [
+ "agent-orchestrator",
+ "anyhow",
+ "futures",
+ "orchestrator-proto",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+]
+
+[[package]]
 name = "orchestrator-proto"
 version = "0.1.0"
 dependencies = [

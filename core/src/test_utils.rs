@@ -4,6 +4,7 @@ use crate::config::{
     PromptDelivery, SafetyConfig, StepBehavior, WorkflowConfig, WorkflowFinalizeConfig,
     WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig, WorkspaceConfig,
 };
+#[allow(unused_imports)]
 use crate::config_load::{
     build_active_config, load_config, persist_raw_config, read_active_config,
 };
@@ -135,14 +136,17 @@ fn create_minimal_test_config() -> OrchestratorConfig {
     }
 }
 
-pub(crate) struct TestState {
+/// Test fixture that creates an isolated orchestrator state with temp directories.
+pub struct TestState {
     temp_root: PathBuf,
     config: OrchestratorConfig,
     state: Option<Arc<InnerState>>,
 }
 
 impl TestState {
-    pub(crate) fn new() -> Self {
+    /// Create a new test state with a temporary directory and minimal config.
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -162,7 +166,8 @@ impl TestState {
         }
     }
 
-    pub(crate) fn with_workspace(
+    /// Add a workspace to the test config.
+    pub fn with_workspace(
         mut self,
         name: impl Into<String>,
         path: impl Into<String>,
@@ -185,8 +190,9 @@ impl TestState {
         self
     }
 
+    /// Add an agent to the test config.
     #[allow(dead_code)] // test builder helper
-    pub(crate) fn with_agent(mut self, name: impl Into<String>, config: AgentConfig) -> Self {
+    pub fn with_agent(mut self, name: impl Into<String>, config: AgentConfig) -> Self {
         let agent_id = name.into();
         self.config
             .projects
@@ -197,8 +203,9 @@ impl TestState {
         self
     }
 
+    /// Add a step template to the test config.
     #[allow(dead_code)] // test builder helper
-    pub(crate) fn with_step_template(
+    pub fn with_step_template(
         mut self,
         name: impl Into<String>,
         config: crate::config::StepTemplateConfig,
@@ -212,8 +219,9 @@ impl TestState {
         self
     }
 
+    /// Add a workflow to the test config.
     #[allow(dead_code)] // test builder helper
-    pub(crate) fn with_workflow(mut self, name: impl Into<String>, config: WorkflowConfig) -> Self {
+    pub fn with_workflow(mut self, name: impl Into<String>, config: WorkflowConfig) -> Self {
         let workflow_id = name.into();
         self.config
             .projects
@@ -224,7 +232,8 @@ impl TestState {
         self
     }
 
-    pub(crate) fn build(&mut self) -> Arc<InnerState> {
+    /// Build the test state, initializing the database and config.
+    pub fn build(&mut self) -> Arc<InnerState> {
         if let Some(existing) = &self.state {
             return existing.clone();
         }
@@ -306,7 +315,8 @@ impl TestState {
         state
     }
 
-    pub(crate) fn temp_root(&self) -> &Path {
+    /// Return the temporary root directory for this test state.
+    pub fn temp_root(&self) -> &Path {
         &self.temp_root
     }
 

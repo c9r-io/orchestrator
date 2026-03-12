@@ -1,0 +1,30 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: echo_fail
+spec:
+  capabilities:
+    - qa
+  command: "sh -c 'exit 1'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: qa_only
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: once
