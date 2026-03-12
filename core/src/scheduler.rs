@@ -387,6 +387,7 @@ mod tests {
                 captures: vec![CaptureDecl {
                     var: capture_var.to_string(),
                     source: CaptureSource::Stdout,
+                    json_path: None,
                 }],
                 ..StepBehavior::default()
             },

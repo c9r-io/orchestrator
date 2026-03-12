@@ -1,6 +1,7 @@
 use super::*;
 use crate::config::{
-    LoopMode, OrchestratorConfig, StepBehavior, StepScope, WorkflowConfig, WorkflowStepConfig,
+    CaptureDecl, CaptureSource, LoopMode, OrchestratorConfig, StepBehavior, StepScope,
+    WorkflowConfig, WorkflowStepConfig,
 };
 use crate::config_load::tests::{
     make_builtin_step, make_command_step, make_config_with_agent, make_config_with_default_project,
@@ -256,6 +257,68 @@ fn validate_workflow_config_rejects_duplicate_step_ids() {
         "unexpected error: {}",
         err
     );
+}
+
+#[test]
+fn validate_workflow_config_rejects_json_path_on_exit_code_capture() {
+    let workflow = WorkflowConfig {
+        steps: vec![WorkflowStepConfig {
+            id: "qa".to_string(),
+            description: None,
+            builtin: None,
+            required_capability: None,
+            execution_profile: None,
+            enabled: true,
+            repeatable: false,
+            is_guard: false,
+            cost_preference: None,
+            prehook: None,
+            tty: false,
+            template: None,
+            outputs: vec![],
+            pipe_to: None,
+            command: Some("echo benchmark".to_string()),
+            chain_steps: vec![],
+            scope: Some(StepScope::Task),
+            behavior: StepBehavior {
+                captures: vec![CaptureDecl {
+                    var: "score".to_string(),
+                    source: CaptureSource::ExitCode,
+                    json_path: Some("$.total_score".to_string()),
+                }],
+                ..StepBehavior::default()
+            },
+            max_parallel: None,
+            timeout_secs: None,
+            item_select_config: None,
+            store_inputs: vec![],
+            store_outputs: vec![],
+        }],
+        execution: Default::default(),
+        loop_policy: crate::config::WorkflowLoopConfig {
+            mode: LoopMode::Once,
+            guard: crate::config::WorkflowLoopGuardConfig {
+                enabled: false,
+                ..crate::config::WorkflowLoopGuardConfig::default()
+            },
+        },
+        finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
+        qa: None,
+        fix: None,
+        retest: None,
+        dynamic_steps: vec![],
+        adaptive: None,
+        safety: crate::config::SafetyConfig::default(),
+        max_parallel: None,
+    };
+
+    let config = make_config_with_default_project();
+    let err = validate_workflow_config(&config, &workflow, "test-workflow")
+        .expect_err("json_path on exit_code should be rejected");
+
+    assert!(err
+        .to_string()
+        .contains("uses json_path with unsupported source"));
 }
 
 #[test]

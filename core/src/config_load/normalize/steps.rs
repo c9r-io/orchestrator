@@ -22,6 +22,7 @@ pub(crate) fn apply_default_step_behavior(step: &mut WorkflowStepConfig) {
                 step.behavior.captures.push(CaptureDecl {
                     var: "qa_failed".to_string(),
                     source: CaptureSource::FailedFlag,
+                    json_path: None,
                 });
             }
             if !has_post_action(&PostAction::CreateTicket) {
@@ -33,6 +34,7 @@ pub(crate) fn apply_default_step_behavior(step: &mut WorkflowStepConfig) {
                 step.behavior.captures.push(CaptureDecl {
                     var: "fix_success".to_string(),
                     source: CaptureSource::SuccessFlag,
+                    json_path: None,
                 });
             }
         }
@@ -42,6 +44,7 @@ pub(crate) fn apply_default_step_behavior(step: &mut WorkflowStepConfig) {
                 step.behavior.captures.push(CaptureDecl {
                     var: "retest_success".to_string(),
                     source: CaptureSource::SuccessFlag,
+                    json_path: None,
                 });
             }
         }

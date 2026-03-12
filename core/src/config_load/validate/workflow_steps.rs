@@ -1,5 +1,7 @@
 use super::common::AgentLookup;
-use crate::config::{resolve_step_semantic_kind, StepSemanticKind, WorkflowStepConfig};
+use crate::config::{
+    resolve_step_semantic_kind, CaptureSource, StepSemanticKind, WorkflowStepConfig,
+};
 use anyhow::Result;
 use std::collections::HashSet;
 
@@ -48,6 +50,22 @@ pub(super) fn validate_workflow_steps<A: AgentLookup>(
                 key,
                 workflow_id
             );
+        }
+        for capture in &step.behavior.captures {
+            if capture.json_path.is_some()
+                && !matches!(
+                    capture.source,
+                    CaptureSource::Stdout | CaptureSource::Stderr
+                )
+            {
+                anyhow::bail!(
+                    "workflow '{}' step '{}' capture '{}' uses json_path with unsupported source '{:?}'",
+                    workflow_id,
+                    step.id,
+                    capture.var,
+                    capture.source
+                );
+            }
         }
         if let Some(prehook) = step.prehook.as_ref() {
             crate::prehook::validate_step_prehook(prehook, workflow_id, key)?;

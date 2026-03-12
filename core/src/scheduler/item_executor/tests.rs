@@ -2,7 +2,11 @@ use super::accumulator::StepExecutionAccumulator;
 use super::dispatch::is_execution_hard_failure;
 use super::spill::{spill_large_var, spill_to_file};
 use crate::config::PIPELINE_VAR_INLINE_LIMIT;
-use crate::config::{CaptureDecl, CaptureSource, ExecutionMode, PipelineVariables, StepBehavior};
+use crate::config::{
+    CaptureDecl, CaptureSource, ExecutionMode, ItemSelectConfig, PipelineVariables,
+    SelectionStrategy, StepBehavior, TieBreak,
+};
+use crate::scheduler::item_select::{execute_item_select, ItemEvalState};
 use std::collections::HashMap;
 
 fn temp_dir(name: &str) -> std::path::PathBuf {
@@ -562,6 +566,7 @@ fn apply_captures_exit_code() {
     let captures = vec![CaptureDecl {
         var: "qa_exit".to_string(),
         source: CaptureSource::ExitCode,
+        json_path: None,
     }];
     let result = make_run_result(42, false, None);
 
@@ -578,6 +583,7 @@ fn apply_captures_failed_flag() {
     let captures = vec![CaptureDecl {
         var: "qa_failed".to_string(),
         source: CaptureSource::FailedFlag,
+        json_path: None,
     }];
     let result = make_run_result(1, false, None);
 
@@ -594,6 +600,7 @@ fn apply_captures_success_flag() {
     let captures = vec![CaptureDecl {
         var: "fix_success".to_string(),
         source: CaptureSource::SuccessFlag,
+        json_path: None,
     }];
     let result = make_run_result(0, true, None);
 
@@ -610,6 +617,7 @@ fn apply_captures_success_flag_on_failure() {
     let captures = vec![CaptureDecl {
         var: "fix_success".to_string(),
         source: CaptureSource::SuccessFlag,
+        json_path: None,
     }];
     let result = make_run_result(1, false, None);
 
@@ -640,6 +648,7 @@ fn apply_captures_stderr() {
     let captures = vec![CaptureDecl {
         var: "qa_stderr".to_string(),
         source: CaptureSource::Stderr,
+        json_path: None,
     }];
     let result = make_run_result(0, true, Some(output));
 
@@ -658,6 +667,7 @@ fn apply_captures_stdout_no_output_is_noop() {
     let captures = vec![CaptureDecl {
         var: "qa_stdout".to_string(),
         source: CaptureSource::Stdout,
+        json_path: None,
     }];
     let result = make_run_result(0, true, None);
 
@@ -673,6 +683,7 @@ fn apply_captures_stderr_no_output_is_noop() {
     let captures = vec![CaptureDecl {
         var: "qa_stderr".to_string(),
         source: CaptureSource::Stderr,
+        json_path: None,
     }];
     let result = make_run_result(0, true, None);
 
@@ -689,14 +700,17 @@ fn apply_captures_multiple() {
         CaptureDecl {
             var: "exit".to_string(),
             source: CaptureSource::ExitCode,
+            json_path: None,
         },
         CaptureDecl {
             var: "failed".to_string(),
             source: CaptureSource::FailedFlag,
+            json_path: None,
         },
         CaptureDecl {
             var: "ok".to_string(),
             source: CaptureSource::SuccessFlag,
+            json_path: None,
         },
     ];
     let result = make_run_result(0, true, None);
@@ -715,6 +729,7 @@ fn apply_captures_stdout_spills_under_task_logs_dir() {
     let captures = vec![CaptureDecl {
         var: "plan_output".to_string(),
         source: CaptureSource::Stdout,
+        json_path: None,
     }];
     let output = crate::collab::AgentOutput {
         run_id: uuid::Uuid::new_v4(),
@@ -747,6 +762,180 @@ fn apply_captures_stdout_spills_under_task_logs_dir() {
         std::fs::read_to_string(&spill_path).expect("read spill file"),
         "CHAIN_PLAN"
     );
+}
+
+#[test]
+fn apply_captures_stdout_json_path_extracts_score() {
+    let output = crate::collab::AgentOutput {
+        run_id: uuid::Uuid::new_v4(),
+        agent_id: "bench".to_string(),
+        phase: "qa".to_string(),
+        exit_code: 0,
+        stdout: r#"{"total_score":85,"summary":"ok"}"#.to_string(),
+        stderr: String::new(),
+        artifacts: vec![],
+        metrics: Default::default(),
+        confidence: 0.0,
+        quality_score: 0.0,
+        created_at: chrono::Utc::now(),
+        build_errors: vec![],
+        test_failures: vec![],
+    };
+    let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+    let temp = tempfile::tempdir().expect("tempdir");
+    let captures = vec![CaptureDecl {
+        var: "score".to_string(),
+        source: CaptureSource::Stdout,
+        json_path: Some("$.total_score".to_string()),
+    }];
+    let result = make_run_result(0, true, Some(output));
+
+    acc.apply_captures(&captures, temp.path(), "task-1", "benchmark", &result);
+
+    assert_eq!(acc.pipeline_vars.vars.get("score").unwrap(), "85");
+}
+
+#[test]
+fn apply_captures_stdout_json_path_extracts_stream_json_score() {
+    let output = crate::collab::AgentOutput {
+        run_id: uuid::Uuid::new_v4(),
+        agent_id: "bench".to_string(),
+        phase: "qa".to_string(),
+        exit_code: 0,
+        stdout: concat!(
+            "{\"type\":\"text\",\"text\":\"running\"}\n",
+            "{\"type\":\"result\",\"result\":\"{\\\"total_score\\\":91}\"}\n"
+        )
+        .to_string(),
+        stderr: String::new(),
+        artifacts: vec![],
+        metrics: Default::default(),
+        confidence: 0.0,
+        quality_score: 0.0,
+        created_at: chrono::Utc::now(),
+        build_errors: vec![],
+        test_failures: vec![],
+    };
+    let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+    let temp = tempfile::tempdir().expect("tempdir");
+    let captures = vec![CaptureDecl {
+        var: "score".to_string(),
+        source: CaptureSource::Stdout,
+        json_path: Some("$.total_score".to_string()),
+    }];
+    let result = make_run_result(0, true, Some(output));
+
+    acc.apply_captures(&captures, temp.path(), "task-1", "benchmark", &result);
+
+    assert_eq!(acc.pipeline_vars.vars.get("score").unwrap(), "91");
+}
+
+#[test]
+fn apply_captures_stdout_json_path_falls_back_to_empty_string_on_missing_field() {
+    let output = crate::collab::AgentOutput {
+        run_id: uuid::Uuid::new_v4(),
+        agent_id: "bench".to_string(),
+        phase: "qa".to_string(),
+        exit_code: 0,
+        stdout: r#"{"summary":"missing"}"#.to_string(),
+        stderr: String::new(),
+        artifacts: vec![],
+        metrics: Default::default(),
+        confidence: 0.0,
+        quality_score: 0.0,
+        created_at: chrono::Utc::now(),
+        build_errors: vec![],
+        test_failures: vec![],
+    };
+    let mut acc = StepExecutionAccumulator::new(empty_pipeline());
+    let temp = tempfile::tempdir().expect("tempdir");
+    let captures = vec![CaptureDecl {
+        var: "score".to_string(),
+        source: CaptureSource::Stdout,
+        json_path: Some("$.total_score".to_string()),
+    }];
+    let result = make_run_result(0, true, Some(output));
+
+    acc.apply_captures(&captures, temp.path(), "task-1", "benchmark", &result);
+
+    assert_eq!(acc.pipeline_vars.vars.get("score").unwrap(), "");
+}
+
+#[test]
+fn benchmark_score_capture_can_drive_item_select_max() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let captures = vec![CaptureDecl {
+        var: "score".to_string(),
+        source: CaptureSource::Stdout,
+        json_path: Some("$.total_score".to_string()),
+    }];
+
+    let mut first = StepExecutionAccumulator::new(empty_pipeline());
+    let result_a = make_run_result(
+        0,
+        true,
+        Some(crate::collab::AgentOutput {
+            run_id: uuid::Uuid::new_v4(),
+            agent_id: "bench".to_string(),
+            phase: "qa".to_string(),
+            exit_code: 0,
+            stdout: r#"{"total_score":67}"#.to_string(),
+            stderr: String::new(),
+            artifacts: vec![],
+            metrics: Default::default(),
+            confidence: 0.0,
+            quality_score: 0.0,
+            created_at: chrono::Utc::now(),
+            build_errors: vec![],
+            test_failures: vec![],
+        }),
+    );
+    first.apply_captures(&captures, temp.path(), "task-1", "benchmark", &result_a);
+
+    let mut second = StepExecutionAccumulator::new(empty_pipeline());
+    let result_b = make_run_result(
+        0,
+        true,
+        Some(crate::collab::AgentOutput {
+            run_id: uuid::Uuid::new_v4(),
+            agent_id: "bench".to_string(),
+            phase: "qa".to_string(),
+            exit_code: 0,
+            stdout: r#"{"total_score":85}"#.to_string(),
+            stderr: String::new(),
+            artifacts: vec![],
+            metrics: Default::default(),
+            confidence: 0.0,
+            quality_score: 0.0,
+            created_at: chrono::Utc::now(),
+            build_errors: vec![],
+            test_failures: vec![],
+        }),
+    );
+    second.apply_captures(&captures, temp.path(), "task-1", "benchmark", &result_b);
+
+    let items = vec![
+        ItemEvalState {
+            item_id: "approach-a".to_string(),
+            pipeline_vars: first.pipeline_vars.vars.clone(),
+        },
+        ItemEvalState {
+            item_id: "approach-b".to_string(),
+            pipeline_vars: second.pipeline_vars.vars.clone(),
+        },
+    ];
+    let config = ItemSelectConfig {
+        strategy: SelectionStrategy::Max,
+        metric_var: Some("score".to_string()),
+        weights: None,
+        threshold: None,
+        store_result: None,
+        tie_break: TieBreak::First,
+    };
+
+    let result = execute_item_select(&items, &config).expect("selection should succeed");
+
+    assert_eq!(result.winner_id, "approach-b");
 }
 
 // ── to_prehook_context() ─────────────────

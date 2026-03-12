@@ -156,6 +156,7 @@ spec:
   command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
   env:
     - fromRef: claude-opus
+    - fromRef: minimax
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -171,6 +172,7 @@ spec:
   env:
     - fromRef: claude-opus
     # - fromRef: claude-sonnet
+    - fromRef: minimax
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -269,7 +271,8 @@ spec:
       behavior:
         captures:
           - var: score
-            source: exit_code
+            source: stdout
+            json_path: "$.total_score"
 
     # ── Phase 4: Select winner ──
     - id: select_best

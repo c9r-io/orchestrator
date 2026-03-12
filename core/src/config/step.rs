@@ -78,6 +78,9 @@ pub struct CaptureDecl {
     pub var: String,
     /// Output channel that populates the variable.
     pub source: CaptureSource,
+    /// Optional JSON path to extract from stdout/stderr content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub json_path: Option<String>,
 }
 
 /// Source of a captured value.
@@ -355,6 +358,37 @@ pub fn default_scope_for_step_id(step_id: &str) -> StepScope {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn capture_decl_deserializes_without_json_path() {
+        let capture: CaptureDecl = serde_yml::from_str(
+            r#"
+var: score
+source: stdout
+"#,
+        )
+        .expect("capture should deserialize");
+
+        assert_eq!(capture.var, "score");
+        assert_eq!(capture.source, CaptureSource::Stdout);
+        assert_eq!(capture.json_path, None);
+    }
+
+    #[test]
+    fn capture_decl_deserializes_with_json_path() {
+        let capture: CaptureDecl = serde_yml::from_str(
+            r#"
+var: score
+source: stdout
+json_path: $.total_score
+"#,
+        )
+        .expect("capture should deserialize");
+
+        assert_eq!(capture.var, "score");
+        assert_eq!(capture.source, CaptureSource::Stdout);
+        assert_eq!(capture.json_path.as_deref(), Some("$.total_score"));
+    }
 
     #[test]
     fn test_validate_step_type_known_ids() {

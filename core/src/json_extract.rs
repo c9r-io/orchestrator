@@ -27,6 +27,27 @@ pub fn extract_field(value: &Value, path: &str) -> Option<String> {
     }
 }
 
+/// Extract the `result` field from the last `{"type":"result",...}` line in stream-json JSONL.
+pub fn extract_stream_json_result(content: &str) -> Option<String> {
+    for line in content.lines().rev() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if trimmed.contains("\"type\":\"result\"") || trimmed.contains("\"type\": \"result\"") {
+            if let Ok(parsed) = serde_json::from_str::<Value>(trimmed) {
+                if let Some(result) = parsed.get("result").and_then(|v| v.as_str()) {
+                    return Some(result.to_string());
+                }
+            }
+            if let Some(extracted) = extract_result_field_raw(trimmed) {
+                return Some(extracted);
+            }
+        }
+    }
+    None
+}
+
 fn resolve_path<'a>(root: &'a Value, path: &str) -> Result<&'a Value> {
     let path = path.strip_prefix("$.").unwrap_or(path);
     let mut current = root;
@@ -39,6 +60,51 @@ fn resolve_path<'a>(root: &'a Value, path: &str) -> Result<&'a Value> {
             .with_context(|| format!("field '{}' not found", segment))?;
     }
     Ok(current)
+}
+
+fn extract_result_field_raw(line: &str) -> Option<String> {
+    let marker = "\"result\":\"";
+    let pos = line.find(marker)?;
+    let value_start = pos + marker.len();
+    let bytes = line.as_bytes();
+
+    let mut i = value_start;
+    let mut result = String::new();
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\\' if i + 1 < bytes.len() => {
+                match bytes[i + 1] {
+                    b'"' => result.push('"'),
+                    b'\\' => result.push('\\'),
+                    b'n' => result.push('\n'),
+                    b'r' => result.push('\r'),
+                    b't' => result.push('\t'),
+                    b'/' => result.push('/'),
+                    b'u' if i + 5 < bytes.len() => {
+                        let hex = &line[i + 2..i + 6];
+                        if let Ok(cp) = u32::from_str_radix(hex, 16) {
+                            if let Some(ch) = char::from_u32(cp) {
+                                result.push(ch);
+                            }
+                        }
+                        i += 6;
+                        continue;
+                    }
+                    other => {
+                        result.push('\\');
+                        result.push(other as char);
+                    }
+                }
+                i += 2;
+            }
+            b'"' => return Some(result),
+            _ => {
+                result.push(bytes[i] as char);
+                i += 1;
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -109,5 +175,29 @@ mod tests {
     fn extract_field_boolean() {
         let value = json!({"active": true});
         assert_eq!(extract_field(&value, "$.active"), Some("true".to_string()));
+    }
+
+    #[test]
+    fn extract_stream_json_result_prefers_last_result_line() {
+        let content = concat!(
+            "{\"type\":\"result\",\"result\":\"{\\\"score\\\":1}\"}\n",
+            "{\"type\":\"result\",\"result\":\"{\\\"score\\\":2}\"}\n"
+        );
+
+        assert_eq!(
+            extract_stream_json_result(content),
+            Some("{\"score\":2}".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_stream_json_result_handles_redacted_lines() {
+        let content =
+            "{\"type\":\"result\",\"cost_usd\":[REDACTED],\"result\":\"{\\\"score\\\":42}\"}";
+
+        assert_eq!(
+            extract_stream_json_result(content),
+            Some("{\"score\":42}".to_string())
+        );
     }
 }

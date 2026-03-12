@@ -477,6 +477,7 @@ fn normalize_does_not_duplicate_existing_captures() {
     step.behavior.captures.push(CaptureDecl {
         var: "qa_failed".to_string(),
         source: CaptureSource::FailedFlag,
+        json_path: None,
     });
     let mut workflow = make_workflow(vec![step]);
     normalize_workflow_config(&mut workflow);

@@ -1,8 +1,10 @@
 use crate::config::{
     CaptureSource, ItemFinalizeContext, PipelineVariables, StepPrehookContext, TaskRuntimeContext,
 };
+use crate::json_extract::{extract_field, extract_stream_json_result};
 use std::collections::HashMap;
 use std::path::Path;
+use tracing::warn;
 
 use super::spill::spill_large_var;
 
@@ -351,23 +353,62 @@ impl StepExecutionAccumulator {
                 }
                 CaptureSource::Stdout => {
                     if let Some(ref output) = result.output {
-                        spill_large_var(
-                            logs_dir,
-                            task_id,
-                            &cap.var,
-                            output.stdout.clone(),
-                            &mut self.pipeline_vars,
-                        );
+                        let value =
+                            capture_text_field(&output.stdout, &cap.var, cap.json_path.as_deref());
+                        match value {
+                            Some(value) => {
+                                spill_large_var(
+                                    logs_dir,
+                                    task_id,
+                                    &cap.var,
+                                    value,
+                                    &mut self.pipeline_vars,
+                                );
+                            }
+                            None => {
+                                self.pipeline_vars
+                                    .vars
+                                    .insert(cap.var.clone(), String::new());
+                            }
+                        }
                     }
                 }
                 CaptureSource::Stderr => {
                     if let Some(ref output) = result.output {
+                        let value =
+                            capture_text_field(&output.stderr, &cap.var, cap.json_path.as_deref());
                         self.pipeline_vars
                             .vars
-                            .insert(cap.var.clone(), output.stderr.clone());
+                            .insert(cap.var.clone(), value.unwrap_or_default());
                     }
                 }
             }
+        }
+    }
+}
+
+fn capture_text_field(raw: &str, var_name: &str, json_path: Option<&str>) -> Option<String> {
+    let Some(json_path) = json_path else {
+        return Some(raw.to_string());
+    };
+
+    let effective = extract_stream_json_result(raw).unwrap_or_else(|| raw.to_string());
+    match serde_json::from_str::<serde_json::Value>(&effective) {
+        Ok(value) => match extract_field(&value, json_path) {
+            Some(extracted) => Some(extracted),
+            None => {
+                warn!(var = %var_name, json_path = %json_path, "capture json_path did not resolve");
+                None
+            }
+        },
+        Err(error) => {
+            warn!(
+                var = %var_name,
+                json_path = %json_path,
+                error = %error,
+                "capture json_path source is not valid JSON"
+            );
+            None
         }
     }
 }

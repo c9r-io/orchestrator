@@ -18,6 +18,8 @@
 | FR-024 | 审计 unsafe 块 | P2 | Closed |
 | FR-026 | 事件表归档与 TTL 清理策略 | P1 | Closed |
 | FR-027 | Worker 轮询优化 — Notify 唤醒机制 | P1 | Implemented |
+| FR-029 | Item-Scoped Git 工作目录隔离 | P0 | Proposed |
+| FR-030 | Self-Evolution 数据库 Schema 对齐验证 | P1 | Proposed |
 
 ## 说明
 
@@ -48,4 +50,5 @@
 - FR-024 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/35-audit-unsafe-blocks.md` 与 `docs/qa/orchestrator/74-audit-unsafe-blocks.md` 承载
 - FR-025 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/37-config-load-module-split.md` 与 `docs/qa/orchestrator/76-config-load-module-split.md` 承载
 - FR-027 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/39-worker-notify-wakeup.md` 与 `docs/qa/orchestrator/78-worker-notify-wakeup.md` 承载
+- FR-028 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/40-benchmark-score-capture.md` 与 `docs/qa/orchestrator/79-benchmark-score-capture.md` 承载
 - FR-026 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/38-event-table-ttl-archival.md` 与 `docs/qa/orchestrator/77-event-table-ttl-archival.md` 承载
