@@ -83,7 +83,7 @@ evo_plan ──[generate_items]──> evo_implement (x2) ──> evo_benchmark 
 C/S 架构下，CLI（`orchestrator`）通过 Unix Domain Socket 连接 daemon（`orchestratord`）。
 
 ```bash
-cd /Volumes/Yotta/ai_native_sdlc
+cd /Volumes/Yotta/c9r-io/orchestrator
 
 cargo build --release -p orchestratord -p orchestrator-cli
 
