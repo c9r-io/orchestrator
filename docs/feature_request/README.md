@@ -18,7 +18,7 @@
 | FR-024 | 审计 unsafe 块 | P2 | Closed |
 | FR-026 | 事件表归档与 TTL 清理策略 | P1 | Closed |
 | FR-027 | Worker 轮询优化 — Notify 唤醒机制 | P1 | Implemented |
-| FR-030 | Self-Evolution 数据库 Schema 对齐验证 | P1 | Proposed |
+| FR-030 | Self-Evolution 数据库 Schema 对齐验证 | P1 | Closed |
 
 ## 说明
 
@@ -52,3 +52,4 @@
 - FR-028 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/40-benchmark-score-capture.md` 与 `docs/qa/orchestrator/79-benchmark-score-capture.md` 承载
 - FR-026 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/38-event-table-ttl-archival.md` 与 `docs/qa/orchestrator/77-event-table-ttl-archival.md` 承载
 - FR-029 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/41-item-scoped-git-worktree-isolation.md` 与 `docs/qa/orchestrator/80-item-scoped-git-worktree-isolation.md` 承载
+- FR-030 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/42-self-evolution-db-schema-alignment.md` 与 `docs/qa/orchestrator/81-self-evolution-db-schema-alignment.md` 承载
