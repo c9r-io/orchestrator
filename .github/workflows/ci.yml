@@ -64,6 +64,8 @@ jobs:
 
       - name: Run clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+        env:
+          PROTOC: /usr/bin/protoc
 
   test:
     name: Rust test
@@ -83,6 +85,8 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace
+        env:
+          PROTOC: /usr/bin/protoc
 
   cross-compile:
     name: Cross-compile (${{ matrix.target }})
@@ -133,5 +137,12 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
+      - name: Detect protoc path
+        id: protoc
+        shell: bash
+        run: echo "path=$(which protoc)" >> "$GITHUB_OUTPUT"
+
       - name: Cargo check
         run: cargo check --workspace --target ${{ matrix.target }}
+        env:
+          PROTOC: ${{ steps.protoc.outputs.path }}

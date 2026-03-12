@@ -12,7 +12,7 @@
 | FR-017 | Agent Drain 与 Enabled 开关 | P1 | Implemented |
 | FR-018 | 用户指南编译验证对齐 | P1 | Implemented |
 | FR-019 | 修复 libc 类型编译错误 | P0 | Implemented |
-| FR-020 | 自动化 protoc 依赖安装 | P0 | Proposed |
+| FR-020 | 自动化 protoc 依赖安装 | P0 | Implemented |
 | FR-021 | 审计并减少 expect() 调用 | P1 | Proposed |
 | FR-022 | 补充公共 API 文档注释 | P1 | In Progress |
 | FR-023 | 增加集成测试覆盖 | P2 | Proposed |
@@ -40,3 +40,4 @@
 - FR-007 已闭环删除；其收口结果由 `docs/architecture.md`、`docs/guide/**`、`skills/orchestrator-guide/**` 与 `docs/qa/**` 持续承载
 - FR-006 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/21-sandbox-resource-network-enforcement.md` 与 `docs/qa/orchestrator/56-sandbox-resource-network-enforcement.md` 承载
 - FR-010 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/22-control-plane-security.md` 与 `docs/qa/orchestrator/58-control-plane-security.md` 承载
+- FR-020 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/32-automate-protoc-dependency.md` 与 `docs/qa/orchestrator/71-automate-protoc-dependency.md` 承载

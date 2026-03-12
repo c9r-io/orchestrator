@@ -321,6 +321,20 @@ The workflow publishes tarballs for supported targets plus a `sha256sums` manife
 
 ## Getting Started
 
+### Prerequisites
+
+The build requires `protoc` (Protocol Buffers compiler). If `protoc` is not installed, the build automatically compiles it from source via `protobuf-src` — no manual setup is needed. For faster builds, you can optionally install `protoc` and set the `PROTOC` environment variable:
+
+```bash
+# macOS
+brew install protobuf
+export PROTOC=$(which protoc)
+
+# Ubuntu/Debian
+sudo apt-get install -y protobuf-compiler
+export PROTOC=/usr/bin/protoc
+```
+
 ### Build
 
 ```bash
