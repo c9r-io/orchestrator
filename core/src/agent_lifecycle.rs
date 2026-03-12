@@ -340,8 +340,7 @@ mod tests {
             let mut lifecycle = state.agent_lifecycle.write().await;
             let entry = lifecycle.get_mut("agent1").unwrap();
             entry.lifecycle = AgentLifecycleState::Draining;
-            entry.drain_requested_at =
-                Some(Utc::now() - chrono::Duration::seconds(10));
+            entry.drain_requested_at = Some(Utc::now() - chrono::Duration::seconds(10));
             entry.drain_timeout_secs = Some(1);
         }
 

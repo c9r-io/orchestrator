@@ -17,9 +17,9 @@ use clap::Parser;
 
 /// Re-exported CLI argument model for integration tests and helper modules.
 pub use cli::{
-    AgentCommands, Cli, Commands, DbCommands, DbMigrationCommands, DebugCommands,
-    ManifestCommands, OutputFormat, SandboxProbeCommands, SecretCommands, SecretKeyCommands,
-    StoreCommands, TaskCommands,
+    AgentCommands, Cli, Commands, DbCommands, DbMigrationCommands, DebugCommands, ManifestCommands,
+    OutputFormat, SandboxProbeCommands, SecretCommands, SecretKeyCommands, StoreCommands,
+    TaskCommands,
 };
 
 fn main() -> Result<()> {

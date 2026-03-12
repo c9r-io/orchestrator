@@ -342,7 +342,14 @@ pub async fn run_phase_with_rotation(
             let health_map = state.agent_health.read().await;
             let metrics_map = state.agent_metrics.read().await;
             let lifecycle_map = state.agent_lifecycle.read().await;
-            select_agent_advanced(cap, &agents, &health_map, &metrics_map, &HashSet::new(), &lifecycle_map)?
+            select_agent_advanced(
+                cap,
+                &agents,
+                &health_map,
+                &metrics_map,
+                &HashSet::new(),
+                &lifecycle_map,
+            )?
         } else {
             select_agent_by_preference(&agents)?
         }

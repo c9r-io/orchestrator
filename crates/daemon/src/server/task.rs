@@ -238,19 +238,15 @@ pub(crate) async fn task_info(
             let agents = resolve_effective_agents(pid, &active.config, None);
             let lifecycle_map = server.state.agent_lifecycle.read().await;
             for (id, cfg) in agents.iter() {
-                let runtime: agent_orchestrator::metrics::AgentRuntimeState = lifecycle_map
-                    .get(id.as_str())
-                    .cloned()
-                    .unwrap_or_default();
+                let runtime: agent_orchestrator::metrics::AgentRuntimeState =
+                    lifecycle_map.get(id.as_str()).cloned().unwrap_or_default();
                 statuses.push(AgentStatus {
                     name: id.clone(),
                     enabled: cfg.enabled,
                     lifecycle_state: runtime.lifecycle.as_str().to_string(),
                     in_flight_items: runtime.in_flight_items as i32,
                     capabilities: cfg.capabilities.clone(),
-                    drain_requested_at: runtime
-                        .drain_requested_at
-                        .map(|dt| dt.to_rfc3339()),
+                    drain_requested_at: runtime.drain_requested_at.map(|dt| dt.to_rfc3339()),
                 });
             }
             statuses.sort_by(|a, b| a.name.cmp(&b.name));
