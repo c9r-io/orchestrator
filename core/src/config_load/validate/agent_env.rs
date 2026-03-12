@@ -1,0 +1,58 @@
+use crate::config::{AgentConfig, EnvStoreConfig, OrchestratorConfig};
+use anyhow::Result;
+use std::collections::HashMap;
+
+/// Validate env store refs for a set of agents within a single project.
+fn validate_env_store_refs_for_agents(
+    agents: &HashMap<String, AgentConfig>,
+    env_stores: &HashMap<String, EnvStoreConfig>,
+    project_id: &str,
+) -> Result<()> {
+    for (agent_name, agent_cfg) in agents {
+        if let Some(ref entries) = agent_cfg.env {
+            for entry in entries {
+                if let Some(ref store_name) = entry.from_ref {
+                    if !env_stores.contains_key(store_name.as_str()) {
+                        anyhow::bail!(
+                            "agent '{}'(project '{}') env fromRef '{}' references unknown store",
+                            agent_name,
+                            project_id,
+                            store_name
+                        );
+                    }
+                }
+                if let Some(ref rv) = entry.ref_value {
+                    if !env_stores.contains_key(&rv.name) {
+                        anyhow::bail!(
+                            "agent '{}'(project '{}') env refValue.name '{}' references unknown store",
+                            agent_name,
+                            project_id,
+                            rv.name
+                        );
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Validates that all agent env store references (fromRef, refValue.name) point to
+/// existing entries in config.env_stores.
+pub fn validate_agent_env_store_refs(config: &OrchestratorConfig) -> Result<()> {
+    for (project_id, project) in &config.projects {
+        validate_env_store_refs_for_agents(&project.agents, &project.env_stores, project_id)?;
+    }
+    Ok(())
+}
+
+/// Like `validate_agent_env_store_refs` but only validates agents in the given project.
+pub fn validate_agent_env_store_refs_for_project(
+    config: &OrchestratorConfig,
+    project_id: &str,
+) -> Result<()> {
+    if let Some(project) = config.projects.get(project_id) {
+        validate_env_store_refs_for_agents(&project.agents, &project.env_stores, project_id)?;
+    }
+    Ok(())
+}
