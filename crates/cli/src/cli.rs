@@ -216,9 +216,15 @@ mod tests {
 
     #[test]
     fn event_cleanup_subcommand_parses() {
-        let cli =
-            Cli::try_parse_from(["orchestrator", "event", "cleanup", "--older-than", "7", "--dry-run"])
-                .expect("event cleanup should parse");
+        let cli = Cli::try_parse_from([
+            "orchestrator",
+            "event",
+            "cleanup",
+            "--older-than",
+            "7",
+            "--dry-run",
+        ])
+        .expect("event cleanup should parse");
         assert!(matches!(
             cli.command,
             Commands::Event(EventCommands::Cleanup {

@@ -18,9 +18,7 @@ async fn agent_cordon_drain_uncordon() {
 
         // List agents — echo should be Active
         let list_resp = client
-            .agent_list(AgentListRequest {
-                project_id: None,
-            })
+            .agent_list(AgentListRequest { project_id: None })
             .await
             .expect("agent_list failed")
             .into_inner();
@@ -42,9 +40,7 @@ async fn agent_cordon_drain_uncordon() {
             .expect("agent_cordon failed");
 
         let list_resp = client
-            .agent_list(AgentListRequest {
-                project_id: None,
-            })
+            .agent_list(AgentListRequest { project_id: None })
             .await
             .expect("agent_list after cordon failed")
             .into_inner();
@@ -77,9 +73,7 @@ async fn agent_cordon_drain_uncordon() {
             .expect("agent_uncordon failed");
 
         let list_resp = client
-            .agent_list(AgentListRequest {
-                project_id: None,
-            })
+            .agent_list(AgentListRequest { project_id: None })
             .await
             .expect("agent_list after uncordon failed")
             .into_inner();

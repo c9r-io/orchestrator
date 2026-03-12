@@ -317,10 +317,9 @@ impl OrchestratorService for TestOrchestratorServer {
         request: Request<TaskInfoRequest>,
     ) -> Result<Response<TaskInfoResponse>, Status> {
         let req = request.into_inner();
-        let detail =
-            agent_orchestrator::service::task::get_task_detail(&self.state, &req.task_id)
-                .await
-                .map_err(map_core_error)?;
+        let detail = agent_orchestrator::service::task::get_task_detail(&self.state, &req.task_id)
+            .await
+            .map_err(map_core_error)?;
 
         let agent_states = {
             use agent_orchestrator::config_load::read_active_config;
@@ -344,9 +343,7 @@ impl OrchestratorService for TestOrchestratorServer {
                         lifecycle_state: runtime.lifecycle.as_str().to_string(),
                         in_flight_items: runtime.in_flight_items as i32,
                         capabilities: cfg.capabilities.clone(),
-                        drain_requested_at: runtime
-                            .drain_requested_at
-                            .map(|dt| dt.to_rfc3339()),
+                        drain_requested_at: runtime.drain_requested_at.map(|dt| dt.to_rfc3339()),
                     });
                 }
                 statuses.sort_by(|a, b| a.name.cmp(&b.name));
@@ -446,24 +443,20 @@ impl OrchestratorService for TestOrchestratorServer {
         tokio::spawn(async move {
             let interval = std::time::Duration::from_secs(interval_secs);
             loop {
-                let summary = match agent_orchestrator::service::task::load_summary(
-                    &state,
-                    &req.task_id,
-                )
-                .await
-                {
-                    Ok(s) => s,
-                    Err(_) => break,
-                };
-                let detail = match agent_orchestrator::service::task::get_task_detail(
-                    &state,
-                    &req.task_id,
-                )
-                .await
-                {
-                    Ok(d) => d,
-                    Err(_) => break,
-                };
+                let summary =
+                    match agent_orchestrator::service::task::load_summary(&state, &req.task_id)
+                        .await
+                    {
+                        Ok(s) => s,
+                        Err(_) => break,
+                    };
+                let detail =
+                    match agent_orchestrator::service::task::get_task_detail(&state, &req.task_id)
+                        .await
+                    {
+                        Ok(d) => d,
+                        Err(_) => break,
+                    };
                 let terminal = matches!(
                     summary.status.as_str(),
                     "completed" | "failed" | "cancelled" | "deleted"
@@ -651,10 +644,7 @@ impl OrchestratorService for TestOrchestratorServer {
         }))
     }
 
-    async fn ping(
-        &self,
-        _request: Request<PingRequest>,
-    ) -> Result<Response<PingResponse>, Status> {
+    async fn ping(&self, _request: Request<PingRequest>) -> Result<Response<PingResponse>, Status> {
         let runtime = agent_orchestrator::service::daemon::runtime_snapshot(&self.state);
         Ok(Response::new(PingResponse {
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -681,11 +671,9 @@ impl OrchestratorService for TestOrchestratorServer {
         request: Request<ConfigDebugRequest>,
     ) -> Result<Response<ConfigDebugResponse>, Status> {
         let req = request.into_inner();
-        let content = agent_orchestrator::service::system::debug_info(
-            &self.state,
-            req.component.as_deref(),
-        )
-        .map_err(map_core_error)?;
+        let content =
+            agent_orchestrator::service::system::debug_info(&self.state, req.component.as_deref())
+                .map_err(map_core_error)?;
         Ok(Response::new(ConfigDebugResponse {
             content,
             format: "text".to_string(),
@@ -727,10 +715,7 @@ impl OrchestratorService for TestOrchestratorServer {
         }))
     }
 
-    async fn init(
-        &self,
-        request: Request<InitRequest>,
-    ) -> Result<Response<InitResponse>, Status> {
+    async fn init(&self, request: Request<InitRequest>) -> Result<Response<InitResponse>, Status> {
         let req = request.into_inner();
         let message =
             agent_orchestrator::service::system::run_init(&self.state, req.root.as_deref())
@@ -780,9 +765,11 @@ impl OrchestratorService for TestOrchestratorServer {
         request: Request<ManifestExportRequest>,
     ) -> Result<Response<ManifestExportResponse>, Status> {
         let req = request.into_inner();
-        let content =
-            agent_orchestrator::service::resource::export_manifests(&self.state, &req.output_format)
-                .map_err(map_core_error)?;
+        let content = agent_orchestrator::service::resource::export_manifests(
+            &self.state,
+            &req.output_format,
+        )
+        .map_err(map_core_error)?;
         Ok(Response::new(ManifestExportResponse {
             content,
             format: req.output_format,
@@ -892,8 +879,11 @@ impl OrchestratorService for TestOrchestratorServer {
         let active = agent_orchestrator::config_load::read_active_config(&self.state)
             .map_err(|e| Status::internal(e.to_string()))?;
         let project_id = req.project_id.as_deref().unwrap_or("");
-        let agents =
-            agent_orchestrator::selection::resolve_effective_agents(project_id, &active.config, None);
+        let agents = agent_orchestrator::selection::resolve_effective_agents(
+            project_id,
+            &active.config,
+            None,
+        );
         let lifecycle_map = self.state.agent_lifecycle.read().await;
 
         let mut statuses: Vec<AgentStatus> = agents
@@ -967,7 +957,11 @@ impl OrchestratorService for TestOrchestratorServer {
         request: Request<EventCleanupRequest>,
     ) -> Result<Response<EventCleanupResponse>, Status> {
         let req = request.into_inner();
-        let older_than = if req.older_than_days == 0 { 30 } else { req.older_than_days };
+        let older_than = if req.older_than_days == 0 {
+            30
+        } else {
+            req.older_than_days
+        };
         if req.dry_run {
             let count = agent_orchestrator::event_cleanup::count_pending_cleanup(
                 &self.state.async_database,

@@ -124,7 +124,11 @@ pub(crate) async fn event_cleanup(
 ) -> Result<Response<EventCleanupResponse>, Status> {
     super::authorize(server, &request, "EventCleanup").map_err(Status::from)?;
     let req = request.into_inner();
-    let older_than = if req.older_than_days == 0 { 30 } else { req.older_than_days };
+    let older_than = if req.older_than_days == 0 {
+        30
+    } else {
+        req.older_than_days
+    };
 
     if req.dry_run {
         let count = agent_orchestrator::event_cleanup::count_pending_cleanup(
@@ -135,7 +139,9 @@ pub(crate) async fn event_cleanup(
         .map_err(|e| Status::internal(e.to_string()))?;
         return Ok(Response::new(EventCleanupResponse {
             affected_count: count,
-            message: format!("{count} events would be deleted (dry-run, older than {older_than} days)"),
+            message: format!(
+                "{count} events would be deleted (dry-run, older than {older_than} days)"
+            ),
         }));
     }
 

@@ -10,10 +10,7 @@ use tokio::time::timeout;
 const TEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Helper: create a task, run it in-process, and return the final task info.
-async fn run_task_to_completion(
-    harness: &TestHarness,
-    workflow_id: &str,
-) -> TaskInfoResponse {
+async fn run_task_to_completion(harness: &TestHarness, workflow_id: &str) -> TaskInfoResponse {
     harness.seed_qa_file();
     let mut client = harness.client();
 
@@ -49,10 +46,7 @@ async fn run_task_to_completion(
             .into_inner();
 
         if let Some(task) = &resp.task {
-            if matches!(
-                task.status.as_str(),
-                "completed" | "failed" | "cancelled"
-            ) {
+            if matches!(task.status.as_str(), "completed" | "failed" | "cancelled") {
                 info = Some(resp);
                 break;
             }
@@ -100,9 +94,10 @@ async fn workflow_prehook_skip() {
         );
 
         // Check events for prehook skip evidence in cycle 1
-        let has_prehook_skip = info.events.iter().any(|e| {
-            e.event_type.contains("prehook") && e.payload_json.contains("skip")
-        });
+        let has_prehook_skip = info
+            .events
+            .iter()
+            .any(|e| e.event_type.contains("prehook") && e.payload_json.contains("skip"));
         // The fix step should have been skipped in cycle 1 (not the last cycle)
         assert!(
             has_prehook_skip,
@@ -122,10 +117,7 @@ async fn multi_cycle_loop() {
         let info = run_task_to_completion(&harness, "qa_only").await;
         let task = info.task.expect("task missing from info");
 
-        assert_eq!(
-            task.status, "completed",
-            "multi-cycle task should complete"
-        );
+        assert_eq!(task.status, "completed", "multi-cycle task should complete");
 
         // Verify multiple cycles ran by checking for cycle-related events
         let cycle_events: Vec<_> = info

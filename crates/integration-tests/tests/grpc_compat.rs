@@ -22,7 +22,10 @@ async fn ping_roundtrip() {
             .into_inner();
 
         assert!(!resp.version.is_empty(), "version should be set");
-        assert!(!resp.lifecycle_state.is_empty(), "lifecycle_state should be set");
+        assert!(
+            !resp.lifecycle_state.is_empty(),
+            "lifecycle_state should be set"
+        );
         assert!(!resp.shutdown_requested);
     })
     .await

@@ -167,11 +167,7 @@ impl TestState {
     }
 
     /// Add a workspace to the test config.
-    pub fn with_workspace(
-        mut self,
-        name: impl Into<String>,
-        path: impl Into<String>,
-    ) -> Self {
+    pub fn with_workspace(mut self, name: impl Into<String>, path: impl Into<String>) -> Self {
         let workspace_id = name.into();
         self.config
             .projects

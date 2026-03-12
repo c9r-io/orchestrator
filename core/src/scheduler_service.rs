@@ -164,7 +164,6 @@ mod tests {
             )
             .expect("query status");
         assert_eq!(status, "pending");
-
     }
 
     #[tokio::test]

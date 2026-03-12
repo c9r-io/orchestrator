@@ -88,18 +88,10 @@ pub async fn event_stats(db: &AsyncDatabase) -> Result<EventStats> {
             let total_rows: i64 =
                 conn.query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))?;
             let earliest: Option<String> = conn
-                .query_row(
-                    "SELECT MIN(created_at) FROM events",
-                    [],
-                    |row| row.get(0),
-                )
+                .query_row("SELECT MIN(created_at) FROM events", [], |row| row.get(0))
                 .unwrap_or(None);
             let latest: Option<String> = conn
-                .query_row(
-                    "SELECT MAX(created_at) FROM events",
-                    [],
-                    |row| row.get(0),
-                )
+                .query_row("SELECT MAX(created_at) FROM events", [], |row| row.get(0))
                 .unwrap_or(None);
 
             let mut stmt = conn.prepare(
@@ -198,9 +190,27 @@ pub async fn archive_events(
             let mut grouped: HashMap<String, Vec<String>> = HashMap::new();
             let mut rowids = Vec::with_capacity(rows.len());
             for row in &rows {
-                let (rowid, task_id, task_item_id, event_type, payload_json, created_at, step, step_scope, cycle) =
-                    (&row.rowid, &row.task_id, &row.task_item_id, &row.event_type,
-                     &row.payload_json, &row.created_at, &row.step, &row.step_scope, &row.cycle);
+                let (
+                    rowid,
+                    task_id,
+                    task_item_id,
+                    event_type,
+                    payload_json,
+                    created_at,
+                    step,
+                    step_scope,
+                    cycle,
+                ) = (
+                    &row.rowid,
+                    &row.task_id,
+                    &row.task_item_id,
+                    &row.event_type,
+                    &row.payload_json,
+                    &row.created_at,
+                    &row.step,
+                    &row.step_scope,
+                    &row.cycle,
+                );
                 rowids.push(*rowid);
                 // Extract date from created_at (first 10 chars: YYYY-MM-DD)
                 let date = if created_at.len() >= 10 {
@@ -251,7 +261,10 @@ pub async fn archive_events(
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     if archived > 0 {
-        info!(archived, retention_days, "event cleanup: archived and deleted events");
+        info!(
+            archived,
+            retention_days, "event cleanup: archived and deleted events"
+        );
     }
     Ok(archived)
 }
@@ -282,12 +295,7 @@ mod tests {
     }
 
     /// Helper: insert an event with a specific created_at timestamp.
-    async fn insert_event(
-        db: &AsyncDatabase,
-        task_id: &str,
-        event_type: &str,
-        created_at: &str,
-    ) {
+    async fn insert_event(db: &AsyncDatabase, task_id: &str, event_type: &str, created_at: &str) {
         let tid = task_id.to_owned();
         let et = event_type.to_owned();
         let ca = created_at.to_owned();
@@ -322,19 +330,39 @@ mod tests {
 
         // completed task with old event — should be cleaned
         insert_task(&state.async_database, "t-done", "completed").await;
-        insert_event(&state.async_database, "t-done", "step_start", "2020-01-01T00:00:00").await;
+        insert_event(
+            &state.async_database,
+            "t-done",
+            "step_start",
+            "2020-01-01T00:00:00",
+        )
+        .await;
 
         // running task with old event — should NOT be cleaned
         insert_task(&state.async_database, "t-running", "running").await;
-        insert_event(&state.async_database, "t-running", "step_start", "2020-01-01T00:00:00").await;
+        insert_event(
+            &state.async_database,
+            "t-running",
+            "step_start",
+            "2020-01-01T00:00:00",
+        )
+        .await;
 
         // completed task with recent event — should NOT be cleaned (within retention)
         insert_task(&state.async_database, "t-recent", "completed").await;
-        insert_event(&state.async_database, "t-recent", "step_start", "2099-01-01T00:00:00").await;
+        insert_event(
+            &state.async_database,
+            "t-recent",
+            "step_start",
+            "2099-01-01T00:00:00",
+        )
+        .await;
 
         assert_eq!(count_events(&state.async_database).await, 3);
 
-        let deleted = cleanup_old_events(&state.async_database, 1, 1000).await.unwrap();
+        let deleted = cleanup_old_events(&state.async_database, 1, 1000)
+            .await
+            .unwrap();
         assert_eq!(deleted, 1);
         assert_eq!(count_events(&state.async_database).await, 2);
     }
@@ -356,7 +384,9 @@ mod tests {
         }
         assert_eq!(count_events(&state.async_database).await, 5);
 
-        let deleted = cleanup_old_events(&state.async_database, 1, 2).await.unwrap();
+        let deleted = cleanup_old_events(&state.async_database, 1, 2)
+            .await
+            .unwrap();
         assert_eq!(deleted, 2);
         assert_eq!(count_events(&state.async_database).await, 3);
     }
@@ -373,7 +403,9 @@ mod tests {
         insert_task(&state.async_database, "t-run", "running").await;
         insert_event(&state.async_database, "t-run", "e3", "2020-01-01T00:00:00").await;
 
-        let count = count_pending_cleanup(&state.async_database, 1).await.unwrap();
+        let count = count_pending_cleanup(&state.async_database, 1)
+            .await
+            .unwrap();
         assert_eq!(count, 2);
     }
 
@@ -400,7 +432,8 @@ mod tests {
     async fn archive_events_writes_jsonl_and_deletes() {
         let mut ts = TestState::new();
         let state = ts.build();
-        let archive_dir = std::env::temp_dir().join(format!("archive-test-{}", uuid::Uuid::new_v4()));
+        let archive_dir =
+            std::env::temp_dir().join(format!("archive-test-{}", uuid::Uuid::new_v4()));
 
         insert_task(&state.async_database, "t-arch", "cancelled").await;
         insert_event(&state.async_database, "t-arch", "e1", "2020-06-15T10:00:00").await;

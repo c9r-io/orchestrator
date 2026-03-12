@@ -49,8 +49,7 @@ async fn task_create_start_complete() {
         let state = harness.state().clone();
         let tid = task_id.clone();
         tokio::spawn(async move {
-            let _ =
-                agent_orchestrator::service::task::start_task_blocking(state, &tid).await;
+            let _ = agent_orchestrator::service::task::start_task_blocking(state, &tid).await;
         });
 
         // Poll until completed or failed
@@ -73,7 +72,10 @@ async fn task_create_start_complete() {
             }
         }
 
-        assert_eq!(final_status, "completed", "task should complete successfully");
+        assert_eq!(
+            final_status, "completed",
+            "task should complete successfully"
+        );
     })
     .await
     .expect("test timed out");
