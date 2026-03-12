@@ -193,9 +193,8 @@ spec:
   command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
   env:
     - fromRef: claude-opus
-    - fromRef: minimax
 ---
-# Coder agent — code generation, fixing, and test alignment (model via env: claude-sonnet or minimax)
+# Coder agent — code generation, fixing, and test alignment (model via env: claude-opus or claude-sonnet)
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
@@ -208,8 +207,8 @@ spec:
     - align_tests
   command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
   env:
-    - fromRef: claude-sonnet
-    - fromRef: minimax
+    - fromRef: claude-opus
+    # - fromRef: claude-sonnet
 ---
 # Tester agent — QA scenario execution (model via env: claude-sonnet or minimax)
 apiVersion: orchestrator.dev/v2
@@ -222,7 +221,7 @@ spec:
     - qa_testing
   command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
   env:
-    - fromRef: claude-sonnet
+    # - fromRef: claude-sonnet
     - fromRef: minimax
 ---
 # Reviewer agent — doc audit and code review (model via env: claude-haiku or minimax)
@@ -238,7 +237,7 @@ spec:
     - loop_guard
   command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
   env:
-    - fromRef: claude-haiku
+    # - fromRef: claude-haiku
     - fromRef: minimax
 ---
 apiVersion: orchestrator.dev/v2

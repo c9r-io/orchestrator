@@ -156,7 +156,6 @@ spec:
   command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
   env:
     - fromRef: claude-opus
-    - fromRef: minimax
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -170,8 +169,8 @@ spec:
     - align_tests
   command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
   env:
-    - fromRef: claude-sonnet
-    - fromRef: minimax
+    - fromRef: claude-opus
+    # - fromRef: claude-sonnet
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -183,7 +182,6 @@ spec:
     - loop_guard
   command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
   env:
-    - fromRef: claude-haiku
     - fromRef: minimax
 ---
 # ── Workflow ────────────────────────────────────────────────────────────
