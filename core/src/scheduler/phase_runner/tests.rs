@@ -334,6 +334,7 @@ mod cases {
         );
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn detect_sandbox_violation_detects_cpu_signal() {
         let dir = tempfile::tempdir().expect("create tempdir");

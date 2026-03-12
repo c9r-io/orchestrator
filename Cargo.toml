@@ -6,3 +6,6 @@ members = [
     "crates/daemon",
     "crates/cli",
 ]
+
+[workspace.dependencies]
+libc = "0.2"

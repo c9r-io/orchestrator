@@ -21,7 +21,9 @@ tonic = { version = "0.14", features = ["tls-native-roots", "tls-ring"] }
 tokio-stream = "0.1"
 tower = "0.5"
 hyper-util = "0.1"
-libc = "0.2"
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.10"

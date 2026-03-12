@@ -32,7 +32,7 @@ pin-project-lite = "0.2"
 tower = "0.5"
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2"
+libc = { workspace = true }
 
 [features]
 dev-insecure = []
