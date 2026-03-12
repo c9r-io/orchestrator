@@ -323,6 +323,7 @@ mod tests {
                     agents: HashMap::from([(
                         "shared-agent".to_string(),
                         crate::config::AgentConfig {
+                            enabled: true,
                             capabilities: vec!["implement".to_string()],
                             command: "echo hi".to_string(),
                             ..Default::default()

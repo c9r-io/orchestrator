@@ -369,6 +369,11 @@ pub struct AgentSpec {
     /// Command to execute (must contain {prompt} placeholder)
     pub command: String,
 
+    /// Whether this agent is enabled for scheduling (default: true).
+    /// Disabled agents are skipped during task dispatch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+
     /// Agent capabilities (e.g., plan, implement, qa_testing)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<Vec<String>>,

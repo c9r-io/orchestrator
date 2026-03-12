@@ -49,6 +49,7 @@ pub async fn execute_guard_step(
         let active = crate::config_load::read_active_config(state)?;
         let health_map = state.agent_health.read().await;
         let metrics_map = state.agent_metrics.read().await;
+        let lifecycle_map = state.agent_lifecycle.read().await;
         let agents = crate::selection::resolve_effective_agents(
             &task_ctx.project_id,
             &active.config,
@@ -61,6 +62,7 @@ pub async fn execute_guard_step(
                 &health_map,
                 &metrics_map,
                 &HashSet::new(),
+                &lifecycle_map,
             )?
         } else {
             select_agent_by_preference(agents)?

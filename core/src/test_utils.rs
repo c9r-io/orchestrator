@@ -54,6 +54,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                         agents.insert(
                             "echo".to_string(),
                             AgentConfig {
+                                enabled: true,
                                 metadata: AgentMetadata {
                                     name: "echo".to_string(),
                                     description: Some("Echo agent for testing".to_string()),
@@ -291,6 +292,7 @@ impl TestState {
             running: Mutex::new(HashMap::new()),
             agent_health: tokio::sync::RwLock::new(HashMap::new()),
             agent_metrics: tokio::sync::RwLock::new(HashMap::new()),
+            agent_lifecycle: tokio::sync::RwLock::new(HashMap::new()),
             message_bus: Arc::new(MessageBus::new()),
             // FR-016 sync exception: test constructor for the event-sink boundary.
             event_sink: std::sync::RwLock::new(Arc::new(NoopSink)),

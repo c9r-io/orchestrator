@@ -1,6 +1,8 @@
 use crate::config::{AgentConfig, PromptDelivery};
 use crate::health::is_capability_healthy;
-use crate::metrics::{calculate_agent_score, AgentHealthState, AgentMetrics, SelectionRequirement};
+use crate::metrics::{
+    calculate_agent_score, AgentHealthState, AgentMetrics, AgentRuntimeState, SelectionRequirement,
+};
 use anyhow::{anyhow, Result};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
@@ -11,11 +13,22 @@ pub fn select_agent_advanced(
     health_map: &HashMap<String, AgentHealthState>,
     metrics_map: &HashMap<String, AgentMetrics>,
     excluded_agents: &HashSet<String>,
+    lifecycle_map: &HashMap<String, AgentRuntimeState>,
 ) -> Result<(String, String, PromptDelivery)> {
     let candidates: Vec<_> = agents
         .iter()
         .filter(|(id, cfg)| {
             if excluded_agents.contains(*id) {
+                return false;
+            }
+            if !cfg.enabled {
+                return false;
+            }
+            if !lifecycle_map
+                .get(*id)
+                .map(|s| s.lifecycle.is_schedulable())
+                .unwrap_or(true)
+            {
                 return false;
             }
             if !cfg.supports_capability(capability) {
@@ -90,6 +103,9 @@ pub fn select_agent_by_preference(
     }
 
     for (id, cfg) in agents {
+        if !cfg.enabled {
+            continue;
+        }
         if cfg.capabilities.is_empty() || cfg.metadata.name == "default_agent" {
             let command = if cfg.command.is_empty() {
                 "echo default".to_string()
@@ -171,7 +187,7 @@ mod tests {
         let metrics_map = HashMap::new();
         let excluded = HashSet::new();
 
-        let result = select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded);
+        let result = select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded, &HashMap::new());
         assert!(result.is_ok());
         let (agent_id, template, _) = result.expect("qa agent should be selected");
         assert_eq!(agent_id, "agent1");
@@ -188,7 +204,7 @@ mod tests {
         let metrics_map = HashMap::new();
         let excluded = HashSet::new();
 
-        let result = select_agent_advanced("fix", &agents, &health_map, &metrics_map, &excluded);
+        let result = select_agent_advanced("fix", &agents, &health_map, &metrics_map, &excluded, &HashMap::new());
         assert!(result.is_err());
         assert!(result
             .expect_err("operation should fail")
@@ -209,7 +225,7 @@ mod tests {
         let mut excluded = HashSet::new();
         excluded.insert("agent1".to_string());
 
-        let result = select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded);
+        let result = select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded, &HashMap::new());
         assert!(result.is_ok());
         let (agent_id, _, _) = result.expect("remaining agent should be selected");
         assert_eq!(agent_id, "agent2");
@@ -287,7 +303,7 @@ mod tests {
 
         for _ in 0..20 {
             let (agent_id, _, _) =
-                select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded)
+                select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded, &HashMap::new())
                     .expect("should select an agent");
             assert_ne!(
                 agent_id, "worst",
@@ -333,7 +349,7 @@ mod tests {
 
         for _ in 0..20 {
             let (agent_id, _, _) =
-                select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded)
+                select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded, &HashMap::new())
                     .expect("should select an agent");
             assert_ne!(
                 agent_id, "bad",
@@ -368,7 +384,7 @@ mod tests {
 
         for _ in 0..20 {
             let (agent_id, _, _) =
-                select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded)
+                select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded, &HashMap::new())
                     .expect("should select an agent");
             assert_ne!(
                 agent_id, "sick",
@@ -391,7 +407,7 @@ mod tests {
         excluded.insert(id_a);
         excluded.insert(id_b);
 
-        let result = select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded);
+        let result = select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded, &HashMap::new());
         assert!(result.is_err());
         assert!(result
             .expect_err("should fail when all excluded")
@@ -411,7 +427,7 @@ mod tests {
 
         for _ in 0..10 {
             let (agent_id, command, _) =
-                select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded)
+                select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded, &HashMap::new())
                     .expect("should select the only agent");
             assert_eq!(agent_id, "solo_agent");
             assert_eq!(command, "echo solo_agent");
@@ -459,7 +475,7 @@ mod tests {
 
         for _ in 0..10 {
             let (agent_id, _, _) =
-                select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded)
+                select_agent_advanced("qa", &agents, &health_map, &metrics_map, &excluded, &HashMap::new())
                     .expect("healthy agent should be selected");
             assert_eq!(
                 agent_id, "ok_agent",

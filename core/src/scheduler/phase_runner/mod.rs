@@ -341,7 +341,8 @@ pub async fn run_phase_with_rotation(
         if let Some(cap) = effective_capability {
             let health_map = state.agent_health.read().await;
             let metrics_map = state.agent_metrics.read().await;
-            select_agent_advanced(cap, &agents, &health_map, &metrics_map, &HashSet::new())?
+            let lifecycle_map = state.agent_lifecycle.read().await;
+            select_agent_advanced(cap, &agents, &health_map, &metrics_map, &HashSet::new(), &lifecycle_map)?
         } else {
             select_agent_by_preference(&agents)?
         }
@@ -354,6 +355,8 @@ pub async fn run_phase_with_rotation(
             .or_insert_with(MetricsCollector::new_agent_metrics);
         MetricsCollector::increment_load(metrics);
     }
+
+    crate::agent_lifecycle::increment_in_flight(state, &agent_id).await;
 
     run_phase_with_selected_agent(
         state,

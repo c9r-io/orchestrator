@@ -54,6 +54,12 @@ service OrchestratorService {
   rpc SecretKeyRevoke(SecretKeyRevokeRequest)   returns (SecretKeyRevokeResponse);
   rpc SecretKeyHistory(SecretKeyHistoryRequest) returns (SecretKeyHistoryResponse);
 
+  // Agent lifecycle (drain/cordon)
+  rpc AgentList(AgentListRequest)               returns (AgentListResponse);
+  rpc AgentCordon(AgentCordonRequest)           returns (AgentCordonResponse);
+  rpc AgentUncordon(AgentUncordonRequest)       returns (AgentUncordonResponse);
+  rpc AgentDrain(AgentDrainRequest)             returns (AgentDrainResponse);
+
 }
 
 // ─── Task messages ────────────────────────────────────────────
@@ -164,6 +170,7 @@ message TaskInfoResponse {
   repeated CommandRun runs = 3;
   repeated Event events = 4;
   repeated TaskGraphDebugBundle graph_debug = 5;
+  repeated AgentStatus agent_states = 6;
 }
 
 message TaskGraphDebugBundle {
@@ -594,4 +601,52 @@ message SecretKeyHistoryRequest {
 
 message SecretKeyHistoryResponse {
   repeated SecretKeyAuditEvent events = 1;
+}
+
+// ─── Agent Lifecycle (Drain / Cordon) ────────────────────────
+
+message AgentStatus {
+  string name = 1;
+  bool enabled = 2;
+  string lifecycle_state = 3;
+  int32 in_flight_items = 4;
+  repeated string capabilities = 5;
+  optional string drain_requested_at = 6;
+}
+
+message AgentListRequest {
+  optional string project_id = 1;
+}
+
+message AgentListResponse {
+  repeated AgentStatus agents = 1;
+}
+
+message AgentCordonRequest {
+  string agent_name = 1;
+  optional string project_id = 2;
+}
+
+message AgentCordonResponse {
+  string message = 1;
+}
+
+message AgentUncordonRequest {
+  string agent_name = 1;
+  optional string project_id = 2;
+}
+
+message AgentUncordonResponse {
+  string message = 1;
+}
+
+message AgentDrainRequest {
+  string agent_name = 1;
+  optional string project_id = 2;
+  optional uint64 timeout_secs = 3;
+}
+
+message AgentDrainResponse {
+  string message = 1;
+  string lifecycle_state = 2;
 }

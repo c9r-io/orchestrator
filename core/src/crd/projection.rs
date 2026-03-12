@@ -272,6 +272,7 @@ mod tests {
     #[test]
     fn agent_config_round_trip() {
         let config = AgentConfig {
+            enabled: true,
             command: "echo {prompt}".to_string(),
             capabilities: vec!["plan".to_string()],
             ..Default::default()

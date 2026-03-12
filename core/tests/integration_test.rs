@@ -32,6 +32,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                 agents: [(
                     "echo".to_string(),
                     AgentConfig {
+                        enabled: true,
                         metadata: AgentMetadata::default(),
                         capabilities: vec!["qa".to_string()],
                         command: "echo test".to_string(),
@@ -565,6 +566,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
 
     fn make_agent(capabilities: &[&str], _templates: &[(&str, &str)]) -> AgentConfig {
         AgentConfig {
+            enabled: true,
             metadata: AgentMetadata::default(),
             capabilities: capabilities.iter().map(|s| s.to_string()).collect(),
             command: "echo test".to_string(),

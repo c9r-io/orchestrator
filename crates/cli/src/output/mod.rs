@@ -81,6 +81,7 @@ mod tests {
                 created_at: "2026-03-10T00:03:00Z".into(),
             }],
             graph_debug: vec![],
+            agent_states: vec![],
         };
 
         let task = resp.task.as_ref().expect("task");

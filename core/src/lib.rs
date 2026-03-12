@@ -3,6 +3,7 @@
     deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)
 )]
 
+pub mod agent_lifecycle;
 pub mod anomaly;
 pub mod async_database;
 pub mod cli_types;

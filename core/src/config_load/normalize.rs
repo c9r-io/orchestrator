@@ -1027,6 +1027,7 @@ mod tests {
             .insert(
                 "norm-ag".to_string(),
                 crate::config::AgentConfig {
+                    enabled: true,
                     command: "echo test".to_string(),
                     ..Default::default()
                 },
@@ -1096,6 +1097,7 @@ mod tests {
             .insert(
                 "idem-ag".to_string(),
                 crate::config::AgentConfig {
+                    enabled: true,
                     command: "echo test".to_string(),
                     ..Default::default()
                 },

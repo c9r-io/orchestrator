@@ -123,6 +123,7 @@ pub(crate) mod tests {
         agents.insert(
             "test-agent".to_string(),
             AgentConfig {
+                enabled: true,
                 capabilities: vec![capability.to_string()],
                 command: "echo test".to_string(),
                 ..AgentConfig::default()

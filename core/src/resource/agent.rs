@@ -109,6 +109,7 @@ pub(crate) fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
             version: None,
             cost: spec.metadata.as_ref().and_then(|m| m.cost),
         },
+        enabled: spec.enabled.unwrap_or(true),
         capabilities,
         command: spec.command.clone(),
         selection: spec
@@ -127,6 +128,7 @@ pub(crate) fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
 pub(crate) fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
     AgentSpec {
         command: config.command.clone(),
+        enabled: if config.enabled { None } else { Some(false) },
         capabilities: if config.capabilities.is_empty() {
             None
         } else {
@@ -184,6 +186,7 @@ mod tests {
         let agent = AgentResource {
             metadata: super::super::metadata_with_name("ag-empty-cmd"),
             spec: AgentSpec {
+                enabled: None,
                 command: "  ".to_string(),
                 capabilities: None,
                 metadata: None,
@@ -201,6 +204,7 @@ mod tests {
         let agent = AgentResource {
             metadata: super::super::metadata_with_name("ag-valid"),
             spec: AgentSpec {
+                enabled: None,
                 command: "glmcode -p \"{prompt}\"".to_string(),
                 capabilities: Some(vec!["plan".to_string()]),
                 metadata: None,
@@ -218,6 +222,7 @@ mod tests {
         config.ensure_project(None).agents.insert(
             "bare-ag".to_string(),
             AgentConfig {
+                enabled: true,
                 metadata: AgentMetadata::default(),
                 capabilities: vec!["qa".to_string()],
                 command: "glmcode -p \"{prompt}\"".to_string(),
@@ -266,6 +271,7 @@ mod tests {
                 annotations: None,
             },
             spec: AgentSpec {
+                enabled: None,
                 command: "glmcode -p \"{prompt}\" --verbose".to_string(),
                 capabilities: Some(vec!["plan".to_string(), "implement".to_string()]),
                 metadata: None,
@@ -283,6 +289,7 @@ mod tests {
     #[test]
     fn agent_spec_config_roundtrip() {
         let spec = AgentSpec {
+            enabled: None,
             command: "glmcode -p \"{prompt}\" --verbose".to_string(),
             capabilities: Some(vec!["plan".to_string(), "implement".to_string()]),
             metadata: Some(AgentMetadataSpec {
@@ -313,6 +320,7 @@ mod tests {
     #[test]
     fn agent_config_to_spec_empty_capabilities_becomes_none() {
         let config = AgentConfig {
+            enabled: true,
             metadata: AgentMetadata::default(),
             capabilities: vec![],
             command: "echo".to_string(),
@@ -327,6 +335,7 @@ mod tests {
     #[test]
     fn agent_config_to_spec_no_metadata_becomes_none() {
         let config = AgentConfig {
+            enabled: true,
             metadata: AgentMetadata {
                 name: String::new(),
                 description: None,
@@ -356,6 +365,7 @@ mod tests {
                 annotations: None,
             },
             spec: ResourceSpec::Agent(Box::new(AgentSpec {
+                enabled: None,
                 command: "glmcode -p \"{prompt}\"".to_string(),
                 capabilities: Some(vec!["qa".to_string()]),
                 metadata: None,

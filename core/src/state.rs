@@ -2,7 +2,7 @@ use crate::collab::MessageBus;
 use crate::config::ActiveConfig;
 use crate::config_load::ConfigSelfHealReport;
 use crate::events::{EventSink, TracingEventSink};
-use crate::metrics::{AgentHealthState, AgentMetrics};
+use crate::metrics::{AgentHealthState, AgentMetrics, AgentRuntimeState};
 use crate::runtime::DaemonRuntimeState;
 use arc_swap::ArcSwap;
 use serde_json::Value;
@@ -57,6 +57,7 @@ pub struct InnerState {
     pub running: Mutex<HashMap<String, RunningTask>>,
     pub agent_health: tokio::sync::RwLock<HashMap<String, AgentHealthState>>,
     pub agent_metrics: tokio::sync::RwLock<HashMap<String, AgentMetrics>>,
+    pub agent_lifecycle: tokio::sync::RwLock<HashMap<String, AgentRuntimeState>>,
     pub message_bus: Arc<MessageBus>,
     // FR-016 sync exception: event emission must remain callable from sync and async
     // paths without making the EventSink interface async. This lock is an

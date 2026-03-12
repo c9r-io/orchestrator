@@ -208,6 +208,7 @@ mod tests {
         agents.insert(
             "agent1".into(),
             AgentConfig {
+                enabled: true,
                 metadata: AgentMetadata::default(),
                 capabilities: vec!["plan".into(), "implement".into()],
                 command: "echo test".to_string(),

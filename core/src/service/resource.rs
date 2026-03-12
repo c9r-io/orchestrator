@@ -1136,6 +1136,7 @@ mod tests {
             agents: HashMap::from([(
                 "agent".to_string(),
                 crate::config::AgentConfig {
+                    enabled: true,
                     metadata: crate::config::AgentMetadata {
                         name: "agent".to_string(),
                         description: None,

@@ -692,6 +692,7 @@ mod tests {
             running: tokio::sync::Mutex::new(std::collections::HashMap::new()),
             agent_health: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             agent_metrics: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            agent_lifecycle: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             message_bus: base.message_bus.clone(),
             // FR-016 sync exception: runtime clone of the event-sink boundary.
             event_sink: std::sync::RwLock::new(crate::state::clone_event_sink(base)),

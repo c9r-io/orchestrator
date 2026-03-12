@@ -70,6 +70,58 @@ pub struct AgentHealthState {
     pub capability_health: HashMap<String, CapabilityHealth>,
 }
 
+/// Agent lifecycle state for drain/cordon operations.
+/// Runtime-only — not persisted to config. On daemon restart, all agents start as `Active`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentLifecycleState {
+    /// Agent is active and accepting new work.
+    #[default]
+    Active,
+    /// Agent is cordoned (no new work), but not draining existing work.
+    Cordoned,
+    /// Agent is draining — no new work, waiting for in-flight items to complete.
+    Draining,
+    /// Agent has completed all in-flight work and is fully quiesced.
+    Drained,
+}
+
+impl AgentLifecycleState {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Active => "Active",
+            Self::Cordoned => "Cordoned",
+            Self::Draining => "Draining",
+            Self::Drained => "Drained",
+        }
+    }
+
+    /// Returns true if the agent should accept new work.
+    pub fn is_schedulable(&self) -> bool {
+        matches!(self, Self::Active)
+    }
+}
+
+/// Runtime state for agent lifecycle tracking (drain/cordon).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRuntimeState {
+    pub lifecycle: AgentLifecycleState,
+    pub drain_requested_at: Option<DateTime<Utc>>,
+    pub drain_timeout_secs: Option<u64>,
+    pub in_flight_items: u32,
+}
+
+impl Default for AgentRuntimeState {
+    fn default() -> Self {
+        Self {
+            lifecycle: AgentLifecycleState::Active,
+            drain_requested_at: None,
+            drain_timeout_secs: None,
+            in_flight_items: 0,
+        }
+    }
+}
+
 /// Selection strategy for agent choosing
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]

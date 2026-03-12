@@ -222,6 +222,42 @@ pub(crate) async fn task_info(
         .await
         .map_err(map_core_error)?;
 
+    // Collect agent lifecycle states for observability
+    let agent_states = {
+        use agent_orchestrator::config_load::read_active_config;
+        use agent_orchestrator::selection::resolve_effective_agents;
+
+        let project_id = &detail.task.project_id;
+        let pid = if project_id.is_empty() {
+            ""
+        } else {
+            project_id.as_str()
+        };
+        let mut statuses = Vec::new();
+        if let Ok(active) = read_active_config(&server.state) {
+            let agents = resolve_effective_agents(pid, &active.config, None);
+            let lifecycle_map = server.state.agent_lifecycle.read().await;
+            for (id, cfg) in agents.iter() {
+                let runtime: agent_orchestrator::metrics::AgentRuntimeState = lifecycle_map
+                    .get(id.as_str())
+                    .cloned()
+                    .unwrap_or_default();
+                statuses.push(AgentStatus {
+                    name: id.clone(),
+                    enabled: cfg.enabled,
+                    lifecycle_state: runtime.lifecycle.as_str().to_string(),
+                    in_flight_items: runtime.in_flight_items as i32,
+                    capabilities: cfg.capabilities.clone(),
+                    drain_requested_at: runtime
+                        .drain_requested_at
+                        .map(|dt| dt.to_rfc3339()),
+                });
+            }
+            statuses.sort_by(|a, b| a.name.cmp(&b.name));
+        }
+        statuses
+    };
+
     Ok(Response::new(TaskInfoResponse {
         task: Some(summary_to_proto(detail.task)),
         items: detail.items.into_iter().map(item_to_proto).collect(),
@@ -232,6 +268,7 @@ pub(crate) async fn task_info(
             .into_iter()
             .map(graph_debug_to_proto)
             .collect(),
+        agent_states,
     }))
 }
 

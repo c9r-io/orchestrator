@@ -1,3 +1,4 @@
+mod agent;
 mod common;
 mod db;
 mod manifest;
@@ -26,6 +27,7 @@ pub async fn dispatch(
     };
 
     match command {
+        Commands::Agent(cmd) => agent::dispatch(client, cmd).await,
         Commands::Task(cmd) => task::dispatch(client, cmd).await,
         Commands::Store(cmd) => store::dispatch(client, cmd).await,
         Commands::Secret(cmd) => secret::dispatch(client, cmd).await,

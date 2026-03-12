@@ -39,6 +39,10 @@ pub struct AgentMetadata {
 pub struct AgentConfig {
     #[serde(default)]
     pub metadata: AgentMetadata,
+    /// Whether this agent is enabled for scheduling.
+    /// Disabled agents are skipped during task dispatch.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
     #[serde(default)]
     pub capabilities: Vec<String>,
     /// Command to execute (must contain {prompt} placeholder)
@@ -55,10 +59,15 @@ pub struct AgentConfig {
     pub prompt_delivery: PromptDelivery,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 impl AgentConfig {
     pub fn new() -> Self {
         Self {
             metadata: AgentMetadata::default(),
+            enabled: true,
             capabilities: Vec::new(),
             command: String::new(),
             selection: AgentSelectionConfig::default(),

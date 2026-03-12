@@ -34,6 +34,7 @@ mod cases {
                 annotations: None,
             },
             spec: ResourceSpec::Agent(Box::new(AgentSpec {
+                enabled: None,
                 command: "echo {prompt}".to_string(),
                 capabilities: None,
                 metadata: None,

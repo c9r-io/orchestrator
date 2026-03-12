@@ -95,6 +95,7 @@ mod tests {
             .with_agent(
                 "planner",
                 AgentConfig {
+                    enabled: true,
                     metadata: AgentMetadata {
                         name: "planner".to_string(),
                         description: Some("plan propagation test agent".to_string()),
@@ -424,6 +425,7 @@ mod tests {
             .with_agent(
                 "planner",
                 AgentConfig {
+                    enabled: true,
                     metadata: AgentMetadata {
                         name: "planner".to_string(),
                         description: Some("smoke chain propagation test agent".to_string()),
@@ -661,6 +663,7 @@ mod tests {
             .with_agent(
                 "planner",
                 AgentConfig {
+                    enabled: true,
                     metadata: AgentMetadata {
                         name: "planner".to_string(),
                         description: Some("large plan spill test".to_string()),
@@ -1406,6 +1409,7 @@ mod tests {
             running: tokio::sync::Mutex::new(HashMap::new()),
             agent_health: tokio::sync::RwLock::new(HashMap::new()),
             agent_metrics: tokio::sync::RwLock::new(HashMap::new()),
+            agent_lifecycle: tokio::sync::RwLock::new(HashMap::new()),
             message_bus: Arc::new(MessageBus::new()),
             event_sink: RwLock::new(Arc::new(NoopSink)),
             db_writer: Arc::new(crate::db_write::DbWriteCoordinator::new(

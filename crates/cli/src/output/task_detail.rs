@@ -70,6 +70,23 @@ pub(super) fn print(resp: &TaskInfoResponse, format: OutputFormat) {
             } else {
                 println!("  Graph: none");
             }
+            if !resp.agent_states.is_empty() {
+                println!("  Agents:");
+                println!(
+                    "    {:<20} {:<8} {:<10} {:<10} {}",
+                    "NAME", "ENABLED", "STATE", "IN-FLIGHT", "CAPABILITIES"
+                );
+                for a in &resp.agent_states {
+                    println!(
+                        "    {:<20} {:<8} {:<10} {:<10} {}",
+                        a.name,
+                        a.enabled,
+                        a.lifecycle_state,
+                        a.in_flight_items,
+                        a.capabilities.join(", ")
+                    );
+                }
+            }
         }
     }
 }

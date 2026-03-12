@@ -12,8 +12,9 @@ use anyhow::{Context, Result};
 use clap::Parser;
 
 pub use cli::{
-    Cli, Commands, DbCommands, DbMigrationCommands, DebugCommands, ManifestCommands, OutputFormat,
-    SandboxProbeCommands, SecretCommands, SecretKeyCommands, StoreCommands, TaskCommands,
+    AgentCommands, Cli, Commands, DbCommands, DbMigrationCommands, DebugCommands,
+    ManifestCommands, OutputFormat, SandboxProbeCommands, SecretCommands, SecretKeyCommands,
+    StoreCommands, TaskCommands,
 };
 
 fn main() -> Result<()> {

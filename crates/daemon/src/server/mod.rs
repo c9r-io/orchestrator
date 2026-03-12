@@ -1,3 +1,4 @@
+mod agent;
 mod mapping;
 mod resource;
 mod secret;
@@ -320,6 +321,34 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<SecretKeyHistoryRequest>,
     ) -> Result<Response<SecretKeyHistoryResponse>, Status> {
         secret::secret_key_history(self, request).await
+    }
+
+    async fn agent_list(
+        &self,
+        request: Request<AgentListRequest>,
+    ) -> Result<Response<AgentListResponse>, Status> {
+        agent::agent_list(self, request).await
+    }
+
+    async fn agent_cordon(
+        &self,
+        request: Request<AgentCordonRequest>,
+    ) -> Result<Response<AgentCordonResponse>, Status> {
+        agent::agent_cordon(self, request).await
+    }
+
+    async fn agent_uncordon(
+        &self,
+        request: Request<AgentUncordonRequest>,
+    ) -> Result<Response<AgentUncordonResponse>, Status> {
+        agent::agent_uncordon(self, request).await
+    }
+
+    async fn agent_drain(
+        &self,
+        request: Request<AgentDrainRequest>,
+    ) -> Result<Response<AgentDrainResponse>, Status> {
+        agent::agent_drain(self, request).await
     }
 }
 

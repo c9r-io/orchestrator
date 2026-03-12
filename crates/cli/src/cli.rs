@@ -138,6 +138,10 @@ pub enum Commands {
     #[command(subcommand)]
     Manifest(ManifestCommands),
 
+    /// Agent lifecycle operations (cordon, drain, uncordon)
+    #[command(alias = "ag", subcommand)]
+    Agent(AgentCommands),
+
     /// Show version
     Version {
         #[arg(long)]
@@ -489,6 +493,47 @@ pub enum SecretKeyCommands {
         key_id: Option<String>,
         #[arg(short, long, default_value = "table")]
         output: OutputFormat,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum AgentCommands {
+    /// List agents and their lifecycle state
+    #[command(alias = "ls")]
+    List {
+        #[arg(short, long)]
+        project: Option<String>,
+
+        #[arg(short, long, default_value = "table")]
+        output: OutputFormat,
+    },
+
+    /// Mark an agent as unschedulable (no new work dispatched)
+    Cordon {
+        agent_name: String,
+
+        #[arg(short, long)]
+        project: Option<String>,
+    },
+
+    /// Mark a cordoned agent as schedulable again
+    Uncordon {
+        agent_name: String,
+
+        #[arg(short, long)]
+        project: Option<String>,
+    },
+
+    /// Drain an agent: cordon + wait for in-flight work to complete
+    Drain {
+        agent_name: String,
+
+        #[arg(short, long)]
+        project: Option<String>,
+
+        /// Timeout in seconds; force-drain after this duration
+        #[arg(long)]
+        timeout: Option<u64>,
     },
 }
 

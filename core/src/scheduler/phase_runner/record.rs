@@ -166,6 +166,8 @@ pub(super) async fn record_phase_results(
         MetricsCollector::decrement_load(metrics);
     }
 
+    crate::agent_lifecycle::decrement_in_flight_and_check(state, agent_id).await;
+
     if !validated.success {
         let errors = increment_consecutive_errors(state, agent_id).await;
         if errors >= 2 {

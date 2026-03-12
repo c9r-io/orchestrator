@@ -1,5 +1,5 @@
 use orchestrator_proto::{
-    CommandRun, Event, TaskGraphDebugBundle, TaskInfoResponse, TaskItem, TaskSummary,
+    AgentStatus, CommandRun, Event, TaskGraphDebugBundle, TaskInfoResponse, TaskItem, TaskSummary,
 };
 use serde_json::{json, Value};
 
@@ -13,6 +13,11 @@ pub(super) fn task_detail_value(task: &TaskSummary, resp: &TaskInfoResponse) -> 
             .graph_debug
             .iter()
             .map(task_graph_debug_value)
+            .collect::<Vec<_>>(),
+        "agent_states": resp
+            .agent_states
+            .iter()
+            .map(agent_status_value)
             .collect::<Vec<_>>(),
     })
 }
@@ -81,6 +86,17 @@ pub(super) fn event_value(event: &Event) -> Value {
         "event_type": event.event_type,
         "payload": payload,
         "created_at": event.created_at,
+    })
+}
+
+pub(super) fn agent_status_value(a: &AgentStatus) -> Value {
+    json!({
+        "name": a.name,
+        "enabled": a.enabled,
+        "lifecycle_state": a.lifecycle_state,
+        "in_flight_items": a.in_flight_items,
+        "capabilities": a.capabilities,
+        "drain_requested_at": a.drain_requested_at,
     })
 }
 

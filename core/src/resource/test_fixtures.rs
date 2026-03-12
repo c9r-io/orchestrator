@@ -47,6 +47,7 @@ pub fn agent_manifest(name: &str, command: &str) -> OrchestratorResource {
             annotations: None,
         },
         spec: ResourceSpec::Agent(Box::new(AgentSpec {
+            enabled: None,
             command: command.to_string(),
             capabilities: None,
             metadata: None,

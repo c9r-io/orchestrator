@@ -1663,6 +1663,7 @@ mod tests {
         project.agents.insert(
             "agent1".to_string(),
             AgentConfig {
+                enabled: true,
                 env: Some(vec![
                     AgentEnvEntry {
                         name: None,
@@ -1700,6 +1701,7 @@ mod tests {
             .insert(
                 "bad-agent".to_string(),
                 AgentConfig {
+                    enabled: true,
                     env: Some(vec![AgentEnvEntry {
                         name: None,
                         value: None,
@@ -1728,6 +1730,7 @@ mod tests {
             .insert(
                 "bad-agent".to_string(),
                 AgentConfig {
+                    enabled: true,
                     env: Some(vec![AgentEnvEntry {
                         name: Some("X".to_string()),
                         value: None,
@@ -1992,6 +1995,7 @@ mod tests {
         agents.insert(
             "planner".to_string(),
             crate::config::AgentConfig {
+                enabled: true,
                 capabilities: vec!["qa".to_string()],
                 command: "echo plan".to_string(),
                 ..crate::config::AgentConfig::default()
@@ -2020,6 +2024,7 @@ mod tests {
         agents.insert(
             "planner".to_string(),
             crate::config::AgentConfig {
+                enabled: true,
                 capabilities: vec!["adaptive_plan".to_string()],
                 command: "echo plan".to_string(),
                 ..crate::config::AgentConfig::default()
@@ -2098,6 +2103,7 @@ mod tests {
             ..AdaptivePlannerConfig::default()
         });
         let agent = crate::config::AgentConfig {
+            enabled: true,
             capabilities: vec!["qa".to_string()],
             command: "echo plan".to_string(),
             ..crate::config::AgentConfig::default()
@@ -2121,6 +2127,7 @@ mod tests {
             ..AdaptivePlannerConfig::default()
         });
         let agent = crate::config::AgentConfig {
+            enabled: true,
             capabilities: vec!["adaptive_plan".to_string()],
             command: "echo plan".to_string(),
             ..crate::config::AgentConfig::default()
@@ -2198,6 +2205,7 @@ mod tests {
     fn with_agents_accepts_agent_step_with_matching_agent() {
         let workflow = make_workflow(vec![make_step("qa", true)]);
         let agent = crate::config::AgentConfig {
+            enabled: true,
             capabilities: vec!["qa".to_string()],
             command: "echo qa".to_string(),
             ..crate::config::AgentConfig::default()
@@ -2249,6 +2257,7 @@ mod tests {
         workflow.loop_policy.mode = LoopMode::Infinite;
         workflow.loop_policy.guard.enabled = true;
         let agent = crate::config::AgentConfig {
+            enabled: true,
             capabilities: vec!["loop_guard".to_string()],
             command: "echo guard".to_string(),
             ..crate::config::AgentConfig::default()
@@ -2322,6 +2331,7 @@ mod tests {
         project.agents.insert(
             "agent1".to_string(),
             AgentConfig {
+                enabled: true,
                 env: Some(vec![
                     AgentEnvEntry {
                         name: None,
@@ -2361,6 +2371,7 @@ mod tests {
             .insert(
                 "agent1".to_string(),
                 AgentConfig {
+                    enabled: true,
                     env: Some(vec![AgentEnvEntry {
                         name: None,
                         value: None,
@@ -2391,6 +2402,7 @@ mod tests {
             .insert(
                 "agent1".to_string(),
                 AgentConfig {
+                    enabled: true,
                     env: Some(vec![AgentEnvEntry {
                         name: Some("X".to_string()),
                         value: None,

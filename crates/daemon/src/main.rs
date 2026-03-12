@@ -140,6 +140,25 @@ fn main() -> Result<()> {
         drop(restart_tx); // drop original sender so only workers hold it
         info!(workers = args.workers, "background workers started");
 
+        // Spawn agent drain timeout sweep (runs every 10s)
+        {
+            let drain_state = inner.clone();
+            let mut drain_shutdown = shutdown_rx.clone();
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+                loop {
+                    tokio::select! {
+                        _ = interval.tick() => {
+                            agent_orchestrator::agent_lifecycle::drain_timeout_sweep(&drain_state).await;
+                        }
+                        _ = drain_shutdown.changed() => {
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+
         let shutdown_notify = Arc::new(tokio::sync::Notify::new());
 
         let protection = Arc::new(protection::ControlPlaneProtection::load_or_bootstrap(

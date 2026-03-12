@@ -294,6 +294,7 @@ mod tests {
     fn project_map_for_agents() {
         let mut store = ResourceStore::default();
         let agent = AgentConfig {
+            enabled: true,
             command: "echo {prompt}".to_string(),
             capabilities: vec!["plan".to_string()],
             ..Default::default()
@@ -426,6 +427,7 @@ mod tests {
         let mut store = ResourceStore::default();
         // Valid agent
         let good = AgentConfig {
+            enabled: true,
             command: "echo ok".to_string(),
             ..Default::default()
         };
