@@ -103,7 +103,7 @@ impl TaskExecutionStep {
     ///
     /// This is the single consolidated entry point for dispatch decisions.
     ///
-    /// Unlike [`renormalize_execution_mode`] which mutates stored state,
+    /// Unlike `normalize_step_execution_mode` in `config::step`, which mutates stored state,
     /// this method is read-only and is always authoritative at dispatch time,
     /// even if renormalization hasn't run yet.
     pub fn effective_execution_mode(&self) -> std::borrow::Cow<'_, ExecutionMode> {

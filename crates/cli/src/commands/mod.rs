@@ -7,7 +7,9 @@ mod secret;
 mod store;
 mod task;
 
+/// Local debug command implementations.
 pub mod debug;
+/// Version-reporting commands that do not require daemon access.
 pub mod version;
 
 use anyhow::Result;
@@ -17,6 +19,7 @@ use tonic::transport::Channel;
 use crate::Commands;
 use common::format_to_string;
 
+/// Dispatch a parsed top-level command to the appropriate handler.
 pub async fn dispatch(
     client: &mut OrchestratorServiceClient<Channel>,
     command: Commands,

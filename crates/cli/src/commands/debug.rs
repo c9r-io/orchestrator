@@ -11,6 +11,7 @@ use crate::{DebugCommands, SandboxProbeCommands};
 const PROBE_PREFIX: &str = "SANDBOX_PROBE";
 const PAGE_SIZE: usize = 4096;
 
+/// Execute a local debug command without contacting the daemon.
 pub async fn run_local(command: DebugCommands) -> Result<()> {
     match command {
         DebugCommands::SandboxProbe { probe } => run_probe(probe),
@@ -21,6 +22,7 @@ pub async fn run_local(command: DebugCommands) -> Result<()> {
     }
 }
 
+/// Print a compact snapshot of daemon liveness and worker activity.
 pub fn print_daemon_status(
     ping: orchestrator_proto::PingResponse,
     status: orchestrator_proto::WorkerStatusResponse,

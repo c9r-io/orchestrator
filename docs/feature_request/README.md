@@ -14,7 +14,7 @@
 | FR-019 | 修复 libc 类型编译错误 | P0 | Proposed |
 | FR-020 | 自动化 protoc 依赖安装 | P0 | Proposed |
 | FR-021 | 审计并减少 expect() 调用 | P1 | Proposed |
-| FR-022 | 补充公共 API 文档注释 | P1 | Proposed |
+| FR-022 | 补充公共 API 文档注释 | P1 | In Progress |
 | FR-023 | 增加集成测试覆盖 | P2 | Proposed |
 | FR-024 | 审计 unsafe 块 | P2 | Proposed |
 

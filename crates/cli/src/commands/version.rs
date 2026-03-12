@@ -16,6 +16,7 @@ fn local_version_info() -> VersionInfo<'static> {
     }
 }
 
+/// Print build metadata in text or JSON form without opening a daemon session.
 pub async fn run(_control_plane_config: Option<&str>, json: bool) -> Result<()> {
     let version = local_version_info();
     if json {

@@ -6,10 +6,12 @@ use orchestrator_proto::{TaskInfoResponse, TaskSummary};
 
 use crate::OutputFormat;
 
+/// Render a list of task summaries in the requested output format.
 pub fn print_task_list(tasks: &[TaskSummary], format: OutputFormat) {
     task_list::print(tasks, format);
 }
 
+/// Render a task detail payload in the requested output format.
 pub fn print_task_detail(resp: &TaskInfoResponse, format: OutputFormat) {
     task_detail::print(resp, format);
 }

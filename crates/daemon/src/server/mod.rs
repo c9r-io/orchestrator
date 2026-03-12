@@ -25,6 +25,7 @@ pub struct OrchestratorServer {
 }
 
 impl OrchestratorServer {
+    /// Construct a gRPC server facade around shared daemon state.
     pub fn new(
         state: Arc<InnerState>,
         shutdown_notify: Arc<Notify>,

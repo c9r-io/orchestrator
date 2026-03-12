@@ -1,7 +1,11 @@
+//! Command-line client for the Agent Orchestrator daemon and control plane.
+//!
+//! This binary exposes task, resource, and debugging workflows over gRPC.
 #![cfg_attr(
     not(test),
     deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)
 )]
+#![warn(missing_docs)]
 
 mod cli;
 mod client;
@@ -11,6 +15,7 @@ mod output;
 use anyhow::{Context, Result};
 use clap::Parser;
 
+/// Re-exported CLI argument model for integration tests and helper modules.
 pub use cli::{
     AgentCommands, Cli, Commands, DbCommands, DbMigrationCommands, DebugCommands,
     ManifestCommands, OutputFormat, SandboxProbeCommands, SecretCommands, SecretKeyCommands,

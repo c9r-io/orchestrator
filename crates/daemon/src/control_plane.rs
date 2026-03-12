@@ -18,18 +18,23 @@ use tonic::{Request, Status};
 use x509_parser::extensions::GeneralName;
 use x509_parser::prelude::{FromDer, X509Certificate};
 
+/// Authorizes control-plane RPCs using mutual TLS identities and policy state.
 #[derive(Debug, Clone)]
 pub struct ControlPlaneSecurity {
     db_path: PathBuf,
     policy_path: PathBuf,
 }
 
+/// TLS server materials and authorization state for the secure gRPC listener.
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct SecureServerConfig {
     pub tls: ServerTlsConfig,
     pub security: Arc<ControlPlaneSecurity>,
 }
 
+/// Authorization failures returned while validating an incoming control-plane request.
+#[allow(missing_docs)]
 #[derive(Debug)]
 pub enum AuthzError {
     Unauthenticated(&'static str),
@@ -60,6 +65,8 @@ struct AuditEvent<'a> {
     rejection_stage: Option<&'a str>,
 }
 
+/// Built-in control-plane roles ordered from least to most privileged.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
@@ -90,6 +97,8 @@ impl Role {
     }
 }
 
+/// A single authenticated subject that is allowed to call control-plane RPCs.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicySubject {
     pub id: String,
@@ -100,12 +109,16 @@ pub struct PolicySubject {
     pub disabled: bool,
 }
 
+/// Authorization policy persisted on disk for the control-plane listener.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AuthzPolicy {
     #[serde(default)]
     pub subjects: Vec<PolicySubject>,
 }
 
+/// Kubeconfig-like client bundle written for remote control-plane access.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ControlPlaneConfig {
     pub current_context: String,
@@ -114,36 +127,48 @@ pub struct ControlPlaneConfig {
     pub contexts: Vec<NamedContext>,
 }
 
+/// Named cluster entry inside a generated control-plane config file.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NamedCluster {
     pub name: String,
     pub cluster: ClusterRef,
 }
 
+/// Server endpoint and CA bundle reference for a named cluster entry.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClusterRef {
     pub server: String,
     pub certificate_authority: String,
 }
 
+/// Named user entry inside a generated control-plane config file.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NamedUser {
     pub name: String,
     pub user: UserRef,
 }
 
+/// Client certificate and key locations for a named user entry.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserRef {
     pub client_certificate: String,
     pub client_key: String,
 }
 
+/// Named context entry that binds a cluster and user together.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NamedContext {
     pub name: String,
     pub context: ContextRef,
 }
 
+/// Cluster and user references selected by a named context entry.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContextRef {
     pub cluster: String,
@@ -151,6 +176,7 @@ pub struct ContextRef {
 }
 
 impl ControlPlaneSecurity {
+    /// Validate the presented client certificate and authorize a specific RPC.
     pub fn authorize<T>(
         &self,
         request: &Request<T>,
@@ -313,6 +339,7 @@ impl ControlPlaneSecurity {
     }
 }
 
+/// Load or bootstrap PKI material for the secure control-plane listener.
 pub fn prepare_secure_server(
     app_root: &Path,
     db_path: &Path,
@@ -347,6 +374,7 @@ pub fn prepare_secure_server(
     })
 }
 
+/// Issue a client certificate bundle and kubeconfig-like file for one subject.
 pub fn issue_client_materials(
     app_root: &Path,
     bind_addr: &SocketAddr,

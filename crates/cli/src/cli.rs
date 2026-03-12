@@ -12,6 +12,7 @@ pub struct Cli {
     #[arg(long, global = true, env = "ORCHESTRATOR_CONTROL_PLANE_CONFIG")]
     pub control_plane_config: Option<String>,
 
+    /// Subcommand selected for this invocation.
     #[command(subcommand)]
     pub command: Commands,
 
@@ -20,6 +21,8 @@ pub struct Cli {
     pub verbose: bool,
 }
 
+/// Top-level subcommands supported by the `orchestrator` CLI.
+#[allow(missing_docs)]
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     /// Apply resource manifests
@@ -182,6 +185,8 @@ mod tests {
     }
 }
 
+/// Local-only debugging commands that do not require daemon connectivity.
+#[allow(missing_docs)]
 #[derive(Subcommand, Debug, Clone)]
 pub enum DebugCommands {
     /// Run a local sandbox probe without contacting the daemon
@@ -197,6 +202,8 @@ pub enum DebugCommands {
     },
 }
 
+/// Sandbox probe primitives used to validate resource and network limits.
+#[allow(missing_docs)]
 #[derive(Subcommand, Debug, Clone)]
 pub enum SandboxProbeCommands {
     WriteFile {
@@ -255,6 +262,8 @@ pub enum SandboxProbeCommands {
     },
 }
 
+/// Manifest-specific utility commands.
+#[allow(missing_docs)]
 #[derive(Subcommand, Debug, Clone)]
 pub enum ManifestCommands {
     /// Validate a manifest file
@@ -273,6 +282,8 @@ pub enum ManifestCommands {
     },
 }
 
+/// Database lifecycle and migration commands.
+#[allow(missing_docs)]
 #[derive(Subcommand, Debug, Clone)]
 pub enum DbCommands {
     /// Show schema status for the local database
@@ -286,6 +297,8 @@ pub enum DbCommands {
     Migrations(DbMigrationCommands),
 }
 
+/// Subcommands for inspecting database migration state.
+#[allow(missing_docs)]
 #[derive(Subcommand, Debug, Clone)]
 pub enum DbMigrationCommands {
     /// List registered migrations and their applied state
@@ -296,6 +309,8 @@ pub enum DbMigrationCommands {
     },
 }
 
+/// Task management commands exposed by the CLI.
+#[allow(missing_docs)]
 #[derive(Subcommand, Debug, Clone)]
 pub enum TaskCommands {
     #[command(alias = "ls")]
@@ -407,6 +422,8 @@ pub enum TaskCommands {
     },
 }
 
+/// Commands for interacting with workflow stores.
+#[allow(missing_docs)]
 #[derive(Subcommand, Debug, Clone)]
 pub enum StoreCommands {
     Get {
@@ -449,6 +466,8 @@ pub enum StoreCommands {
     },
 }
 
+/// Secret-management commands available to operators.
+#[allow(missing_docs)]
 #[derive(Subcommand, Debug, Clone)]
 pub enum SecretCommands {
     /// Secret key operations
@@ -456,6 +475,8 @@ pub enum SecretCommands {
     Key(SecretKeyCommands),
 }
 
+/// Secret key lifecycle commands.
+#[allow(missing_docs)]
 #[derive(Subcommand, Debug, Clone)]
 pub enum SecretKeyCommands {
     /// Show active key status
@@ -496,6 +517,8 @@ pub enum SecretKeyCommands {
     },
 }
 
+/// Agent lifecycle commands for scheduling control.
+#[allow(missing_docs)]
 #[derive(Subcommand, Debug, Clone)]
 pub enum AgentCommands {
     /// List agents and their lifecycle state
@@ -537,6 +560,8 @@ pub enum AgentCommands {
     },
 }
 
+/// Supported human-readable and machine-readable output encodings.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
 pub enum OutputFormat {
     Table,

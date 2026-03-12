@@ -1,7 +1,11 @@
+//! Daemon entrypoint for the Agent Orchestrator control plane and worker loop.
+//!
+//! It hosts the gRPC API, background workers, and secure control-plane bootstrap.
 #![cfg_attr(
     not(test),
     deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)
 )]
+#![warn(missing_docs)]
 
 mod control_plane;
 mod lifecycle;

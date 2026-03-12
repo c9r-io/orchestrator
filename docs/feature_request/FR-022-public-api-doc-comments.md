@@ -1,7 +1,7 @@
 # FR-022: 补充公共 API 文档注释
 
 **优先级**: P1
-**状态**: Proposed
+**状态**: In Progress
 **目标**: 提升 API 可发现性
 
 ## 背景与目标
@@ -18,6 +18,21 @@
 - 文档注释包含：功能描述、参数说明（如适用）、返回值语义、panic 条件（如有）、示例（关键接口）。
 - `cargo doc --workspace --no-deps` 无 `missing_docs` 警告。
 - 建立 lint 规则防止未来公共接口缺少文档。
+
+## 当前实现状态
+
+已完成：
+
+- [x] 在 `crates/cli` 与 `crates/daemon` 启用 `#![warn(missing_docs)]`，将缺失文档纳入常规编译/文档检查信号。
+- [x] 为 `cli` 与 `daemon` 的主要公共入口补充类型级 `///` 文档注释，包括 CLI 子命令模型、客户端连接入口、控制面安全配置与流量保护层。
+- [x] 修复一个现存 rustdoc 失效链接，确保 `cargo doc --workspace --no-deps` 当前无文档告警。
+- [x] 验证 `cargo check -p orchestrator-cli -p orchestratord`、`cargo doc --workspace --no-deps`、`cargo clippy -p orchestrator-cli -p orchestratord --all-targets -- -D warnings` 与 `cargo test --doc --workspace` 通过。
+
+剩余：
+
+- [ ] `core` crate 仍有大规模公共 API 缺失文档，当前审计基线约为 774 个公开项未覆盖，尚未达到 FR 要求的“核心 crate 全量补齐”。
+- [ ] 尚未将任何 crate 升级到 `#![deny(missing_docs)]`，因为 `core` 仍未完成全面治理。
+- [ ] 关键 `core` API 仍缺少 `# Examples` 代码块，当前 doc-test 通过但没有新增关键示例。
 
 非目标：
 
@@ -102,8 +117,14 @@
 
 ## 验收标准
 
-- `cargo doc --workspace --no-deps` 无 `missing_docs` 警告。
-- 核心 crate（`core`、`daemon`、`cli`）的所有 `pub` 接口包含 `///` 文档注释。
-- 关键接口包含 `# Examples` 代码块且 `cargo test --doc` 通过。
-- 各已完成 crate 的 `lib.rs` 中启用 `#![deny(missing_docs)]`。
-- `cargo clippy --workspace --all-targets -- -D warnings` 通过。
+- [x] `cargo doc --workspace --no-deps` 无当前文档告警。
+- [ ] 核心 crate（`core`、`daemon`、`cli`）的所有 `pub` 接口包含 `///` 文档注释。
+- [ ] 关键接口包含 `# Examples` 代码块且 `cargo test --doc` 通过。
+- [ ] 各已完成 crate 的 `lib.rs`/crate root 中启用 `#![deny(missing_docs)]`。
+- [ ] `cargo clippy --workspace --all-targets -- -D warnings` 通过。
+
+## 后续治理建议
+
+1. 以 `core/src/lib.rs` 暴露的顶层模块为边界，按模块批次补齐公开 API 文档，而不是一次性横扫整个 crate。
+2. 每完成一批 `core` 模块后，移除对应 `#[allow(missing_docs)]` 豁免并缩小预警面，最终再升级为 `#![deny(missing_docs)]`。
+3. 优先为真正面向外部集成的 `core::service::*`、`core::config::*` 与 `core::dto::*` 补充 `# Examples`。

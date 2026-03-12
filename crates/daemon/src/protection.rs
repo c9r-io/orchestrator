@@ -17,6 +17,7 @@ use tower::{Layer, Service};
 
 use crate::control_plane;
 
+/// Enforces control-plane rate, concurrency, and stream budgets per RPC.
 #[derive(Debug, Clone)]
 pub struct ControlPlaneProtection {
     db_path: PathBuf,
@@ -24,6 +25,8 @@ pub struct ControlPlaneProtection {
     states: Arc<LimiterStates>,
 }
 
+/// Root configuration persisted for control-plane traffic protection.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProtectionConfig {
     #[serde(default)]
@@ -34,6 +37,8 @@ pub struct ProtectionConfig {
     pub overrides: HashMap<String, RpcProtectionOverride>,
 }
 
+/// Budget families applied to read, write, streaming, and admin traffic.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrafficPolicies {
     pub read: BudgetPolicy,
@@ -42,6 +47,8 @@ pub struct TrafficPolicies {
     pub admin: BudgetPolicy,
 }
 
+/// Token-bucket and concurrency settings for one traffic class.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BudgetPolicy {
     pub rate_per_sec: u32,
@@ -52,6 +59,8 @@ pub struct BudgetPolicy {
     pub max_active_streams: Option<u32>,
 }
 
+/// Per-RPC overrides layered on top of the default protection policy.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RpcProtectionOverride {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -62,6 +71,8 @@ pub struct RpcProtectionOverride {
     pub global: Option<BudgetPolicyOverride>,
 }
 
+/// Partial override for an existing budget policy.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BudgetPolicyOverride {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -74,6 +85,8 @@ pub struct BudgetPolicyOverride {
     pub max_active_streams: Option<u32>,
 }
 
+/// Traffic buckets used to map RPCs onto budget families.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TrafficClass {
@@ -109,6 +122,7 @@ impl LimitScope {
     }
 }
 
+/// Lease that keeps acquired in-flight counters alive for the request lifetime.
 #[derive(Debug)]
 pub struct ProtectionLease {
     _subject_guard: Option<CounterGuard>,
@@ -228,6 +242,7 @@ impl TokenBucket {
 }
 
 impl ControlPlaneProtection {
+    /// Load the persisted protection policy or write a default config on first start.
     pub fn load_or_bootstrap(
         app_root: &Path,
         db_path: &Path,
@@ -259,6 +274,7 @@ impl ControlPlaneProtection {
         })
     }
 
+    /// Apply protection checks to a single HTTP/gRPC request and acquire counters.
     pub fn protect_http<B>(
         &self,
         request: &HttpRequest<B>,
@@ -267,6 +283,7 @@ impl ControlPlaneProtection {
         self.acquire_http(request, rpc, is_streaming_rpc(rpc))
     }
 
+    /// Wrap a Tower service with control-plane protection middleware.
     pub fn layer(self: Arc<Self>) -> ControlPlaneProtectionLayer {
         ControlPlaneProtectionLayer { protection: self }
     }
@@ -544,6 +561,7 @@ impl ControlPlaneProtection {
     }
 }
 
+/// Tower layer that injects control-plane protection into request handling.
 #[derive(Clone)]
 pub struct ControlPlaneProtectionLayer {
     protection: Arc<ControlPlaneProtection>,
@@ -560,6 +578,7 @@ impl<S> Layer<S> for ControlPlaneProtectionLayer {
     }
 }
 
+/// Tower service wrapper that enforces protection budgets per request.
 #[derive(Clone)]
 pub struct ControlPlaneProtectionService<S> {
     inner: S,
@@ -617,6 +636,7 @@ where
 
 pin_project! {
     #[derive(Debug)]
+    /// Response body wrapper that holds protection leases until streaming completes.
     pub struct ProtectedBody<B> {
         #[pin]
         kind: ProtectedBodyKind<B>,

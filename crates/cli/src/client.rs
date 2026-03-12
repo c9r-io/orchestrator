@@ -64,6 +64,11 @@ fn discover_socket_path() -> std::path::PathBuf {
     app_root.join("data/orchestrator.sock")
 }
 
+/// Connect to the daemon using the best available transport.
+///
+/// Prefers the Unix socket when `ORCHESTRATOR_SOCKET` is set and no explicit
+/// control-plane config is requested. Otherwise it discovers a TLS client
+/// config and falls back to the Unix socket when none is present.
 pub async fn connect(
     explicit_control_plane_config: Option<&str>,
 ) -> Result<OrchestratorServiceClient<Channel>> {
