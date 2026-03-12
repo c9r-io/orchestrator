@@ -19,6 +19,16 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  async-lock-governance:
+    name: Async lock governance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify async lock governance
+        run: ./scripts/check-async-lock-governance.sh
+
   fmt:
     name: Rust fmt
     runs-on: ubuntu-latest

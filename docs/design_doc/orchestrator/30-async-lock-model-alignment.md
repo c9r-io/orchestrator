@@ -21,12 +21,14 @@ Goals:
 - stop returning lock guards from state/config helpers
 - preserve existing CLI, gRPC, manifest, and task behavior
 - document the few synchronous boundaries that remain intentionally synchronous
+- prevent future regressions back to blocking lock semantics in async-owned state
 
 Non-goals:
 
 - converting every mutex in the repository to async primitives
 - introducing a new actor subsystem for metrics, health, or control-plane protection
 - changing proto contracts, CLI flags, or manifest schemas
+- converting the remaining documented sync exceptions into async interfaces within FR-016
 
 ## Scope
 
@@ -72,6 +74,31 @@ External behavior is unchanged:
 - no CLI surface changes
 - no workflow/config schema changes
 
+## Governance Rules
+
+All new shared state in `core` must be classified before implementation:
+
+- config-like state shared across sync + async readers: immutable snapshot, exposed as domain data
+- async-hot mutable state: `tokio::sync::{Mutex,RwLock}` with short lock scopes
+- ordered event flow or ownership-sensitive mutation: channel / actor style message passing
+- synchronous-only bounded critical sections: explicit sync exception with documentation and tests
+
+The repository now enforces a lightweight governance gate through `scripts/check-async-lock-governance.sh`.
+That gate rejects new `std::sync::RwLock` and leaked `RwLock*Guard` usage outside the approved exception set.
+
+Approved exceptions are intentionally narrow:
+
+- `core/src/state.rs` `event_sink`, plus its bootstrap/test/runtime construction sites
+- `crates/daemon/src/protection.rs`
+
+Adding a new sync exception requires all of the following in the same change:
+
+- a code comment at the retained sync boundary
+- design doc update
+- QA doc update
+- governance-script whitelist update
+- a test proving the boundary behavior still matches the documented exception
+
 ## Key Design and Tradeoffs
 
 ### Config state uses immutable snapshots instead of async locks
@@ -96,6 +123,10 @@ The chosen model makes reads cheap and lock-free from the caller perspective, wh
 - `crates/daemon/src/protection.rs` keeps synchronous `Mutex<HashMap<...>>` counters because those critical sections are bounded, local to the protection layer, and do not cross `.await`
 
 These are documented exceptions, not hidden leftovers.
+
+### Governance is enforced with a repository gate, not reviewer memory
+
+The async lock model is now a maintained invariant. Relying on code review alone would drift over time, especially in test helpers and bootstrap code where `std::sync::RwLock::new(...)` can look harmless. A lightweight static check is sufficient here because the anti-pattern is syntactic and the approved exception surface is small.
 
 ## Risks and Mitigations
 
@@ -125,7 +156,9 @@ Acceptance is satisfied when:
 - agent health/metrics state is backed by `tokio::sync::RwLock`
 - scheduler/service/store/log paths still pass existing regression tests
 - the two synchronous exceptions are documented and covered by QA
+- `scripts/check-async-lock-governance.sh` passes locally and in CI
 - workspace verification passes:
+  - `./scripts/check-async-lock-governance.sh`
   - `cargo test -p agent-orchestrator`
   - `cargo test --workspace`
   - `cargo clippy --workspace --all-targets -- -D warnings`

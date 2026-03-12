@@ -52,9 +52,22 @@
    - `event_sink` remains the only retained poison-recovery state path in `core`
    - control-plane protection counters and limits still work with the existing synchronous limiter implementation
 
-5. Run workspace verification:
+5. Run the governance gate:
 
    ```bash
+   ./scripts/check-async-lock-governance.sh
+   ```
+
+   Expected:
+
+   - the script passes without reporting new `std::sync::RwLock` usage in `core`
+   - only the documented `event_sink` and `protection` exceptions remain on the whitelist
+   - no `RwLockReadGuard` / `RwLockWriteGuard` helper leakage is reported
+
+6. Run workspace verification:
+
+   ```bash
+   ./scripts/check-async-lock-governance.sh
    cargo test --workspace
    cargo clippy --workspace --all-targets -- -D warnings
    cargo fmt --all --check
@@ -71,6 +84,7 @@
 - If telemetry behavior regresses, inspect `core/src/health.rs` and `core/src/scheduler/phase_runner/record.rs`
 - If store or log paths regress, inspect `core/src/service/store.rs`, `core/src/scheduler/item_executor/apply.rs`, and `core/src/scheduler/query/log_stream.rs`
 - If control-plane protection regresses, inspect `crates/daemon/src/protection.rs`
+- If the governance gate fails, inspect `scripts/check-async-lock-governance.sh` and the reported sync-lock call sites
 
 ## Checklist
 
@@ -80,4 +94,5 @@
 | 2 | Health and phase-runner regressions | ☐ | |
 | 3 | Scheduler/runtime and store/log regressions | ☐ | |
 | 4 | Documented synchronous exceptions remain deliberate | ☐ | |
-| 5 | Workspace verification | ☐ | |
+| 5 | Governance gate | ☐ | |
+| 6 | Workspace verification | ☐ | |

@@ -58,6 +58,9 @@ pub struct InnerState {
     pub agent_health: tokio::sync::RwLock<HashMap<String, AgentHealthState>>,
     pub agent_metrics: tokio::sync::RwLock<HashMap<String, AgentMetrics>>,
     pub message_bus: Arc<MessageBus>,
+    // FR-016 sync exception: event emission must remain callable from sync and async
+    // paths without making the EventSink interface async. This lock is an
+    // observability boundary, not async main-path shared business state.
     pub event_sink: std::sync::RwLock<Arc<dyn EventSink>>,
     pub db_writer: Arc<crate::db_write::DbWriteCoordinator>,
     pub session_store: Arc<crate::session_store::AsyncSessionStore>,

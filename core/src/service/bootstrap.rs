@@ -138,6 +138,7 @@ fn build_managed_state(
             agent_health: tokio::sync::RwLock::new(HashMap::new()),
             agent_metrics: tokio::sync::RwLock::new(HashMap::new()),
             message_bus: Arc::new(MessageBus::new()),
+            // FR-016 sync exception: constructor site for the event-sink boundary.
             event_sink: std::sync::RwLock::new(Arc::new(crate::events::TracingEventSink::new())),
             db_writer,
             session_store,

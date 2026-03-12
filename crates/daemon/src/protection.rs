@@ -117,6 +117,8 @@ pub struct ProtectionLease {
 
 #[derive(Debug)]
 struct CounterGuard {
+    // FR-016 sync exception: control-plane limiter counters are bounded local
+    // critical sections inside the tower protection layer and never cross .await.
     map: Arc<Mutex<HashMap<String, usize>>>,
     key: String,
 }
@@ -145,6 +147,9 @@ struct LimiterStates {
 
 #[derive(Debug)]
 struct LimiterState {
+    // FR-016 sync exception: these short-lived limiter maps are intentionally
+    // synchronous and scoped to the protection boundary, not the scheduler's
+    // async shared-state model.
     rate_buckets: Arc<Mutex<HashMap<String, TokenBucket>>>,
     in_flight: Arc<Mutex<HashMap<String, usize>>>,
     active_streams: Arc<Mutex<HashMap<String, usize>>>,
