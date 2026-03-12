@@ -262,56 +262,6 @@ Verify `TaskWatch` consumes a stream permit until disconnect and the second conc
 
 ---
 
-## Scenario 5: Secure TCP Pressure Script Rejects Fast And Preserves Daemon Availability
-
-### Preconditions
-- Repository root: `/Volumes/Yotta/ai_native_sdlc`
-- Release binaries built:
-  ```bash
-  cargo build --release -p orchestratord -p orchestrator-cli
-  ```
-
-### Goal
-Verify the middleware-based protection stack rejects excess `TaskList`, `TaskWatch`, and `Apply` traffic under repeated concurrent pressure without crashing the daemon.
-
-### Steps
-1. Run the pressure script:
-   ```bash
-   cd /Volumes/Yotta/ai_native_sdlc
-   scripts/qa/test-fr013-control-plane-protection.sh
-   ```
-2. Observe the emitted audit sample at the end of the script.
-
-### Expected
-- The script exits `0`.
-- The script records at least one rejected `TaskList` row with `reason_code='rate_limited'`.
-- The script records at least one rejected `TaskWatch` row with `reason_code='stream_limit_exceeded'`.
-- The script records at least one rejected `Apply` row with `reason_code='rate_limited'` or `reason_code='concurrency_limited'`.
-- The final daemon health probe (`orchestrator debug`) succeeds, proving non-exhausted traffic can still reach the control plane.
-
-### Expected Data State
-```sql
-SELECT rpc, traffic_class, limit_scope, decision, reason_code
-FROM control_plane_audit
-WHERE rpc IN ('TaskList', 'TaskWatch', 'Apply')
-ORDER BY id DESC
-LIMIT 20;
--- Expected: rejected rows are present for all three RPC groups with stable reason_code values.
-```
-- Audit rows for `TaskWatch` show `traffic_class='stream'` and `reason_code='stream_limit_exceeded'`.
-
-### Expected Data State
-```sql
-SELECT rpc, traffic_class, limit_scope, decision, reason_code
-FROM control_plane_audit
-WHERE rpc = 'TaskWatch'
-ORDER BY id DESC
-LIMIT 2;
--- Expected: latest row contains stream/rejected/stream_limit_exceeded.
-```
-
----
-
 ## Scenario 4: UDS Mode Still Applies Protection Using Local Fallback Identity
 
 ### Preconditions
@@ -382,12 +332,47 @@ FROM control_plane_audit
 WHERE rpc = 'TaskList'
 ORDER BY id DESC
 LIMIT 2;
--- Expected: latest row contains uds/NULL/read/global or subject/rejected/rate_limited.
 -- Expected: latest row contains uds/NULL/read/subject/rejected/rate_limited.
 ```
 
 ---
 
+## Scenario 5: Secure TCP Pressure Script Rejects Fast And Preserves Daemon Availability
+
+### Preconditions
+- Repository root: `/Volumes/Yotta/ai_native_sdlc`
+- Release binaries built:
+  ```bash
+  cargo build --release -p orchestratord -p orchestrator-cli
+  ```
+
+### Goal
+Verify the middleware-based protection stack rejects excess `TaskList`, `TaskWatch`, and `Apply` traffic under repeated concurrent pressure without crashing the daemon.
+
+### Steps
+1. Run the pressure script:
+   ```bash
+   cd /Volumes/Yotta/ai_native_sdlc
+   scripts/qa/test-fr013-control-plane-protection.sh
+   ```
+2. Observe the emitted audit sample at the end of the script.
+
+### Expected
+- The script exits `0`.
+- The script records at least one rejected `TaskList` row with `reason_code='rate_limited'`.
+- The script records at least one rejected `TaskWatch` row with `reason_code='stream_limit_exceeded'`.
+- The script records at least one rejected `Apply` row with `reason_code='rate_limited'` or `reason_code='concurrency_limited'`.
+- The final daemon health probe (`orchestrator debug`) succeeds, proving non-exhausted traffic can still reach the control plane.
+
+### Expected Data State
+```sql
+SELECT rpc, traffic_class, limit_scope, decision, reason_code
+FROM control_plane_audit
+WHERE rpc IN ('TaskList', 'TaskWatch', 'Apply')
+ORDER BY id DESC
+LIMIT 20;
+-- Expected: rejected rows are present for all three RPC groups with stable reason_code values.
+```
 ## Checklist
 
 | # | Scenario | Status | Test Date | Tester | Notes |
@@ -396,3 +381,4 @@ LIMIT 2;
 | 2 | Secure TCP Applies Subject Read Rate Limit And Audits Rejection | PASS | 2026-03-12 | codex | Second `task list` returned `RESOURCE_EXHAUSTED` with `reason_code=rate_limited`; audit row carried `read/subject/rejected/rate_limited`. |
 | 3 | Secure TCP Enforces Active Stream Limit For TaskWatch | PASS | 2026-03-12 | codex | Added explicit mock QA target precondition; second concurrent `task watch` returned `stream_limit_exceeded` and audit row recorded `stream/rejected`. |
 | 4 | UDS Mode Still Applies Protection Using Local Fallback Identity | PASS | 2026-03-12 | codex | UDS path rate-limited without certificates; audit row showed `transport=uds`, empty `subject_id`, and `limit_scope=subject`. |
+| 5 | Secure TCP Pressure Script Rejects Fast And Preserves Daemon Availability | PASS | 2026-03-12 | codex | `scripts/qa/test-fr013-control-plane-protection.sh` returned `0`; `TaskList` / `TaskWatch` / `Apply` all produced rejected audit rows while `orchestrator debug` still succeeded. |
