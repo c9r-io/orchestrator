@@ -73,8 +73,8 @@ pub(super) fn print(resp: &TaskInfoResponse, format: OutputFormat) {
             if !resp.agent_states.is_empty() {
                 println!("  Agents:");
                 println!(
-                    "    {:<20} {:<8} {:<10} {:<10} {}",
-                    "NAME", "ENABLED", "STATE", "IN-FLIGHT", "CAPABILITIES"
+                    "    {:<20} {:<8} {:<10} {:<10} CAPABILITIES",
+                    "NAME", "ENABLED", "STATE", "IN-FLIGHT"
                 );
                 for a in &resp.agent_states {
                     println!(

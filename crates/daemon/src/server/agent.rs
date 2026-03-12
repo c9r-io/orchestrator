@@ -57,7 +57,7 @@ pub(crate) async fn agent_cordon(
 
     agent_lifecycle::cordon_agent(&server.state, &req.agent_name)
         .await
-        .map_err(|e| Status::failed_precondition(e))?;
+        .map_err(Status::failed_precondition)?;
 
     Ok(Response::new(AgentCordonResponse {
         message: format!("agent '{}' cordoned", req.agent_name),
@@ -75,7 +75,7 @@ pub(crate) async fn agent_uncordon(
 
     agent_lifecycle::uncordon_agent(&server.state, &req.agent_name)
         .await
-        .map_err(|e| Status::failed_precondition(e))?;
+        .map_err(Status::failed_precondition)?;
 
     Ok(Response::new(AgentUncordonResponse {
         message: format!("agent '{}' uncordoned", req.agent_name),
@@ -97,7 +97,7 @@ pub(crate) async fn agent_drain(
     let result_state =
         agent_lifecycle::drain_agent(&server.state, &req.agent_name, req.timeout_secs)
             .await
-            .map_err(|e| Status::failed_precondition(e))?;
+            .map_err(Status::failed_precondition)?;
 
     Ok(Response::new(AgentDrainResponse {
         message: format!(

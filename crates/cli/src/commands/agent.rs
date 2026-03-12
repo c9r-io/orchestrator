@@ -102,8 +102,8 @@ fn print_agent_list(agents: &[orchestrator_proto::AgentStatus], format: OutputFo
         }
         OutputFormat::Table => {
             println!(
-                "{:<20} {:<8} {:<10} {:<10} {}",
-                "NAME", "ENABLED", "STATE", "IN-FLIGHT", "CAPABILITIES"
+                "{:<20} {:<8} {:<10} {:<10} CAPABILITIES",
+                "NAME", "ENABLED", "STATE", "IN-FLIGHT"
             );
             for a in agents {
                 println!(
