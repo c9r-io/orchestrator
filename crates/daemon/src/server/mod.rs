@@ -351,6 +351,20 @@ impl OrchestratorService for OrchestratorServer {
     ) -> Result<Response<AgentDrainResponse>, Status> {
         agent::agent_drain(self, request).await
     }
+
+    async fn event_cleanup(
+        &self,
+        request: Request<EventCleanupRequest>,
+    ) -> Result<Response<EventCleanupResponse>, Status> {
+        system::event_cleanup(self, request).await
+    }
+
+    async fn event_stats(
+        &self,
+        request: Request<EventStatsRequest>,
+    ) -> Result<Response<EventStatsResponse>, Status> {
+        system::event_stats(self, request).await
+    }
 }
 
 #[cfg(test)]

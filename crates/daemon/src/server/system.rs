@@ -118,6 +118,72 @@ pub(crate) async fn db_migrations_list(
     Ok(Response::new(list))
 }
 
+pub(crate) async fn event_cleanup(
+    server: &OrchestratorServer,
+    request: Request<EventCleanupRequest>,
+) -> Result<Response<EventCleanupResponse>, Status> {
+    super::authorize(server, &request, "EventCleanup").map_err(Status::from)?;
+    let req = request.into_inner();
+    let older_than = if req.older_than_days == 0 { 30 } else { req.older_than_days };
+
+    if req.dry_run {
+        let count = agent_orchestrator::event_cleanup::count_pending_cleanup(
+            &server.state.async_database,
+            older_than,
+        )
+        .await
+        .map_err(|e| Status::internal(e.to_string()))?;
+        return Ok(Response::new(EventCleanupResponse {
+            affected_count: count,
+            message: format!("{count} events would be deleted (dry-run, older than {older_than} days)"),
+        }));
+    }
+
+    let affected = if req.archive {
+        let archive_dir = server.state.app_root.join("data/archive/events");
+        agent_orchestrator::event_cleanup::archive_events(
+            &server.state.async_database,
+            &archive_dir,
+            older_than,
+            1000,
+        )
+        .await
+        .map_err(|e| Status::internal(e.to_string()))?
+    } else {
+        agent_orchestrator::event_cleanup::cleanup_old_events(
+            &server.state.async_database,
+            older_than,
+            1000,
+        )
+        .await
+        .map_err(|e| Status::internal(e.to_string()))?
+    };
+    Ok(Response::new(EventCleanupResponse {
+        affected_count: affected,
+        message: format!("{affected} events deleted (older than {older_than} days)"),
+    }))
+}
+
+pub(crate) async fn event_stats(
+    server: &OrchestratorServer,
+    request: Request<EventStatsRequest>,
+) -> Result<Response<EventStatsResponse>, Status> {
+    super::authorize(server, &request, "EventStats").map_err(Status::from)?;
+    let stats = agent_orchestrator::event_cleanup::event_stats(&server.state.async_database)
+        .await
+        .map_err(|e| Status::internal(e.to_string()))?;
+    Ok(Response::new(EventStatsResponse {
+        total_rows: stats.total_rows,
+        earliest: stats.earliest.unwrap_or_default(),
+        latest: stats.latest.unwrap_or_default(),
+        by_task_status: stats
+            .by_task_status
+            .into_iter()
+            .map(|(status, count)| EventStatusCount { status, count })
+            .collect(),
+    }))
+}
+
 pub(crate) async fn manifest_validate(
     server: &OrchestratorServer,
     request: Request<ManifestValidateRequest>,

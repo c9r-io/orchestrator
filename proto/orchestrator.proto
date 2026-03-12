@@ -60,6 +60,10 @@ service OrchestratorService {
   rpc AgentUncordon(AgentUncordonRequest)       returns (AgentUncordonResponse);
   rpc AgentDrain(AgentDrainRequest)             returns (AgentDrainResponse);
 
+  // Event lifecycle
+  rpc EventCleanup(EventCleanupRequest)         returns (EventCleanupResponse);
+  rpc EventStats(EventStatsRequest)             returns (EventStatsResponse);
+
 }
 
 // ─── Task messages ────────────────────────────────────────────
@@ -649,4 +653,31 @@ message AgentDrainRequest {
 message AgentDrainResponse {
   string message = 1;
   string lifecycle_state = 2;
+}
+
+// ─── Event Lifecycle ─────────────────────────────────────────
+
+message EventCleanupRequest {
+  uint32 older_than_days = 1;
+  bool dry_run = 2;
+  bool archive = 3;
+}
+
+message EventCleanupResponse {
+  uint64 affected_count = 1;
+  string message = 2;
+}
+
+message EventStatsRequest {}
+
+message EventStatsResponse {
+  uint64 total_rows = 1;
+  string earliest = 2;
+  string latest = 3;
+  repeated EventStatusCount by_task_status = 4;
+}
+
+message EventStatusCount {
+  string status = 1;
+  uint64 count = 2;
 }

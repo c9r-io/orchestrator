@@ -1,6 +1,7 @@
 mod agent;
 mod common;
 mod db;
+mod event;
 mod manifest;
 mod resource;
 mod secret;
@@ -35,6 +36,7 @@ pub async fn dispatch(
         Commands::Store(cmd) => store::dispatch(client, cmd).await,
         Commands::Secret(cmd) => secret::dispatch(client, cmd).await,
         Commands::Db(cmd) => db::dispatch(client, cmd).await,
+        Commands::Event(cmd) => event::dispatch(client, cmd).await,
         Commands::Debug {
             component,
             command: None,

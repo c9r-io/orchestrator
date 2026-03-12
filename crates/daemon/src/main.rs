@@ -54,6 +54,22 @@ struct Args {
     #[arg(long = "control-plane-dir")]
     control_plane_dir: Option<PathBuf>,
 
+    /// Number of days to retain events before automatic cleanup (0 = disabled).
+    #[arg(long = "event-retention-days", default_value_t = 30)]
+    event_retention_days: u32,
+
+    /// Interval in seconds between automatic event cleanup sweeps.
+    #[arg(long = "event-cleanup-interval-secs", default_value_t = 3600)]
+    event_cleanup_interval_secs: u64,
+
+    /// Enable event archival to JSONL before cleanup.
+    #[arg(long = "event-archive-enabled")]
+    event_archive_enabled: bool,
+
+    /// Override the directory used for event archive JSONL files.
+    #[arg(long = "event-archive-dir")]
+    event_archive_dir: Option<PathBuf>,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -157,6 +173,54 @@ fn main() -> Result<()> {
                             agent_orchestrator::agent_lifecycle::drain_timeout_sweep(&drain_state).await;
                         }
                         _ = drain_shutdown.changed() => {
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+
+        // Spawn event cleanup sweep (TTL-based)
+        if args.event_retention_days > 0 {
+            let cleanup_state = inner.clone();
+            let mut cleanup_shutdown = shutdown_rx.clone();
+            let retention_days = args.event_retention_days;
+            let archive_enabled = args.event_archive_enabled;
+            let archive_dir = args
+                .event_archive_dir
+                .clone()
+                .unwrap_or_else(|| inner.app_root.join("data/archive/events"));
+            let interval_secs = args.event_cleanup_interval_secs;
+            info!(
+                retention_days,
+                interval_secs, archive_enabled, "event cleanup sweep started"
+            );
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
+                loop {
+                    tokio::select! {
+                        _ = interval.tick() => {
+                            let result = if archive_enabled {
+                                agent_orchestrator::event_cleanup::archive_events(
+                                    &cleanup_state.async_database,
+                                    &archive_dir,
+                                    retention_days,
+                                    1000,
+                                )
+                                .await
+                            } else {
+                                agent_orchestrator::event_cleanup::cleanup_old_events(
+                                    &cleanup_state.async_database,
+                                    retention_days,
+                                    1000,
+                                )
+                                .await
+                            };
+                            if let Err(e) = result {
+                                tracing::warn!(error = %e, "event cleanup sweep failed");
+                            }
+                        }
+                        _ = cleanup_shutdown.changed() => {
                             break;
                         }
                     }

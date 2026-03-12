@@ -170,6 +170,10 @@ pub enum Commands {
     #[command(alias = "ag", subcommand)]
     Agent(AgentCommands),
 
+    /// Event lifecycle operations (cleanup, stats)
+    #[command(alias = "ev", subcommand)]
+    Event(EventCommands),
+
     /// Show version
     Version {
         /// Emit JSON instead of human-readable text.
@@ -180,7 +184,7 @@ pub enum Commands {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cli, Commands, DbCommands, DbMigrationCommands};
+    use super::{Cli, Commands, DbCommands, DbMigrationCommands, EventCommands};
     use clap::Parser;
 
     #[test]
@@ -208,6 +212,28 @@ mod tests {
             cli.command,
             Commands::Db(DbCommands::Migrations(DbMigrationCommands::List { .. }))
         ));
+    }
+
+    #[test]
+    fn event_cleanup_subcommand_parses() {
+        let cli =
+            Cli::try_parse_from(["orchestrator", "event", "cleanup", "--older-than", "7", "--dry-run"])
+                .expect("event cleanup should parse");
+        assert!(matches!(
+            cli.command,
+            Commands::Event(EventCommands::Cleanup {
+                older_than_days: 7,
+                dry_run: true,
+                archive: false,
+            })
+        ));
+    }
+
+    #[test]
+    fn event_stats_subcommand_parses() {
+        let cli = Cli::try_parse_from(["orchestrator", "event", "stats"])
+            .expect("event stats should parse");
+        assert!(matches!(cli.command, Commands::Event(EventCommands::Stats)));
     }
 }
 
@@ -681,6 +707,28 @@ pub enum AgentCommands {
         #[arg(long)]
         timeout: Option<u64>,
     },
+}
+
+/// Event lifecycle commands for cleanup and statistics.
+#[derive(Subcommand, Debug, Clone)]
+pub enum EventCommands {
+    /// Clean up old events from terminated tasks
+    Cleanup {
+        /// Delete events older than this many days (default 30).
+        #[arg(long = "older-than", default_value_t = 30)]
+        older_than_days: u32,
+
+        /// Preview how many events would be deleted without deleting.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Archive events to JSONL before deleting.
+        #[arg(long)]
+        archive: bool,
+    },
+
+    /// Show event table statistics
+    Stats,
 }
 
 /// Supported human-readable and machine-readable output encodings.

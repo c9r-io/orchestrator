@@ -43,6 +43,8 @@ pub mod dynamic_orchestration;
 pub mod env_resolve;
 /// Canonical error categories and error classification helpers.
 pub mod error;
+/// TTL-based event cleanup, archival, and statistics.
+pub mod event_cleanup;
 /// Event sink types and event-query helpers.
 pub mod events;
 /// Backfill helpers for reconstructing missing event streams.

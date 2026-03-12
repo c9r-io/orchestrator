@@ -961,6 +961,68 @@ impl OrchestratorService for TestOrchestratorServer {
             lifecycle_state: result_state.as_str().to_string(),
         }))
     }
+
+    async fn event_cleanup(
+        &self,
+        request: Request<EventCleanupRequest>,
+    ) -> Result<Response<EventCleanupResponse>, Status> {
+        let req = request.into_inner();
+        let older_than = if req.older_than_days == 0 { 30 } else { req.older_than_days };
+        if req.dry_run {
+            let count = agent_orchestrator::event_cleanup::count_pending_cleanup(
+                &self.state.async_database,
+                older_than,
+            )
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
+            return Ok(Response::new(EventCleanupResponse {
+                affected_count: count,
+                message: format!("{count} events (dry-run)"),
+            }));
+        }
+        let affected = if req.archive {
+            let archive_dir = self.state.app_root.join("data/archive/events");
+            agent_orchestrator::event_cleanup::archive_events(
+                &self.state.async_database,
+                &archive_dir,
+                older_than,
+                1000,
+            )
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?
+        } else {
+            agent_orchestrator::event_cleanup::cleanup_old_events(
+                &self.state.async_database,
+                older_than,
+                1000,
+            )
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?
+        };
+        Ok(Response::new(EventCleanupResponse {
+            affected_count: affected,
+            message: format!("{affected} events deleted"),
+        }))
+    }
+
+    async fn event_stats(
+        &self,
+        _request: Request<EventStatsRequest>,
+    ) -> Result<Response<EventStatsResponse>, Status> {
+        let stats = agent_orchestrator::event_cleanup::event_stats(&self.state.async_database)
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
+        Ok(Response::new(EventStatsResponse {
+            total_rows: stats.total_rows,
+            earliest: stats.earliest.unwrap_or_default(),
+            latest: stats.latest.unwrap_or_default(),
+            by_task_status: stats
+                .by_task_status
+                .into_iter()
+                .map(|(status, count)| EventStatusCount { status, count })
+                .collect(),
+        }))
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -16,7 +16,7 @@
 | FR-021 | 审计并减少 expect() 调用 | P1 | Implemented |
 | FR-023 | 增加集成测试覆盖 | P2 | Closed |
 | FR-024 | 审计 unsafe 块 | P2 | Closed |
-| FR-026 | 事件表归档与 TTL 清理策略 | P1 | Proposed |
+| FR-026 | 事件表归档与 TTL 清理策略 | P1 | Closed |
 | FR-027 | Worker 轮询优化 — Notify 唤醒机制 | P1 | Proposed |
 
 ## 说明
@@ -47,3 +47,4 @@
 - FR-023 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/34-integration-test-coverage.md` 与 `docs/qa/orchestrator/73-integration-test-coverage.md` 承载
 - FR-024 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/35-audit-unsafe-blocks.md` 与 `docs/qa/orchestrator/74-audit-unsafe-blocks.md` 承载
 - FR-025 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/37-config-load-module-split.md` 与 `docs/qa/orchestrator/76-config-load-module-split.md` 承载
+- FR-026 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/38-event-table-ttl-archival.md` 与 `docs/qa/orchestrator/77-event-table-ttl-archival.md` 承载
