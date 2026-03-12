@@ -1,3 +1,5 @@
+//! Helpers for discovering, previewing, and creating QA failure tickets.
+
 use crate::config::TaskRuntimeContext;
 use crate::config_load::resolve_workspace_path;
 use crate::dto::{TicketPreviewData, UNASSIGNED_QA_FILE_PATH};
@@ -48,6 +50,7 @@ pub fn is_self_referential_safe(
     }
 }
 
+/// Normalizes a relative path for stable ticket-to-QA matching.
 pub fn normalize_rel_path_for_match(raw: &str) -> String {
     let value = raw.trim().trim_matches('`').replace('\\', "/");
     if value.is_empty() {
@@ -66,11 +69,13 @@ pub fn normalize_rel_path_for_match(raw: &str) -> String {
     parts.join("/")
 }
 
+/// Returns `true` when the ticket status still represents an open failure.
 pub fn is_active_ticket_status(status: &str) -> bool {
     let normalized = status.trim().to_ascii_uppercase();
     normalized.is_empty() || matches!(normalized.as_str(), "FAILED" | "OPEN")
 }
 
+/// Extracts preview metadata from the first section of a ticket document.
 pub fn parse_ticket_preview_content(content: &str) -> TicketPreviewData {
     let mut status = String::new();
     let mut qa_doc = String::new();
@@ -91,6 +96,7 @@ pub fn parse_ticket_preview_content(content: &str) -> TicketPreviewData {
     }
 }
 
+/// Reads a ticket file from the workspace and returns its preview metadata.
 pub fn read_ticket_preview_from_workspace(
     workspace_root: &Path,
     rel_path: &str,
@@ -108,6 +114,7 @@ pub fn read_ticket_preview_from_workspace(
     parse_ticket_preview_content(&content)
 }
 
+/// Lists Markdown ticket files beneath the configured ticket directory.
 pub fn list_ticket_files_in_workspace(
     workspace_root: &Path,
     ticket_dir: &str,
@@ -145,10 +152,12 @@ pub fn list_ticket_files_in_workspace(
     Ok(result)
 }
 
+/// Lists ticket files for a task runtime context.
 pub fn list_ticket_files(task_ctx: &TaskRuntimeContext) -> Result<Vec<String>> {
     list_ticket_files_in_workspace(&task_ctx.workspace_root, &task_ctx.ticket_dir)
 }
 
+/// Lists active tickets that match a specific QA file for the task.
 pub fn list_existing_tickets_for_item(
     task_ctx: &TaskRuntimeContext,
     qa_file_path: &str,
@@ -175,6 +184,7 @@ pub fn list_existing_tickets_for_item(
     Ok(matched)
 }
 
+/// Groups active ticket paths by task-item QA file path.
 pub fn scan_active_tickets_for_task_items(
     task_ctx: &TaskRuntimeContext,
     task_item_paths: &[String],
@@ -211,6 +221,7 @@ pub fn scan_active_tickets_for_task_items(
     Ok(grouped)
 }
 
+/// Returns a JSON preview payload for a single ticket path.
 pub fn read_ticket_preview(task_ctx: &TaskRuntimeContext, rel_path: &str) -> serde_json::Value {
     let preview = read_ticket_preview_from_workspace(&task_ctx.workspace_root, rel_path);
     json!({
@@ -220,6 +231,7 @@ pub fn read_ticket_preview(task_ctx: &TaskRuntimeContext, rel_path: &str) -> ser
     })
 }
 
+/// Resolves the target files for a QA or fix operation.
 pub fn collect_target_files(
     workspace_root: &Path,
     qa_targets: &[String],
@@ -277,6 +289,7 @@ pub fn collect_target_files(
     Ok(files)
 }
 
+/// Creates a Markdown ticket for a QA failure when no active duplicate exists.
 pub fn create_ticket_for_qa_failure(
     workspace_root: &Path,
     ticket_dir: &str,
@@ -383,6 +396,7 @@ QA phase exited with code {exit_code}.
     Ok(Some(rel))
 }
 
+/// Collects target files referenced by currently active ticket documents.
 pub fn collect_target_files_from_active_tickets(
     workspace_root: &Path,
     ticket_dir: &str,

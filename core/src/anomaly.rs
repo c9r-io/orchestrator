@@ -1,26 +1,31 @@
 use serde::Serialize;
 
-// ── Severity ────────────────────────────────────────────────────────
-
+/// Severity assigned to an anomaly detected in task traces or runtime events.
 #[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
+    /// The anomaly indicates a correctness or safety problem.
     Error,
+    /// The anomaly indicates degraded or suspicious behavior.
     Warning,
+    /// The anomaly is informational and may not require action.
     Info,
 }
 
-// ── Escalation ──────────────────────────────────────────────────────
-
+/// Recommended operator response for an anomaly.
 #[derive(Debug, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Escalation {
+    /// Record the anomaly without interrupting execution.
     Notice,
+    /// Bring the anomaly to operator attention for follow-up.
     Attention,
+    /// Interrupt or actively intervene in execution.
     Intervene,
 }
 
 impl Escalation {
+    /// Returns a stable uppercase label for operator-facing displays.
     pub fn label(&self) -> &'static str {
         match self {
             Escalation::Notice => "NOTICE",
@@ -30,24 +35,35 @@ impl Escalation {
     }
 }
 
-// ── AnomalyRule ─────────────────────────────────────────────────────
-
+/// Canonical anomaly rules emitted by trace analysis.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AnomalyRule {
+    /// A step produced too little output to be considered trustworthy.
     LowOutput,
+    /// A step or cycle ran longer than expected.
     LongRunning,
+    /// A transient read error interrupted trace collection.
     TransientReadError,
+    /// More than one runner processed the same logical work.
     DuplicateRunner,
+    /// Multiple workflow cycles overlapped unexpectedly.
     OverlappingCycles,
+    /// Multiple steps overlapped unexpectedly.
     OverlappingSteps,
+    /// A step start event was observed without a matching end event.
     MissingStepEnd,
+    /// A workflow cycle completed without processing any steps.
     EmptyCycle,
+    /// A command was observed without a matching task-step context.
     OrphanCommand,
+    /// A command exited with a non-zero status.
     NonzeroExit,
+    /// A templated variable remained unexpanded in emitted output.
     UnexpandedTemplateVar,
 }
 
 impl AnomalyRule {
+    /// Returns the stable machine-readable name for the rule.
     pub fn canonical_name(&self) -> &'static str {
         match self {
             AnomalyRule::LowOutput => "low_output",
@@ -64,6 +80,7 @@ impl AnomalyRule {
         }
     }
 
+    /// Returns the default severity associated with the rule.
     pub fn default_severity(&self) -> Severity {
         match self {
             AnomalyRule::DuplicateRunner
@@ -81,6 +98,7 @@ impl AnomalyRule {
         }
     }
 
+    /// Returns the default escalation policy associated with the rule.
     pub fn escalation(&self) -> Escalation {
         match self {
             AnomalyRule::LowOutput
@@ -98,6 +116,7 @@ impl AnomalyRule {
         }
     }
 
+    /// Returns the uppercase display tag used in reports and logs.
     pub fn display_tag(&self) -> &'static str {
         match self {
             AnomalyRule::LowOutput => "LOW_OUTPUT",
@@ -114,6 +133,7 @@ impl AnomalyRule {
         }
     }
 
+    /// Parses a canonical rule name back into an [`AnomalyRule`].
     pub fn from_canonical(name: &str) -> Option<AnomalyRule> {
         match name {
             "low_output" => Some(AnomalyRule::LowOutput),
@@ -132,18 +152,23 @@ impl AnomalyRule {
     }
 }
 
-// ── Anomaly ─────────────────────────────────────────────────────────
-
+/// Serializable anomaly payload returned by trace analysis.
 #[derive(Debug, Serialize, Clone)]
 pub struct Anomaly {
+    /// Canonical rule name.
     pub rule: String,
+    /// Default severity for the detected rule.
     pub severity: Severity,
+    /// Recommended escalation level.
     pub escalation: Escalation,
+    /// Human-readable anomaly description.
     pub message: String,
+    /// Optional timestamp or location associated with the anomaly.
     pub at: Option<String>,
 }
 
 impl Anomaly {
+    /// Builds an anomaly payload from a rule and message.
     pub fn new(rule: AnomalyRule, message: String, at: Option<String>) -> Self {
         Anomaly {
             severity: rule.default_severity(),

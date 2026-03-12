@@ -1,18 +1,27 @@
 use anyhow::Error as AnyError;
 use std::fmt;
 
+/// High-level category assigned to orchestrator failures.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorCategory {
+    /// The caller supplied invalid or incomplete input.
     UserInput,
+    /// Configuration content failed validation.
     ConfigValidation,
+    /// The requested object or resource was not found.
     NotFound,
+    /// The system state does not permit the requested operation.
     InvalidState,
+    /// Security policy denied the requested operation.
     SecurityDenied,
+    /// An external dependency such as I/O, transport, or database failed.
     ExternalDependency,
+    /// An internal invariant was violated.
     InternalInvariant,
 }
 
 impl ErrorCategory {
+    /// Returns the stable machine-readable label for the category.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::UserInput => "user_input",
@@ -26,6 +35,7 @@ impl ErrorCategory {
     }
 }
 
+/// Canonical error type returned by public orchestrator APIs.
 #[derive(Debug)]
 pub struct OrchestratorError {
     category: ErrorCategory,
@@ -35,6 +45,7 @@ pub struct OrchestratorError {
 }
 
 impl OrchestratorError {
+    /// Builds an error with an explicit category and operation label.
     pub fn new(
         category: ErrorCategory,
         operation: &'static str,
@@ -48,51 +59,63 @@ impl OrchestratorError {
         }
     }
 
+    /// Attaches an optional resource or subject identifier to the error.
     pub fn with_subject(mut self, subject: impl Into<String>) -> Self {
         self.subject = Some(subject.into());
         self
     }
 
+    /// Returns the assigned error category.
     pub fn category(&self) -> ErrorCategory {
         self.category
     }
 
+    /// Returns the operation label associated with the error.
     pub fn operation(&self) -> &'static str {
         self.operation
     }
 
+    /// Returns the optional subject attached to the error.
     pub fn subject(&self) -> Option<&str> {
         self.subject.as_deref()
     }
 
+    /// Returns the formatted source error message.
     pub fn message(&self) -> String {
         self.source.to_string()
     }
 
+    /// Builds a [`ErrorCategory::UserInput`] error.
     pub fn user_input(operation: &'static str, source: impl Into<AnyError>) -> Self {
         Self::new(ErrorCategory::UserInput, operation, source)
     }
 
+    /// Builds a [`ErrorCategory::ConfigValidation`] error.
     pub fn config_validation(operation: &'static str, source: impl Into<AnyError>) -> Self {
         Self::new(ErrorCategory::ConfigValidation, operation, source)
     }
 
+    /// Builds a [`ErrorCategory::NotFound`] error.
     pub fn not_found(operation: &'static str, source: impl Into<AnyError>) -> Self {
         Self::new(ErrorCategory::NotFound, operation, source)
     }
 
+    /// Builds a [`ErrorCategory::InvalidState`] error.
     pub fn invalid_state(operation: &'static str, source: impl Into<AnyError>) -> Self {
         Self::new(ErrorCategory::InvalidState, operation, source)
     }
 
+    /// Builds a [`ErrorCategory::SecurityDenied`] error.
     pub fn security_denied(operation: &'static str, source: impl Into<AnyError>) -> Self {
         Self::new(ErrorCategory::SecurityDenied, operation, source)
     }
 
+    /// Builds a [`ErrorCategory::ExternalDependency`] error.
     pub fn external_dependency(operation: &'static str, source: impl Into<AnyError>) -> Self {
         Self::new(ErrorCategory::ExternalDependency, operation, source)
     }
 
+    /// Builds a [`ErrorCategory::InternalInvariant`] error.
     pub fn internal_invariant(operation: &'static str, source: impl Into<AnyError>) -> Self {
         Self::new(ErrorCategory::InternalInvariant, operation, source)
     }
@@ -216,6 +239,7 @@ fn classify_by_message(operation: &'static str, error: AnyError) -> Orchestrator
     OrchestratorError::internal_invariant(operation, error)
 }
 
+/// Classifies a task-related error into an [`OrchestratorError`].
 pub fn classify_task_error(
     operation: &'static str,
     error: impl Into<AnyError>,
@@ -223,6 +247,7 @@ pub fn classify_task_error(
     classify_by_message(operation, error.into())
 }
 
+/// Classifies a resource-management error into an [`OrchestratorError`].
 pub fn classify_resource_error(
     operation: &'static str,
     error: impl Into<AnyError>,
@@ -230,6 +255,7 @@ pub fn classify_resource_error(
     classify_by_message(operation, error.into())
 }
 
+/// Classifies a store-backend error into an [`OrchestratorError`].
 pub fn classify_store_error(
     operation: &'static str,
     error: impl Into<AnyError>,
@@ -237,6 +263,7 @@ pub fn classify_store_error(
     classify_by_message(operation, error.into())
 }
 
+/// Classifies a system-level error into an [`OrchestratorError`].
 pub fn classify_system_error(
     operation: &'static str,
     error: impl Into<AnyError>,
@@ -244,6 +271,7 @@ pub fn classify_system_error(
     classify_by_message(operation, error.into())
 }
 
+/// Classifies a secret-management error into an [`OrchestratorError`].
 pub fn classify_secret_error(
     operation: &'static str,
     error: impl Into<AnyError>,

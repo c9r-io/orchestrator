@@ -16,6 +16,10 @@ pub struct AsyncDatabase {
 }
 
 impl AsyncDatabase {
+    /// Opens the database and configures paired writer and reader connections.
+    ///
+    /// The writer connection uses default read-write flags, while the reader
+    /// connection is opened read-only to reduce contention.
     pub async fn open(db_path: impl AsRef<Path>) -> Result<Self> {
         let db_path = db_path.as_ref().to_path_buf();
 
@@ -47,14 +51,17 @@ impl AsyncDatabase {
         })
     }
 
+    /// Returns the filesystem path for the database file.
     pub fn path(&self) -> &Path {
         &self.db_path
     }
 
+    /// Returns the write-capable SQLite connection.
     pub fn writer(&self) -> &tokio_rusqlite::Connection {
         &self.writer
     }
 
+    /// Returns the read-only SQLite connection.
     pub fn reader(&self) -> &tokio_rusqlite::Connection {
         &self.reader
     }

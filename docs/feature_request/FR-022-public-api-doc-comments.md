@@ -27,12 +27,15 @@
 - [x] 为 `cli` 与 `daemon` 的主要公共入口补充类型级 `///` 文档注释，包括 CLI 子命令模型、客户端连接入口、控制面安全配置与流量保护层。
 - [x] 修复一个现存 rustdoc 失效链接，确保 `cargo doc --workspace --no-deps` 当前无文档告警。
 - [x] 验证 `cargo check -p orchestrator-cli -p orchestratord`、`cargo doc --workspace --no-deps`、`cargo clippy -p orchestrator-cli -p orchestratord --all-targets -- -D warnings` 与 `cargo test --doc --workspace` 通过。
+- [x] 在 `core/src/lib.rs` 启用 `#![warn(missing_docs)]`，将核心 crate 的缺失文档正式纳入编译信号。
+- [x] 为 `core` crate 根与第一批高接触面 API（`dto`、`error`、`anomaly`、`async_database`、`ticket`）补充英文 `///` 文档注释，并为 crate 根新增 `# Examples` 代码块。
+- [x] 重新审计 `core` 文档缺口，确认 `cargo check -p agent-orchestrator --all-targets` 仍通过，`missing_docs` 告警从 2038 条下降到 1797 条。
 
 剩余：
 
-- [ ] `core` crate 仍有大规模公共 API 缺失文档，当前审计基线约为 774 个公开项未覆盖，尚未达到 FR 要求的“核心 crate 全量补齐”。
+- [ ] `core` crate 仍有大规模公共 API 缺失文档；最新基线为 `cargo check -p agent-orchestrator --all-targets` 产生 1797 条 `missing_docs` 告警，尚未达到 FR 要求的“核心 crate 全量补齐”。
 - [ ] 尚未将任何 crate 升级到 `#![deny(missing_docs)]`，因为 `core` 仍未完成全面治理。
-- [ ] 关键 `core` API 仍缺少 `# Examples` 代码块，当前 doc-test 通过但没有新增关键示例。
+- [ ] 关键 `core` API 仍缺少更细粒度的 `# Examples` 代码块，当前仅 crate 根新增示例，尚不足以覆盖核心集成入口。
 
 非目标：
 
