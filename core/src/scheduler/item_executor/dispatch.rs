@@ -876,7 +876,7 @@ pub(crate) async fn execute_builtin_step(
         let resolved_prompt = step.template.as_ref().and_then(|tmpl_name| {
             let cfg = crate::config_load::read_loaded_config(state).ok()?;
             cfg.config
-                .default_project()?
+                .project(Some(&task_ctx.project_id))?
                 .step_templates
                 .get(tmpl_name)
                 .map(|t| t.prompt.clone())
@@ -1298,6 +1298,15 @@ pub(crate) async fn execute_dynamic_step_config(
         json!({"step_id": ds.id, "step_type": ds.step_type, "step_scope": "item", "priority": ds.priority}),
     )
     .await?;
+    // Resolve StepTemplate reference to actual prompt content before passing to phase execution
+    let resolved_prompt = ds.template.as_ref().and_then(|tmpl_name| {
+        let cfg = crate::config_load::read_loaded_config(state).ok()?;
+        cfg.config
+            .project(Some(&task_ctx.project_id))?
+            .step_templates
+            .get(tmpl_name)
+            .map(|t| t.prompt.clone())
+    });
     let result = if let Some(agent_id) = ds.agent_id.as_deref() {
         let workspace_root = crate::scheduler::loop_engine::isolation::step_workspace_root(
             task_ctx,
@@ -1343,7 +1352,7 @@ pub(crate) async fn execute_dynamic_step_config(
                 pipeline_vars: None,
                 step_timeout_secs: task_ctx.safety.step_timeout_secs,
                 step_scope: crate::config::StepScope::Item,
-                step_template_prompt: ds.template.as_deref(),
+                step_template_prompt: resolved_prompt.as_deref(),
                 project_id: &task_ctx.project_id,
                 execution_profile: None,
             },
@@ -1374,7 +1383,7 @@ pub(crate) async fn execute_dynamic_step_config(
                 pipeline_vars: None,
                 step_timeout_secs: task_ctx.safety.step_timeout_secs,
                 step_scope: crate::config::StepScope::Item,
-                step_template_prompt: ds.template.as_deref(),
+                step_template_prompt: resolved_prompt.as_deref(),
                 project_id: &task_ctx.project_id,
                 execution_profile: None,
             },
