@@ -6,6 +6,7 @@
     deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)
 )]
 #![warn(missing_docs)]
+#![deny(clippy::undocumented_unsafe_blocks)]
 
 mod cli;
 mod client;
@@ -37,9 +38,10 @@ fn main() -> Result<()> {
 
 fn configure_sigpipe() {
     #[cfg(unix)]
+    // SAFETY: `libc::signal` is a POSIX-standard function. Called before the
+    // async runtime starts, so no signal-handler races are possible. Restoring
+    // SIGPIPE to SIG_DFL is a well-defined operation with no preconditions.
     unsafe {
-        // Restore default SIGPIPE handling so piped CLI output exits quietly
-        // when the downstream reader closes early (`head`, `grep -m1`, etc.).
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
 }

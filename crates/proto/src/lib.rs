@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 pub mod orchestrator {
     tonic::include_proto!("orchestrator");
 }

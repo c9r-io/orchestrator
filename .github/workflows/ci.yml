@@ -88,6 +88,32 @@ jobs:
         env:
           PROTOC: /usr/bin/protoc
 
+  miri:
+    name: Miri unsafe validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Install Rust nightly with Miri
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: miri
+
+      - name: Run Miri on core crate (resource_limits module)
+        run: cargo +nightly miri test -p agent-orchestrator --lib -- runner::resource_limits
+        env:
+          PROTOC: /usr/bin/protoc
+          MIRIFLAGS: "-Zmiri-disable-isolation"
+
   cross-compile:
     name: Cross-compile (${{ matrix.target }})
     strategy:

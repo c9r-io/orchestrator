@@ -15,8 +15,10 @@ pub(crate) fn apply_unix_resource_limits_to_command(
     let Some(limits) = UnixResourceLimits::from_execution_profile(execution_profile) else {
         return Ok(());
     };
-    // Apply rlimits in the child just before exec so the sandbox wrapper and
-    // the eventual agent process inherit the same enforcement boundary.
+    // SAFETY: `pre_exec` runs in the forked child between fork() and exec().
+    // The closure only calls `setrlimit`, which is async-signal-safe per POSIX.
+    // No heap allocations, mutex acquisitions, or non-signal-safe operations
+    // occur inside the closure.
     unsafe {
         cmd.pre_exec(move || apply_unix_resource_limits(&limits).map_err(io::Error::other));
     }

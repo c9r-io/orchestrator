@@ -17,6 +17,7 @@
     deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)
 )]
 #![warn(missing_docs)]
+#![deny(clippy::undocumented_unsafe_blocks)]
 
 pub mod agent_lifecycle;
 /// Anomaly classification types for scheduler traces and runtime diagnostics.

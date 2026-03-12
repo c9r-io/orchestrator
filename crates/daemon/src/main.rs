@@ -6,6 +6,7 @@
     deny(clippy::panic, clippy::unwrap_used, clippy::expect_used)
 )]
 #![warn(missing_docs)]
+#![deny(clippy::undocumented_unsafe_blocks)]
 
 mod control_plane;
 mod lifecycle;

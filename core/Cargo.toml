@@ -34,6 +34,7 @@ pathdiff = "0.2"
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
+nix = { version = "0.29", default-features = false, features = ["user"] }
 
 [features]
 test-harness = []

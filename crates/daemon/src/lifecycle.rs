@@ -37,7 +37,7 @@ pub fn read_pid_file(path: &Path) -> Option<u32> {
 #[cfg(unix)]
 #[allow(dead_code)]
 pub fn is_process_alive(pid: u32) -> bool {
-    unsafe { libc::kill(pid as i32, 0) == 0 }
+    nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid as i32), None).is_ok()
 }
 
 /// Clean up socket and PID file on shutdown.

@@ -106,6 +106,11 @@ fn alloc_memory_probe(chunk_mb: usize, total_mb: usize) -> Result<()> {
                 sanitize_value(&err.to_string())
             ));
         }
+        // SAFETY: `try_reserve_exact(chunk_bytes)` succeeded on the preceding
+        // line, so the allocation has capacity >= chunk_bytes. The bytes are
+        // intentionally left uninitialized; the page-stride write loop below
+        // touches every page, and the Vec is dropped at end of scope without
+        // reading uninitialized memory through safe APIs.
         unsafe {
             block.set_len(chunk_bytes);
         }

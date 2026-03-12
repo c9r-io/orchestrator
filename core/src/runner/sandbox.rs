@@ -246,7 +246,7 @@ pub(crate) fn detect_linux_sandbox_support(
                     .to_string(),
             );
         }
-        if unsafe { libc::geteuid() } != 0 {
+        if nix::unistd::geteuid().as_raw() != 0 {
             missing.push("linux_native requires the daemon to run as root".to_string());
         }
         LinuxSandboxSupport {

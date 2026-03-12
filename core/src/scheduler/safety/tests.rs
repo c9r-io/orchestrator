@@ -8,6 +8,32 @@ use std::io::Write;
 use std::path::Path;
 use tempfile::TempDir;
 
+/// Set an environment variable in test code.
+///
+/// # Safety
+/// Callers must hold `ENV_LOCK` for the duration of the test to ensure
+/// no concurrent env mutations occur.
+macro_rules! test_set_env {
+    ($key:expr, $val:expr) => {
+        // SAFETY: This test holds ENV_LOCK, ensuring exclusive access to the
+        // process environment. No other thread mutates env vars concurrently.
+        unsafe { std::env::set_var($key, $val) }
+    };
+}
+
+/// Remove an environment variable in test code.
+///
+/// # Safety
+/// Callers must hold `ENV_LOCK` for the duration of the test to ensure
+/// no concurrent env mutations occur.
+macro_rules! test_remove_env {
+    ($key:expr) => {
+        // SAFETY: This test holds ENV_LOCK, ensuring exclusive access to the
+        // process environment. No other thread mutates env vars concurrently.
+        unsafe { std::env::remove_var($key) }
+    };
+}
+
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
@@ -363,15 +389,15 @@ async fn test_execute_self_test_step_returns_nonzero_when_cargo_check_fails() {
     // workspace_root is already created by TestState
 
     let fake_cargo = fake_bin.join("cargo");
-    std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
-    std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
+    test_set_env!("FAKE_CARGO_LOG", &cargo_log);
+    test_set_env!("ORCH_SELF_TEST_CARGO", &fake_cargo);
 
     let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1", None)
         .await
         .expect("self test should return exit code");
 
-    std::env::remove_var("FAKE_CARGO_LOG");
-    std::env::remove_var("ORCH_SELF_TEST_CARGO");
+    test_remove_env!("FAKE_CARGO_LOG");
+    test_remove_env!("ORCH_SELF_TEST_CARGO");
 
     assert_eq!(result, 9);
     let log = std::fs::read_to_string(&cargo_log).expect("read cargo log");
@@ -394,8 +420,8 @@ async fn test_execute_self_test_step_success_with_manifest_validate() {
     );
 
     let fake_cargo = fake_bin.join("cargo");
-    std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
-    std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
+    test_set_env!("FAKE_CARGO_LOG", &cargo_log);
+    test_set_env!("ORCH_SELF_TEST_CARGO", &fake_cargo);
 
     // Self-test now uses direct library call for manifest validation,
     // so we skip that phase here (no manifest file = no validation).
@@ -403,8 +429,8 @@ async fn test_execute_self_test_step_success_with_manifest_validate() {
         .await
         .expect("self test should succeed");
 
-    std::env::remove_var("FAKE_CARGO_LOG");
-    std::env::remove_var("ORCH_SELF_TEST_CARGO");
+    test_remove_env!("FAKE_CARGO_LOG");
+    test_remove_env!("ORCH_SELF_TEST_CARGO");
 
     assert_eq!(result, 0);
     let cargo_calls = std::fs::read_to_string(&cargo_log).expect("read cargo log");
@@ -704,15 +730,15 @@ async fn test_execute_self_test_step_cargo_test_fails() {
         "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FAKE_CARGO_LOG\"\ncase \"$*\" in *check*) exit 0 ;; *) exit 7 ;; esac\n",
     );
     let fake_cargo = fake_bin.join("cargo");
-    std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
-    std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
+    test_set_env!("FAKE_CARGO_LOG", &cargo_log);
+    test_set_env!("ORCH_SELF_TEST_CARGO", &fake_cargo);
 
     let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1", None)
         .await
         .expect("self test should return exit code");
 
-    std::env::remove_var("FAKE_CARGO_LOG");
-    std::env::remove_var("ORCH_SELF_TEST_CARGO");
+    test_remove_env!("FAKE_CARGO_LOG");
+    test_remove_env!("ORCH_SELF_TEST_CARGO");
 
     assert_eq!(result, 7);
     let log = std::fs::read_to_string(&cargo_log).expect("read cargo log");
@@ -743,15 +769,15 @@ async fn test_execute_self_test_step_no_manifest_script() {
     // Deliberately do NOT create docs/workflow/self-bootstrap.yaml
 
     let fake_cargo = fake_bin.join("cargo");
-    std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
-    std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
+    test_set_env!("FAKE_CARGO_LOG", &cargo_log);
+    test_set_env!("ORCH_SELF_TEST_CARGO", &fake_cargo);
 
     let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1", None)
         .await
         .expect("self test should return exit code");
 
-    std::env::remove_var("FAKE_CARGO_LOG");
-    std::env::remove_var("ORCH_SELF_TEST_CARGO");
+    test_remove_env!("FAKE_CARGO_LOG");
+    test_remove_env!("ORCH_SELF_TEST_CARGO");
 
     assert_eq!(result, 0, "should succeed when manifest script is absent");
 }
@@ -888,17 +914,13 @@ async fn test_execute_self_restart_step_build_fails() {
     // workspace_root is already created by TestState
 
     let fake_cargo = fake_bin.join("cargo");
-    unsafe {
-        std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
-    }
+    test_set_env!("ORCH_SELF_TEST_CARGO", &fake_cargo);
 
     let result = execute_self_restart_step(&workspace_root, &state, "task-1", "item-1")
         .await
         .expect("self restart should return outcome");
 
-    unsafe {
-        std::env::remove_var("ORCH_SELF_TEST_CARGO");
-    }
+    test_remove_env!("ORCH_SELF_TEST_CARGO");
 
     // Build failure should return Failed with the cargo exit code
     match result {
@@ -946,17 +968,13 @@ async fn test_execute_self_restart_step_success_returns_exit_restart() {
     ).expect("insert task");
 
     let fake_cargo = fake_bin.join("cargo");
-    unsafe {
-        std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
-    }
+    test_set_env!("ORCH_SELF_TEST_CARGO", &fake_cargo);
 
     let result = execute_self_restart_step(&workspace_root, &state, "task-restart", "item-1")
         .await
         .expect("self restart should return outcome");
 
-    unsafe {
-        std::env::remove_var("ORCH_SELF_TEST_CARGO");
-    }
+    test_remove_env!("ORCH_SELF_TEST_CARGO");
 
     assert!(
         matches!(result, SelfRestartOutcome::RestartReady { .. }),
@@ -1110,20 +1128,16 @@ async fn test_execute_self_restart_step_verify_timeout() {
     write_executable(&binary_path, "#!/bin/sh\nsleep 20\n");
 
     let fake_cargo = fake_bin.join("cargo");
-    unsafe {
-        std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
-        // Use a short timeout so the test doesn't block for 30s
-        std::env::set_var("ORCH_VERIFY_BINARY_TIMEOUT", "2");
-    }
+    test_set_env!("ORCH_SELF_TEST_CARGO", &fake_cargo);
+    // Use a short timeout so the test doesn't block for 30s
+    test_set_env!("ORCH_VERIFY_BINARY_TIMEOUT", "2");
 
     let result = execute_self_restart_step(&workspace_root, &state, "task-timeout", "item-1")
         .await
         .expect("should return outcome even on timeout");
 
-    unsafe {
-        std::env::remove_var("ORCH_SELF_TEST_CARGO");
-        std::env::remove_var("ORCH_VERIFY_BINARY_TIMEOUT");
-    }
+    test_remove_env!("ORCH_SELF_TEST_CARGO");
+    test_remove_env!("ORCH_VERIFY_BINARY_TIMEOUT");
 
     // Timeout path returns Failed(1)
     match result {
@@ -1149,9 +1163,7 @@ async fn test_execute_self_restart_step_snapshot_fails() {
     write_executable(&binary_path, "#!/bin/sh\necho 'help'\nexit 0\n");
 
     let fake_cargo = fake_bin.join("cargo");
-    unsafe {
-        std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
-    }
+    test_set_env!("ORCH_SELF_TEST_CARGO", &fake_cargo);
 
     // Remove the binary so snapshot_binary fails (binary not found)
     std::fs::remove_file(&binary_path).expect("remove binary before snapshot");
@@ -1160,9 +1172,7 @@ async fn test_execute_self_restart_step_snapshot_fails() {
         .await
         .expect("should return outcome on snapshot failure");
 
-    unsafe {
-        std::env::remove_var("ORCH_SELF_TEST_CARGO");
-    }
+    test_remove_env!("ORCH_SELF_TEST_CARGO");
 
     match result {
         SelfRestartOutcome::Failed(code) => assert_eq!(code, 1),
@@ -1194,9 +1204,7 @@ async fn test_execute_self_restart_step_binary_read_fails_uses_unknown() {
     ).expect("insert task");
 
     let fake_cargo = fake_bin.join("cargo");
-    unsafe {
-        std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
-    }
+    test_set_env!("ORCH_SELF_TEST_CARGO", &fake_cargo);
 
     // Make binary unreadable after snapshot by setting up a write-only file
     // We achieve the "unknown" path by removing the binary after snapshot
@@ -1209,9 +1217,7 @@ async fn test_execute_self_restart_step_binary_read_fails_uses_unknown() {
         .await
         .expect("should return outcome");
 
-    unsafe {
-        std::env::remove_var("ORCH_SELF_TEST_CARGO");
-    }
+    test_remove_env!("ORCH_SELF_TEST_CARGO");
 
     // On success, RestartReady is returned
     assert!(
@@ -1271,15 +1277,15 @@ async fn test_execute_self_test_step_manifest_validate_fails() {
     // workspace_root is already created by TestState
 
     let fake_cargo = fake_bin.join("cargo");
-    std::env::set_var("FAKE_CARGO_LOG", &cargo_log);
-    std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
+    test_set_env!("FAKE_CARGO_LOG", &cargo_log);
+    test_set_env!("ORCH_SELF_TEST_CARGO", &fake_cargo);
 
     let result = execute_self_test_step(&workspace_root, &state, "task-1", "item-1", None)
         .await
         .expect("self test should return exit code");
 
-    std::env::remove_var("FAKE_CARGO_LOG");
-    std::env::remove_var("ORCH_SELF_TEST_CARGO");
+    test_remove_env!("FAKE_CARGO_LOG");
+    test_remove_env!("ORCH_SELF_TEST_CARGO");
 
     assert_ne!(
         result, 0,
@@ -1398,17 +1404,13 @@ async fn test_execute_self_restart_step_records_old_binary_sha256() {
     ).expect("insert task");
 
     let fake_cargo = fake_bin.join("cargo");
-    unsafe {
-        std::env::set_var("ORCH_SELF_TEST_CARGO", &fake_cargo);
-    }
+    test_set_env!("ORCH_SELF_TEST_CARGO", &fake_cargo);
 
     let result = execute_self_restart_step(&workspace_root, &state, "task-old-sha", "item-1")
         .await
         .expect("should return outcome");
 
-    unsafe {
-        std::env::remove_var("ORCH_SELF_TEST_CARGO");
-    }
+    test_remove_env!("ORCH_SELF_TEST_CARGO");
 
     assert!(
         matches!(result, SelfRestartOutcome::RestartReady { .. }),
