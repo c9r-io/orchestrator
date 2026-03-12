@@ -1319,7 +1319,7 @@ pub(crate) async fn execute_dynamic_step_config(
                 )
             })?;
             (
-                ds.template.clone().unwrap_or_else(|| agent.command.clone()),
+                agent.command.clone(),
                 agent.prompt_delivery,
             )
         };
@@ -1343,7 +1343,7 @@ pub(crate) async fn execute_dynamic_step_config(
                 pipeline_vars: None,
                 step_timeout_secs: task_ctx.safety.step_timeout_secs,
                 step_scope: crate::config::StepScope::Item,
-                step_template_prompt: None,
+                step_template_prompt: ds.template.as_deref(),
                 project_id: &task_ctx.project_id,
                 execution_profile: None,
             },

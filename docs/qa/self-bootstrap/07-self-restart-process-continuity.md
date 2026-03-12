@@ -218,6 +218,12 @@ Full end-to-end testing (exit 75 → daemon restart loop relaunch → new binary
 
 ---
 
+## Troubleshooting
+
+| Symptom | Root Cause | Resolution |
+|---------|-----------|------------|
+| `self_restart` completes with `self_restart_ready` event but task status becomes `failed`; Cycle 2 never starts | Running daemon binary was built from an older commit that predates the `RestartRequestedError` fix (`0133e49`). The self_restart step rebuilt the binary but `binary_changed=false` because incremental build didn't pick up the newer commit. | Rebuild the daemon from HEAD before running the test: `cargo build --release -p orchestratord -p orchestrator-cli`. Verify the running binary's `build_git_hash` in the `self_restart_ready` event matches the latest commit. |
+
 ## Checklist
 
 | # | Scenario | Status | Test Date | Tester | Notes |
