@@ -46,3 +46,24 @@ pub(crate) fn format_to_string(f: OutputFormat) -> String {
         OutputFormat::Yaml => "yaml".to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_grpc_error_preserves_failed_precondition_hint() {
+        let err = format_grpc_error(tonic::Status::failed_precondition(
+            "use --force to confirm task deletion",
+        ));
+        let rendered = err.to_string();
+        assert!(rendered.contains("use --force to confirm task deletion"));
+        assert!(rendered.contains("hint: check --force"));
+    }
+
+    #[test]
+    fn format_grpc_error_preserves_not_found_message() {
+        let err = format_grpc_error(tonic::Status::not_found("task.info: task not found: abc"));
+        assert_eq!(err.to_string(), "task.info: task not found: abc");
+    }
+}

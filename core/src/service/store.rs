@@ -1,6 +1,6 @@
+use crate::error::{classify_store_error, OrchestratorError, Result};
 use crate::state::InnerState;
 use crate::store::{StoreOp, StoreOpResult};
-use anyhow::Result;
 
 pub async fn store_get(
     state: &InnerState,
@@ -15,7 +15,9 @@ pub async fn store_get(
     };
     let result = execute_store_op(state, op).await?;
     match result {
-        StoreOpResult::Value(Some(v)) => Ok(Some(serde_json::to_string_pretty(&v)?)),
+        StoreOpResult::Value(Some(v)) => serde_json::to_string_pretty(&v)
+            .map(Some)
+            .map_err(|err| classify_store_error("store.get", err)),
         StoreOpResult::Value(None) => Ok(None),
         _ => Ok(None),
     }
@@ -109,13 +111,19 @@ pub async fn store_prune(state: &InnerState, store: &str, project: &str) -> Resu
 
 async fn execute_store_op(state: &InnerState, op: StoreOp) -> Result<StoreOpResult> {
     let custom_resources = {
-        let config = state
-            .active_config
-            .read()
-            .map_err(|_| anyhow::anyhow!("failed to read active config"))?;
+        let config = state.active_config.read().map_err(|_| {
+            OrchestratorError::external_dependency(
+                "store.active_config",
+                anyhow::anyhow!("failed to read active config"),
+            )
+        })?;
         config.config.custom_resources.clone()
     };
-    state.store_manager.execute(&custom_resources, op).await
+    state
+        .store_manager
+        .execute(&custom_resources, op)
+        .await
+        .map_err(|err| classify_store_error("store.execute", err))
 }
 
 #[cfg(test)]

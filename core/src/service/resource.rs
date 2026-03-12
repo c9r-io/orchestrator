@@ -3,12 +3,13 @@ use crate::config_load::{
     persist_config_for_delete, read_active_config, ResourceRemoval,
 };
 use crate::crd::{self, ParsedManifest};
+use crate::error::{classify_resource_error, Result};
 use crate::resource::{
     apply_to_project, dispatch_resource, kind_as_str, parse_manifests_from_yaml, ApplyResult,
     Resource,
 };
 use crate::state::InnerState;
-use anyhow::{Context, Result};
+use anyhow::Context;
 use std::collections::{HashMap, HashSet};
 
 /// Apply manifest content. Returns an ApplyResponse proto.
@@ -20,10 +21,12 @@ pub fn apply_manifests(
     prune: bool,
 ) -> Result<orchestrator_proto::ApplyResponse> {
     let db_path = &state.db_path;
-    let manifests =
-        parse_manifests_from_yaml(content).map_err(|e| anyhow::anyhow!("parse error: {}", e))?;
+    let manifests = parse_manifests_from_yaml(content).map_err(|e| {
+        classify_resource_error("resource.apply", anyhow::anyhow!("parse error: {}", e))
+    })?;
 
-    let current_config = load_config(db_path)?
+    let current_config = load_config(db_path)
+        .map_err(|err| classify_resource_error("resource.apply", err))?
         .map(|(cfg, _, _)| cfg)
         .unwrap_or_default();
     let mut merged_config = current_config.clone();
@@ -70,7 +73,8 @@ pub fn apply_manifests(
                         continue;
                     }
                 }
-                let result = apply_to_project(&registered, &mut merged_config, cli_project)?;
+                let result = apply_to_project(&registered, &mut merged_config, cli_project)
+                    .map_err(|err| classify_resource_error("resource.apply", err))?;
                 if let Some(kind) = prunable_resource_kind(&registered) {
                     prunable_manifest_names
                         .entry(kind)
@@ -148,8 +152,10 @@ pub fn apply_manifests(
     };
 
     if errors.is_empty() && !deleted_resources.is_empty() {
-        let conn = crate::db::open_conn(db_path)?;
-        enforce_deletion_guards_for_removals(&conn, &deleted_resources)?;
+        let conn = crate::db::open_conn(db_path)
+            .map_err(|err| classify_resource_error("resource.apply", err))?;
+        enforce_deletion_guards_for_removals(&conn, &deleted_resources)
+            .map_err(|err| classify_resource_error("resource.apply", err))?;
     }
 
     for deletion in &deleted_resources {
@@ -164,7 +170,8 @@ pub fn apply_manifests(
     let config_version = if !dry_run && !results.is_empty() && errors.is_empty() {
         autofill_defaults_for_manifest_mode(&mut merged_config);
         let yaml = serde_yml::to_string(&merged_config)
-            .context("failed to serialize config after apply")?;
+            .context("failed to serialize config after apply")
+            .map_err(|err| classify_resource_error("resource.apply", err))?;
         let overview = persist_config_and_reload(
             state,
             merged_config,
@@ -172,7 +179,8 @@ pub fn apply_manifests(
             "daemon-apply",
             Some(cli_project),
             &deleted_resources,
-        )?;
+        )
+        .map_err(|err| classify_resource_error("resource.apply", err))?;
         Some(overview.version)
     } else {
         None
@@ -193,17 +201,25 @@ pub fn get_resource(
     output_format: &str,
     project: Option<&str>,
 ) -> Result<String> {
-    let active = read_active_config(state)?;
+    let active =
+        read_active_config(state).map_err(|err| classify_resource_error("resource.get", err))?;
     let config = &active.config;
     let project_id = project.unwrap_or(crate::config::DEFAULT_PROJECT_ID);
-    let proj_cfg = config
-        .projects
-        .get(project_id)
-        .context(format!("project not found: {}", project_id))?;
+    let proj_cfg = config.projects.get(project_id).ok_or_else(|| {
+        classify_resource_error(
+            "resource.get",
+            anyhow::anyhow!("project not found: {}", project_id),
+        )
+    })?;
 
     if resource.contains('/') {
         if selector.is_some() {
-            anyhow::bail!("label selector (-l) cannot be used with a named resource; use it with list queries only");
+            return Err(classify_resource_error(
+                "resource.get",
+                anyhow::anyhow!(
+                    "label selector (-l) cannot be used with a named resource; use it with list queries only"
+                ),
+            ));
         }
         let parts: Vec<&str> = resource.splitn(2, '/').collect();
         let (kind, name) = (parts[0], parts[1]);
@@ -228,27 +244,36 @@ fn get_single_resource(
 ) -> Result<String> {
     match kind {
         "ws" | "workspace" => {
-            let ws = project
-                .workspaces
-                .get(name)
-                .context(format!("workspace not found: {}", name))?;
+            let ws = project.workspaces.get(name).ok_or_else(|| {
+                classify_resource_error(
+                    "resource.get",
+                    anyhow::anyhow!("workspace not found: {}", name),
+                )
+            })?;
             format_output(ws, output_format)
         }
         "wf" | "workflow" => {
-            let wf = project
-                .workflows
-                .get(name)
-                .context(format!("workflow not found: {}", name))?;
+            let wf = project.workflows.get(name).ok_or_else(|| {
+                classify_resource_error(
+                    "resource.get",
+                    anyhow::anyhow!("workflow not found: {}", name),
+                )
+            })?;
             format_output(wf, output_format)
         }
         "agent" => {
-            let agent = project
-                .agents
-                .get(name)
-                .context(format!("agent not found: {}", name))?;
+            let agent = project.agents.get(name).ok_or_else(|| {
+                classify_resource_error(
+                    "resource.get",
+                    anyhow::anyhow!("agent not found: {}", name),
+                )
+            })?;
             format_output(agent, output_format)
         }
-        _ => anyhow::bail!("unknown resource type: {}", kind),
+        _ => Err(classify_resource_error(
+            "resource.get",
+            anyhow::anyhow!("unknown resource type: {}", kind),
+        )),
     }
 }
 
@@ -264,7 +289,12 @@ fn get_list_resource(
         "ws" | "workspace" | "workspaces" => (project.workspaces.keys().collect(), "Workspace"),
         "agent" | "agents" => (project.agents.keys().collect(), "Agent"),
         "wf" | "workflow" | "workflows" => (project.workflows.keys().collect(), "Workflow"),
-        _ => anyhow::bail!("unknown list resource type: {}", resource_type),
+        _ => {
+            return Err(classify_resource_error(
+                "resource.get",
+                anyhow::anyhow!("unknown list resource type: {}", resource_type),
+            ));
+        }
     };
 
     let filtered: Vec<&String> = if let Some(sel) = selector {
@@ -295,7 +325,10 @@ fn parse_label_selector(selector: &str) -> Result<Vec<(String, String)>> {
         }
         let kv: Vec<&str> = part.splitn(2, '=').collect();
         if kv.len() != 2 {
-            anyhow::bail!("invalid label selector: '{}' (expected key=value)", part);
+            return Err(classify_resource_error(
+                "resource.get",
+                anyhow::anyhow!("invalid label selector: '{}' (expected key=value)", part),
+            ));
         }
         conditions.push((kv[0].to_string(), kv[1].to_string()));
     }
@@ -335,12 +368,18 @@ pub fn delete_resource(
 ) -> Result<()> {
     let parts: Vec<&str> = resource.split('/').collect();
     if parts.len() != 2 {
-        anyhow::bail!("invalid resource format: {} (use kind/name)", resource);
+        return Err(classify_resource_error(
+            "resource.delete",
+            anyhow::anyhow!("invalid resource format: {} (use kind/name)", resource),
+        ));
     }
     let (kind, name) = (parts[0], parts[1]);
 
     if !force {
-        anyhow::bail!("use --force to confirm deletion of {}/{}", kind, name);
+        return Err(classify_resource_error(
+            "resource.delete",
+            anyhow::anyhow!("use --force to confirm deletion of {}/{}", kind, name),
+        ));
     }
 
     let config = {
@@ -353,7 +392,10 @@ pub fn delete_resource(
             if config.projects.contains_key(name) {
                 return Ok(());
             } else {
-                anyhow::bail!("project '{}' not found", name);
+                return Err(classify_resource_error(
+                    "resource.delete",
+                    anyhow::anyhow!("project '{}' not found", name),
+                ));
             }
         }
         let project_id = project.unwrap_or(crate::config::DEFAULT_PROJECT_ID);
@@ -373,7 +415,10 @@ pub fn delete_resource(
             _ => false,
         };
         if !exists {
-            anyhow::bail!("{}/{} not found in project '{}'", kind, name, project_id);
+            return Err(classify_resource_error(
+                "resource.delete",
+                anyhow::anyhow!("{}/{} not found in project '{}'", kind, name, project_id),
+            ));
         }
         return Ok(());
     }
@@ -429,14 +474,19 @@ pub fn delete_resource(
     }
 
     let project_id = project.unwrap_or(crate::config::DEFAULT_PROJECT_ID);
-    let proj_cfg = config
-        .projects
-        .get_mut(project_id)
-        .context(format!("project not found: {}", project_id))?;
+    let proj_cfg = config.projects.get_mut(project_id).ok_or_else(|| {
+        classify_resource_error(
+            "resource.delete",
+            anyhow::anyhow!("project not found: {}", project_id),
+        )
+    })?;
     let canonical_kind = canonical_project_kind(kind)?;
     let deleted = delete_resource_from_project(proj_cfg, kind, name)?;
     if !deleted {
-        anyhow::bail!("{}/{} not found in project '{}'", kind, name, project_id);
+        return Err(classify_resource_error(
+            "resource.delete",
+            anyhow::anyhow!("{}/{} not found in project '{}'", kind, name, project_id),
+        ));
     }
     let deleted_resources = vec![ResourceRemoval {
         kind: canonical_kind.to_string(),
@@ -464,7 +514,10 @@ fn delete_resource_from_project(
         }
         "envstore" | "env-store" | "env_store" | "secretstore" | "secret-store"
         | "secret_store" => Ok(proj.env_stores.remove(name).is_some()),
-        _ => anyhow::bail!("unknown resource type for project delete: {}", kind),
+        _ => Err(classify_resource_error(
+            "resource.delete",
+            anyhow::anyhow!("unknown resource type for project delete: {}", kind),
+        )),
     }
 }
 
@@ -477,7 +530,10 @@ fn canonical_project_kind(kind: &str) -> Result<&'static str> {
         "executionprofile" | "execution-profile" | "execution_profile" => Ok("ExecutionProfile"),
         "envstore" | "env-store" | "env_store" => Ok("EnvStore"),
         "secretstore" | "secret-store" | "secret_store" => Ok("SecretStore"),
-        _ => anyhow::bail!("unknown resource type for project delete: {}", kind),
+        _ => Err(classify_resource_error(
+            "resource.delete",
+            anyhow::anyhow!("unknown resource type for project delete: {}", kind),
+        )),
     }
 }
 

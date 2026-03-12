@@ -1,7 +1,7 @@
 use orchestrator_proto::*;
 use tonic::{Request, Response, Status};
 
-use super::OrchestratorServer;
+use super::{map_core_error, OrchestratorServer};
 
 pub(crate) async fn ping(
     server: &OrchestratorServer,
@@ -40,7 +40,7 @@ pub(crate) async fn config_debug(
     let req = request.into_inner();
     let content =
         agent_orchestrator::service::system::debug_info(&server.state, req.component.as_deref())
-            .map_err(|e| Status::internal(format!("{e}")))?;
+            .map_err(map_core_error)?;
 
     Ok(Response::new(ConfigDebugResponse {
         content,
@@ -55,7 +55,7 @@ pub(crate) async fn worker_status(
     super::authorize(server, &request, "WorkerStatus").map_err(Status::from)?;
     let status = agent_orchestrator::service::system::worker_status(&server.state)
         .await
-        .map_err(|e| Status::internal(format!("{e}")))?;
+        .map_err(map_core_error)?;
 
     Ok(Response::new(status))
 }
@@ -72,7 +72,7 @@ pub(crate) async fn check(
         &req.output_format,
         req.project_id.as_deref(),
     )
-    .map_err(|e| Status::internal(format!("{e}")))?;
+    .map_err(map_core_error)?;
 
     Ok(Response::new(CheckResponse {
         content: report.content,
@@ -94,7 +94,7 @@ pub(crate) async fn init(
     super::authorize(server, &request, "Init").map_err(Status::from)?;
     let req = request.into_inner();
     let message = agent_orchestrator::service::system::run_init(&server.state, req.root.as_deref())
-        .map_err(|e| Status::internal(format!("{e}")))?;
+        .map_err(map_core_error)?;
     Ok(Response::new(InitResponse { message }))
 }
 
@@ -103,8 +103,8 @@ pub(crate) async fn db_status(
     request: Request<DbStatusRequest>,
 ) -> Result<Response<DbStatusResponse>, Status> {
     super::authorize(server, &request, "DbStatus").map_err(Status::from)?;
-    let status = agent_orchestrator::service::system::db_status(&server.state)
-        .map_err(|e| Status::internal(format!("{e}")))?;
+    let status =
+        agent_orchestrator::service::system::db_status(&server.state).map_err(map_core_error)?;
     Ok(Response::new(status))
 }
 
@@ -114,7 +114,7 @@ pub(crate) async fn db_migrations_list(
 ) -> Result<Response<DbMigrationsListResponse>, Status> {
     super::authorize(server, &request, "DbMigrationsList").map_err(Status::from)?;
     let list = agent_orchestrator::service::system::db_migrations_list(&server.state)
-        .map_err(|e| Status::internal(format!("{e}")))?;
+        .map_err(map_core_error)?;
     Ok(Response::new(list))
 }
 
@@ -129,7 +129,7 @@ pub(crate) async fn manifest_validate(
         &req.content,
         req.project_id.as_deref(),
     )
-    .map_err(|e| Status::internal(format!("{e}")))?;
+    .map_err(map_core_error)?;
     Ok(Response::new(ManifestValidateResponse {
         valid: report.valid,
         errors: report.errors,

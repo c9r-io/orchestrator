@@ -7,6 +7,7 @@ mod task;
 
 use std::sync::Arc;
 
+use agent_orchestrator::error::{ErrorCategory, OrchestratorError};
 use agent_orchestrator::state::InnerState;
 use orchestrator_proto::*;
 use tokio::sync::Notify;
@@ -58,19 +59,18 @@ pub(crate) fn authorize<T>(
     }
 }
 
-fn map_resource_error(error: anyhow::Error) -> Status {
+fn map_core_error(error: OrchestratorError) -> Status {
     let message = error.to_string();
-    if message.starts_with("[FAILED_PRECONDITION]") {
-        return Status::failed_precondition(
-            message
-                .trim_start_matches("[FAILED_PRECONDITION] ")
-                .to_string(),
-        );
+    match error.category() {
+        ErrorCategory::UserInput => Status::invalid_argument(message),
+        ErrorCategory::ConfigValidation | ErrorCategory::InvalidState => {
+            Status::failed_precondition(message)
+        }
+        ErrorCategory::NotFound => Status::not_found(message),
+        ErrorCategory::SecurityDenied => Status::permission_denied(message),
+        ErrorCategory::ExternalDependency => Status::unavailable(message),
+        ErrorCategory::InternalInvariant => Status::internal(message),
     }
-    if message.starts_with("use --force") {
-        return Status::failed_precondition(message);
-    }
-    Status::internal(message)
 }
 
 #[tonic::async_trait]
@@ -320,5 +320,37 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<SecretKeyHistoryRequest>,
     ) -> Result<Response<SecretKeyHistoryResponse>, Status> {
         secret::secret_key_history(self, request).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn map_core_error_uses_not_found_status() {
+        let status = map_core_error(OrchestratorError::not_found(
+            "task.info",
+            anyhow::anyhow!("task not found: deadbeef"),
+        ));
+        assert_eq!(status.code(), tonic::Code::NotFound);
+    }
+
+    #[test]
+    fn map_core_error_uses_failed_precondition_for_invalid_state() {
+        let status = map_core_error(OrchestratorError::invalid_state(
+            "task.retry",
+            anyhow::anyhow!("use --force to confirm task retry"),
+        ));
+        assert_eq!(status.code(), tonic::Code::FailedPrecondition);
+    }
+
+    #[test]
+    fn map_core_error_uses_invalid_argument_for_user_input() {
+        let status = map_core_error(OrchestratorError::user_input(
+            "task.start",
+            anyhow::anyhow!("task_id or --latest required"),
+        ));
+        assert_eq!(status.code(), tonic::Code::InvalidArgument);
     }
 }

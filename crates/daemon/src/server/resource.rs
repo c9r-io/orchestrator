@@ -1,7 +1,7 @@
 use orchestrator_proto::*;
 use tonic::{Request, Response, Status};
 
-use super::{map_resource_error, OrchestratorServer};
+use super::{map_core_error, OrchestratorServer};
 
 pub(crate) async fn apply(
     server: &OrchestratorServer,
@@ -16,7 +16,7 @@ pub(crate) async fn apply(
         req.project.as_deref(),
         req.prune,
     )
-    .map_err(map_resource_error)?;
+    .map_err(map_core_error)?;
 
     Ok(Response::new(result))
 }
@@ -34,7 +34,7 @@ pub(crate) async fn get(
         &req.output_format,
         req.project.as_deref(),
     )
-    .map_err(|e| Status::internal(format!("{e}")))?;
+    .map_err(map_core_error)?;
 
     Ok(Response::new(GetResponse {
         content,
@@ -54,7 +54,7 @@ pub(crate) async fn describe(
         &req.output_format,
         req.project.as_deref(),
     )
-    .map_err(|e| Status::internal(format!("{e}")))?;
+    .map_err(map_core_error)?;
 
     Ok(Response::new(DescribeResponse {
         content,
@@ -75,7 +75,7 @@ pub(crate) async fn delete(
         req.project.as_deref(),
         req.dry_run,
     )
-    .map_err(map_resource_error)?;
+    .map_err(map_core_error)?;
     let scope = req
         .project
         .map(|p| format!(" (project: {})", p))
@@ -98,7 +98,7 @@ pub(crate) async fn manifest_export(
     let req = request.into_inner();
     let content =
         agent_orchestrator::service::resource::export_manifests(&server.state, &req.output_format)
-            .map_err(|e| Status::internal(format!("{e}")))?;
+            .map_err(map_core_error)?;
     Ok(Response::new(ManifestExportResponse {
         content,
         format: req.output_format,

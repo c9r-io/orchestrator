@@ -7,7 +7,7 @@ use tonic::{Request, Response, Status};
 use super::mapping::{
     event_to_proto, graph_debug_to_proto, item_to_proto, run_to_proto, summary_to_proto,
 };
-use super::OrchestratorServer;
+use super::{map_core_error, OrchestratorServer};
 
 pub(crate) type TaskLogsStream = Pin<Box<dyn Stream<Item = Result<TaskLogChunk, Status>> + Send>>;
 pub(crate) type TaskFollowStream = Pin<Box<dyn Stream<Item = Result<TaskLogLine, Status>> + Send>>;
@@ -48,7 +48,7 @@ pub(crate) async fn task_create(
     };
 
     let created = agent_orchestrator::service::task::create_task(&server.state, payload)
-        .map_err(|e| Status::internal(format!("task create failed: {e}")))?;
+        .map_err(map_core_error)?;
 
     let mut status = "created".to_string();
     let mut message = format!("Task created: {}", created.id);
@@ -56,7 +56,7 @@ pub(crate) async fn task_create(
     if !req.no_start {
         agent_orchestrator::service::task::enqueue_task(&server.state, &created.id)
             .await
-            .map_err(|e| Status::internal(format!("enqueue failed: {e}")))?;
+            .map_err(map_core_error)?;
         status = "enqueued".to_string();
         message = format!("Task enqueued: {}", created.id);
     }
@@ -83,11 +83,11 @@ pub(crate) async fn task_start(
         req.latest,
     )
     .await
-    .map_err(|e| Status::internal(format!("{e}")))?;
+    .map_err(map_core_error)?;
 
     agent_orchestrator::service::task::enqueue_task(&server.state, &id)
         .await
-        .map_err(|e| Status::internal(format!("{e}")))?;
+        .map_err(map_core_error)?;
     Ok(Response::new(TaskStartResponse {
         task_id: id.clone(),
         status: "enqueued".into(),
@@ -103,10 +103,10 @@ pub(crate) async fn task_pause(
     let req = request.into_inner();
     let id = agent_orchestrator::service::task::resolve_id(&server.state, &req.task_id)
         .await
-        .map_err(|e| Status::internal(format!("{e}")))?;
+        .map_err(map_core_error)?;
     agent_orchestrator::service::task::pause_task(server.state.clone(), &id)
         .await
-        .map_err(|e| Status::internal(format!("{e}")))?;
+        .map_err(map_core_error)?;
     Ok(Response::new(TaskPauseResponse {
         task_id: id.clone(),
         message: format!("Task paused: {id}"),
@@ -124,11 +124,11 @@ pub(crate) async fn task_resume(
     let req = request.into_inner();
     let id = agent_orchestrator::service::task::resolve_id(&server.state, &req.task_id)
         .await
-        .map_err(|e| Status::internal(format!("{e}")))?;
+        .map_err(map_core_error)?;
 
     agent_orchestrator::service::task::enqueue_task(&server.state, &id)
         .await
-        .map_err(|e| Status::internal(format!("{e}")))?;
+        .map_err(map_core_error)?;
     Ok(Response::new(TaskResumeResponse {
         task_id: id.clone(),
         status: "enqueued".into(),
@@ -149,10 +149,10 @@ pub(crate) async fn task_delete(
     }
     let id = agent_orchestrator::service::task::resolve_id(&server.state, &req.task_id)
         .await
-        .map_err(|e| Status::internal(format!("{e}")))?;
+        .map_err(map_core_error)?;
     agent_orchestrator::service::task::delete_task(server.state.clone(), &id)
         .await
-        .map_err(|e| Status::internal(format!("{e}")))?;
+        .map_err(map_core_error)?;
     Ok(Response::new(TaskDeleteResponse {
         message: format!("Task deleted: {id}"),
     }))
@@ -174,11 +174,11 @@ pub(crate) async fn task_retry(
     }
     let task_id =
         agent_orchestrator::service::task::retry_task_item(&server.state, &req.task_item_id)
-            .map_err(|e| Status::internal(format!("{e}")))?;
+            .map_err(map_core_error)?;
 
     agent_orchestrator::service::task::enqueue_task(&server.state, &task_id)
         .await
-        .map_err(|e| Status::internal(format!("{e}")))?;
+        .map_err(map_core_error)?;
     Ok(Response::new(TaskRetryResponse {
         task_id: task_id.clone(),
         status: "enqueued".into(),
@@ -194,7 +194,7 @@ pub(crate) async fn task_list(
     let req = request.into_inner();
     let tasks = agent_orchestrator::service::task::list_tasks(&server.state)
         .await
-        .map_err(|e| Status::internal(format!("{e}")))?;
+        .map_err(map_core_error)?;
 
     let filtered: Vec<_> = tasks
         .into_iter()
@@ -220,7 +220,7 @@ pub(crate) async fn task_info(
     let req = request.into_inner();
     let detail = agent_orchestrator::service::task::get_task_detail(&server.state, &req.task_id)
         .await
-        .map_err(|e| Status::internal(format!("{e}")))?;
+        .map_err(map_core_error)?;
 
     Ok(Response::new(TaskInfoResponse {
         task: Some(summary_to_proto(&detail.task)),
@@ -248,7 +248,7 @@ pub(crate) async fn task_logs(
         req.timestamps,
     )
     .await
-    .map_err(|e| Status::internal(format!("{e}")))?;
+    .map_err(map_core_error)?;
 
     let (tx, rx) = tokio::sync::mpsc::channel(32);
     for chunk in logs {
@@ -371,7 +371,7 @@ pub(crate) async fn task_trace(
     let result =
         agent_orchestrator::service::task::get_task_trace(&server.state, &req.task_id, req.verbose)
             .await
-            .map_err(|e| Status::internal(format!("{e}")))?;
+            .map_err(map_core_error)?;
 
     let entries = result
         .entries

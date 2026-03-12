@@ -15,6 +15,7 @@ pub mod db_write;
 pub mod dto;
 pub mod dynamic_orchestration;
 pub mod env_resolve;
+pub mod error;
 pub mod events;
 pub mod events_backfill;
 pub mod health;

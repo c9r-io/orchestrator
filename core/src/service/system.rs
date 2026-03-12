@@ -1,10 +1,11 @@
 use super::daemon::runtime_snapshot;
 use crate::config_load::read_active_config;
+use crate::error::{classify_system_error, OrchestratorError, Result};
 use crate::persistence::migration;
 use crate::scheduler::check::{run_checks, CheckReport, CheckResult};
 use crate::scheduler_service::{pending_task_count, worker_stop_signal_path};
 use crate::state::InnerState;
-use anyhow::{Context, Result};
+use anyhow::Context;
 use std::path::Path;
 
 #[derive(Debug, Clone)]
@@ -31,7 +32,8 @@ pub fn debug_info(state: &InnerState, component: Option<&str>) -> Result<String>
                 .to_string(),
         ),
         "config" => {
-            let config = read_active_config(state)?;
+            let config = read_active_config(state)
+                .map_err(|err| classify_system_error("system.debug_info", err))?;
             Ok(format!(
                 "Active Configuration:\n{}",
                 serde_yml::to_string(&config.config).unwrap_or_default()
@@ -92,7 +94,9 @@ fn debug_dag_info(state: &InnerState) -> Result<String> {
 
 /// Get worker status.
 pub async fn worker_status(state: &InnerState) -> Result<orchestrator_proto::WorkerStatusResponse> {
-    let pending = pending_task_count(state).await?;
+    let pending = pending_task_count(state)
+        .await
+        .map_err(|err| classify_system_error("system.worker_status", err))?;
     let stop_signal = worker_stop_signal_path(state).exists();
     let runtime = runtime_snapshot(state);
 
@@ -127,7 +131,8 @@ pub fn run_init(state: &InnerState, root: Option<&str>) -> Result<String> {
 }
 
 pub fn db_status(state: &InnerState) -> Result<orchestrator_proto::DbStatusResponse> {
-    let status = crate::persistence::schema::PersistenceBootstrap::status(&state.db_path)?;
+    let status = crate::persistence::schema::PersistenceBootstrap::status(&state.db_path)
+        .map_err(|err| classify_system_error("system.db_status", err))?;
     let is_current = status.is_current();
     Ok(orchestrator_proto::DbStatusResponse {
         db_path: state.db_path.display().to_string(),
@@ -146,8 +151,10 @@ pub fn db_status(state: &InnerState) -> Result<orchestrator_proto::DbStatusRespo
 pub fn db_migrations_list(
     state: &InnerState,
 ) -> Result<orchestrator_proto::DbMigrationsListResponse> {
-    let conn = crate::db::open_conn(&state.db_path)?;
-    let status = migration::registered_status(&conn)?;
+    let conn = crate::db::open_conn(&state.db_path)
+        .map_err(|err| classify_system_error("system.db_migrations_list", err))?;
+    let status = migration::registered_status(&conn)
+        .map_err(|err| classify_system_error("system.db_migrations_list", err))?;
     let migrations = migration::registered_migration_statuses(&conn)?
         .into_iter()
         .map(|migration| orchestrator_proto::DbMigration {
@@ -173,14 +180,19 @@ pub fn run_db_reset(
     include_config: bool,
 ) -> Result<String> {
     if !force {
-        anyhow::bail!("Use --force to confirm database reset");
+        return Err(OrchestratorError::invalid_state(
+            "system.db_reset",
+            anyhow::anyhow!("Use --force to confirm database reset"),
+        ));
     }
-    crate::db::reset_db_by_path(&state.db_path, include_history, include_config)?;
+    crate::db::reset_db_by_path(&state.db_path, include_history, include_config)
+        .map_err(|err| classify_system_error("system.db_reset", err))?;
 
     // When config is cleared from SQLite, sync the daemon's in-memory state
     // to avoid stale ActiveConfig surviving until the next `apply`.
     if include_config {
-        crate::state::reset_active_config_to_default(state)?;
+        crate::state::reset_active_config_to_default(state)
+            .map_err(|err| classify_system_error("system.db_reset", err))?;
     }
 
     let mut msg = "Database reset completed".to_string();
@@ -217,7 +229,8 @@ pub fn validate_manifests(
         }
     };
 
-    let mut merged_config = crate::config_load::load_config(&state.db_path)?
+    let mut merged_config = crate::config_load::load_config(&state.db_path)
+        .map_err(|err| classify_system_error("system.manifest_validate", err))?
         .map(|(cfg, _, _)| cfg)
         .unwrap_or_default();
 

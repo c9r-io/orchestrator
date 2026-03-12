@@ -1,7 +1,7 @@
 use orchestrator_proto::*;
 use tonic::{Request, Response, Status};
 
-use super::OrchestratorServer;
+use super::{map_core_error, OrchestratorServer};
 
 pub(crate) async fn store_get(
     server: &OrchestratorServer,
@@ -16,7 +16,7 @@ pub(crate) async fn store_get(
         &req.project,
     )
     .await
-    .map_err(|e| Status::internal(format!("{e}")))?;
+    .map_err(map_core_error)?;
 
     Ok(Response::new(StoreGetResponse {
         value_json: result.clone(),
@@ -39,7 +39,7 @@ pub(crate) async fn store_put(
         &req.task_id,
     )
     .await
-    .map_err(|e| Status::internal(format!("{e}")))?;
+    .map_err(map_core_error)?;
 
     Ok(Response::new(StorePutResponse {
         message: format!("stored key '{}' in '{}'", req.key, req.store),
@@ -59,7 +59,7 @@ pub(crate) async fn store_delete(
         &req.project,
     )
     .await
-    .map_err(|e| Status::internal(format!("{e}")))?;
+    .map_err(map_core_error)?;
 
     Ok(Response::new(StoreDeleteResponse {
         message: format!("deleted key '{}' from '{}'", req.key, req.store),
@@ -80,7 +80,7 @@ pub(crate) async fn store_list(
         req.offset,
     )
     .await
-    .map_err(|e| Status::internal(format!("{e}")))?;
+    .map_err(map_core_error)?;
 
     Ok(Response::new(StoreListResponse { entries }))
 }
@@ -93,7 +93,7 @@ pub(crate) async fn store_prune(
     let req = request.into_inner();
     agent_orchestrator::service::store::store_prune(&server.state, &req.store, &req.project)
         .await
-        .map_err(|e| Status::internal(format!("{e}")))?;
+        .map_err(map_core_error)?;
 
     Ok(Response::new(StorePruneResponse {
         message: format!("pruned store '{}'", req.store),
