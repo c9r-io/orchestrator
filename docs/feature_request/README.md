@@ -11,6 +11,12 @@
 | FR-011 | validate/scheduler/runner 职责拆分与验证逻辑去重 | P1 | Proposed |
 | FR-017 | Agent Drain 与 Enabled 开关 | P1 | Implemented |
 | FR-018 | 用户指南编译验证对齐 | P1 | Implemented |
+| FR-019 | 修复 libc 类型编译错误 | P0 | Proposed |
+| FR-020 | 自动化 protoc 依赖安装 | P0 | Proposed |
+| FR-021 | 审计并减少 expect() 调用 | P1 | Proposed |
+| FR-022 | 补充公共 API 文档注释 | P1 | Proposed |
+| FR-023 | 增加集成测试覆盖 | P2 | Proposed |
+| FR-024 | 审计 unsafe 块 | P2 | Proposed |
 
 ## 说明
 
