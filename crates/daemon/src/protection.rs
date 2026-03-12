@@ -175,6 +175,21 @@ struct EffectivePolicy {
     class: TrafficClass,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct EnforcementContext<'a> {
+    resolved: &'a ResolvedContext,
+    rpc: &'static str,
+    traffic_class: TrafficClass,
+    scope: LimitScope,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CounterRequest<'a> {
+    max_allowed: Option<u32>,
+    reason_code: &'static str,
+    key: &'a str,
+}
+
 #[derive(Debug)]
 struct TokenBucket {
     tokens: f64,
@@ -269,22 +284,28 @@ impl ControlPlaneProtection {
     ) -> Result<ProtectionLease, Status> {
         let effective = self.effective_policy(rpc);
         let limiter = self.states.for_class(effective.class);
+        let subject_context = EnforcementContext {
+            resolved: &resolved,
+            rpc,
+            traffic_class: effective.class,
+            scope: LimitScope::Subject,
+        };
+        let global_context = EnforcementContext {
+            resolved: &resolved,
+            rpc,
+            traffic_class: effective.class,
+            scope: LimitScope::Global,
+        };
 
         self.check_rate(
             &limiter.rate_buckets,
-            &resolved,
-            rpc,
-            effective.class,
-            LimitScope::Subject,
+            subject_context,
             &resolved.subject_key,
             &effective.subject,
         )?;
         self.check_rate(
             &limiter.rate_buckets,
-            &resolved,
-            rpc,
-            effective.class,
-            LimitScope::Global,
+            global_context,
             "global",
             &effective.global,
         )?;
@@ -292,48 +313,44 @@ impl ControlPlaneProtection {
         let subject_guard = if stream_mode {
             self.acquire_counter(
                 limiter.active_streams.clone(),
-                &resolved,
-                rpc,
-                effective.class,
-                LimitScope::Subject,
-                &resolved.subject_key,
-                effective.subject.max_active_streams,
-                "stream_limit_exceeded",
+                subject_context,
+                CounterRequest {
+                    max_allowed: effective.subject.max_active_streams,
+                    reason_code: "stream_limit_exceeded",
+                    key: &resolved.subject_key,
+                },
             )?
         } else {
             self.acquire_counter(
                 limiter.in_flight.clone(),
-                &resolved,
-                rpc,
-                effective.class,
-                LimitScope::Subject,
-                &resolved.subject_key,
-                effective.subject.max_in_flight,
-                "concurrency_limited",
+                subject_context,
+                CounterRequest {
+                    max_allowed: effective.subject.max_in_flight,
+                    reason_code: "concurrency_limited",
+                    key: &resolved.subject_key,
+                },
             )?
         };
 
         let global_guard = if stream_mode {
             self.acquire_counter(
                 limiter.active_streams.clone(),
-                &resolved,
-                rpc,
-                effective.class,
-                LimitScope::Global,
-                "global",
-                effective.global.max_active_streams,
-                "stream_limit_exceeded",
+                global_context,
+                CounterRequest {
+                    max_allowed: effective.global.max_active_streams,
+                    reason_code: "stream_limit_exceeded",
+                    key: "global",
+                },
             )?
         } else {
             self.acquire_counter(
                 limiter.in_flight.clone(),
-                &resolved,
-                rpc,
-                effective.class,
-                LimitScope::Global,
-                "global",
-                effective.global.max_in_flight,
-                "concurrency_limited",
+                global_context,
+                CounterRequest {
+                    max_allowed: effective.global.max_in_flight,
+                    reason_code: "concurrency_limited",
+                    key: "global",
+                },
             )?
         };
 
@@ -394,23 +411,21 @@ impl ControlPlaneProtection {
     fn check_rate(
         &self,
         buckets: &Arc<Mutex<HashMap<String, TokenBucket>>>,
-        resolved: &ResolvedContext,
-        rpc: &'static str,
-        traffic_class: TrafficClass,
-        scope: LimitScope,
+        context: EnforcementContext<'_>,
         key: &str,
         policy: &BudgetPolicy,
     ) -> Result<(), Status> {
         let mut buckets = buckets.lock().map_err(|_| {
             self.status_and_audit(
-                resolved,
-                rpc,
-                traffic_class,
-                scope,
+                context.resolved,
+                context.rpc,
+                context.traffic_class,
+                context.scope,
                 "load_shed",
                 Status::unavailable(format!(
-                    "{rpc} rejected: traffic_class={} reason_code=load_shed",
-                    traffic_class.as_str()
+                    "{} rejected: traffic_class={} reason_code=load_shed",
+                    context.rpc,
+                    context.traffic_class.as_str()
                 )),
             )
         })?;
@@ -421,14 +436,15 @@ impl ControlPlaneProtection {
             Ok(())
         } else {
             Err(self.status_and_audit(
-                resolved,
-                rpc,
-                traffic_class,
-                scope,
+                context.resolved,
+                context.rpc,
+                context.traffic_class,
+                context.scope,
                 "rate_limited",
                 Status::resource_exhausted(format!(
-                    "{rpc} rejected: traffic_class={} reason_code=rate_limited",
-                    traffic_class.as_str()
+                    "{} rejected: traffic_class={} reason_code=rate_limited",
+                    context.rpc,
+                    context.traffic_class.as_str()
                 )),
             ))
         }
@@ -437,49 +453,47 @@ impl ControlPlaneProtection {
     fn acquire_counter(
         &self,
         counters: Arc<Mutex<HashMap<String, usize>>>,
-        resolved: &ResolvedContext,
-        rpc: &'static str,
-        traffic_class: TrafficClass,
-        scope: LimitScope,
-        key: &str,
-        max_allowed: Option<u32>,
-        reason_code: &'static str,
+        context: EnforcementContext<'_>,
+        request: CounterRequest<'_>,
     ) -> Result<Option<CounterGuard>, Status> {
-        let Some(limit) = max_allowed else {
+        let Some(limit) = request.max_allowed else {
             return Ok(None);
         };
         let counter_map = counters.clone();
         let mut counters = counters.lock().map_err(|_| {
             self.status_and_audit(
-                resolved,
-                rpc,
-                traffic_class,
-                scope,
+                context.resolved,
+                context.rpc,
+                context.traffic_class,
+                context.scope,
                 "load_shed",
                 Status::unavailable(format!(
-                    "{rpc} rejected: traffic_class={} reason_code=load_shed",
-                    traffic_class.as_str()
+                    "{} rejected: traffic_class={} reason_code=load_shed",
+                    context.rpc,
+                    context.traffic_class.as_str()
                 )),
             )
         })?;
-        let current = counters.entry(key.to_string()).or_insert(0);
+        let current = counters.entry(request.key.to_string()).or_insert(0);
         if *current >= limit as usize {
             return Err(self.status_and_audit(
-                resolved,
-                rpc,
-                traffic_class,
-                scope,
-                reason_code,
+                context.resolved,
+                context.rpc,
+                context.traffic_class,
+                context.scope,
+                request.reason_code,
                 Status::resource_exhausted(format!(
-                    "{rpc} rejected: traffic_class={} reason_code={reason_code}",
-                    traffic_class.as_str()
+                    "{} rejected: traffic_class={} reason_code={}",
+                    context.rpc,
+                    context.traffic_class.as_str(),
+                    request.reason_code
                 )),
             ));
         }
         *current += 1;
         Ok(Some(CounterGuard {
             map: counter_map,
-            key: key.to_string(),
+            key: request.key.to_string(),
         }))
     }
 
