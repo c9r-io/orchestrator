@@ -5,19 +5,23 @@ use crate::store::{StoreEntry, StoreOp, StoreOpResult};
 use anyhow::{Context, Result};
 use std::sync::Arc;
 
+/// SQLite-backed workflow store implementation.
 pub struct LocalStoreBackend {
     repository: Arc<dyn WorkflowStoreRepository>,
 }
 
 impl LocalStoreBackend {
+    /// Creates a backend backed by the default SQLite repository.
     pub fn new(async_db: Arc<crate::async_database::AsyncDatabase>) -> Self {
         Self::with_repository(Arc::new(SqliteWorkflowStoreRepository::new(async_db)))
     }
 
+    /// Creates a backend from an injected repository implementation.
     pub fn with_repository(repository: Arc<dyn WorkflowStoreRepository>) -> Self {
         Self { repository }
     }
 
+    /// Executes a store operation using the repository boundary.
     pub async fn execute(&self, op: StoreOp) -> Result<StoreOpResult> {
         match op {
             StoreOp::Get {

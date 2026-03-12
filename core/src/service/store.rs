@@ -2,6 +2,7 @@ use crate::error::{classify_store_error, OrchestratorError, Result};
 use crate::state::InnerState;
 use crate::store::{StoreOp, StoreOpResult};
 
+/// Reads a single workflow-store entry and returns it as formatted JSON.
 pub async fn store_get(
     state: &InnerState,
     store: &str,
@@ -23,6 +24,7 @@ pub async fn store_get(
     }
 }
 
+/// Writes a JSON payload into a workflow store entry.
 pub async fn store_put(
     state: &InnerState,
     store: &str,
@@ -42,6 +44,7 @@ pub async fn store_put(
     Ok(())
 }
 
+/// Deletes a single key from a workflow store.
 pub async fn store_delete(state: &InnerState, store: &str, key: &str, project: &str) -> Result<()> {
     let op = StoreOp::Delete {
         store_name: store.to_string(),
@@ -52,6 +55,7 @@ pub async fn store_delete(state: &InnerState, store: &str, key: &str, project: &
     Ok(())
 }
 
+/// Lists workflow-store entries for a project and converts them to proto responses.
 pub async fn store_list(
     state: &InnerState,
     store: &str,
@@ -82,6 +86,7 @@ pub async fn store_list(
     }
 }
 
+/// Applies the retention policy configured on a workflow store.
 pub async fn store_prune(state: &InnerState, store: &str, project: &str) -> Result<()> {
     use crate::crd::projection::CrdProjectable as _;
 

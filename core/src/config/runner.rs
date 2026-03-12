@@ -1,35 +1,49 @@
 use serde::{Deserialize, Serialize};
 
+/// Policy used to constrain shell execution.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RunnerPolicy {
+    /// Permit arbitrary shells and arguments.
     Unsafe,
+    /// Allow only configured shells, args, and environment variables.
     #[default]
     Allowlist,
 }
 
+/// Execution backend used by the runner.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RunnerExecutorKind {
+    /// Execute commands through a shell process.
     #[default]
     Shell,
 }
 
+/// Configuration for command execution in orchestrated steps.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunnerConfig {
+    /// Default shell binary used to launch commands.
     pub shell: String,
+    /// Default argument passed before the command string.
     #[serde(default = "default_shell_arg")]
     pub shell_arg: String,
+    /// Security policy applied to shell execution.
     #[serde(default)]
     pub policy: RunnerPolicy,
+    /// Execution backend used for step commands.
     #[serde(default)]
     pub executor: RunnerExecutorKind,
+    /// Shell binaries allowed when `policy` is `Allowlist`.
     #[serde(default = "default_allowed_shells")]
     pub allowed_shells: Vec<String>,
+    /// Shell arguments allowed when `policy` is `Allowlist`.
     #[serde(default = "default_allowed_shell_args")]
     pub allowed_shell_args: Vec<String>,
+    /// Environment variables passed through to the runner.
     #[serde(default = "default_env_allowlist")]
     pub env_allowlist: Vec<String>,
+    /// Case-insensitive patterns redacted from logs and telemetry.
     #[serde(default = "default_redaction_patterns")]
     pub redaction_patterns: Vec<String>,
 }
@@ -88,6 +102,7 @@ impl Default for RunnerConfig {
 /// Resume behavior configuration
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ResumeConfig {
+    /// Automatically resume eligible tasks after restart.
     #[serde(default)]
     pub auto: bool,
 }

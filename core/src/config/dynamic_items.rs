@@ -31,8 +31,11 @@ pub struct DynamicItemMapping {
 /// A dynamically generated task item, ready for DB insertion.
 #[derive(Debug, Clone)]
 pub struct NewDynamicItem {
+    /// Identifier assigned to the new task item.
     pub item_id: String,
+    /// Optional display label for the item.
     pub label: Option<String>,
+    /// Per-item variables extracted from the source payload.
     pub vars: HashMap<String, String>,
 }
 

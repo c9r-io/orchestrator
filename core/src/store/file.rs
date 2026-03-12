@@ -4,15 +4,18 @@ use crate::store::{StoreEntry, StoreOp, StoreOpResult};
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 
+/// Filesystem-backed workflow store implementation.
 pub struct FileStoreBackend {
     app_root: PathBuf,
 }
 
 impl FileStoreBackend {
+    /// Creates a file-store backend rooted at the orchestrator app directory.
     pub fn new(app_root: PathBuf) -> Self {
         Self { app_root }
     }
 
+    /// Executes a store operation against JSON files on disk.
     pub async fn execute(&self, op: StoreOp) -> Result<StoreOpResult> {
         match op {
             StoreOp::Get {

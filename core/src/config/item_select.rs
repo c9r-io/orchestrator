@@ -27,16 +27,22 @@ pub struct ItemSelectConfig {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SelectionStrategy {
+    /// Keep the item with the lowest metric value.
     Min,
+    /// Keep the item with the highest metric value.
     Max,
+    /// Keep items that satisfy the configured threshold rule.
     Threshold,
+    /// Score items with weighted variables and keep the highest-ranked one.
     Weighted,
 }
 
 /// Where to store the selection result.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StoreTarget {
+    /// Workflow-store namespace or store identifier.
     pub namespace: String,
+    /// Key written inside the target store.
     pub key: String,
 }
 
@@ -44,17 +50,23 @@ pub struct StoreTarget {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TieBreak {
+    /// Keep the first candidate in deterministic order.
     #[default]
     First,
+    /// Keep the last candidate in deterministic order.
     Last,
+    /// Select one winner randomly.
     Random,
 }
 
 /// Result of a selection operation.
 #[derive(Debug, Clone)]
 pub struct SelectionResult {
+    /// Identifier of the surviving item.
     pub winner_id: String,
+    /// Identifiers of items removed from the candidate set.
     pub eliminated_ids: Vec<String>,
+    /// Variable map attached to the winning item.
     pub winner_vars: HashMap<String, String>,
 }
 

@@ -3,23 +3,33 @@ use serde::{Deserialize, Serialize};
 /// Configuration for a single invariant constraint (WP04).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InvariantConfig {
+    /// Stable identifier for the invariant.
     pub name: String,
+    /// Human-readable description shown in diagnostics.
     #[serde(default)]
     pub description: String,
+    /// Optional shell command executed to evaluate the invariant.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
+    /// Expected exit code for `command`, when command-based evaluation is used.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expect_exit: Option<i32>,
+    /// Optional pipeline variable name used to capture command output.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capture_as: Option<String>,
+    /// CEL-style assertion evaluated against the captured result.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assert_expr: Option<String>,
+    /// Marks the invariant as immutable once the task starts.
     #[serde(default)]
     pub immutable: bool,
+    /// Task checkpoints where the invariant should run.
     #[serde(default = "default_check_at")]
     pub check_at: Vec<InvariantCheckPoint>,
+    /// Policy to apply when the invariant fails.
     #[serde(default)]
     pub on_violation: OnViolation,
+    /// Files that must remain unchanged while the invariant is active.
     #[serde(default)]
     pub protected_files: Vec<String>,
 }
@@ -35,9 +45,13 @@ fn default_check_at() -> Vec<InvariantCheckPoint> {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum InvariantCheckPoint {
+    /// Run before a workflow cycle begins.
     BeforeCycle,
+    /// Run after the implement/fix phase completes.
     AfterImplement,
+    /// Run before a task is restarted.
     BeforeRestart,
+    /// Run before the task is marked complete.
     BeforeComplete,
 }
 
@@ -45,18 +59,25 @@ pub enum InvariantCheckPoint {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum OnViolation {
+    /// Stop execution immediately.
     #[default]
     Halt,
+    /// Roll back the task item before continuing.
     Rollback,
+    /// Record a warning but keep the workflow running.
     Warn,
 }
 
 /// Result of evaluating a single invariant.
 #[derive(Debug, Clone)]
 pub struct InvariantResult {
+    /// Name of the invariant that ran.
     pub name: String,
+    /// Whether the invariant passed.
     pub passed: bool,
+    /// Human-readable evaluation summary.
     pub message: String,
+    /// Violation policy attached to the invariant.
     pub on_violation: OnViolation,
 }
 

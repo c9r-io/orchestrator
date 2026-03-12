@@ -6,27 +6,40 @@ use crate::config::{
 use anyhow::Result;
 use serde::Serialize;
 
+/// Diagnostic entry emitted while evaluating self-referential workflow policy.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct PolicyDiagnostic {
+    /// Diagnostic source namespace.
     pub source: String,
+    /// Stable rule identifier.
     pub rule_id: String,
+    /// Severity level associated with the violation.
     pub severity: Severity,
+    /// Whether the evaluated rule passed.
     pub passed: bool,
+    /// Whether this diagnostic should block execution.
     pub blocking: bool,
+    /// Human-readable diagnostic message.
     pub message: String,
+    /// Scope string identifying workflow and workspace.
     pub scope: String,
+    /// Actual observed value, when relevant.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub actual: Option<String>,
+    /// Expected value, when relevant.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expected: Option<String>,
+    /// Operational risk if the issue is ignored.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub risk: Option<String>,
+    /// Suggested remediation for the violation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suggested_fix: Option<String>,
 }
 
 impl PolicyDiagnostic {
+    /// Builds a blocking error diagnostic.
     pub fn error(
         rule_id: impl Into<String>,
         message: impl Into<String>,
@@ -47,6 +60,7 @@ impl PolicyDiagnostic {
         }
     }
 
+    /// Builds a non-blocking warning diagnostic.
     pub fn warning(
         rule_id: impl Into<String>,
         message: impl Into<String>,
@@ -67,6 +81,7 @@ impl PolicyDiagnostic {
         }
     }
 
+    /// Adds actual/expected/risk/fix details to a diagnostic.
     pub fn with_details(
         mut self,
         actual: impl Into<String>,
@@ -82,21 +97,26 @@ impl PolicyDiagnostic {
     }
 }
 
+/// Aggregate result of self-referential policy evaluation.
 #[derive(Debug, Clone, Serialize, Default, PartialEq)]
 pub struct PolicyEvaluation {
+    /// Diagnostics collected during evaluation.
     pub diagnostics: Vec<PolicyDiagnostic>,
 }
 
 impl PolicyEvaluation {
+    /// Returns whether any blocking diagnostics were emitted.
     pub fn has_blocking_errors(&self) -> bool {
         self.diagnostics.iter().any(|diag| diag.blocking)
     }
 
+    /// Iterates over diagnostics that did not pass.
     pub fn failing_diagnostics(&self) -> impl Iterator<Item = &PolicyDiagnostic> {
         self.diagnostics.iter().filter(|diag| !diag.passed)
     }
 }
 
+/// Evaluates whether a workflow is safe to run against a self-referential workspace.
 pub fn evaluate_self_referential_policy(
     workflow: &WorkflowConfig,
     workflow_id: &str,
@@ -371,6 +391,7 @@ fn append_probe_diagnostics(
     Ok(())
 }
 
+/// Renders a human-readable error message from blocking self-referential policy diagnostics.
 pub fn format_blocking_policy_error(evaluation: &PolicyEvaluation) -> String {
     let mut rendered = String::from(
         "[SELF_REF_POLICY_VIOLATION] self-referential safety policy rejected the workflow:",

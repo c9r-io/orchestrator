@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum StepHookEngine {
+    /// Evaluate hooks with the CEL expression engine.
     #[default]
     Cel,
 }
@@ -12,17 +13,22 @@ pub enum StepHookEngine {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StepPrehookUiMode {
+    /// Use the visual builder representation.
     Visual,
+    /// Use a raw CEL expression editor.
     Cel,
 }
 
 /// Prehook UI configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StepPrehookUiConfig {
+    /// Preferred UI editing mode.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<StepPrehookUiMode>,
+    /// Optional preset identifier selected in the UI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preset_id: Option<String>,
+    /// Serialized UI expression payload.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expr: Option<serde_json::Value>,
 }
@@ -30,13 +36,18 @@ pub struct StepPrehookUiConfig {
 /// Step prehook configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StepPrehookConfig {
+    /// Expression engine used to evaluate the prehook.
     #[serde(default)]
     pub engine: StepHookEngine,
+    /// Expression that decides whether the step should run.
     pub when: String,
+    /// Optional human-readable explanation shown when the hook matches.
     #[serde(default)]
     pub reason: Option<String>,
+    /// UI metadata used by manifest editors.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ui: Option<StepPrehookUiConfig>,
+    /// Enables extended context fields during evaluation.
     #[serde(default)]
     pub extended: bool,
 }
@@ -44,11 +55,16 @@ pub struct StepPrehookConfig {
 /// Workflow finalize rule
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowFinalizeRule {
+    /// Stable rule identifier.
     pub id: String,
+    /// Expression engine used to evaluate the rule.
     #[serde(default)]
     pub engine: StepHookEngine,
+    /// Expression that decides whether the rule matches.
     pub when: String,
+    /// Status written when the rule matches.
     pub status: String,
+    /// Optional human-readable explanation for the outcome.
     #[serde(default)]
     pub reason: Option<String>,
 }
@@ -56,6 +72,7 @@ pub struct WorkflowFinalizeRule {
 /// Workflow finalize configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct WorkflowFinalizeConfig {
+    /// Ordered finalize rules evaluated after task-item execution.
     #[serde(default)]
     pub rules: Vec<WorkflowFinalizeRule>,
 }

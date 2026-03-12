@@ -5,6 +5,7 @@ use std::collections::HashMap;
 /// Used by both EnvStore (sensitive=false) and SecretStore (sensitive=true) resources.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnvStoreConfig {
+    /// Key-value pairs materialized into the target environment.
     pub data: HashMap<String, String>,
     /// When true, values from this store are redacted in logs.
     #[serde(default)]

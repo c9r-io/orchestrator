@@ -10,7 +10,7 @@
 //! use agent_orchestrator::config::WorkflowLoopGuardConfig;
 //!
 //! let guard = WorkflowLoopGuardConfig::default();
-//! assert!(!guard.stop_when_no_unresolved);
+//! assert!(guard.stop_when_no_unresolved);
 //! ```
 #![cfg_attr(
     not(test),

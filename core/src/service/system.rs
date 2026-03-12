@@ -8,18 +8,27 @@ use crate::state::InnerState;
 use anyhow::Context;
 use std::path::Path;
 
+/// Result of manifest validation with both plain-text and structured diagnostics.
 #[derive(Debug, Clone)]
 pub struct ManifestValidationReport {
+    /// Whether all manifests validated successfully.
     pub valid: bool,
+    /// Plain-text error strings for quick CLI output.
     pub errors: Vec<String>,
+    /// Summary message describing the overall result.
     pub message: String,
+    /// Structured diagnostics for gRPC and UI consumers.
     pub diagnostics: Vec<orchestrator_proto::DiagnosticEntry>,
 }
 
+/// Rendered result of `orchestrator check`.
 #[derive(Debug, Clone)]
 pub struct RenderedCheckReport {
+    /// Structured report returned by the scheduler checks.
     pub report: CheckReport,
+    /// Human-readable report body.
     pub content: String,
+    /// Process exit code recommended for the check result.
     pub exit_code: i32,
 }
 
@@ -130,6 +139,7 @@ pub fn run_init(state: &InnerState, root: Option<&str>) -> Result<String> {
     ))
 }
 
+/// Returns database migration status for the current runtime database.
 pub fn db_status(state: &InnerState) -> Result<orchestrator_proto::DbStatusResponse> {
     let status = crate::persistence::schema::PersistenceBootstrap::status(&state.db_path)
         .map_err(|err| classify_system_error("system.db_status", err))?;
@@ -148,6 +158,7 @@ pub fn db_status(state: &InnerState) -> Result<orchestrator_proto::DbStatusRespo
     })
 }
 
+/// Lists registered migrations and whether each one has been applied.
 pub fn db_migrations_list(
     state: &InnerState,
 ) -> Result<orchestrator_proto::DbMigrationsListResponse> {

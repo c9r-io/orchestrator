@@ -27,33 +27,57 @@ use std::sync::Arc;
 /// Operations that can be performed on a store.
 #[derive(Debug, Clone)]
 pub enum StoreOp {
+    /// Load a single value by key.
     Get {
+        /// Logical workflow-store name.
         store_name: String,
+        /// Project scope used to namespace entries.
         project_id: String,
+        /// Entry key to load.
         key: String,
     },
+    /// Upsert a single value by key.
     Put {
+        /// Logical workflow-store name.
         store_name: String,
+        /// Project scope used to namespace entries.
         project_id: String,
+        /// Entry key to write.
         key: String,
+        /// JSON payload to persist.
         value: String,
+        /// Task responsible for the write.
         task_id: String,
     },
+    /// Remove a single value by key.
     Delete {
+        /// Logical workflow-store name.
         store_name: String,
+        /// Project scope used to namespace entries.
         project_id: String,
+        /// Entry key to delete.
         key: String,
     },
+    /// List entries in a store.
     List {
+        /// Logical workflow-store name.
         store_name: String,
+        /// Project scope used to namespace entries.
         project_id: String,
+        /// Maximum number of rows to return.
         limit: u64,
+        /// Zero-based row offset.
         offset: u64,
     },
+    /// Apply retention pruning to a store.
     Prune {
+        /// Logical workflow-store name.
         store_name: String,
+        /// Project scope used to namespace entries.
         project_id: String,
+        /// Optional maximum number of retained entries.
         max_entries: Option<u64>,
+        /// Optional retention window in days.
         ttl_days: Option<u64>,
     },
 }
@@ -72,8 +96,11 @@ pub enum StoreOpResult {
 /// A single entry in a workflow store.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoreEntry {
+    /// Entry key.
     pub key: String,
+    /// JSON payload stored under `key`.
     pub value: serde_json::Value,
+    /// RFC 3339 timestamp of the latest update.
     pub updated_at: String,
 }
 
@@ -85,6 +112,7 @@ pub struct StoreManager {
 }
 
 impl StoreManager {
+    /// Creates a store manager with built-in local and file backends.
     pub fn new(async_db: Arc<AsyncDatabase>, app_root: std::path::PathBuf) -> Self {
         Self {
             local_backend: LocalStoreBackend::new(async_db.clone()),

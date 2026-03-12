@@ -4,9 +4,11 @@ use crate::config::StoreBackendCommands;
 use crate::store::{StoreEntry, StoreOp, StoreOpResult};
 use anyhow::{anyhow, Result};
 
+/// Adapter for store backends implemented as shell commands.
 pub struct CommandAdapter;
 
 impl CommandAdapter {
+    /// Executes a store operation by expanding provider command templates and parsing stdout.
     pub async fn execute(
         &self,
         commands: &StoreBackendCommands,

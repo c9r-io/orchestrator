@@ -1,18 +1,25 @@
 use serde::{Deserialize, Serialize};
 use tracing::Level;
 
+/// Supported log verbosity levels for orchestrator components.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum LogLevel {
+    /// Emit only error events.
     Error,
+    /// Emit warnings and errors.
     Warn,
+    /// Emit standard operational information.
     #[default]
     Info,
+    /// Emit debug diagnostics.
     Debug,
+    /// Emit highly verbose trace diagnostics.
     Trace,
 }
 
 impl LogLevel {
+    /// Converts the config enum to the corresponding `tracing` level.
     pub fn as_tracing_level(self) -> Level {
         match self {
             Self::Error => Level::ERROR,
@@ -23,6 +30,7 @@ impl LogLevel {
         }
     }
 
+    /// Parses a case-insensitive log level string.
     pub fn parse(value: &str) -> Option<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
             "error" => Some(Self::Error),
@@ -34,6 +42,7 @@ impl LogLevel {
         }
     }
 
+    /// Returns the more verbose of two log levels.
     pub fn max(self, other: Self) -> Self {
         use LogLevel::*;
         match (self, other) {
@@ -46,15 +55,19 @@ impl LogLevel {
     }
 }
 
+/// Output encoding used by log sinks.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum LoggingFormat {
+    /// Human-readable text output.
     #[default]
     Pretty,
+    /// Structured JSON output.
     Json,
 }
 
 impl LoggingFormat {
+    /// Parses a case-insensitive logging-format string.
     pub fn parse(value: &str) -> Option<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
             "pretty" | "compact" | "text" => Some(Self::Pretty),
@@ -64,12 +77,16 @@ impl LoggingFormat {
     }
 }
 
+/// Settings for console log output.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ConsoleLoggingConfig {
+    /// Enables or disables console logging.
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+    /// Output format used for console logs.
     #[serde(default)]
     pub format: LoggingFormat,
+    /// Enables ANSI coloring for console logs.
     #[serde(default = "default_enabled")]
     pub ansi: bool,
 }
@@ -84,12 +101,16 @@ impl Default for ConsoleLoggingConfig {
     }
 }
 
+/// Settings for file-based log output.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FileLoggingConfig {
+    /// Enables or disables file logging.
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+    /// Output format used for file logs.
     #[serde(default = "default_file_format")]
     pub format: LoggingFormat,
+    /// Directory where log files are written.
     #[serde(default = "default_log_directory")]
     pub directory: String,
 }
@@ -104,14 +125,19 @@ impl Default for FileLoggingConfig {
     }
 }
 
+/// Aggregate logging configuration for the orchestrator runtime.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LoggingConfig {
+    /// Minimum log level emitted by configured sinks.
     #[serde(default)]
     pub level: LogLevel,
+    /// Console sink configuration.
     #[serde(default)]
     pub console: ConsoleLoggingConfig,
+    /// File sink configuration.
     #[serde(default)]
     pub file: FileLoggingConfig,
+    /// Whether to bridge internal events into the log stream.
     #[serde(default = "default_enabled")]
     pub event_bridge: bool,
 }
@@ -127,8 +153,10 @@ impl Default for LoggingConfig {
     }
 }
 
+/// Top-level observability configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct ObservabilityConfig {
+    /// Logging configuration for the runtime.
     #[serde(default)]
     pub logging: LoggingConfig,
 }
