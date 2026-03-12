@@ -464,11 +464,11 @@ mod tests {
             .await
             .expect("insert command run");
 
-        *state
-            .active_config_error
-            .write()
-            .expect("active_config_error lock should be writable") =
-            Some("active config is not runnable".to_string());
+        crate::state::replace_active_config_status(
+            &state,
+            Some("active config is not runnable".to_string()),
+            None,
+        );
 
         let chunks = stream_task_logs_impl(&state, &task_id, 10, false)
             .await
@@ -693,12 +693,9 @@ mod tests {
         let item_id = first_item_id(&state, &task_id);
 
         // Inject a sensitive store into the active config
-        {
-            let mut active = state
-                .active_config
-                .write()
-                .expect("active_config write lock");
-            active
+        crate::state::update_config_runtime(&state, |current| {
+            let mut next = current.clone();
+            std::sync::Arc::make_mut(&mut next.active_config)
                 .config
                 .project_mut(None)
                 .expect("default project")
@@ -710,7 +707,8 @@ mod tests {
                         sensitive: true,
                     },
                 );
-        }
+            (next, ())
+        });
 
         let dir = test_dir("stream-secret-store");
         let stdout_path = dir.join("secret_out.log");

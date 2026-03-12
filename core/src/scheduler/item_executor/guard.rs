@@ -1,6 +1,6 @@
 use crate::config::{ExecutionMode, TaskExecutionStep, TaskRuntimeContext};
 use crate::selection::{select_agent_advanced, select_agent_by_preference};
-use crate::state::{read_agent_health, read_agent_metrics, write_agent_metrics, InnerState};
+use crate::state::InnerState;
 use anyhow::Result;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -47,8 +47,8 @@ pub async fn execute_guard_step(
 
     let (agent_id, template, _prompt_delivery) = {
         let active = crate::config_load::read_active_config(state)?;
-        let health_map = read_agent_health(state);
-        let metrics_map = read_agent_metrics(state);
+        let health_map = state.agent_health.read().await;
+        let metrics_map = state.agent_metrics.read().await;
         let agents = crate::selection::resolve_effective_agents(
             &task_ctx.project_id,
             &active.config,
@@ -68,7 +68,7 @@ pub async fn execute_guard_step(
     };
 
     {
-        let mut metrics_map = write_agent_metrics(state);
+        let mut metrics_map = state.agent_metrics.write().await;
         let metrics = metrics_map
             .entry(agent_id.clone())
             .or_insert_with(crate::metrics::MetricsCollector::new_agent_metrics);

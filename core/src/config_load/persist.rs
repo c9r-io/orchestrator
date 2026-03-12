@@ -110,11 +110,10 @@ pub fn persist_config_and_reload(
         deleted_resources,
     )?;
 
-    {
-        let mut active = crate::state::write_active_config(state)?;
-        *active = candidate;
-    }
-    crate::state::clear_active_config_status(state)?;
+    crate::state::set_config_runtime_snapshot(
+        state,
+        crate::state::ConfigRuntimeSnapshot::new(candidate, None, None),
+    );
 
     Ok(overview)
 }
@@ -142,9 +141,10 @@ pub fn persist_config_for_delete(
     // Best-effort rebuild of active config; if validation fails, still persist
     match build_active_config(&state.app_root, normalized.clone()) {
         Ok(candidate) => {
-            let mut active = crate::state::write_active_config(state)?;
-            *active = candidate;
-            crate::state::clear_active_config_status(state)?;
+            crate::state::set_config_runtime_snapshot(
+                state,
+                crate::state::ConfigRuntimeSnapshot::new(candidate, None, None),
+            );
         }
         Err(_) => {
             // Config is persisted but in-memory state may be stale.

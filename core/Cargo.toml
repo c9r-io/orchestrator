@@ -10,6 +10,7 @@ rust-version = "1.77"
 [dependencies]
 orchestrator-proto = { path = "../crates/proto" }
 anyhow = "1.0"
+arc-swap = "1.7"
 aes-gcm-siv = "0.11"
 base64 = "0.22"
 cel-interpreter = "0.10.0"

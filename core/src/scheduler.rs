@@ -1392,16 +1392,20 @@ mod tests {
             unsafe_mode: false,
             async_database: async_database.clone(),
             logs_dir: PathBuf::new(),
-            active_config: RwLock::new(crate::config::ActiveConfig {
-                config: crate::config::OrchestratorConfig::default(),
-                workspaces: HashMap::new(),
-                projects: HashMap::new(),
-            }),
-            active_config_error: RwLock::new(None),
-            active_config_notice: RwLock::new(None),
+            config_runtime: arc_swap::ArcSwap::from_pointee(
+                crate::state::ConfigRuntimeSnapshot::new(
+                    crate::config::ActiveConfig {
+                        config: crate::config::OrchestratorConfig::default(),
+                        workspaces: HashMap::new(),
+                        projects: HashMap::new(),
+                    },
+                    None,
+                    None,
+                ),
+            ),
             running: tokio::sync::Mutex::new(HashMap::new()),
-            agent_health: RwLock::new(HashMap::new()),
-            agent_metrics: RwLock::new(HashMap::new()),
+            agent_health: tokio::sync::RwLock::new(HashMap::new()),
+            agent_metrics: tokio::sync::RwLock::new(HashMap::new()),
             message_bus: Arc::new(MessageBus::new()),
             event_sink: RwLock::new(Arc::new(NoopSink)),
             db_writer: Arc::new(crate::db_write::DbWriteCoordinator::new(

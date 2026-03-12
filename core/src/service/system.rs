@@ -191,8 +191,7 @@ pub fn run_db_reset(
     // When config is cleared from SQLite, sync the daemon's in-memory state
     // to avoid stale ActiveConfig surviving until the next `apply`.
     if include_config {
-        crate::state::reset_active_config_to_default(state)
-            .map_err(|err| classify_system_error("system.db_reset", err))?;
+        crate::state::reset_active_config_to_default(state);
     }
 
     let mut msg = "Database reset completed".to_string();
@@ -545,9 +544,7 @@ mod tests {
 
         let message = run_db_reset(&state, true, false, true).expect("reset with config");
         assert!(message.contains("All config versions deleted"));
-        assert!(state
-            .active_config
-            .read()
+        assert!(crate::config_load::read_loaded_config(&state)
             .expect("read active config")
             .projects
             .is_empty());

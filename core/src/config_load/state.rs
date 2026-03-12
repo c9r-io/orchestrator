@@ -1,20 +1,19 @@
 use crate::config::ActiveConfig;
 use anyhow::Result;
+use std::sync::Arc;
 
-pub fn read_active_config<'a>(
-    state: &'a crate::state::InnerState,
-) -> Result<std::sync::RwLockReadGuard<'a, ActiveConfig>> {
-    let active_config_error = crate::state::read_active_config_error(state)?.clone();
-    if let Some(message) = active_config_error {
+pub fn read_active_config(state: &crate::state::InnerState) -> Result<Arc<ActiveConfig>> {
+    let snapshot = crate::state::config_runtime_snapshot(state);
+    if let Some(message) = snapshot.active_config_error.clone() {
         anyhow::bail!(message);
     }
-    read_loaded_config(state)
+    Ok(Arc::clone(&snapshot.active_config))
 }
 
-pub fn read_loaded_config<'a>(
-    state: &'a crate::state::InnerState,
-) -> Result<std::sync::RwLockReadGuard<'a, ActiveConfig>> {
-    crate::state::read_loaded_config_guard(state)
+pub fn read_loaded_config(state: &crate::state::InnerState) -> Result<Arc<ActiveConfig>> {
+    Ok(Arc::clone(
+        &crate::state::config_runtime_snapshot(state).active_config,
+    ))
 }
 
 #[cfg(test)]
@@ -25,11 +24,11 @@ mod tests {
     fn read_active_config_rejects_non_runnable_state() {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
-        *state
-            .active_config_error
-            .write()
-            .expect("active_config_error lock should be writable") =
-            Some("active config is not runnable".to_string());
+        crate::state::replace_active_config_status(
+            &state,
+            Some("active config is not runnable".to_string()),
+            None,
+        );
 
         let result = read_active_config(&state);
         assert!(result.is_err());

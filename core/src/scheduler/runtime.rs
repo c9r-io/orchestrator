@@ -495,10 +495,10 @@ mod tests {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
 
-        {
-            let mut active = state.active_config.write().expect("lock active config");
+        crate::state::update_config_runtime(&state, |current| {
+            let mut next = current.clone();
             let workflow_id = "basic".to_string();
-            let workflow = active
+            let workflow = std::sync::Arc::make_mut(&mut next.active_config)
                 .config
                 .projects
                 .get_mut(crate::config::DEFAULT_PROJECT_ID)
@@ -509,7 +509,8 @@ mod tests {
             workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
             workflow.safety.checkpoint_strategy = crate::config::CheckpointStrategy::GitTag;
             workflow.safety.auto_rollback = true;
-        }
+            (next, ())
+        });
 
         let err = load_task_runtime_context(&state, &task_id)
             .await
@@ -682,16 +683,15 @@ mod tests {
             unsafe_mode: true,
             async_database: base.async_database.clone(),
             logs_dir: base.logs_dir.clone(),
-            active_config: std::sync::RwLock::new(
-                crate::config_load::read_loaded_config(base)
-                    .expect("lock active config")
-                    .clone(),
-            ),
-            active_config_error: std::sync::RwLock::new(None),
-            active_config_notice: std::sync::RwLock::new(None),
+            config_runtime: arc_swap::ArcSwap::from_pointee(crate::state::ConfigRuntimeSnapshot {
+                active_config: crate::config_load::read_loaded_config(base)
+                    .expect("read active config"),
+                active_config_error: None,
+                active_config_notice: None,
+            }),
             running: tokio::sync::Mutex::new(std::collections::HashMap::new()),
-            agent_health: std::sync::RwLock::new(std::collections::HashMap::new()),
-            agent_metrics: std::sync::RwLock::new(std::collections::HashMap::new()),
+            agent_health: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            agent_metrics: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             message_bus: base.message_bus.clone(),
             event_sink: std::sync::RwLock::new(crate::state::clone_event_sink(base)),
             db_writer: base.db_writer.clone(),
@@ -711,13 +711,10 @@ mod tests {
         let (base_state, task_id) = seed_task(&mut fixture);
 
         // Set probe profile (which would normally fail for non-self-referential workspace)
-        {
-            let mut active = base_state
-                .active_config
-                .write()
-                .expect("lock active config");
+        crate::state::update_config_runtime(&base_state, |current| {
+            let mut next = current.clone();
             let workflow_id = "basic".to_string();
-            active
+            Arc::make_mut(&mut next.active_config)
                 .config
                 .projects
                 .get_mut(crate::config::DEFAULT_PROJECT_ID)
@@ -727,7 +724,8 @@ mod tests {
                 .expect("default workflow")
                 .safety
                 .profile = WorkflowSafetyProfile::SelfReferentialProbe;
-        }
+            (next, ())
+        });
 
         let unsafe_state = state_with_unsafe_mode(&base_state);
 

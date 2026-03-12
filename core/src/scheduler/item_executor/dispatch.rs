@@ -1419,10 +1419,7 @@ async fn resolve_store_inputs(
     inputs: &[StoreInputConfig],
     acc: &mut StepExecutionAccumulator,
 ) -> Result<()> {
-    let cr = state
-        .active_config
-        .read()
-        .map_err(|e| anyhow::anyhow!("config lock: {}", e))?
+    let cr = crate::config_load::read_loaded_config(state)?
         .config
         .custom_resources
         .clone();

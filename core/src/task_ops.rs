@@ -261,7 +261,7 @@ mod tests {
         WorkflowFinalizeConfig, WorkflowLoopConfig, WorkflowLoopGuardConfig, WorkflowStepConfig,
     };
     use crate::dto::CreateTaskPayload;
-    use crate::state::write_active_config;
+    use crate::state::update_config_runtime;
     use crate::test_utils::TestState;
     use std::collections::HashMap;
 
@@ -635,32 +635,38 @@ mod tests {
         let mut ts = TestState::new().with_workflow("task_only", task_only_workflow());
         let state = ts.build();
 
-        {
-            let mut active = write_active_config(&state).expect("write active config");
-            active.config.projects.insert(
-                "proj-a".to_string(),
-                ProjectConfig {
-                    description: None,
-                    workspaces: HashMap::new(),
-                    agents: HashMap::new(),
-                    workflows: HashMap::new(),
-                    step_templates: HashMap::new(),
-                    env_stores: HashMap::new(),
-                    execution_profiles: HashMap::new(),
-                },
-            );
-            active.projects.insert(
-                "proj-a".to_string(),
-                ResolvedProject {
-                    workspaces: HashMap::new(),
-                    agents: HashMap::new(),
-                    workflows: HashMap::new(),
-                    step_templates: HashMap::new(),
-                    env_stores: HashMap::new(),
-                    execution_profiles: HashMap::new(),
-                },
-            );
-        }
+        update_config_runtime(&state, |current| {
+            let mut next = current.clone();
+            std::sync::Arc::make_mut(&mut next.active_config)
+                .config
+                .projects
+                .insert(
+                    "proj-a".to_string(),
+                    ProjectConfig {
+                        description: None,
+                        workspaces: HashMap::new(),
+                        agents: HashMap::new(),
+                        workflows: HashMap::new(),
+                        step_templates: HashMap::new(),
+                        env_stores: HashMap::new(),
+                        execution_profiles: HashMap::new(),
+                    },
+                );
+            std::sync::Arc::make_mut(&mut next.active_config)
+                .projects
+                .insert(
+                    "proj-a".to_string(),
+                    ResolvedProject {
+                        workspaces: HashMap::new(),
+                        agents: HashMap::new(),
+                        workflows: HashMap::new(),
+                        step_templates: HashMap::new(),
+                        env_stores: HashMap::new(),
+                        execution_profiles: HashMap::new(),
+                    },
+                );
+            (next, ())
+        });
 
         let payload = CreateTaskPayload {
             name: Some("Project Strict".to_string()),

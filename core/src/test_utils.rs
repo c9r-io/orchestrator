@@ -9,10 +9,10 @@ use crate::config_load::{
 };
 use crate::db::init_schema;
 use crate::events::NoopSink;
-use crate::state::InnerState;
+use crate::state::{ConfigRuntimeSnapshot, InnerState};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 use uuid::Uuid;
@@ -285,12 +285,12 @@ impl TestState {
             unsafe_mode: false,
             async_database,
             logs_dir,
-            active_config: RwLock::new(active),
-            active_config_error: RwLock::new(None),
-            active_config_notice: RwLock::new(None),
+            config_runtime: arc_swap::ArcSwap::from_pointee(ConfigRuntimeSnapshot::new(
+                active, None, None,
+            )),
             running: Mutex::new(HashMap::new()),
-            agent_health: std::sync::RwLock::new(HashMap::new()),
-            agent_metrics: std::sync::RwLock::new(HashMap::new()),
+            agent_health: tokio::sync::RwLock::new(HashMap::new()),
+            agent_metrics: tokio::sync::RwLock::new(HashMap::new()),
             message_bus: Arc::new(MessageBus::new()),
             event_sink: std::sync::RwLock::new(Arc::new(NoopSink)),
             db_writer: writer,

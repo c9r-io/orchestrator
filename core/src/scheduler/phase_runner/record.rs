@@ -5,7 +5,7 @@ use crate::health::{
     update_capability_health,
 };
 use crate::metrics::MetricsCollector;
-use crate::state::{write_agent_metrics, InnerState};
+use crate::state::InnerState;
 use crate::task_repository::NewCommandRun;
 use anyhow::Result;
 use serde_json::json;
@@ -150,11 +150,11 @@ pub(super) async fn record_phase_results(
             .await?;
     }
 
-    update_capability_health(state, agent_id, Some(phase), validated.success);
+    update_capability_health(state, agent_id, Some(phase), validated.success).await;
 
     let duration_ms = duration.as_millis() as u64;
     {
-        let mut metrics_map = write_agent_metrics(state);
+        let mut metrics_map = state.agent_metrics.write().await;
         let metrics = metrics_map
             .entry(agent_id.to_string())
             .or_insert_with(MetricsCollector::new_agent_metrics);
@@ -167,12 +167,12 @@ pub(super) async fn record_phase_results(
     }
 
     if !validated.success {
-        let errors = increment_consecutive_errors(state, agent_id);
+        let errors = increment_consecutive_errors(state, agent_id).await;
         if errors >= 2 {
-            mark_agent_diseased(state, agent_id);
+            mark_agent_diseased(state, agent_id).await;
         }
     } else {
-        reset_consecutive_errors(state, agent_id);
+        reset_consecutive_errors(state, agent_id).await;
     }
     if let Some(sid) = session_id.as_deref() {
         let _ = state

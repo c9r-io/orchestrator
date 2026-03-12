@@ -4,14 +4,14 @@ use crate::config_load::ConfigSelfHealReport;
 use crate::events::{EventSink, TracingEventSink};
 use crate::metrics::{AgentHealthState, AgentMetrics};
 use crate::runtime::DaemonRuntimeState;
+use arc_swap::ArcSwap;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, OnceLock};
 use tokio::process::Child;
 use tokio::sync::Mutex;
-use tracing::error;
 
 pub const MAX_CONCURRENT_TASKS: usize = 10;
 
@@ -26,18 +26,37 @@ pub struct ManagedState {
     pub inner: Arc<InnerState>,
 }
 
+#[derive(Clone)]
+pub struct ConfigRuntimeSnapshot {
+    pub active_config: Arc<ActiveConfig>,
+    pub active_config_error: Option<String>,
+    pub active_config_notice: Option<ConfigSelfHealReport>,
+}
+
+impl ConfigRuntimeSnapshot {
+    pub fn new(
+        active_config: ActiveConfig,
+        active_config_error: Option<String>,
+        active_config_notice: Option<ConfigSelfHealReport>,
+    ) -> Self {
+        Self {
+            active_config: Arc::new(active_config),
+            active_config_error,
+            active_config_notice,
+        }
+    }
+}
+
 pub struct InnerState {
     pub app_root: PathBuf,
     pub db_path: PathBuf,
     pub unsafe_mode: bool,
     pub async_database: Arc<crate::async_database::AsyncDatabase>,
     pub logs_dir: PathBuf,
-    pub active_config: RwLock<ActiveConfig>,
-    pub active_config_error: RwLock<Option<String>>,
-    pub active_config_notice: RwLock<Option<ConfigSelfHealReport>>,
+    pub config_runtime: ArcSwap<ConfigRuntimeSnapshot>,
     pub running: Mutex<HashMap<String, RunningTask>>,
-    pub agent_health: std::sync::RwLock<HashMap<String, crate::metrics::AgentHealthState>>,
-    pub agent_metrics: std::sync::RwLock<HashMap<String, crate::metrics::AgentMetrics>>,
+    pub agent_health: tokio::sync::RwLock<HashMap<String, AgentHealthState>>,
+    pub agent_metrics: tokio::sync::RwLock<HashMap<String, AgentMetrics>>,
     pub message_bus: Arc<MessageBus>,
     pub event_sink: std::sync::RwLock<Arc<dyn EventSink>>,
     pub db_writer: Arc<crate::db_write::DbWriteCoordinator>,
@@ -91,187 +110,96 @@ impl RunningTask {
     }
 }
 
-pub fn write_active_config<'a>(
-    state: &'a InnerState,
-) -> Result<std::sync::RwLockWriteGuard<'a, ActiveConfig>, anyhow::Error> {
-    write_lock_fail_closed(&state.active_config, "active_config")
+pub fn config_runtime_snapshot(state: &InnerState) -> Arc<ConfigRuntimeSnapshot> {
+    state.config_runtime.load_full()
 }
 
-pub fn read_agent_health<'a>(
-    state: &'a InnerState,
-) -> RwLockReadGuard<'a, HashMap<String, AgentHealthState>> {
-    recoverable_read_lock(
-        &state.agent_health,
-        "agent_health",
-        HashMap::new,
-        Some(state),
-    )
+pub fn set_config_runtime_snapshot(state: &InnerState, snapshot: ConfigRuntimeSnapshot) {
+    state.config_runtime.store(Arc::new(snapshot));
 }
 
-pub fn write_active_config_error<'a>(
-    state: &'a InnerState,
-) -> Result<RwLockWriteGuard<'a, Option<String>>, anyhow::Error> {
-    write_lock_fail_closed(&state.active_config_error, "active_config_error")
+pub fn update_config_runtime<R>(
+    state: &InnerState,
+    f: impl FnOnce(&ConfigRuntimeSnapshot) -> (ConfigRuntimeSnapshot, R),
+) -> R {
+    let current = state.config_runtime.load_full();
+    let (next, result) = f(current.as_ref());
+    state.config_runtime.store(Arc::new(next));
+    result
 }
 
-pub fn write_active_config_notice<'a>(
-    state: &'a InnerState,
-) -> Result<RwLockWriteGuard<'a, Option<ConfigSelfHealReport>>, anyhow::Error> {
-    write_lock_fail_closed(&state.active_config_notice, "active_config_notice")
+pub fn replace_active_config(state: &InnerState, active_config: ActiveConfig) {
+    update_config_runtime(state, |current| {
+        (
+            ConfigRuntimeSnapshot {
+                active_config: Arc::new(active_config),
+                active_config_error: current.active_config_error.clone(),
+                active_config_notice: current.active_config_notice.clone(),
+            },
+            (),
+        )
+    });
 }
 
-pub fn clear_active_config_status(state: &InnerState) -> Result<(), anyhow::Error> {
-    *write_active_config_error(state)? = None;
-    *write_active_config_notice(state)? = None;
-    Ok(())
+pub fn replace_active_config_status(
+    state: &InnerState,
+    active_config_error: Option<String>,
+    active_config_notice: Option<ConfigSelfHealReport>,
+) {
+    update_config_runtime(state, |current| {
+        (
+            ConfigRuntimeSnapshot {
+                active_config: Arc::clone(&current.active_config),
+                active_config_error,
+                active_config_notice,
+            },
+            (),
+        )
+    });
 }
 
-pub fn reset_active_config_to_default(state: &InnerState) -> Result<(), anyhow::Error> {
-    *write_active_config(state)? = ActiveConfig {
-        config: Default::default(),
-        workspaces: Default::default(),
-        projects: Default::default(),
-    };
-    clear_active_config_status(state)
+pub fn clear_active_config_status(state: &InnerState) {
+    replace_active_config_status(state, None, None);
+}
+
+pub fn reset_active_config_to_default(state: &InnerState) {
+    set_config_runtime_snapshot(
+        state,
+        ConfigRuntimeSnapshot::new(
+            ActiveConfig {
+                config: Default::default(),
+                workspaces: Default::default(),
+                projects: Default::default(),
+            },
+            None,
+            None,
+        ),
+    );
 }
 
 pub fn clone_event_sink(state: &InnerState) -> Arc<dyn EventSink> {
-    recoverable_read_lock(
-        &state.event_sink,
-        "event_sink",
-        || Arc::new(TracingEventSink::new()),
-        None,
-    )
-    .clone()
-}
-
-pub fn replace_event_sink(state: &InnerState, sink: Arc<dyn EventSink>) {
-    *recoverable_write_lock(
-        &state.event_sink,
-        "event_sink",
-        || Arc::new(TracingEventSink::new()),
-        None,
-    ) = sink;
-}
-
-pub fn read_active_config_error<'a>(
-    state: &'a InnerState,
-) -> Result<RwLockReadGuard<'a, Option<String>>, anyhow::Error> {
-    read_lock_fail_closed(&state.active_config_error, "active_config_error")
-}
-
-pub fn read_loaded_config_guard<'a>(
-    state: &'a InnerState,
-) -> Result<RwLockReadGuard<'a, ActiveConfig>, anyhow::Error> {
-    read_lock_fail_closed(&state.active_config, "active_config")
-}
-
-pub fn read_active_config_notice<'a>(
-    state: &'a InnerState,
-) -> Result<RwLockReadGuard<'a, Option<ConfigSelfHealReport>>, anyhow::Error> {
-    read_lock_fail_closed(&state.active_config_notice, "active_config_notice")
-}
-
-fn control_plane_lock_error(lock_name: &str) -> anyhow::Error {
-    anyhow::anyhow!(
-        "{lock_name} lock poisoned; in-memory control-plane state corrupted; restart required"
-    )
-}
-
-fn read_lock_fail_closed<'a, T>(
-    lock: &'a RwLock<T>,
-    lock_name: &str,
-) -> Result<RwLockReadGuard<'a, T>, anyhow::Error> {
-    lock.read().map_err(|_| control_plane_lock_error(lock_name))
-}
-
-fn write_lock_fail_closed<'a, T>(
-    lock: &'a RwLock<T>,
-    lock_name: &str,
-) -> Result<RwLockWriteGuard<'a, T>, anyhow::Error> {
-    lock.write()
-        .map_err(|_| control_plane_lock_error(lock_name))
-}
-
-fn recoverable_read_lock<'a, T>(
-    lock: &'a RwLock<T>,
-    lock_name: &str,
-    reset: impl FnOnce() -> T,
-    state: Option<&InnerState>,
-) -> RwLockReadGuard<'a, T> {
-    match lock.read() {
-        Ok(guard) => guard,
+    match state.event_sink.read() {
+        Ok(guard) => guard.clone(),
         Err(err) => {
             drop(err.into_inner());
-            drop(recoverable_write_lock(lock, lock_name, reset, state));
-            lock.read().unwrap_or_else(|err| err.into_inner())
+            let mut guard = state
+                .event_sink
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            *guard = Arc::new(TracingEventSink::new());
+            state.event_sink.clear_poison();
+            guard.clone()
         }
     }
 }
 
-pub fn write_agent_health<'a>(
-    state: &'a InnerState,
-) -> RwLockWriteGuard<'a, HashMap<String, AgentHealthState>> {
-    recoverable_write_lock(
-        &state.agent_health,
-        "agent_health",
-        HashMap::new,
-        Some(state),
-    )
-}
-
-pub fn read_agent_metrics<'a>(
-    state: &'a InnerState,
-) -> RwLockReadGuard<'a, HashMap<String, AgentMetrics>> {
-    recoverable_read_lock(
-        &state.agent_metrics,
-        "agent_metrics",
-        HashMap::new,
-        Some(state),
-    )
-}
-
-pub fn write_agent_metrics<'a>(
-    state: &'a InnerState,
-) -> RwLockWriteGuard<'a, HashMap<String, AgentMetrics>> {
-    recoverable_write_lock(
-        &state.agent_metrics,
-        "agent_metrics",
-        HashMap::new,
-        Some(state),
-    )
-}
-
-fn recoverable_write_lock<'a, T>(
-    lock: &'a RwLock<T>,
-    lock_name: &str,
-    reset: impl FnOnce() -> T,
-    state: Option<&InnerState>,
-) -> RwLockWriteGuard<'a, T> {
-    match lock.write() {
-        Ok(guard) => guard,
+pub fn replace_event_sink(state: &InnerState, sink: Arc<dyn EventSink>) {
+    match state.event_sink.write() {
+        Ok(mut guard) => *guard = sink,
         Err(err) => {
-            error!(
-                lock_name,
-                policy = "reset_and_continue",
-                "lock poisoned; resetting in-memory state"
-            );
             let mut guard = err.into_inner();
-            *guard = reset();
-            lock.clear_poison();
-            if let Some(state) = state {
-                state.emit_event(
-                    "",
-                    None,
-                    "lock_poison_recovered",
-                    serde_json::json!({
-                        "lock_name": lock_name,
-                        "policy": "reset_and_continue",
-                        "state_dropped": true
-                    }),
-                );
-            }
-            guard
+            *guard = sink;
+            state.event_sink.clear_poison();
         }
     }
 }
@@ -282,7 +210,6 @@ mod tests {
     use crate::config_load::{read_active_config, read_loaded_config};
     use crate::test_utils::TestState;
     use std::sync::atomic::Ordering;
-    use std::thread;
 
     #[test]
     fn running_task_starts_with_defaults() {
@@ -291,12 +218,12 @@ mod tests {
         assert!(runtime.child.try_lock().expect("lock child").is_none());
     }
 
-    #[test]
-    fn state_accessors_round_trip_agent_maps() {
+    #[tokio::test]
+    async fn state_accessors_round_trip_agent_maps() {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
-        write_agent_health(&state).insert(
+        state.agent_health.write().await.insert(
             "echo".to_string(),
             AgentHealthState {
                 consecutive_errors: 1,
@@ -305,10 +232,14 @@ mod tests {
                 capability_health: HashMap::new(),
             },
         );
-        write_agent_metrics(&state).insert("echo".to_string(), AgentMetrics::default());
+        state
+            .agent_metrics
+            .write()
+            .await
+            .insert("echo".to_string(), AgentMetrics::default());
 
-        assert!(read_agent_health(&state).contains_key("echo"));
-        assert!(read_agent_metrics(&state).contains_key("echo"));
+        assert!(state.agent_health.read().await.contains_key("echo"));
+        assert!(state.agent_metrics.read().await.contains_key("echo"));
     }
 
     #[test]
@@ -324,44 +255,43 @@ mod tests {
     }
 
     #[test]
-    fn write_active_config_returns_mutable_guard() {
+    fn update_config_runtime_replaces_snapshot_without_exposing_guards() {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
-        let original = state
-            .active_config
-            .read()
-            .expect("read active config")
+        let original = read_loaded_config(&state)
+            .expect("read loaded config")
             .projects
             .get(crate::config::DEFAULT_PROJECT_ID)
             .and_then(|p| p.workflows.keys().next())
             .cloned()
             .unwrap_or_default();
-        let mut guard = write_active_config(&state).expect("lock active config");
-        let workflow_clone = guard
-            .projects
-            .get(crate::config::DEFAULT_PROJECT_ID)
-            .and_then(|p| p.workflows.get(&original))
-            .cloned()
-            .expect("default workflow should exist");
-        guard
-            .projects
-            .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
-            .or_insert_with(|| crate::config::ResolvedProject {
-                workspaces: HashMap::new(),
-                agents: HashMap::new(),
-                workflows: HashMap::new(),
-                step_templates: HashMap::new(),
-                env_stores: HashMap::new(),
-                execution_profiles: HashMap::new(),
-            })
-            .workflows
-            .insert(format!("{}-updated", original), workflow_clone);
-        drop(guard);
+        update_config_runtime(&state, |current| {
+            let mut next = current.clone();
+            let workflow_clone = next
+                .active_config
+                .projects
+                .get(crate::config::DEFAULT_PROJECT_ID)
+                .and_then(|p| p.workflows.get(&original))
+                .cloned()
+                .expect("default workflow should exist");
+            Arc::make_mut(&mut next.active_config)
+                .projects
+                .entry(crate::config::DEFAULT_PROJECT_ID.to_string())
+                .or_insert_with(|| crate::config::ResolvedProject {
+                    workspaces: HashMap::new(),
+                    agents: HashMap::new(),
+                    workflows: HashMap::new(),
+                    step_templates: HashMap::new(),
+                    env_stores: HashMap::new(),
+                    execution_profiles: HashMap::new(),
+                })
+                .workflows
+                .insert(format!("{}-updated", original), workflow_clone);
+            (next, ())
+        });
 
-        let updated_exists = state
-            .active_config
-            .read()
+        let updated_exists = read_loaded_config(&state)
             .expect("re-read active config")
             .projects
             .get(crate::config::DEFAULT_PROJECT_ID)
@@ -371,88 +301,41 @@ mod tests {
     }
 
     #[test]
-    fn poisoned_active_config_read_fails_closed() {
+    fn read_active_config_rejects_non_runnable_snapshot() {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
-        let result = thread::spawn({
-            let state = state.clone();
-            move || {
-                let _guard = state.active_config.write().expect("lock active config");
-                panic!("poison active config");
-            }
-        });
-        assert!(result.join().is_err());
+        replace_active_config_status(
+            &state,
+            Some("active config is not runnable".to_string()),
+            None,
+        );
 
-        let error = read_loaded_config(&state).expect_err("poisoned config should fail");
-        assert!(error.to_string().contains("active_config lock poisoned"));
-        assert!(error.to_string().contains("restart required"));
+        let error = read_active_config(&state).expect_err("non-runnable config should fail");
+        assert!(error.to_string().contains("not runnable"));
     }
 
-    #[test]
-    fn poisoned_active_config_error_fails_closed() {
+    #[tokio::test]
+    async fn agent_health_and_metrics_reset_explicitly() {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
-        let result = thread::spawn({
-            let state = state.clone();
-            move || {
-                let _guard = state
-                    .active_config_error
-                    .write()
-                    .expect("lock active_config_error");
-                panic!("poison active_config_error");
-            }
-        });
-        assert!(result.join().is_err());
+        state
+            .agent_health
+            .write()
+            .await
+            .insert("echo".to_string(), AgentHealthState::default());
+        state
+            .agent_metrics
+            .write()
+            .await
+            .insert("echo".to_string(), AgentMetrics::default());
 
-        let error = read_active_config(&state).expect_err("poisoned config error lock should fail");
-        assert!(error
-            .to_string()
-            .contains("active_config_error lock poisoned"));
-        assert!(error.to_string().contains("restart required"));
-    }
+        state.agent_health.write().await.clear();
+        state.agent_metrics.write().await.clear();
 
-    #[test]
-    fn poisoned_agent_health_resets_and_clears_poison() {
-        let mut fixture = TestState::new();
-        let state = fixture.build();
-
-        write_agent_health(&state).insert("echo".to_string(), AgentHealthState::default());
-        let result = thread::spawn({
-            let state = state.clone();
-            move || {
-                let _guard = state.agent_health.write().expect("lock agent_health");
-                panic!("poison agent_health");
-            }
-        });
-        assert!(result.join().is_err());
-
-        let health = write_agent_health(&state);
-        assert!(health.is_empty());
-        drop(health);
-        assert!(state.agent_health.read().is_ok());
-    }
-
-    #[test]
-    fn poisoned_agent_metrics_resets_and_clears_poison() {
-        let mut fixture = TestState::new();
-        let state = fixture.build();
-
-        write_agent_metrics(&state).insert("echo".to_string(), AgentMetrics::default());
-        let result = thread::spawn({
-            let state = state.clone();
-            move || {
-                let _guard = state.agent_metrics.write().expect("lock agent_metrics");
-                panic!("poison agent_metrics");
-            }
-        });
-        assert!(result.join().is_err());
-
-        let metrics = write_agent_metrics(&state);
-        assert!(metrics.is_empty());
-        drop(metrics);
-        assert!(state.agent_metrics.read().is_ok());
+        assert!(state.agent_health.read().await.is_empty());
+        assert!(state.agent_metrics.read().await.is_empty());
     }
 
     #[test]
@@ -460,7 +343,7 @@ mod tests {
         let mut fixture = TestState::new();
         let state = fixture.build();
 
-        let result = thread::spawn({
+        let result = std::thread::spawn({
             let state = state.clone();
             move || {
                 let _guard = state.event_sink.write().expect("lock event_sink");

@@ -2,7 +2,7 @@
 
 - ID: `FR-016`
 - Priority: `P1`
-- Status: `Proposed`
+- Status: `Implemented`
 - Owner: `orchestrator core`
 
 ## 背景
@@ -82,5 +82,5 @@
 
 ## 后续产物
 
-- 设计文档：`TBD`
-- QA 文档：`TBD`
+- 设计文档：`docs/design_doc/orchestrator/30-async-lock-model-alignment.md`
+- QA 文档：`docs/qa/orchestrator/69-async-lock-model-alignment.md`

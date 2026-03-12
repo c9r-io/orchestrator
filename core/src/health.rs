@@ -1,5 +1,5 @@
 use crate::metrics::{AgentHealthState, CapabilityHealth};
-use crate::state::{write_agent_health, InnerState};
+use crate::state::InnerState;
 use chrono::Utc;
 use std::collections::HashMap;
 
@@ -36,8 +36,8 @@ pub fn is_capability_healthy(
     }
 }
 
-pub fn mark_agent_diseased(state: &InnerState, agent_id: &str) {
-    let mut health = write_agent_health(state);
+pub async fn mark_agent_diseased(state: &InnerState, agent_id: &str) {
+    let mut health = state.agent_health.write().await;
     let entry = health
         .entry(agent_id.to_string())
         .or_insert(AgentHealthState {
@@ -63,8 +63,8 @@ pub fn mark_agent_diseased(state: &InnerState, agent_id: &str) {
     );
 }
 
-pub fn increment_consecutive_errors(state: &InnerState, agent_id: &str) -> u32 {
-    let mut health = write_agent_health(state);
+pub async fn increment_consecutive_errors(state: &InnerState, agent_id: &str) -> u32 {
+    let mut health = state.agent_health.write().await;
     let entry = health
         .entry(agent_id.to_string())
         .or_insert(AgentHealthState {
@@ -96,8 +96,8 @@ pub fn increment_consecutive_errors(state: &InnerState, agent_id: &str) -> u32 {
     consecutive_errors
 }
 
-pub fn reset_consecutive_errors(state: &InnerState, agent_id: &str) {
-    let mut health = write_agent_health(state);
+pub async fn reset_consecutive_errors(state: &InnerState, agent_id: &str) {
+    let mut health = state.agent_health.write().await;
     if let Some(entry) = health.get_mut(agent_id) {
         if entry.consecutive_errors == 0 {
             return;
@@ -123,14 +123,14 @@ pub fn reset_consecutive_errors(state: &InnerState, agent_id: &str) {
     }
 }
 
-pub fn update_capability_health(
+pub async fn update_capability_health(
     state: &InnerState,
     agent_id: &str,
     capability: Option<&str>,
     success: bool,
 ) {
     if let Some(cap) = capability {
-        let mut health = write_agent_health(state);
+        let mut health = state.agent_health.write().await;
         let entry = health
             .entry(agent_id.to_string())
             .or_insert_with(|| AgentHealthState {
@@ -300,26 +300,25 @@ mod tests {
         assert!(!is_capability_healthy(&map, "agent1", "qa"));
     }
 
-    #[test]
-    fn health_operations_with_test_state() {
+    #[tokio::test]
+    async fn health_operations_with_test_state() {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
 
         // Initially healthy
-        assert!(is_agent_healthy(
-            &crate::state::read_agent_health(&state),
-            "test_agent"
-        ));
+        let health = state.agent_health.read().await;
+        assert!(is_agent_healthy(&health, "test_agent"));
+        drop(health);
 
         // Increment errors
-        let count = increment_consecutive_errors(&state, "test_agent");
+        let count = increment_consecutive_errors(&state, "test_agent").await;
         assert_eq!(count, 1);
-        let count = increment_consecutive_errors(&state, "test_agent");
+        let count = increment_consecutive_errors(&state, "test_agent").await;
         assert_eq!(count, 2);
 
         // Reset errors
-        reset_consecutive_errors(&state, "test_agent");
-        let health = crate::state::read_agent_health(&state);
+        reset_consecutive_errors(&state, "test_agent").await;
+        let health = state.agent_health.read().await;
         assert_eq!(
             health
                 .get("test_agent")
@@ -330,17 +329,17 @@ mod tests {
         drop(health);
 
         // Mark diseased
-        mark_agent_diseased(&state, "test_agent");
-        let health = crate::state::read_agent_health(&state);
+        mark_agent_diseased(&state, "test_agent").await;
+        let health = state.agent_health.read().await;
         assert!(!is_agent_healthy(&health, "test_agent"));
         drop(health);
 
         // Update capability health
-        update_capability_health(&state, "test_agent", Some("qa"), true);
-        update_capability_health(&state, "test_agent", Some("qa"), true);
-        update_capability_health(&state, "test_agent", Some("qa"), false);
+        update_capability_health(&state, "test_agent", Some("qa"), true).await;
+        update_capability_health(&state, "test_agent", Some("qa"), true).await;
+        update_capability_health(&state, "test_agent", Some("qa"), false).await;
 
-        let health = crate::state::read_agent_health(&state);
+        let health = state.agent_health.read().await;
         let cap = health
             .get("test_agent")
             .expect("test_agent should exist for capability tracking")
@@ -352,47 +351,47 @@ mod tests {
         assert!(cap.last_error_at.is_some());
     }
 
-    #[test]
-    fn reset_consecutive_errors_noop_when_already_zero() {
+    #[tokio::test]
+    async fn reset_consecutive_errors_noop_when_already_zero() {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
 
         // Reset on non-existent agent - should be a no-op
-        reset_consecutive_errors(&state, "nonexistent");
-        let health = crate::state::read_agent_health(&state);
+        reset_consecutive_errors(&state, "nonexistent").await;
+        let health = state.agent_health.read().await;
         assert!(health.get("nonexistent").is_none());
     }
 
-    #[test]
-    fn test_total_lifetime_errors_incremented() {
+    #[tokio::test]
+    async fn test_total_lifetime_errors_incremented() {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
 
-        increment_consecutive_errors(&state, "test_agent");
-        increment_consecutive_errors(&state, "test_agent");
-        increment_consecutive_errors(&state, "test_agent");
+        increment_consecutive_errors(&state, "test_agent").await;
+        increment_consecutive_errors(&state, "test_agent").await;
+        increment_consecutive_errors(&state, "test_agent").await;
 
-        let health = crate::state::read_agent_health(&state);
+        let health = state.agent_health.read().await;
         let entry = health.get("test_agent").expect("agent should exist");
         assert_eq!(entry.total_lifetime_errors, 3);
         assert_eq!(entry.consecutive_errors, 3);
 
         // Reset consecutive, but lifetime should persist
         drop(health);
-        reset_consecutive_errors(&state, "test_agent");
-        let health = crate::state::read_agent_health(&state);
+        reset_consecutive_errors(&state, "test_agent").await;
+        let health = state.agent_health.read().await;
         let entry = health.get("test_agent").expect("agent should exist");
         assert_eq!(entry.consecutive_errors, 0);
         assert_eq!(entry.total_lifetime_errors, 3);
     }
 
-    #[test]
-    fn update_capability_health_none_capability_is_noop() {
+    #[tokio::test]
+    async fn update_capability_health_none_capability_is_noop() {
         let mut fixture = crate::test_utils::TestState::new();
         let state = fixture.build();
 
-        update_capability_health(&state, "agent1", None, true);
-        let health = crate::state::read_agent_health(&state);
+        update_capability_health(&state, "agent1", None, true).await;
+        let health = state.agent_health.read().await;
         assert!(health.get("agent1").is_none());
     }
 }

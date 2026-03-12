@@ -15,7 +15,7 @@ use crate::events::insert_event;
 use crate::metrics::MetricsCollector;
 use crate::runner::SandboxBackendError;
 use crate::selection::{select_agent_advanced, select_agent_by_preference};
-use crate::state::{read_agent_health, read_agent_metrics, write_agent_metrics, InnerState};
+use crate::state::InnerState;
 use anyhow::Result;
 use serde_json::json;
 use std::collections::HashSet;
@@ -339,8 +339,8 @@ pub async fn run_phase_with_rotation(
         .clone();
 
         if let Some(cap) = effective_capability {
-            let health_map = read_agent_health(state);
-            let metrics_map = read_agent_metrics(state);
+            let health_map = state.agent_health.read().await;
+            let metrics_map = state.agent_metrics.read().await;
             select_agent_advanced(cap, &agents, &health_map, &metrics_map, &HashSet::new())?
         } else {
             select_agent_by_preference(&agents)?
@@ -348,7 +348,7 @@ pub async fn run_phase_with_rotation(
     };
 
     {
-        let mut metrics_map = write_agent_metrics(state);
+        let mut metrics_map = state.agent_metrics.write().await;
         let metrics = metrics_map
             .entry(agent_id.clone())
             .or_insert_with(MetricsCollector::new_agent_metrics);

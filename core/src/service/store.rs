@@ -86,10 +86,7 @@ pub async fn store_prune(state: &InnerState, store: &str, project: &str) -> Resu
     use crate::crd::projection::CrdProjectable as _;
 
     let store_config = {
-        let config = state
-            .active_config
-            .read()
-            .map_err(|_| anyhow::anyhow!("failed to read active config"))?;
+        let config = crate::config_load::read_loaded_config(state)?;
         let key = format!("WorkflowStore/{}", store);
         config
             .config
@@ -110,15 +107,11 @@ pub async fn store_prune(state: &InnerState, store: &str, project: &str) -> Resu
 }
 
 async fn execute_store_op(state: &InnerState, op: StoreOp) -> Result<StoreOpResult> {
-    let custom_resources = {
-        let config = state.active_config.read().map_err(|_| {
-            OrchestratorError::external_dependency(
-                "store.active_config",
-                anyhow::anyhow!("failed to read active config"),
-            )
-        })?;
-        config.config.custom_resources.clone()
-    };
+    let custom_resources = crate::config_load::read_loaded_config(state)
+        .map_err(|err| OrchestratorError::external_dependency("store.active_config", err))?
+        .config
+        .custom_resources
+        .clone();
     state
         .store_manager
         .execute(&custom_resources, op)

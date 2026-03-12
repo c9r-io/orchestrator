@@ -320,10 +320,7 @@ async fn execute_store_put(
     key: &str,
     value: &str,
 ) -> Result<()> {
-    let cr = state
-        .active_config
-        .read()
-        .map_err(|e| anyhow::anyhow!("config lock: {}", e))?
+    let cr = crate::config_load::read_loaded_config(state)?
         .config
         .custom_resources
         .clone();

@@ -3,11 +3,11 @@ use crate::config_load::{
     build_active_config_with_self_heal, detect_app_root, load_or_seed_config,
 };
 use crate::persistence::schema::PersistenceBootstrap;
-use crate::state::{InnerState, ManagedState};
+use crate::state::{ConfigRuntimeSnapshot, InnerState, ManagedState};
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Initialize orchestrator state — extracted from the former binary's `init_state()`.
@@ -129,12 +129,14 @@ fn build_managed_state(
             unsafe_mode,
             async_database,
             logs_dir,
-            active_config: RwLock::new(active),
-            active_config_error: RwLock::new(active_config_error),
-            active_config_notice: RwLock::new(active_config_notice),
+            config_runtime: arc_swap::ArcSwap::from_pointee(ConfigRuntimeSnapshot::new(
+                active,
+                active_config_error,
+                active_config_notice,
+            )),
             running: Mutex::new(HashMap::new()),
-            agent_health: std::sync::RwLock::new(HashMap::new()),
-            agent_metrics: std::sync::RwLock::new(HashMap::new()),
+            agent_health: tokio::sync::RwLock::new(HashMap::new()),
+            agent_metrics: tokio::sync::RwLock::new(HashMap::new()),
             message_bus: Arc::new(MessageBus::new()),
             event_sink: std::sync::RwLock::new(Arc::new(crate::events::TracingEventSink::new())),
             db_writer,
@@ -395,6 +397,7 @@ mod tests {
             seeded.async_database.clone(),
             crate::config_load::read_active_config(&seeded)
                 .expect("read active config")
+                .as_ref()
                 .clone(),
             Some("config-error".to_string()),
             None,
@@ -404,11 +407,8 @@ mod tests {
         assert!(managed.inner.unsafe_mode);
         assert_eq!(managed.inner.app_root, seeded.app_root);
         assert!(
-            managed
-                .inner
+            crate::state::config_runtime_snapshot(&managed.inner)
                 .active_config_error
-                .read()
-                .expect("read config error")
                 .as_deref()
                 == Some("config-error")
         );
