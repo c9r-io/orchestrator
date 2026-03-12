@@ -20,6 +20,7 @@ use std::sync::Arc;
 use super::item_executor::{process_item, StepExecutionAccumulator};
 use super::phase_runner::{run_phase_with_rotation, RotatingPhaseRunRequest};
 use super::runtime::load_task_runtime_context;
+use super::safety::RestartRequestedError;
 use super::task_state::{
     count_unresolved_items, first_task_item_id, is_task_paused_in_db, list_task_items_for_cycle,
     record_task_execution_metric, set_task_status, update_task_cycle_state,
@@ -38,23 +39,29 @@ pub async fn run_task_loop(
         let _ = isolation::cleanup_task_isolation(&state, task_id, &task_ctx).await;
     }
     if let Err(ref e) = result {
-        let _ = set_task_status(&state, task_id, "failed", false).await;
-        let _ = insert_event(
-            &state,
-            task_id,
-            None,
-            "task_failed",
-            json!({"error": e.to_string()}),
-        )
-        .await;
-        state.emit_event(
-            task_id,
-            None,
-            "task_failed",
-            json!({"error": e.to_string()}),
-        );
-        let unresolved = count_unresolved_items(&state, task_id).await.unwrap_or(0);
-        let _ = record_task_execution_metric(&state, task_id, "failed", 0, unresolved).await;
+        // RestartRequestedError is not a failure — the self_restart step already
+        // set the task to "restart_pending".  Propagate the error so the daemon
+        // can exec() the new binary; do NOT overwrite the status to "failed".
+        if e.downcast_ref::<RestartRequestedError>().is_none() {
+            let _ = set_task_status(&state, task_id, "failed", false).await;
+            let _ = insert_event(
+                &state,
+                task_id,
+                None,
+                "task_failed",
+                json!({"error": e.to_string()}),
+            )
+            .await;
+            state.emit_event(
+                task_id,
+                None,
+                "task_failed",
+                json!({"error": e.to_string()}),
+            );
+            let unresolved = count_unresolved_items(&state, task_id).await.unwrap_or(0);
+            let _ =
+                record_task_execution_metric(&state, task_id, "failed", 0, unresolved).await;
+        }
     }
     result
 }
