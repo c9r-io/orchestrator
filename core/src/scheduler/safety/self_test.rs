@@ -4,6 +4,15 @@ use serde_json::json;
 use std::path::Path;
 use tracing::error;
 
+/// Result of executing the self-test step.
+#[derive(Debug)]
+pub struct SelfTestResult {
+    /// Process exit code (0 = success).
+    pub exit_code: i64,
+    /// Captured error output from the first failing phase (empty on success).
+    pub error_output: String,
+}
+
 /// Executes the builtin self-test step against the orchestrator workspace.
 pub async fn execute_self_test_step(
     workspace_root: &Path,
@@ -11,7 +20,7 @@ pub async fn execute_self_test_step(
     task_id: &str,
     item_id: &str,
     project_id: Option<&str>,
-) -> Result<i64> {
+) -> Result<SelfTestResult> {
     let cargo_bin = std::env::var("ORCH_SELF_TEST_CARGO").unwrap_or_else(|_| "cargo".to_string());
 
     state.emit_event(
@@ -36,7 +45,10 @@ pub async fn execute_self_test_step(
             "self_test_phase",
             json!({"phase": "cargo_check", "passed": false}),
         );
-        return Ok(check_output.status.code().unwrap_or(1) as i64);
+        return Ok(SelfTestResult {
+            exit_code: check_output.status.code().unwrap_or(1) as i64,
+            error_output: format!("[cargo check failed]\n{}", stderr.trim()),
+        });
     }
     state.emit_event(
         task_id,
@@ -79,7 +91,10 @@ pub async fn execute_self_test_step(
             "self_test_phase",
             json!({"phase": "cargo_test_lib", "passed": false}),
         );
-        return Ok(test_output.status.code().unwrap_or(1) as i64);
+        return Ok(SelfTestResult {
+            exit_code: test_output.status.code().unwrap_or(1) as i64,
+            error_output: format!("[cargo test --lib failed]\n{}", stderr.trim()),
+        });
     }
     state.emit_event(
         task_id,
@@ -127,9 +142,15 @@ pub async fn execute_self_test_step(
             json!({"phase": "manifest_validate", "passed": validate_passed}),
         );
         if !validate_passed {
-            return Ok(1);
+            return Ok(SelfTestResult {
+                exit_code: 1,
+                error_output: "[manifest_validate failed]".to_string(),
+            });
         }
     }
 
-    Ok(0)
+    Ok(SelfTestResult {
+        exit_code: 0,
+        error_output: String::new(),
+    })
 }

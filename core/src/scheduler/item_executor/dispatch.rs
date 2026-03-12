@@ -469,7 +469,8 @@ async fn execute_builtin_step_dispatch(
     match effective_execution {
         ExecutionMode::Builtin { name } if name == "self_test" => {
             // Self-test uses a specialized builtin
-            let exit_code = execute_self_test_step(
+            use crate::scheduler::safety::SelfTestResult;
+            let self_test_result = execute_self_test_step(
                 &task_ctx.workspace_root,
                 state,
                 task_id,
@@ -477,7 +478,11 @@ async fn execute_builtin_step_dispatch(
                 Some(task_ctx.project_id.as_str()),
             )
             .await
-            .unwrap_or(1);
+            .unwrap_or(SelfTestResult {
+                exit_code: 1,
+                error_output: String::new(),
+            });
+            let exit_code = self_test_result.exit_code;
             let passed = exit_code == 0;
             acc.pipeline_vars
                 .vars
@@ -485,6 +490,15 @@ async fn execute_builtin_step_dispatch(
             acc.pipeline_vars
                 .vars
                 .insert("self_test_passed".to_string(), passed.to_string());
+            if !self_test_result.error_output.is_empty() {
+                crate::scheduler::item_executor::spill::spill_large_var(
+                    &state.logs_dir,
+                    task_id,
+                    "self_test_errors",
+                    self_test_result.error_output,
+                    &mut acc.pipeline_vars,
+                );
+            }
 
             let mut payload = json!({
                 "step": phase,

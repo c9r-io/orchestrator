@@ -26,19 +26,49 @@ Observe and evaluate the orchestrator's execution of a test plan. **You are a mo
    - Key checkpoints
    - Known anomaly patterns
 
-### Phase 2: Pre-Execution Setup
+### Phase 2: Pre-Execution Setup — Build, Restart & Baseline
 
-1. Verify the daemon is running: `pgrep -f orchestratord` or check `data/daemon.pid`
-2. If not running, inform the user — do NOT start it yourself
-3. Note the current git state: `git status`, `git log --oneline -3`
-4. Note existing tasks: `orchestrator task list`
-5. Record the baseline state for later comparison
+Ensure the daemon and CLI are built from the latest code and the daemon is running before launching any task.
 
-### Phase 3: Guided Task Launch
+#### 2.1 Rebuild daemon & CLI
 
-1. Walk the user through the startup steps described in the selected plan
-2. The USER creates the task — you only tell them what command to run per the plan
-3. Once the task is created, record the task ID for monitoring
+```bash
+cargo build --release -p orchestratord -p orchestrator-cli
+```
+
+If the build fails, report the error to the user and stop — do NOT proceed with a stale binary.
+
+#### 2.2 Restart the daemon
+
+```bash
+# Stop old daemon if running
+kill $(cat data/daemon.pid 2>/dev/null) 2>/dev/null; sleep 2
+
+# Start fresh daemon
+nohup ./target/release/orchestratord --foreground --workers 2 > /tmp/orchestratord.log 2>&1 &
+
+# Verify it's running (wait a moment for startup)
+sleep 3
+pgrep -f orchestratord
+```
+
+If the daemon fails to start, check `/tmp/orchestratord.log` and report the error.
+
+#### 2.3 Collect baseline state
+
+1. Note the current git state: `git status`, `git log --oneline -3`
+2. Note existing tasks: `orchestrator task list`
+3. Run any plan-specific baseline checks (e.g., grep for specific code patterns)
+4. Record the baseline state for later comparison
+
+### Phase 3: Task Launch
+
+Directly execute the startup steps described in the selected plan — do NOT ask the user to run them.
+
+1. Run any plan-specific resource initialization commands (e.g., `orchestrator delete`, `orchestrator init`, `orchestrator apply`)
+2. Create the task using the exact command from the plan
+3. Record the returned task ID for monitoring
+4. Immediately proceed to Phase 4 (Live Monitoring)
 
 ### Phase 4: Live Monitoring (OBSERVE ONLY)
 
@@ -160,9 +190,10 @@ Produce a structured assessment:
 ## Rules
 
 1. **NEVER** modify source code, config files, or workflow definitions
-2. **NEVER** restart the daemon, kill processes, or alter system state
-3. **NEVER** run `cargo` commands, `git commit/push`, or any write operation on the codebase
-4. **NEVER** fix bugs — only record them as tickets
-5. **ALWAYS** report suspicious observations immediately, don't wait
-6. **ALWAYS** show raw evidence (log lines, events) when reporting issues
-7. If the orchestrator is stuck and you suspect it will not recover, inform the user with evidence and let THEM decide whether to intervene
+2. **NEVER** fix bugs — only record them as tickets
+3. **ALWAYS** report suspicious observations immediately, don't wait
+4. **ALWAYS** show raw evidence (log lines, events) when reporting issues
+5. If the orchestrator is stuck and you suspect it will not recover, inform the user with evidence and let THEM decide whether to intervene
+6. **ALLOWED** in Phase 2 only: `cargo build` (daemon/CLI rebuild), killing and restarting the daemon process, and `orchestrator` CLI commands for resource setup
+7. **ALLOWED** in Phase 3: running `orchestrator` CLI commands to initialize resources and create tasks
+8. **NEVER** run `git commit`, `git push`, or any git write operations

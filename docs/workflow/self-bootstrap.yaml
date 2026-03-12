@@ -78,10 +78,17 @@ spec:
 
     Follow the QA Strategy defined in the plan:
     - If the plan says QA docs are NOT needed (e.g. refactoring tasks where
-      behavioral equivalence is validated by unit tests), output a brief
-      summary explaining why and skip QA doc generation.
+      behavioral equivalence is validated by unit tests), DO NOT generate new docs.
+      Instead, identify 3-10 existing QA documents under docs/qa/ that are most
+      relevant for regression testing this change (covering affected code paths,
+      APIs, and integration points). Output ONLY a JSON object:
+      {"regression_targets": [{"id": "path/to/doc.md", "name": "path/to/doc.md"}]}
+      Use the relative path (e.g. "docs/qa/orchestrator/02-cli-task-lifecycle.md")
+      as both the id and name. Output NO other text — just the JSON.
     - If the plan calls for scenario-based QA docs, generate them under
-      docs/qa/ following existing conventions.
+      docs/qa/ following existing conventions. After generation, output a JSON
+      object listing the new docs:
+      {"regression_targets": [{"id": "docs/qa/.../new-doc.md", "name": "docs/qa/.../new-doc.md"}]}
 
     Do NOT generate QA documents that duplicate what unit tests already cover.
     Focus on integration-level and end-to-end behaviors that unit tests cannot
@@ -103,6 +110,11 @@ spec:
     Follow the plan exactly — implement only what is listed in the plan's
     'Files to Change' and 'Scope Boundary' sections. Do NOT add abstractions,
     traits, or types that are not specified in the plan.
+
+    If a previous build failed, the errors are at {self_test_errors_path}
+    (set by the self_test builtin step when cargo check/test fails).
+    Read that file FIRST and fix those specific compilation/test errors
+    before proceeding with any other implementation work.
 
     After writing code, run 'cd {source_tree}/core && cargo check'
     to verify compilation before finishing.
@@ -255,6 +267,13 @@ spec:
   # Segments for this workflow:
   #   ┌─── Task ──────────────────────────────────────────────────────┐  ┌── Item ──────────┐  ┌── Task ──────────────────────┐
   #   plan + qa_doc_gen + implement + self_test + self_restart          qa_testing + ticket_fix  align_tests + doc_governance
+  #
+  # Item narrowing:
+  #   qa_doc_gen has a generate_items post_action. Post-actions are DEFERRED —
+  #   they buffer during the step but execute AFTER the entire Task segment ends.
+  #   When qa_doc_gen outputs {"regression_targets": [...]}, those targets replace
+  #   the 99 static QA items, so the next Item segment (qa_testing + ticket_fix)
+  #   only processes the selected subset. If extraction fails, static items remain.
 
   # Default parallelism for item-scoped segments (qa_testing + ticket_fix)
   # Reduced from 4 to 2: each claude agent consumes significant CPU/memory
@@ -279,6 +298,18 @@ spec:
       enabled: true
       repeatable: false
       tty: false
+      behavior:
+        post_actions:
+          # Narrows the QA item set for the downstream Item segment (qa_testing).
+          # Deferred: buffers here, executes after the Task segment ends.
+          # On extraction failure: silent fallback to all static items.
+          - type: generate_items
+            from_var: qa_doc_gen_output
+            json_path: "$.regression_targets"
+            mapping:
+              item_id: "$.id"
+              label: "$.name"
+            replace: true
 
     - id: implement
       type: implement
@@ -291,6 +322,8 @@ spec:
       tty: false
 
     # Self-Test — cargo check + cargo test --lib + manifest validate (builtin)
+    # On failure: captures build errors into pipeline var `self_test_errors`
+    # (spilled to file as `self_test_errors_path`), consumed by implement on next cycle.
     - id: self_test
       type: self_test
       scope: task
