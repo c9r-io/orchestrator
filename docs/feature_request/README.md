@@ -13,7 +13,7 @@
 | FR-018 | 用户指南编译验证对齐 | P1 | Implemented |
 | FR-019 | 修复 libc 类型编译错误 | P0 | Implemented |
 | FR-020 | 自动化 protoc 依赖安装 | P0 | Implemented |
-| FR-021 | 审计并减少 expect() 调用 | P1 | Proposed |
+| FR-021 | 审计并减少 expect() 调用 | P1 | Implemented |
 | FR-022 | 补充公共 API 文档注释 | P1 | In Progress |
 | FR-023 | 增加集成测试覆盖 | P2 | Proposed |
 | FR-024 | 审计 unsafe 块 | P2 | Proposed |
@@ -41,3 +41,4 @@
 - FR-006 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/21-sandbox-resource-network-enforcement.md` 与 `docs/qa/orchestrator/56-sandbox-resource-network-enforcement.md` 承载
 - FR-010 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/22-control-plane-security.md` 与 `docs/qa/orchestrator/58-control-plane-security.md` 承载
 - FR-020 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/32-automate-protoc-dependency.md` 与 `docs/qa/orchestrator/71-automate-protoc-dependency.md` 承载
+- FR-021 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/33-audit-reduce-expect-calls.md` 与 `docs/qa/orchestrator/72-audit-reduce-expect-calls.md` 承载
