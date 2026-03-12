@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use super::model::CycleTrace;
 use super::time::parse_trace_timestamp;
 
-pub(super) fn detect_duplicate_runner(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
+pub(super) fn detect_duplicate_runner(events: &[&EventDto], anomalies: &mut Vec<Anomaly>) {
     let mut task_started_count = 0u32;
     let mut last_task_started_at: Option<String> = None;
 
@@ -67,7 +67,7 @@ pub(super) fn detect_overlapping_cycles(cycles: &[CycleTrace], anomalies: &mut V
     }
 }
 
-pub(super) fn detect_overlapping_steps(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
+pub(super) fn detect_overlapping_steps(events: &[&EventDto], anomalies: &mut Vec<Anomaly>) {
     let mut open: HashMap<(String, Option<String>), String> = HashMap::new();
 
     for event in events {
@@ -108,7 +108,7 @@ pub(super) fn detect_overlapping_steps(events: &[EventDto], anomalies: &mut Vec<
     }
 }
 
-pub(super) fn detect_missing_step_end(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
+pub(super) fn detect_missing_step_end(events: &[&EventDto], anomalies: &mut Vec<Anomaly>) {
     let mut open: HashMap<(String, Option<String>), String> = HashMap::new();
 
     for event in events {
@@ -159,7 +159,7 @@ pub(super) fn detect_missing_step_end(events: &[EventDto], anomalies: &mut Vec<A
     }
 }
 
-pub(super) fn detect_empty_cycles(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
+pub(super) fn detect_empty_cycles(events: &[&EventDto], anomalies: &mut Vec<Anomaly>) {
     let mut cycle_start: Option<(u32, String)> = None;
     let mut has_steps = false;
 
@@ -213,7 +213,7 @@ pub(super) fn detect_empty_cycles(events: &[EventDto], anomalies: &mut Vec<Anoma
 }
 
 pub(super) fn detect_orphan_commands(
-    events: &[EventDto],
+    events: &[&EventDto],
     command_runs: &[CommandRunDto],
     anomalies: &mut Vec<Anomaly>,
 ) {
@@ -328,7 +328,7 @@ pub(super) fn detect_long_running_steps(cycles: &[CycleTrace], anomalies: &mut V
     }
 }
 
-pub(super) fn detect_low_output_steps(events: &[EventDto], anomalies: &mut Vec<Anomaly>) {
+pub(super) fn detect_low_output_steps(events: &[&EventDto], anomalies: &mut Vec<Anomaly>) {
     let mut seen_steps = HashSet::new();
 
     for event in events {

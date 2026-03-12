@@ -1,24 +1,24 @@
 use orchestrator_proto::{CommandRun, Event, TaskGraphDebugBundle, TaskItem, TaskSummary};
 
-pub(super) fn summary_to_proto(t: &agent_orchestrator::dto::TaskSummary) -> TaskSummary {
+pub(super) fn summary_to_proto(t: agent_orchestrator::dto::TaskSummary) -> TaskSummary {
     TaskSummary {
-        id: t.id.clone(),
-        name: t.name.clone(),
-        status: t.status.clone(),
-        started_at: t.started_at.clone(),
-        completed_at: t.completed_at.clone(),
-        goal: t.goal.clone(),
-        project_id: t.project_id.clone(),
-        workspace_id: t.workspace_id.clone(),
-        workflow_id: t.workflow_id.clone(),
-        target_files: t.target_files.clone(),
+        id: t.id,
+        name: t.name,
+        status: t.status,
+        started_at: t.started_at,
+        completed_at: t.completed_at,
+        goal: t.goal,
+        project_id: t.project_id,
+        workspace_id: t.workspace_id,
+        workflow_id: t.workflow_id,
+        target_files: t.target_files,
         total_items: t.total_items,
         finished_items: t.finished_items,
         failed_items: t.failed_items,
-        created_at: t.created_at.clone(),
-        updated_at: t.updated_at.clone(),
-        parent_task_id: t.parent_task_id.clone(),
-        spawn_reason: t.spawn_reason.clone(),
+        created_at: t.created_at,
+        updated_at: t.updated_at,
+        parent_task_id: t.parent_task_id,
+        spawn_reason: t.spawn_reason,
         spawn_depth: t.spawn_depth,
     }
 }

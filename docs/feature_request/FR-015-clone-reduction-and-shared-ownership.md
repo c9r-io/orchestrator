@@ -2,7 +2,7 @@
 
 - ID: `FR-015`
 - Priority: `P2`
-- Status: `Proposed`
+- Status: `In Progress`
 - Owner: `orchestrator core`
 
 ## 背景
@@ -80,8 +80,21 @@
 - 风险：没有基准支撑，优化收益不可见。
   - 缓解：要求热点证据和前后对比。
 
-## 后续产物
+## 首批已落地产物
 
-- 设计文档：`TBD`
-- QA 文档：`TBD`
+- 设计文档：`docs/design_doc/orchestrator/29-clone-reduction-and-shared-ownership.md`
+- QA 文档：`docs/qa/orchestrator/67-clone-reduction-and-shared-ownership.md`
 
+## 当前落地范围
+
+- `TaskRuntimeContext` 的高成本只读字段共享化，减少并发 item 执行与 graph 路径的深拷贝
+- daemon `TaskSummary -> proto` 映射收敛为边界单次 ownership transfer
+- workflow spec/config 转换中的 builtin 类型判定收敛为共享 helper，减少分支式重复字符串分配
+- generic builtin 执行路径不再为 `pipeline_vars` 覆盖而整块克隆 `TaskRuntimeContext`
+- task trace 构建链路改为 borrow-first 的事件排序与异常检测，不再复制整份 `EventDto` 列表
+
+## 剩余治理项
+
+- 继续基于热点证据治理 `dispatch.rs` chain-step 路径、`segment.rs` 并行 item 扇出中的中间复制
+- 治理 `resource/export.rs`、`db_write.rs`、`secret_key_lifecycle.rs` 等剩余热点
+- 如需继续优化 trace/export 之外的观测与导出路径，再补充专项设计与验证

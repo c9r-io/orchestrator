@@ -238,7 +238,7 @@ mod tests {
             workspace_id: "ws".to_string(),
             workspace_root: "/tmp".into(),
             ticket_dir: "tickets".to_string(),
-            execution_plan: crate::config::TaskExecutionPlan {
+            execution_plan: std::sync::Arc::new(crate::config::TaskExecutionPlan {
                 steps: vec![
                     crate::config::TaskExecutionStep {
                         id: "init_once".to_string(),
@@ -340,14 +340,14 @@ mod tests {
                 loop_policy: Default::default(),
                 finalize: Default::default(),
                 max_parallel: None,
-            },
+            }),
             execution: Default::default(),
             current_cycle: 1,
             init_done: true,
-            dynamic_steps: vec![],
-            adaptive: None,
+            dynamic_steps: std::sync::Arc::new(vec![]),
+            adaptive: std::sync::Arc::new(None),
             pipeline_vars: Default::default(),
-            safety: Default::default(),
+            safety: std::sync::Arc::new(Default::default()),
             self_referential: false,
             consecutive_failures: 0,
             project_id: "default".to_string(),

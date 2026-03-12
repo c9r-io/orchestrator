@@ -68,33 +68,20 @@ pub fn build_trace_with_meta(
 ) -> TaskTrace {
     let mut sorted_events: Vec<&EventDto> = events.iter().collect();
     sorted_events.sort_by_key(|e| e.id);
-    let sorted_refs: Vec<EventDto> = sorted_events
-        .into_iter()
-        .map(|e| EventDto {
-            id: e.id,
-            task_id: e.task_id.clone(),
-            task_item_id: e.task_item_id.clone(),
-            event_type: e.event_type.clone(),
-            payload: e.payload.clone(),
-            created_at: e.created_at.clone(),
-        })
-        .collect();
-    let events = &sorted_refs;
-
-    let cycles = build_cycles(&task_meta, events, command_runs);
-    let graph_runs = build_graph_runs(events);
+    let cycles = build_cycles(&task_meta, &sorted_events, command_runs);
+    let graph_runs = build_graph_runs(&sorted_events);
     let mut anomalies = Vec::new();
 
-    detect_duplicate_runner(events, &mut anomalies);
+    detect_duplicate_runner(&sorted_events, &mut anomalies);
     detect_overlapping_cycles(&cycles, &mut anomalies);
-    detect_overlapping_steps(events, &mut anomalies);
-    detect_missing_step_end(events, &mut anomalies);
-    detect_empty_cycles(events, &mut anomalies);
-    detect_orphan_commands(events, command_runs, &mut anomalies);
+    detect_overlapping_steps(&sorted_events, &mut anomalies);
+    detect_missing_step_end(&sorted_events, &mut anomalies);
+    detect_empty_cycles(&sorted_events, &mut anomalies);
+    detect_orphan_commands(&sorted_events, command_runs, &mut anomalies);
     detect_nonzero_exit(command_runs, &mut anomalies);
     detect_unexpanded_template_var(command_runs, &mut anomalies);
     detect_long_running_steps(&cycles, &mut anomalies);
-    detect_low_output_steps(events, &mut anomalies);
+    detect_low_output_steps(&sorted_events, &mut anomalies);
 
     let total_steps: u32 = cycles.iter().map(|c| c.steps.len() as u32).sum();
     let total_commands = command_runs.len() as u32;
@@ -113,7 +100,7 @@ pub fn build_trace_with_meta(
         *anomaly_counts.entry(key.to_string()).or_insert(0) += 1;
     }
 
-    let wall_time_secs = compute_wall_time(&task_meta, events);
+    let wall_time_secs = compute_wall_time(&task_meta, &sorted_events);
 
     let summary = TraceSummary {
         total_cycles: cycles.len() as u32,
@@ -135,7 +122,7 @@ pub fn build_trace_with_meta(
     }
 }
 
-fn build_graph_runs(events: &[EventDto]) -> Vec<GraphTrace> {
+fn build_graph_runs(events: &[&EventDto]) -> Vec<GraphTrace> {
     let mut by_cycle: HashMap<u32, GraphTrace> = HashMap::new();
     for event in events {
         if !event.event_type.starts_with("dynamic_") {
@@ -200,7 +187,7 @@ fn build_graph_runs(events: &[EventDto]) -> Vec<GraphTrace> {
 
 fn build_cycles(
     task_meta: &TraceTaskMeta<'_>,
-    events: &[EventDto],
+    events: &[&EventDto],
     command_runs: &[CommandRunDto],
 ) -> Vec<CycleTrace> {
     let mut cycles: Vec<CycleBuilder> = Vec::new();
@@ -433,7 +420,7 @@ fn is_cycle_activity_event(event_type: &str) -> bool {
 fn finalize_cycle_boundaries(
     cycles: &mut [CycleBuilder],
     task_meta: &TraceTaskMeta<'_>,
-    events: &[EventDto],
+    events: &[&EventDto],
 ) {
     let task_terminal_at = task_meta
         .completed_at

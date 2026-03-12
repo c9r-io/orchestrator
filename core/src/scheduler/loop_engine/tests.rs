@@ -230,7 +230,7 @@ fn build_segments_groups_contiguous_scopes() {
         workspace_id: "ws".into(),
         workspace_root: "/tmp".into(),
         ticket_dir: "tickets".into(),
-        execution_plan: TaskExecutionPlan {
+        execution_plan: std::sync::Arc::new(TaskExecutionPlan {
             steps: vec![
                 TaskExecutionStep {
                     id: "plan".into(),
@@ -361,14 +361,14 @@ fn build_segments_groups_contiguous_scopes() {
             loop_policy: WorkflowLoopConfig::default(),
             finalize: WorkflowFinalizeConfig::default(),
             max_parallel: None,
-        },
+        }),
         execution: Default::default(),
         current_cycle: 1,
         init_done: true,
-        dynamic_steps: vec![],
-        adaptive: None,
+        dynamic_steps: std::sync::Arc::new(vec![]),
+        adaptive: std::sync::Arc::new(None),
         pipeline_vars: PipelineVariables::default(),
-        safety: SafetyConfig::default(),
+        safety: std::sync::Arc::new(SafetyConfig::default()),
         self_referential: false,
         consecutive_failures: 0,
         project_id: String::new(),
@@ -404,7 +404,7 @@ fn build_segments_skips_guards() {
         workspace_id: "ws".into(),
         workspace_root: "/tmp".into(),
         ticket_dir: "tickets".into(),
-        execution_plan: TaskExecutionPlan {
+        execution_plan: std::sync::Arc::new(TaskExecutionPlan {
             steps: vec![
                 TaskExecutionStep {
                     id: "plan".into(),
@@ -460,14 +460,14 @@ fn build_segments_skips_guards() {
             loop_policy: WorkflowLoopConfig::default(),
             finalize: WorkflowFinalizeConfig::default(),
             max_parallel: None,
-        },
+        }),
         execution: Default::default(),
         current_cycle: 1,
         init_done: true,
-        dynamic_steps: vec![],
-        adaptive: None,
+        dynamic_steps: std::sync::Arc::new(vec![]),
+        adaptive: std::sync::Arc::new(None),
         pipeline_vars: PipelineVariables::default(),
-        safety: SafetyConfig::default(),
+        safety: std::sync::Arc::new(SafetyConfig::default()),
         self_referential: false,
         consecutive_failures: 0,
         project_id: String::new(),
@@ -581,7 +581,7 @@ fn collect_remaining_item_step_steps_returns_only_item_steps_after_segment() {
         workspace_root: "/tmp".into(),
         ticket_dir: "tickets".into(),
         current_cycle: 2,
-        execution_plan: TaskExecutionPlan {
+        execution_plan: std::sync::Arc::new(TaskExecutionPlan {
             steps: vec![
                 TaskExecutionStep {
                     id: "implement".into(),
@@ -683,13 +683,13 @@ fn collect_remaining_item_step_steps_returns_only_item_steps_after_segment() {
             loop_policy: WorkflowLoopConfig::default(),
             finalize: WorkflowFinalizeConfig::default(),
             max_parallel: None,
-        },
+        }),
         execution: Default::default(),
         init_done: true,
-        dynamic_steps: vec![],
-        adaptive: None,
+        dynamic_steps: std::sync::Arc::new(vec![]),
+        adaptive: std::sync::Arc::new(None),
         pipeline_vars: PipelineVariables::default(),
-        safety: SafetyConfig::default(),
+        safety: std::sync::Arc::new(SafetyConfig::default()),
         self_referential: false,
         consecutive_failures: 0,
         project_id: String::new(),
@@ -719,7 +719,7 @@ fn collect_remaining_item_step_steps_skips_non_repeatable_steps_after_first_cycl
         workspace_root: "/tmp".into(),
         ticket_dir: "tickets".into(),
         current_cycle: 2,
-        execution_plan: TaskExecutionPlan {
+        execution_plan: std::sync::Arc::new(TaskExecutionPlan {
             steps: vec![TaskExecutionStep {
                 id: "qa_testing".into(),
                 required_capability: None,
@@ -747,13 +747,13 @@ fn collect_remaining_item_step_steps_skips_non_repeatable_steps_after_first_cycl
             loop_policy: WorkflowLoopConfig::default(),
             finalize: WorkflowFinalizeConfig::default(),
             max_parallel: None,
-        },
+        }),
         execution: Default::default(),
         init_done: true,
-        dynamic_steps: vec![],
-        adaptive: None,
+        dynamic_steps: std::sync::Arc::new(vec![]),
+        adaptive: std::sync::Arc::new(None),
         pipeline_vars: PipelineVariables::default(),
-        safety: SafetyConfig::default(),
+        safety: std::sync::Arc::new(SafetyConfig::default()),
         self_referential: false,
         consecutive_failures: 0,
         project_id: String::new(),
@@ -832,7 +832,7 @@ fn build_segments_skips_disabled_steps() {
         workspace_id: "ws".into(),
         workspace_root: "/tmp".into(),
         ticket_dir: "tickets".into(),
-        execution_plan: TaskExecutionPlan {
+        execution_plan: std::sync::Arc::new(TaskExecutionPlan {
             steps: vec![
                 TaskExecutionStep {
                     id: "plan".into(),
@@ -886,14 +886,14 @@ fn build_segments_skips_disabled_steps() {
             loop_policy: WorkflowLoopConfig::default(),
             finalize: WorkflowFinalizeConfig::default(),
             max_parallel: None,
-        },
+        }),
         execution: Default::default(),
         current_cycle: 1,
         init_done: true,
-        dynamic_steps: vec![],
-        adaptive: None,
+        dynamic_steps: std::sync::Arc::new(vec![]),
+        adaptive: std::sync::Arc::new(None),
         pipeline_vars: PipelineVariables::default(),
-        safety: SafetyConfig::default(),
+        safety: std::sync::Arc::new(SafetyConfig::default()),
         self_referential: false,
         consecutive_failures: 0,
         project_id: String::new(),
@@ -915,19 +915,19 @@ fn build_segments_empty_when_no_steps() {
         workspace_id: "ws".into(),
         workspace_root: "/tmp".into(),
         ticket_dir: "tickets".into(),
-        execution_plan: TaskExecutionPlan {
+        execution_plan: std::sync::Arc::new(TaskExecutionPlan {
             steps: vec![],
             loop_policy: WorkflowLoopConfig::default(),
             finalize: WorkflowFinalizeConfig::default(),
             max_parallel: None,
-        },
+        }),
         execution: Default::default(),
         current_cycle: 1,
         init_done: true,
-        dynamic_steps: vec![],
-        adaptive: None,
+        dynamic_steps: std::sync::Arc::new(vec![]),
+        adaptive: std::sync::Arc::new(None),
         pipeline_vars: PipelineVariables::default(),
-        safety: SafetyConfig::default(),
+        safety: std::sync::Arc::new(SafetyConfig::default()),
         self_referential: false,
         consecutive_failures: 0,
         project_id: String::new(),
@@ -1064,7 +1064,7 @@ fn collect_remaining_item_step_steps_from_start_index_2() {
         workspace_root: "/tmp".into(),
         ticket_dir: "tickets".into(),
         current_cycle: 1,
-        execution_plan: TaskExecutionPlan {
+        execution_plan: std::sync::Arc::new(TaskExecutionPlan {
             steps: vec![
                 TaskExecutionStep {
                     id: "plan".into(),
@@ -1142,13 +1142,13 @@ fn collect_remaining_item_step_steps_from_start_index_2() {
             loop_policy: WorkflowLoopConfig::default(),
             finalize: WorkflowFinalizeConfig::default(),
             max_parallel: None,
-        },
+        }),
         execution: Default::default(),
         init_done: true,
-        dynamic_steps: vec![],
-        adaptive: None,
+        dynamic_steps: std::sync::Arc::new(vec![]),
+        adaptive: std::sync::Arc::new(None),
         pipeline_vars: PipelineVariables::default(),
-        safety: SafetyConfig::default(),
+        safety: std::sync::Arc::new(SafetyConfig::default()),
         self_referential: false,
         consecutive_failures: 0,
         project_id: String::new(),
@@ -1218,7 +1218,7 @@ fn build_segments_item_select_is_task_scoped() {
         workspace_id: "ws".into(),
         workspace_root: "/tmp".into(),
         ticket_dir: "tickets".into(),
-        execution_plan: TaskExecutionPlan {
+        execution_plan: std::sync::Arc::new(TaskExecutionPlan {
             steps: vec![
                 TaskExecutionStep {
                     id: "qa_testing".into(),
@@ -1279,14 +1279,14 @@ fn build_segments_item_select_is_task_scoped() {
             loop_policy: WorkflowLoopConfig::default(),
             finalize: WorkflowFinalizeConfig::default(),
             max_parallel: None,
-        },
+        }),
         execution: Default::default(),
         current_cycle: 1,
         init_done: true,
-        dynamic_steps: vec![],
-        adaptive: None,
+        dynamic_steps: std::sync::Arc::new(vec![]),
+        adaptive: std::sync::Arc::new(None),
         pipeline_vars: PipelineVariables::default(),
-        safety: SafetyConfig::default(),
+        safety: std::sync::Arc::new(SafetyConfig::default()),
         self_referential: false,
         consecutive_failures: 0,
         project_id: String::new(),
@@ -1583,13 +1583,13 @@ async fn execute_cycle_graph_returns_static_segment_fallback_on_fail_closed_plan
     let (_fixture, state, task_id) = seed_dynamic_graph_task().await;
     let mut task_ctx = load_cycle_context(&state, &task_id).await;
     task_ctx.execution.fallback_mode = crate::config::DagFallbackMode::StaticSegment;
-    task_ctx.adaptive = Some(AdaptivePlannerConfig {
+    task_ctx.adaptive = std::sync::Arc::new(Some(AdaptivePlannerConfig {
         enabled: true,
         planner_agent: None,
         max_history: 10,
         temperature: 0.7,
         fallback_mode: AdaptiveFallbackMode::FailClosed,
-    });
+    }));
 
     let outcome = graph::execute_cycle_graph(
         &state,
@@ -1627,13 +1627,13 @@ async fn execute_cycle_graph_uses_deterministic_dag_fallback_graph_on_fail_close
     let (_fixture, state, task_id) = seed_dynamic_graph_task().await;
     let mut task_ctx = load_cycle_context(&state, &task_id).await;
     task_ctx.execution.fallback_mode = crate::config::DagFallbackMode::DeterministicDag;
-    task_ctx.adaptive = Some(AdaptivePlannerConfig {
+    task_ctx.adaptive = std::sync::Arc::new(Some(AdaptivePlannerConfig {
         enabled: true,
         planner_agent: None,
         max_history: 10,
         temperature: 0.7,
         fallback_mode: AdaptiveFallbackMode::FailClosed,
-    });
+    }));
 
     let outcome = graph::execute_cycle_graph(
         &state,

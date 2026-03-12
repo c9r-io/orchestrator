@@ -334,12 +334,12 @@ pub async fn load_task_runtime_context(
         workspace_id,
         workspace_root,
         ticket_dir,
-        execution_plan,
+        execution_plan: Arc::new(execution_plan),
         execution,
         current_cycle: current_cycle.max(0) as u32,
         init_done: init_done == 1,
-        dynamic_steps,
-        adaptive,
+        dynamic_steps: Arc::new(dynamic_steps),
+        adaptive: Arc::new(adaptive),
         pipeline_vars: {
             let mut pv = match runtime_row.pipeline_vars_json.as_deref() {
                 Some(json) if !json.is_empty() => {
@@ -361,7 +361,7 @@ pub async fn load_task_runtime_context(
             pv
         },
         pinned_invariants: std::sync::Arc::new(safety.invariants.clone()),
-        safety,
+        safety: Arc::new(safety),
         self_referential,
         consecutive_failures: 0,
         project_id: effective_project_id,
@@ -455,6 +455,26 @@ mod tests {
             Some("runtime-test-goal")
         );
         assert!(!ctx.execution_plan.steps.is_empty());
+    }
+
+    #[tokio::test]
+    async fn load_task_runtime_context_clone_shares_heavy_fields() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+
+        let ctx = load_task_runtime_context(&state, &task_id)
+            .await
+            .expect("load runtime context");
+        let cloned = ctx.clone();
+
+        assert!(Arc::ptr_eq(&ctx.execution_plan, &cloned.execution_plan));
+        assert!(Arc::ptr_eq(&ctx.dynamic_steps, &cloned.dynamic_steps));
+        assert!(Arc::ptr_eq(&ctx.adaptive, &cloned.adaptive));
+        assert!(Arc::ptr_eq(&ctx.safety, &cloned.safety));
+        assert!(Arc::ptr_eq(
+            &ctx.pinned_invariants,
+            &cloned.pinned_invariants
+        ));
     }
 
     #[tokio::test]

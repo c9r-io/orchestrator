@@ -754,17 +754,17 @@ async fn execute_agent_step(
 
         // ExecutionMode::Agent or ExecutionMode::Builtin for generic builtins
         _ => {
-            let mut step_ctx = task_ctx.clone();
-            step_ctx.pipeline_vars = acc.pipeline_vars.clone();
-
             let exec_result = execute_builtin_step(
                 state,
                 task_id,
                 item.id.as_str(),
                 step,
-                &step_ctx,
-                runtime,
-                &item.qa_file_path,
+                BuiltinStepContext {
+                    task_ctx,
+                    pipeline_vars: &acc.pipeline_vars,
+                    runtime,
+                    rel_path: &item.qa_file_path,
+                },
             )
             .await;
 
@@ -812,16 +812,25 @@ async fn execute_agent_step(
     }
 }
 
-pub async fn execute_builtin_step(
+pub(crate) struct BuiltinStepContext<'a> {
+    task_ctx: &'a TaskRuntimeContext,
+    pipeline_vars: &'a PipelineVariables,
+    runtime: &'a RunningTask,
+    rel_path: &'a str,
+}
+
+pub(crate) async fn execute_builtin_step(
     state: &Arc<InnerState>,
     task_id: &str,
     item_id: &str,
     step: &TaskExecutionStep,
-    task_ctx: &TaskRuntimeContext,
-    runtime: &RunningTask,
-    rel_path: &str,
+    ctx: BuiltinStepContext<'_>,
 ) -> Result<(crate::dto::RunResult, PipelineVariables)> {
     let phase = &step.id;
+    let task_ctx = ctx.task_ctx;
+    let pipeline_vars = ctx.pipeline_vars;
+    let runtime = ctx.runtime;
+    let rel_path = ctx.rel_path;
 
     let result = if let Some(ref command) = step.command {
         let ctx = crate::collab::AgentContext::new(
@@ -832,8 +841,7 @@ pub async fn execute_builtin_step(
             task_ctx.workspace_root.clone(),
             task_ctx.workspace_id.clone(),
         );
-        let rendered_command =
-            ctx.render_template_with_pipeline(command, Some(&task_ctx.pipeline_vars));
+        let rendered_command = ctx.render_template_with_pipeline(command, Some(pipeline_vars));
 
         run_phase(
             state,
@@ -882,7 +890,7 @@ pub async fn execute_builtin_step(
                 workspace_id: &task_ctx.workspace_id,
                 cycle: task_ctx.current_cycle,
                 runtime,
-                pipeline_vars: Some(&task_ctx.pipeline_vars),
+                pipeline_vars: Some(pipeline_vars),
                 step_timeout_secs: step.timeout_secs.or(task_ctx.safety.step_timeout_secs),
                 step_scope: step.resolved_scope(),
                 step_template_prompt: resolved_prompt.as_deref(),
@@ -893,7 +901,7 @@ pub async fn execute_builtin_step(
         .await?
     };
 
-    let mut pipeline = task_ctx.pipeline_vars.clone();
+    let mut pipeline = pipeline_vars.clone();
     if let Some(ref output) = result.output {
         pipeline.prev_stdout = output.stdout.clone();
         pipeline.prev_stderr = output.stderr.clone();
@@ -961,7 +969,7 @@ async fn execute_dynamic_steps(
     runtime: &RunningTask,
     acc: &mut StepExecutionAccumulator,
 ) -> Result<()> {
-    if let Some(adaptive_config) = task_ctx.adaptive.clone().filter(|cfg| cfg.enabled) {
+    if let Some(adaptive_config) = task_ctx.adaptive_config().filter(|cfg| cfg.enabled) {
         let history = build_adaptive_history(task_id, item.id.as_str(), task_ctx, acc);
         let mut planner = AdaptivePlanner::new(adaptive_config.clone());
         for record in history {
@@ -1046,7 +1054,7 @@ async fn execute_dynamic_steps(
 
     let pool = {
         let mut p = crate::dynamic_orchestration::DynamicStepPool::new();
-        for ds in &task_ctx.dynamic_steps {
+        for ds in task_ctx.dynamic_step_configs() {
             p.add_step(ds.clone());
         }
         p

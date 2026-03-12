@@ -395,7 +395,7 @@ fn make_task_ctx(
         workspace_id: "default".to_string(),
         workspace_root: std::path::PathBuf::from("/tmp/test"),
         ticket_dir: "/tmp/test/docs/ticket".to_string(),
-        execution_plan: crate::config::TaskExecutionPlan {
+        execution_plan: std::sync::Arc::new(crate::config::TaskExecutionPlan {
             steps,
             loop_policy: crate::config::WorkflowLoopConfig {
                 mode: crate::config::LoopMode::Fixed,
@@ -408,14 +408,14 @@ fn make_task_ctx(
             },
             finalize: Default::default(),
             max_parallel: None,
-        },
+        }),
         execution: Default::default(),
         current_cycle,
         init_done: false,
-        dynamic_steps: vec![],
-        adaptive: None,
+        dynamic_steps: std::sync::Arc::new(vec![]),
+        adaptive: std::sync::Arc::new(None),
         pipeline_vars: empty_pipeline(),
-        safety: Default::default(),
+        safety: std::sync::Arc::new(Default::default()),
         self_referential: false,
         consecutive_failures: 0,
         project_id: String::new(),

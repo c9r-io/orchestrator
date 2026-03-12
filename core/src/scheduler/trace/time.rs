@@ -3,7 +3,10 @@ use chrono::TimeZone;
 
 use super::model::TraceTaskMeta;
 
-pub(super) fn compute_wall_time(task_meta: &TraceTaskMeta<'_>, events: &[EventDto]) -> Option<f64> {
+pub(super) fn compute_wall_time(
+    task_meta: &TraceTaskMeta<'_>,
+    events: &[&EventDto],
+) -> Option<f64> {
     let start_ts = task_meta
         .started_at
         .or_else(|| (!task_meta.created_at.is_empty()).then_some(task_meta.created_at))

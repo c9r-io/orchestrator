@@ -13,7 +13,7 @@ mod task_state;
 pub mod trace;
 
 pub use crate::state::RunningTask;
-pub use item_executor::{execute_builtin_step, execute_guard_step, process_item, GuardResult};
+pub use item_executor::{execute_guard_step, process_item, GuardResult};
 pub use loop_engine::{evaluate_loop_guard_rules, run_task_loop};
 pub use phase_runner::{run_phase, run_phase_with_rotation};
 pub use query::{

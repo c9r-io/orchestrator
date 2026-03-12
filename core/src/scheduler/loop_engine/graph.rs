@@ -235,7 +235,7 @@ async fn materialize_graph(
         return Ok(materialized);
     };
 
-    if let Some(adaptive_config) = task_ctx.adaptive.clone().filter(|cfg| cfg.enabled) {
+    if let Some(adaptive_config) = task_ctx.adaptive_config().filter(|cfg| cfg.enabled) {
         let generation_ctx = GraphMaterialization {
             graph: EffectiveExecutionGraph::default(),
             graph_run_id: graph_run_id.clone(),
@@ -790,7 +790,7 @@ async fn inject_dynamic_pool_steps(
             .or_insert_with(|| StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone()));
         let ctx = acc.to_prehook_context(task_id, item, task_ctx, &node.id);
         let mut pool = crate::dynamic_orchestration::DynamicStepPool::new();
-        for dynamic_step in &task_ctx.dynamic_steps {
+        for dynamic_step in task_ctx.dynamic_step_configs() {
             pool.add_step(dynamic_step.clone());
         }
         for dynamic_step in pool.find_matching_steps(&ctx) {

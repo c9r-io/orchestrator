@@ -10,6 +10,21 @@ use crate::config::{
 };
 use anyhow::{anyhow, Result};
 
+fn owned_builtin_step_type(step_type: &str) -> Option<String> {
+    matches!(
+        step_type,
+        "init_once" | "loop_guard" | "self_test" | "self_restart"
+    )
+    .then(|| step_type.to_string())
+}
+
+fn is_builtin_step_type(step_type: &str) -> bool {
+    matches!(
+        step_type,
+        "init_once" | "loop_guard" | "ticket_scan" | "self_test" | "self_restart" | "item_select"
+    )
+}
+
 pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowConfig> {
     let steps = spec
         .steps
@@ -143,15 +158,9 @@ pub(crate) fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
 
 fn workflow_step_spec_to_config(step: &WorkflowStepSpec) -> Result<WorkflowStepConfig> {
     crate::config::validate_step_type(&step.step_type).map_err(|e| anyhow!(e))?;
-    let is_guard = step.step_type == "loop_guard";
-    let builtin = if matches!(
-        step.step_type.as_str(),
-        "init_once" | "loop_guard" | "self_test" | "self_restart"
-    ) {
-        Some(step.step_type.clone())
-    } else {
-        None
-    };
+    let step_type = step.step_type.as_str();
+    let is_guard = step_type == "loop_guard";
+    let builtin = owned_builtin_step_type(step_type);
     let prehook = match step.prehook.as_ref() {
         Some(prehook) => Some(StepPrehookConfig {
             engine: parse_hook_engine(&prehook.engine),
@@ -172,19 +181,16 @@ fn workflow_step_spec_to_config(step: &WorkflowStepSpec) -> Result<WorkflowStepC
         Some("item") => Some(StepScope::Item),
         _ => None,
     };
-    let is_builtin_type = matches!(
-        step.step_type.as_str(),
-        "init_once" | "loop_guard" | "ticket_scan" | "self_test" | "self_restart" | "item_select"
-    );
+    let is_builtin_type = is_builtin_step_type(step_type);
     let required_capability = step.required_capability.clone().or_else(|| {
         if is_builtin_type || step.builtin.is_some() || !step.chain_steps.is_empty() {
             None
         } else {
-            Some(step.step_type.clone())
+            Some(step_type.to_string())
         }
     });
     let builtin = if is_builtin_type {
-        Some(step.step_type.clone())
+        Some(step_type.to_string())
     } else {
         builtin
     };

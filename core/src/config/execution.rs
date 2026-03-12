@@ -190,16 +190,16 @@ pub struct TaskRuntimeContext {
     pub workspace_id: String,
     pub workspace_root: std::path::PathBuf,
     pub ticket_dir: String,
-    pub execution_plan: TaskExecutionPlan,
+    pub execution_plan: Arc<TaskExecutionPlan>,
     pub execution: WorkflowExecutionConfig,
     pub current_cycle: u32,
     pub init_done: bool,
-    pub dynamic_steps: Vec<crate::dynamic_orchestration::DynamicStepConfig>,
-    pub adaptive: Option<crate::dynamic_orchestration::AdaptivePlannerConfig>,
+    pub dynamic_steps: Arc<Vec<crate::dynamic_orchestration::DynamicStepConfig>>,
+    pub adaptive: Arc<Option<crate::dynamic_orchestration::AdaptivePlannerConfig>>,
     /// Pipeline variables accumulated across steps in the current cycle
     pub pipeline_vars: PipelineVariables,
     /// Safety configuration
-    pub safety: SafetyConfig,
+    pub safety: Arc<SafetyConfig>,
     /// Whether the workspace is self-referential
     pub self_referential: bool,
     /// Consecutive failure counter for auto-rollback
@@ -212,6 +212,16 @@ pub struct TaskRuntimeContext {
     pub workflow_id: String,
     /// WP02: Current spawn depth for depth limiting
     pub spawn_depth: i64,
+}
+
+impl TaskRuntimeContext {
+    pub fn adaptive_config(&self) -> Option<&crate::dynamic_orchestration::AdaptivePlannerConfig> {
+        self.adaptive.as_ref().as_ref()
+    }
+
+    pub fn dynamic_step_configs(&self) -> &[crate::dynamic_orchestration::DynamicStepConfig] {
+        self.dynamic_steps.as_ref().as_slice()
+    }
 }
 
 /// Step prehook context for evaluation

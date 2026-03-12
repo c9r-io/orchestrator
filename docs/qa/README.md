@@ -159,6 +159,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/64-secretstore-key-lifecycle.md` | 5 | FR-012: SecretStore key lifecycle — legacy migration, rotation, resume, revocation, audit history |
 | orchestrator | `docs/qa/orchestrator/65-grpc-control-plane-protection.md` | 5 | FR-013 closure: protection config bootstrap, secure-TCP rate limits, stream occupancy limit, UDS fallback protection, and repeatable pressure validation |
 | orchestrator | `docs/qa/orchestrator/66-error-semantics-governance.md` | 4 | FR-014: boundary error taxonomy, shared gRPC status mapping, CLI error rendering, and regression verification |
+| orchestrator | `docs/qa/orchestrator/67-clone-reduction-and-shared-ownership.md` | 5 | FR-015 clone reduction: shallow-shared scheduler runtime fields, owned daemon summary mapping, builtin execution cleanup, and trace hotspot regression coverage |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
 | script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |

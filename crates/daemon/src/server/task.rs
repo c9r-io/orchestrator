@@ -208,7 +208,7 @@ pub(crate) async fn task_list(
         })
         .collect();
 
-    let protos = filtered.into_iter().map(|t| summary_to_proto(&t)).collect();
+    let protos = filtered.into_iter().map(summary_to_proto).collect();
     Ok(Response::new(TaskListResponse { tasks: protos }))
 }
 
@@ -223,7 +223,7 @@ pub(crate) async fn task_info(
         .map_err(map_core_error)?;
 
     Ok(Response::new(TaskInfoResponse {
-        task: Some(summary_to_proto(&detail.task)),
+        task: Some(summary_to_proto(detail.task)),
         items: detail.items.into_iter().map(item_to_proto).collect(),
         runs: detail.runs.into_iter().map(run_to_proto).collect(),
         events: detail.events.into_iter().map(event_to_proto).collect(),
@@ -336,8 +336,13 @@ pub(crate) async fn task_watch(
                 Err(_) => break,
             };
 
+            let terminal = matches!(
+                summary.status.as_str(),
+                "completed" | "failed" | "cancelled" | "deleted"
+            );
+
             let snapshot = TaskWatchSnapshot {
-                task: Some(summary_to_proto(&summary)),
+                task: Some(summary_to_proto(summary)),
                 items: detail.items.into_iter().map(item_to_proto).collect(),
             };
 
@@ -345,10 +350,6 @@ pub(crate) async fn task_watch(
                 break;
             }
 
-            let terminal = matches!(
-                summary.status.as_str(),
-                "completed" | "failed" | "cancelled" | "deleted"
-            );
             if terminal {
                 break;
             }
