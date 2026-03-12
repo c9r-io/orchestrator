@@ -146,7 +146,7 @@ pub(super) async fn record_phase_results(
             payload_json: publish_event_payload_json,
         });
         writer
-            .update_command_run_with_events(&insert_payload, &events)
+            .update_command_run_with_owned_events(insert_payload, events)
             .await?;
     }
 

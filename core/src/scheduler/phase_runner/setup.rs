@@ -203,7 +203,10 @@ pub(super) async fn setup_phase_execution(
             },
             output_json_path: None,
         };
-        state.db_writer.insert_command_run(&initial_run).await?;
+        state
+            .db_writer
+            .insert_command_run_owned(initial_run)
+            .await?;
     }
 
     Ok(PhaseSetup {

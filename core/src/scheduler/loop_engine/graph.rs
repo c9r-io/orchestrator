@@ -186,6 +186,16 @@ struct GraphMaterialization {
     normalized_plan_json: Option<String>,
 }
 
+impl GraphMaterialization {
+    fn graph_run_id(&self) -> &str {
+        &self.graph_run_id
+    }
+
+    fn source(&self) -> &str {
+        &self.source
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 struct NodeExecutionRecord {
     node_id: String,
@@ -218,13 +228,14 @@ async fn materialize_graph(
     items: &[crate::dto::TaskItemRow],
 ) -> Result<GraphMaterialization> {
     let graph_run_id = Uuid::new_v4().to_string();
+    let cycle = task_ctx.current_cycle as i64;
     let Some(anchor_item) = items.first() else {
         let graph = build_static_execution_graph(task_ctx)?;
         let materialized = GraphMaterialization {
             graph,
             graph_run_id,
             source: "static_baseline".to_string(),
-            cycle: task_ctx.current_cycle as i64,
+            cycle,
             fallback_mode: None,
             planner_failure_class: None,
             planner_failure_message: None,
@@ -236,14 +247,13 @@ async fn materialize_graph(
     };
 
     if let Some(adaptive_config) = task_ctx.adaptive_config().filter(|cfg| cfg.enabled) {
+        let fallback_mode = dag_fallback_mode_name(task_ctx.execution.fallback_mode).to_string();
         let generation_ctx = GraphMaterialization {
             graph: EffectiveExecutionGraph::default(),
             graph_run_id: graph_run_id.clone(),
             source: "adaptive_planner".to_string(),
-            cycle: task_ctx.current_cycle as i64,
-            fallback_mode: Some(
-                dag_fallback_mode_name(task_ctx.execution.fallback_mode).to_string(),
-            ),
+            cycle,
+            fallback_mode: Some(fallback_mode.clone()),
             planner_failure_class: None,
             planner_failure_message: None,
             planner_raw_output_json: None,
@@ -283,10 +293,8 @@ async fn materialize_graph(
             graph,
             graph_run_id,
             source: execution_graph_source_name(source).to_string(),
-            cycle: task_ctx.current_cycle as i64,
-            fallback_mode: Some(
-                dag_fallback_mode_name(task_ctx.execution.fallback_mode).to_string(),
-            ),
+            cycle,
+            fallback_mode: Some(fallback_mode),
             planner_failure_class: outcome
                 .metadata
                 .error_class
@@ -302,26 +310,24 @@ async fn materialize_graph(
         insert_graph_run(state, task_id, &materialized).await?;
         if task_ctx.execution.persist_graph_snapshots {
             if let Some(raw_output) = materialized.planner_raw_output_json.as_ref() {
-                state
-                    .task_repo
-                    .insert_task_graph_snapshot(crate::task_repository::NewTaskGraphSnapshot {
-                        graph_run_id: materialized.graph_run_id.clone(),
-                        task_id: task_id.to_string(),
-                        snapshot_kind: "planner_raw_output".to_string(),
-                        payload_json: raw_output.clone(),
-                    })
-                    .await?;
+                persist_graph_snapshot_payload(
+                    state,
+                    task_id,
+                    materialized.graph_run_id(),
+                    "planner_raw_output",
+                    raw_output.clone(),
+                )
+                .await?;
             }
             if let Some(normalized_plan_json) = materialized.normalized_plan_json.as_ref() {
-                state
-                    .task_repo
-                    .insert_task_graph_snapshot(crate::task_repository::NewTaskGraphSnapshot {
-                        graph_run_id: materialized.graph_run_id.clone(),
-                        task_id: task_id.to_string(),
-                        snapshot_kind: "normalized_plan".to_string(),
-                        payload_json: normalized_plan_json.clone(),
-                    })
-                    .await?;
+                persist_graph_snapshot_payload(
+                    state,
+                    task_id,
+                    materialized.graph_run_id(),
+                    "normalized_plan",
+                    normalized_plan_json.clone(),
+                )
+                .await?;
             }
         }
         emit_graph_event(
@@ -346,7 +352,7 @@ async fn materialize_graph(
         graph,
         graph_run_id,
         source: "static_baseline".to_string(),
-        cycle: task_ctx.current_cycle as i64,
+        cycle,
         fallback_mode: None,
         planner_failure_class: None,
         planner_failure_message: None,
@@ -455,39 +461,40 @@ async fn execute_graph_nodes(
     task_item_paths: &mut Vec<String>,
 ) -> Result<GraphExecutionReplay> {
     let mut replay = GraphExecutionReplay::default();
-    let mut resolved_incoming: HashMap<String, usize> = graph
+    let mut resolved_incoming: HashMap<&str, usize> = graph
         .nodes
         .keys()
-        .map(|node_id| (node_id.clone(), 0usize))
+        .map(|node_id| (node_id.as_str(), 0usize))
         .collect();
-    let incoming_total: HashMap<String, usize> = graph
+    let incoming_total: HashMap<&str, usize> = graph
         .nodes
         .keys()
-        .map(|node_id| (node_id.clone(), graph.incoming_count(node_id)))
+        .map(|node_id| (node_id.as_str(), graph.incoming_count(node_id)))
         .collect();
-    let mut has_taken_incoming: HashSet<String> = HashSet::new();
-    let mut queue: VecDeque<String> = graph
+    let mut has_taken_incoming: HashSet<&str> = HashSet::new();
+    let mut queue: VecDeque<&str> = graph
         .nodes
         .keys()
+        .map(|node_id| node_id.as_str())
         .filter(|node_id| incoming_total.get(*node_id).copied().unwrap_or(0) == 0)
-        .cloned()
         .collect();
     if let Some(entry) = graph.entry.as_ref() {
-        queue.retain(|node_id| node_id == entry);
-        queue.push_front(entry.clone());
+        let entry = entry.as_str();
+        queue.retain(|node_id| *node_id == entry);
+        queue.push_front(entry);
     }
-    let mut executed: HashSet<String> = HashSet::new();
+    let mut executed: HashSet<&str> = HashSet::new();
     let mut injected_dynamic_ids: HashSet<String> = HashSet::new();
 
     while let Some(node_id) = queue.pop_front() {
-        if executed.contains(&node_id) {
+        if executed.contains(node_id) {
             continue;
         }
         if runtime.stop_flag.load(Ordering::SeqCst) || is_task_paused_in_db(state, task_id).await? {
             return Ok(replay);
         }
         let node = graph
-            .get_node(&node_id)
+            .get_node(node_id)
             .ok_or_else(|| anyhow!("graph node '{}' disappeared", node_id))?;
         emit_graph_event(
             state,
@@ -499,7 +506,7 @@ async fn execute_graph_nodes(
         )
         .await?;
         if should_skip_node(task_id, task_ctx, items, item_state, node)? {
-            executed.insert(node_id.clone());
+            executed.insert(node_id);
             replay.node_execution_order.push(node.id.clone());
             replay.node_results.push(NodeExecutionRecord {
                 node_id: node.id.clone(),
@@ -553,7 +560,7 @@ async fn execute_graph_nodes(
                 json!({"node_id": node.id, "scope": node.scope, "success": true}),
             )
             .await?;
-            executed.insert(node_id.clone());
+            executed.insert(node_id);
             inject_dynamic_pool_steps(
                 state,
                 task_id,
@@ -569,7 +576,8 @@ async fn execute_graph_nodes(
             .await?;
         }
 
-        for edge in graph.outgoing_edges(&node_id) {
+        for edge in graph.outgoing_edges(node_id) {
+            let to_node = edge.to.as_str();
             let taken = evaluate_edge(
                 task_id,
                 task_ctx,
@@ -584,7 +592,7 @@ async fn execute_graph_nodes(
             };
             replay.edge_decisions.push(EdgeDecisionRecord {
                 from: edge.from.clone(),
-                to: edge.to.clone(),
+                to: to_node.to_string(),
                 condition: edge.condition.clone(),
                 taken,
                 reason: reason.clone(),
@@ -598,9 +606,9 @@ async fn execute_graph_nodes(
                 json!({"from": edge.from, "to": edge.to, "condition": edge.condition, "taken": taken, "reason": reason}),
             )
             .await?;
-            *resolved_incoming.entry(edge.to.clone()).or_insert(0) += 1;
+            *resolved_incoming.entry(to_node).or_insert(0) += 1;
             if taken {
-                has_taken_incoming.insert(edge.to.clone());
+                has_taken_incoming.insert(to_node);
                 emit_graph_event(
                     state,
                     task_id,
@@ -611,13 +619,13 @@ async fn execute_graph_nodes(
                 )
                 .await?;
             }
-            let total = incoming_total.get(&edge.to).copied().unwrap_or(0);
-            let resolved = resolved_incoming.get(&edge.to).copied().unwrap_or(0);
+            let total = incoming_total.get(to_node).copied().unwrap_or(0);
+            let resolved = resolved_incoming.get(to_node).copied().unwrap_or(0);
             if resolved >= total
-                && (has_taken_incoming.contains(&edge.to) || total == 0)
-                && !executed.contains(&edge.to)
+                && (has_taken_incoming.contains(to_node) || total == 0)
+                && !executed.contains(to_node)
             {
-                queue.push_back(edge.to.clone());
+                queue.push_back(to_node);
             }
         }
     }
@@ -827,7 +835,7 @@ async fn insert_graph_run(
             task_id: task_id.to_string(),
             cycle: materialized.cycle,
             mode: "dynamic_dag".to_string(),
-            source: materialized.source.clone(),
+            source: materialized.source().to_string(),
             status: "materialized".to_string(),
             fallback_mode: materialized.fallback_mode.clone(),
             planner_failure_class: materialized.planner_failure_class.clone(),
@@ -835,6 +843,24 @@ async fn insert_graph_run(
             entry_node_id: materialized.graph.entry.clone(),
             node_count: materialized.graph.nodes.len() as i64,
             edge_count: materialized.graph.edges.len() as i64,
+        })
+        .await
+}
+
+async fn persist_graph_snapshot_payload(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    graph_run_id: &str,
+    snapshot_kind: &str,
+    payload_json: String,
+) -> Result<()> {
+    state
+        .task_repo
+        .insert_task_graph_snapshot(crate::task_repository::NewTaskGraphSnapshot {
+            graph_run_id: graph_run_id.to_string(),
+            task_id: task_id.to_string(),
+            snapshot_kind: snapshot_kind.to_string(),
+            payload_json,
         })
         .await
 }
@@ -870,10 +896,10 @@ async fn emit_graph_event(
     payload_obj.insert("mode".to_string(), json!("dynamic_dag"));
     payload_obj.insert("cycle".to_string(), json!(graph_run.cycle));
     if !graph_run.graph_run_id.is_empty() {
-        payload_obj.insert("graph_run_id".to_string(), json!(graph_run.graph_run_id));
+        payload_obj.insert("graph_run_id".to_string(), json!(graph_run.graph_run_id()));
     }
-    if !graph_run.source.is_empty() {
-        payload_obj.insert("source".to_string(), json!(graph_run.source));
+    if !graph_run.source().is_empty() {
+        payload_obj.insert("source".to_string(), json!(graph_run.source()));
     }
     insert_event(
         state,

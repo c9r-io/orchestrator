@@ -1,7 +1,7 @@
 # Clone Reduction and Shared Ownership Governance
 
 **Related FR**: `FR-015`  
-**Related QA**: `docs/qa/orchestrator/67-clone-reduction-and-shared-ownership.md`
+**Related QA**: `docs/qa/orchestrator/67-clone-reduction-and-shared-ownership.md`, `docs/qa/orchestrator/68-clone-reduction-follow-up.md`
 
 ## Background And Goals
 
@@ -13,6 +13,14 @@ This change governs the first high-value batch of FR-015:
 - keep daemon/proto mapping at one final ownership transfer instead of extra DTO field copies
 - trim repeated owned string creation in workflow spec/config conversion branches
 - move trace reconstruction to borrow-first event ordering instead of cloning full `EventDto` snapshots
+
+The follow-up batch extends the same boundary rules into the next hotspot tier:
+
+- remove chain-step execution's temporary `TaskRuntimeContext` clone now that pipeline state already lives in the accumulator
+- keep parallel item fan-out on shared task context without a second pre-spawn pipeline-vars clone
+- add owned fast-paths in `DbWriteCoordinator` so phase-runner hot paths can move `NewCommandRun` and event vectors once
+- centralize export metadata and secret-key audit event assembly so manifest/audit boundaries own data once instead of rebuilding identical string bundles at each branch
+- convert graph execution queue/incoming-state tracking to borrowed node ids and remove `outgoing_edges()`' transient `Vec` allocation from replay/materialization hot paths
 
 Non-goals:
 
@@ -55,6 +63,8 @@ Specific decisions:
 - daemon mapping is optimized only to the boundary where owned DTOs are already available; proto messages still require one final owned copy
 - workflow conversion keeps the same public shapes and only centralizes builtin-step classification helpers to avoid repeated branch-time string cloning
 - trace reconstruction keeps owned trace output, but internal ordering/anomaly passes no longer duplicate the full input event list
+- graph replay keeps owned persisted/event payloads, but execution-time queueing, incoming-edge accounting, and edge traversal now borrow graph ids until the final replay/event boundary
+- repository-level owned writes below `DbWriteCoordinator` remain an explicit keep-as-owned boundary because crossing async `tokio_rusqlite` closures with borrow-heavy APIs would add more coupling than this FR justifies
 
 ## Risks And Mitigations
 
@@ -62,7 +72,7 @@ Risk: shared ownership hides accidental mutation assumptions.
 Mitigation: only readonly runtime fields moved behind `Arc`; mutable per-cycle state remains plain owned data.
 
 Risk: partial optimization leaves many cold-path clones untouched.  
-Mitigation: this document treats FR-015 as hotspot governance, not style cleanup. Remaining clones stay out of scope until backed by evidence.
+Mitigation: this document treats FR-015 as hotspot governance, not style cleanup. Final owned copies at proto, event, YAML, DB, and async repository boundaries are retained by design.
 
 Risk: behavior drift in scheduler/runtime tests.  
 Mitigation: add regression coverage that cloned runtime contexts share the same heavy allocations while preserving existing execution semantics.
@@ -75,17 +85,22 @@ Repeatable observation for this FR uses lightweight regression signals rather th
 - scheduler and graph regression tests keep execution semantics stable after ownership changes
 - daemon task RPC tests continue exercising list/info/watch paths after owned-summary mapping changes
 - trace regression tests continue exercising event ordering, anomaly detection, and graph replay reconstruction after borrow-first refactor
+- db-write, export, and secret-key lifecycle regressions continue exercising persistence, manifest generation, and audit behavior after the follow-up borrow/owned cleanup
+- loop-engine graph regressions continue exercising adaptive fallback, replay persistence, and edge evaluation after borrowed queue traversal replaced intermediate node-id copies
 
 No operational rollout changes are required.
 
 ## Testing And Acceptance
 
-Acceptance for this batch is satisfied when:
+Acceptance for FR-015 is satisfied when:
 
 - runtime-context clone regression confirms shared `Arc` ownership for heavy fields
 - workspace tests and clippy pass with the new ownership model
 - daemon task/info/watch flows still serialize the same payload shape
 - workflow conversion round-trip tests stay green
 - trace reconstruction tests stay green after removing full-event cloning
+- graph replay and fallback tests stay green after removing intermediate node-id/edge-allocation churn
+- remaining owned copies are either final boundary transfers or explicit keep-as-owned decisions
 
 Executable verification lives in `docs/qa/orchestrator/67-clone-reduction-and-shared-ownership.md`.
+Follow-up hotspot verification lives in `docs/qa/orchestrator/68-clone-reduction-follow-up.md`.

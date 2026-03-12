@@ -84,11 +84,9 @@ impl EffectiveExecutionGraph {
         self.nodes.get(node_id)
     }
 
-    pub fn outgoing_edges(&self, node_id: &str) -> Vec<&ExecutionGraphEdge> {
-        self.edges
-            .iter()
-            .filter(|edge| edge.from == node_id)
-            .collect()
+    pub fn outgoing_edges(&self, node_id: &str) -> impl Iterator<Item = &ExecutionGraphEdge> + '_ {
+        let node_id = node_id.to_owned();
+        self.edges.iter().filter(move |edge| edge.from == node_id)
     }
 
     pub fn incoming_count(&self, node_id: &str) -> usize {

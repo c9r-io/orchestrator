@@ -274,6 +274,7 @@ pub(super) async fn execute_item_segment(
                 .await
                 .map_err(|e| anyhow::anyhow!("semaphore closed: {}", e))?;
             let state = state.clone();
+            let item_id = item.id.clone();
             let item = item.clone();
             let task_id = task_id.to_string();
             let paths = shared_paths.clone();
@@ -281,18 +282,17 @@ pub(super) async fn execute_item_segment(
             let filter = shared_filter.clone();
             let item_runtime = runtime.fork();
             // Reuse existing accumulator to preserve prior segment state
-            let prior_acc = item_state.remove(&item.id);
-            let pipeline_vars = task_ctx.pipeline_vars.clone();
+            let prior_acc = item_state.remove(&item_id);
 
             join_set.spawn(async move {
                 let _permit = permit;
-                let mut acc =
-                    prior_acc.unwrap_or_else(|| StepExecutionAccumulator::new(pipeline_vars));
+                let mut acc = prior_acc
+                    .unwrap_or_else(|| StepExecutionAccumulator::new(ctx.pipeline_vars.clone()));
                 let result = process_item_filtered_owned(
                     &state,
                     OwnedProcessItemRequest {
                         task_id: task_id.clone(),
-                        item: item.clone(),
+                        item,
                         task_item_paths: paths,
                         task_ctx: ctx,
                         runtime: item_runtime,
@@ -302,7 +302,7 @@ pub(super) async fn execute_item_segment(
                     &mut acc,
                 )
                 .await;
-                (item.id.clone(), acc, result)
+                (item_id, acc, result)
             });
         }
 

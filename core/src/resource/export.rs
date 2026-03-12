@@ -7,6 +7,15 @@ use super::{
     WorkspaceResource, API_VERSION,
 };
 
+fn project_metadata(project_id: &str, name: &str) -> crate::cli_types::ResourceMetadata {
+    crate::cli_types::ResourceMetadata {
+        name: name.to_owned(),
+        project: Some(project_id.to_owned()),
+        labels: None,
+        annotations: None,
+    }
+}
+
 pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredResource> {
     let mut resources = Vec::new();
     if let Some(runtime_policy) = RuntimePolicyResource::get_from(config, "runtime") {
@@ -23,12 +32,7 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
     for (project_id, project) in &config.projects {
         for (name, workspace) in &project.workspaces {
             resources.push(RegisteredResource::Workspace(WorkspaceResource {
-                metadata: crate::cli_types::ResourceMetadata {
-                    name: name.clone(),
-                    project: Some(project_id.clone()),
-                    labels: None,
-                    annotations: None,
-                },
+                metadata: project_metadata(project_id, name),
                 spec: crate::cli_types::WorkspaceSpec {
                     root_path: workspace.root_path.clone(),
                     qa_targets: workspace.qa_targets.clone(),
@@ -39,34 +43,19 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
         }
         for (name, agent) in &project.agents {
             resources.push(RegisteredResource::Agent(Box::new(AgentResource {
-                metadata: crate::cli_types::ResourceMetadata {
-                    name: name.clone(),
-                    project: Some(project_id.clone()),
-                    labels: None,
-                    annotations: None,
-                },
+                metadata: project_metadata(project_id, name),
                 spec: super::agent::agent_config_to_spec(agent),
             })));
         }
         for (name, workflow) in &project.workflows {
             resources.push(RegisteredResource::Workflow(WorkflowResource {
-                metadata: crate::cli_types::ResourceMetadata {
-                    name: name.clone(),
-                    project: Some(project_id.clone()),
-                    labels: None,
-                    annotations: None,
-                },
+                metadata: project_metadata(project_id, name),
                 spec: super::workflow::workflow_config_to_spec(workflow),
             }));
         }
         for (name, template) in &project.step_templates {
             resources.push(RegisteredResource::StepTemplate(StepTemplateResource {
-                metadata: crate::cli_types::ResourceMetadata {
-                    name: name.clone(),
-                    project: Some(project_id.clone()),
-                    labels: None,
-                    annotations: None,
-                },
+                metadata: project_metadata(project_id, name),
                 spec: crate::cli_types::StepTemplateSpec {
                     prompt: template.prompt.clone(),
                     description: template.description.clone(),
@@ -76,12 +65,7 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
         for (name, profile) in &project.execution_profiles {
             resources.push(RegisteredResource::ExecutionProfile(
                 ExecutionProfileResource {
-                    metadata: crate::cli_types::ResourceMetadata {
-                        name: name.clone(),
-                        project: Some(project_id.clone()),
-                        labels: None,
-                        annotations: None,
-                    },
+                    metadata: project_metadata(project_id, name),
                     spec: crate::resource::execution_profile::execution_profile_config_to_spec(
                         profile,
                     ),
@@ -89,12 +73,7 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
             ));
         }
         for (name, store) in &project.env_stores {
-            let metadata = crate::cli_types::ResourceMetadata {
-                name: name.clone(),
-                project: Some(project_id.clone()),
-                labels: None,
-                annotations: None,
-            };
+            let metadata = project_metadata(project_id, name);
             let spec = crate::cli_types::EnvStoreSpec {
                 data: store.data.clone(),
             };

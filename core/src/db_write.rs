@@ -65,11 +65,19 @@ impl DbWriteCoordinator {
     }
 
     pub async fn insert_command_run(&self, run: &NewCommandRun) -> Result<()> {
-        self.repo.insert_command_run(run.clone()).await
+        self.insert_command_run_owned(run.clone()).await
+    }
+
+    pub async fn insert_command_run_owned(&self, run: NewCommandRun) -> Result<()> {
+        self.repo.insert_command_run(run).await
     }
 
     pub async fn update_command_run(&self, run: &NewCommandRun) -> Result<()> {
-        self.repo.update_command_run(run.clone()).await
+        self.update_command_run_owned(run.clone()).await
+    }
+
+    pub async fn update_command_run_owned(&self, run: NewCommandRun) -> Result<()> {
+        self.repo.update_command_run(run).await
     }
 
     pub async fn update_command_run_with_events(
@@ -77,9 +85,16 @@ impl DbWriteCoordinator {
         run: &NewCommandRun,
         events: &[DbEventRecord],
     ) -> Result<()> {
-        self.repo
-            .update_command_run_with_events(run.clone(), events.to_vec())
+        self.update_command_run_with_owned_events(run.clone(), events.to_vec())
             .await
+    }
+
+    pub async fn update_command_run_with_owned_events(
+        &self,
+        run: NewCommandRun,
+        events: Vec<DbEventRecord>,
+    ) -> Result<()> {
+        self.repo.update_command_run_with_events(run, events).await
     }
 
     pub async fn persist_phase_result(
@@ -99,8 +114,17 @@ impl DbWriteCoordinator {
         run: &NewCommandRun,
         events: &[DbEventRecord],
     ) -> Result<()> {
+        self.persist_phase_result_with_owned_events(run.clone(), events.to_vec())
+            .await
+    }
+
+    pub async fn persist_phase_result_with_owned_events(
+        &self,
+        run: NewCommandRun,
+        events: Vec<DbEventRecord>,
+    ) -> Result<()> {
         self.repo
-            .persist_phase_result_with_events(run.clone(), events.to_vec())
+            .persist_phase_result_with_events(run, events)
             .await
     }
 

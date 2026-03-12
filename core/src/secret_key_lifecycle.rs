@@ -113,6 +113,23 @@ impl KeyRing {
     }
 }
 
+fn audit_event_for_record(
+    event_kind: crate::secret_key_audit::KeyAuditEventKind,
+    record: &KeyRecord,
+    actor: &str,
+    detail_json: String,
+    created_at: &str,
+) -> crate::secret_key_audit::KeyAuditEvent {
+    crate::secret_key_audit::KeyAuditEvent {
+        event_kind,
+        key_id: record.key_id.clone(),
+        key_fingerprint: record.fingerprint.clone(),
+        actor: actor.to_owned(),
+        detail_json,
+        created_at: created_at.to_owned(),
+    }
+}
+
 // ─── Load KeyRing ────────────────────────────────────────────────
 
 pub fn load_keyring(app_root: &Path, db_path: &Path) -> Result<KeyRing> {
@@ -340,40 +357,37 @@ pub fn begin_rotation(conn: &Connection, app_root: &Path) -> Result<(KeyRecord, 
     // Audit events
     crate::secret_key_audit::insert_key_audit_event(
         conn,
-        &crate::secret_key_audit::KeyAuditEvent {
-            event_kind: crate::secret_key_audit::KeyAuditEventKind::KeyCreated,
-            key_id: new_record.key_id.clone(),
-            key_fingerprint: new_record.fingerprint.clone(),
-            actor: "cli:rotate".to_string(),
-            detail_json: "{}".to_string(),
-            created_at: now.clone(),
-        },
+        &audit_event_for_record(
+            crate::secret_key_audit::KeyAuditEventKind::KeyCreated,
+            &new_record,
+            "cli:rotate",
+            "{}".to_string(),
+            &now,
+        ),
     )?;
     crate::secret_key_audit::insert_key_audit_event(
         conn,
-        &crate::secret_key_audit::KeyAuditEvent {
-            event_kind: crate::secret_key_audit::KeyAuditEventKind::KeyActivated,
-            key_id: new_record.key_id.clone(),
-            key_fingerprint: new_record.fingerprint.clone(),
-            actor: "cli:rotate".to_string(),
-            detail_json: "{}".to_string(),
-            created_at: now.clone(),
-        },
+        &audit_event_for_record(
+            crate::secret_key_audit::KeyAuditEventKind::KeyActivated,
+            &new_record,
+            "cli:rotate",
+            "{}".to_string(),
+            &now,
+        ),
     )?;
     crate::secret_key_audit::insert_key_audit_event(
         conn,
-        &crate::secret_key_audit::KeyAuditEvent {
-            event_kind: crate::secret_key_audit::KeyAuditEventKind::RotateStarted,
-            key_id: old_record.key_id.clone(),
-            key_fingerprint: old_record.fingerprint.clone(),
-            actor: "cli:rotate".to_string(),
-            detail_json: serde_json::json!({
+        &audit_event_for_record(
+            crate::secret_key_audit::KeyAuditEventKind::RotateStarted,
+            &old_record,
+            "cli:rotate",
+            serde_json::json!({
                 "new_key_id": new_record.key_id,
                 "old_key_id": old_record.key_id,
             })
             .to_string(),
-            created_at: now,
-        },
+            &now,
+        ),
     )?;
 
     Ok((new_record, old_record))

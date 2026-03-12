@@ -718,8 +718,6 @@ async fn execute_agent_step(
         ExecutionMode::Chain => {
             let mut chain_passed = true;
             for chain_step in &step.chain_steps {
-                let mut step_ctx = task_ctx.clone();
-                step_ctx.pipeline_vars = acc.pipeline_vars.clone();
                 match execute_step(
                     state,
                     StepExecutionRequest {
@@ -728,7 +726,7 @@ async fn execute_agent_step(
                         task_item_paths,
                         event_ctx: StepEventContext::chain_child(&step.id),
                         step: chain_step,
-                        task_ctx: &step_ctx,
+                        task_ctx,
                         runtime,
                     },
                     acc,
