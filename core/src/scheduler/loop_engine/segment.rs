@@ -15,6 +15,8 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tracing::warn;
 
+use super::isolation;
+
 /// Signal returned by task-scoped segment execution.
 pub(super) enum TaskSegmentOutcome {
     /// Continue to next segment.
@@ -244,6 +246,7 @@ pub(super) async fn execute_item_segment(
             let acc = item_state
                 .entry(item.id.clone())
                 .or_insert_with(|| StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone()));
+            isolation::ensure_item_isolation(state, task_id, item, task_ctx, acc).await?;
             process_item_filtered(
                 state,
                 ProcessItemRequest {
@@ -268,6 +271,11 @@ pub(super) async fn execute_item_segment(
         let mut join_set = JoinSet::new();
 
         for item in items {
+            let mut seeded_acc = item_state
+                .remove(&item.id)
+                .unwrap_or_else(|| StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone()));
+            isolation::ensure_item_isolation(state, task_id, item, task_ctx, &mut seeded_acc)
+                .await?;
             let permit = semaphore
                 .clone()
                 .acquire_owned()
@@ -281,13 +289,11 @@ pub(super) async fn execute_item_segment(
             let ctx = shared_ctx.clone();
             let filter = shared_filter.clone();
             let item_runtime = runtime.fork();
-            // Reuse existing accumulator to preserve prior segment state
-            let prior_acc = item_state.remove(&item_id);
+            let prior_acc = seeded_acc;
 
             join_set.spawn(async move {
                 let _permit = permit;
-                let mut acc = prior_acc
-                    .unwrap_or_else(|| StepExecutionAccumulator::new(ctx.pipeline_vars.clone()));
+                let mut acc = prior_acc;
                 let result = process_item_filtered_owned(
                     &state,
                     OwnedProcessItemRequest {
@@ -376,6 +382,7 @@ pub(super) async fn try_item_selection(
                     .await;
             }
             promote_winner_vars(&mut task_ctx.pipeline_vars, &result);
+            isolation::apply_winner_if_needed(state, task_id, task_ctx).await?;
             persist_selection_to_store(state, task_ctx, task_id, &result, &config).await;
             insert_event(
                 state,

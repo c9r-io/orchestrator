@@ -494,6 +494,10 @@ pub struct WorkflowSpec {
     /// Default max parallelism for item-scoped segments (1 = sequential)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_parallel: Option<usize>,
+
+    /// Workflow-level item isolation for item-scoped execution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_isolation: Option<crate::config::ItemIsolationConfig>,
 }
 
 /// Safety configuration specification for YAML

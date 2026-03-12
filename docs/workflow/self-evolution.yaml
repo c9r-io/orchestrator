@@ -71,6 +71,7 @@ spec:
 
     Implement this approach. Follow the strategy exactly.
     After writing code, run 'cd {source_tree}/core && cargo check' to verify compilation.
+    Do not run git checkout, git branch, or git worktree commands.
 
     IMPORTANT: Keep changes minimal and focused. This is a competitive evaluation —
     your implementation will be scored against an alternative approach.
@@ -126,6 +127,7 @@ spec:
     2. Run 'cd {source_tree}/core && cargo test --lib' to confirm
     3. Clean up any artifacts from the losing candidate
     4. Run 'cd {source_tree}/core && cargo clippy -- -D warnings' for final check
+    Do not run git checkout, git branch, or git worktree commands.
 
     Do NOT add new features or refactor beyond what the winner implemented.
 ---
@@ -225,6 +227,10 @@ metadata:
   name: self-evolution
 spec:
   max_parallel: 1  # cost control: run candidates sequentially
+  item_isolation:
+    strategy: git_worktree
+    branch_prefix: evo-item
+    cleanup: after_workflow
 
   steps:
     # ── Phase 1: Generate candidate approaches ──

@@ -146,6 +146,7 @@ fn build_execution_plan_inner(workflow: &WorkflowConfig) -> Result<TaskExecution
         loop_policy,
         finalize: workflow.finalize.clone(),
         max_parallel: workflow.max_parallel,
+        item_isolation: workflow.item_isolation.clone(),
     })
 }
 

@@ -412,6 +412,7 @@ fn make_task_ctx(
             },
             finalize: Default::default(),
             max_parallel: None,
+            item_isolation: None,
         }),
         execution: Default::default(),
         current_cycle,

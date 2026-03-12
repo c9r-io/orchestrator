@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
 use super::{
-    CostPreference, ItemSelectConfig, SafetyConfig, StepBehavior, StepPrehookConfig, StepScope,
-    StoreInputConfig, StoreOutputConfig, WorkflowFinalizeConfig,
+    CostPreference, ItemIsolationConfig, ItemSelectConfig, SafetyConfig, StepBehavior,
+    StepPrehookConfig, StepScope, StoreInputConfig, StoreOutputConfig, WorkflowFinalizeConfig,
 };
 
 /// Workflow step configuration.
@@ -166,6 +166,9 @@ pub struct WorkflowConfig {
     /// Default max parallelism for item-scoped segments (1 = sequential)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_parallel: Option<usize>,
+    /// Workflow-level item isolation for item-scoped execution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_isolation: Option<ItemIsolationConfig>,
 }
 
 /// Loop mode used to control workflow repetition.
@@ -235,6 +238,7 @@ pub struct WorkflowLoopConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{ItemIsolationCleanup, ItemIsolationStrategy};
 
     #[test]
     fn test_workflow_loop_guard_default() {
@@ -288,5 +292,26 @@ mod tests {
         let cfg = WorkflowLoopConfig::default();
         assert!(matches!(cfg.mode, LoopMode::Once));
         assert!(cfg.guard.enabled);
+    }
+
+    #[test]
+    fn workflow_config_item_isolation_round_trips_through_serde() {
+        let workflow = WorkflowConfig {
+            item_isolation: Some(ItemIsolationConfig {
+                strategy: ItemIsolationStrategy::GitWorktree,
+                branch_prefix: Some("evo-item".to_string()),
+                cleanup: ItemIsolationCleanup::AfterWorkflow,
+            }),
+            ..WorkflowConfig::default()
+        };
+
+        let json = serde_json::to_string(&workflow).expect("serialize workflow");
+        let decoded: WorkflowConfig = serde_json::from_str(&json).expect("deserialize workflow");
+        let isolation = decoded
+            .item_isolation
+            .expect("item isolation should be preserved");
+        assert_eq!(isolation.strategy, ItemIsolationStrategy::GitWorktree);
+        assert_eq!(isolation.branch_prefix.as_deref(), Some("evo-item"));
+        assert_eq!(isolation.cleanup, ItemIsolationCleanup::AfterWorkflow);
     }
 }

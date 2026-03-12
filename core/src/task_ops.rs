@@ -288,6 +288,7 @@ mod tests {
             adaptive: None,
             safety: SafetyConfig::default(),
             max_parallel: None,
+            item_isolation: None,
         }
     }
 

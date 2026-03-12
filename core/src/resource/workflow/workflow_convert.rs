@@ -99,6 +99,7 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
             spawn_cooldown_seconds: spec.safety.spawn_cooldown_seconds,
         },
         max_parallel: spec.max_parallel,
+        item_isolation: spec.item_isolation.clone(),
     })
 }
 
@@ -153,6 +154,7 @@ pub(crate) fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
         adaptive: config.adaptive.clone(),
         safety: safety_config_to_spec(&config.safety),
         max_parallel: config.max_parallel,
+        item_isolation: config.item_isolation.clone(),
     }
 }
 
@@ -503,6 +505,7 @@ mod tests {
             adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
+            item_isolation: None,
         };
 
         let config = workflow_spec_to_config(&spec).expect("should convert");
@@ -624,6 +627,7 @@ mod tests {
             adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
+            item_isolation: None,
         };
 
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
@@ -681,6 +685,7 @@ mod tests {
             adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
+            item_isolation: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert_eq!(config.steps[0].builtin.as_deref(), Some("init_once"));
@@ -730,6 +735,7 @@ mod tests {
             adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
+            item_isolation: None,
         };
 
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
@@ -782,6 +788,7 @@ mod tests {
             adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
+            item_isolation: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert!(config.steps[0].is_guard);
@@ -826,6 +833,7 @@ mod tests {
             adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
+            item_isolation: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert_eq!(config.steps[0].scope, Some(StepScope::Item));
@@ -880,6 +888,7 @@ mod tests {
                 spawn_cooldown_seconds: None,
             },
             max_parallel: None,
+            item_isolation: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert_eq!(config.safety.max_consecutive_failures, 5);
@@ -945,6 +954,7 @@ mod tests {
                 spawn_cooldown_seconds: None,
             },
             max_parallel: None,
+            item_isolation: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert!(matches!(
@@ -1002,6 +1012,7 @@ mod tests {
                 spawn_cooldown_seconds: None,
             },
             max_parallel: None,
+            item_isolation: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
         assert!(matches!(
@@ -1110,6 +1121,7 @@ mod tests {
             adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
+            item_isolation: None,
         };
         let spec = workflow_config_to_spec(&config);
         assert_eq!(
@@ -1175,6 +1187,7 @@ mod tests {
             adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
+            item_isolation: None,
         };
         let spec = workflow_config_to_spec(&config);
         assert_eq!(spec.loop_policy.mode, "infinite");
@@ -1236,6 +1249,7 @@ mod tests {
             adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
+            item_isolation: None,
         };
         let spec = workflow_config_to_spec(&config);
         let prehook = spec.steps[0]
@@ -1311,6 +1325,7 @@ mod tests {
             adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
+            item_isolation: None,
         };
         let spec = workflow_config_to_spec(&config);
         assert_eq!(spec.finalize.rules.len(), 2);
@@ -1419,6 +1434,7 @@ mod tests {
                 spawn_cooldown_seconds: None,
             },
             max_parallel: None,
+            item_isolation: None,
         };
         let config = workflow_spec_to_config(&spec).expect("spec->config should succeed");
         let roundtripped = workflow_config_to_spec(&config);
@@ -1487,6 +1503,7 @@ mod tests {
                 ..SafetyConfig::default()
             },
             max_parallel: None,
+            item_isolation: None,
         };
         let spec = workflow_config_to_spec(&config);
         assert_eq!(spec.safety.max_consecutive_failures, 5);
@@ -1497,6 +1514,48 @@ mod tests {
         assert_eq!(
             spec.safety.profile.as_deref(),
             Some("self_referential_probe")
+        );
+    }
+
+    #[test]
+    fn workflow_item_isolation_round_trip_through_spec_conversion() {
+        let spec = WorkflowSpec {
+            steps: vec![],
+            loop_policy: WorkflowLoopSpec::default(),
+            finalize: WorkflowFinalizeSpec::default(),
+            dynamic_steps: vec![],
+            adaptive: None,
+            safety: SafetySpec::default(),
+            max_parallel: Some(1),
+            item_isolation: Some(crate::config::ItemIsolationConfig {
+                strategy: crate::config::ItemIsolationStrategy::GitWorktree,
+                branch_prefix: Some("evo-item".to_string()),
+                cleanup: crate::config::ItemIsolationCleanup::AfterWorkflow,
+            }),
+        };
+
+        let config = workflow_spec_to_config(&spec).expect("spec->config should succeed");
+        let isolation = config
+            .item_isolation
+            .clone()
+            .expect("item isolation should be preserved");
+        assert_eq!(
+            isolation.strategy,
+            crate::config::ItemIsolationStrategy::GitWorktree
+        );
+        assert_eq!(isolation.branch_prefix.as_deref(), Some("evo-item"));
+
+        let roundtrip = workflow_config_to_spec(&config);
+        let roundtrip_isolation = roundtrip
+            .item_isolation
+            .expect("config->spec should preserve item isolation");
+        assert_eq!(
+            roundtrip_isolation.strategy,
+            crate::config::ItemIsolationStrategy::GitWorktree
+        );
+        assert_eq!(
+            roundtrip_isolation.branch_prefix.as_deref(),
+            Some("evo-item")
         );
     }
 }

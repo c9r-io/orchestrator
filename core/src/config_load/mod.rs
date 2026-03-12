@@ -116,6 +116,7 @@ pub(crate) mod tests {
             adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
+            item_isolation: None,
         }
     }
 

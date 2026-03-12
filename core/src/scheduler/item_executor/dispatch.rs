@@ -763,6 +763,11 @@ async fn execute_agent_step(
                     pipeline_vars: &acc.pipeline_vars,
                     runtime,
                     rel_path: &item.qa_file_path,
+                    workspace_root: crate::scheduler::loop_engine::isolation::step_workspace_root(
+                        task_ctx,
+                        &acc.pipeline_vars,
+                        step.resolved_scope(),
+                    ),
                 },
             )
             .await;
@@ -816,6 +821,7 @@ pub(crate) struct BuiltinStepContext<'a> {
     pipeline_vars: &'a PipelineVariables,
     runtime: &'a RunningTask,
     rel_path: &'a str,
+    workspace_root: std::path::PathBuf,
 }
 
 pub(crate) async fn execute_builtin_step(
@@ -830,6 +836,7 @@ pub(crate) async fn execute_builtin_step(
     let pipeline_vars = ctx.pipeline_vars;
     let runtime = ctx.runtime;
     let rel_path = ctx.rel_path;
+    let workspace_root = ctx.workspace_root;
 
     let result = if let Some(ref command) = step.command {
         let ctx = crate::collab::AgentContext::new(
@@ -837,7 +844,7 @@ pub(crate) async fn execute_builtin_step(
             item_id.to_string(),
             task_ctx.current_cycle,
             phase.to_string(),
-            task_ctx.workspace_root.clone(),
+            workspace_root.clone(),
             task_ctx.workspace_id.clone(),
         );
         let rendered_command = ctx.render_template_with_pipeline(command, Some(pipeline_vars));
@@ -851,7 +858,7 @@ pub(crate) async fn execute_builtin_step(
                 phase,
                 tty: step.tty,
                 command: rendered_command,
-                workspace_root: &task_ctx.workspace_root,
+                workspace_root: &workspace_root,
                 workspace_id: &task_ctx.workspace_id,
                 agent_id: "builtin",
                 runtime,
@@ -885,7 +892,7 @@ pub(crate) async fn execute_builtin_step(
                 capability: step.required_capability.as_deref(),
                 rel_path,
                 ticket_paths: &[],
-                workspace_root: &task_ctx.workspace_root,
+                workspace_root: &workspace_root,
                 workspace_id: &task_ctx.workspace_id,
                 cycle: task_ctx.current_cycle,
                 runtime,
@@ -939,7 +946,7 @@ pub(crate) async fn execute_builtin_step(
 
     if let Ok(diff_output) = tokio::process::Command::new("git")
         .args(["diff", "HEAD"])
-        .current_dir(&task_ctx.workspace_root)
+        .current_dir(&workspace_root)
         .output()
         .await
     {
@@ -1292,6 +1299,11 @@ pub(crate) async fn execute_dynamic_step_config(
     )
     .await?;
     let result = if let Some(agent_id) = ds.agent_id.as_deref() {
+        let workspace_root = crate::scheduler::loop_engine::isolation::step_workspace_root(
+            task_ctx,
+            &acc.pipeline_vars,
+            crate::config::StepScope::Item,
+        );
         let (command, prompt_delivery) = {
             let active = crate::config_load::read_active_config(state)?;
             let agent = crate::selection::resolve_agent_by_id(
@@ -1324,7 +1336,7 @@ pub(crate) async fn execute_dynamic_step_config(
                 prompt_delivery,
                 rel_path: &item.qa_file_path,
                 ticket_paths: &acc.active_tickets,
-                workspace_root: &task_ctx.workspace_root,
+                workspace_root: &workspace_root,
                 workspace_id: &task_ctx.workspace_id,
                 cycle: task_ctx.current_cycle,
                 runtime,
@@ -1339,6 +1351,11 @@ pub(crate) async fn execute_dynamic_step_config(
         .await?
     } else {
         let cap = Some(ds.step_type.as_str());
+        let workspace_root = crate::scheduler::loop_engine::isolation::step_workspace_root(
+            task_ctx,
+            &acc.pipeline_vars,
+            crate::config::StepScope::Item,
+        );
         run_phase_with_rotation(
             state,
             RotatingPhaseRunRequest {
@@ -1350,7 +1367,7 @@ pub(crate) async fn execute_dynamic_step_config(
                 capability: cap,
                 rel_path: &item.qa_file_path,
                 ticket_paths: &acc.active_tickets,
-                workspace_root: &task_ctx.workspace_root,
+                workspace_root: &workspace_root,
                 workspace_id: &task_ctx.workspace_id,
                 cycle: task_ctx.current_cycle,
                 runtime,

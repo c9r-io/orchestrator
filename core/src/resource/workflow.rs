@@ -204,6 +204,7 @@ mod tests {
                 adaptive: None,
                 safety: SafetySpec::default(),
                 max_parallel: None,
+                item_isolation: None,
             },
         };
         let err = wf.validate().expect_err("operation should fail");
@@ -250,6 +251,7 @@ mod tests {
                 adaptive: None,
                 safety: SafetySpec::default(),
                 max_parallel: None,
+                item_isolation: None,
             },
         };
         let err = wf.validate().expect_err("operation should fail");
@@ -296,6 +298,7 @@ mod tests {
                 adaptive: None,
                 safety: SafetySpec::default(),
                 max_parallel: None,
+                item_isolation: None,
             },
         };
         let err = wf.validate().expect_err("operation should fail");
@@ -342,6 +345,7 @@ mod tests {
                 adaptive: None,
                 safety: SafetySpec::default(),
                 max_parallel: None,
+                item_isolation: None,
             },
         };
         let err = wf.validate().expect_err("operation should fail");
@@ -388,6 +392,7 @@ mod tests {
                 adaptive: None,
                 safety: SafetySpec::default(),
                 max_parallel: None,
+                item_isolation: None,
             },
         };
         assert!(wf.validate().is_ok());
@@ -416,6 +421,7 @@ mod tests {
                 adaptive: None,
                 safety: SafetySpec::default(),
                 max_parallel: None,
+                item_isolation: None,
             },
         };
         let result = workflow.validate();
@@ -498,6 +504,7 @@ mod tests {
                 adaptive: None,
                 safety: SafetySpec::default(),
                 max_parallel: None,
+                item_isolation: None,
             }),
         };
         let rr = dispatch_resource(resource).expect("dispatch workflow resource");

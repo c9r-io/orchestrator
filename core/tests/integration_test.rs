@@ -83,6 +83,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                         adaptive: None,
                         safety: agent_orchestrator::config::SafetyConfig::default(),
                         max_parallel: None,
+                        item_isolation: None,
                     },
                 )]
                 .into(),
@@ -845,6 +846,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                         adaptive: None,
                         safety: SafetyConfig::default(),
                         max_parallel: None,
+                        item_isolation: None,
                     },
                 )]
                 .into(),
@@ -1006,6 +1008,7 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
         adaptive: None,
         safety: agent_orchestrator::config::SafetyConfig::default(),
         max_parallel: None,
+        item_isolation: None,
     };
 
     normalize_workflow_config(&mut workflow);

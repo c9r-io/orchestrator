@@ -81,6 +81,7 @@ fn validate_workflow_config_allows_multiple_self_test_steps() {
         adaptive: None,
         safety: crate::config::SafetyConfig::default(),
         max_parallel: None,
+        item_isolation: None,
     };
 
     let config = make_config_with_default_project();
@@ -162,6 +163,7 @@ fn validate_workflow_config_allows_multiple_implement_steps() {
         adaptive: None,
         safety: crate::config::SafetyConfig::default(),
         max_parallel: None,
+        item_isolation: None,
     };
 
     let config = make_config_with_default_project();
@@ -243,6 +245,7 @@ fn validate_workflow_config_rejects_duplicate_step_ids() {
         adaptive: None,
         safety: crate::config::SafetyConfig::default(),
         max_parallel: None,
+        item_isolation: None,
     };
 
     let config = make_config_with_default_project();
@@ -310,6 +313,7 @@ fn validate_workflow_config_rejects_json_path_on_exit_code_capture() {
         adaptive: None,
         safety: crate::config::SafetyConfig::default(),
         max_parallel: None,
+        item_isolation: None,
     };
 
     let config = make_config_with_default_project();
@@ -370,6 +374,7 @@ fn validate_self_referential_safety_errors_missing_self_test() {
             ..crate::config::SafetyConfig::default()
         },
         max_parallel: None,
+        item_isolation: None,
     };
 
     let result = validate_self_referential_safety(&workflow, "test-workflow", "test-ws", true);
@@ -456,6 +461,7 @@ fn validate_self_referential_safety_passes_with_self_test() {
             ..crate::config::SafetyConfig::default()
         },
         max_parallel: None,
+        item_isolation: None,
     };
 
     let result = validate_self_referential_safety(&workflow, "test-workflow", "test-ws", true);
@@ -487,6 +493,7 @@ fn validate_self_referential_safety_errors_without_checkpoint_strategy() {
             ..crate::config::SafetyConfig::default()
         },
         max_parallel: None,
+        item_isolation: None,
     };
 
     let result = validate_self_referential_safety(&workflow, "test-workflow", "test-ws", true);

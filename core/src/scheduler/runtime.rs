@@ -262,6 +262,7 @@ pub async fn load_task_runtime_context(
                     loop_policy: crate::config::WorkflowLoopConfig::default(),
                     finalize: crate::config::default_workflow_finalize_config(),
                     max_parallel: None,
+                    item_isolation: None,
                 })
             });
         (

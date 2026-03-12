@@ -231,6 +231,7 @@ mod tests {
                     adaptive: None,
                     safety: crate::config::SafetyConfig::default(),
                     max_parallel: None,
+                    item_isolation: None,
                 },
             );
         let state = fixture.build();
@@ -348,6 +349,7 @@ mod tests {
             adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
+            item_isolation: None,
         };
 
         crate::config_load::normalize_workflow_config(&mut workflow);
@@ -535,6 +537,7 @@ mod tests {
                     adaptive: None,
                     safety: crate::config::SafetyConfig::default(),
                     max_parallel: None,
+                    item_isolation: None,
                 },
             );
         let state = fixture.build();
@@ -796,6 +799,7 @@ mod tests {
                     adaptive: None,
                     safety: crate::config::SafetyConfig::default(),
                     max_parallel: None,
+                    item_isolation: None,
                 },
             );
         let state = fixture.build();
@@ -1082,6 +1086,7 @@ mod tests {
                 adaptive: None,
                 safety: crate::config::SafetyConfig::default(),
                 max_parallel: None,
+                item_isolation: None,
             },
         );
         let state = fixture.build();
@@ -1216,6 +1221,7 @@ mod tests {
                 adaptive: None,
                 safety: crate::config::SafetyConfig::default(),
                 max_parallel: None,
+                item_isolation: None,
             },
         );
         let state = fixture.build();
@@ -1337,6 +1343,7 @@ mod tests {
                     ..crate::config::SafetyConfig::default()
                 },
                 max_parallel: None,
+                item_isolation: None,
             },
         );
         let state = fixture.build();

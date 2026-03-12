@@ -112,6 +112,7 @@ pub fn workflow_manifest(name: &str) -> OrchestratorResource {
             adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
+            item_isolation: None,
         }),
     }
 }

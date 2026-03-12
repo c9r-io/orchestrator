@@ -51,6 +51,7 @@ fn normalize_workflow_sets_builtin_for_self_test() {
         adaptive: None,
         safety: crate::config::SafetyConfig::default(),
         max_parallel: None,
+        item_isolation: None,
     };
 
     normalize_workflow_config(&mut workflow);
@@ -180,6 +181,7 @@ fn normalize_workflow_preserves_multiple_self_test_steps() {
         adaptive: None,
         safety: crate::config::SafetyConfig::default(),
         max_parallel: None,
+        item_isolation: None,
     };
 
     normalize_workflow_config(&mut workflow);

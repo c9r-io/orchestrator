@@ -443,6 +443,7 @@ mod tests {
             adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
+            item_isolation: None,
         };
         let spec = config.to_cr_spec();
         let back = WorkflowConfig::from_cr_spec(&spec).expect("should deserialize workflow");
@@ -484,6 +485,7 @@ mod tests {
             adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
+            item_isolation: None,
         };
         let spec = config.to_cr_spec();
         let back = WorkflowConfig::from_cr_spec(&spec).expect("should deserialize");

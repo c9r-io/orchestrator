@@ -1,6 +1,7 @@
 mod continuation;
 mod cycle_safety;
 mod graph;
+pub(crate) mod isolation;
 mod segment;
 #[cfg(test)]
 mod tests;
@@ -33,6 +34,9 @@ pub async fn run_task_loop(
 ) -> Result<()> {
     set_task_status(&state, task_id, "running", false).await?;
     let result = run_task_loop_core(state.clone(), task_id, runtime).await;
+    if let Ok(task_ctx) = load_task_runtime_context(&state, task_id).await {
+        let _ = isolation::cleanup_task_isolation(&state, task_id, &task_ctx).await;
+    }
     if let Err(ref e) = result {
         let _ = set_task_status(&state, task_id, "failed", false).await;
         let _ = insert_event(

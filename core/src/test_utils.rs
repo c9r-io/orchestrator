@@ -119,6 +119,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                                 adaptive: None,
                                 safety: SafetyConfig::default(),
                                 max_parallel: None,
+                                item_isolation: None,
                             },
                         );
                         workflows

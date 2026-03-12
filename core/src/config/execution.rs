@@ -4,10 +4,10 @@ use std::sync::Arc;
 
 use super::{
     default_scope_for_step_id, is_known_builtin_step_name, AgentConfig, CostPreference,
-    ExecutionMode, ExecutionProfileConfig, InvariantConfig, ItemSelectConfig, OrchestratorConfig,
-    PipelineVariables, SafetyConfig, StepBehavior, StepPrehookConfig, StepScope, StoreInputConfig,
-    StoreOutputConfig, WorkflowConfig, WorkflowExecutionConfig, WorkflowFinalizeConfig,
-    WorkflowLoopConfig,
+    ExecutionMode, ExecutionProfileConfig, InvariantConfig, ItemIsolationConfig, ItemSelectConfig,
+    OrchestratorConfig, PipelineVariables, SafetyConfig, StepBehavior, StepPrehookConfig,
+    StepScope, StoreInputConfig, StoreOutputConfig, WorkflowConfig, WorkflowExecutionConfig,
+    WorkflowFinalizeConfig, WorkflowLoopConfig,
 };
 
 fn default_true() -> bool {
@@ -188,6 +188,9 @@ pub struct TaskExecutionPlan {
     /// Default max parallelism for item-scoped segments (1 = sequential)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_parallel: Option<usize>,
+    /// Workflow-level item isolation for item-scoped execution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_isolation: Option<ItemIsolationConfig>,
 }
 
 impl TaskExecutionPlan {
@@ -644,6 +647,7 @@ mod tests {
             loop_policy: WorkflowLoopConfig::default(),
             finalize: WorkflowFinalizeConfig::default(),
             max_parallel: None,
+            item_isolation: None,
         };
 
         let found = plan.step_by_id("qa");
@@ -662,6 +666,7 @@ mod tests {
             loop_policy: WorkflowLoopConfig::default(),
             finalize: WorkflowFinalizeConfig::default(),
             max_parallel: None,
+            item_isolation: None,
         };
         assert!(plan.step_by_id("fix").is_none());
     }
