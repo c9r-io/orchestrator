@@ -9,10 +9,13 @@ use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObservedStepScope {
+    /// Event belongs to a task-scoped step.
     Task,
+    /// Event belongs to an item-scoped step.
     Item,
 }
 
+/// Extracts the observed step scope from an event payload.
 pub fn observed_step_scope_from_payload(payload: &Value) -> Option<ObservedStepScope> {
     match payload["step_scope"].as_str() {
         Some("task") => Some(ObservedStepScope::Task),
@@ -21,6 +24,7 @@ pub fn observed_step_scope_from_payload(payload: &Value) -> Option<ObservedStepS
     }
 }
 
+/// Returns the stable label used for a step scope in logs and APIs.
 pub fn observed_step_scope_label(scope: Option<ObservedStepScope>) -> &'static str {
     match scope {
         Some(ObservedStepScope::Task) => "task",
@@ -49,9 +53,11 @@ impl EventSink for NoopSink {
     }
 }
 
+/// Event sink that forwards workflow events into structured tracing logs.
 pub struct TracingEventSink;
 
 impl TracingEventSink {
+    /// Creates a tracing-backed event sink.
     pub fn new() -> Self {
         Self
     }
@@ -99,6 +105,7 @@ impl EventSink for TracingEventSink {
     }
 }
 
+/// Persists one workflow event using the shared async database writer.
 pub async fn insert_event(
     state: &InnerState,
     task_id: &str,
@@ -120,24 +127,43 @@ pub async fn insert_event(
 /// Parsed step event from the events table for display in watch/follow.
 #[derive(Debug)]
 pub struct StepEvent {
+    /// Event type label.
     pub event_type: String,
+    /// Step identifier or phase name associated with the event.
     pub step: Option<String>,
+    /// Scope inferred from promoted columns or payload JSON.
     pub step_scope: Option<ObservedStepScope>,
+    /// Task-item identifier for item-scoped events.
     pub task_item_id: Option<String>,
+    /// Agent identifier when an agent executed the step.
     pub agent_id: Option<String>,
+    /// Success flag captured from the payload.
     pub success: Option<bool>,
+    /// Step duration in milliseconds.
     pub duration_ms: Option<u64>,
+    /// Confidence score reported by the agent.
     pub confidence: Option<f64>,
+    /// Human-readable reason or message from the payload.
     pub reason: Option<String>,
+    /// Elapsed seconds reported by heartbeat events.
     pub elapsed_secs: Option<u64>,
+    /// Total stdout bytes written so far.
     pub stdout_bytes: Option<u64>,
+    /// Total stderr bytes written so far.
     pub stderr_bytes: Option<u64>,
+    /// Stdout growth since the previous heartbeat.
     pub stdout_delta_bytes: Option<u64>,
+    /// Stderr growth since the previous heartbeat.
     pub stderr_delta_bytes: Option<u64>,
+    /// Number of consecutive stagnant heartbeat samples.
     pub stagnant_heartbeats: Option<u32>,
+    /// Child process identifier when tracked.
     pub pid: Option<u32>,
+    /// Whether the child process was still alive at sample time.
     pub pid_alive: Option<bool>,
+    /// Output-state classification attached to the event.
     pub output_state: Option<String>,
+    /// Timestamp when the event row was created.
     pub created_at: String,
 }
 
@@ -262,6 +288,7 @@ fn query_step_events_with_conn(conn: &Connection, task_id: &str) -> Result<Vec<S
     Ok(events)
 }
 
+/// Async variant of [`query_latest_step_log_paths`] backed by the shared async reader.
 pub async fn query_latest_step_log_paths_async(
     state: &InnerState,
     task_id: &str,
@@ -278,6 +305,7 @@ pub async fn query_latest_step_log_paths_async(
         .map_err(flatten_err)
 }
 
+/// Async variant of [`query_step_events`] backed by the shared async reader.
 pub async fn query_step_events_async(state: &InnerState, task_id: &str) -> Result<Vec<StepEvent>> {
     let task_id = task_id.to_owned();
     state

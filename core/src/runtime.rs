@@ -5,14 +5,19 @@ const STATE_SERVING: u8 = 0;
 const STATE_DRAINING: u8 = 1;
 const STATE_STOPPED: u8 = 2;
 
+/// Lifecycle state exposed by the daemon runtime snapshot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DaemonLifecycleState {
+    /// The daemon is accepting and executing work.
     Serving,
+    /// The daemon is draining and should not accept new work.
     Draining,
+    /// The daemon has fully stopped.
     Stopped,
 }
 
 impl DaemonLifecycleState {
+    /// Returns the stable machine-readable lifecycle label.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Serving => "serving",
@@ -38,18 +43,28 @@ impl DaemonLifecycleState {
     }
 }
 
+/// Runtime counters exported by the daemon control plane.
 #[derive(Debug, Clone)]
 pub struct DaemonRuntimeSnapshot {
+    /// Seconds elapsed since the runtime state was created.
     pub uptime_secs: u64,
+    /// Current lifecycle state of the daemon.
     pub lifecycle_state: DaemonLifecycleState,
+    /// Whether shutdown has been requested.
     pub shutdown_requested: bool,
+    /// Configured worker pool size.
     pub configured_workers: u64,
+    /// Workers currently alive.
     pub live_workers: u64,
+    /// Workers currently idle.
     pub idle_workers: u64,
+    /// Workers currently running a task.
     pub active_workers: u64,
+    /// Number of tasks currently executing.
     pub running_tasks: u64,
 }
 
+/// Shared atomic runtime counters for the daemon process.
 pub struct DaemonRuntimeState {
     started_at: Instant,
     lifecycle_state: AtomicU8,
@@ -68,6 +83,7 @@ impl Default for DaemonRuntimeState {
 }
 
 impl DaemonRuntimeState {
+    /// Creates a runtime state initialized in the `serving` lifecycle state.
     pub fn new() -> Self {
         Self {
             started_at: Instant::now(),
@@ -81,6 +97,7 @@ impl DaemonRuntimeState {
         }
     }
 
+    /// Produces a point-in-time snapshot of daemon counters.
     pub fn snapshot(&self) -> DaemonRuntimeSnapshot {
         DaemonRuntimeSnapshot {
             uptime_secs: self.started_at.elapsed().as_secs(),
@@ -96,11 +113,13 @@ impl DaemonRuntimeState {
         }
     }
 
+    /// Updates the configured worker count published by the runtime snapshot.
     pub fn set_configured_workers(&self, count: usize) {
         self.configured_workers
             .store(count as u64, Ordering::SeqCst);
     }
 
+    /// Requests shutdown and transitions the runtime into `draining`.
     pub fn request_shutdown(&self) -> bool {
         let first = !self.shutdown_requested.swap(true, Ordering::SeqCst);
         self.lifecycle_state
@@ -108,16 +127,19 @@ impl DaemonRuntimeState {
         first
     }
 
+    /// Marks the daemon lifecycle as fully stopped.
     pub fn mark_stopped(&self) {
         self.lifecycle_state
             .store(DaemonLifecycleState::Stopped.as_u8(), Ordering::SeqCst);
     }
 
+    /// Increments live and idle worker counters for a newly started worker.
     pub fn worker_started(&self) {
         self.live_workers.fetch_add(1, Ordering::SeqCst);
         self.idle_workers.fetch_add(1, Ordering::SeqCst);
     }
 
+    /// Decrements worker counters when a worker exits.
     pub fn worker_stopped(&self, was_busy: bool) {
         self.live_workers.fetch_sub(1, Ordering::SeqCst);
         if was_busy {
@@ -127,20 +149,24 @@ impl DaemonRuntimeState {
         }
     }
 
+    /// Moves one worker from idle to active state.
     pub fn worker_became_busy(&self) {
         self.idle_workers.fetch_sub(1, Ordering::SeqCst);
         self.active_workers.fetch_add(1, Ordering::SeqCst);
     }
 
+    /// Moves one worker from active to idle state.
     pub fn worker_became_idle(&self) {
         self.active_workers.fetch_sub(1, Ordering::SeqCst);
         self.idle_workers.fetch_add(1, Ordering::SeqCst);
     }
 
+    /// Increments the count of running tasks.
     pub fn running_task_started(&self) {
         self.running_tasks.fetch_add(1, Ordering::SeqCst);
     }
 
+    /// Decrements the count of running tasks.
     pub fn running_task_finished(&self) {
         self.running_tasks.fetch_sub(1, Ordering::SeqCst);
     }

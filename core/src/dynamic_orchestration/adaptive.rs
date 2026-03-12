@@ -29,8 +29,10 @@ pub struct AdaptivePlannerConfig {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AdaptiveFallbackMode {
+    /// Fall back to deterministic planning when the adaptive planner fails.
     #[default]
     SoftFallback,
+    /// Treat adaptive planner failures as hard errors.
     FailClosed,
 }
 
@@ -57,63 +59,97 @@ impl Default for AdaptivePlannerConfig {
 /// Historical execution record for planning context.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExecutionHistoryRecord {
+    /// Task that produced this historical record.
     pub task_id: String,
+    /// Task item associated with the recorded execution.
     pub item_id: String,
+    /// Workflow cycle number for the record.
     pub cycle: u32,
+    /// Step-level execution summaries captured for the cycle.
     pub steps: Vec<StepExecutionRecord>,
+    /// Final task-item status after the cycle.
     pub final_status: String,
+    /// Timestamp when the record was captured.
     pub timestamp: DateTime<Utc>,
 }
 
+/// Step-level execution data included in adaptive planning history.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StepExecutionRecord {
+    /// Workflow step identifier.
     pub step_id: String,
+    /// Semantic step type used by the planner.
     pub step_type: String,
+    /// Exit code returned by the step command.
     pub exit_code: i64,
+    /// Measured wall-clock duration in milliseconds.
     pub duration_ms: u64,
+    /// Confidence score reported by the agent, when available.
     pub confidence: Option<f32>,
+    /// Quality score reported by the agent, when available.
     pub quality_score: Option<f32>,
+    /// Number of tickets created by the step.
     pub tickets_created: i64,
+    /// Number of tickets resolved by the step.
     pub tickets_resolved: i64,
 }
 
+/// Source used to materialize an adaptive execution plan.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AdaptivePlanSource {
+    /// The adaptive planner returned a valid plan.
     Planner,
+    /// The planner failed and deterministic fallback logic was used.
     DeterministicFallback,
 }
 
+/// Failure classes used to explain adaptive planner degradation.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AdaptiveFailureClass {
+    /// Adaptive planning is disabled for the workflow.
     Disabled,
+    /// Required planner configuration is missing or invalid.
     Misconfigured,
+    /// The injected executor failed before returning a plan.
     ExecutorFailure,
+    /// The executor returned output that was not valid JSON.
     InvalidJson,
+    /// The returned graph failed structural validation.
     InvalidPlan,
 }
 
+/// Metadata describing how an adaptive plan outcome was produced.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AdaptivePlanMetadata {
+    /// Source that produced the final plan.
     pub source: AdaptivePlanSource,
+    /// Whether fallback logic was used.
     pub used_fallback: bool,
+    /// Failure class recorded when fallback logic was used.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_class: Option<AdaptiveFailureClass>,
+    /// Human-readable error message captured during fallback.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_message: Option<String>,
 }
 
+/// Final adaptive planning result returned to the scheduler.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdaptivePlanOutcome {
+    /// Executable graph selected for the workflow item.
     pub plan: DynamicExecutionPlan,
+    /// Metadata describing planner source and degradation state.
     pub metadata: AdaptivePlanMetadata,
+    /// Raw planner output before JSON deserialization, when retained.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub raw_output: Option<String>,
 }
 
 #[async_trait]
 pub trait AdaptivePlanExecutor: Send + Sync {
+    /// Executes the planner prompt and returns raw JSON output.
     async fn execute(&self, prompt: &str, config: &AdaptivePlannerConfig) -> Result<String>;
 }
 
@@ -125,6 +161,7 @@ pub struct AdaptivePlanner {
 }
 
 impl AdaptivePlanner {
+    /// Creates an adaptive planner with empty execution history.
     pub fn new(config: AdaptivePlannerConfig) -> Self {
         Self {
             config,
@@ -132,6 +169,7 @@ impl AdaptivePlanner {
         }
     }
 
+    /// Adds one historical execution record, trimming to the configured history size.
     pub fn add_history(&mut self, record: ExecutionHistoryRecord) {
         if self.history.len() >= self.config.max_history {
             self.history.remove(0);
@@ -139,10 +177,12 @@ impl AdaptivePlanner {
         self.history.push(record);
     }
 
+    /// Returns the in-memory execution history currently used for prompt generation.
     pub fn history(&self) -> &[ExecutionHistoryRecord] {
         &self.history
     }
 
+    /// Generates a dynamic execution plan using the configured adaptive planner executor.
     pub async fn generate_plan<E>(
         &self,
         executor: &E,

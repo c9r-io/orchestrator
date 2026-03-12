@@ -35,13 +35,18 @@
 - [x] 为第三批核心公开 API 补充英文 `///` 文档注释，覆盖 `config::{execution,execution_profile,invariant,env_store,dynamic_items,item_select,observability,prehook,runner}`、`service::{mod,store,system}`、`store::{mod,command,file,local}` 与 `self_referential_policy` 等高接触面接口，并为 `ExecutionProfileConfig::implicit_host` 新增可编译 `# Examples`。
 - [x] 修复 `core/src/lib.rs` crate 根 rustdoc 示例的失效断言，确保新增示例验证不会被历史示例阻断。
 - [x] 重新验证 `cargo check -p agent-orchestrator --all-targets`，确认 `core` 的 `missing_docs` 告警进一步从 1213 条下降到 913 条。
+- [x] 为第四批核心公开 API 补充英文 `///` 文档注释，覆盖 `db`、`dynamic_orchestration::{adaptive,graph}`、`config::{step,workflow}`、`scheduler::trace::model` 等高频公开模型与函数，并为 `WorkflowConfig` 新增可编译 `# Examples`。
+- [x] 为第五批核心公开 API 补充英文 `///` 文档注释，覆盖 `events`、`runtime`、`db_write` 等运行态和持久化入口；重新验证 `cargo check -p agent-orchestrator --all-targets`，确认 `core` 的 `missing_docs` 告警进一步从 913 条下降到 597 条。
+- [x] 重新验证 `cargo test --doc -p agent-orchestrator`，确认 crate 根、`ExecutionProfileConfig::implicit_host` 与 `WorkflowConfig` 的 3 个 rustdoc 示例通过。
 
 剩余：
 
-- [ ] `core` crate 仍有大规模公共 API 缺失文档；最新基线为 `cargo check -p agent-orchestrator --all-targets` 产生 913 条 `missing_docs` 告警，尚未达到 FR 要求的“核心 crate 全量补齐”。
-- [ ] 尚未将任何 crate 升级到 `#![deny(missing_docs)]`，因为 `core` 仍未完成全面治理。
-- [ ] 关键 `core` API 仍缺少更细粒度的 `# Examples` 代码块；当前除 crate 根外，仅 `ExecutionProfileConfig::implicit_host` 新增了示例，仍不足以覆盖核心集成入口。
-- [ ] 当前缺口已主要收敛到 `config::{pipeline,safety,step,workflow}`、`config_load::*`、`scheduler::{trace,service}`、`secret_*`、`selection`、`service::task`、`task_ops` 等模块，仍需继续分批治理。
+- [ ] `core` crate 仍有大规模公共 API 缺失文档；最新基线为 `cargo check -p agent-orchestrator --all-targets` 产生 597 条 `missing_docs` 告警，尚未达到 FR 要求的“核心 crate 全量补齐”。
+- [ ] `cargo doc --workspace --no-deps` 当前可以执行完成，但仍会输出 597 条来自 `core` 的 `missing_docs` 告警，因此尚未满足 FR 的“workspace 无文档告警”目标。
+- [ ] `cargo clippy -p agent-orchestrator --all-targets -- -D warnings` 当前仍失败，除剩余 `missing_docs` 外，还暴露出 `WorkflowConfig` 默认实现需保持可 derive 等 lint 收口要求；workspace 级 `clippy -D warnings` 尚未满足。
+- [ ] `cli` 与 `daemon` 仍保留多处 `#[allow(missing_docs)]` 兜底，尚未达到“核心 crate 全量补齐后升级到 `#![deny(missing_docs)]`”的收口条件。
+- [ ] 关键 `core` API 的 `# Examples` 仍偏少；当前除 crate 根外，仅 `ExecutionProfileConfig::implicit_host` 与 `WorkflowConfig` 新增了可编译示例，仍不足以覆盖核心集成入口。
+- [ ] 当前缺口已主要收敛到 `config::{pipeline,safety}`、`config_load::*`、`secret_*`、`persistence::*`、`runner::*`、`scheduler::{check,safety}`、`crd::*`、`service::task`、`task_ops` 等模块，仍需继续分批治理。
 
 非目标：
 
@@ -126,9 +131,9 @@
 
 ## 验收标准
 
-- [x] `cargo doc --workspace --no-deps` 无当前文档告警。
+- [ ] `cargo doc --workspace --no-deps` 无当前文档告警。
 - [ ] 核心 crate（`core`、`daemon`、`cli`）的所有 `pub` 接口包含 `///` 文档注释。
-- [ ] 关键接口包含 `# Examples` 代码块且 `cargo test --doc` 通过（当前重新执行时已定位并修复 crate 根历史示例断言，仍需在下一批治理后重新全量确认）。
+- [ ] 关键接口包含 `# Examples` 代码块且 `cargo test --doc` 通过（`agent-orchestrator` 当前已有 3 个 doc tests 通过，但 workspace 级关键入口示例覆盖仍不足）。
 - [ ] 各已完成 crate 的 `lib.rs`/crate root 中启用 `#![deny(missing_docs)]`。
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings` 通过。
 
@@ -137,4 +142,4 @@
 1. 以 `core/src/lib.rs` 暴露的顶层模块为边界，按模块批次补齐公开 API 文档，而不是一次性横扫整个 crate。
 2. 每完成一批 `core` 模块后，移除对应 `#[allow(missing_docs)]` 豁免并缩小预警面，最终再升级为 `#![deny(missing_docs)]`。
 3. 优先为真正面向外部集成的 `core::service::*`、`core::config::*` 与 `core::dto::*` 补充 `# Examples`。
-4. 下一轮治理建议从 `core/src/config/{workflow,step,safety,pipeline}.rs`、`core/src/config_load/` 与 `core/src/secret_*` 开始，这些文件已成为最新主要告警簇。
+4. 下一轮治理建议从 `core/src/config/{pipeline,safety}.rs`、`core/src/config_load/`、`core/src/secret_*` 与 `core/src/persistence/**/*` 开始，这些文件已成为最新主要告警簇。

@@ -4,64 +4,101 @@ use std::path::Path;
 
 pub use crate::persistence::sqlite::SQLITE_BUSY_TIMEOUT_MS;
 
+/// Counts returned after deleting all persisted state for one project.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectResetStats {
+    /// Number of task rows removed.
     pub tasks: u64,
+    /// Number of task-item rows removed.
     pub task_items: u64,
+    /// Number of command-run rows removed.
     pub command_runs: u64,
+    /// Number of event rows removed.
     pub events: u64,
+    /// Number of ticket files removed from disk.
     pub tickets_cleaned: u64,
 }
 
+/// Minimal reference to a non-terminal task.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskReference {
+    /// Stable task identifier.
     pub task_id: String,
+    /// Current task status label.
     pub status: String,
 }
 
+/// Execution metrics materialized into the persistence layer.
 #[derive(Debug, Clone)]
 pub struct TaskExecutionMetric {
+    /// Stable task identifier.
     pub task_id: String,
+    /// Task status associated with the metric sample.
     pub status: String,
+    /// Workflow cycle active when the sample was recorded.
     pub current_cycle: u32,
+    /// Number of unresolved task items at sample time.
     pub unresolved_items: i64,
+    /// Total number of task items known for the task.
     pub total_items: i64,
+    /// Number of failed task items at sample time.
     pub failed_items: i64,
+    /// Number of command runs recorded so far.
     pub command_runs: i64,
+    /// RFC 3339 timestamp when the metric was captured.
     pub created_at: String,
 }
 
+/// Audit payload written for one control-plane authorization decision.
 #[derive(Debug, Clone)]
 pub struct ControlPlaneAuditRecord {
+    /// Transport used by the incoming RPC, such as `tcp`.
     pub transport: String,
+    /// Remote peer address when known.
     pub remote_addr: Option<String>,
+    /// Fully qualified RPC name.
     pub rpc: String,
+    /// Authenticated subject identifier when available.
     pub subject_id: Option<String>,
+    /// Authentication outcome label.
     pub authn_result: String,
+    /// Authorization outcome label.
     pub authz_result: String,
+    /// Effective role assigned to the subject.
     pub role: Option<String>,
+    /// Human-readable reason for denial or fallback behavior.
     pub reason: Option<String>,
+    /// SHA-256 fingerprint of the presented client certificate.
     pub tls_fingerprint: Option<String>,
+    /// Pipeline stage that rejected the request.
     pub rejection_stage: Option<String>,
+    /// Traffic bucket selected for protection enforcement.
     pub traffic_class: Option<String>,
+    /// Whether subject-scoped or global limits produced the decision.
     pub limit_scope: Option<String>,
+    /// Final decision label written by the limiter.
     pub decision: Option<String>,
+    /// Stable machine-readable reason code.
     pub reason_code: Option<String>,
 }
 
+/// Opens a SQLite connection using the orchestrator persistence defaults.
 pub fn open_conn(db_path: &Path) -> Result<Connection> {
     crate::persistence::sqlite::open_conn(db_path)
 }
 
+/// Applies the standard busy timeout and pragma configuration to a connection.
 pub fn configure_conn(conn: &Connection) -> Result<()> {
     crate::persistence::sqlite::configure_conn(conn)
 }
 
+/// Ensures the persistence schema exists and is migrated to the current version.
 pub fn init_schema(db_path: &Path) -> Result<()> {
     crate::persistence::schema::PersistenceBootstrap::ensure_current(db_path)?;
     Ok(())
 }
 
+/// Counts running or pending tasks for one project workspace pair.
 pub fn count_non_terminal_tasks_by_workspace(
     conn: &Connection,
     project_id: &str,
@@ -78,6 +115,7 @@ pub fn count_non_terminal_tasks_by_workspace(
     Ok(count)
 }
 
+/// Counts running or pending tasks for one project workflow pair.
 pub fn count_non_terminal_tasks_by_workflow(
     conn: &Connection,
     project_id: &str,
@@ -94,6 +132,7 @@ pub fn count_non_terminal_tasks_by_workflow(
     Ok(count)
 }
 
+/// Lists the oldest non-terminal tasks for one project workspace pair.
 pub fn list_non_terminal_tasks_by_workspace(
     conn: &Connection,
     project_id: &str,
@@ -121,6 +160,7 @@ pub fn list_non_terminal_tasks_by_workspace(
     Ok(tasks)
 }
 
+/// Lists the oldest non-terminal tasks for one project workflow pair.
 pub fn list_non_terminal_tasks_by_workflow(
     conn: &Connection,
     project_id: &str,
@@ -148,6 +188,7 @@ pub fn list_non_terminal_tasks_by_workflow(
     Ok(tasks)
 }
 
+/// Resets persisted runtime data using the active daemon state.
 pub fn reset_db(
     state: &crate::state::InnerState,
     include_history: bool,
@@ -156,6 +197,7 @@ pub fn reset_db(
     reset_db_by_path(&state.db_path, include_history, include_config)
 }
 
+/// Deletes persisted runtime data from a database path after guarding against active tasks.
 pub fn reset_db_by_path(db_path: &Path, include_history: bool, include_config: bool) -> Result<()> {
     let conn = open_conn(db_path)?;
 
@@ -193,6 +235,7 @@ pub fn reset_db_by_path(db_path: &Path, include_history: bool, include_config: b
     Ok(())
 }
 
+/// Inserts one control-plane audit record into persistence.
 pub fn insert_control_plane_audit(db_path: &Path, record: &ControlPlaneAuditRecord) -> Result<()> {
     let conn = open_conn(db_path)?;
     conn.execute(
@@ -222,6 +265,7 @@ pub fn insert_control_plane_audit(db_path: &Path, record: &ControlPlaneAuditReco
     Ok(())
 }
 
+/// Inserts one task execution metric sample into persistence.
 pub fn insert_task_execution_metric(db_path: &Path, metric: &TaskExecutionMetric) -> Result<()> {
     let conn = open_conn(db_path)?;
     conn.execute(
@@ -241,6 +285,7 @@ pub fn insert_task_execution_metric(db_path: &Path, metric: &TaskExecutionMetric
     Ok(())
 }
 
+/// Deletes all persisted records and ticket files associated with one project.
 pub fn reset_project_data(
     state: &crate::state::InnerState,
     project_id: &str,

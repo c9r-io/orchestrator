@@ -4,64 +4,92 @@ use crate::config::{StepPrehookConfig, StepScope, TaskExecutionStep, TaskRuntime
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
+/// Source used to derive the effective execution graph.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionGraphSource {
+    /// Graph built directly from the static workflow definition.
     #[default]
     StaticBaseline,
+    /// Graph returned by the adaptive planner.
     AdaptivePlanner,
+    /// Graph produced by deterministic fallback logic.
     DeterministicFallback,
 }
 
+/// Node specification stored in the effective execution graph.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ExecutionGraphNodeSpec {
+    /// Reference to a statically configured workflow step.
     StaticStep {
+        /// Workflow step identifier.
         step_id: String,
     },
+    /// Runtime-generated step selected by dynamic orchestration.
     DynamicStep {
+        /// Dynamic step type or capability identifier.
         step_type: String,
+        /// Pinned agent identifier, when the planner selected one.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent_id: Option<String>,
+        /// Explicit template override to execute.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         template: Option<String>,
     },
 }
 
+/// One executable node inside the effective execution graph.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionGraphNode {
+    /// Stable node identifier.
     pub id: String,
+    /// Execution scope used when scheduling the node.
     pub scope: StepScope,
+    /// Whether the node should repeat on later cycles.
     #[serde(default)]
     pub repeatable: bool,
+    /// Whether the node can terminate the workflow loop.
     #[serde(default)]
     pub is_guard: bool,
+    /// Conditional execution hook evaluated before the node runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prehook: Option<StepPrehookConfig>,
+    /// Static or dynamic node specification.
     pub spec: ExecutionGraphNodeSpec,
 }
 
+/// Directed edge between two execution graph nodes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionGraphEdge {
+    /// Source node identifier.
     pub from: String,
+    /// Destination node identifier.
     pub to: String,
+    /// Optional condition that must evaluate truthy for traversal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub condition: Option<String>,
 }
 
+/// Fully materialized execution graph used by the runtime scheduler.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EffectiveExecutionGraph {
+    /// Planner or fallback source that produced the graph.
     #[serde(default)]
     pub source: ExecutionGraphSource,
+    /// Node map keyed by node id.
     #[serde(default)]
     pub nodes: HashMap<String, ExecutionGraphNode>,
+    /// Directed edges between nodes.
     #[serde(default)]
     pub edges: Vec<ExecutionGraphEdge>,
+    /// Optional entry node selected for execution start.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entry: Option<String>,
 }
 
 impl EffectiveExecutionGraph {
+    /// Adds a node and rejects duplicate ids.
     pub fn add_node(&mut self, node: ExecutionGraphNode) -> Result<()> {
         if self.nodes.insert(node.id.clone(), node).is_some() {
             return Err(anyhow!("graph node '{}' already exists", self.nodes.len()));
@@ -69,6 +97,7 @@ impl EffectiveExecutionGraph {
         Ok(())
     }
 
+    /// Adds an edge after verifying that both endpoint nodes exist.
     pub fn add_edge(&mut self, edge: ExecutionGraphEdge) -> Result<()> {
         if !self.nodes.contains_key(&edge.from) {
             return Err(anyhow!("graph edge source '{}' does not exist", edge.from));
@@ -80,19 +109,23 @@ impl EffectiveExecutionGraph {
         Ok(())
     }
 
+    /// Returns one node by id.
     pub fn get_node(&self, node_id: &str) -> Option<&ExecutionGraphNode> {
         self.nodes.get(node_id)
     }
 
+    /// Iterates over outgoing edges for one node.
     pub fn outgoing_edges(&self, node_id: &str) -> impl Iterator<Item = &ExecutionGraphEdge> + '_ {
         let node_id = node_id.to_owned();
         self.edges.iter().filter(move |edge| edge.from == node_id)
     }
 
+    /// Counts incoming edges for one node.
     pub fn incoming_count(&self, node_id: &str) -> usize {
         self.edges.iter().filter(|edge| edge.to == node_id).count()
     }
 
+    /// Validates entry-point references and rejects cyclic graphs.
     pub fn validate(&self) -> Result<()> {
         if self.nodes.is_empty() {
             return Err(anyhow!("effective execution graph has no nodes"));
@@ -156,6 +189,7 @@ fn static_step_node(step: &TaskExecutionStep) -> Option<ExecutionGraphNode> {
     })
 }
 
+/// Builds the baseline execution graph from statically configured workflow steps.
 pub fn build_static_execution_graph(
     task_ctx: &TaskRuntimeContext,
 ) -> Result<EffectiveExecutionGraph> {
@@ -186,6 +220,7 @@ pub fn build_static_execution_graph(
     Ok(graph)
 }
 
+/// Builds an effective execution graph from a dynamic execution plan.
 pub fn build_adaptive_execution_graph(
     plan: &super::DynamicExecutionPlan,
     source: ExecutionGraphSource,
