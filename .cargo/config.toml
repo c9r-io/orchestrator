@@ -1,0 +1,8 @@
+[build]
+# Limit parallel jobs to reduce I/O pressure on USB external drive
+jobs = 4
+
+[profile.dev]
+# Disable incremental compilation — it creates massive amounts of small files
+# which are the worst-case workload for USB drives
+incremental = false
