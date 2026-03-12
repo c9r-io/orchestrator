@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 
 /// Initialize orchestrator state — extracted from the former binary's `init_state()`.
 /// This is the single entry point for both daemon and any future standalone usage.
@@ -146,6 +146,7 @@ fn build_managed_state(
             task_repo,
             store_manager,
             daemon_runtime: crate::runtime::DaemonRuntimeState::new(),
+            worker_notify: Arc::new(Notify::new()),
         }),
     })
 }

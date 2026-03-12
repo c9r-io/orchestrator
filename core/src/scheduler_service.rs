@@ -1,4 +1,3 @@
-use crate::config_load::now_ts;
 use crate::events::insert_event;
 use crate::persistence::repository::{SchedulerRepository, SqliteSchedulerRepository};
 use crate::state::InnerState;
@@ -12,7 +11,7 @@ pub async fn enqueue_task(state: &InnerState, task_id: &str) -> Result<()> {
         .db_writer
         .set_task_status(task_id, "pending", false)
         .await?;
-    touch_worker_wake_signal(state)?;
+    state.worker_notify.notify_waiters();
     insert_event(
         state,
         task_id,
@@ -50,21 +49,6 @@ pub fn worker_stop_signal_path(state: &InnerState) -> PathBuf {
     state.app_root.join("data").join("worker.stop")
 }
 
-/// Returns the marker-file path used to wake the worker loop.
-pub fn worker_wake_signal_path(state: &InnerState) -> PathBuf {
-    state.app_root.join("data").join("worker.wakeup")
-}
-
-/// Touches the wake-signal file so the worker loop notices pending work.
-pub fn touch_worker_wake_signal(state: &InnerState) -> Result<()> {
-    let path = worker_wake_signal_path(state);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, now_ts())?;
-    Ok(())
-}
-
 /// Removes the worker stop marker if it exists.
 pub fn clear_worker_stop_signal(state: &InnerState) -> Result<()> {
     let path = worker_stop_signal_path(state);
@@ -81,7 +65,7 @@ pub fn signal_worker_stop(state: &InnerState) -> Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     std::fs::write(path, "stop")?;
-    let _ = touch_worker_wake_signal(state);
+    state.worker_notify.notify_waiters();
     Ok(())
 }
 
@@ -159,7 +143,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn enqueue_task_sets_pending_and_creates_wake_signal() {
+    async fn enqueue_task_sets_pending() {
         let mut fixture = TestState::new();
         let (state, task_id) = seed_task(&mut fixture);
 
@@ -181,9 +165,6 @@ mod tests {
             .expect("query status");
         assert_eq!(status, "pending");
 
-        // Wake signal file should exist
-        let wake_path = worker_wake_signal_path(&state);
-        assert!(wake_path.exists(), "wake signal file should exist");
     }
 
     #[tokio::test]
@@ -249,10 +230,27 @@ mod tests {
 
         let contents = std::fs::read_to_string(&stop_path).expect("read stop file");
         assert_eq!(contents, "stop");
+    }
 
-        // Wake signal should also be touched
-        let wake_path = worker_wake_signal_path(&state);
-        assert!(wake_path.exists(), "wake signal should be touched by stop");
+    #[tokio::test]
+    async fn signal_worker_stop_notifies_waiters() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let notify = state.worker_notify.clone();
+
+        let waiter = tokio::spawn(async move {
+            tokio::time::timeout(std::time::Duration::from_millis(250), notify.notified())
+                .await
+                .is_ok()
+        });
+
+        tokio::task::yield_now().await;
+        signal_worker_stop(&state).expect("signal stop");
+
+        assert!(
+            waiter.await.expect("waiter join"),
+            "stop signal should wake waiting workers"
+        );
     }
 
     #[test]
@@ -329,11 +327,8 @@ mod tests {
         let state = fixture.build();
 
         let stop_path = worker_stop_signal_path(&state);
-        let wake_path = worker_wake_signal_path(&state);
 
         assert!(stop_path.starts_with(state.app_root.join("data")));
-        assert!(wake_path.starts_with(state.app_root.join("data")));
         assert!(stop_path.ends_with("worker.stop"));
-        assert!(wake_path.ends_with("worker.wakeup"));
     }
 }

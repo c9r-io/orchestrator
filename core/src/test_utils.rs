@@ -310,6 +310,7 @@ impl TestState {
             task_repo,
             store_manager,
             daemon_runtime: crate::runtime::DaemonRuntimeState::new(),
+            worker_notify: Arc::new(tokio::sync::Notify::new()),
         });
         self.state = Some(state.clone());
         state

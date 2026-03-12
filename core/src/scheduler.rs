@@ -1433,6 +1433,7 @@ mod tests {
                 project_root.to_path_buf(),
             ),
             daemon_runtime: crate::runtime::DaemonRuntimeState::new(),
+            worker_notify: Arc::new(tokio::sync::Notify::new()),
         });
 
         state.emit_event(

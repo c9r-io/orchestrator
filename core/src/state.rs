@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, OnceLock};
 use tokio::process::Child;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 
 /// Maximum number of tasks that may run concurrently in-process.
 pub const MAX_CONCURRENT_TASKS: usize = 10;
@@ -95,6 +95,8 @@ pub struct InnerState {
     pub store_manager: crate::store::StoreManager,
     /// Runtime daemon lifecycle state.
     pub daemon_runtime: DaemonRuntimeState,
+    /// In-process wakeup channel for idle workers.
+    pub worker_notify: Arc<Notify>,
 }
 
 impl InnerState {

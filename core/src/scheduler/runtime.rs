@@ -712,6 +712,7 @@ mod tests {
                 base.app_root.clone(),
             ),
             daemon_runtime: crate::runtime::DaemonRuntimeState::new(),
+            worker_notify: Arc::new(tokio::sync::Notify::new()),
         })
     }
 

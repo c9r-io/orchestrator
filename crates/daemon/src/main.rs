@@ -30,7 +30,6 @@ use agent_orchestrator::scheduler::{
 };
 use agent_orchestrator::scheduler_service::{
     claim_next_pending_task, clear_worker_stop_signal, worker_stop_signal_path,
-    worker_wake_signal_path,
 };
 use agent_orchestrator::state::{task_semaphore, InnerState};
 use orchestrator_proto::OrchestratorServiceServer;
@@ -426,7 +425,6 @@ async fn worker_loop(
     mut shutdown: tokio::sync::watch::Receiver<bool>,
     restart_tx: tokio::sync::watch::Sender<Option<std::path::PathBuf>>,
 ) {
-    let wake_path = worker_wake_signal_path(&state);
     let stop_path = worker_stop_signal_path(&state);
     let poll_interval = std::time::Duration::from_millis(2000);
     let worker_num = worker_idx + 1;
@@ -524,11 +522,9 @@ async fn worker_loop(
             }
             Ok(None) => {
                 drop(permit);
-                // No task available — sleep or wait for wake signal, whichever comes first
+                // No task available — wait for in-process wakeup, timeout fallback, or shutdown.
                 tokio::select! {
-                    _ = wait_for_wake_signal(&wake_path) => {
-                        // Wake signal received, loop immediately to claim
-                    }
+                    _ = state.worker_notify.notified() => {}
                     _ = tokio::time::sleep(poll_interval) => {}
                     _ = shutdown.changed() => {}
                 }
@@ -556,18 +552,6 @@ async fn worker_loop(
     )
     .await;
     info!(worker = worker_num, "worker stopped");
-}
-
-/// Wait until the wake signal file appears, then consume it.
-async fn wait_for_wake_signal(path: &std::path::Path) {
-    // Simple polling for the signal file; this is a lightweight check
-    loop {
-        if path.exists() {
-            let _ = std::fs::remove_file(path);
-            return;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-    }
 }
 
 async fn emit_daemon_event(state: &InnerState, event_type: &str, payload: serde_json::Value) {
