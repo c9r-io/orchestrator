@@ -1,0 +1,42 @@
+# Execution profiles for production workflows (self-bootstrap, self-evolution).
+#
+# These profiles balance security (filesystem isolation) with functionality
+# (API access for AI agents). They are separate from the QA/fixture profiles
+# under fixtures/manifests/bundles/ which test sandbox enforcement itself.
+#
+# Platform notes:
+#   - network_mode=allowlist is Linux-only (macOS Seatbelt does not support it).
+#   - On macOS, use network_mode=inherit for steps requiring API access.
+#   - On Linux, prefer network_mode=allowlist with explicit API targets.
+---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: sandbox_write
+spec:
+  mode: sandbox
+  fs_mode: workspace_rw_scoped
+  writable_paths:
+    - docs
+    - core/src
+    - crates
+    - tests
+  network_mode: inherit    # agents need API access (Claude, etc.)
+---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: sandbox_docs_only
+spec:
+  mode: sandbox
+  fs_mode: workspace_rw_scoped
+  writable_paths:
+    - docs
+  network_mode: inherit    # agents need API access for doc generation
+---
+apiVersion: orchestrator.dev/v2
+kind: ExecutionProfile
+metadata:
+  name: host
+spec:
+  mode: host
