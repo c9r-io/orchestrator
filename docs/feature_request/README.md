@@ -11,7 +11,7 @@
 | FR-011 | validate/scheduler/runner 职责拆分与验证逻辑去重 | P1 | Proposed |
 | FR-017 | Agent Drain 与 Enabled 开关 | P1 | Implemented |
 | FR-018 | 用户指南编译验证对齐 | P1 | Implemented |
-| FR-019 | 修复 libc 类型编译错误 | P0 | Proposed |
+| FR-019 | 修复 libc 类型编译错误 | P0 | Implemented |
 | FR-020 | 自动化 protoc 依赖安装 | P0 | Proposed |
 | FR-021 | 审计并减少 expect() 调用 | P1 | Proposed |
 | FR-022 | 补充公共 API 文档注释 | P1 | In Progress |
@@ -34,6 +34,7 @@
 - FR-016 已闭环删除；其设计、验证与门禁信息现由 `docs/design_doc/orchestrator/30-async-lock-model-alignment.md`、`docs/qa/orchestrator/69-async-lock-model-alignment.md` 与 `scripts/check-async-lock-governance.sh` 持续承载
 - FR-017 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/agent-drain-enabled.md` 与 `docs/qa/orchestrator/agent-drain-enabled.md` 承载
 - FR-018 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/guide-alignment.md` 与 `docs/qa/orchestrator/guide-alignment.md` 承载，`guide-alignment` skill 提供持续治理能力
+- FR-019 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/31-libc-cross-platform-compilation.md` 与 `docs/qa/orchestrator/70-libc-cross-platform-compilation.md` 承载
 - FR-009 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/25-database-persistence-bootstrap-repositories.md`、`docs/design_doc/orchestrator/26-database-migration-kernel-and-repository-governance.md`、`docs/qa/orchestrator/62-database-persistence-bootstrap-repositories.md` 与 `docs/qa/orchestrator/63-database-migration-kernel-and-repository-governance.md` 承载
 - FR-008 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/13-unified-step-execution-model.md`、`docs/guide/**` 与 `docs/qa/orchestrator/61-chain-steps-execution.md` 承载
 - FR-007 已闭环删除；其收口结果由 `docs/architecture.md`、`docs/guide/**`、`skills/orchestrator-guide/**` 与 `docs/qa/**` 持续承载
