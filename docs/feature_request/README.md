@@ -21,7 +21,7 @@
 | FR-030 | Self-Evolution 数据库 Schema 对齐验证 | P1 | Closed |
 | FR-031 | generate_items 对 LLM 非标准 JSON 输出的容错解析 | P1 | Closed |
 | FR-032 | Daemon 进程崩溃韧性与 Worker 存活保障 | P1 | Closed |
-| FR-033 | Daemon 重启后孤立 Running Items 自动恢复 | P1 | Proposed |
+| FR-033 | Daemon 重启后孤立 Running Items 自动恢复 | P1 | Closed |
 | FR-034 | QA Testing 自引用安全防护 | P1 | Closed |
 | FR-035 | 退化循环检测与熔断机制 | P1 | Closed |
 | FR-036 | Plan Output Context Overflow 缓解 | P1 | Closed |
@@ -64,3 +64,4 @@
 - FR-036 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/45-plan-output-context-overflow-mitigation.md` 与 `docs/qa/orchestrator/89-plan-output-context-overflow-mitigation.md` 承载
 - FR-031 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/46-unquoted-json-extraction.md` 与 `docs/qa/orchestrator/90-unquoted-json-extraction.md` 承载
 - FR-032 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/47-daemon-crash-resilience.md` 与 `docs/qa/orchestrator/91-daemon-crash-resilience.md` 承载
+- FR-033 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/48-orphaned-running-items-recovery.md` 与 `docs/qa/orchestrator/86-orphaned-running-items-recovery.md` 承载
