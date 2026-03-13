@@ -179,7 +179,7 @@ pub fn create_task_impl(
     let conn = open_conn(&state.db_path)?;
     let tx = conn.unchecked_transaction()?;
     tx.execute(
-        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, project_id, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, execution_plan_json, loop_mode, current_cycle, init_done, resume_token, created_at, updated_at, parent_task_id, spawn_reason, spawn_depth) VALUES (?1, ?2, 'pending', NULL, NULL, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 0, 0, NULL, ?13, ?13, ?14, ?15, 0)",
+        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, project_id, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, execution_plan_json, loop_mode, current_cycle, init_done, resume_token, created_at, updated_at, parent_task_id, spawn_reason, spawn_depth) VALUES (?1, ?2, 'created', NULL, NULL, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 0, 0, NULL, ?13, ?13, ?14, ?15, 0)",
         params![
             task_id,
             task_name,
@@ -391,7 +391,7 @@ mod tests {
             result.err()
         );
         let summary = result.expect("create_task_impl should produce summary");
-        assert_eq!(summary.status, "pending");
+        assert_eq!(summary.status, "created");
         assert!(!summary.id.is_empty());
         assert!(summary.name.starts_with("QA Sprint"));
         assert_eq!(summary.goal, "Automated QA workflow with fix and resume");

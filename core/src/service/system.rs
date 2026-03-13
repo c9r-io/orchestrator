@@ -482,7 +482,11 @@ mod tests {
             .app_root
             .join("workspace/default/docs/qa/system-worker.md");
         std::fs::write(&qa_file, "# worker\n").expect("seed qa file");
-        create_task_impl(&state, crate::dto::CreateTaskPayload::default()).expect("create task");
+        let created =
+            create_task_impl(&state, crate::dto::CreateTaskPayload::default()).expect("create task");
+        crate::scheduler_service::enqueue_task(&state, &created.id)
+            .await
+            .expect("enqueue task");
 
         let status = worker_status(&state).await.expect("worker status");
         assert_eq!(status.pending_tasks, 1);

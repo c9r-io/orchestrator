@@ -83,3 +83,11 @@ cargo test --workspace
 ```
 
 **预期**: 所有测试通过（包含集成测试）。总执行时间 ≤ 5 分钟。
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

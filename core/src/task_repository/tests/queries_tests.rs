@@ -1107,7 +1107,7 @@ fn load_task_status_returns_current_status() {
     let status = repo
         .load_task_status(&task_id)
         .expect("load_task_status should succeed");
-    assert_eq!(status, Some("pending".to_string()));
+    assert_eq!(status, Some("created".to_string()));
 }
 
 #[test]

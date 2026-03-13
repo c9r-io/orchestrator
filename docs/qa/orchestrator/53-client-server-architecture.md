@@ -104,7 +104,7 @@ Verify daemon starts on UDS, creates PID/socket files, and shuts down cleanly on
 - Daemon starts, logs `orchestratord starting` with socket path and version info.
 - PID file contains correct process ID.
 - UDS socket file is created and is a socket type.
-- On SIGTERM, daemon logs `received SIGTERM, shutting down`, workers stop, and both PID/socket files are removed.
+- On SIGTERM, daemon logs `received SIGTERM, shutting down`, workers stop, and both PID/socket files are removed. Shutdown includes a task drain grace period (up to 5 s) and a supervisor wait (up to 30 s), so expect up to ~10 s for a clean exit when tasks are running.
 - Exit code is 0.
 
 ---

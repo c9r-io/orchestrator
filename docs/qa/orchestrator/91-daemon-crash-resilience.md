@@ -83,3 +83,11 @@
 **预期结果:**
 - [ ] 所有测试通过，无 failure
 - [ ] 无新增编译警告
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

@@ -80,3 +80,11 @@
 
    - 输出 "OK"
    - Skill 包含五阶段流程（Compile、Parse、Compare、Auto-Fix、Report）
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

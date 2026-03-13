@@ -48,7 +48,7 @@ Verify that `generate_items` extracts regression targets from `qa_doc_gen` outpu
    ```
 3. Create the task:
    ```bash
-   orchestrator task create --workflow narrow-test --goal "test generate_items narrowing"
+   orchestrator task create --project narrow-test --workflow narrow-test --goal "test generate_items narrowing"
    ```
 4. Wait for task to complete:
    ```bash
@@ -124,7 +124,7 @@ Verify that when `self_restart` fires at the end of Cycle 1's task segment, the 
    ```
 3. Create the task:
    ```bash
-   orchestrator task create --workflow self-bootstrap --goal "test generate_items across restart"
+   orchestrator task create --project self-bootstrap-mock --workflow self-bootstrap --goal "test generate_items across restart"
    ```
 4. Monitor Cycle 1 completion and Cycle 2 start:
    ```bash
@@ -167,7 +167,7 @@ Verify that the `plan` step outputs its plan to stdout only and does not create 
    orchestrator delete --all --yes
    orchestrator init
    orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml
-   orchestrator task create --workflow self-bootstrap --goal "test plan step file creation"
+   orchestrator task create --project self-bootstrap-mock --workflow self-bootstrap --goal "test plan step file creation"
    ```
 3. Wait for Cycle 1 plan step to complete:
    ```bash

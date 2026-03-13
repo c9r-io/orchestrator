@@ -57,3 +57,11 @@ Expected:
 
 - workflow is configured for physical item isolation
 - agents are not instructed to interfere with engine-managed git state
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

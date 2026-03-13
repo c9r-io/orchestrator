@@ -87,6 +87,9 @@ mod tests {
         std::fs::write(&qa_file, "# scheduler service test\n").expect("seed qa file");
         let created = create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
 
+        // Task starts in 'created' status; enqueue to make it 'pending' and claimable
+        enqueue_task(&state, &created.id).await.expect("enqueue task");
+
         let claimed = claim_next_pending_task(&state)
             .await
             .expect("claim pending task");
@@ -112,6 +115,7 @@ mod tests {
             .join("workspace/default/docs/qa/scheduler_service_test.md");
         std::fs::write(&qa_file, "# scheduler service test\n").expect("seed qa file");
         let _created = create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
+        enqueue_task(&state, &_created.id).await.expect("enqueue task");
         let state_a = state.clone();
         let state_b = state.clone();
 
@@ -142,10 +146,19 @@ mod tests {
         (state, created.id)
     }
 
+    /// Helper to seed a qa file, create a task, and enqueue it (making it claimable).
+    async fn seed_and_enqueue_task(
+        fixture: &mut TestState,
+    ) -> (std::sync::Arc<crate::state::InnerState>, String) {
+        let (state, task_id) = seed_task(fixture);
+        enqueue_task(&state, &task_id).await.expect("enqueue task");
+        (state, task_id)
+    }
+
     #[tokio::test]
     async fn enqueue_task_sets_pending() {
         let mut fixture = TestState::new();
-        let (state, task_id) = seed_task(&mut fixture);
+        let (state, task_id) = seed_and_enqueue_task(&mut fixture).await;
 
         // First claim the task so it becomes "running"
         let claimed = claim_next_pending_task(&state).await.expect("claim");
@@ -169,7 +182,7 @@ mod tests {
     #[tokio::test]
     async fn next_pending_task_id_returns_pending() {
         let mut fixture = TestState::new();
-        let (state, task_id) = seed_task(&mut fixture);
+        let (state, task_id) = seed_and_enqueue_task(&mut fixture).await;
 
         let next = next_pending_task_id(&state).await.expect("next pending");
         assert_eq!(next.as_deref(), Some(task_id.as_str()));
@@ -178,7 +191,7 @@ mod tests {
     #[tokio::test]
     async fn next_pending_task_id_returns_none_when_no_pending() {
         let mut fixture = TestState::new();
-        let (state, _task_id) = seed_task(&mut fixture);
+        let (state, _task_id) = seed_and_enqueue_task(&mut fixture).await;
 
         // Claim the only task so none are pending
         let _ = claim_next_pending_task(&state).await.expect("claim");
@@ -198,14 +211,16 @@ mod tests {
         let count = pending_task_count(&state).await.expect("count 0");
         assert_eq!(count, 0);
 
-        // Seed a qa file and create 2 tasks
+        // Seed a qa file and create 2 tasks, then enqueue them
         let qa_file = state
             .app_root
             .join("workspace/default/docs/qa/count_test.md");
         std::fs::write(&qa_file, "# count test\n").expect("seed qa file");
 
-        create_task_impl(&state, CreateTaskPayload::default()).expect("create task 1");
-        create_task_impl(&state, CreateTaskPayload::default()).expect("create task 2");
+        let t1 = create_task_impl(&state, CreateTaskPayload::default()).expect("create task 1");
+        let t2 = create_task_impl(&state, CreateTaskPayload::default()).expect("create task 2");
+        enqueue_task(&state, &t1.id).await.expect("enqueue task 1");
+        enqueue_task(&state, &t2.id).await.expect("enqueue task 2");
 
         let count = pending_task_count(&state).await.expect("count 2");
         assert_eq!(count, 2);
@@ -279,7 +294,7 @@ mod tests {
     #[tokio::test]
     async fn claim_next_prioritizes_restart_pending() {
         let mut fixture = TestState::new();
-        let (state, pending_task_id) = seed_task(&mut fixture);
+        let (state, pending_task_id) = seed_and_enqueue_task(&mut fixture).await;
 
         // Create a second task and manually set it to restart_pending
         let qa_file2 = state

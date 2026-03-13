@@ -61,3 +61,11 @@ Verified on 2026-03-12:
 - `scheduler_service::tests::signal_worker_stop_notifies_waiters`: passed
 - `cargo test --workspace`: passed
 - `cargo clippy --workspace --all-targets -- -D warnings`: passed
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

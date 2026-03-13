@@ -57,3 +57,11 @@
 2. Run `cargo test --workspace`
 
 **Expected:** No compilation errors. All tests pass.
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

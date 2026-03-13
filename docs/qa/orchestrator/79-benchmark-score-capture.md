@@ -78,3 +78,11 @@ Verified on 2026-03-12:
 - targeted capture and validation regressions passed
 - `cargo test --workspace`: passed
 - `cargo clippy --workspace --all-targets -- -D warnings`: passed
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

@@ -891,7 +891,7 @@ mod async_wrapper_tests {
         assert!(!items.is_empty());
 
         let status = repo.load_task_status(&task_id).await.expect("load status");
-        assert_eq!(status.as_deref(), Some("pending"));
+        assert_eq!(status.as_deref(), Some("created"));
 
         let name = repo.load_task_name(&task_id).await.expect("load task name");
         assert_eq!(name.as_deref(), Some("async-repo"));

@@ -155,7 +155,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/60-daemon-lifecycle-runtime-metrics.md` | 4 | FR-005: daemon runtime snapshot, live worker/task counters, graceful drain, and restart-state reset |
 | orchestrator | `docs/qa/orchestrator/61-chain-steps-execution.md` | 4 | FR-008: chain_steps runtime contract, runtime plan preservation, parent/child failure ordering, and trace compatibility |
 | orchestrator | `docs/qa/orchestrator/62-database-persistence-bootstrap-repositories.md` | 5 | FR-009 Phase 1: persistence bootstrap ownership, public ensure_column removal, and repository-backed session/store boundaries |
-| orchestrator | `docs/qa/orchestrator/63-database-migration-kernel-and-repository-governance.md` | 6 | FR-009 follow-up governance for migration kernel split, repository expansion boundaries, and DB operations visibility |
+| orchestrator | `docs/qa/orchestrator/63-database-migration-kernel-and-repository-governance.md` | 5 | FR-009 follow-up governance for migration kernel split, repository expansion boundaries, and DB operations visibility |
 | orchestrator | `docs/qa/orchestrator/64-secretstore-key-lifecycle.md` | 5 | FR-012: SecretStore key lifecycle — legacy migration, rotation, resume, revocation, audit history |
 | orchestrator | `docs/qa/orchestrator/65-grpc-control-plane-protection.md` | 5 | FR-013 closure: protection config bootstrap, secure-TCP rate limits, stream occupancy limit, UDS fallback protection, and repeatable pressure validation |
 | orchestrator | `docs/qa/orchestrator/66-error-semantics-governance.md` | 4 | FR-014: boundary error taxonomy, shared gRPC status mapping, CLI error rendering, and regression verification |
@@ -163,9 +163,29 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/68-clone-reduction-follow-up.md` | 5 | FR-015 follow-up: chain-step/task-fanout cleanup, graph replay ownership tightening, db-write owned fast-paths, export metadata helpers, and secret-key audit assembly |
 | orchestrator | `docs/qa/orchestrator/69-async-lock-model-alignment.md` | 6 | FR-016: config runtime snapshots, async health/metrics locks, governance-gate regression, and documented sync exceptions |
 | orchestrator | `docs/qa/orchestrator/70-libc-cross-platform-compilation.md` | 5 | FR-019: libc workspace dep unification, cfg(unix) gating, SIGXCPU test guard, and 5-target cross-compile CI |
+| orchestrator | `docs/qa/orchestrator/71-automate-protoc-dependency.md` | - | FR-020: automate protoc dependency, PROTOC env var override, CI enforcement |
+| orchestrator | `docs/qa/orchestrator/72-audit-reduce-expect-calls.md` | - | FR-021: audit and reduce expect() calls, deny-level lint enforcement |
+| orchestrator | `docs/qa/orchestrator/73-integration-test-coverage.md` | - | FR-023: integration test coverage for CLI-daemon-core interaction |
+| orchestrator | `docs/qa/orchestrator/74-audit-unsafe-blocks.md` | - | FR-024: audit unsafe blocks, SAFETY comment enforcement |
+| orchestrator | `docs/qa/orchestrator/75-public-api-doc-comments.md` | - | FR-022: public API doc comment governance and lint enforcement |
+| orchestrator | `docs/qa/orchestrator/76-config-load-module-split.md` | - | FR-025: config_load module split and responsibility segregation |
+| orchestrator | `docs/qa/orchestrator/77-event-table-ttl-archival.md` | - | Event table TTL and archival: event stats, cleanup, archive to JSONL |
+| orchestrator | `docs/qa/orchestrator/78-worker-notify-wakeup.md` | - | FR-027: worker notify wakeup governance, wake-file removal |
+| orchestrator | `docs/qa/orchestrator/79-benchmark-score-capture.md` | - | FR-028: benchmark score capture, json_path extraction, item_select |
+| orchestrator | `docs/qa/orchestrator/80-item-scoped-git-worktree-isolation.md` | 4 | Item-scoped git worktree isolation: config round-trip, vendored protoc, workspace regression, self-evolution manifest |
+| orchestrator | `docs/qa/orchestrator/81-self-evolution-db-schema-alignment.md` | - | FR-030: self-evolution DB schema alignment, monitoring queries |
 | orchestrator | `docs/qa/orchestrator/82-step-variable-expansion-completeness.md` | 5 | Variable expansion completeness: renderer helpers, runtime propagation, step-family coverage matrix, and unexpanded-placeholder anomaly guard |
+| orchestrator | `docs/qa/orchestrator/83-generate-items-mixed-text-extraction.md` | 5 | GenerateItems extraction from non-pure-JSON agent output: mixed text, malformed JSON, fenced code blocks |
+| orchestrator | `docs/qa/orchestrator/84-generate-items-regression-narrowing.md` | 3 | Generate items regression narrowing: self_restart survival, dynamic item filtering, qa_testing scope narrowing |
 | orchestrator | `docs/qa/orchestrator/85-daemon-crash-resilience.md` | 5 | FR-032: worker auto-respawn, stale PID crash recovery, panic hook crash log, supervisor health monitoring, total_worker_restarts metric |
+| orchestrator | `docs/qa/orchestrator/86-orphaned-running-items-recovery.md` | 5 | FR-033: orphaned running items auto-recovery, startup recovery, stall detection, CLI task recover, audit events |
+| orchestrator | `docs/qa/orchestrator/87-self-referential-daemon-pid-guard.md` | 4 | FR-034: daemon PID kill guard for self-referential workspace safety |
 | orchestrator | `docs/qa/orchestrator/88-degenerate-cycle-loop-guard.md` | 5 | FR-035: rapid cycle detection (L2), degenerate loop trace anomaly, blocked item recovery, circuit breaker unit tests |
+| orchestrator | `docs/qa/orchestrator/89-plan-output-context-overflow-mitigation.md` | - | FR-036: plan output context overflow mitigation, stream-JSON result extraction |
+| orchestrator | `docs/qa/orchestrator/90-unquoted-json-extraction.md` | - | FR-031: generate_items unquoted JSON extraction, LLM non-standard output tolerance |
+| orchestrator | `docs/qa/orchestrator/91-daemon-crash-resilience.md` | - | FR-032: daemon crash resilience, worker survival, health monitoring |
+| orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
+| orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
 | script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |

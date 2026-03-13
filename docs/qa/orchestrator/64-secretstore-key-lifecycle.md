@@ -162,3 +162,15 @@ Full interruption-resume testing requires simulating a mid-rotation crash, which
 - Step 2: Returns at most 3 events (most recent first).
 - Step 3: Returns only events where `key_id == "primary"` — the legacy key's `key_created` and `key_activated` events from migration.
 - Each event includes: `event_kind`, `key_id`, `key_fingerprint`, `actor`, `detail_json`, `created_at`.
+
+---
+
+## Checklist
+
+| # | Scenario | Status | Test Date | Tester | Notes |
+|---|----------|--------|-----------|--------|-------|
+| 1 | Legacy Key Migration | ☐ | | | |
+| 2 | Key Rotation Forward Path | ☐ | | | |
+| 3 | Resume and No-op Resume Guard | ☐ | | | |
+| 4 | Key Revocation Safety | ☐ | | | |
+| 5 | Audit History Query | ☐ | | | |

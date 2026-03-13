@@ -67,3 +67,11 @@ Verified on 2026-03-12:
 - `normalize` production modules: 3 submodules, all under 500 lines
 - `cargo test --workspace`: passed
 - `cargo clippy --workspace --all-targets -- -D warnings`: passed
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

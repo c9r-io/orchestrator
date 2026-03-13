@@ -57,3 +57,11 @@ Verify that the workspace builds successfully both with and without a system `pr
 ## Result
 
 All scenarios verified locally on 2026-03-12.
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

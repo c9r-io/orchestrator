@@ -55,3 +55,11 @@ Verify that production code contains no `expect()`/`unwrap()` calls, that deny-l
 ## Result
 
 All scenarios verified on 2026-03-12. Lint enforcement confirmed in all 3 crate roots.
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

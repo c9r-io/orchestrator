@@ -68,3 +68,11 @@
 | `archive_events_writes_jsonl_and_deletes` | `core/src/event_cleanup.rs` |
 | `event_cleanup_subcommand_parses` | `crates/cli/src/cli.rs` |
 | `event_stats_subcommand_parses` | `crates/cli/src/cli.rs` |
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

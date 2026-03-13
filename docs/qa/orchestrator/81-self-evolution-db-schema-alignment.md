@@ -86,3 +86,11 @@ Verified on 2026-03-12:
 - Schema audit confirmed all tables, columns, and migrations are in place
 - All three monitoring queries are valid against current schema
 - `cargo test --workspace`: passed
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

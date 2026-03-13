@@ -2,7 +2,7 @@
 
 **Module**: orchestrator
 **Scope**: FR-009 follow-up governance for migration kernel split, repository expansion boundaries, and DB operations visibility
-**Scenarios**: 6
+**Scenarios**: 5
 **Priority**: High
 
 ---
@@ -169,14 +169,15 @@ SELECT COALESCE(MAX(version), 0) AS current_version FROM schema_migrations;
 
 ---
 
-## Scenario 5: Historical SQLite Databases Upgrade Cleanly
+## Scenario 5: Historical SQLite Upgrade And Full Package Regression
 
 ### Preconditions
 - File-backed historical SQLite sample tests exist for empty, old-version, partial-upgrade, and current states.
+- Repository root is the current working directory.
 - Rust toolchain is available.
 
 ### Goal
-Verify the migration kernel can safely upgrade representative historical databases.
+Verify the migration kernel can safely upgrade representative historical databases and that migration-kernel and repository-boundary work does not regress orchestrator behavior.
 
 ### Steps
 1. Run the focused historical upgrade regressions:
@@ -186,43 +187,22 @@ Verify the migration kernel can safely upgrade representative historical databas
    cargo test -p agent-orchestrator migration::tests::file_backed_partial_upgrade_database_recovers_to_latest -- --exact
    cargo test -p agent-orchestrator migration::tests::file_backed_current_database_is_noop -- --exact
    ```
+2. Run the full package regression suite:
+   ```bash
+   cargo test -p agent-orchestrator
+   ```
 
 ### Expected
 - Empty databases upgrade to the latest schema.
 - Older databases upgrade in place without losing version tracking.
 - Partially upgraded databases recover and converge to latest.
 - Current databases report zero pending migrations.
+- The full package test suite passes with no regressions in bootstrap, scheduler, repository, session, store, or migration paths.
 
 ### Expected Data State
 ```sql
 SELECT version, name FROM schema_migrations ORDER BY version;
 -- Every upgraded sample ends at the latest registered version.
-```
-
----
-
-## Scenario 6: Full Package Regression Remains Green After FR-009 Follow-Up
-
-### Preconditions
-- Repository root is the current working directory.
-- Rust toolchain is available.
-
-### Goal
-Verify migration-kernel and repository-boundary work does not regress orchestrator behavior.
-
-### Steps
-1. Run:
-   ```bash
-   cargo test -p agent-orchestrator
-   ```
-
-### Expected
-- The full package test suite passes.
-- No regressions appear in bootstrap, scheduler, repository, session, store, or migration paths.
-
-### Expected Data State
-```sql
--- N/A: package-level regression suite.
 ```
 
 ---
@@ -235,5 +215,4 @@ Verify migration-kernel and repository-boundary work does not regress orchestrat
 | 2 | Pending Migration Execution Remains Idempotent And Safe | PASS | 2026-03-11 | Codex | Fresh-db, idempotency, and failed-migration regressions all passed |
 | 3 | Runtime Persistence Continues Moving Behind Repository Boundaries | PASS | 2026-03-11 | Codex | `SchedulerRepository`、`ConfigRepository` 和 task write repository seam 已落地；`DbWriteCoordinator` 不再持有 SQL |
 | 4 | CLI Exposes Read-Only Schema And Migration Status | PASS | 2026-03-11 | Codex | Core service + CLI command regressions passed after `db` command rollout |
-| 5 | Historical SQLite Databases Upgrade Cleanly | PASS | 2026-03-11 | Codex | File-backed blank/mid-schema/partial-upgrade/current regression tests all passed |
-| 6 | Full Package Regression Remains Green After FR-009 Follow-Up | PASS | 2026-03-11 | Codex | `cargo test -p agent-orchestrator` passed |
+| 5 | Historical SQLite Upgrade And Full Package Regression | PASS | 2026-03-11 | Codex | File-backed upgrade tests + `cargo test -p agent-orchestrator` all passed |

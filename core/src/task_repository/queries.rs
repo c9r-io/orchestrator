@@ -193,7 +193,7 @@ pub fn find_latest_resumable_task_id(
         let resumable = matches!(
             status.as_str(),
             "running" | "interrupted" | "paused" | "restart_pending"
-        ) || (include_pending && status == "pending");
+        ) || (include_pending && matches!(status.as_str(), "pending" | "created"));
         if resumable {
             return Ok(Some(id));
         }

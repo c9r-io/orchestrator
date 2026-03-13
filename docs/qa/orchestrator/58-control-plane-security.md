@@ -2,7 +2,7 @@
 
 **Module**: orchestrator
 **Scope**: Validate secure TCP daemon bootstrap, host-user client config generation, role-based RPC authorization, insecure TCP escape hatch, and control-plane audit persistence
-**Scenarios**: 8
+**Scenarios**: 5
 **Priority**: Critical
 
 ---
@@ -220,16 +220,20 @@ LIMIT 5;
 
 ---
 
-## Scenario 4: Insecure TCP Requires Explicit Unsafe Flag And dev-insecure Feature
+## Scenario 4: Insecure TCP Feature Gate And Default Build Rejection
 
 ### Preconditions
 - Release binaries built with `dev-insecure` feature:
   ```bash
   cargo build --release -p orchestratord --features dev-insecure
   ```
+- A second release binary built without `dev-insecure` feature:
+  ```bash
+  cargo build --release -p orchestratord
+  ```
 
 ### Goal
-Verify insecure TCP is no longer the default meaning of `--bind` and only starts when `--insecure-bind` is used explicitly with a `dev-insecure` feature build.
+Verify insecure TCP only starts with `--insecure-bind` on a `dev-insecure` build, and the default build rejects the flag entirely.
 
 ### Steps
 1. Start the daemon in insecure TCP mode (requires `dev-insecure` build):
@@ -247,134 +251,69 @@ Verify insecure TCP is no longer the default meaning of `--bind` and only starts
    kill "$DAEMON_PID"
    wait "$DAEMON_PID" 2>/dev/null
    ```
-
-### Expected
-- The daemon starts on TCP only when `--insecure-bind` is passed.
-- Startup logs contain an explicit unsafe warning.
-- The warning makes the insecure path discoverable during QA and release review.
-
----
-
-## Scenario 5: UDS Mode Remains Available Without Client Certificates
-
-### Preconditions
-- Remove explicit secure-client override for this scenario:
-  ```bash
-  unset ORCHESTRATOR_CONTROL_PLANE_CONFIG
-  ```
-- Keep `ORCHESTRATOR_SOCKET` pointed at the UDS path for the command under test
-
-### Goal
-Verify UDS mode still works as the low-friction local path without client-certificate handling.
-
-### Steps
-1. Start the daemon without `--bind`:
-   ```bash
-   ./target/release/orchestratord --foreground --workers 1 &
-   DAEMON_PID=$!
-   sleep 3
-   ```
-2. Verify the UDS socket exists:
-   ```bash
-   test -S data/orchestrator.sock
-   ```
-3. Force CLI to use the socket path and run a basic command:
-   ```bash
-   export ORCHESTRATOR_SOCKET="$(pwd)/data/orchestrator.sock"
-   ./target/release/orchestrator version
-   ```
-4. Stop the daemon:
-   ```bash
-   kill "$DAEMON_PID"
-   wait "$DAEMON_PID" 2>/dev/null
-   unset ORCHESTRATOR_SOCKET
-   ```
-
-### Expected
-- The daemon creates `data/orchestrator.sock` as before.
-- The CLI can connect over UDS without providing any TLS materials.
-- UDS remains the fallback local transport for development and recovery.
-
----
-
-## Scenario 6: Mandatory mTLS Rejects Connections Without Client Certificate
-
-### Preconditions
-- Secure daemon running on `127.0.0.1:50051` (started via Scenario 1 steps)
-
-### Goal
-Verify that connections without a valid client certificate fail at the TLS handshake layer, not at the RPC layer.
-
-### Steps
-1. Start the secure daemon:
-   ```bash
-   ./target/release/orchestratord --foreground --bind 127.0.0.1:50051 --workers 1 &
-   DAEMON_PID=$!
-   sleep 3
-   ```
-2. Attempt a connection without a client certificate:
-   ```bash
-   curl -k https://127.0.0.1:50051 2>&1
-   ```
-3. Stop the daemon:
-   ```bash
-   kill "$DAEMON_PID"
-   wait "$DAEMON_PID" 2>/dev/null
-   ```
-
-### Expected
-- `curl` reports a TLS handshake error (e.g., `SSL peer handshake failed`).
-- The connection never reaches the gRPC layer.
-- No audit row is written for the rejected connection (handshake-layer rejection is outside application scope; covered by tracing logs only).
-
----
-
-## Scenario 7: Default Build Does Not Provide --insecure-bind
-
-### Preconditions
-- Release binary built without `dev-insecure` feature:
-  ```bash
-  cargo build --release -p orchestratord
-  ```
-
-### Goal
-Verify that the default build rejects `--insecure-bind` at the CLI argument parsing level.
-
-### Steps
-1. Attempt to start the daemon with `--insecure-bind`:
+4. Attempt to start the default build with `--insecure-bind`:
    ```bash
    ./target/release/orchestratord --insecure-bind 127.0.0.1:9999 2>&1
    ```
 
 ### Expected
-- The command exits with a non-zero exit code.
-- Output contains clap error text such as `unexpected argument '--insecure-bind'`.
-- No daemon process is started.
+- The `dev-insecure` daemon starts on TCP only when `--insecure-bind` is passed.
+- Startup logs contain an explicit unsafe warning.
+- The default build exits with a non-zero exit code and clap error text such as `unexpected argument '--insecure-bind'`.
 
 ---
 
-## Scenario 8: Audit Records Contain rejection_stage Classification
+## Scenario 5: UDS Fallback, mTLS Enforcement, And Audit Classification
 
 ### Preconditions
-- Secure daemon running with valid PKI (from Scenario 1)
+- Secure daemon running on `127.0.0.1:50051` (started via Scenario 1 steps)
 - At least one denied RPC attempt has been performed (from Scenario 3)
 
 ### Goal
-Verify that the `rejection_stage` column in `control_plane_audit` is populated for denial events.
+Verify UDS mode works without client certificates, mandatory mTLS rejects unauthenticated TCP connections, and audit `rejection_stage` is populated for denial events.
 
 ### Steps
-1. Query audit records:
+1. Start the daemon without `--bind` for UDS verification:
+   ```bash
+   ./target/release/orchestratord --foreground --workers 1 &
+   DAEMON_PID=$!
+   sleep 3
+   ```
+2. Verify the UDS socket exists and CLI connects:
+   ```bash
+   test -S data/orchestrator.sock
+   export ORCHESTRATOR_SOCKET="$(pwd)/data/orchestrator.sock"
+   ./target/release/orchestrator version
+   ```
+3. Stop the UDS daemon:
+   ```bash
+   kill "$DAEMON_PID"
+   wait "$DAEMON_PID" 2>/dev/null
+   unset ORCHESTRATOR_SOCKET
+   ```
+4. Start a secure TCP daemon and attempt a connection without a client certificate:
+   ```bash
+   ./target/release/orchestratord --foreground --bind 127.0.0.1:50051 --workers 1 &
+   DAEMON_PID=$!
+   sleep 3
+   curl -k https://127.0.0.1:50051 2>&1
+   ```
+5. Query audit records for rejection_stage classification:
    ```bash
    sqlite3 data/agent_orchestrator.db \
      "SELECT rejection_stage, COUNT(*) FROM control_plane_audit GROUP BY rejection_stage;"
-   ```
-2. Verify specific denial classifications:
-   ```bash
    sqlite3 data/agent_orchestrator.db \
      "SELECT rpc, rejection_stage, reason FROM control_plane_audit WHERE rejection_stage IS NOT NULL ORDER BY id DESC LIMIT 5;"
    ```
+6. Stop the daemon:
+   ```bash
+   kill "$DAEMON_PID"
+   wait "$DAEMON_PID" 2>/dev/null
+   ```
 
 ### Expected
+- The daemon creates `data/orchestrator.sock` and CLI connects over UDS without TLS materials.
+- `curl` without a client certificate reports a TLS handshake error; the connection never reaches the gRPC layer.
 - Allowed requests have `rejection_stage = NULL`.
 - Denied requests show one of: `cert_validation_failed`, `subject_not_found`, `subject_disabled`, `role_insufficient`.
 - The `role_insufficient` stage corresponds to operator-calls-admin-RPC denials from Scenario 3.
@@ -388,8 +327,5 @@ Verify that the `rejection_stage` column in `control_plane_audit` is populated f
 | 1 | Secure TCP Bootstrap Generates Server And Client Materials | ✅ | 2026-03-12 | Claude | PKI + policy + client materials all bootstrapped correctly |
 | 2 | CLI Auto-Discovery Uses Generated Secure Client Config | ✅ | 2026-03-12 | Claude | version + task list succeed over auto-discovered secure TCP config |
 | 3 | Additional Operator Client Is Denied On Admin RPC | ✅ | 2026-03-12 | Claude | Operator task list allowed; debug denied with "permission denied" |
-| 4 | Insecure TCP Requires Explicit Unsafe Flag And dev-insecure Feature | ✅ | 2026-03-12 | Claude | dev-insecure build logs warning; default build rejects flag |
-| 5 | UDS Mode Remains Available Without Client Certificates | ✅ | 2026-03-12 | Claude | Socket created, CLI connects, task list returns data, cleanup on shutdown |
-| 6 | Mandatory mTLS Rejects Connections Without Client Certificate | ✅ | 2026-03-12 | Claude | curl without client cert gets connection reset (exit 56); no audit row written |
-| 7 | Default Build Does Not Provide --insecure-bind | ✅ | 2026-03-12 | Claude | clap returns "unexpected argument" with exit code 2 |
-| 8 | Audit Records Contain rejection_stage Classification | ✅ | 2026-03-12 | Claude | role_insufficient=2, allowed(null)=3; distribution matches expected denial/allow pattern |
+| 4 | Insecure TCP Feature Gate And Default Build Rejection | ✅ | 2026-03-12 | Claude | dev-insecure build logs warning; default build rejects flag with exit code 2 |
+| 5 | UDS Fallback, mTLS Enforcement, And Audit Classification | ✅ | 2026-03-12 | Claude | UDS works without TLS; curl rejected at handshake; audit rejection_stage populated correctly |

@@ -89,3 +89,11 @@
 - `runner::policy::tests::allows_kill_word_in_echo`
 - `runner::policy::tests::does_not_false_positive_on_pid_substring`
 - `runner::policy::tests::does_not_false_positive_on_pid_prefix`
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

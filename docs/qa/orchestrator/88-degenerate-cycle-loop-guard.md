@@ -301,3 +301,11 @@ Verify that all FR-035 unit tests pass: safety config serde, anomaly rule defini
 - `degenerate_loop_emits_anomaly_on_three_consecutive_failures` — passes: 3+ consecutive exit-1 runs trigger anomaly
 - `degenerate_loop_no_anomaly_when_fewer_than_three_consecutive_failures` — passes: 2 failures produce no anomaly
 - `degenerate_loop_no_anomaly_when_failures_are_non_consecutive` — passes: interrupted failure streak produces no anomaly
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

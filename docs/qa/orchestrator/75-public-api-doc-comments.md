@@ -74,3 +74,11 @@ rg -n '#\\[allow\\(missing_docs\\)\\]' crates/cli crates/daemon core || true
 **预期**:
 - 命令无结果。
 - 说明此前 CLI / daemon 的局部兜底已被移除。
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

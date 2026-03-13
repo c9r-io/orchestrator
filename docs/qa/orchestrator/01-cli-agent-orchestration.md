@@ -85,7 +85,7 @@ Validate task creation and execution with mock bash agent completes successfully
 
 ### Expected
 
-- Task created successfully with status "pending"
+- Task created successfully with status "created" (tasks start in "created" status and only transition to "pending" when enqueued via `task start`)
 - Task list shows the new task
 - Task details show correct name, goal, workspace, and workflow
 
@@ -117,7 +117,7 @@ Validate task list filtering by status works correctly.
 
 3. Filter by status (if tasks exist):
    ```bash
-   ./target/release/orchestrator task list --status pending
+   ./target/release/orchestrator task list --status created
    ./target/release/orchestrator task list --status completed
    ```
 

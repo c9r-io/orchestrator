@@ -84,3 +84,11 @@
 - [ ] 多 result 行时取最后一条
 - [ ] 含 [REDACTED] 的行仍能提取
 - [ ] 无 result 行时返回 None
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

@@ -99,3 +99,11 @@
 **预期结果:**
 - [ ] 测试通过
 - [ ] 标准 JSON 输入不经过 repair 路径，直接解析成功
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

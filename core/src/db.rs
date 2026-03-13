@@ -108,7 +108,7 @@ pub fn count_non_terminal_tasks_by_workspace(
         "SELECT COUNT(*) FROM tasks
          WHERE project_id = ?1
            AND workspace_id = ?2
-           AND status IN ('pending', 'running', 'restart_pending')",
+           AND status IN ('created', 'pending', 'running', 'restart_pending')",
         params![project_id, workspace_id],
         |row| row.get(0),
     )?;
@@ -125,7 +125,7 @@ pub fn count_non_terminal_tasks_by_workflow(
         "SELECT COUNT(*) FROM tasks
          WHERE project_id = ?1
            AND workflow_id = ?2
-           AND status IN ('pending', 'running', 'restart_pending')",
+           AND status IN ('created', 'pending', 'running', 'restart_pending')",
         params![project_id, workflow_id],
         |row| row.get(0),
     )?;
@@ -143,7 +143,7 @@ pub fn list_non_terminal_tasks_by_workspace(
         "SELECT id, status FROM tasks
          WHERE project_id = ?1
            AND workspace_id = ?2
-           AND status IN ('pending', 'running', 'restart_pending')
+           AND status IN ('created', 'pending', 'running', 'restart_pending')
          ORDER BY created_at ASC
          LIMIT ?3",
     )?;
@@ -171,7 +171,7 @@ pub fn list_non_terminal_tasks_by_workflow(
         "SELECT id, status FROM tasks
          WHERE project_id = ?1
            AND workflow_id = ?2
-           AND status IN ('pending', 'running', 'restart_pending')
+           AND status IN ('created', 'pending', 'running', 'restart_pending')
          ORDER BY created_at ASC
          LIMIT ?3",
     )?;
@@ -721,8 +721,8 @@ mod tests {
         )
         .expect("list");
         assert_eq!(tasks.len(), 2);
-        assert_eq!(tasks[0].status, "pending");
-        assert_eq!(tasks[1].status, "pending");
+        assert_eq!(tasks[0].status, "created");
+        assert_eq!(tasks[1].status, "created");
     }
 
     #[test]
@@ -814,7 +814,7 @@ mod tests {
         )
         .expect("list");
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0].status, "pending");
+        assert_eq!(tasks[0].status, "created");
     }
 
     #[test]
