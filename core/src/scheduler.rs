@@ -885,6 +885,229 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn stream_json_plan_output_extracts_result_text() {
+        // FR-036: When plan agent outputs stream-json, only the result field
+        // should be extracted and spilled, not the full session transcript.
+        let plan_text = "## Plan -- 1. Change foo.rs -- 2. Add tests";
+        let large_content = "X".repeat(8192);
+        // Build a shell command that outputs JSONL lines (one per echo)
+        let plan_command = format!(
+            concat!(
+                "echo '{{\"type\":\"assistant\",\"message\":\"thinking\"}}' && ",
+                "echo '{{\"type\":\"tool_use\",\"tool\":\"Read\",\"input\":\"foo.rs\"}}' && ",
+                "echo '{{\"type\":\"tool_result\",\"content\":\"{}\"}}' && ",
+                "echo '{{\"type\":\"result\",\"result\":\"{}\"}}'"
+            ),
+            large_content, plan_text,
+        );
+
+        let mut fixture = TestState::new()
+            .with_agent(
+                "planner",
+                AgentConfig {
+                    enabled: true,
+                    metadata: AgentMetadata {
+                        name: "planner".to_string(),
+                        description: Some("stream-json plan extraction test".to_string()),
+                        version: None,
+                        cost: Some(1),
+                    },
+                    capabilities: vec!["plan".to_string(), "qa_doc_gen".to_string()],
+                    command: "echo {prompt}".to_string(),
+                    selection: AgentSelectionConfig::default(),
+                    env: None,
+                    prompt_delivery: PromptDelivery::default(),
+                },
+            )
+            .with_step_template(
+                "qa_doc_gen",
+                crate::config::StepTemplateConfig {
+                    prompt: "QA {plan_output} {plan_output_path}".to_string(),
+                    description: None,
+                },
+            )
+            .with_workflow(
+                "stream-json-test",
+                WorkflowConfig {
+                    steps: vec![
+                        WorkflowStepConfig {
+                            id: "plan".to_string(),
+                            description: None,
+                            builtin: None,
+                            required_capability: Some("plan".to_string()),
+                            execution_profile: None,
+                            enabled: true,
+                            repeatable: false,
+                            is_guard: false,
+                            cost_preference: None,
+                            prehook: None,
+                            tty: false,
+                            template: None,
+                            outputs: Vec::new(),
+                            pipe_to: None,
+                            command: Some(plan_command),
+                            chain_steps: vec![],
+                            scope: None,
+                            behavior: StepBehavior::default(),
+                            max_parallel: None,
+                            timeout_secs: None,
+                            item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
+                        },
+                        WorkflowStepConfig {
+                            id: "qa_doc_gen".to_string(),
+                            description: None,
+                            builtin: None,
+                            required_capability: Some("qa_doc_gen".to_string()),
+                            execution_profile: None,
+                            enabled: true,
+                            repeatable: false,
+                            is_guard: false,
+                            cost_preference: None,
+                            prehook: None,
+                            tty: false,
+                            template: Some("qa_doc_gen".to_string()),
+                            outputs: Vec::new(),
+                            pipe_to: None,
+                            command: None,
+                            chain_steps: vec![],
+                            scope: None,
+                            behavior: StepBehavior::default(),
+                            max_parallel: None,
+                            timeout_secs: None,
+                            item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
+                        },
+                        WorkflowStepConfig {
+                            id: "loop_guard".to_string(),
+                            description: None,
+                            builtin: Some("loop_guard".to_string()),
+                            required_capability: None,
+                            execution_profile: None,
+                            enabled: true,
+                            repeatable: true,
+                            is_guard: true,
+                            cost_preference: None,
+                            prehook: None,
+                            tty: false,
+                            template: None,
+                            outputs: Vec::new(),
+                            pipe_to: None,
+                            command: None,
+                            chain_steps: vec![],
+                            scope: None,
+                            behavior: StepBehavior::default(),
+                            max_parallel: None,
+                            timeout_secs: None,
+                            item_select_config: None,
+                            store_inputs: vec![],
+                            store_outputs: vec![],
+                        },
+                    ],
+                    execution: Default::default(),
+                    loop_policy: WorkflowLoopConfig {
+                        mode: LoopMode::Once,
+                        guard: WorkflowLoopGuardConfig {
+                            enabled: true,
+                            stop_when_no_unresolved: true,
+                            max_cycles: Some(1),
+                            agent_template: None,
+                        },
+                    },
+                    finalize: WorkflowFinalizeConfig { rules: vec![] },
+                    qa: None,
+                    fix: None,
+                    retest: None,
+                    dynamic_steps: vec![],
+                    adaptive: None,
+                    safety: crate::config::SafetyConfig::default(),
+                    max_parallel: None,
+                    item_isolation: None,
+                },
+            );
+        let state = fixture.build();
+
+        let qa_file = state
+            .app_root
+            .join("workspace/default/docs/qa/stream_json_test.md");
+        std::fs::write(&qa_file, "# stream-json plan extraction\n").expect("seed qa file");
+
+        let created = create_task_impl(
+            &state,
+            CreateTaskPayload {
+                name: Some("stream-json-test".to_string()),
+                goal: Some("verify stream-json plan output extraction".to_string()),
+                workflow_id: Some("stream-json-test".to_string()),
+                target_files: Some(vec!["docs/qa/stream_json_test.md".to_string()]),
+                ..Default::default()
+            },
+        )
+        .expect("task should be created");
+
+        prepare_task_for_start(&state, &created.id)
+            .await
+            .expect("prepare task");
+        run_task_loop(state.clone(), &created.id, RunningTask::new())
+            .await
+            .expect("task should run");
+
+        // Verify the spill file contains only the extracted result, not the full transcript
+        let spill_file = state
+            .logs_dir
+            .join(&created.id)
+            .join("plan_output.txt");
+        assert!(
+            spill_file.exists(),
+            "plan_output.txt should exist at {}",
+            spill_file.display()
+        );
+        let spill_content = std::fs::read_to_string(&spill_file).expect("read plan_output.txt");
+
+        // Should contain the plan text
+        assert!(
+            spill_content.contains("Plan"),
+            "spill file should contain extracted plan text, got: {}",
+            &spill_content[..spill_content.len().min(200)]
+        );
+        // Should NOT contain session transcript artifacts
+        assert!(
+            !spill_content.contains("tool_use"),
+            "spill file should not contain tool_use lines from session transcript"
+        );
+        assert!(
+            !spill_content.contains("tool_result"),
+            "spill file should not contain tool_result lines from session transcript"
+        );
+
+        // Verify qa_doc_gen command doesn't contain truncation marker
+        // (the extracted result is small enough to fit inline)
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        let qa_command: String = conn
+            .query_row(
+                "SELECT command
+                 FROM command_runs
+                 WHERE task_item_id = (
+                   SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1
+                 ) AND phase = 'qa_doc_gen'
+                 ORDER BY started_at DESC LIMIT 1",
+                params![created.id.clone()],
+                |row| row.get(0),
+            )
+            .expect("qa_doc_gen run should exist");
+
+        assert!(
+            !qa_command.contains("truncated"),
+            "extracted plan text should fit inline without truncation"
+        );
+        assert!(
+            qa_command.contains("Plan"),
+            "inline plan_output should contain the plan text"
+        );
+    }
+
     #[test]
     fn spill_large_var_inline_when_small() {
         let dir = std::env::temp_dir().join(format!("spill-small-{}", uuid::Uuid::new_v4()));

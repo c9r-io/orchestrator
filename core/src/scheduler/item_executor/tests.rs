@@ -1490,3 +1490,115 @@ fn parse_guard_output_should_stop_takes_precedence_over_continue() {
     assert!(result.should_stop);
     assert_eq!(result.reason, "both");
 }
+
+// ── stream-json auto-capture extraction (FR-036) ──
+
+#[test]
+fn auto_capture_extracts_stream_json_result_for_spill() {
+    // Simulates the auto-capture logic in dispatch.rs: extract_stream_json_result + spill_large_var
+    let temp = tempfile::tempdir().expect("tempdir");
+    let mut pipeline = crate::config::PipelineVariables::default();
+
+    // Build a stream-json stdout with tool calls and a final result line
+    let stream_json_stdout = concat!(
+        "{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"thinking...\"}]}}\n",
+        "{\"type\":\"tool_use\",\"tool\":\"Read\",\"input\":{\"path\":\"foo.rs\"}}\n",
+        "{\"type\":\"tool_result\",\"content\":\"file contents here\"}\n",
+        "{\"type\":\"result\",\"result\":\"## Plan\\n\\n1. Change foo.rs\\n2. Add tests\\n\\n## Scope\\n- foo.rs only\"}\n",
+    );
+
+    // Apply the same extraction logic as dispatch.rs auto-capture
+    let effective_output =
+        crate::json_extract::extract_stream_json_result(stream_json_stdout)
+            .unwrap_or_else(|| stream_json_stdout.to_string());
+
+    super::spill::spill_large_var(
+        temp.path(),
+        "task-fr036",
+        "plan_output",
+        effective_output.clone(),
+        &mut pipeline,
+    );
+
+    // Verify extracted content is the plan text, not the full transcript
+    let spill_path = temp.path().join("task-fr036").join("plan_output.txt");
+    let spill_content = std::fs::read_to_string(&spill_path).expect("read spill file");
+    assert_eq!(
+        spill_content,
+        "## Plan\n\n1. Change foo.rs\n2. Add tests\n\n## Scope\n- foo.rs only"
+    );
+    assert!(
+        !spill_content.contains("tool_use"),
+        "spill file should not contain tool_use lines from the session transcript"
+    );
+    assert!(
+        !spill_content.contains("thinking..."),
+        "spill file should not contain thinking blocks from the session transcript"
+    );
+}
+
+#[test]
+fn auto_capture_falls_back_to_raw_stdout_for_non_stream_json() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let mut pipeline = crate::config::PipelineVariables::default();
+
+    let plain_stdout = "This is plain text output from a non-stream-json agent";
+
+    let effective_output =
+        crate::json_extract::extract_stream_json_result(plain_stdout)
+            .unwrap_or_else(|| plain_stdout.to_string());
+
+    super::spill::spill_large_var(
+        temp.path(),
+        "task-plain",
+        "plan_output",
+        effective_output,
+        &mut pipeline,
+    );
+
+    let spill_path = temp.path().join("task-plain").join("plan_output.txt");
+    let spill_content = std::fs::read_to_string(&spill_path).expect("read spill file");
+    assert_eq!(spill_content, plain_stdout);
+}
+
+#[test]
+fn auto_capture_stream_json_large_result_spills_only_extracted_text() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let mut pipeline = crate::config::PipelineVariables::default();
+
+    // Build a large stream-json output where the raw transcript is huge
+    // but the extracted result is small
+    let large_tool_output = "X".repeat(100_000);
+    let small_plan = "## Small Plan\n\nJust one change.";
+    let stream_json_stdout = format!(
+        "{{\"type\":\"tool_result\",\"content\":\"{}\"}}\n{{\"type\":\"result\",\"result\":\"{}\"}}\n",
+        large_tool_output,
+        small_plan.replace('\n', "\\n"),
+    );
+
+    let effective_output =
+        crate::json_extract::extract_stream_json_result(&stream_json_stdout)
+            .unwrap_or_else(|| stream_json_stdout.clone());
+
+    super::spill::spill_large_var(
+        temp.path(),
+        "task-large",
+        "plan_output",
+        effective_output.clone(),
+        &mut pipeline,
+    );
+
+    // The inline variable should contain the small plan (no truncation needed)
+    let inline = pipeline
+        .vars
+        .get("plan_output")
+        .expect("plan_output should be set");
+    assert!(
+        !inline.contains("truncated"),
+        "extracted plan is small enough to fit inline"
+    );
+    assert!(
+        inline.contains("Small Plan"),
+        "inline var should contain the plan text"
+    );
+}

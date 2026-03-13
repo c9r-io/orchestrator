@@ -815,11 +815,16 @@ async fn execute_agent_step(
             if let Some(ref output) = result.output {
                 if !output.stdout.is_empty() {
                     let output_key = format!("{}_output", step.id);
+                    // Extract result text from stream-json output when available;
+                    // fall back to raw stdout for non-stream-json agents.
+                    let effective_output =
+                        crate::json_extract::extract_stream_json_result(&output.stdout)
+                            .unwrap_or_else(|| output.stdout.clone());
                     spill_large_var(
                         &state.logs_dir,
                         task_id,
                         &output_key,
-                        output.stdout.clone(),
+                        effective_output,
                         &mut acc.pipeline_vars,
                     );
                 }
