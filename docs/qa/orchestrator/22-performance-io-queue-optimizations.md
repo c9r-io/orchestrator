@@ -194,10 +194,16 @@ LIMIT 1;
    ```bash
    sqlite3 data/agent_orchestrator.db "SELECT COUNT(*) FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='${TASK_ID}');"
    ```
+5. Verify no duplicate runs **per phase** for this task (important: always scope to `${TASK_ID}`):
+   ```bash
+   sqlite3 data/agent_orchestrator.db "SELECT cr.task_item_id, cr.phase, COUNT(*) as run_count FROM command_runs cr JOIN task_items ti ON cr.task_item_id = ti.id WHERE ti.task_id = '${TASK_ID}' GROUP BY cr.task_item_id, cr.phase HAVING run_count > 1;"
+   ```
 
 ### Expected
 - Task transitions `pending -> running -> terminal` without duplicate queue consumption.
 - No second worker re-claims the same pending task record.
+- Each task_item has exactly **one** command_run **per phase**. A multi-step workflow naturally produces multiple command_runs per task_item (one per step/phase), which is expected and is NOT a duplicate.
+- Step 5 query must return **zero rows** (no duplicate runs for the same item+phase combination).
 
 ### Expected Data State
 ```sql
@@ -205,7 +211,26 @@ SELECT status
 FROM tasks
 WHERE id = '{task_id}';
 -- Expected: completed or failed (not left in pending/running due to duplicate claim race)
+
+-- Duplicate detection: always scope to the test task and group by phase.
+-- A task_item with multiple runs across DIFFERENT phases is expected (multi-step workflow).
+-- Only same-phase duplicates indicate a real atomicity issue.
+SELECT cr.task_item_id, cr.phase, COUNT(*) as run_count
+FROM command_runs cr
+JOIN task_items ti ON cr.task_item_id = ti.id
+WHERE ti.task_id = '{task_id}'
+GROUP BY cr.task_item_id, cr.phase
+HAVING run_count > 1;
+-- Expected: 0 rows
 ```
+
+### Troubleshooting
+
+| Symptom | Likely Cause | Resolution |
+|---------|-------------|------------|
+| Global `GROUP BY task_item_id HAVING COUNT(*) > 1` shows duplicates | Query is not scoped to the test task — picks up runs from other tasks with multi-step workflows | Always filter by `ti.task_id = '${TASK_ID}'` and group by `cr.phase` |
+| Multiple runs per item but each has a **different** phase | Expected behavior for workflows with multiple steps (e.g., qa → fix → retest) | Not a bug — each step creates its own command_run |
+| Multiple runs for the **same** item+phase | Real atomicity issue — investigate claim mechanism or loop re-entry | File a ticket with task_id-scoped evidence |
 
 ---
 
