@@ -4,6 +4,7 @@
 **Scope**: Validate edit export/open commands for resource management
 **Scenarios**: 4
 **Priority**: Medium
+**Status**: NOT IMPLEMENTED — all scenarios describe planned features that do not exist in the current CLI. The `edit` subcommand is not registered. Do not raise tickets against these scenarios until the feature is implemented.
 
 ---
 
@@ -12,6 +13,8 @@
 This document tests the edit commands for exporting and opening resources in the editor.
 
 Entry point: `orchestrator edit <command>` (subcommands: `export`, `open`; bare `edit <resource>` is NOT valid)
+
+> **Note**: As of 2026-03-13, the `edit` subcommand does not exist. Running `orchestrator edit` returns `error: unrecognized subcommand 'edit'`. These scenarios are placeholders for a planned feature.
 
 ---
 
@@ -132,7 +135,7 @@ Entry point: `orchestrator edit <command>` (subcommands: `export`, `open`; bare 
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Edit Export Workspace | ☐ | | | |
-| 2 | Edit Export Agent | ☐ | | | |
-| 3 | Edit Export Workflow | ☐ | | | |
-| 4 | Edit Open | ☐ | | | |
+| 1 | Edit Export Workspace | N/A | 2026-03-13 | claude | `edit` subcommand not implemented; false positive tickets deleted |
+| 2 | Edit Export Agent | N/A | 2026-03-13 | claude | `edit` subcommand not implemented |
+| 3 | Edit Export Workflow | N/A | 2026-03-13 | claude | `edit` subcommand not implemented |
+| 4 | Edit Open | N/A | 2026-03-13 | claude | `edit` subcommand not implemented |

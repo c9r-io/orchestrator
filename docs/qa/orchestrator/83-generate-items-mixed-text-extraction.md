@@ -229,8 +229,8 @@ Verify extraction selects the correct JSON block containing the target path.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Mixed text — natural language + JSON | | | | Blocked on fix: `extract_json_array` requires pure JSON |
-| 2 | Fenced code block (` ```json ``` `) | | | | Blocked on fix |
-| 3 | Pure JSON baseline (regression guard) | ✅ | 2026-03-13 | claude | Covered by existing unit test `test_extract_dynamic_items` in `item_generate.rs` |
-| 4 | Malformed JSON — graceful error | ✅ | 2026-03-13 | claude | Current behavior is correct: WARN log + fallback. Unit test `extract_array_not_array_fails` covers parse error path |
-| 5 | Multiple JSON objects in text | | | | Blocked on fix |
+| 1 | Mixed text — natural language + JSON | ✅ | 2026-03-13 | claude | Unit test `extract_array_from_mixed_text_with_preamble` in `json_extract.rs`. Scan fallback finds `{` and parses |
+| 2 | Fenced code block (` ```json ``` `) | ✅ | 2026-03-13 | claude | Unit tests `extract_array_from_fenced_code_block` and `extract_array_from_unfenced_code_block` |
+| 3 | Pure JSON baseline (regression guard) | ✅ | 2026-03-13 | claude | Unit test `extract_array_pure_json_still_works` + existing `extract_array_simple`, `extract_array_nested` |
+| 4 | Malformed JSON — graceful error | ✅ | 2026-03-13 | claude | Unit test `extract_array_malformed_json_fails`. Returns error, caller logs WARN + fallback |
+| 5 | Multiple JSON objects in text | ✅ | 2026-03-13 | claude | Unit test `extract_array_multiple_json_objects_finds_correct_one`. Uses streaming deserializer to handle trailing text |

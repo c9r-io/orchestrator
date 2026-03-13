@@ -219,9 +219,11 @@ Validate that a guard step can terminate the workflow loop.
 
 > **Note**: The `loop_guard` step type uses the **builtin** guard implementation.
 > The builtin guard terminates based on `stop_when_no_unresolved` configuration
-> (default: false) and `max_cycles` limit — it does not parse agent JSON output.
-> When all items pass QA (no unresolved), the loop completes after cycle 1
-> because subsequent cycles find no work to do.
+> and `max_cycles` limit — it does not parse agent JSON output.
+> Since the fixture uses `stop_when_no_unresolved: false` (the default) and
+> `max_cycles: 3`, the loop runs all 3 cycles regardless of item status.
+> To terminate early on no-unresolved, `stop_when_no_unresolved: true` must be
+> set explicitly in the workflow's `loop` config.
 
 ### Steps
 
@@ -252,7 +254,7 @@ Validate that a guard step can terminate the workflow loop.
 
 - Workflow `guard_test` appears in config
 - Task creation and execution succeed — status: `completed`, failed: 0
-- Loop terminates after cycle 1 (all items pass QA with no tickets)
+- Loop runs up to `max_cycles` (3) because `stop_when_no_unresolved` defaults to false
 
 ---
 
@@ -316,5 +318,5 @@ both agents are used for execution.
 | 1 | Capability Isolation | ✅ | 2026-03-05 | auto | agent_qa_only → qa, agent_fix_only → fix |
 | 2 | Multi-Agent Same Capability | ✅ | 2026-03-05 | auto | alpha/beta distributed, 0 failures |
 | 3 | Repeatable Step Execution | ☐ | | | |
-| 4 | Guard Step Termination | ✅ | 2026-03-05 | auto | Completed cycle 1, guard terminated correctly |
+| 4 | Guard Step Termination | ✅ | 2026-03-13 | claude | False positive: expected cycle=1 but fixture has stop_when_no_unresolved=false (default), so runs to max_cycles=3. QA doc corrected. |
 | 5 | Performance Selection Fixture | ✅ | 2026-03-05 | auto | fast_agent 58%, quality_agent 42% |

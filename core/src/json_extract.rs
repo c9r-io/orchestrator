@@ -1,17 +1,81 @@
 use anyhow::{Context, Result};
+use serde::Deserialize;
 use serde_json::Value;
 
 /// Extract a JSON array from a JSON string using a simple path expression.
 ///
 /// Supports paths like `$.field_name` or `$.field.nested`.
 /// Returns the array found at the given path.
+///
+/// Resilient to mixed-text input (e.g. LLM agent output with natural language
+/// before/after JSON). Tries in order:
+/// 1. Parse the entire string as JSON
+/// 2. Extract from a fenced code block (```json ... ```)
+/// 3. Scan for the first `{` or `[` and try parsing from there
 pub fn extract_json_array(json_str: &str, path: &str) -> Result<Vec<Value>> {
-    let root: Value = serde_json::from_str(json_str).context("invalid JSON")?;
-    let target = resolve_path(&root, path)?;
-    match target {
-        Value::Array(arr) => Ok(arr.clone()),
-        _ => anyhow::bail!("path '{}' does not point to an array", path),
+    // 1. Try parsing the whole string as JSON
+    if let Ok(root) = serde_json::from_str::<Value>(json_str) {
+        let target = resolve_path(&root, path)?;
+        return match target {
+            Value::Array(arr) => Ok(arr.clone()),
+            _ => anyhow::bail!("path '{}' does not point to an array", path),
+        };
     }
+
+    // 2. Try extracting from a fenced code block (```json ... ``` or ``` ... ```)
+    if let Some(json_block) = extract_fenced_json(json_str) {
+        if let Ok(root) = serde_json::from_str::<Value>(&json_block) {
+            if let Ok(target) = resolve_path(&root, path) {
+                return match target {
+                    Value::Array(arr) => Ok(arr.clone()),
+                    _ => anyhow::bail!("path '{}' does not point to an array", path),
+                };
+            }
+        }
+    }
+
+    // 3. Scan for JSON objects/arrays starting at each `{` or `[`
+    if let Some(arr) = scan_for_json_with_path(json_str, path) {
+        return Ok(arr);
+    }
+
+    anyhow::bail!("no valid JSON containing path '{}' found in text", path)
+}
+
+/// Extract JSON content from a markdown fenced code block.
+fn extract_fenced_json(text: &str) -> Option<String> {
+    // Match ```json ... ``` or ``` ... ```
+    let fence_start_markers = ["```json\n", "```json\r\n", "```\n", "```\r\n"];
+    for marker in &fence_start_markers {
+        if let Some(start) = text.find(marker) {
+            let content_start = start + marker.len();
+            if let Some(end) = text[content_start..].find("```") {
+                return Some(text[content_start..content_start + end].trim().to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Scan text for JSON objects starting at each `{` or `[`, try to parse and resolve path.
+/// Uses `serde_json::Deserializer::from_str` to parse a single value from a prefix,
+/// allowing trailing text after the JSON.
+fn scan_for_json_with_path(text: &str, path: &str) -> Option<Vec<Value>> {
+    for (i, ch) in text.char_indices() {
+        if ch != '{' && ch != '[' {
+            continue;
+        }
+        let slice = &text[i..];
+        let mut de = serde_json::Deserializer::from_str(slice);
+        if let Ok(root) = <Value as Deserialize>::deserialize(&mut de) {
+            if let Ok(target) = resolve_path(&root, path) {
+                if let Value::Array(arr) = target {
+                    return Some(arr.clone());
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Extract a single field value from a JSON Value using a simple dot-path.
@@ -175,6 +239,82 @@ mod tests {
     fn extract_field_boolean() {
         let value = json!({"active": true});
         assert_eq!(extract_field(&value, "$.active"), Some("true".to_string()));
+    }
+
+    #[test]
+    fn extract_array_from_mixed_text_with_preamble() {
+        let mixed = r#"Based on my analysis, I identified these targets:
+
+{"regression_targets": [{"id": "target-a", "name": "A"}, {"id": "target-b", "name": "B"}]}"#;
+        let arr = extract_json_array(mixed, "$.regression_targets")
+            .expect("should extract from mixed text");
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0]["id"], json!("target-a"));
+        assert_eq!(arr[1]["id"], json!("target-b"));
+    }
+
+    #[test]
+    fn extract_array_from_fenced_code_block() {
+        let fenced = r#"Here are the results:
+
+```json
+{"items": [{"id": "a"}, {"id": "b"}, {"id": "c"}]}
+```
+
+Done."#;
+        let arr =
+            extract_json_array(fenced, "$.items").expect("should extract from fenced block");
+        assert_eq!(arr.len(), 3);
+    }
+
+    #[test]
+    fn extract_array_from_unfenced_code_block() {
+        let fenced = r#"Results:
+
+```
+{"goals": ["x", "y"]}
+```
+"#;
+        let arr = extract_json_array(fenced, "$.goals")
+            .expect("should extract from unfenced block");
+        assert_eq!(arr.len(), 2);
+    }
+
+    #[test]
+    fn extract_array_multiple_json_objects_finds_correct_one() {
+        let multi = r#"Summary: {"status": "ok", "count": 3}
+
+Details:
+{"regression_targets": [{"id": "rt-1"}, {"id": "rt-2"}]}
+
+Footer: {"ts": "2026-01-01"}"#;
+        let arr = extract_json_array(multi, "$.regression_targets")
+            .expect("should find the correct JSON object");
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0]["id"], json!("rt-1"));
+    }
+
+    #[test]
+    fn extract_array_malformed_json_fails() {
+        let bad = "I found: {targets: [a, b]}";
+        let result = extract_json_array(bad, "$.targets");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn extract_array_no_matching_path_in_mixed_text_fails() {
+        let mixed = r#"Some text {"other_field": [1, 2]}"#;
+        let result = extract_json_array(mixed, "$.regression_targets");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn extract_array_pure_json_still_works() {
+        // Regression guard: pure JSON must keep working
+        let pure = r#"{"items": [{"id": "clean"}]}"#;
+        let arr = extract_json_array(pure, "$.items").expect("pure JSON must work");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["id"], json!("clean"));
     }
 
     #[test]
