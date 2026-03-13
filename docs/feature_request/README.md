@@ -26,6 +26,7 @@
 | FR-035 | 退化循环检测与熔断机制 | P1 | Closed |
 | FR-036 | Plan Output Context Overflow 缓解 | P1 | Closed |
 | FR-037 | Dynamic Items 触发的循环溢出 — max_cycles 约束失效 | P1 | Closed |
+| FR-038 | Daemon 重启时在途步骤竞态 — task_completed 提前发出与动态 Item 状态丢失 | P1 | Proposed |
 
 ## 说明
 
