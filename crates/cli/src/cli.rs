@@ -480,6 +480,9 @@ pub enum TaskCommands {
     Resume {
         /// Task identifier.
         task_id: String,
+        /// Reset blocked items back to unresolved before resuming.
+        #[arg(long)]
+        reset_blocked: bool,
     },
 
     #[command(alias = "log")]

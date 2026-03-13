@@ -60,6 +60,8 @@ pub enum AnomalyRule {
     NonzeroExit,
     /// A templated variable remained unexpanded in emitted output.
     UnexpandedTemplateVar,
+    /// FR-035: An item-phase pair failed repeatedly, indicating a degenerate loop.
+    DegenerateLoop,
 }
 
 impl AnomalyRule {
@@ -77,6 +79,7 @@ impl AnomalyRule {
             AnomalyRule::OrphanCommand => "orphan_command",
             AnomalyRule::NonzeroExit => "nonzero_exit",
             AnomalyRule::UnexpandedTemplateVar => "unexpanded_template_var",
+            AnomalyRule::DegenerateLoop => "degenerate_loop",
         }
     }
 
@@ -85,7 +88,8 @@ impl AnomalyRule {
         match self {
             AnomalyRule::DuplicateRunner
             | AnomalyRule::OverlappingCycles
-            | AnomalyRule::OverlappingSteps => Severity::Error,
+            | AnomalyRule::OverlappingSteps
+            | AnomalyRule::DegenerateLoop => Severity::Error,
 
             AnomalyRule::LowOutput
             | AnomalyRule::MissingStepEnd
@@ -104,7 +108,8 @@ impl AnomalyRule {
             AnomalyRule::LowOutput
             | AnomalyRule::DuplicateRunner
             | AnomalyRule::OverlappingCycles
-            | AnomalyRule::OverlappingSteps => Escalation::Intervene,
+            | AnomalyRule::OverlappingSteps
+            | AnomalyRule::DegenerateLoop => Escalation::Intervene,
 
             AnomalyRule::NonzeroExit
             | AnomalyRule::OrphanCommand
@@ -130,6 +135,7 @@ impl AnomalyRule {
             AnomalyRule::OrphanCommand => "ORPHAN_COMMAND",
             AnomalyRule::NonzeroExit => "NONZERO_EXIT",
             AnomalyRule::UnexpandedTemplateVar => "UNEXPANDED_TEMPLATE_VAR",
+            AnomalyRule::DegenerateLoop => "DEGENERATE_LOOP",
         }
     }
 
@@ -147,6 +153,7 @@ impl AnomalyRule {
             "orphan_command" => Some(AnomalyRule::OrphanCommand),
             "nonzero_exit" => Some(AnomalyRule::NonzeroExit),
             "unexpanded_template_var" => Some(AnomalyRule::UnexpandedTemplateVar),
+            "degenerate_loop" => Some(AnomalyRule::DegenerateLoop),
             _ => None,
         }
     }
@@ -198,6 +205,7 @@ mod tests {
         AnomalyRule::OrphanCommand,
         AnomalyRule::NonzeroExit,
         AnomalyRule::UnexpandedTemplateVar,
+        AnomalyRule::DegenerateLoop,
     ];
 
     #[test]
@@ -226,6 +234,10 @@ mod tests {
         );
         assert_eq!(
             AnomalyRule::OverlappingSteps.default_severity(),
+            Severity::Error
+        );
+        assert_eq!(
+            AnomalyRule::DegenerateLoop.default_severity(),
             Severity::Error
         );
 
@@ -268,6 +280,10 @@ mod tests {
         );
         assert_eq!(
             AnomalyRule::OverlappingSteps.escalation(),
+            Escalation::Intervene
+        );
+        assert_eq!(
+            AnomalyRule::DegenerateLoop.escalation(),
             Escalation::Intervene
         );
 

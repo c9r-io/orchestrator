@@ -97,6 +97,8 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
             max_spawned_tasks: spec.safety.max_spawned_tasks,
             max_spawn_depth: spec.safety.max_spawn_depth,
             spawn_cooldown_seconds: spec.safety.spawn_cooldown_seconds,
+            max_item_step_failures: spec.safety.max_item_step_failures,
+            min_cycle_interval_secs: spec.safety.min_cycle_interval_secs,
         },
         max_parallel: spec.max_parallel,
         item_isolation: spec.item_isolation.clone(),
@@ -298,6 +300,8 @@ pub(super) fn safety_config_to_spec(config: &SafetyConfig) -> SafetySpec {
         max_spawned_tasks: config.max_spawned_tasks,
         max_spawn_depth: config.max_spawn_depth,
         spawn_cooldown_seconds: config.spawn_cooldown_seconds,
+        max_item_step_failures: config.max_item_step_failures,
+        min_cycle_interval_secs: config.min_cycle_interval_secs,
     }
 }
 
@@ -886,6 +890,7 @@ mod tests {
                 max_spawned_tasks: None,
                 max_spawn_depth: None,
                 spawn_cooldown_seconds: None,
+                ..SafetySpec::default()
             },
             max_parallel: None,
             item_isolation: None,
@@ -952,6 +957,7 @@ mod tests {
                 max_spawned_tasks: None,
                 max_spawn_depth: None,
                 spawn_cooldown_seconds: None,
+                ..SafetySpec::default()
             },
             max_parallel: None,
             item_isolation: None,
@@ -1010,6 +1016,7 @@ mod tests {
                 max_spawned_tasks: None,
                 max_spawn_depth: None,
                 spawn_cooldown_seconds: None,
+                ..SafetySpec::default()
             },
             max_parallel: None,
             item_isolation: None,
@@ -1432,6 +1439,7 @@ mod tests {
                 max_spawned_tasks: None,
                 max_spawn_depth: None,
                 spawn_cooldown_seconds: None,
+                ..SafetySpec::default()
             },
             max_parallel: None,
             item_isolation: None,

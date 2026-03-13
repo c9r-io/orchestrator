@@ -4,7 +4,7 @@ use crate::scheduler::item_executor::{
     finalize_item_execution, process_item_filtered, process_item_filtered_owned,
     OwnedProcessItemRequest, ProcessItemRequest, StepExecutionAccumulator,
 };
-use crate::scheduler::task_state::{list_task_items_for_cycle, set_task_status};
+use crate::scheduler::task_state::{list_task_items_for_cycle, set_item_blocked, set_task_status};
 use crate::scheduler::RunningTask;
 use crate::state::InnerState;
 use anyhow::Result;
@@ -211,7 +211,7 @@ pub(super) async fn execute_task_segment(
 pub(super) async fn execute_item_segment(
     state: &Arc<InnerState>,
     task_id: &str,
-    task_ctx: &crate::config::TaskRuntimeContext,
+    task_ctx: &mut crate::config::TaskRuntimeContext,
     runtime: &RunningTask,
     segment: &ScopeSegment,
     segment_idx: usize,
@@ -224,7 +224,30 @@ pub(super) async fn execute_item_segment(
     let run_dynamic_steps = is_last_item_segment(segment_idx, segments);
     if max_par <= 1 {
         // === Sequential path ===
+        let max_item_failures = task_ctx.safety.max_item_step_failures;
         for item in items {
+            // FR-035 L1: Skip blocked items (any step at or above threshold)
+            let is_blocked = task_ctx
+                .item_step_failures
+                .iter()
+                .any(|((iid, _), &count)| iid == &item.id && count >= max_item_failures);
+            if is_blocked {
+                continue;
+            }
+            // FR-035 L1: Skip items in retry backoff
+            if let Some(&retry_after) = task_ctx.item_retry_after.get(&item.id) {
+                if std::time::Instant::now() < retry_after {
+                    insert_event(
+                        state,
+                        task_id,
+                        Some(&item.id),
+                        "step_skipped",
+                        json!({"reason": "retry_backoff"}),
+                    )
+                    .await?;
+                    continue;
+                }
+            }
             let acc = item_state
                 .entry(item.id.clone())
                 .or_insert_with(|| StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone()));
@@ -243,6 +266,62 @@ pub(super) async fn execute_item_segment(
                 acc,
             )
             .await?;
+
+            // FR-035 L1: Track per-item per-step failures and apply circuit breaker
+            let acc = item_state.get(&item.id).expect("acc just inserted");
+            for (step_id, &exit_code) in &acc.exit_codes {
+                if !segment.step_ids.contains(step_id) {
+                    continue;
+                }
+                let key = (item.id.clone(), step_id.clone());
+                if exit_code != 0 {
+                    let count = task_ctx
+                        .item_step_failures
+                        .entry(key)
+                        .or_insert(0);
+                    *count += 1;
+                    if *count >= max_item_failures {
+                        set_item_blocked(state, task_id, &item.id).await?;
+                        insert_event(
+                            state,
+                            task_id,
+                            Some(&item.id),
+                            "item_blocked_consecutive_failures",
+                            json!({
+                                "step_id": step_id,
+                                "failure_count": *count,
+                                "last_exit_code": exit_code,
+                            }),
+                        )
+                        .await?;
+                        state.emit_event(
+                            task_id,
+                            Some(&item.id),
+                            "item_blocked_consecutive_failures",
+                            json!({
+                                "step_id": step_id,
+                                "failure_count": *count,
+                            }),
+                        );
+                    } else {
+                        // Exponential backoff: 1 failure → 30s, 2 → 120s
+                        let delay_secs = match *count {
+                            1 => 30,
+                            2 => 120,
+                            _ => 120,
+                        };
+                        task_ctx.item_retry_after.insert(
+                            item.id.clone(),
+                            std::time::Instant::now()
+                                + std::time::Duration::from_secs(delay_secs),
+                        );
+                    }
+                } else {
+                    // Success: reset failure counter and retry_after
+                    task_ctx.item_step_failures.remove(&key);
+                    task_ctx.item_retry_after.remove(&item.id);
+                }
+            }
         }
     } else {
         // === Parallel path ===

@@ -37,7 +37,7 @@ pub use safety::{
 };
 pub use task_state::{
     count_unresolved_items, find_latest_resumable_task_id, first_task_item_id,
-    prepare_task_for_start, set_task_status, update_task_cycle_state,
+    prepare_task_for_start, reset_blocked_items, set_task_status, update_task_cycle_state,
 };
 
 #[cfg(test)]

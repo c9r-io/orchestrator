@@ -126,6 +126,18 @@ pub(crate) async fn task_resume(
         .await
         .map_err(map_core_error)?;
 
+    // FR-035: reset blocked items before resuming if requested
+    if req.reset_blocked {
+        let count = agent_orchestrator::scheduler::reset_blocked_items(
+            &server.state, &id,
+        )
+        .await
+        .map_err(|e| Status::internal(e.to_string()))?;
+        if count > 0 {
+            tracing::info!(task_id = %id, count, "reset {count} blocked items to unresolved");
+        }
+    }
+
     agent_orchestrator::service::task::enqueue_task(&server.state, &id)
         .await
         .map_err(map_core_error)?;

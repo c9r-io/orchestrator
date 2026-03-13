@@ -145,6 +145,7 @@ async fn task_pause_resume() {
         let resume_resp = client
             .task_resume(TaskResumeRequest {
                 task_id: task_id.clone(),
+                reset_blocked: false,
             })
             .await
             .expect("task_resume failed")

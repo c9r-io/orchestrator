@@ -39,10 +39,24 @@ pub struct SafetyConfig {
     /// WP02: Minimum seconds between spawn bursts
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spawn_cooldown_seconds: Option<u64>,
+    /// FR-035: Per-item per-step consecutive failure threshold before blocking
+    #[serde(default = "default_max_item_step_failures")]
+    pub max_item_step_failures: u32,
+    /// FR-035: Minimum cycle interval in seconds; rapid cycles below this trigger pause
+    #[serde(default = "default_min_cycle_interval_secs")]
+    pub min_cycle_interval_secs: u64,
 }
 
 fn default_max_consecutive_failures() -> u32 {
     3
+}
+
+fn default_max_item_step_failures() -> u32 {
+    3
+}
+
+fn default_min_cycle_interval_secs() -> u64 {
+    60
 }
 
 impl Default for SafetyConfig {
@@ -58,6 +72,8 @@ impl Default for SafetyConfig {
             max_spawned_tasks: None,
             max_spawn_depth: None,
             spawn_cooldown_seconds: None,
+            max_item_step_failures: 3,
+            min_cycle_interval_secs: 60,
         }
     }
 }
@@ -138,6 +154,8 @@ mod tests {
         assert!(matches!(cfg.checkpoint_strategy, CheckpointStrategy::None));
         assert!(cfg.step_timeout_secs.is_none());
         assert!(!cfg.binary_snapshot);
+        assert_eq!(cfg.max_item_step_failures, 3);
+        assert_eq!(cfg.min_cycle_interval_secs, 60);
     }
 
     #[test]
@@ -171,6 +189,34 @@ mod tests {
         assert_eq!(cfg.max_consecutive_failures, 3);
         assert!(!cfg.auto_rollback);
         assert_eq!(cfg.profile, WorkflowSafetyProfile::Standard);
+        assert_eq!(cfg.max_item_step_failures, 3);
+        assert_eq!(cfg.min_cycle_interval_secs, 60);
+    }
+
+    #[test]
+    fn test_fr035_fields_serde_round_trip() {
+        let cfg = SafetyConfig {
+            max_item_step_failures: 7,
+            min_cycle_interval_secs: 120,
+            ..SafetyConfig::default()
+        };
+        let json = serde_json::to_string(&cfg).expect("serialize FR-035 safety config");
+        let cfg2: SafetyConfig =
+            serde_json::from_str(&json).expect("deserialize FR-035 safety config");
+        assert_eq!(cfg2.max_item_step_failures, 7);
+        assert_eq!(cfg2.min_cycle_interval_secs, 120);
+    }
+
+    #[test]
+    fn test_fr035_fields_explicit_json_deserialization() {
+        let json = r#"{"max_item_step_failures": 5, "min_cycle_interval_secs": 30}"#;
+        let cfg: SafetyConfig =
+            serde_json::from_str(json).expect("deserialize explicit FR-035 fields");
+        assert_eq!(cfg.max_item_step_failures, 5);
+        assert_eq!(cfg.min_cycle_interval_secs, 30);
+        // Other fields should remain at their defaults.
+        assert_eq!(cfg.max_consecutive_failures, 3);
+        assert!(!cfg.auto_rollback);
     }
 
     #[test]

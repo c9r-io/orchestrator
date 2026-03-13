@@ -427,6 +427,8 @@ fn make_task_ctx(
         pinned_invariants: std::sync::Arc::new(vec![]),
         workflow_id: String::new(),
         spawn_depth: 0,
+        item_step_failures: HashMap::new(),
+        item_retry_after: HashMap::new(),
     }
 }
 

@@ -9,6 +9,7 @@ mod tests;
 pub use continuation::evaluate_loop_guard_rules;
 
 use crate::config::{InvariantCheckPoint, StepScope};
+use chrono::TimeZone;
 use crate::events::insert_event;
 use crate::state::InnerState;
 use anyhow::Result;
@@ -18,6 +19,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use super::item_executor::{process_item, StepExecutionAccumulator};
+use super::task_state::query_recent_cycle_timestamps;
 use super::phase_runner::{run_phase_with_rotation, RotatingPhaseRunRequest};
 use super::runtime::load_task_runtime_context;
 use super::safety::RestartRequestedError;
@@ -139,6 +141,46 @@ async fn run_task_loop_core(
             "cycle_started",
             json!({"cycle": task_ctx.current_cycle, "max_cycles": max_cycles}),
         );
+
+        // FR-035 L2: Rapid cycle detection — pause task if last 3 cycles were too fast
+        if task_ctx.current_cycle >= 4 {
+            if let Ok(true) = detect_rapid_cycles(
+                &state,
+                task_id,
+                &task_ctx,
+            )
+            .await
+            {
+                insert_event(
+                    &state,
+                    task_id,
+                    None,
+                    "degenerate_cycle_detected",
+                    json!({
+                        "cycle": task_ctx.current_cycle,
+                        "min_cycle_interval_secs": task_ctx.safety.min_cycle_interval_secs,
+                    }),
+                )
+                .await?;
+                state.emit_event(
+                    task_id,
+                    None,
+                    "degenerate_cycle_detected",
+                    json!({"cycle": task_ctx.current_cycle}),
+                );
+                set_task_status(&state, task_id, "paused", false).await?;
+                let unresolved = count_unresolved_items(&state, task_id).await?;
+                record_task_execution_metric(
+                    &state,
+                    task_id,
+                    "paused",
+                    task_ctx.current_cycle,
+                    unresolved,
+                )
+                .await?;
+                return Ok(());
+            }
+        }
 
         let outcome = match task_ctx.execution.mode {
             crate::config::WorkflowExecutionMode::StaticSegment => {
@@ -446,4 +488,58 @@ async fn execute_cycle_segments(
     }
 
     Ok(CycleSegmentOutcome::Completed)
+}
+
+/// FR-035 L2: Checks if the last 3 cycle intervals were all shorter than
+/// `safety.min_cycle_interval_secs`, indicating a degenerate loop.
+/// Returns `Ok(true)` when rapid cycles are detected.
+async fn detect_rapid_cycles(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    task_ctx: &crate::config::TaskRuntimeContext,
+) -> Result<bool> {
+    // Need at least 4 timestamps to compute 3 intervals
+    let timestamps = query_recent_cycle_timestamps(state, task_id, 4).await?;
+    if timestamps.len() < 4 {
+        return Ok(false);
+    }
+
+    let min_interval = task_ctx.safety.min_cycle_interval_secs as i64;
+    let parsed: Vec<_> = timestamps
+        .iter()
+        .filter_map(|ts| parse_cycle_timestamp(ts))
+        .collect();
+    if parsed.len() < 4 {
+        return Ok(false);
+    }
+
+    // Timestamps are newest-first from DB; reverse to oldest-first for interval computation
+    let mut sorted = parsed;
+    sorted.reverse();
+
+    for pair in sorted.windows(2) {
+        let interval = pair[1].signed_duration_since(pair[0]).num_seconds().abs();
+        if interval >= min_interval {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// Parses a DB event timestamp into a chrono DateTime.
+fn parse_cycle_timestamp(ts: &str) -> Option<chrono::DateTime<chrono::FixedOffset>> {
+    if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(ts) {
+        return Some(parsed);
+    }
+    let zero_offset = chrono::FixedOffset::east_opt(0)?;
+    for fmt in [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S%.f",
+    ] {
+        if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(ts, fmt) {
+            return Some(zero_offset.from_utc_datetime(&naive));
+        }
+    }
+    None
 }

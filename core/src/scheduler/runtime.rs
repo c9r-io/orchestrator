@@ -376,6 +376,8 @@ pub async fn load_task_runtime_context(
         project_id: effective_project_id,
         workflow_id,
         spawn_depth: runtime_row.spawn_depth,
+        item_step_failures: std::collections::HashMap::new(),
+        item_retry_after: std::collections::HashMap::new(),
     })
 }
 

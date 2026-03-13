@@ -142,6 +142,64 @@ pub(crate) async fn is_task_paused_in_db(state: &InnerState, task_id: &str) -> R
     Ok(matches!(status.as_deref(), Some("paused")))
 }
 
+/// FR-035: Marks a task item as blocked (circuit-breaker tripped).
+pub async fn set_item_blocked(state: &InnerState, task_id: &str, item_id: &str) -> Result<()> {
+    let task_id = task_id.to_owned();
+    let item_id = item_id.to_owned();
+    state
+        .async_database
+        .writer()
+        .call(move |conn| {
+            conn.execute(
+                "UPDATE task_items SET status = 'blocked' WHERE id = ?1 AND task_id = ?2",
+                rusqlite::params![item_id, task_id],
+            )?;
+            Ok(())
+        })
+        .await
+        .map_err(crate::async_database::flatten_err)
+}
+
+/// FR-035: Resets all blocked items back to unresolved for a task. Returns the count reset.
+pub async fn reset_blocked_items(state: &InnerState, task_id: &str) -> Result<u64> {
+    let task_id = task_id.to_owned();
+    state
+        .async_database
+        .writer()
+        .call(move |conn| {
+            let count = conn.execute(
+                "UPDATE task_items SET status = 'unresolved' WHERE task_id = ?1 AND status = 'blocked'",
+                rusqlite::params![task_id],
+            )?;
+            Ok(count as u64)
+        })
+        .await
+        .map_err(crate::async_database::flatten_err)
+}
+
+/// FR-035: Queries recent cycle_started event timestamps from DB (newest first).
+pub async fn query_recent_cycle_timestamps(
+    state: &InnerState,
+    task_id: &str,
+    limit: u32,
+) -> Result<Vec<String>> {
+    let task_id = task_id.to_owned();
+    state
+        .async_database
+        .reader()
+        .call(move |conn| {
+            let mut stmt = conn.prepare(
+                "SELECT created_at FROM events WHERE task_id = ?1 AND event_type = 'cycle_started' ORDER BY id DESC LIMIT ?2",
+            )?;
+            let rows = stmt
+                .query_map(rusqlite::params![task_id, limit], |row| row.get(0))?
+                .collect::<std::result::Result<Vec<String>, _>>()?;
+            Ok(rows)
+        })
+        .await
+        .map_err(crate::async_database::flatten_err)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

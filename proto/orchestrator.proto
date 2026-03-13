@@ -107,6 +107,7 @@ message TaskPauseResponse {
 
 message TaskResumeRequest {
   string task_id = 1;
+  bool reset_blocked = 2;
 }
 
 message TaskResumeResponse {

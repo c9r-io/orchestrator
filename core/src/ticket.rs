@@ -752,6 +752,8 @@ mod tests {
             pinned_invariants: std::sync::Arc::new(vec![]),
             workflow_id: String::new(),
             spawn_depth: 0,
+            item_step_failures: HashMap::new(),
+            item_retry_after: HashMap::new(),
         };
 
         let result = read_ticket_preview(&task_ctx, "docs/ticket/t1.md");
@@ -1082,6 +1084,8 @@ mod tests {
             pinned_invariants: std::sync::Arc::new(vec![]),
             workflow_id: String::new(),
             spawn_depth: 0,
+            item_step_failures: HashMap::new(),
+            item_retry_after: HashMap::new(),
         };
 
         let result =
@@ -1131,6 +1135,8 @@ mod tests {
             pinned_invariants: std::sync::Arc::new(vec![]),
             workflow_id: String::new(),
             spawn_depth: 0,
+            item_step_failures: HashMap::new(),
+            item_retry_after: HashMap::new(),
         };
 
         // When looking for UNASSIGNED, should match ticket with empty QA doc
@@ -1191,6 +1197,8 @@ mod tests {
             pinned_invariants: std::sync::Arc::new(vec![]),
             workflow_id: String::new(),
             spawn_depth: 0,
+            item_step_failures: HashMap::new(),
+            item_retry_after: HashMap::new(),
         };
 
         let items = vec!["docs/qa/auth.md".to_string()];
@@ -1250,6 +1258,8 @@ mod tests {
             pinned_invariants: std::sync::Arc::new(vec![]),
             workflow_id: String::new(),
             spawn_depth: 0,
+            item_step_failures: HashMap::new(),
+            item_retry_after: HashMap::new(),
         };
 
         let items = vec!["docs/qa/auth.md".to_string()];

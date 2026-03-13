@@ -23,6 +23,8 @@
 | FR-032 | Daemon 进程崩溃韧性与 Worker 存活保障 | P1 | Proposed |
 | FR-033 | Daemon 重启后孤立 Running Items 自动恢复 | P1 | Proposed |
 | FR-034 | QA Testing 自引用安全防护 | P1 | Closed |
+| FR-035 | 退化循环检测与熔断机制 | P1 | Closed |
+| FR-036 | Plan Output Context Overflow 缓解 | P1 | Proposed |
 
 ## 说明
 
@@ -58,3 +60,4 @@
 - FR-029 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/41-item-scoped-git-worktree-isolation.md` 与 `docs/qa/orchestrator/80-item-scoped-git-worktree-isolation.md` 承载
 - FR-030 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/42-self-evolution-db-schema-alignment.md` 与 `docs/qa/orchestrator/81-self-evolution-db-schema-alignment.md` 承载
 - FR-034 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/44-self-referential-daemon-pid-guard.md` 与 `docs/qa/orchestrator/87-self-referential-daemon-pid-guard.md` 承载
+- FR-035 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/12-degenerate-cycle-loop-guard.md` 与 `docs/qa/orchestrator/23-degenerate-cycle-loop-guard.md` 承载

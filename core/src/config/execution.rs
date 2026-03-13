@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use super::{
     default_scope_for_step_id, is_known_builtin_step_name, AgentConfig, CostPreference,
@@ -237,6 +238,10 @@ pub struct TaskRuntimeContext {
     pub workflow_id: String,
     /// WP02: Current spawn depth for depth limiting
     pub spawn_depth: i64,
+    /// FR-035: Per-item per-step consecutive failure counter (item_id, step_id) -> count
+    pub item_step_failures: HashMap<(String, String), u32>,
+    /// FR-035: Per-item retry-after timestamp for exponential backoff
+    pub item_retry_after: HashMap<String, Instant>,
 }
 
 impl TaskRuntimeContext {

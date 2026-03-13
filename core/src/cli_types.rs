@@ -533,10 +533,24 @@ pub struct SafetySpec {
     /// WP02: Cooldown between spawns in seconds
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spawn_cooldown_seconds: Option<u64>,
+    /// FR-035: Per-item per-step consecutive failure threshold before blocking
+    #[serde(default = "default_max_item_step_failures")]
+    pub max_item_step_failures: u32,
+    /// FR-035: Minimum cycle interval in seconds; rapid cycles below this trigger pause
+    #[serde(default = "default_min_cycle_interval_secs")]
+    pub min_cycle_interval_secs: u64,
 }
 
 fn default_max_consecutive_failures() -> u32 {
     3
+}
+
+fn default_max_item_step_failures() -> u32 {
+    3
+}
+
+fn default_min_cycle_interval_secs() -> u64 {
+    60
 }
 
 /// Workflow step specification.

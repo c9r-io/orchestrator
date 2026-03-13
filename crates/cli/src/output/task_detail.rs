@@ -38,9 +38,14 @@ pub(super) fn print(resp: &TaskInfoResponse, format: OutputFormat) {
             }
             println!("  Items: {}", resp.items.len());
             for item in &resp.items {
+                let blocked_tag = if item.status == "blocked" {
+                    " [BLOCKED]"
+                } else {
+                    ""
+                };
                 println!(
-                    "    - {} [{}] order={} path={}",
-                    item.id, item.status, item.order_no, item.qa_file_path
+                    "    - {} [{}]{} order={} path={}",
+                    item.id, item.status, blocked_tag, item.order_no, item.qa_file_path
                 );
             }
             println!("  Runs: {}", resp.runs.len());

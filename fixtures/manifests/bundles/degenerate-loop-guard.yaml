@@ -1,0 +1,115 @@
+# FR-035 Degenerate Cycle Loop Guard — QA test fixtures
+#
+# Uses a narrow workspace with only 2 QA targets to keep cycle times short.
+#
+# Workflows:
+#   circuit_breaker_test  — item-scoped qa_testing always fails; triggers L1 circuit breaker
+#   rapid_cycle_test      — all steps succeed instantly with wide interval threshold; triggers L2
+#   normal_flow_test      — all steps succeed; verifies no false positives
+---
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - fixtures/qa-fr035
+  ticket_dir: fixtures/ticket
+---
+# Agent that always fails qa_testing (exit 1) — used for circuit breaker test
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_always_fail
+spec:
+  capabilities:
+    - qa_testing
+    - qa
+    - implement
+  command: "echo '{\"confidence\":0.1,\"quality_score\":0.0,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"regression\",\"content\":{\"title\":\"always-fail\",\"qa_file\":\"target\"}}]}' && exit 1"
+---
+# Agent that always succeeds — used for normal flow and rapid cycle tests
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_always_ok
+spec:
+  capabilities:
+    - qa_testing
+    - qa
+    - loop_guard
+    - fix
+    - retest
+    - implement
+  command: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"ok\",\"description\":\"pass\",\"severity\":\"info\"}]}]}'"
+---
+# S1: Circuit breaker — qa_testing always fails (exit 1), items stay unresolved,
+# loop continues until items get blocked after max_item_step_failures.
+# Backoff disabled via min_cycle_interval_secs=1 to keep test fast.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: circuit_breaker_test
+spec:
+  steps:
+    - id: qa_testing
+      type: qa_testing
+      scope: item
+      enabled: true
+      repeatable: true
+      command: "echo '{\"confidence\":0.1,\"quality_score\":0.0,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"regression\",\"content\":{\"title\":\"always-fail\",\"qa_file\":\"target\"}}]}' && exit 1"
+  loop:
+    mode: infinite
+    max_cycles: 8
+  safety:
+    max_consecutive_failures: 10
+    auto_rollback: false
+    checkpoint_strategy: none
+    max_item_step_failures: 3
+    min_cycle_interval_secs: 1
+---
+# S2: Rapid cycle detection — qa_testing succeeds instantly, but min_cycle_interval_secs
+# is set to 600 so all cycles appear "too fast". Task should pause after 4 rapid cycles.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: rapid_cycle_test
+spec:
+  steps:
+    - id: qa_testing
+      type: qa_testing
+      scope: item
+      enabled: true
+      repeatable: true
+      command: "echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"ok\",\"description\":\"pass\",\"severity\":\"info\"}]}]}'"
+  loop:
+    mode: infinite
+    max_cycles: 8
+  safety:
+    max_consecutive_failures: 10
+    auto_rollback: false
+    checkpoint_strategy: none
+    max_item_step_failures: 10
+    min_cycle_interval_secs: 600
+---
+# S3: Normal flow — qa_testing succeeds, mode once, generous safety thresholds.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: normal_flow_test
+spec:
+  steps:
+    - id: qa_testing
+      type: qa_testing
+      scope: item
+      enabled: true
+      command: "echo '{\"confidence\":0.95,\"quality_score\":0.92,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"ok\",\"description\":\"pass\",\"severity\":\"info\"}]}]}'"
+  loop:
+    mode: once
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
+    max_item_step_failures: 3
+    min_cycle_interval_secs: 60

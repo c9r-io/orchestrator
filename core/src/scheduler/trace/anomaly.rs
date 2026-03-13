@@ -328,6 +328,130 @@ pub(super) fn detect_long_running_steps(cycles: &[CycleTrace], anomalies: &mut V
     }
 }
 
+/// FR-035: Detects item-phase pairs with 3+ consecutive failures (degenerate loop pattern).
+pub(super) fn detect_degenerate_loop(
+    command_runs: &[CommandRunDto],
+    anomalies: &mut Vec<Anomaly>,
+) {
+    // Group runs by (item_id, phase), ordered by started_at (already sorted by caller).
+    let mut groups: HashMap<(&str, &str), Vec<&CommandRunDto>> = HashMap::new();
+    for run in command_runs {
+        groups
+            .entry((run.task_item_id.as_str(), run.phase.as_str()))
+            .or_default()
+            .push(run);
+    }
+
+    for ((item_id, phase), runs) in &groups {
+        // Count maximum consecutive non-zero exit codes from the end.
+        let mut consecutive = 0u32;
+        let mut last_exit: Option<i64> = None;
+        for run in runs.iter().rev() {
+            match run.exit_code {
+                Some(code) if code != 0 => {
+                    consecutive += 1;
+                    if last_exit.is_none() {
+                        last_exit = Some(code);
+                    }
+                }
+                _ => break,
+            }
+        }
+        if consecutive >= 3 {
+            anomalies.push(Anomaly::new(
+                AnomalyRule::DegenerateLoop,
+                format!(
+                    "Item '{}' phase '{}' failed {} times consecutively (last exit: {})",
+                    item_id,
+                    phase,
+                    consecutive,
+                    last_exit.unwrap_or(-1),
+                ),
+                runs.last().map(|r| r.started_at.clone()),
+            ));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dto::CommandRunDto;
+
+    fn make_run(id: &str, item_id: &str, phase: &str, exit_code: Option<i64>) -> CommandRunDto {
+        CommandRunDto {
+            id: id.to_string(),
+            task_item_id: item_id.to_string(),
+            phase: phase.to_string(),
+            command: "echo test".to_string(),
+            cwd: "/tmp".to_string(),
+            workspace_id: "ws1".to_string(),
+            agent_id: "agent1".to_string(),
+            exit_code,
+            stdout_path: String::new(),
+            stderr_path: String::new(),
+            started_at: "2025-01-01T00:00:00Z".to_string(),
+            ended_at: None,
+            interrupted: false,
+        }
+    }
+
+    #[test]
+    fn degenerate_loop_emits_anomaly_on_three_consecutive_failures() {
+        let runs = vec![
+            make_run("r1", "item-a", "run", Some(0)),   // success — resets baseline
+            make_run("r2", "item-a", "run", Some(1)),   // failure 1
+            make_run("r3", "item-a", "run", Some(1)),   // failure 2
+            make_run("r4", "item-a", "run", Some(2)),   // failure 3 — threshold reached
+        ];
+        let mut anomalies = Vec::new();
+        detect_degenerate_loop(&runs, &mut anomalies);
+        assert_eq!(anomalies.len(), 1, "expected exactly one DegenerateLoop anomaly");
+        assert_eq!(anomalies[0].rule, "degenerate_loop");
+        assert!(
+            anomalies[0].message.contains("item-a"),
+            "anomaly message should identify the item"
+        );
+        assert!(
+            anomalies[0].message.contains("run"),
+            "anomaly message should identify the phase"
+        );
+    }
+
+    #[test]
+    fn degenerate_loop_no_anomaly_when_fewer_than_three_consecutive_failures() {
+        let runs = vec![
+            make_run("r1", "item-b", "run", Some(1)),   // failure 1
+            make_run("r2", "item-b", "run", Some(1)),   // failure 2 — below threshold
+        ];
+        let mut anomalies = Vec::new();
+        detect_degenerate_loop(&runs, &mut anomalies);
+        assert!(
+            anomalies.is_empty(),
+            "expected no anomaly for fewer than 3 consecutive failures"
+        );
+    }
+
+    #[test]
+    fn degenerate_loop_no_anomaly_when_failures_are_non_consecutive() {
+        // Three failures but a success breaks the streak at the tail; the trailing
+        // run window (success + 2 failures counting backwards) is only 2 failures.
+        let runs = vec![
+            make_run("r1", "item-c", "run", Some(1)),   // failure
+            make_run("r2", "item-c", "run", Some(1)),   // failure
+            make_run("r3", "item-c", "run", Some(0)),   // success — breaks streak
+            make_run("r4", "item-c", "run", Some(1)),   // failure
+            make_run("r5", "item-c", "run", Some(1)),   // failure — streak of 2, not 3
+        ];
+        let mut anomalies = Vec::new();
+        detect_degenerate_loop(&runs, &mut anomalies);
+        assert!(
+            anomalies.is_empty(),
+            "expected no anomaly when a success interrupts the failure streak"
+        );
+    }
+}
+
 pub(super) fn detect_low_output_steps(events: &[&EventDto], anomalies: &mut Vec<Anomaly>) {
     let mut seen_steps = HashSet::new();
 

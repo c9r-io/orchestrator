@@ -79,9 +79,15 @@ pub(crate) async fn dispatch(
             Ok(())
         }
 
-        TaskCommands::Resume { task_id } => {
+        TaskCommands::Resume {
+            task_id,
+            reset_blocked,
+        } => {
             let resp = client
-                .task_resume(orchestrator_proto::TaskResumeRequest { task_id })
+                .task_resume(orchestrator_proto::TaskResumeRequest {
+                    task_id,
+                    reset_blocked,
+                })
                 .await?
                 .into_inner();
             println!("{}", resp.message);

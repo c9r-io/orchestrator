@@ -377,6 +377,8 @@ fn build_segments_groups_contiguous_scopes() {
         pinned_invariants: std::sync::Arc::new(vec![]),
         workflow_id: String::new(),
         spawn_depth: 0,
+        item_step_failures: HashMap::new(),
+        item_retry_after: HashMap::new(),
     };
 
     let segments = build_scope_segments(&task_ctx);
@@ -477,6 +479,8 @@ fn build_segments_skips_guards() {
         pinned_invariants: std::sync::Arc::new(vec![]),
         workflow_id: String::new(),
         spawn_depth: 0,
+        item_step_failures: HashMap::new(),
+        item_retry_after: HashMap::new(),
     };
 
     let segments = build_scope_segments(&task_ctx);
@@ -700,6 +704,8 @@ fn collect_remaining_item_step_steps_returns_only_item_steps_after_segment() {
         pinned_invariants: std::sync::Arc::new(vec![]),
         workflow_id: String::new(),
         spawn_depth: 0,
+        item_step_failures: HashMap::new(),
+        item_retry_after: HashMap::new(),
     };
     let segments = build_scope_segments(&task_ctx);
 
@@ -765,6 +771,8 @@ fn collect_remaining_item_step_steps_skips_non_repeatable_steps_after_first_cycl
         pinned_invariants: std::sync::Arc::new(vec![]),
         workflow_id: String::new(),
         spawn_depth: 0,
+        item_step_failures: HashMap::new(),
+        item_retry_after: HashMap::new(),
     };
     let segments = build_scope_segments(&task_ctx);
 
@@ -906,6 +914,8 @@ fn build_segments_skips_disabled_steps() {
         pinned_invariants: std::sync::Arc::new(vec![]),
         workflow_id: String::new(),
         spawn_depth: 0,
+        item_step_failures: HashMap::new(),
+        item_retry_after: HashMap::new(),
     };
 
     let segments = build_scope_segments(&task_ctx);
@@ -941,6 +951,8 @@ fn build_segments_empty_when_no_steps() {
         pinned_invariants: std::sync::Arc::new(vec![]),
         workflow_id: String::new(),
         spawn_depth: 0,
+        item_step_failures: HashMap::new(),
+        item_retry_after: HashMap::new(),
     };
 
     let segments = build_scope_segments(&task_ctx);
@@ -1163,6 +1175,8 @@ fn collect_remaining_item_step_steps_from_start_index_2() {
         pinned_invariants: std::sync::Arc::new(vec![]),
         workflow_id: String::new(),
         spawn_depth: 0,
+        item_step_failures: HashMap::new(),
+        item_retry_after: HashMap::new(),
     };
     let segments = build_scope_segments(&task_ctx);
     assert_eq!(segments.len(), 3);
@@ -1302,6 +1316,8 @@ fn build_segments_item_select_is_task_scoped() {
         pinned_invariants: std::sync::Arc::new(vec![]),
         workflow_id: String::new(),
         spawn_depth: 0,
+        item_step_failures: HashMap::new(),
+        item_retry_after: HashMap::new(),
     };
 
     let segments = build_scope_segments(&task_ctx);
