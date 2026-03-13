@@ -28,7 +28,9 @@ spec:
   prompt: >-
     You are working on the Agent Orchestrator project at {source_tree}.
     Your task: create a detailed implementation plan for: {goal}.
-    Output ONLY a plan document — do NOT write any code or make file changes.
+    Output ONLY a plan document to stdout — do NOT write any code or create any
+    files. Do NOT use the Write or Edit tools. Your plan output will be captured
+    automatically by the orchestrator pipeline.
 
     Use /arch-guidance — read docs/architecture.md first.
     Use /rust-conventions for coding patterns.

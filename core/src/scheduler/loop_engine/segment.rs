@@ -91,7 +91,7 @@ pub(super) async fn execute_task_segment(
     };
 
     let mut task_acc = StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone());
-    process_item_filtered(
+    let process_result = process_item_filtered(
         state,
         ProcessItemRequest {
             task_id,
@@ -104,7 +104,36 @@ pub(super) async fn execute_task_segment(
         },
         &mut task_acc,
     )
-    .await?;
+    .await;
+
+    // When self_restart fires, process_item_filtered returns RestartRequestedError
+    // before we reach the generate_items logic below.  Flush deferred post-actions
+    // (pipeline vars + generate_items) to the database NOW so they survive the
+    // exec() restart and are available in the next cycle.
+    if let Err(ref e) = process_result {
+        if e.downcast_ref::<super::super::safety::RestartRequestedError>()
+            .is_some()
+        {
+            // Persist pipeline vars so the new process can read qa_doc_gen_output
+            task_ctx.pipeline_vars = task_acc.pipeline_vars.clone();
+            if let Ok(json_str) = serde_json::to_string(&task_ctx.pipeline_vars) {
+                let _ = state
+                    .db_writer
+                    .update_task_pipeline_vars(task_id, &json_str)
+                    .await;
+            }
+            // Flush pending generate_items — creates dynamic items in the DB
+            flush_pending_generate_items(
+                state,
+                task_id,
+                &mut task_acc,
+                items,
+                task_item_paths,
+            )
+            .await;
+        }
+    }
+    process_result?;
 
     // Propagate task-scoped pipeline vars to subsequent segments
     task_ctx.pipeline_vars = task_acc.pipeline_vars.clone();
@@ -158,54 +187,7 @@ pub(super) async fn execute_task_segment(
         has_pending = task_acc.pending_generate_items.is_some(),
         "checking pending_generate_items after task segment"
     );
-    if let Some(gen_action) = task_acc.pending_generate_items.take() {
-        match super::super::item_generate::extract_dynamic_items(
-            &task_acc.pipeline_vars.vars,
-            &gen_action,
-        ) {
-            Ok(new_items) if !new_items.is_empty() => {
-                match super::super::item_generate::create_dynamic_task_items_async(
-                    state,
-                    task_id,
-                    &new_items,
-                    gen_action.replace,
-                )
-                .await
-                {
-                    Ok(_count) => {
-                        insert_event(
-                            state,
-                            task_id,
-                            None,
-                            "items_generated",
-                            json!({"count": new_items.len(), "replace": gen_action.replace}),
-                        )
-                        .await?;
-                        // Refresh items list — when dynamic items exist,
-                        // subsequent item-scoped steps target only dynamic items
-                        let all_items = list_task_items_for_cycle(state, task_id).await?;
-                        let has_dynamic = all_items.iter().any(|i| i.source == "dynamic");
-                        *items = if has_dynamic {
-                            all_items
-                                .into_iter()
-                                .filter(|i| i.source == "dynamic")
-                                .collect()
-                        } else {
-                            all_items
-                        };
-                        *task_item_paths = items.iter().map(|i| i.qa_file_path.clone()).collect();
-                    }
-                    Err(e) => {
-                        warn!(error = %e, "failed to create dynamic items");
-                    }
-                }
-            }
-            Ok(_) => {} // empty items, no-op
-            Err(e) => {
-                warn!(error = %e, "failed to extract dynamic items");
-            }
-        }
-    }
+    flush_pending_generate_items(state, task_id, &mut task_acc, items, task_item_paths).await;
 
     if task_acc.terminal {
         let skipped_item_steps =
@@ -590,6 +572,82 @@ async fn persist_selection_to_store(
         };
         if let Err(e) = state.store_manager.execute(&cr, op).await {
             warn!(error = %e, "failed to persist item_select result to store");
+        }
+    }
+}
+
+/// Flush any pending `generate_items` post-action from the accumulator.
+///
+/// Extracts dynamic items from pipeline variables, creates them in the database,
+/// and refreshes the in-memory items list.  Called both on the normal path (after
+/// the task segment completes) and on the restart path (before `RestartRequestedError`
+/// propagates up to exec()) so that dynamic items survive a process restart.
+async fn flush_pending_generate_items(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    task_acc: &mut StepExecutionAccumulator,
+    items: &mut Vec<crate::dto::TaskItemRow>,
+    task_item_paths: &mut Vec<String>,
+) {
+    let gen_action = match task_acc.pending_generate_items.take() {
+        Some(a) => a,
+        None => return,
+    };
+
+    match super::super::item_generate::extract_dynamic_items(
+        &task_acc.pipeline_vars.vars,
+        &gen_action,
+    ) {
+        Ok(new_items) if !new_items.is_empty() => {
+            match super::super::item_generate::create_dynamic_task_items_async(
+                state,
+                task_id,
+                &new_items,
+                gen_action.replace,
+            )
+            .await
+            {
+                Ok(_count) => {
+                    if let Err(e) = insert_event(
+                        state,
+                        task_id,
+                        None,
+                        "items_generated",
+                        json!({"count": new_items.len(), "replace": gen_action.replace}),
+                    )
+                    .await
+                    {
+                        warn!(error = %e, "failed to emit items_generated event");
+                    }
+                    // Refresh items list — when dynamic items exist,
+                    // subsequent item-scoped steps target only dynamic items
+                    match list_task_items_for_cycle(state, task_id).await {
+                        Ok(all_items) => {
+                            let has_dynamic = all_items.iter().any(|i| i.source == "dynamic");
+                            *items = if has_dynamic {
+                                all_items
+                                    .into_iter()
+                                    .filter(|i| i.source == "dynamic")
+                                    .collect()
+                            } else {
+                                all_items
+                            };
+                            *task_item_paths =
+                                items.iter().map(|i| i.qa_file_path.clone()).collect();
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "failed to refresh items after generate_items");
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(error = %e, "failed to create dynamic items");
+                }
+            }
+        }
+        Ok(_) => {} // empty items, no-op
+        Err(e) => {
+            warn!(error = %e, "failed to extract dynamic items");
         }
     }
 }

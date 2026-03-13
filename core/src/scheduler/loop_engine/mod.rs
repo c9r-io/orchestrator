@@ -347,7 +347,19 @@ async fn execute_cycle_segments(
         }
     }
 
-    let mut items = list_task_items_for_cycle(state, task_id).await?;
+    let all_items = list_task_items_for_cycle(state, task_id).await?;
+    // When dynamic items exist (created by generate_items post-action, possibly
+    // before a self_restart), narrow to only dynamic items so that item-scoped
+    // segments (e.g. qa_testing) process only the selected subset.
+    let has_dynamic = all_items.iter().any(|i| i.source == "dynamic");
+    let mut items: Vec<_> = if has_dynamic {
+        all_items
+            .into_iter()
+            .filter(|i| i.source == "dynamic")
+            .collect()
+    } else {
+        all_items
+    };
     let mut task_item_paths: Vec<String> =
         items.iter().map(|item| item.qa_file_path.clone()).collect();
 
