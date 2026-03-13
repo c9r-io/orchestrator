@@ -183,6 +183,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0017_control_plane_protection_fields",
             up: crate::persistence::migration_steps::m0017_control_plane_protection_fields,
         },
+        Migration {
+            version: 18,
+            name: "m0018_trigger_state",
+            up: crate::persistence::migration_steps::m0018_trigger_state,
+        },
     ]
 }
 

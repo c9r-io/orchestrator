@@ -236,6 +236,20 @@ fn main() -> Result<()> {
         };
         info!(workers = args.workers, "worker supervisor started");
 
+        // Spawn trigger engine (cron + event-driven task creation)
+        {
+            let (engine, handle) =
+                agent_orchestrator::trigger_engine::TriggerEngine::new(inner.clone());
+            // Store handle so resource apply/delete can notify the engine to reload.
+            if let Ok(mut guard) = inner.trigger_engine_handle.lock() {
+                *guard = Some(handle);
+            }
+            let trig_shutdown = shutdown_rx.clone();
+            tokio::spawn(async move {
+                engine.run(trig_shutdown).await;
+            });
+        }
+
         // Spawn agent drain timeout sweep (runs every 10s)
         {
             let drain_state = inner.clone();

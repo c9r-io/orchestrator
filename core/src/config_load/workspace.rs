@@ -228,6 +228,7 @@ mod tests {
                     step_templates: HashMap::new(),
                     env_stores: HashMap::new(),
                     execution_profiles: HashMap::new(),
+                    triggers: HashMap::new(),
                 },
             )]
             .into(),
@@ -263,6 +264,7 @@ mod tests {
                     step_templates: HashMap::new(),
                     env_stores: HashMap::new(),
                     execution_profiles: HashMap::new(),
+                    triggers: HashMap::new(),
                 },
             )]
             .into(),
@@ -302,6 +304,7 @@ mod tests {
                     step_templates: Default::default(),
                     env_stores: Default::default(),
                     execution_profiles: Default::default(),
+                    triggers: Default::default(),
                 },
             )]
             .into(),
@@ -342,6 +345,7 @@ mod tests {
                     step_templates: Default::default(),
                     env_stores: Default::default(),
                     execution_profiles: Default::default(),
+                    triggers: Default::default(),
                 },
             )]
             .into(),
@@ -385,6 +389,7 @@ mod tests {
                     step_templates: Default::default(),
                     env_stores: Default::default(),
                     execution_profiles: Default::default(),
+                    triggers: Default::default(),
                 },
             )]
             .into(),
@@ -432,6 +437,7 @@ mod tests {
                 step_templates: HashMap::new(),
                 env_stores: HashMap::new(),
                 execution_profiles: HashMap::new(),
+                triggers: HashMap::new(),
             },
         );
         let config = OrchestratorConfig {

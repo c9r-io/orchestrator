@@ -716,6 +716,8 @@ mod tests {
             ),
             daemon_runtime: crate::runtime::DaemonRuntimeState::new(),
             worker_notify: Arc::new(tokio::sync::Notify::new()),
+            trigger_event_tx: tokio::sync::broadcast::channel(64).0,
+            trigger_engine_handle: std::sync::Mutex::new(None),
         })
     }
 

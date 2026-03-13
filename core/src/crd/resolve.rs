@@ -72,6 +72,7 @@ pub fn is_builtin_kind(kind: &str) -> bool {
             | "ExecutionProfile"
             | "EnvStore"
             | "SecretStore"
+            | "Trigger"
     )
 }
 
@@ -111,6 +112,9 @@ pub fn is_builtin_alias(name: &str) -> bool {
             | "task"
             | "tasks"
             | "t"
+            | "trigger"
+            | "triggers"
+            | "tg"
     )
 }
 

@@ -686,6 +686,7 @@ mod tests {
                         step_templates: HashMap::new(),
                         env_stores: HashMap::new(),
                         execution_profiles: HashMap::new(),
+                        triggers: HashMap::new(),
                     },
                 );
             std::sync::Arc::make_mut(&mut next.active_config)

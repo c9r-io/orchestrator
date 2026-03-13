@@ -147,6 +147,8 @@ fn build_managed_state(
             store_manager,
             daemon_runtime: crate::runtime::DaemonRuntimeState::new(),
             worker_notify: Arc::new(Notify::new()),
+            trigger_event_tx: tokio::sync::broadcast::channel(64).0,
+            trigger_engine_handle: std::sync::Mutex::new(None),
         }),
     })
 }

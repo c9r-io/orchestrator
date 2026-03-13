@@ -127,6 +127,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                     step_templates: HashMap::new(),
                     env_stores: HashMap::new(),
                     execution_profiles: HashMap::new(),
+                    triggers: HashMap::new(),
                 },
             );
             projects
@@ -308,6 +309,8 @@ impl TestState {
             store_manager,
             daemon_runtime: crate::runtime::DaemonRuntimeState::new(),
             worker_notify: Arc::new(tokio::sync::Notify::new()),
+            trigger_event_tx: tokio::sync::broadcast::channel(64).0,
+            trigger_engine_handle: std::sync::Mutex::new(None),
         });
         self.state = Some(state.clone());
         state

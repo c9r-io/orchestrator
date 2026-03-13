@@ -174,6 +174,10 @@ pub enum Commands {
     #[command(alias = "ev", subcommand)]
     Event(EventCommands),
 
+    /// Trigger lifecycle operations (suspend, resume, fire)
+    #[command(alias = "tg", subcommand)]
+    Trigger(TriggerCommands),
+
     /// Show version
     Version {
         /// Emit JSON instead of human-readable text.
@@ -744,6 +748,40 @@ pub enum EventCommands {
 
     /// Show event table statistics
     Stats,
+}
+
+/// Trigger lifecycle commands for suspend, resume, and manual fire.
+#[derive(Subcommand, Debug, Clone)]
+pub enum TriggerCommands {
+    /// Suspend a trigger so it stops firing
+    Suspend {
+        /// Trigger name.
+        name: String,
+
+        /// Optional project override.
+        #[arg(short, long)]
+        project: Option<String>,
+    },
+
+    /// Resume a suspended trigger
+    Resume {
+        /// Trigger name.
+        name: String,
+
+        /// Optional project override.
+        #[arg(short, long)]
+        project: Option<String>,
+    },
+
+    /// Manually fire a trigger once, creating a task
+    Fire {
+        /// Trigger name.
+        name: String,
+
+        /// Optional project override.
+        #[arg(short, long)]
+        project: Option<String>,
+    },
 }
 
 /// Supported human-readable and machine-readable output encodings.

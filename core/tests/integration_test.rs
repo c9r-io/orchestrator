@@ -90,6 +90,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                 step_templates: HashMap::new(),
                 env_stores: HashMap::new(),
                 execution_profiles: HashMap::new(),
+                triggers: HashMap::new(),
             },
         )]
         .into(),
@@ -853,6 +854,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                 step_templates: HashMap::new(),
                 env_stores: HashMap::new(),
                 execution_profiles: HashMap::new(),
+                triggers: HashMap::new(),
             },
         )]
         .into(),

@@ -25,6 +25,7 @@ pub fn apply_to_project(
             step_templates: Default::default(),
             env_stores: Default::default(),
             execution_profiles: Default::default(),
+            triggers: Default::default(),
         });
 
     match resource {

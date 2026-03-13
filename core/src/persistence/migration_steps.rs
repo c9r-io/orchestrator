@@ -686,6 +686,26 @@ pub(crate) fn m0017_control_plane_protection_fields(conn: &Connection) -> Result
     Ok(())
 }
 
+pub(crate) fn m0018_trigger_state(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS trigger_state (
+            trigger_name TEXT NOT NULL,
+            project TEXT NOT NULL,
+            last_fired_at TEXT,
+            next_fire_at TEXT,
+            fire_count INTEGER DEFAULT 0,
+            last_task_id TEXT,
+            last_status TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (trigger_name, project)
+        );
+        "#,
+    )?;
+    Ok(())
+}
+
 pub(crate) fn m0014_task_graph_debug_tables(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"

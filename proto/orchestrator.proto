@@ -65,6 +65,11 @@ service OrchestratorService {
   rpc EventCleanup(EventCleanupRequest)         returns (EventCleanupResponse);
   rpc EventStats(EventStatsRequest)             returns (EventStatsResponse);
 
+  // Trigger lifecycle
+  rpc TriggerSuspend(TriggerSuspendRequest)     returns (TriggerSuspendResponse);
+  rpc TriggerResume(TriggerResumeRequest)       returns (TriggerResumeResponse);
+  rpc TriggerFire(TriggerFireRequest)           returns (TriggerFireResponse);
+
 }
 
 // ─── Task messages ────────────────────────────────────────────
@@ -693,4 +698,34 @@ message EventStatsResponse {
 message EventStatusCount {
   string status = 1;
   uint64 count = 2;
+}
+
+// ─── Trigger Lifecycle ───────────────────────────────────────
+
+message TriggerSuspendRequest {
+  string trigger_name = 1;
+  optional string project = 2;
+}
+
+message TriggerSuspendResponse {
+  string message = 1;
+}
+
+message TriggerResumeRequest {
+  string trigger_name = 1;
+  optional string project = 2;
+}
+
+message TriggerResumeResponse {
+  string message = 1;
+}
+
+message TriggerFireRequest {
+  string trigger_name = 1;
+  optional string project = 2;
+}
+
+message TriggerFireResponse {
+  string task_id = 1;
+  string message = 2;
 }

@@ -16,6 +16,7 @@ pub(crate) fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorCo
             step_templates: Default::default(),
             env_stores: Default::default(),
             execution_profiles: Default::default(),
+            triggers: Default::default(),
         });
 
     for project in config.projects.values_mut() {

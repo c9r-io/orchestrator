@@ -97,10 +97,17 @@ pub struct InnerState {
     pub daemon_runtime: DaemonRuntimeState,
     /// In-process wakeup channel for idle workers.
     pub worker_notify: Arc<Notify>,
+    /// Broadcast channel for trigger-relevant task events (task_completed / task_failed).
+    pub trigger_event_tx: tokio::sync::broadcast::Sender<crate::trigger_engine::TriggerEventPayload>,
+    /// Handle for notifying the trigger engine of config changes.
+    pub trigger_engine_handle: std::sync::Mutex<Option<crate::trigger_engine::TriggerEngineHandle>>,
 }
 
 impl InnerState {
     /// Emits an event through the currently configured event sink.
+    ///
+    /// When the event is `task_completed` or `task_failed`, it is also broadcast
+    /// on `trigger_event_tx` so the trigger engine can evaluate event triggers.
     pub fn emit_event(
         &self,
         task_id: &str,
@@ -110,6 +117,17 @@ impl InnerState {
     ) {
         let sink = clone_event_sink(self);
         sink.emit(task_id, task_item_id, event_type, payload);
+
+        // Broadcast to trigger engine for event-driven triggers.
+        if matches!(event_type, "task_completed" | "task_failed") {
+            crate::trigger_engine::broadcast_task_event(
+                self,
+                crate::trigger_engine::TriggerEventPayload {
+                    event_type: event_type.to_string(),
+                    task_id: task_id.to_string(),
+                },
+            );
+        }
     }
 }
 

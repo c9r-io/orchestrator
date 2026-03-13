@@ -1041,6 +1041,55 @@ impl OrchestratorService for TestOrchestratorServer {
                 .collect(),
         }))
     }
+
+    async fn trigger_suspend(
+        &self,
+        request: Request<TriggerSuspendRequest>,
+    ) -> Result<Response<TriggerSuspendResponse>, Status> {
+        let req = request.into_inner();
+        agent_orchestrator::service::resource::suspend_trigger(
+            &self.state,
+            &req.trigger_name,
+            req.project.as_deref(),
+        )
+        .map_err(map_core_error)?;
+        Ok(Response::new(TriggerSuspendResponse {
+            message: format!("trigger '{}' suspended", req.trigger_name),
+        }))
+    }
+
+    async fn trigger_resume(
+        &self,
+        request: Request<TriggerResumeRequest>,
+    ) -> Result<Response<TriggerResumeResponse>, Status> {
+        let req = request.into_inner();
+        agent_orchestrator::service::resource::resume_trigger(
+            &self.state,
+            &req.trigger_name,
+            req.project.as_deref(),
+        )
+        .map_err(map_core_error)?;
+        Ok(Response::new(TriggerResumeResponse {
+            message: format!("trigger '{}' resumed", req.trigger_name),
+        }))
+    }
+
+    async fn trigger_fire(
+        &self,
+        request: Request<TriggerFireRequest>,
+    ) -> Result<Response<TriggerFireResponse>, Status> {
+        let req = request.into_inner();
+        let task_id = agent_orchestrator::service::resource::fire_trigger(
+            &self.state,
+            &req.trigger_name,
+            req.project.as_deref(),
+        )
+        .map_err(map_core_error)?;
+        Ok(Response::new(TriggerFireResponse {
+            task_id: task_id.clone(),
+            message: format!("trigger '{}' fired — task {}", req.trigger_name, task_id),
+        }))
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -36,6 +36,7 @@ impl Resource for ProjectResource {
             step_templates: std::collections::HashMap::new(),
             env_stores: std::collections::HashMap::new(),
             execution_profiles: std::collections::HashMap::new(),
+            triggers: std::collections::HashMap::new(),
         };
         let spec_value = incoming.to_cr_spec();
         Ok(super::apply_to_store(

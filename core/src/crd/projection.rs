@@ -99,6 +99,7 @@ impl CrdProjectable for ProjectConfig {
             step_templates: Default::default(),
             env_stores: Default::default(),
             execution_profiles: Default::default(),
+            triggers: Default::default(),
         })
     }
 
@@ -360,6 +361,7 @@ mod tests {
             step_templates: Default::default(),
             env_stores: Default::default(),
             execution_profiles: Default::default(),
+            triggers: Default::default(),
         };
         let spec = config.to_cr_spec();
         let back = ProjectConfig::from_cr_spec(&spec).expect("should deserialize");

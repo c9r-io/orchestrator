@@ -86,6 +86,11 @@ impl<'de> Deserialize<'de> for OrchestratorResource {
                     serde_yml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
                 ResourceSpec::EnvStore(s)
             }
+            ResourceKind::Trigger => {
+                let s: TriggerSpec =
+                    serde_yml::from_value(raw.spec).map_err(serde::de::Error::custom)?;
+                ResourceSpec::Trigger(s)
+            }
         };
         Ok(OrchestratorResource {
             api_version: raw.api_version,
@@ -133,6 +138,8 @@ pub enum ResourceKind {
     EnvStore,
     /// Secret-store manifest.
     SecretStore,
+    /// Trigger manifest.
+    Trigger,
 }
 
 /// Kubernetes-style resource metadata.
@@ -184,6 +191,9 @@ pub enum ResourceSpec {
     /// Env store / Secret store resource spec (both share the same data shape).
     /// The `ResourceKind` field on `OrchestratorResource` distinguishes them.
     EnvStore(EnvStoreSpec),
+
+    /// Trigger resource spec.
+    Trigger(TriggerSpec),
 }
 
 /// Project resource specification.
@@ -370,6 +380,149 @@ fn default_execution_network_mode() -> String {
 pub struct EnvStoreSpec {
     /// Key-value environment pairs exposed by the store.
     pub data: HashMap<String, String>,
+}
+
+// ── Trigger resource types ──────────────────────────────────────────────────
+
+/// Trigger resource specification.
+/// Defines an automatic task creation rule driven by cron schedule or events.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerSpec {
+    /// Cron-based trigger condition (mutually exclusive with `event`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cron: Option<TriggerCronSpec>,
+
+    /// Event-based trigger condition (mutually exclusive with `cron`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event: Option<TriggerEventSpec>,
+
+    /// Action to take when the trigger fires.
+    pub action: TriggerActionSpec,
+
+    /// Concurrency policy for overlapping triggers.
+    #[serde(
+        default,
+        rename = "concurrencyPolicy",
+        skip_serializing_if = "ConcurrencyPolicy::is_default"
+    )]
+    pub concurrency_policy: ConcurrencyPolicy,
+
+    /// Whether the trigger is suspended (paused).
+    #[serde(default)]
+    pub suspend: bool,
+
+    /// Limits on how many historical tasks to retain.
+    #[serde(
+        default,
+        rename = "historyLimit",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub history_limit: Option<TriggerHistoryLimit>,
+
+    /// Throttle settings for event-driven triggers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub throttle: Option<TriggerThrottleSpec>,
+}
+
+/// Cron schedule specification for a Trigger.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerCronSpec {
+    /// Standard 5-field cron expression (min hour dom month dow).
+    pub schedule: String,
+
+    /// IANA timezone name (e.g. "Asia/Shanghai"). Defaults to UTC.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timezone: Option<String>,
+}
+
+/// Event-based trigger specification.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerEventSpec {
+    /// Event source type (e.g. "task_completed", "task_failed").
+    pub source: String,
+
+    /// Optional filter conditions for the event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter: Option<TriggerEventFilter>,
+}
+
+/// Filter conditions for event-based triggers.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerEventFilter {
+    /// Match events from a specific workflow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow: Option<String>,
+
+    /// CEL expression evaluated against the event context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub condition: Option<String>,
+}
+
+/// Action specification — what happens when a trigger fires.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerActionSpec {
+    /// Target workflow name to create a task for.
+    pub workflow: String,
+
+    /// Target workspace name.
+    pub workspace: String,
+
+    /// Optional arguments passed to the created task (e.g. target-file lists).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<HashMap<String, Vec<String>>>,
+
+    /// Whether to start the task immediately after creation. Defaults to true.
+    #[serde(default = "default_trigger_action_start")]
+    pub start: bool,
+}
+
+fn default_trigger_action_start() -> bool {
+    true
+}
+
+/// Concurrency policy for trigger-created tasks.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum ConcurrencyPolicy {
+    /// Allow concurrent tasks.
+    Allow,
+    /// Skip trigger if an active task already exists (default).
+    #[default]
+    Forbid,
+    /// Cancel active tasks before creating a new one.
+    Replace,
+}
+
+impl ConcurrencyPolicy {
+    fn is_default(&self) -> bool {
+        matches!(self, ConcurrencyPolicy::Forbid)
+    }
+}
+
+/// History retention limits for trigger-created tasks.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerHistoryLimit {
+    /// Number of successful tasks to retain.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub successful: Option<u32>,
+
+    /// Number of failed tasks to retain.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failed: Option<u32>,
+}
+
+/// Throttle configuration for event-driven triggers.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TriggerThrottleSpec {
+    /// Minimum interval in seconds between trigger firings.
+    #[serde(default, rename = "minInterval")]
+    pub min_interval: u64,
 }
 
 /// A single entry in an Agent's env configuration.

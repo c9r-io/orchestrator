@@ -5,6 +5,7 @@ mod secret;
 mod store;
 mod system;
 mod task;
+mod trigger;
 
 use std::sync::Arc;
 
@@ -371,6 +372,27 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<EventStatsRequest>,
     ) -> Result<Response<EventStatsResponse>, Status> {
         system::event_stats(self, request).await
+    }
+
+    async fn trigger_suspend(
+        &self,
+        request: Request<TriggerSuspendRequest>,
+    ) -> Result<Response<TriggerSuspendResponse>, Status> {
+        trigger::trigger_suspend(self, request).await
+    }
+
+    async fn trigger_resume(
+        &self,
+        request: Request<TriggerResumeRequest>,
+    ) -> Result<Response<TriggerResumeResponse>, Status> {
+        trigger::trigger_resume(self, request).await
+    }
+
+    async fn trigger_fire(
+        &self,
+        request: Request<TriggerFireRequest>,
+    ) -> Result<Response<TriggerFireResponse>, Status> {
+        trigger::trigger_fire(self, request).await
     }
 }
 

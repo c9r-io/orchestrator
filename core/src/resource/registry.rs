@@ -4,12 +4,12 @@ use anyhow::{anyhow, Result};
 
 use super::{
     agent, env_store, execution_profile, project, runtime_policy, secret_store, step_template,
-    workflow, workspace, ApplyResult, Resource,
+    trigger, workflow, workspace, ApplyResult, Resource,
 };
 use super::{
     AgentResource, EnvStoreResource, ExecutionProfileResource, ProjectResource,
-    RuntimePolicyResource, SecretStoreResource, StepTemplateResource, WorkflowResource,
-    WorkspaceResource,
+    RuntimePolicyResource, SecretStoreResource, StepTemplateResource, TriggerResource,
+    WorkflowResource, WorkspaceResource,
 };
 
 #[derive(Debug, Clone)]
@@ -33,6 +33,8 @@ pub enum RegisteredResource {
     EnvStore(EnvStoreResource),
     /// Secret store resource.
     SecretStore(SecretStoreResource),
+    /// Trigger resource.
+    Trigger(TriggerResource),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -45,7 +47,7 @@ pub struct ResourceRegistration {
 }
 
 /// Returns the static registry for builtin manifest resource kinds.
-pub fn resource_registry() -> [ResourceRegistration; 9] {
+pub fn resource_registry() -> [ResourceRegistration; 10] {
     [
         ResourceRegistration {
             kind: ResourceKind::Workspace,
@@ -83,6 +85,10 @@ pub fn resource_registry() -> [ResourceRegistration; 9] {
             kind: ResourceKind::SecretStore,
             build: secret_store::build_secret_store,
         },
+        ResourceRegistration {
+            kind: ResourceKind::Trigger,
+            build: trigger::build_trigger,
+        },
     ]
 }
 
@@ -99,6 +105,7 @@ impl RegisteredResource {
             Self::ExecutionProfile(r) => &r.metadata,
             Self::EnvStore(r) => &r.metadata,
             Self::SecretStore(r) => &r.metadata,
+            Self::Trigger(r) => &r.metadata,
         };
         meta.project.as_deref()
     }
@@ -127,6 +134,7 @@ impl Resource for RegisteredResource {
             Self::ExecutionProfile(_) => ResourceKind::ExecutionProfile,
             Self::EnvStore(_) => ResourceKind::EnvStore,
             Self::SecretStore(_) => ResourceKind::SecretStore,
+            Self::Trigger(_) => ResourceKind::Trigger,
         }
     }
 
@@ -141,6 +149,7 @@ impl Resource for RegisteredResource {
             Self::ExecutionProfile(resource) => &resource.metadata.name,
             Self::EnvStore(resource) => &resource.metadata.name,
             Self::SecretStore(resource) => &resource.metadata.name,
+            Self::Trigger(resource) => &resource.metadata.name,
         }
     }
 
@@ -155,6 +164,7 @@ impl Resource for RegisteredResource {
             Self::ExecutionProfile(resource) => resource.validate(),
             Self::EnvStore(resource) => resource.validate(),
             Self::SecretStore(resource) => resource.validate(),
+            Self::Trigger(resource) => resource.validate(),
         }
     }
 
@@ -169,6 +179,7 @@ impl Resource for RegisteredResource {
             Self::ExecutionProfile(resource) => resource.apply(config),
             Self::EnvStore(resource) => resource.apply(config),
             Self::SecretStore(resource) => resource.apply(config),
+            Self::Trigger(resource) => resource.apply(config),
         }
     }
 
@@ -183,6 +194,7 @@ impl Resource for RegisteredResource {
             Self::ExecutionProfile(resource) => resource.to_yaml(),
             Self::EnvStore(resource) => resource.to_yaml(),
             Self::SecretStore(resource) => resource.to_yaml(),
+            Self::Trigger(resource) => resource.to_yaml(),
         }
     }
 
@@ -227,6 +239,9 @@ impl Resource for RegisteredResource {
         {
             return Some(Self::SecretStore(secret_store));
         }
+        if let Some(trigger) = TriggerResource::get_from_project(config, name, project_id) {
+            return Some(Self::Trigger(trigger));
+        }
         None
     }
 
@@ -258,6 +273,9 @@ impl Resource for RegisteredResource {
             return true;
         }
         if SecretStoreResource::delete_from_project(config, name, project_id) {
+            return true;
+        }
+        if TriggerResource::delete_from_project(config, name, project_id) {
             return true;
         }
         false

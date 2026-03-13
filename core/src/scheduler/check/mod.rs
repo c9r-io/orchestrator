@@ -189,6 +189,48 @@ pub fn run_checks(
     workflow::check_empty_workflows(workflows, workflow_filter, &mut checks);
     safety::check_self_referential_policy(workspaces, workflows, workflow_filter, &mut checks);
 
+    // Trigger reference integrity: action.workflow and action.workspace must exist.
+    if let Some(project) = oc.projects.get(effective_project) {
+        for (name, trigger) in &project.triggers {
+            let wf_exists = workflows.contains_key(&trigger.action.workflow);
+            checks.push(CheckResult::simple(
+                "trigger_workflow_ref",
+                Severity::Error,
+                wf_exists,
+                if wf_exists {
+                    format!(
+                        "trigger \"{}\" references workflow \"{}\" (found)",
+                        name, trigger.action.workflow
+                    )
+                } else {
+                    format!(
+                        "trigger \"{}\" references workflow \"{}\" which does not exist",
+                        name, trigger.action.workflow
+                    )
+                },
+                None,
+            ));
+            let ws_exists = workspaces.contains_key(&trigger.action.workspace);
+            checks.push(CheckResult::simple(
+                "trigger_workspace_ref",
+                Severity::Error,
+                ws_exists,
+                if ws_exists {
+                    format!(
+                        "trigger \"{}\" references workspace \"{}\" (found)",
+                        name, trigger.action.workspace
+                    )
+                } else {
+                    format!(
+                        "trigger \"{}\" references workspace \"{}\" which does not exist",
+                        name, trigger.action.workspace
+                    )
+                },
+                None,
+            ));
+        }
+    }
+
     build_report(checks)
 }
 
@@ -363,6 +405,7 @@ mod tests {
                 step_templates: HashMap::new(),
                 env_stores: HashMap::new(),
                 execution_profiles: HashMap::new(),
+                triggers: HashMap::new(),
             });
         ActiveConfig {
             config,

@@ -8,8 +8,8 @@ use serde::Deserialize;
 
 use super::{
     AgentResource, EnvStoreResource, ExecutionProfileResource, ProjectResource, Resource,
-    RuntimePolicyResource, SecretStoreResource, StepTemplateResource, WorkflowResource,
-    WorkspaceResource,
+    RuntimePolicyResource, SecretStoreResource, StepTemplateResource, TriggerResource,
+    WorkflowResource, WorkspaceResource,
 };
 
 /// Parse YAML into builtin OrchestratorResource types only (backward-compatible).
@@ -88,6 +88,7 @@ pub fn delete_resource_by_kind(
         "secretstore" | "secret-store" | "secret_store" => {
             Ok(SecretStoreResource::delete_from(config, name))
         }
+        "trigger" | "tg" => Ok(TriggerResource::delete_from(config, name)),
         "customresourcedefinition" | "crd" => crate::crd::delete_crd(config, name),
         _ => {
             // Try CRD-defined custom resource types
@@ -118,6 +119,7 @@ pub fn kind_as_str(kind: ResourceKind) -> &'static str {
         ResourceKind::ExecutionProfile => "executionprofile",
         ResourceKind::EnvStore => "envstore",
         ResourceKind::SecretStore => "secretstore",
+        ResourceKind::Trigger => "trigger",
     }
 }
 

@@ -105,6 +105,8 @@ pub mod task_ops;
 pub mod task_repository;
 /// Ticket discovery, preview, and creation helpers.
 pub mod ticket;
+/// Trigger engine: cron scheduler and event-driven task creation.
+pub mod trigger_engine;
 
 /// Test utilities and fixtures for building isolated orchestrator state.
 #[cfg(any(test, feature = "test-harness"))]

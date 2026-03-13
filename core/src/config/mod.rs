@@ -18,6 +18,7 @@ mod spawn;
 mod step;
 mod step_template;
 mod store_backend_provider;
+mod trigger;
 mod store_io;
 mod workflow;
 mod workflow_store;
@@ -41,6 +42,7 @@ pub use step::*;
 pub use step_template::*;
 pub use store_backend_provider::*;
 pub use store_io::*;
+pub use trigger::*;
 pub use workflow::*;
 pub use workflow_store::*;
 

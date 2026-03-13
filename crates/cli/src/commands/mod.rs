@@ -7,6 +7,7 @@ mod resource;
 mod secret;
 mod store;
 mod task;
+mod trigger;
 
 /// Local debug command implementations.
 pub mod debug;
@@ -37,6 +38,7 @@ pub async fn dispatch(
         Commands::Secret(cmd) => secret::dispatch(client, cmd).await,
         Commands::Db(cmd) => db::dispatch(client, cmd).await,
         Commands::Event(cmd) => event::dispatch(client, cmd).await,
+        Commands::Trigger(cmd) => trigger::dispatch(client, cmd).await,
         Commands::Debug {
             component,
             command: None,

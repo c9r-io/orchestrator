@@ -181,6 +181,8 @@ pub fn apply_manifests(
             &deleted_resources,
         )
         .map_err(|err| classify_resource_error("resource.apply", err))?;
+        // Notify trigger engine to pick up any trigger config changes.
+        crate::trigger_engine::notify_trigger_reload(state);
         Some(overview.version)
     } else {
         None
@@ -412,6 +414,7 @@ pub fn delete_resource(
             }
             "envstore" | "env-store" | "env_store" | "secretstore" | "secret-store"
             | "secret_store" => proj_cfg.env_stores.contains_key(name),
+            "trigger" | "tg" => proj_cfg.triggers.contains_key(name),
             _ => false,
         };
         if !exists {
@@ -470,6 +473,7 @@ pub fn delete_resource(
 
         // 5. Persist (using delete-safe path)
         persist_config_for_delete(state, config, "project-delete", &[])?;
+        crate::trigger_engine::notify_trigger_reload(state);
         return Ok(());
     }
 
@@ -494,6 +498,7 @@ pub fn delete_resource(
         name: name.to_string(),
     }];
     persist_config_for_delete(state, config, "daemon-delete", &deleted_resources)?;
+    crate::trigger_engine::notify_trigger_reload(state);
     Ok(())
 }
 
@@ -514,6 +519,7 @@ fn delete_resource_from_project(
         }
         "envstore" | "env-store" | "env_store" | "secretstore" | "secret-store"
         | "secret_store" => Ok(proj.env_stores.remove(name).is_some()),
+        "trigger" | "tg" => Ok(proj.triggers.remove(name).is_some()),
         _ => Err(classify_resource_error(
             "resource.delete",
             anyhow::anyhow!("unknown resource type for project delete: {}", kind),
@@ -530,6 +536,7 @@ fn canonical_project_kind(kind: &str) -> Result<&'static str> {
         "executionprofile" | "execution-profile" | "execution_profile" => Ok("ExecutionProfile"),
         "envstore" | "env-store" | "env_store" => Ok("EnvStore"),
         "secretstore" | "secret-store" | "secret_store" => Ok("SecretStore"),
+        "trigger" | "tg" => Ok("Trigger"),
         _ => Err(classify_resource_error(
             "resource.delete",
             anyhow::anyhow!("unknown resource type for project delete: {}", kind),
@@ -546,6 +553,7 @@ fn prunable_resource_kind(resource: &crate::resource::RegisteredResource) -> Opt
         crate::cli_types::ResourceKind::ExecutionProfile => Some("ExecutionProfile"),
         crate::cli_types::ResourceKind::EnvStore => Some("EnvStore"),
         crate::cli_types::ResourceKind::SecretStore => Some("SecretStore"),
+        crate::cli_types::ResourceKind::Trigger => Some("Trigger"),
         crate::cli_types::ResourceKind::Project | crate::cli_types::ResourceKind::RuntimePolicy => {
             None
         }
@@ -716,7 +724,119 @@ fn autofill_defaults_for_manifest_mode(config: &mut crate::config::OrchestratorC
             step_templates: Default::default(),
             env_stores: Default::default(),
             execution_profiles: Default::default(),
+            triggers: Default::default(),
         });
+}
+
+/// Suspend a trigger by name, setting its `suspend` flag to `true`.
+pub fn suspend_trigger(
+    state: &InnerState,
+    trigger_name: &str,
+    project: Option<&str>,
+) -> Result<()> {
+    set_trigger_suspend(state, trigger_name, project, true)
+}
+
+/// Resume a suspended trigger by clearing its `suspend` flag.
+pub fn resume_trigger(
+    state: &InnerState,
+    trigger_name: &str,
+    project: Option<&str>,
+) -> Result<()> {
+    set_trigger_suspend(state, trigger_name, project, false)
+}
+
+/// Manually fire a trigger once, creating (and optionally starting) the task
+/// described by the trigger's action configuration. Returns the new task ID.
+pub fn fire_trigger(
+    state: &InnerState,
+    trigger_name: &str,
+    project: Option<&str>,
+) -> Result<String> {
+    let project_id = project
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or(crate::config::DEFAULT_PROJECT_ID);
+
+    let active = read_active_config(state)
+        .map_err(|err| classify_resource_error("trigger.fire", err))?;
+    let proj_cfg = active.config.projects.get(project_id).ok_or_else(|| {
+        classify_resource_error(
+            "trigger.fire",
+            anyhow::anyhow!("project not found: {}", project_id),
+        )
+    })?;
+    let trigger_cfg = proj_cfg.triggers.get(trigger_name).ok_or_else(|| {
+        classify_resource_error(
+            "trigger.fire",
+            anyhow::anyhow!(
+                "trigger '{}' not found in project '{}'",
+                trigger_name,
+                project_id
+            ),
+        )
+    })?;
+
+    let action = &trigger_cfg.action;
+    let payload = crate::dto::CreateTaskPayload {
+        name: Some(format!("trigger-{}", trigger_name)),
+        goal: None,
+        project_id: Some(project_id.to_string()),
+        workspace_id: Some(action.workspace.clone()),
+        workflow_id: Some(action.workflow.clone()),
+        target_files: None,
+        parent_task_id: None,
+        spawn_reason: Some(format!("manual fire of trigger '{}'", trigger_name)),
+    };
+
+    let created = crate::service::task::create_task(state, payload)
+        .map_err(|err| classify_resource_error("trigger.fire", err))?;
+
+    Ok(created.id)
+}
+
+fn set_trigger_suspend(
+    state: &InnerState,
+    trigger_name: &str,
+    project: Option<&str>,
+    suspend: bool,
+) -> Result<()> {
+    let op = if suspend {
+        "trigger.suspend"
+    } else {
+        "trigger.resume"
+    };
+    let project_id = project
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or(crate::config::DEFAULT_PROJECT_ID);
+
+    let mut config = {
+        let active = read_active_config(state).map_err(|err| classify_resource_error(op, err))?;
+        active.config.clone()
+    };
+
+    let proj_cfg = config.projects.get_mut(project_id).ok_or_else(|| {
+        classify_resource_error(op, anyhow::anyhow!("project not found: {}", project_id))
+    })?;
+    let trigger_cfg = proj_cfg.triggers.get_mut(trigger_name).ok_or_else(|| {
+        classify_resource_error(
+            op,
+            anyhow::anyhow!(
+                "trigger '{}' not found in project '{}'",
+                trigger_name,
+                project_id
+            ),
+        )
+    })?;
+
+    trigger_cfg.suspend = suspend;
+
+    let yaml = serde_yml::to_string(&config)
+        .context("failed to serialize config after trigger update")
+        .map_err(|err| classify_resource_error(op, err))?;
+    persist_config_and_reload(state, config, yaml, op, Some(project_id), &[])
+        .map_err(|err| classify_resource_error(op, err))?;
+    crate::trigger_engine::notify_trigger_reload(state);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1174,6 +1294,7 @@ mod tests {
             step_templates: HashMap::new(),
             env_stores: HashMap::new(),
             execution_profiles: HashMap::new(),
+            triggers: HashMap::new(),
         };
 
         assert_eq!(

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use super::{
     AgentConfig, EnvStoreConfig, ExecutionProfileConfig, InvariantConfig, StepTemplateConfig,
-    WorkflowConfig,
+    TriggerConfig, WorkflowConfig,
 };
 
 /// Safety configuration for self-bootstrap and dangerous operations
@@ -140,6 +140,9 @@ pub struct ProjectConfig {
     #[serde(default)]
     /// Execution profiles available within the project.
     pub execution_profiles: HashMap<String, ExecutionProfileConfig>,
+    #[serde(default)]
+    /// Trigger definitions scoped to the project.
+    pub triggers: HashMap<String, TriggerConfig>,
 }
 
 #[cfg(test)]

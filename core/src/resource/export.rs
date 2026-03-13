@@ -220,6 +220,12 @@ pub fn export_manifest_documents(config: &OrchestratorConfig) -> Vec<Orchestrato
                 metadata: item.metadata,
                 spec: ResourceSpec::EnvStore(item.spec),
             },
+            RegisteredResource::Trigger(item) => OrchestratorResource {
+                api_version: API_VERSION.to_string(),
+                kind: ResourceKind::Trigger,
+                metadata: item.metadata,
+                spec: ResourceSpec::Trigger(item.spec),
+            },
         })
         .collect()
 }
@@ -484,6 +490,7 @@ mod tests {
                 step_templates: Default::default(),
                 env_stores: Default::default(),
                 execution_profiles: Default::default(),
+                triggers: Default::default(),
             },
         );
 
