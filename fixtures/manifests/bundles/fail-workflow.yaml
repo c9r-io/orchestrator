@@ -15,8 +15,17 @@ metadata:
 spec:
   capabilities:
     - qa
-    - fix
   command: "echo '{\"confidence\":0.35,\"quality_score\":0.2,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"regression\",\"content\":{\"title\":\"qa-failed\",\"qa_file\":\"target-file\"}}]}' && exit 1"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_healthy
+spec:
+  capabilities:
+    - qa
+    - fix
+  command: "echo '{\"confidence\":0.9,\"quality_score\":0.8,\"artifacts\":[]}'"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow

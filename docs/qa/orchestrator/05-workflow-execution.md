@@ -18,7 +18,7 @@ selection can change the outcome.
 
 Every scenario starts from a clean slate. Two cleanup steps are required:
 
-> **Fixture Workflow IDs**: `echo-workflow.yaml` defines `qa_only`, `qa_fix`, `qa_fix_retest`, `loop_test`. `fail-workflow.yaml` defines `qa_fix` (fail variant). Do NOT use stale names like `basic` or `echo`.
+> **Fixture Workflow IDs**: `echo-workflow.yaml` defines `qa_only`, `qa_fix`, `qa_fix_retest`, `loop_test`. `fail-workflow.yaml` defines `qa_fix` (fail variant) with two agents: `mock_fail` (qa only, always exits 1) and `mock_healthy` (qa + fix, exits 0). When `mock_fail` is isolated by the health system after consecutive failures, `mock_healthy` takes over remaining QA and handles all fix work. Do NOT use stale names like `basic` or `echo`.
 
 1. **Project isolation**: `apply` is additive — agents from previous test fixtures
    remain in the active config and participate in agent selection, causing unexpected
@@ -210,18 +210,18 @@ orchestrator apply -f fixtures/manifests/bundles/fail-workflow.yaml --project "$
 
 ### Expected
 
-- QA phase fails for every item (mock_fail exits 1)
+- `mock_fail` handles QA for the first items and exits 1, producing
+  ticket artifacts; the health system isolates `mock_fail` after
+  consecutive failures
 - Ticket files are created as `fixtures/ticket/auto_*.md` (the ticket_dir
   of the workspace the task runs against — the global `default` workspace
   has `ticket_dir: fixtures/ticket`)
-- Fix phase executes after ticket scan; because the mock fix agent exits 0,
-  every item transitions from `qa_failed` → `fixed`
-- Task completes with `Failed: 0` (items are "fixed", not "qa_failed")
+- `mock_healthy` takes over QA for remaining items (exits 0, no tickets)
+  and handles all fix work (exits 0)
+- Items that had QA failures transition from `qa_failed` → `fixed`
+- Task completes with `Failed: 0`
 - Logs show structured JSON outputs (`output_json`/`artifacts_json`);
   failing QA runs are marked by non-success status and ticket artifacts
-- **Note**: If the agent becomes unhealthy after repeated QA failures, the task
-  may report "No healthy agent found with capability: fix" — this is expected
-  when health tracking marks the agent as diseased.
 
 ### Troubleshooting
 
@@ -229,6 +229,7 @@ orchestrator apply -f fixtures/manifests/bundles/fail-workflow.yaml --project "$
 |---------|-----------|-----|
 | No ticket files found in `workspace/${QA_PROJECT}/fixtures/ticket/` | The task uses the global `default` workspace (ticket_dir: `fixtures/ticket`), not the project workspace | Check `fixtures/ticket/auto_*.md` instead |
 | `Failed: 0` when expecting failures | Fix phase succeeds (exit 0), transitioning items from `qa_failed` to `fixed` | This is correct behavior; "Failed" counts only items whose final status is a failure state |
+| "No healthy agent found with capability: fix" or task stuck at 0 progress | `mock_fail` was the only agent with the required capability; health system isolated it after consecutive failures, leaving no healthy agent | Ensure `mock_healthy` (qa + fix) is present in the fixture as a fallback agent that takes over when `mock_fail` is isolated |
 
 ---
 
