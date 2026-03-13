@@ -297,6 +297,7 @@ async fn run_init_once_if_needed(
                     step_template_prompt: None,
                     project_id: &task_ctx.project_id,
                     execution_profile: step.execution_profile.as_deref(),
+                    self_referential: task_ctx.self_referential,
                 },
             )
             .await?;

@@ -62,6 +62,16 @@ impl RunnerExecutor for ShellRunnerExecutor {
         } = params;
 
         enforce_runner_policy(runner, command)?;
+
+        // In self-referential workspaces, guard against commands that would
+        // kill the daemon process.  The presence of ORCHESTRATOR_DAEMON_PID in
+        // extra_env signals that the self-referential guard is active.
+        if let Some(pid_str) = extra_env.get("ORCHESTRATOR_DAEMON_PID") {
+            if let Ok(daemon_pid) = pid_str.parse::<u32>() {
+                super::policy::guard_daemon_pid_kill(command, daemon_pid)?;
+            }
+        }
+
         let mut cmd = build_command_for_profile(runner, command, cwd, execution_profile)?;
 
         match stdio_mode {

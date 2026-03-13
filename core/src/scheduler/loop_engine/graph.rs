@@ -438,6 +438,7 @@ impl AdaptivePlanExecutor for GraphAdaptiveExecutor<'_> {
                 step_template_prompt: Some(prompt),
                 project_id: &self.task_ctx.project_id,
                 execution_profile: None,
+                self_referential: self.task_ctx.self_referential,
             },
         )
         .await?;

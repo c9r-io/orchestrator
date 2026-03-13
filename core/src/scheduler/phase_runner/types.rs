@@ -117,6 +117,8 @@ pub struct PhaseRunRequest<'a> {
     /// Project ID for project-scoped agent env resolution (empty = non-project).
     pub project_id: &'a str,
     pub execution_profile: Option<&'a str>,
+    /// Whether the workspace is self-referential (daemon PID protection enabled).
+    pub self_referential: bool,
 }
 
 pub struct RotatingPhaseRunRequest<'a> {
@@ -140,6 +142,8 @@ pub struct RotatingPhaseRunRequest<'a> {
     /// Project ID for project-scoped agent selection (empty = non-project).
     pub project_id: &'a str,
     pub execution_profile: Option<&'a str>,
+    /// Whether the workspace is self-referential (daemon PID protection enabled).
+    pub self_referential: bool,
 }
 
 pub struct SelectedPhaseRunRequest<'a> {
@@ -164,4 +168,6 @@ pub struct SelectedPhaseRunRequest<'a> {
     /// Project ID for project-scoped agent env resolution (empty = non-project).
     pub project_id: &'a str,
     pub execution_profile: Option<&'a str>,
+    /// Whether the workspace is self-referential (daemon PID protection enabled).
+    pub self_referential: bool,
 }

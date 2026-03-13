@@ -9,7 +9,7 @@ mod sandbox_linux;
 mod sandbox_macos;
 mod spawn;
 
-pub use policy::enforce_runner_policy;
+pub use policy::{enforce_runner_policy, DaemonPidGuardBlocked};
 pub use profile::ResolvedExecutionProfile;
 pub use redact::redact_text;
 pub use sandbox::{

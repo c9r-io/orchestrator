@@ -108,6 +108,7 @@ pub async fn execute_guard_step(
             pipe_stdin: false,
             project_id: &task_ctx.project_id,
             execution_profile: None,
+            self_referential: task_ctx.self_referential,
         },
     )
     .await?;

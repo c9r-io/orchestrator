@@ -29,6 +29,7 @@ pub(super) async fn setup_phase_execution(
     prompt_payload: &Option<String>,
     project_id: &str,
     execution_profile_name: Option<&str>,
+    self_referential: bool,
 ) -> Result<PhaseSetup> {
     let now = now_ts();
     let run_uuid = Uuid::new_v4();
@@ -80,6 +81,15 @@ pub(super) async fn setup_phase_execution(
         validate_execution_profile_support(&execution_profile)?;
         (runner, execution_profile, extra_env, sensitive)
     };
+    // Inject daemon PID for self-referential workspaces so the runner can
+    // guard against kill commands targeting the daemon process itself.
+    if self_referential {
+        resolved_extra_env.insert(
+            "ORCHESTRATOR_DAEMON_PID".to_string(),
+            std::process::id().to_string(),
+        );
+    }
+
     let mut redaction_patterns = runner.redaction_patterns.clone();
     redaction_patterns.extend(sensitive_values);
     if !logs_dir.starts_with(&state.logs_dir) {

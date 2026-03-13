@@ -13,7 +13,7 @@ pub(crate) use util::shell_escape;
 use crate::config::PromptDelivery;
 use crate::events::insert_event;
 use crate::metrics::MetricsCollector;
-use crate::runner::SandboxBackendError;
+use crate::runner::{DaemonPidGuardBlocked, SandboxBackendError};
 use crate::selection::{select_agent_advanced, select_agent_by_preference};
 use crate::state::InnerState;
 use anyhow::Result;
@@ -54,6 +54,7 @@ async fn run_phase_with_timeout(
         pipe_stdin: req_pipe_stdin,
         project_id,
         execution_profile,
+        self_referential,
     } = request;
 
     // Stage 1: setup
@@ -71,11 +72,19 @@ async fn run_phase_with_timeout(
         &prompt_payload,
         project_id,
         execution_profile,
+        self_referential,
     )
     .await
     {
         Ok(setup) => setup,
         Err(err) => {
+            if let Some(result) = handle_daemon_pid_guard_blocked(
+                state, &err, task_id, item_id, step_id, phase, step_scope, agent_id,
+            )
+            .await?
+            {
+                return Ok(result);
+            }
             if let Some(result) = handle_sandbox_backend_error(
                 state,
                 &err,
@@ -115,6 +124,13 @@ async fn run_phase_with_timeout(
     {
         Ok(spawn_result) => spawn_result,
         Err(err) => {
+            if let Some(result) = handle_daemon_pid_guard_blocked(
+                state, &err, task_id, item_id, step_id, phase, step_scope, agent_id,
+            )
+            .await?
+            {
+                return Ok(result);
+            }
             if let Some(result) = handle_sandbox_backend_error(
                 state,
                 &err,
@@ -293,6 +309,64 @@ async fn handle_sandbox_backend_error(
     }))
 }
 
+/// Handles a `DaemonPidGuardBlocked` error by recording an audit event and
+/// returning a successful (skipped) result so the step does not produce false
+/// failure tickets.
+async fn handle_daemon_pid_guard_blocked(
+    state: &Arc<InnerState>,
+    err: &anyhow::Error,
+    task_id: &str,
+    item_id: &str,
+    step_id: &str,
+    phase: &str,
+    step_scope: crate::config::StepScope,
+    agent_id: &str,
+) -> Result<Option<crate::dto::RunResult>> {
+    let Some(guard_err) = err.downcast_ref::<DaemonPidGuardBlocked>() else {
+        return Ok(None);
+    };
+    let run_id = Uuid::new_v4().to_string();
+    insert_event(
+        state,
+        task_id,
+        Some(item_id),
+        "daemon_pid_kill_blocked",
+        json!({
+            "step": phase,
+            "step_id": step_id,
+            "step_scope": match step_scope {
+                crate::config::StepScope::Task => "task",
+                crate::config::StepScope::Item => "item",
+            },
+            "agent_id": agent_id,
+            "run_id": run_id,
+            "daemon_pid": std::process::id(),
+            "matched_pattern": guard_err.matched_pattern,
+            "reason": guard_err.reason,
+        }),
+    )
+    .await?;
+    Ok(Some(crate::dto::RunResult {
+        success: true,
+        exit_code: 0,
+        stdout_path: String::new(),
+        stderr_path: String::new(),
+        timed_out: false,
+        duration_ms: Some(0),
+        output: None,
+        validation_status: "skipped".to_string(),
+        agent_id: agent_id.to_string(),
+        run_id,
+        execution_profile: String::new(),
+        execution_mode: "host".to_string(),
+        sandbox_denied: true,
+        sandbox_denial_reason: Some("daemon_pid_guard".to_string()),
+        sandbox_violation_kind: Some("daemon_pid_kill_blocked".to_string()),
+        sandbox_resource_kind: None,
+        sandbox_network_target: None,
+    }))
+}
+
 /// Runs one phase command with the standard timeout and capture pipeline.
 pub async fn run_phase(
     state: &Arc<InnerState>,
@@ -325,6 +399,7 @@ pub async fn run_phase_with_rotation(
         step_template_prompt,
         project_id,
         execution_profile,
+        self_referential,
     } = request;
     let effective_capability = capability.or(match phase {
         "qa" | "fix" | "retest" => Some(phase),
@@ -390,6 +465,7 @@ pub async fn run_phase_with_rotation(
             step_template_prompt,
             project_id,
             execution_profile,
+            self_referential,
         },
     )
     .await
@@ -420,6 +496,7 @@ pub async fn run_phase_with_selected_agent(
         step_template_prompt,
         project_id,
         execution_profile,
+        self_referential,
     } = request;
 
     // Render template variables into the step template prompt, then inject into agent command
@@ -511,6 +588,7 @@ pub async fn run_phase_with_selected_agent(
             pipe_stdin: prompt_delivery == PromptDelivery::Stdin,
             project_id,
             execution_profile,
+            self_referential,
         },
     )
     .await

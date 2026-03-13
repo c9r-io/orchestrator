@@ -223,7 +223,7 @@ fn query_step_events_with_conn(conn: &Connection, task_id: &str) -> Result<Vec<S
     let mut stmt = conn.prepare(
         "SELECT event_type, payload_json, created_at, task_item_id, step, step_scope FROM events
          WHERE task_id = ?1
-           AND event_type IN ('step_started', 'step_finished', 'step_skipped', 'step_heartbeat', 'step_spawned', 'step_timeout', 'cycle_started', 'sandbox_denied', 'sandbox_resource_exceeded', 'sandbox_network_blocked')
+           AND event_type IN ('step_started', 'step_finished', 'step_skipped', 'step_heartbeat', 'step_spawned', 'step_timeout', 'cycle_started', 'sandbox_denied', 'sandbox_resource_exceeded', 'sandbox_network_blocked', 'daemon_pid_kill_blocked')
          ORDER BY id ASC",
     )?;
     let rows = stmt.query_map(params![task_id], |row| {
