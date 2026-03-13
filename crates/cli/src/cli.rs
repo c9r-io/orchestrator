@@ -522,6 +522,12 @@ pub enum TaskCommands {
         force: bool,
     },
 
+    /// Recover orphaned running items for a task.
+    Recover {
+        /// Task identifier.
+        task_id: String,
+    },
+
     /// Watch task status continuously.
     Watch {
         /// Task identifier.

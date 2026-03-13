@@ -289,6 +289,30 @@ impl OrchestratorService for TestOrchestratorServer {
         }))
     }
 
+    async fn task_recover(
+        &self,
+        request: Request<TaskRecoverRequest>,
+    ) -> Result<Response<TaskRecoverResponse>, Status> {
+        let req = request.into_inner();
+        let id = agent_orchestrator::service::task::resolve_id(&self.state, &req.task_id)
+            .await
+            .map_err(map_core_error)?;
+        let recovered = agent_orchestrator::service::task::recover_task(&self.state, &id)
+            .await
+            .map_err(map_core_error)?;
+        let count = recovered.len() as u64;
+        let message = if count == 0 {
+            format!("No orphaned running items found for task {id}")
+        } else {
+            format!("Recovered {count} orphaned running item(s) for task {id}")
+        };
+        Ok(Response::new(TaskRecoverResponse {
+            task_id: id,
+            recovered_items: count,
+            message,
+        }))
+    }
+
     async fn task_list(
         &self,
         request: Request<TaskListRequest>,

@@ -11,6 +11,7 @@ service OrchestratorService {
   rpc TaskResume(TaskResumeRequest)   returns (TaskResumeResponse);
   rpc TaskDelete(TaskDeleteRequest)   returns (TaskDeleteResponse);
   rpc TaskRetry(TaskRetryRequest)     returns (TaskRetryResponse);
+  rpc TaskRecover(TaskRecoverRequest) returns (TaskRecoverResponse);
 
   // Task queries
   rpc TaskList(TaskListRequest)       returns (TaskListResponse);
@@ -131,6 +132,16 @@ message TaskRetryRequest {
 message TaskRetryResponse {
   string task_id = 1;
   string status = 2;
+  string message = 3;
+}
+
+message TaskRecoverRequest {
+  string task_id = 1;
+}
+
+message TaskRecoverResponse {
+  string task_id = 1;
+  uint64 recovered_items = 2;
   string message = 3;
 }
 

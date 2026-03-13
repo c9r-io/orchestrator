@@ -309,8 +309,8 @@ WHERE id = '{task_item_id}';
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Queue-Only Task Start | ☐ | | | |
-| 2 | Create/Start Enqueue Mode | ☐ | | | |
-| 3 | Daemon Worker Consumption | ☐ | | | |
-| 4 | Task Logs | ☐ | | | |
-| 5 | Task Retry (Queue-Only) | ☐ | | | |
+| 1 | Queue-Only Task Start | ✅ PASS | 2026-03-13 | chenhan | Task created with --no-start, started, and completed successfully |
+| 2 | Create/Start Enqueue Mode | ✅ PASS | 2026-03-13 | chenhan | Task creation uses scheduler, scheduler_enqueued event recorded |
+| 3 | Daemon Worker Consumption | ✅ PASS | 2026-03-13 | chenhan | 3 workers consumed pending tasks, task watch shows status changes |
+| 4 | Task Logs | ✅ PASS | 2026-03-13 | chenhan | Logs display correctly with run output, --tail and --timestamps work |
+| 5 | Task Retry (Queue-Only) | ✅ PASS | 2026-03-13 | chenhan | Without --force: exits with code 1. With --force: enqueues task successfully |

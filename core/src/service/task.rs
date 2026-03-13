@@ -103,6 +103,18 @@ pub async fn delete_task(state: Arc<InnerState>, task_id: &str) -> Result<()> {
         .map_err(|err| classify_task_error("task.delete", err))
 }
 
+/// Recover orphaned running items for a task. Returns recovered item IDs.
+pub async fn recover_task(state: &InnerState, task_id: &str) -> Result<Vec<String>> {
+    let resolved = resolve_task_id(state, task_id)
+        .await
+        .map_err(|err| classify_task_error("task.recover", err))?;
+    state
+        .task_repo
+        .recover_orphaned_running_items_for_task(&resolved)
+        .await
+        .map_err(|err| classify_task_error("task.recover", err))
+}
+
 /// Retry a failed task item. Returns the parent task ID.
 pub fn retry_task_item(state: &InnerState, task_item_id: &str) -> Result<String> {
     reset_task_item_for_retry(state, task_item_id)

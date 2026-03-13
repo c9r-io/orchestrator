@@ -731,6 +731,51 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Recovers all orphaned running items across all tasks.
+    pub async fn recover_orphaned_running_items(
+        &self,
+    ) -> Result<Vec<(String, Vec<String>)>> {
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                state::recover_orphaned_running_items(conn)
+                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// Recovers orphaned running items for a single task.
+    pub async fn recover_orphaned_running_items_for_task(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<String>> {
+        let task_id = task_id.to_owned();
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                state::recover_orphaned_running_items_for_task(conn, &task_id)
+                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// Recovers stalled running items older than the given threshold.
+    pub async fn recover_stalled_running_items(
+        &self,
+        stall_threshold_secs: u64,
+    ) -> Result<Vec<(String, Vec<String>)>> {
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                state::recover_stalled_running_items(conn, stall_threshold_secs)
+                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
     /// Persists one task-graph snapshot payload.
     pub async fn insert_task_graph_snapshot(&self, snapshot: NewTaskGraphSnapshot) -> Result<()> {
         self.async_db

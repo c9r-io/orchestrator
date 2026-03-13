@@ -186,6 +186,31 @@ pub(crate) async fn task_retry(
     }))
 }
 
+pub(crate) async fn task_recover(
+    server: &OrchestratorServer,
+    request: Request<TaskRecoverRequest>,
+) -> Result<Response<TaskRecoverResponse>, Status> {
+    super::authorize(server, &request, "TaskRecover").map_err(Status::from)?;
+    let req = request.into_inner();
+    let id = agent_orchestrator::service::task::resolve_id(&server.state, &req.task_id)
+        .await
+        .map_err(map_core_error)?;
+    let recovered = agent_orchestrator::service::task::recover_task(&server.state, &id)
+        .await
+        .map_err(map_core_error)?;
+    let count = recovered.len() as u64;
+    let message = if count == 0 {
+        format!("No orphaned running items found for task {id}")
+    } else {
+        format!("Recovered {count} orphaned running item(s) for task {id}")
+    };
+    Ok(Response::new(TaskRecoverResponse {
+        task_id: id,
+        recovered_items: count,
+        message,
+    }))
+}
+
 pub(crate) async fn task_list(
     server: &OrchestratorServer,
     request: Request<TaskListRequest>,

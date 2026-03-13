@@ -1,7 +1,8 @@
+use super::super::state;
 use super::super::trait_def::TaskRepository;
 use super::super::types::TaskRepositorySource;
 use super::super::SqliteTaskRepository;
-use super::fixtures::seed_task;
+use super::fixtures::{get_item_id, seed_task};
 use crate::db::open_conn;
 use crate::test_utils::TestState;
 use rusqlite::params;
@@ -425,4 +426,211 @@ fn set_task_status_restart_pending_clears_completed_at() {
         completed_at, None,
         "restart_pending should clear completed_at"
     );
+}
+
+// ── recover_orphaned_running_items ────────────────────────────────
+
+#[test]
+fn recover_orphaned_running_items_resets_items_and_task() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id = get_item_id(&state, &task_id);
+
+    // Set task and item to running
+    conn.execute(
+        "UPDATE tasks SET status='running' WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("mark task running");
+    conn.execute(
+        "UPDATE task_items SET status='running', started_at='2026-01-01T00:00:00Z' WHERE id = ?1",
+        params![item_id.clone()],
+    )
+    .expect("mark item running");
+
+    let recovered = state::recover_orphaned_running_items(&conn).expect("recover should succeed");
+    assert_eq!(recovered.len(), 1);
+    assert_eq!(recovered[0].0, task_id);
+    assert_eq!(recovered[0].1, vec![item_id.clone()]);
+
+    // Verify item is now pending
+    let item_status: String = conn
+        .query_row(
+            "SELECT status FROM task_items WHERE id = ?1",
+            params![item_id],
+            |row| row.get(0),
+        )
+        .expect("query item status");
+    assert_eq!(item_status, "pending");
+
+    // Verify started_at is cleared
+    let started_at: Option<String> = conn
+        .query_row(
+            "SELECT started_at FROM task_items WHERE id = ?1",
+            params![item_id],
+            |row| row.get(0),
+        )
+        .expect("query started_at");
+    assert!(started_at.is_none(), "started_at should be cleared");
+
+    // Verify task is now restart_pending
+    let task_status: String = conn
+        .query_row(
+            "SELECT status FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .expect("query task status");
+    assert_eq!(task_status, "restart_pending");
+}
+
+#[test]
+fn recover_orphaned_running_items_returns_empty_when_no_orphans() {
+    let mut fixture = TestState::new();
+    let (state, _task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+
+    let recovered = state::recover_orphaned_running_items(&conn).expect("recover should succeed");
+    assert!(recovered.is_empty());
+}
+
+#[test]
+fn recover_orphaned_running_items_does_not_affect_terminal_items() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id = get_item_id(&state, &task_id);
+
+    // Set item to a terminal status
+    conn.execute(
+        "UPDATE task_items SET status='qa_passed' WHERE id = ?1",
+        params![item_id.clone()],
+    )
+    .expect("mark item qa_passed");
+
+    let recovered = state::recover_orphaned_running_items(&conn).expect("recover should succeed");
+    assert!(recovered.is_empty());
+
+    // Verify item is still qa_passed
+    let item_status: String = conn
+        .query_row(
+            "SELECT status FROM task_items WHERE id = ?1",
+            params![item_id],
+            |row| row.get(0),
+        )
+        .expect("query item status");
+    assert_eq!(item_status, "qa_passed");
+}
+
+#[test]
+fn recover_orphaned_running_items_for_task_only_affects_target_task() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id = get_item_id(&state, &task_id);
+
+    // Create a second task
+    let qa_file2 = state
+        .app_root
+        .join("workspace/default/docs/qa/repo_test2.md");
+    std::fs::write(&qa_file2, "# repo test 2\n").expect("seed second qa file");
+    let created2 = crate::task_ops::create_task_impl(
+        &state,
+        crate::dto::CreateTaskPayload {
+            name: Some("repo-test-2".to_string()),
+            goal: Some("repo-test-2-goal".to_string()),
+            ..Default::default()
+        },
+    )
+    .expect("create second task");
+    let task_id2 = created2.id;
+    let item_id2 = get_item_id(&state, &task_id2);
+
+    // Set both tasks and items to running
+    conn.execute(
+        "UPDATE tasks SET status='running' WHERE id IN (?1, ?2)",
+        params![task_id.clone(), task_id2.clone()],
+    )
+    .expect("mark tasks running");
+    conn.execute(
+        "UPDATE task_items SET status='running', started_at='2026-01-01T00:00:00Z' WHERE id IN (?1, ?2)",
+        params![item_id.clone(), item_id2.clone()],
+    )
+    .expect("mark items running");
+
+    // Recover only the first task
+    let recovered =
+        state::recover_orphaned_running_items_for_task(&conn, &task_id).expect("recover");
+    assert_eq!(recovered, vec![item_id.clone()]);
+
+    // First task item should be pending
+    let status1: String = conn
+        .query_row(
+            "SELECT status FROM task_items WHERE id = ?1",
+            params![item_id],
+            |row| row.get(0),
+        )
+        .expect("item1 status");
+    assert_eq!(status1, "pending");
+
+    // Second task item should STILL be running
+    let status2: String = conn
+        .query_row(
+            "SELECT status FROM task_items WHERE id = ?1",
+            params![item_id2],
+            |row| row.get(0),
+        )
+        .expect("item2 status");
+    assert_eq!(status2, "running");
+}
+
+#[test]
+fn recover_stalled_running_items_respects_threshold() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id = get_item_id(&state, &task_id);
+
+    // Set task and item to running with a started_at in the past (2 hours ago)
+    let old_ts = (chrono::Utc::now() - chrono::Duration::hours(2)).to_rfc3339();
+    conn.execute(
+        "UPDATE tasks SET status='running' WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("mark task running");
+    conn.execute(
+        "UPDATE task_items SET status='running', started_at=?2 WHERE id = ?1",
+        params![item_id.clone(), old_ts],
+    )
+    .expect("mark item running with old started_at");
+
+    // Threshold of 3 hours → should NOT recover (item is only 2h old)
+    let recovered = state::recover_stalled_running_items(&conn, 3 * 3600).expect("recover");
+    assert!(recovered.is_empty(), "should not recover items within threshold");
+
+    // Verify item is still running
+    let status: String = conn
+        .query_row(
+            "SELECT status FROM task_items WHERE id = ?1",
+            params![item_id.clone()],
+            |row| row.get(0),
+        )
+        .expect("item status");
+    assert_eq!(status, "running");
+
+    // Threshold of 1 hour → SHOULD recover (item is 2h old)
+    let recovered = state::recover_stalled_running_items(&conn, 3600).expect("recover");
+    assert_eq!(recovered.len(), 1);
+    assert_eq!(recovered[0].0, task_id);
+
+    // Verify item is now pending
+    let status: String = conn
+        .query_row(
+            "SELECT status FROM task_items WHERE id = ?1",
+            params![item_id],
+            |row| row.get(0),
+        )
+        .expect("item status");
+    assert_eq!(status, "pending");
 }

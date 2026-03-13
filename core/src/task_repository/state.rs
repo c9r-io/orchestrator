@@ -102,3 +102,148 @@ pub fn update_task_cycle_state(
     )?;
     Ok(())
 }
+
+/// Recover all orphaned running items across all tasks.
+/// Resets running items to `pending` and their parent tasks to `restart_pending`.
+/// Returns `Vec<(task_id, Vec<item_id>)>` for audit.
+pub fn recover_orphaned_running_items(conn: &Connection) -> Result<Vec<(String, Vec<String>)>> {
+    let tx = conn.unchecked_transaction()?;
+    let now = now_ts();
+
+    // Find all running items grouped by task
+    let rows: Vec<(String, String)> = {
+        let mut stmt = tx.prepare(
+            "SELECT id, task_id FROM task_items WHERE status = 'running' ORDER BY task_id",
+        )?;
+        let mapped = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        mapped
+    };
+
+    if rows.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Group by task_id
+    let mut grouped: std::collections::BTreeMap<String, Vec<String>> =
+        std::collections::BTreeMap::new();
+    for (item_id, task_id) in &rows {
+        grouped
+            .entry(task_id.clone())
+            .or_default()
+            .push(item_id.clone());
+    }
+
+    // Reset items to pending
+    tx.execute(
+        "UPDATE task_items SET status = 'pending', started_at = NULL, completed_at = NULL, updated_at = ?1 WHERE status = 'running'",
+        params![now],
+    )?;
+
+    // Set parent tasks from running to restart_pending
+    for task_id in grouped.keys() {
+        tx.execute(
+            "UPDATE tasks SET status = 'restart_pending', completed_at = NULL, updated_at = ?2 WHERE id = ?1 AND status = 'running'",
+            params![task_id, now],
+        )?;
+    }
+
+    tx.commit()?;
+    Ok(grouped.into_iter().collect())
+}
+
+/// Recover orphaned running items for a single task.
+/// Returns the list of recovered item IDs.
+pub fn recover_orphaned_running_items_for_task(
+    conn: &Connection,
+    task_id: &str,
+) -> Result<Vec<String>> {
+    let tx = conn.unchecked_transaction()?;
+    let now = now_ts();
+
+    let item_ids: Vec<String> = {
+        let mut stmt = tx.prepare(
+            "SELECT id FROM task_items WHERE task_id = ?1 AND status = 'running'",
+        )?;
+        let mapped = stmt
+            .query_map(params![task_id], |row| row.get(0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        mapped
+    };
+
+    if item_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    tx.execute(
+        "UPDATE task_items SET status = 'pending', started_at = NULL, completed_at = NULL, updated_at = ?2 WHERE task_id = ?1 AND status = 'running'",
+        params![task_id, now],
+    )?;
+
+    tx.execute(
+        "UPDATE tasks SET status = 'restart_pending', completed_at = NULL, updated_at = ?2 WHERE id = ?1 AND status = 'running'",
+        params![task_id, now],
+    )?;
+
+    tx.commit()?;
+    Ok(item_ids)
+}
+
+/// Recover stalled running items older than the given threshold.
+/// Returns `Vec<(task_id, Vec<item_id>)>` for audit.
+pub fn recover_stalled_running_items(
+    conn: &Connection,
+    stall_threshold_secs: u64,
+) -> Result<Vec<(String, Vec<String>)>> {
+    let tx = conn.unchecked_transaction()?;
+    let now = now_ts();
+
+    // Compute cutoff timestamp
+    let cutoff = chrono::Utc::now()
+        .checked_sub_signed(chrono::Duration::seconds(stall_threshold_secs as i64))
+        .map(|dt| dt.to_rfc3339())
+        .unwrap_or_default();
+
+    let rows: Vec<(String, String)> = {
+        let mut stmt = tx.prepare(
+            "SELECT id, task_id FROM task_items WHERE status = 'running' AND started_at < ?1 ORDER BY task_id",
+        )?;
+        let mapped = stmt
+            .query_map(params![cutoff], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        mapped
+    };
+
+    if rows.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut grouped: std::collections::BTreeMap<String, Vec<String>> =
+        std::collections::BTreeMap::new();
+    for (item_id, task_id) in &rows {
+        grouped
+            .entry(task_id.clone())
+            .or_default()
+            .push(item_id.clone());
+    }
+
+    // Reset stalled items
+    for item_id in grouped.values().flatten() {
+        tx.execute(
+            "UPDATE task_items SET status = 'pending', started_at = NULL, completed_at = NULL, updated_at = ?2 WHERE id = ?1",
+            params![item_id, now],
+        )?;
+    }
+
+    // Set parent tasks to restart_pending
+    for task_id in grouped.keys() {
+        tx.execute(
+            "UPDATE tasks SET status = 'restart_pending', completed_at = NULL, updated_at = ?2 WHERE id = ?1 AND status = 'running'",
+            params![task_id, now],
+        )?;
+    }
+
+    tx.commit()?;
+    Ok(grouped.into_iter().collect())
+}

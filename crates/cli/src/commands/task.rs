@@ -157,6 +157,15 @@ pub(crate) async fn dispatch(
             Ok(())
         }
 
+        TaskCommands::Recover { task_id } => {
+            let resp = client
+                .task_recover(orchestrator_proto::TaskRecoverRequest { task_id })
+                .await?
+                .into_inner();
+            println!("{}", resp.message);
+            Ok(())
+        }
+
         TaskCommands::Watch { task_id, interval } => {
             let mut stream = client
                 .task_watch(orchestrator_proto::TaskWatchRequest {

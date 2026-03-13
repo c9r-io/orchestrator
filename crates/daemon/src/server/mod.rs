@@ -123,6 +123,13 @@ impl OrchestratorService for OrchestratorServer {
         task::task_retry(self, request).await
     }
 
+    async fn task_recover(
+        &self,
+        request: Request<TaskRecoverRequest>,
+    ) -> Result<Response<TaskRecoverResponse>, Status> {
+        task::task_recover(self, request).await
+    }
+
     async fn task_list(
         &self,
         request: Request<TaskListRequest>,

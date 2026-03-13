@@ -69,6 +69,10 @@ struct Args {
     #[arg(long = "event-archive-dir")]
     event_archive_dir: Option<PathBuf>,
 
+    /// Minutes before a running item is considered stalled (0 = disabled).
+    #[arg(long = "stall-timeout-mins", default_value_t = 30)]
+    stall_timeout_mins: u64,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -175,6 +179,40 @@ fn main() -> Result<()> {
             .await;
         }
 
+        // Recover orphaned running items from a previous crash
+        match inner.task_repo.recover_orphaned_running_items().await {
+            Ok(recovered) => {
+                for (task_id, item_ids) in &recovered {
+                    info!(
+                        task_id = %task_id,
+                        items = item_ids.len(),
+                        "recovered orphaned running items"
+                    );
+                    emit_daemon_event(
+                        &inner,
+                        "orphaned_items_recovered",
+                        serde_json::json!({
+                            "task_id": task_id,
+                            "recovered_item_ids": item_ids,
+                            "count": item_ids.len(),
+                        }),
+                    )
+                    .await;
+                }
+                if !recovered.is_empty() {
+                    let total: usize = recovered.iter().map(|(_, ids)| ids.len()).sum();
+                    info!(
+                        tasks = recovered.len(),
+                        items = total,
+                        "startup orphan recovery complete"
+                    );
+                }
+            }
+            Err(e) => {
+                error!(error = %e, "failed to recover orphaned running items at startup");
+            }
+        }
+
         // Clear any stale stop signal from a previous run
         let _ = clear_worker_stop_signal(&inner);
 
@@ -258,6 +296,51 @@ fn main() -> Result<()> {
                             }
                         }
                         _ = cleanup_shutdown.changed() => {
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+
+        // Spawn stall detection sweep
+        if args.stall_timeout_mins > 0 {
+            let stall_state = inner.clone();
+            let mut stall_shutdown = shutdown_rx.clone();
+            let stall_threshold_secs = args.stall_timeout_mins * 60;
+            info!(
+                stall_timeout_mins = args.stall_timeout_mins,
+                "stall detection sweep started"
+            );
+            tokio::spawn(async move {
+                let mut interval =
+                    tokio::time::interval(std::time::Duration::from_secs(300));
+                loop {
+                    tokio::select! {
+                        _ = interval.tick() => {
+                            match stall_state.task_repo.recover_stalled_running_items(stall_threshold_secs).await {
+                                Ok(recovered) => {
+                                    for (task_id, item_ids) in &recovered {
+                                        for item_id in item_ids {
+                                            emit_daemon_event(
+                                                &stall_state,
+                                                "item_stall_recovered",
+                                                serde_json::json!({
+                                                    "task_id": task_id,
+                                                    "item_id": item_id,
+                                                    "stall_threshold_secs": stall_threshold_secs,
+                                                }),
+                                            )
+                                            .await;
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::warn!(error = %e, "stall detection sweep failed");
+                                }
+                            }
+                        }
+                        _ = stall_shutdown.changed() => {
                             break;
                         }
                     }
