@@ -62,6 +62,8 @@ pub struct DaemonRuntimeSnapshot {
     pub active_workers: u64,
     /// Number of tasks currently executing.
     pub running_tasks: u64,
+    /// Total number of worker restarts due to panics.
+    pub total_worker_restarts: u64,
 }
 
 /// Shared atomic runtime counters for the daemon process.
@@ -74,6 +76,7 @@ pub struct DaemonRuntimeState {
     idle_workers: AtomicU64,
     active_workers: AtomicU64,
     running_tasks: AtomicU64,
+    total_worker_restarts: AtomicU64,
 }
 
 impl Default for DaemonRuntimeState {
@@ -94,6 +97,7 @@ impl DaemonRuntimeState {
             idle_workers: AtomicU64::new(0),
             active_workers: AtomicU64::new(0),
             running_tasks: AtomicU64::new(0),
+            total_worker_restarts: AtomicU64::new(0),
         }
     }
 
@@ -110,6 +114,7 @@ impl DaemonRuntimeState {
             idle_workers: self.idle_workers.load(Ordering::SeqCst),
             active_workers: self.active_workers.load(Ordering::SeqCst),
             running_tasks: self.running_tasks.load(Ordering::SeqCst),
+            total_worker_restarts: self.total_worker_restarts.load(Ordering::SeqCst),
         }
     }
 
@@ -170,6 +175,11 @@ impl DaemonRuntimeState {
     pub fn running_task_finished(&self) {
         self.running_tasks.fetch_sub(1, Ordering::SeqCst);
     }
+
+    /// Records a worker restart after a panic recovery.
+    pub fn record_worker_restart(&self) {
+        self.total_worker_restarts.fetch_add(1, Ordering::SeqCst);
+    }
 }
 
 #[cfg(test)]
@@ -193,6 +203,11 @@ mod tests {
         assert_eq!(serving.active_workers, 1);
         assert_eq!(serving.running_tasks, 1);
         assert!(!serving.shutdown_requested);
+        assert_eq!(serving.total_worker_restarts, 0);
+
+        runtime.record_worker_restart();
+        runtime.record_worker_restart();
+        assert_eq!(runtime.snapshot().total_worker_restarts, 2);
 
         assert!(runtime.request_shutdown());
         let draining = runtime.snapshot();

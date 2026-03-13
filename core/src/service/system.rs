@@ -118,6 +118,7 @@ pub async fn worker_status(state: &InnerState) -> Result<orchestrator_proto::Wor
         configured_workers: runtime.configured_workers as i64,
         shutdown_requested: runtime.shutdown_requested,
         lifecycle_state: runtime.lifecycle_state.as_str().to_string(),
+        total_worker_restarts: runtime.total_worker_restarts as i64,
     })
 }
 

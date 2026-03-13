@@ -20,6 +20,8 @@
 | FR-027 | Worker 轮询优化 — Notify 唤醒机制 | P1 | Implemented |
 | FR-030 | Self-Evolution 数据库 Schema 对齐验证 | P1 | Closed |
 | FR-031 | generate_items 对 LLM 非标准 JSON 输出的容错解析 | P1 | Proposed |
+| FR-032 | Daemon 进程崩溃韧性与 Worker 存活保障 | P1 | Proposed |
+| FR-033 | Daemon 重启后孤立 Running Items 自动恢复 | P1 | Proposed |
 
 ## 说明
 

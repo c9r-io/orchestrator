@@ -40,6 +40,7 @@ pub fn print_daemon_status(
     println!("running_tasks:      {}", status.running_tasks);
     println!("pending_tasks:      {}", status.pending_tasks);
     println!("stop_signal:        {}", status.stop_signal);
+    println!("total_worker_restarts: {}", status.total_worker_restarts);
 }
 
 fn run_probe(probe: SandboxProbeCommands) -> Result<()> {

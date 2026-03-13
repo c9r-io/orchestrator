@@ -164,6 +164,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/69-async-lock-model-alignment.md` | 6 | FR-016: config runtime snapshots, async health/metrics locks, governance-gate regression, and documented sync exceptions |
 | orchestrator | `docs/qa/orchestrator/70-libc-cross-platform-compilation.md` | 5 | FR-019: libc workspace dep unification, cfg(unix) gating, SIGXCPU test guard, and 5-target cross-compile CI |
 | orchestrator | `docs/qa/orchestrator/82-step-variable-expansion-completeness.md` | 5 | Variable expansion completeness: renderer helpers, runtime propagation, step-family coverage matrix, and unexpanded-placeholder anomaly guard |
+| orchestrator | `docs/qa/orchestrator/85-daemon-crash-resilience.md` | 5 | FR-032: worker auto-respawn, stale PID crash recovery, panic hook crash log, supervisor health monitoring, total_worker_restarts metric |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
 | script | `docs/qa/script/` | 6 | Executable QA scripts |
 | self-bootstrap | `docs/qa/self-bootstrap/smoke-self-bootstrap.md` | - | Smoke test: self-bootstrap basics |

@@ -427,6 +427,7 @@ message WorkerStatusResponse {
   int64 configured_workers = 6;
   bool shutdown_requested = 7;
   string lifecycle_state = 8;
+  int64 total_worker_restarts = 9;
 }
 
 message DiagnosticEntry {

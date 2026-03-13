@@ -26,7 +26,6 @@ pub fn write_pid_file(path: &Path) -> Result<()> {
 }
 
 /// Read the PID from the PID file, if present.
-#[allow(dead_code)]
 pub fn read_pid_file(path: &Path) -> Option<u32> {
     std::fs::read_to_string(path)
         .ok()
@@ -35,15 +34,53 @@ pub fn read_pid_file(path: &Path) -> Option<u32> {
 
 /// Check if a process with the given PID is alive.
 #[cfg(unix)]
-#[allow(dead_code)]
 pub fn is_process_alive(pid: u32) -> bool {
     nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid as i32), None).is_ok()
+}
+
+/// Detect whether a PID file refers to a dead process (stale from a previous crash).
+/// Returns `true` if a PID file exists and the process is no longer alive.
+#[cfg(unix)]
+pub fn detect_stale_pid(pid_path: &Path) -> bool {
+    match read_pid_file(pid_path) {
+        Some(pid) => !is_process_alive(pid),
+        None => false,
+    }
 }
 
 /// Clean up socket and PID file on shutdown.
 pub fn cleanup(socket_path: &Path, pid_path: &Path) {
     let _ = std::fs::remove_file(socket_path);
     let _ = std::fs::remove_file(pid_path);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detect_stale_pid_returns_true_for_dead_process() {
+        let dir = tempfile::tempdir().unwrap();
+        let pid_path = dir.path().join("daemon.pid");
+        // PID 2_000_000_000 is almost certainly not alive
+        std::fs::write(&pid_path, "2000000000").unwrap();
+        assert!(detect_stale_pid(&pid_path));
+    }
+
+    #[test]
+    fn detect_stale_pid_returns_false_for_current_process() {
+        let dir = tempfile::tempdir().unwrap();
+        let pid_path = dir.path().join("daemon.pid");
+        std::fs::write(&pid_path, std::process::id().to_string()).unwrap();
+        assert!(!detect_stale_pid(&pid_path));
+    }
+
+    #[test]
+    fn detect_stale_pid_returns_false_when_no_pid_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let pid_path = dir.path().join("daemon.pid");
+        assert!(!detect_stale_pid(&pid_path));
+    }
 }
 
 /// Wait for SIGTERM or SIGINT, then initiate graceful shutdown.

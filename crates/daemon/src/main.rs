@@ -109,6 +109,28 @@ fn main() -> Result<()> {
     tracing::subscriber::set_global_default(subscriber)
         .context("failed to set tracing subscriber")?;
 
+    // Install panic hook that appends to data/daemon_crash.log before the default hook.
+    {
+        let app_root = agent_orchestrator::config_load::detect_app_root();
+        let crash_log = app_root.join("data/daemon_crash.log");
+        let default_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&crash_log)
+            {
+                use std::io::Write;
+                let ts = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                let _ = writeln!(f, "[epoch={ts}] {info}");
+            }
+            default_hook(info);
+        }));
+    }
+
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -128,6 +150,9 @@ fn main() -> Result<()> {
         let socket_path = lifecycle::socket_path(&inner.app_root);
         let pid_path = lifecycle::pid_path(&inner.app_root);
 
+        // Detect stale PID from a previous crash before overwriting
+        let stale_pid_detected = lifecycle::detect_stale_pid(&pid_path);
+
         // Write PID file
         lifecycle::write_pid_file(&pid_path)?;
 
@@ -139,6 +164,17 @@ fn main() -> Result<()> {
             "orchestratord starting"
         );
 
+        // Emit crash recovery event if stale PID was detected
+        if stale_pid_detected {
+            info!("stale PID file detected — previous daemon likely crashed");
+            emit_daemon_event(
+                &inner,
+                "daemon_crash_recovered",
+                serde_json::json!({ "source": "stale_pid_detection" }),
+            )
+            .await;
+        }
+
         // Clear any stale stop signal from a previous run
         let _ = clear_worker_stop_signal(&inner);
 
@@ -148,17 +184,19 @@ fn main() -> Result<()> {
         let (restart_tx, restart_rx) =
             tokio::sync::watch::channel::<Option<std::path::PathBuf>>(None);
 
-        // Spawn worker tasks
-        let mut worker_handles = Vec::with_capacity(args.workers);
-        for idx in 0..args.workers {
-            let rx = shutdown_rx.clone();
-            let st = inner.clone();
-            let rtx = restart_tx.clone();
-            let handle = tokio::spawn(worker_loop(st, idx, rx, rtx));
-            worker_handles.push(handle);
-        }
-        drop(restart_tx); // drop original sender so only workers hold it
-        info!(workers = args.workers, "background workers started");
+        // Spawn worker supervisor (owns restart_tx, manages worker lifecycle)
+        let supervisor_handle = {
+            let sup_state = inner.clone();
+            let sup_shutdown = shutdown_rx.clone();
+            let worker_count = args.workers;
+            tokio::spawn(worker_supervisor(
+                sup_state,
+                worker_count,
+                sup_shutdown,
+                restart_tx,
+            ))
+        };
+        info!(workers = args.workers, "worker supervisor started");
 
         // Spawn agent drain timeout sweep (runs every 10s)
         {
@@ -347,16 +385,13 @@ fn main() -> Result<()> {
             .await;
         }
 
-        // Wait for all workers to finish (with a timeout)
-        let drain = futures::future::join_all(worker_handles);
-        match tokio::time::timeout(std::time::Duration::from_secs(30), drain).await {
-            Ok(results) => {
-                for (i, r) in results.into_iter().enumerate() {
-                    if let Err(e) = r {
-                        error!(worker = i + 1, error = %e, "worker task panicked");
-                    }
-                }
+        // Wait for supervisor (and all workers) to finish
+        match tokio::time::timeout(std::time::Duration::from_secs(30), supervisor_handle).await {
+            Ok(Ok(())) => {
                 info!("all workers stopped");
+            }
+            Ok(Err(e)) => {
+                error!(error = %e, "worker supervisor panicked");
             }
             Err(_) => {
                 error!("timed out waiting for workers to drain (30s)");
@@ -418,15 +453,127 @@ fn handle_subcommand(command: Commands) -> Result<()> {
     }
 }
 
+/// Outcome of a single worker iteration (one poll cycle).
+enum WorkerIterationOutcome {
+    /// Continue polling for more tasks.
+    Continue,
+    /// Worker should shut down cleanly.
+    Shutdown,
+    /// A restart was requested; propagate the binary path.
+    RestartRequested(std::path::PathBuf),
+}
+
+/// Execute a single worker iteration: acquire permit, claim task, run it.
+async fn worker_iteration(
+    state: &Arc<InnerState>,
+    worker_num: usize,
+    shutdown: &mut tokio::sync::watch::Receiver<bool>,
+    is_busy: &mut bool,
+) -> WorkerIterationOutcome {
+    let stop_path = worker_stop_signal_path(state);
+    let poll_interval = std::time::Duration::from_millis(2000);
+
+    // Check shutdown
+    if *shutdown.borrow() {
+        return WorkerIterationOutcome::Shutdown;
+    }
+
+    // Check external stop signal file
+    if stop_path.exists() {
+        info!(worker = worker_num, "stop signal detected, exiting");
+        return WorkerIterationOutcome::Shutdown;
+    }
+
+    // Acquire concurrency permit
+    let permit = match task_semaphore().clone().acquire_owned().await {
+        Ok(p) => p,
+        Err(_) => {
+            info!(worker = worker_num, "semaphore closed, exiting");
+            return WorkerIterationOutcome::Shutdown;
+        }
+    };
+
+    match claim_next_pending_task(state).await {
+        Ok(Some(task_id)) => {
+            info!(worker = worker_num, %task_id, "claimed task");
+            let runtime = RunningTask::new();
+            state.daemon_runtime.worker_became_busy();
+            *is_busy = true;
+            emit_daemon_event(
+                state,
+                "worker_state_changed",
+                serde_json::json!({
+                    "worker_id": worker_num,
+                    "from_state": "idle",
+                    "to_state": "busy",
+                    "task_id": task_id,
+                }),
+            )
+            .await;
+            let _ = register_running_task(state, &task_id, runtime.clone()).await;
+            let run_result = run_task_loop(state.clone(), &task_id, runtime).await;
+            unregister_running_task(state, &task_id).await;
+            state.daemon_runtime.worker_became_idle();
+            *is_busy = false;
+            emit_daemon_event(
+                state,
+                "worker_state_changed",
+                serde_json::json!({
+                    "worker_id": worker_num,
+                    "from_state": "busy",
+                    "to_state": "idle",
+                    "task_id": task_id,
+                }),
+            )
+            .await;
+            match run_result {
+                Ok(()) => {
+                    if let Ok(summary) = load_task_summary(state, &task_id).await {
+                        info!(worker = worker_num, %task_id, status = %summary.status, "task finished");
+                    }
+                }
+                Err(e) => {
+                    if let Some(restart) = e.downcast_ref::<RestartRequestedError>() {
+                        info!(worker = worker_num, "restart requested, signalling daemon");
+                        state.daemon_runtime.request_shutdown();
+                        return WorkerIterationOutcome::RestartRequested(
+                            restart.binary_path.clone(),
+                        );
+                    }
+                    error!(worker = worker_num, %task_id, error = %e, "task failed");
+                }
+            }
+            drop(permit);
+        }
+        Ok(None) => {
+            drop(permit);
+            // No task available — wait for in-process wakeup, timeout fallback, or shutdown.
+            tokio::select! {
+                _ = state.worker_notify.notified() => {}
+                _ = tokio::time::sleep(poll_interval) => {}
+                _ = shutdown.changed() => {}
+            }
+        }
+        Err(e) => {
+            drop(permit);
+            error!(worker = worker_num, error = %e, "claim error");
+            tokio::select! {
+                _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {}
+                _ = shutdown.changed() => {}
+            }
+        }
+    }
+    WorkerIterationOutcome::Continue
+}
+
 /// Background worker loop: polls for pending tasks, claims and executes them.
+/// Wraps each iteration in catch_unwind so panics are recovered instead of killing the worker.
 async fn worker_loop(
     state: Arc<InnerState>,
     worker_idx: usize,
     mut shutdown: tokio::sync::watch::Receiver<bool>,
     restart_tx: tokio::sync::watch::Sender<Option<std::path::PathBuf>>,
 ) {
-    let stop_path = worker_stop_signal_path(&state);
-    let poll_interval = std::time::Duration::from_millis(2000);
     let worker_num = worker_idx + 1;
 
     state.daemon_runtime.worker_started();
@@ -442,100 +589,50 @@ async fn worker_loop(
     .await;
     info!(worker = worker_num, "worker started");
 
+    let mut is_busy = false;
+
     loop {
-        // Check shutdown
+        // Shutdown/stop checks are infallible — check before entering catch_unwind.
         if *shutdown.borrow() {
             break;
         }
 
-        // Check external stop signal file
-        if stop_path.exists() {
-            info!(worker = worker_num, "stop signal detected, exiting");
-            break;
-        }
+        let result = std::panic::AssertUnwindSafe(worker_iteration(
+            &state,
+            worker_num,
+            &mut shutdown,
+            &mut is_busy,
+        ))
+        .catch_unwind()
+        .await;
 
-        // Acquire concurrency permit
-        let permit = match task_semaphore().clone().acquire_owned().await {
-            Ok(p) => p,
-            Err(_) => {
-                info!(worker = worker_num, "semaphore closed, exiting");
+        match result {
+            Ok(WorkerIterationOutcome::Continue) => {}
+            Ok(WorkerIterationOutcome::Shutdown) => break,
+            Ok(WorkerIterationOutcome::RestartRequested(binary_path)) => {
+                let _ = restart_tx.send(Some(binary_path));
                 break;
             }
-        };
+            Err(_panic) => {
+                error!(worker = worker_num, "worker iteration panicked, recovering");
+                state.daemon_runtime.record_worker_restart();
 
-        match claim_next_pending_task(&state).await {
-            Ok(Some(task_id)) => {
-                info!(worker = worker_num, %task_id, "claimed task");
-                let runtime = RunningTask::new();
-                state.daemon_runtime.worker_became_busy();
+                // If we panicked while busy, fix the counters
+                if is_busy {
+                    state.daemon_runtime.worker_became_idle();
+                    is_busy = false;
+                }
+
                 emit_daemon_event(
                     &state,
-                    "worker_state_changed",
-                    serde_json::json!({
-                        "worker_id": worker_num,
-                        "from_state": "idle",
-                        "to_state": "busy",
-                        "task_id": task_id,
-                    }),
+                    "worker_panic_recovered",
+                    serde_json::json!({ "worker_id": worker_num }),
                 )
                 .await;
-                let _ = register_running_task(&state, &task_id, runtime.clone()).await;
-                let run_result =
-                    std::panic::AssertUnwindSafe(run_task_loop(state.clone(), &task_id, runtime))
-                        .catch_unwind()
-                        .await;
-                unregister_running_task(&state, &task_id).await;
-                state.daemon_runtime.worker_became_idle();
-                emit_daemon_event(
-                    &state,
-                    "worker_state_changed",
-                    serde_json::json!({
-                        "worker_id": worker_num,
-                        "from_state": "busy",
-                        "to_state": "idle",
-                        "task_id": task_id,
-                    }),
-                )
-                .await;
-                match run_result {
-                    Ok(Ok(())) => {
-                        if let Ok(summary) = load_task_summary(&state, &task_id).await {
-                            info!(worker = worker_num, %task_id, status = %summary.status, "task finished");
-                        }
-                    }
-                    Ok(Err(e)) => {
-                        if let Some(restart) = e.downcast_ref::<RestartRequestedError>() {
-                            info!(worker = worker_num, "restart requested, signalling daemon");
-                            state.daemon_runtime.request_shutdown();
-                            let _ = restart_tx.send(Some(restart.binary_path.clone()));
-                            break;
-                        }
-                        error!(worker = worker_num, %task_id, error = %e, "task failed");
-                    }
-                    Err(panic) => {
-                        error!(worker = worker_num, %task_id, "task panicked");
-                        drop(panic);
-                        break;
-                    }
-                }
-                drop(permit);
-            }
-            Ok(None) => {
-                drop(permit);
-                // No task available — wait for in-process wakeup, timeout fallback, or shutdown.
-                tokio::select! {
-                    _ = state.worker_notify.notified() => {}
-                    _ = tokio::time::sleep(poll_interval) => {}
-                    _ = shutdown.changed() => {}
-                }
-            }
-            Err(e) => {
-                drop(permit);
-                error!(worker = worker_num, error = %e, "claim error");
-                tokio::select! {
-                    _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {}
-                    _ = shutdown.changed() => {}
-                }
+
+                // Brief delay before retrying to avoid tight panic loops
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                continue;
             }
         }
     }
@@ -552,6 +649,97 @@ async fn worker_loop(
     )
     .await;
     info!(worker = worker_num, "worker stopped");
+}
+
+/// Supervisor that spawns and monitors workers, respawning any that finish unexpectedly.
+async fn worker_supervisor(
+    state: Arc<InnerState>,
+    worker_count: usize,
+    mut shutdown: tokio::sync::watch::Receiver<bool>,
+    restart_tx: tokio::sync::watch::Sender<Option<std::path::PathBuf>>,
+) {
+    let mut handles: Vec<(usize, tokio::task::JoinHandle<()>)> = Vec::with_capacity(worker_count);
+
+    // Spawn initial workers
+    for idx in 0..worker_count {
+        let rx = shutdown.clone();
+        let st = state.clone();
+        let rtx = restart_tx.clone();
+        let handle = tokio::spawn(worker_loop(st, idx, rx, rtx));
+        handles.push((idx, handle));
+    }
+    info!(workers = worker_count, "initial workers spawned");
+
+    let health_interval = std::time::Duration::from_secs(30);
+
+    loop {
+        tokio::select! {
+            _ = tokio::time::sleep(health_interval) => {}
+            _ = shutdown.changed() => {
+                // Shutdown requested — stop respawning
+                break;
+            }
+        }
+
+        if *shutdown.borrow() {
+            break;
+        }
+
+        // Health check: find finished workers and respawn them
+        let mut respawn_indices = Vec::new();
+        for (idx, (worker_idx, handle)) in handles.iter().enumerate() {
+            if handle.is_finished() {
+                info!(worker = worker_idx + 1, "detected dead worker, scheduling respawn");
+                respawn_indices.push((idx, *worker_idx));
+            }
+        }
+
+        for (vec_idx, worker_idx) in respawn_indices.into_iter().rev() {
+            let (_, old_handle) = handles.remove(vec_idx);
+            if let Err(e) = old_handle.await {
+                error!(worker = worker_idx + 1, error = %e, "dead worker had panicked");
+            }
+
+            // Brief delay before respawn
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+            if *shutdown.borrow() {
+                break;
+            }
+
+            let rx = shutdown.clone();
+            let st = state.clone();
+            let rtx = restart_tx.clone();
+            let handle = tokio::spawn(worker_loop(st, worker_idx, rx, rtx));
+            handles.push((worker_idx, handle));
+            state.daemon_runtime.record_worker_restart();
+
+            emit_daemon_event(
+                &state,
+                "worker_respawned",
+                serde_json::json!({ "worker_id": worker_idx + 1 }),
+            )
+            .await;
+            info!(worker = worker_idx + 1, "worker respawned by supervisor");
+        }
+
+        // Warn if live workers are below configured count
+        let live = handles.iter().filter(|(_, h)| !h.is_finished()).count();
+        if live < worker_count {
+            tracing::warn!(
+                live_workers = live,
+                configured = worker_count,
+                "live workers below configured count"
+            );
+        }
+    }
+
+    // Wait for all workers to finish
+    for (worker_idx, handle) in handles {
+        if let Err(e) = handle.await {
+            error!(worker = worker_idx + 1, error = %e, "worker panicked during shutdown");
+        }
+    }
 }
 
 async fn emit_daemon_event(state: &InnerState, event_type: &str, payload: serde_json::Value) {
