@@ -275,32 +275,57 @@ ORDER BY started_at DESC;
 ## Scenario 5: Task Retry (Queue-Only)
 
 ### Preconditions
-- A task has at least one failed or unresolved item.
+- A completed or failed task exists (any terminal item status is retryable).
 
 ### Steps
-1. Find retry target item:
+1. Create a task with `--no-start` so it has an item in a known state:
    ```bash
-   orchestrator task info {task_id} -o json
+   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --workflow probe_task_scoped --name "retry-test" --goal "test retry" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
-2. Attempt retry without `--force` (safety gate):
+2. Extract the task-item ID:
    ```bash
-   orchestrator task retry {task_item_id} 2>&1; echo "exit=$?"
+   ITEM_ID=$(orchestrator task info "${TASK_ID}" -o json | jq -r '.items[0].id')
    ```
-3. Retry with `--force`:
+3. Extract a short prefix (first 8 characters) for prefix-resolution testing:
    ```bash
-   orchestrator task retry {task_item_id} --force
+   SHORT_ID="${ITEM_ID:0:8}"
+   ```
+4. Attempt retry without `--force` (safety gate) — use full ID:
+   ```bash
+   orchestrator task retry "${ITEM_ID}" 2>&1; echo "exit=$?"
+   ```
+5. Retry with `--force` using **full ID**:
+   ```bash
+   orchestrator task retry "${ITEM_ID}" --force
+   ```
+6. Re-create a fresh task for prefix test (step 5 already consumed the previous item):
+   ```bash
+   TASK_ID2=$(orchestrator task create --project "${QA_PROJECT}" --workflow probe_task_scoped --name "retry-prefix" --goal "test prefix retry" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   ITEM_ID2=$(orchestrator task info "${TASK_ID2}" -o json | jq -r '.items[0].id')
+   SHORT_ID2="${ITEM_ID2:0:8}"
+   ```
+7. Retry with `--force` using **short prefix**:
+   ```bash
+   orchestrator task retry "${SHORT_ID2}" --force
    ```
 
 ### Expected
-- Without `--force`: prints warning to stderr and exits with code 1; no state change occurs.
-- Retry with `--force` enqueues associated task and returns without inline execution.
+- Step 4: prints warning to stderr and exits with code 1; no state change occurs.
+- Step 5: enqueues associated task and returns promptly with "Task enqueued: {task_id}".
+- Step 7: same success as step 5 — prefix is resolved to the full task-item ID.
+- Both full task-item IDs and unique prefixes (e.g. first 8 characters) are accepted.
+
+| Symptom | Likely Cause | Fix |
+|---|---|---|
+| `Query returned no rows` when using a short ID prefix | Prefix does not uniquely match a task item | Use a longer prefix or the full ID |
+| `multiple task items match prefix` | Ambiguous prefix matches more than one item | Use a longer prefix or the full ID |
 
 ### Expected Data State
 ```sql
 SELECT status, updated_at
 FROM task_items
 WHERE id = '{task_item_id}';
--- Expected: status/updated_at changed after retry execution
+-- Expected: status reset to 'pending', updated_at changed after retry
 ```
 
 ---
@@ -313,4 +338,4 @@ WHERE id = '{task_item_id}';
 | 2 | Create/Start Enqueue Mode | ✅ PASS | 2026-03-13 | chenhan | Task creation uses scheduler, scheduler_enqueued event recorded |
 | 3 | Daemon Worker Consumption | ✅ PASS | 2026-03-13 | chenhan | 3 workers consumed pending tasks, task watch shows status changes |
 | 4 | Task Logs | ✅ PASS | 2026-03-13 | chenhan | Logs display correctly with run output, --tail and --timestamps work |
-| 5 | Task Retry (Queue-Only) | ✅ PASS | 2026-03-13 | chenhan | Without --force: exits with code 1. With --force: enqueues task successfully |
+| 5 | Task Retry (Queue-Only) | ✅ PASS | 2026-03-14 | claude | Without --force: exits code 1. Full ID + short prefix both enqueue successfully |

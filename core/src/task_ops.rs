@@ -238,21 +238,54 @@ fn resolve_default_resource_id<T>(
 }
 
 /// Resets one failed task item back to the pending state and returns its parent task id.
+///
+/// Accepts an exact task-item ID or a unique prefix (same behaviour as
+/// `resolve_task_id` for tasks).
 pub fn reset_task_item_for_retry(
     state: &crate::state::InnerState,
     task_item_id: &str,
 ) -> Result<String> {
     let conn = open_conn(&state.db_path)?;
+    let resolved_id = resolve_task_item_id(&conn, task_item_id)?;
     let task_id: String = conn.query_row(
         "SELECT task_id FROM task_items WHERE id = ?1",
-        params![task_item_id],
+        params![resolved_id],
         |row| row.get(0),
     )?;
     conn.execute(
         "UPDATE task_items SET status = 'pending', ticket_files_json = '[]', ticket_content_json = '[]', fix_required = 0, fixed = 0, last_error = '', started_at = NULL, completed_at = NULL, updated_at = ?2 WHERE id = ?1",
-        params![task_item_id, now_ts()],
+        params![resolved_id, now_ts()],
     )?;
     Ok(task_id)
+}
+
+/// Resolve a task-item ID from an exact match or unique prefix.
+fn resolve_task_item_id(conn: &rusqlite::Connection, id_or_prefix: &str) -> Result<String> {
+    use rusqlite::OptionalExtension;
+    let exact: Option<String> = conn
+        .query_row(
+            "SELECT id FROM task_items WHERE id = ?1",
+            params![id_or_prefix],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if let Some(id) = exact {
+        return Ok(id);
+    }
+    let pattern = format!("{}%", id_or_prefix);
+    let mut stmt = conn.prepare("SELECT id FROM task_items WHERE id LIKE ?1")?;
+    let matches: Vec<String> = stmt
+        .query_map(params![pattern], |row| row.get(0))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    match matches.len() {
+        1 => Ok(matches.into_iter().next().unwrap()),
+        0 => anyhow::bail!("task item not found: {}", id_or_prefix),
+        _ => anyhow::bail!(
+            "multiple task items match prefix '{}': {:?}",
+            id_or_prefix,
+            matches
+        ),
+    }
 }
 
 #[cfg(test)]
