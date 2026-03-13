@@ -123,6 +123,35 @@ async fn run_task_loop_core(
             return Ok(());
         }
 
+        // FR-037: Proactive max_cycles enforcement — prevent cycle overflow from
+        // dynamic items that bypass the post-cycle continuation check.
+        {
+            let proactive_max = proactive_max_cycles(&task_ctx.execution_plan.loop_policy);
+            if task_ctx.current_cycle >= proactive_max {
+                insert_event(
+                    &state,
+                    task_id,
+                    None,
+                    "max_cycles_enforced",
+                    json!({
+                        "current_cycle": task_ctx.current_cycle,
+                        "max_cycles": proactive_max,
+                    }),
+                )
+                .await?;
+                state.emit_event(
+                    task_id,
+                    None,
+                    "max_cycles_enforced",
+                    json!({
+                        "current_cycle": task_ctx.current_cycle,
+                        "max_cycles": proactive_max,
+                    }),
+                );
+                break;
+            }
+        }
+
         task_ctx.current_cycle += 1;
         update_task_cycle_state(&state, task_id, task_ctx.current_cycle, task_ctx.init_done)
             .await?;
@@ -542,4 +571,16 @@ fn parse_cycle_timestamp(ts: &str) -> Option<chrono::DateTime<chrono::FixedOffse
         }
     }
     None
+}
+
+/// FR-037: Compute the proactive max-cycles limit for a given loop policy.
+///
+/// Returns the cycle ceiling: if `current_cycle >= proactive_max`, the loop
+/// must NOT increment and should break immediately.
+pub(crate) fn proactive_max_cycles(policy: &crate::config::WorkflowLoopConfig) -> u32 {
+    match policy.mode {
+        crate::config::LoopMode::Fixed => policy.guard.max_cycles.unwrap_or(1),
+        crate::config::LoopMode::Infinite => policy.guard.max_cycles.unwrap_or(u32::MAX),
+        _ => u32::MAX, // Once mode: handled by evaluate_loop_guard_rules
+    }
 }

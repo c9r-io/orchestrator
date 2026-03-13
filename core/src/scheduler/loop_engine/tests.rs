@@ -178,6 +178,57 @@ async fn load_cycle_context(
     task_ctx
 }
 
+// ── FR-037: proactive max_cycles enforcement ────────────────────────────
+
+#[test]
+fn proactive_max_cycles_fixed_mode() {
+    use super::proactive_max_cycles;
+    let policy = make_loop_policy(LoopMode::Fixed, Some(2));
+    assert_eq!(proactive_max_cycles(&policy), 2);
+    // current_cycle=0 < 2 → allowed to increment
+    assert!(0 < proactive_max_cycles(&policy));
+    // current_cycle=1 < 2 → allowed to increment
+    assert!(1 < proactive_max_cycles(&policy));
+    // current_cycle=2 >= 2 → must break (would be cycle 3)
+    assert!(2 >= proactive_max_cycles(&policy));
+}
+
+#[test]
+fn proactive_max_cycles_fixed_mode_default() {
+    use super::proactive_max_cycles;
+    // Fixed mode with no max_cycles defaults to 1
+    let policy = make_loop_policy(LoopMode::Fixed, None);
+    assert_eq!(proactive_max_cycles(&policy), 1);
+    // current_cycle=1 >= 1 → must break after first cycle
+    assert!(1 >= proactive_max_cycles(&policy));
+}
+
+#[test]
+fn proactive_max_cycles_infinite_mode_with_cap() {
+    use super::proactive_max_cycles;
+    let policy = make_loop_policy(LoopMode::Infinite, Some(5));
+    assert_eq!(proactive_max_cycles(&policy), 5);
+    assert!(4 < proactive_max_cycles(&policy));
+    assert!(5 >= proactive_max_cycles(&policy));
+}
+
+#[test]
+fn proactive_max_cycles_infinite_mode_no_cap() {
+    use super::proactive_max_cycles;
+    let policy = make_loop_policy(LoopMode::Infinite, None);
+    assert_eq!(proactive_max_cycles(&policy), u32::MAX);
+}
+
+#[test]
+fn proactive_max_cycles_once_mode_passthrough() {
+    use super::proactive_max_cycles;
+    // Once mode is handled by evaluate_loop_guard_rules; proactive returns MAX
+    let policy = make_loop_policy(LoopMode::Once, None);
+    assert_eq!(proactive_max_cycles(&policy), u32::MAX);
+}
+
+// ── evaluate_loop_guard_rules ───────────────────────────────────────────
+
 #[test]
 fn fixed_mode_stops_at_max_cycles() {
     let policy = make_loop_policy(LoopMode::Fixed, Some(2));

@@ -25,7 +25,7 @@
 | FR-034 | QA Testing 自引用安全防护 | P1 | Closed |
 | FR-035 | 退化循环检测与熔断机制 | P1 | Closed |
 | FR-036 | Plan Output Context Overflow 缓解 | P1 | Closed |
-| FR-037 | Dynamic Items 触发的循环溢出 — max_cycles 约束失效 | P1 | Proposed |
+| FR-037 | Dynamic Items 触发的循环溢出 — max_cycles 约束失效 | P1 | Closed |
 
 ## 说明
 
@@ -66,3 +66,4 @@
 - FR-031 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/46-unquoted-json-extraction.md` 与 `docs/qa/orchestrator/90-unquoted-json-extraction.md` 承载
 - FR-032 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/47-daemon-crash-resilience.md` 与 `docs/qa/orchestrator/91-daemon-crash-resilience.md` 承载
 - FR-033 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/48-orphaned-running-items-recovery.md` 与 `docs/qa/orchestrator/86-orphaned-running-items-recovery.md` 承载
+- FR-037 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/49-dynamic-items-cycle-overflow.md` 与 `docs/qa/orchestrator/92-dynamic-items-cycle-overflow.md` 承载

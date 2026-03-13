@@ -1,0 +1,211 @@
+# FR-037 Dynamic Items Cycle Overflow — QA test fixtures
+#
+# Workflows:
+#   fixed_with_dynamic_items — mode: fixed, max_cycles: 2, qa_doc_gen produces dynamic items
+#                              Verifies proactive max_cycles gate prevents cycle 3.
+#   infinite_with_dynamic_items — mode: infinite (no max_cycles), qa_doc_gen produces dynamic items
+#                                  Verifies infinite mode is not affected by proactive gate.
+#   fixed_no_dynamic — mode: fixed, max_cycles: 2, no generate_items
+#                      Verifies baseline fixed-mode behavior unchanged.
+---
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - fixtures/qa-fr037
+  ticket_dir: fixtures/ticket
+  self_referential: false
+---
+# Mock architect: outputs regression_targets JSON for generate_items post-action
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_architect
+  description: "Mock architect — outputs regression_targets JSON"
+spec:
+  capabilities:
+    - plan
+    - qa_doc_gen
+    - implement
+  command: >-
+    printf '%s' '{"confidence":0.95,"quality_score":0.9,"artifacts":[],"regression_targets":[{"id":"fixtures/qa-fr037/target-a.md","name":"target-a"},{"id":"fixtures/qa-fr037/target-b.md","name":"target-b"}]}'
+---
+# Mock tester: echoes success JSON for qa_testing and loop_guard
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_tester
+  description: "Mock tester — echoes success JSON"
+spec:
+  capabilities:
+    - qa_testing
+    - loop_guard
+    - self_test
+  command: "echo '{\"confidence\":0.92,\"quality_score\":0.88,\"artifacts\":[]}'"
+---
+# S1: Fixed mode + dynamic items — max_cycles: 2
+# qa_doc_gen runs in cycle 1, creates 2 dynamic items via generate_items.
+# implement runs each cycle (task-scoped, repeatable).
+# Proactive gate must stop the loop after cycle 2.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: fixed_with_dynamic_items
+spec:
+  max_parallel: 1
+
+  steps:
+    - id: implement
+      type: implement
+      scope: task
+      required_capability: implement
+      enabled: true
+      repeatable: true
+      command: "echo '{\"confidence\":0.9,\"quality_score\":0.85,\"artifacts\":[]}'"
+
+    - id: qa_doc_gen
+      type: qa_doc_gen
+      scope: task
+      required_capability: qa_doc_gen
+      enabled: true
+      repeatable: false
+      behavior:
+        post_actions:
+          - type: generate_items
+            from_var: qa_doc_gen_output
+            json_path: "$.regression_targets"
+            mapping:
+              item_id: "$.id"
+              label: "$.name"
+            replace: true
+
+    - id: qa_testing
+      type: qa_testing
+      scope: item
+      required_capability: qa_testing
+      enabled: true
+      repeatable: true
+
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+
+  loop:
+    mode: fixed
+    max_cycles: 2
+    enabled: true
+
+  safety:
+    max_consecutive_failures: 5
+    auto_rollback: false
+    checkpoint_strategy: none
+    max_item_step_failures: 3
+    min_cycle_interval_secs: 1
+---
+# S3: Infinite mode + dynamic items — no max_cycles cap
+# Should complete 1 cycle (items resolve) and stop via stop_when_no_unresolved.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: infinite_with_dynamic_items
+spec:
+  max_parallel: 1
+
+  steps:
+    - id: implement
+      type: implement
+      scope: task
+      required_capability: implement
+      enabled: true
+      repeatable: true
+      command: "echo '{\"confidence\":0.9,\"quality_score\":0.85,\"artifacts\":[]}'"
+
+    - id: qa_doc_gen
+      type: qa_doc_gen
+      scope: task
+      required_capability: qa_doc_gen
+      enabled: true
+      repeatable: false
+      behavior:
+        post_actions:
+          - type: generate_items
+            from_var: qa_doc_gen_output
+            json_path: "$.regression_targets"
+            mapping:
+              item_id: "$.id"
+              label: "$.name"
+            replace: true
+
+    - id: qa_testing
+      type: qa_testing
+      scope: item
+      required_capability: qa_testing
+      enabled: true
+      repeatable: true
+
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+
+  loop:
+    mode: infinite
+    enabled: true
+    stop_when_no_unresolved: true
+
+  safety:
+    max_consecutive_failures: 5
+    auto_rollback: false
+    checkpoint_strategy: none
+    max_item_step_failures: 3
+    min_cycle_interval_secs: 1
+---
+# S4: Fixed mode, no dynamic items — baseline regression
+# Verifies that the proactive gate does not break plain fixed-mode workflows.
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: fixed_no_dynamic
+spec:
+  steps:
+    - id: implement
+      type: implement
+      scope: task
+      required_capability: implement
+      enabled: true
+      repeatable: true
+      command: "echo '{\"confidence\":0.9,\"quality_score\":0.85,\"artifacts\":[]}'"
+
+    - id: qa_testing
+      type: qa_testing
+      scope: item
+      required_capability: qa_testing
+      enabled: true
+      repeatable: true
+
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+
+  loop:
+    mode: fixed
+    max_cycles: 2
+    enabled: true
+
+  safety:
+    max_consecutive_failures: 5
+    auto_rollback: false
+    checkpoint_strategy: none
+    max_item_step_failures: 3
+    min_cycle_interval_secs: 1
