@@ -16,6 +16,7 @@ mod tests;
 
 pub use command_run::NewCommandRun;
 pub use trait_def::TaskRepository;
+pub use write_ops::CompletedRunRecord;
 pub use types::{
     DbEventRecord, NewTaskGraphRun, NewTaskGraphSnapshot, TaskLogRunRow, TaskRepositoryConn,
     TaskRepositorySource, TaskRuntimeRow,
@@ -225,6 +226,27 @@ impl TaskRepository for SqliteTaskRepository {
     fn find_active_child_pids(&self, task_id: &str) -> Result<Vec<i64>> {
         let conn = self.connection()?;
         write_ops::find_active_child_pids(&conn, task_id)
+    }
+
+    fn find_inflight_command_runs_for_task(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<(String, String, String, Option<i64>)>> {
+        let conn = self.connection()?;
+        write_ops::find_inflight_command_runs_for_task(&conn, task_id)
+    }
+
+    fn find_completed_runs_for_pending_items(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<write_ops::CompletedRunRecord>> {
+        let conn = self.connection()?;
+        write_ops::find_completed_runs_for_pending_items(&conn, task_id)
+    }
+
+    fn count_stale_pending_items(&self, task_id: &str) -> Result<i64> {
+        let conn = self.connection()?;
+        queries::count_stale_pending_items(&conn, task_id)
     }
 
     fn update_task_pipeline_vars(&self, task_id: &str, pipeline_vars_json: &str) -> Result<()> {
@@ -652,6 +674,51 @@ impl AsyncSqliteTaskRepository {
             .reader()
             .call(move |conn| {
                 write_ops::find_active_child_pids(conn, &task_id)
+                    .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// Returns in-flight command runs for a task (FR-038).
+    pub async fn find_inflight_command_runs_for_task(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<(String, String, String, Option<i64>)>> {
+        let task_id = task_id.to_owned();
+        self.async_db
+            .reader()
+            .call(move |conn| {
+                write_ops::find_inflight_command_runs_for_task(conn, &task_id)
+                    .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// Returns completed runs whose parent items are still `pending` (FR-038).
+    pub async fn find_completed_runs_for_pending_items(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<write_ops::CompletedRunRecord>> {
+        let task_id = task_id.to_owned();
+        self.async_db
+            .reader()
+            .call(move |conn| {
+                write_ops::find_completed_runs_for_pending_items(conn, &task_id)
+                    .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// Counts stale pending items (FR-038).
+    pub async fn count_stale_pending_items(&self, task_id: &str) -> Result<i64> {
+        let task_id = task_id.to_owned();
+        self.async_db
+            .reader()
+            .call(move |conn| {
+                queries::count_stale_pending_items(conn, &task_id)
                     .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
             })
             .await

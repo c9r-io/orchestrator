@@ -85,6 +85,18 @@ pub trait TaskRepository {
     fn update_command_run_pid(&self, run_id: &str, pid: i64) -> Result<()>;
     /// Returns active child PIDs for a task.
     fn find_active_child_pids(&self, task_id: &str) -> Result<Vec<i64>>;
+    /// Returns in-flight command runs for a task (FR-038).
+    fn find_inflight_command_runs_for_task(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<(String, String, String, Option<i64>)>>;
+    /// Returns completed runs whose parent items are still `pending` (FR-038).
+    fn find_completed_runs_for_pending_items(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<super::write_ops::CompletedRunRecord>>;
+    /// Counts stale pending items (FR-038).
+    fn count_stale_pending_items(&self, task_id: &str) -> Result<i64>;
     /// Persists the serialized pipeline-variable map for a task.
     fn update_task_pipeline_vars(&self, task_id: &str, pipeline_vars_json: &str) -> Result<()>;
     /// Persists the active ticket lists and preview content for a task item.

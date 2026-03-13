@@ -151,6 +151,31 @@ impl DbWriteCoordinator {
         self.repo.find_active_child_pids(task_id).await
     }
 
+    /// Returns in-flight command runs for a task (FR-038).
+    pub async fn find_inflight_command_runs_for_task(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<(String, String, String, Option<i64>)>> {
+        self.repo
+            .find_inflight_command_runs_for_task(task_id)
+            .await
+    }
+
+    /// Returns completed runs whose parent items are still `pending` (FR-038).
+    pub async fn find_completed_runs_for_pending_items(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<crate::task_repository::CompletedRunRecord>> {
+        self.repo
+            .find_completed_runs_for_pending_items(task_id)
+            .await
+    }
+
+    /// Counts stale pending items (FR-038).
+    pub async fn count_stale_pending_items(&self, task_id: &str) -> Result<i64> {
+        self.repo.count_stale_pending_items(task_id).await
+    }
+
     /// Updates task-cycle counters and init-step state.
     pub async fn update_task_cycle_state(
         &self,
@@ -1207,5 +1232,187 @@ mod tests {
 
         // COALESCE should preserve the original started_at
         assert_eq!(first_started_at, second_started_at);
+    }
+
+    // ── FR-038: find_inflight_command_runs_for_task ──
+
+    #[tokio::test]
+    async fn find_inflight_command_runs_empty() {
+        let (state, task_id, _item_id) = setup_task();
+        let runs = state
+            .db_writer
+            .find_inflight_command_runs_for_task(&task_id)
+            .await
+            .expect("find inflight");
+        assert!(runs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn find_inflight_command_runs_returns_active() {
+        let (state, task_id, item_id) = setup_task();
+        let mut run = make_command_run(&item_id);
+        run.exit_code = -1;
+        run.ended_at = String::new();
+        let run_id = run.id.clone();
+
+        state
+            .db_writer
+            .insert_command_run(&run)
+            .await
+            .expect("insert");
+
+        let conn = open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "UPDATE command_runs SET pid = 12345 WHERE id = ?1",
+            params![run_id],
+        )
+        .expect("set pid");
+        drop(conn);
+
+        let inflight = state
+            .db_writer
+            .find_inflight_command_runs_for_task(&task_id)
+            .await
+            .expect("find inflight");
+        assert_eq!(inflight.len(), 1);
+        assert_eq!(inflight[0].1, item_id);
+        assert_eq!(inflight[0].3, Some(12345));
+    }
+
+    #[tokio::test]
+    async fn find_inflight_ignores_completed_runs() {
+        let (state, task_id, item_id) = setup_task();
+        let run = make_command_run(&item_id); // exit_code=0, ended_at set
+
+        state
+            .db_writer
+            .insert_command_run(&run)
+            .await
+            .expect("insert");
+
+        let inflight = state
+            .db_writer
+            .find_inflight_command_runs_for_task(&task_id)
+            .await
+            .expect("find inflight");
+        assert!(inflight.is_empty());
+    }
+
+    // ── FR-038: find_completed_runs_for_pending_items ──
+
+    #[tokio::test]
+    async fn find_completed_runs_for_pending_items_empty_when_no_pending() {
+        let (state, task_id, _item_id) = setup_task();
+        let runs = state
+            .db_writer
+            .find_completed_runs_for_pending_items(&task_id)
+            .await
+            .expect("find completed");
+        assert!(runs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn find_completed_runs_for_pending_items_returns_matching() {
+        let (state, task_id, item_id) = setup_task();
+        // Item starts as 'pending' by default
+        let mut run = make_command_run(&item_id);
+        run.phase = "qa_testing".to_string();
+        run.exit_code = 0;
+        run.ended_at = "2026-01-01T00:01:00Z".to_string();
+        run.confidence = Some(0.9);
+
+        state
+            .db_writer
+            .insert_command_run(&run)
+            .await
+            .expect("insert");
+
+        let completed = state
+            .db_writer
+            .find_completed_runs_for_pending_items(&task_id)
+            .await
+            .expect("find completed");
+        assert_eq!(completed.len(), 1);
+        assert_eq!(completed[0].task_item_id, item_id);
+        assert_eq!(completed[0].phase, "qa_testing");
+        assert_eq!(completed[0].exit_code, 0);
+    }
+
+    #[tokio::test]
+    async fn find_completed_runs_excludes_non_pending_items() {
+        let (state, task_id, item_id) = setup_task();
+        // Set item to qa_passed (non-pending)
+        state
+            .db_writer
+            .set_task_item_terminal_status(&item_id, "qa_passed")
+            .await
+            .expect("set terminal");
+
+        let run = make_command_run(&item_id);
+        state
+            .db_writer
+            .insert_command_run(&run)
+            .await
+            .expect("insert");
+
+        let completed = state
+            .db_writer
+            .find_completed_runs_for_pending_items(&task_id)
+            .await
+            .expect("find completed");
+        assert!(completed.is_empty());
+    }
+
+    // ── FR-038: count_stale_pending_items ──
+
+    #[tokio::test]
+    async fn count_stale_pending_items_zero_with_no_runs() {
+        let (state, task_id, _item_id) = setup_task();
+        let count = state
+            .db_writer
+            .count_stale_pending_items(&task_id)
+            .await
+            .expect("count stale");
+        assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn count_stale_pending_items_counts_stale() {
+        let (state, task_id, item_id) = setup_task();
+        // Item is pending; insert a completed run
+        let run = make_command_run(&item_id);
+        state
+            .db_writer
+            .insert_command_run(&run)
+            .await
+            .expect("insert");
+
+        let count = state
+            .db_writer
+            .count_stale_pending_items(&task_id)
+            .await
+            .expect("count stale");
+        assert_eq!(count, 1);
+    }
+
+    #[tokio::test]
+    async fn count_stale_pending_items_ignores_inflight() {
+        let (state, task_id, item_id) = setup_task();
+        // Item is pending; insert an in-flight run (exit_code=-1, no ended_at)
+        let mut run = make_command_run(&item_id);
+        run.exit_code = -1;
+        run.ended_at = String::new();
+        state
+            .db_writer
+            .insert_command_run(&run)
+            .await
+            .expect("insert");
+
+        let count = state
+            .db_writer
+            .count_stale_pending_items(&task_id)
+            .await
+            .expect("count stale");
+        assert_eq!(count, 0);
     }
 }

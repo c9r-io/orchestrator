@@ -116,6 +116,33 @@ pub async fn count_unresolved_items(state: &InnerState, task_id: &str) -> Result
     state.task_repo.count_unresolved_items(task_id).await
 }
 
+/// Counts stale pending items (FR-038).
+pub async fn count_stale_pending_items(state: &InnerState, task_id: &str) -> Result<i64> {
+    state.task_repo.count_stale_pending_items(task_id).await
+}
+
+/// Returns in-flight command runs for a task (FR-038).
+pub async fn find_inflight_command_runs_for_task(
+    state: &InnerState,
+    task_id: &str,
+) -> Result<Vec<(String, String, String, Option<i64>)>> {
+    state
+        .task_repo
+        .find_inflight_command_runs_for_task(task_id)
+        .await
+}
+
+/// Returns completed runs whose parent items are still `pending` (FR-038).
+pub async fn find_completed_runs_for_pending_items(
+    state: &InnerState,
+    task_id: &str,
+) -> Result<Vec<crate::task_repository::CompletedRunRecord>> {
+    state
+        .task_repo
+        .find_completed_runs_for_pending_items(task_id)
+        .await
+}
+
 /// Lists task items for the current cycle.
 pub async fn list_task_items_for_cycle(
     state: &InnerState,

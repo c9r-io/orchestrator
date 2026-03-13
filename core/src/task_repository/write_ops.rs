@@ -168,6 +168,73 @@ pub fn update_task_pipeline_vars(
     Ok(())
 }
 
+/// Record of a completed command run for a pending item (used by FR-038 compensation).
+#[derive(Debug, Clone)]
+pub struct CompletedRunRecord {
+    /// The task item this run belongs to.
+    pub task_item_id: String,
+    /// The workflow phase (e.g., `qa_testing`).
+    pub phase: String,
+    /// Process exit code.
+    pub exit_code: i64,
+    /// Optional confidence score from the agent.
+    pub confidence: Option<f64>,
+    /// Optional quality score from the agent.
+    pub quality_score: Option<f64>,
+}
+
+/// Returns in-flight command runs (exit_code = -1, not yet ended) for a task.
+pub fn find_inflight_command_runs_for_task(
+    conn: &Connection,
+    task_id: &str,
+) -> Result<Vec<(String, String, String, Option<i64>)>> {
+    let mut stmt = conn.prepare(
+        "SELECT cr.id, cr.task_item_id, cr.phase, cr.pid
+         FROM command_runs cr
+         JOIN task_items ti ON cr.task_item_id = ti.id
+         WHERE ti.task_id = ?1 AND cr.exit_code = -1 AND (cr.ended_at IS NULL OR cr.ended_at = '')",
+    )?;
+    let rows = stmt
+        .query_map(params![task_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<i64>>(3)?,
+            ))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// Returns completed command runs whose parent items are still `pending`.
+/// Used by FR-038 post-recovery finalize compensation.
+pub fn find_completed_runs_for_pending_items(
+    conn: &Connection,
+    task_id: &str,
+) -> Result<Vec<CompletedRunRecord>> {
+    let mut stmt = conn.prepare(
+        "SELECT cr.task_item_id, cr.phase, cr.exit_code, cr.confidence, cr.quality_score
+         FROM task_items ti
+         JOIN command_runs cr ON cr.task_item_id = ti.id
+         WHERE ti.task_id = ?1 AND ti.status = 'pending'
+           AND cr.ended_at IS NOT NULL AND cr.ended_at != '' AND cr.exit_code != -1
+         ORDER BY ti.id, cr.started_at",
+    )?;
+    let rows = stmt
+        .query_map(params![task_id], |row| {
+            Ok(CompletedRunRecord {
+                task_item_id: row.get(0)?,
+                phase: row.get(1)?,
+                exit_code: row.get(2)?,
+                confidence: row.get(3)?,
+                quality_score: row.get(4)?,
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
 pub fn update_task_item_tickets(
     conn: &Connection,
     task_item_id: &str,

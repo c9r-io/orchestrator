@@ -243,6 +243,27 @@ pub fn count_unresolved_items(conn: &Connection, task_id: &str) -> Result<i64> {
     .context("count unresolved items")
 }
 
+/// Counts items that are `pending` with no in-flight runs but at least one completed run.
+/// These are items whose subprocess finished after recovery but were never finalized (FR-038).
+pub fn count_stale_pending_items(conn: &Connection, task_id: &str) -> Result<i64> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM task_items ti
+         WHERE ti.task_id = ?1 AND ti.status = 'pending'
+           AND NOT EXISTS (
+               SELECT 1 FROM command_runs cr
+               WHERE cr.task_item_id = ti.id AND cr.exit_code = -1
+                 AND (cr.ended_at IS NULL OR cr.ended_at = '')
+           )
+           AND EXISTS (
+               SELECT 1 FROM command_runs cr
+               WHERE cr.task_item_id = ti.id AND cr.ended_at IS NOT NULL AND cr.ended_at != ''
+           )",
+        params![task_id],
+        |row| row.get(0),
+    )
+    .context("count stale pending items")
+}
+
 pub fn list_task_items_for_cycle(conn: &Connection, task_id: &str) -> Result<Vec<TaskItemRow>> {
     let mut stmt = conn.prepare(
         "SELECT id, qa_file_path, dynamic_vars_json, label, source

@@ -23,9 +23,12 @@ use super::task_state::query_recent_cycle_timestamps;
 use super::phase_runner::{run_phase_with_rotation, RotatingPhaseRunRequest};
 use super::runtime::load_task_runtime_context;
 use super::safety::RestartRequestedError;
+use super::item_executor::finalize_item_execution;
 use super::task_state::{
-    count_unresolved_items, first_task_item_id, is_task_paused_in_db, list_task_items_for_cycle,
-    record_task_execution_metric, set_task_status, update_task_cycle_state,
+    count_stale_pending_items, count_unresolved_items, find_completed_runs_for_pending_items,
+    find_inflight_command_runs_for_task, first_task_item_id, is_task_paused_in_db,
+    list_task_items_for_cycle, record_task_execution_metric, set_task_status,
+    update_task_cycle_state,
 };
 use super::RunningTask;
 
@@ -280,33 +283,52 @@ async fn run_task_loop_core(
         // rollback at before_complete is treated as warn-only
     }
 
+    // FR-038: Wait for in-flight command runs before deciding task fate.
+    wait_for_inflight_runs(&state, task_id).await?;
+
+    // FR-038: Compensate pending items whose runs completed during recovery.
+    let compensated = compensate_pending_items(&state, task_id, &task_ctx).await?;
+    if compensated > 0 {
+        insert_event(
+            &state,
+            task_id,
+            None,
+            "items_compensated",
+            json!({"count": compensated}),
+        )
+        .await?;
+    }
+
     let unresolved = count_unresolved_items(&state, task_id).await?;
+    let stale_pending = count_stale_pending_items(&state, task_id).await?;
+    let effective_unresolved = unresolved + stale_pending;
+
     if is_task_paused_in_db(&state, task_id).await? {
         return Ok(());
     }
 
-    if unresolved > 0 {
+    if effective_unresolved > 0 {
         set_task_status(&state, task_id, "failed", true).await?;
         insert_event(
             &state,
             task_id,
             None,
             "task_failed",
-            json!({"unresolved_items": unresolved}),
+            json!({"unresolved_items": unresolved, "stale_pending_items": stale_pending}),
         )
         .await?;
         state.emit_event(
             task_id,
             None,
             "task_failed",
-            json!({"unresolved_items": unresolved}),
+            json!({"unresolved_items": unresolved, "stale_pending_items": stale_pending}),
         );
         record_task_execution_metric(
             &state,
             task_id,
             "failed",
             task_ctx.current_cycle,
-            unresolved,
+            effective_unresolved,
         )
         .await?;
     } else {
@@ -318,7 +340,7 @@ async fn run_task_loop_core(
             task_id,
             "completed",
             task_ctx.current_cycle,
-            unresolved,
+            effective_unresolved,
         )
         .await?;
     }
@@ -583,4 +605,155 @@ pub(crate) fn proactive_max_cycles(policy: &crate::config::WorkflowLoopConfig) -
         crate::config::LoopMode::Infinite => policy.guard.max_cycles.unwrap_or(u32::MAX),
         _ => u32::MAX, // Once mode: handled by evaluate_loop_guard_rules
     }
+}
+
+/// FR-038: Wait for in-flight command runs to finish before deciding task fate.
+///
+/// Polls for up to 120 seconds (2-second intervals) checking whether any
+/// command runs for this task still have `exit_code = -1` (active). If all
+/// runs complete or their PIDs are dead, returns immediately.
+async fn wait_for_inflight_runs(state: &Arc<InnerState>, task_id: &str) -> Result<()> {
+    let inflight = find_inflight_command_runs_for_task(state, task_id).await?;
+    if inflight.is_empty() {
+        return Ok(());
+    }
+
+    let pids: Vec<i64> = inflight.iter().filter_map(|(_, _, _, pid)| *pid).collect();
+    insert_event(
+        state,
+        task_id,
+        None,
+        "inflight_runs_detected",
+        json!({ "count": inflight.len(), "pids": pids }),
+    )
+    .await?;
+    state.emit_event(
+        task_id,
+        None,
+        "inflight_runs_detected",
+        json!({ "count": inflight.len(), "pids": pids }),
+    );
+
+    let timeout = std::time::Duration::from_secs(120);
+    let poll_interval = std::time::Duration::from_secs(2);
+    let start = std::time::Instant::now();
+
+    loop {
+        if start.elapsed() >= timeout {
+            insert_event(
+                state,
+                task_id,
+                None,
+                "inflight_wait_timeout",
+                json!({ "elapsed_secs": start.elapsed().as_secs() }),
+            )
+            .await?;
+            break;
+        }
+
+        tokio::time::sleep(poll_interval).await;
+
+        let remaining = find_inflight_command_runs_for_task(state, task_id).await?;
+        if remaining.is_empty() {
+            break;
+        }
+
+        // Check if all known PIDs are dead
+        let all_dead = remaining.iter().all(|(_, _, _, pid)| {
+            pid.map_or(true, |p| unsafe { libc::kill(p as i32, 0) } != 0)
+        });
+        if all_dead {
+            break;
+        }
+    }
+
+    Ok(())
+}
+
+/// FR-038: Compensate pending items whose command runs completed after recovery.
+///
+/// Reconstructs a `StepExecutionAccumulator` from DB records and calls
+/// `finalize_item_execution` to properly transition item status.
+async fn compensate_pending_items(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    task_ctx: &crate::config::TaskRuntimeContext,
+) -> Result<u32> {
+    let completed_runs = find_completed_runs_for_pending_items(state, task_id).await?;
+    if completed_runs.is_empty() {
+        return Ok(0);
+    }
+
+    // Group by item_id
+    let mut grouped: std::collections::BTreeMap<String, Vec<&crate::task_repository::CompletedRunRecord>> =
+        std::collections::BTreeMap::new();
+    for run in &completed_runs {
+        grouped
+            .entry(run.task_item_id.clone())
+            .or_default()
+            .push(run);
+    }
+
+    let all_items = list_task_items_for_cycle(state, task_id).await?;
+    let mut compensated = 0u32;
+
+    for (item_id, runs) in &grouped {
+        let Some(item) = all_items.iter().find(|i| i.id == *item_id) else {
+            continue;
+        };
+
+        let mut acc = StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone());
+
+        for run in runs {
+            acc.exit_codes
+                .insert(run.phase.clone(), run.exit_code);
+            acc.step_ran.insert(run.phase.clone(), true);
+
+            // Populate qa-specific fields
+            if run.phase == "qa_testing" || run.phase == "qa" {
+                acc.qa_confidence = run.confidence.map(|v| v as f32);
+                acc.qa_quality_score = run.quality_score.map(|v| v as f32);
+                if run.exit_code != 0 {
+                    acc.flags.insert("qa_failed".to_string(), true);
+                }
+            }
+            if run.phase == "fix" || run.phase == "ticket_fix" {
+                acc.fix_confidence = run.confidence.map(|v| v as f32);
+                acc.fix_quality_score = run.quality_score.map(|v| v as f32);
+                if run.exit_code == 0 {
+                    acc.flags.insert("fix_success".to_string(), true);
+                }
+            }
+            if run.phase == "retest" && run.exit_code == 0 {
+                acc.flags.insert("retest_success".to_string(), true);
+            }
+        }
+
+        finalize_item_execution(state, task_id, item, task_ctx, &mut acc).await?;
+
+        insert_event(
+            state,
+            task_id,
+            Some(item_id),
+            "item_compensated",
+            json!({
+                "phases": runs.iter().map(|r| r.phase.as_str()).collect::<Vec<_>>(),
+                "final_status": acc.item_status,
+            }),
+        )
+        .await?;
+        state.emit_event(
+            task_id,
+            Some(item_id),
+            "item_compensated",
+            json!({
+                "phases": runs.iter().map(|r| r.phase.as_str()).collect::<Vec<_>>(),
+                "final_status": acc.item_status,
+            }),
+        );
+
+        compensated += 1;
+    }
+
+    Ok(compensated)
 }
