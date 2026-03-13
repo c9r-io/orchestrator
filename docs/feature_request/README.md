@@ -19,6 +19,7 @@
 | FR-026 | 事件表归档与 TTL 清理策略 | P1 | Closed |
 | FR-027 | Worker 轮询优化 — Notify 唤醒机制 | P1 | Implemented |
 | FR-030 | Self-Evolution 数据库 Schema 对齐验证 | P1 | Closed |
+| FR-031 | generate_items 对 LLM 非标准 JSON 输出的容错解析 | P1 | Proposed |
 
 ## 说明
 

@@ -642,12 +642,37 @@ async fn flush_pending_generate_items(
                 }
                 Err(e) => {
                     warn!(error = %e, "failed to create dynamic items");
+                    let _ = insert_event(
+                        state,
+                        task_id,
+                        None,
+                        "items_generation_failed",
+                        json!({
+                            "error": e.to_string(),
+                            "stage": "db_create",
+                            "fallback": "static_items_retained",
+                        }),
+                    )
+                    .await;
                 }
             }
         }
         Ok(_) => {} // empty items, no-op
         Err(e) => {
             warn!(error = %e, "failed to extract dynamic items");
+            let _ = insert_event(
+                state,
+                task_id,
+                None,
+                "items_generation_failed",
+                json!({
+                    "error": e.to_string(),
+                    "from_var": gen_action.from_var,
+                    "json_path": gen_action.json_path,
+                    "fallback": "static_items_retained",
+                }),
+            )
+            .await;
         }
     }
 }

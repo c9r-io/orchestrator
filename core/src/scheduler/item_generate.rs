@@ -365,6 +365,37 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_dynamic_items_unquoted_json() {
+        let mut vars = HashMap::new();
+        vars.insert(
+            "doc_gen_result".to_string(),
+            r#"{regression_targets: [{id: docs/qa/foo.md, scope: unit}, {id: docs/qa/bar.md, scope: e2e}]}"#.to_string(),
+        );
+
+        let action = GenerateItemsAction {
+            from_var: "doc_gen_result".to_string(),
+            json_path: "$.regression_targets".to_string(),
+            mapping: DynamicItemMapping {
+                item_id: "$.id".to_string(),
+                label: None,
+                vars: {
+                    let mut m = HashMap::new();
+                    m.insert("scope".to_string(), "$.scope".to_string());
+                    m
+                },
+            },
+            replace: false,
+        };
+
+        let items = extract_dynamic_items(&vars, &action).expect("should handle unquoted JSON");
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].item_id, "docs/qa/foo.md");
+        assert_eq!(items[0].vars.get("scope"), Some(&"unit".to_string()));
+        assert_eq!(items[1].item_id, "docs/qa/bar.md");
+        assert_eq!(items[1].vars.get("scope"), Some(&"e2e".to_string()));
+    }
+
+    #[test]
     fn test_resolve_pipeline_var_content_missing_var() {
         let vars = HashMap::new();
         let result = resolve_pipeline_var_content(&vars, "missing");

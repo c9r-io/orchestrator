@@ -2,6 +2,150 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::Value;
 
+/// Repair unquoted JSON by adding quotes around bare keys and string values.
+///
+/// Handles LLM output like `{id: docs/qa/foo.md, count: 42, ok: true}` and
+/// converts it to valid JSON. Idempotent on already-valid JSON since all
+/// keys/strings are already quoted.
+pub(crate) fn repair_unquoted_json(input: &str) -> String {
+    #[derive(Clone, Copy, PartialEq)]
+    enum Context {
+        Object,
+        Array,
+    }
+
+    #[derive(Clone, Copy, PartialEq)]
+    enum Expecting {
+        Key,
+        Value,
+        ArrayElement,
+    }
+
+    let mut out = String::with_capacity(input.len() + 64);
+    let bytes = input.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    let mut in_string = false;
+    let mut context_stack: Vec<Context> = Vec::new();
+    let mut expecting = Expecting::Value; // top-level
+    let mut ever_opened = false; // track if we ever entered a structure
+
+    while i < len {
+        let b = bytes[i];
+
+        if in_string {
+            out.push(b as char);
+            if b == b'\\' && i + 1 < len {
+                i += 1;
+                out.push(bytes[i] as char);
+            } else if b == b'"' {
+                in_string = false;
+            }
+            i += 1;
+            continue;
+        }
+
+        match b {
+            b'"' => {
+                in_string = true;
+                out.push('"');
+                i += 1;
+            }
+            b'{' => {
+                out.push('{');
+                context_stack.push(Context::Object);
+                expecting = Expecting::Key;
+                ever_opened = true;
+                i += 1;
+            }
+            b'[' => {
+                out.push('[');
+                context_stack.push(Context::Array);
+                expecting = Expecting::ArrayElement;
+                ever_opened = true;
+                i += 1;
+            }
+            b'}' => {
+                out.push('}');
+                context_stack.pop();
+                if ever_opened && context_stack.is_empty() {
+                    // Top-level structure closed; stop — don't corrupt trailing text
+                    out.push_str(&input[i + 1..]);
+                    return out;
+                }
+                i += 1;
+            }
+            b']' => {
+                out.push(']');
+                context_stack.pop();
+                if ever_opened && context_stack.is_empty() {
+                    out.push_str(&input[i + 1..]);
+                    return out;
+                }
+                i += 1;
+            }
+            b':' => {
+                out.push(':');
+                expecting = Expecting::Value;
+                i += 1;
+            }
+            b',' => {
+                out.push(',');
+                expecting = match context_stack.last() {
+                    Some(Context::Object) => Expecting::Key,
+                    Some(Context::Array) => Expecting::ArrayElement,
+                    None => Expecting::Value,
+                };
+                i += 1;
+            }
+            b if b.is_ascii_whitespace() => {
+                out.push(b as char);
+                i += 1;
+            }
+            _ => {
+                // Bare token — accumulate it
+                let start = i;
+                if expecting == Expecting::Key {
+                    // Key: accumulate [a-zA-Z0-9_-]
+                    while i < len
+                        && (bytes[i].is_ascii_alphanumeric()
+                            || bytes[i] == b'_'
+                            || bytes[i] == b'-')
+                    {
+                        i += 1;
+                    }
+                    let token = &input[start..i];
+                    out.push('"');
+                    out.push_str(token);
+                    out.push('"');
+                } else {
+                    // Value or ArrayElement: accumulate until , } ] or end
+                    while i < len
+                        && bytes[i] != b','
+                        && bytes[i] != b'}'
+                        && bytes[i] != b']'
+                    {
+                        i += 1;
+                    }
+                    let token = input[start..i].trim();
+                    // Check if it's a number, bool, or null — leave as-is
+                    if token == "true" || token == "false" || token == "null" {
+                        out.push_str(token);
+                    } else if token.parse::<f64>().is_ok() {
+                        out.push_str(token);
+                    } else {
+                        out.push('"');
+                        out.push_str(token);
+                        out.push('"');
+                    }
+                }
+            }
+        }
+    }
+
+    out
+}
+
 /// Extract a JSON array from a JSON string using a simple path expression.
 ///
 /// Supports paths like `$.field_name` or `$.field.nested`.
@@ -25,6 +169,19 @@ pub fn extract_json_array(json_str: &str, path: &str) -> Result<Vec<Value>> {
     // 2. Try extracting from a fenced code block (```json ... ``` or ``` ... ```)
     if let Some(json_block) = extract_fenced_json(json_str) {
         if let Ok(root) = serde_json::from_str::<Value>(&json_block) {
+            if let Ok(target) = resolve_path(&root, path) {
+                return match target {
+                    Value::Array(arr) => Ok(arr.clone()),
+                    _ => anyhow::bail!("path '{}' does not point to an array", path),
+                };
+            }
+        }
+    }
+
+    // 2.5 Try repairing unquoted JSON
+    let repaired = repair_unquoted_json(json_str);
+    if repaired != json_str {
+        if let Ok(root) = serde_json::from_str::<Value>(&repaired) {
             if let Ok(target) = resolve_path(&root, path) {
                 return match target {
                     Value::Array(arr) => Ok(arr.clone()),
@@ -71,6 +228,18 @@ fn scan_for_json_with_path(text: &str, path: &str) -> Option<Vec<Value>> {
             if let Ok(target) = resolve_path(&root, path) {
                 if let Value::Array(arr) = target {
                     return Some(arr.clone());
+                }
+            }
+        }
+        // Fallback: try repairing unquoted JSON in this slice
+        let repaired = repair_unquoted_json(slice);
+        if repaired != slice {
+            let mut de = serde_json::Deserializer::from_str(&repaired);
+            if let Ok(root) = <Value as Deserialize>::deserialize(&mut de) {
+                if let Ok(target) = resolve_path(&root, path) {
+                    if let Value::Array(arr) = target {
+                        return Some(arr.clone());
+                    }
                 }
             }
         }
@@ -295,8 +464,17 @@ Footer: {"ts": "2026-01-01"}"#;
     }
 
     #[test]
-    fn extract_array_malformed_json_fails() {
-        let bad = "I found: {targets: [a, b]}";
+    fn extract_array_unquoted_json_succeeds() {
+        let input = "I found: {targets: [a, b]}";
+        let arr = extract_json_array(input, "$.targets").expect("should repair and extract");
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0], json!("a"));
+        assert_eq!(arr[1], json!("b"));
+    }
+
+    #[test]
+    fn extract_array_truly_unparsable_fails() {
+        let bad = "I found: <<<not json at all>>>";
         let result = extract_json_array(bad, "$.targets");
         assert!(result.is_err());
     }
@@ -339,5 +517,87 @@ Footer: {"ts": "2026-01-01"}"#;
             extract_stream_json_result(content),
             Some("{\"score\":42}".to_string())
         );
+    }
+
+    // --- repair_unquoted_json tests ---
+
+    #[test]
+    fn repair_unquoted_json_keys_and_values() {
+        let input = r#"{id: docs/qa/foo.md, name: test}"#;
+        let repaired = repair_unquoted_json(input);
+        let parsed: Value = serde_json::from_str(&repaired).expect("should be valid JSON");
+        assert_eq!(parsed["id"], json!("docs/qa/foo.md"));
+        assert_eq!(parsed["name"], json!("test"));
+    }
+
+    #[test]
+    fn repair_unquoted_json_nested_array() {
+        let input = r#"{items: [{id: a}, {id: b}]}"#;
+        let repaired = repair_unquoted_json(input);
+        let parsed: Value = serde_json::from_str(&repaired).expect("should be valid JSON");
+        assert_eq!(parsed["items"].as_array().unwrap().len(), 2);
+        assert_eq!(parsed["items"][0]["id"], json!("a"));
+        assert_eq!(parsed["items"][1]["id"], json!("b"));
+    }
+
+    #[test]
+    fn repair_unquoted_json_preserves_valid() {
+        let input = r#"{"id":"a"}"#;
+        let repaired = repair_unquoted_json(input);
+        assert_eq!(repaired, input);
+    }
+
+    #[test]
+    fn repair_unquoted_json_mixed_quoted() {
+        let input = r#"{"id": "a", name: b}"#;
+        let repaired = repair_unquoted_json(input);
+        let parsed: Value = serde_json::from_str(&repaired).expect("should be valid JSON");
+        assert_eq!(parsed["id"], json!("a"));
+        assert_eq!(parsed["name"], json!("b"));
+    }
+
+    #[test]
+    fn repair_unquoted_json_numbers_bools_null() {
+        let input = r#"{count: 42, ok: true, x: null}"#;
+        let repaired = repair_unquoted_json(input);
+        let parsed: Value = serde_json::from_str(&repaired).expect("should be valid JSON");
+        assert_eq!(parsed["count"], json!(42));
+        assert_eq!(parsed["ok"], json!(true));
+        assert_eq!(parsed["x"], json!(null));
+    }
+
+    #[test]
+    fn repair_unquoted_json_file_paths() {
+        let input = r#"{id: docs/qa/orchestrator/02-cli-task-lifecycle.md}"#;
+        let repaired = repair_unquoted_json(input);
+        let parsed: Value = serde_json::from_str(&repaired).expect("should be valid JSON");
+        assert_eq!(
+            parsed["id"],
+            json!("docs/qa/orchestrator/02-cli-task-lifecycle.md")
+        );
+    }
+
+    #[test]
+    fn extract_array_unquoted_regression_targets() {
+        let input = r#"{regression_targets: [{id: docs/qa/foo.md, scope: unit}, {id: docs/qa/bar.md, scope: e2e}, {id: docs/qa/baz.md, scope: unit}, {id: docs/qa/qux.md, scope: integration}, {id: docs/qa/quux.md, scope: unit}]}"#;
+        let arr = extract_json_array(input, "$.regression_targets")
+            .expect("should extract unquoted regression targets");
+        assert_eq!(arr.len(), 5);
+        assert_eq!(arr[0]["id"], json!("docs/qa/foo.md"));
+        assert_eq!(arr[2]["scope"], json!("unit"));
+    }
+
+    #[test]
+    fn extract_array_mixed_text_unquoted() {
+        let input = r#"Based on my analysis, here are the targets:
+
+{regression_targets: [{id: target-a, name: A}, {id: target-b, name: B}]}
+
+That's all."#;
+        let arr = extract_json_array(input, "$.regression_targets")
+            .expect("should extract from mixed text with unquoted JSON");
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0]["id"], json!("target-a"));
+        assert_eq!(arr[1]["name"], json!("B"));
     }
 }
