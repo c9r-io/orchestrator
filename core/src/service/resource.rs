@@ -272,6 +272,15 @@ fn get_single_resource(
             })?;
             format_output(agent, output_format)
         }
+        "trigger" | "tg" => {
+            let trigger = project.triggers.get(name).ok_or_else(|| {
+                classify_resource_error(
+                    "resource.get",
+                    anyhow::anyhow!("trigger not found: {}", name),
+                )
+            })?;
+            format_output(trigger, output_format)
+        }
         _ => Err(classify_resource_error(
             "resource.get",
             anyhow::anyhow!("unknown resource type: {}", kind),
@@ -291,6 +300,7 @@ fn get_list_resource(
         "ws" | "workspace" | "workspaces" => (project.workspaces.keys().collect(), "Workspace"),
         "agent" | "agents" => (project.agents.keys().collect(), "Agent"),
         "wf" | "workflow" | "workflows" => (project.workflows.keys().collect(), "Workflow"),
+        "trigger" | "triggers" | "tg" => (project.triggers.keys().collect(), "Trigger"),
         _ => {
             return Err(classify_resource_error(
                 "resource.get",
