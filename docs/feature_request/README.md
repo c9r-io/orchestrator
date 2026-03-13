@@ -25,6 +25,7 @@
 | FR-034 | QA Testing 自引用安全防护 | P1 | Closed |
 | FR-035 | 退化循环检测与熔断机制 | P1 | Closed |
 | FR-036 | Plan Output Context Overflow 缓解 | P1 | Closed |
+| FR-037 | Dynamic Items 触发的循环溢出 — max_cycles 约束失效 | P1 | Proposed |
 
 ## 说明
 
