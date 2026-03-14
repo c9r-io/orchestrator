@@ -443,6 +443,9 @@ fn main() -> Result<()> {
                 let uds_stream = tokio_stream::wrappers::UnixListenerStream::new(uds);
 
                 info!(socket = %socket_path.display(), "listening on UDS");
+                emit_daemon_event(&inner, "daemon_socket_ready", serde_json::json!({
+                    "socket": socket_path.to_string_lossy(),
+                })).await;
                 Server::builder()
                     .layer(protection.clone().layer())
                     .add_service(OrchestratorServiceServer::new(service))
@@ -498,14 +501,19 @@ fn main() -> Result<()> {
         // Check if this was a restart request
         if let Some(binary_path) = restart_rx.borrow().clone() {
             info!(binary = %binary_path.display(), "exec-ing new daemon binary");
-            lifecycle::cleanup(&socket_path, &pid_path);
+            // Only remove PID file; leave socket for the new binary to clean up
+            // at startup (it already calls remove_file on the socket path).
+            // This avoids a window where both socket and PID are gone if exec() fails.
+            lifecycle::cleanup_pid_only(&pid_path);
 
             use std::os::unix::process::CommandExt;
             let err = std::process::Command::new(&binary_path)
                 .args(std::env::args_os().skip(1))
                 .exec();
-            // exec() only returns on error
+            // exec() only returns on error — write PID so stale detection works
+            // on next manual start.
             error!("exec failed: {}", err);
+            let _ = lifecycle::write_pid_file(&pid_path);
             std::process::exit(1);
         }
 

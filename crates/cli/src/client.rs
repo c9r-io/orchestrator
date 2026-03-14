@@ -92,25 +92,46 @@ async fn connect_uds() -> Result<OrchestratorServiceClient<Channel>> {
         );
     }
 
-    let socket_path_clone = socket_path.clone();
-    let channel = Endpoint::try_from("http://[::]:50051")
-        .context("failed to create endpoint")?
-        .connect_with_connector(service_fn(move |_: Uri| {
-            let path = socket_path_clone.clone();
-            async move {
-                let stream = tokio::net::UnixStream::connect(path).await?;
-                Ok::<_, std::io::Error>(hyper_util::rt::TokioIo::new(stream))
-            }
-        }))
-        .await
-        .with_context(|| {
-            format!(
-                "failed to connect to daemon at {}. Is the daemon running?",
-                socket_path.display()
-            )
-        })?;
+    // Retry up to 3 times with 1s intervals to tolerate transient unavailability
+    // (e.g. daemon is restarting via exec() and the new process hasn't bound the
+    // socket yet).
+    let max_attempts = 3;
+    let mut last_err = None;
+    for attempt in 1..=max_attempts {
+        let socket_path_clone = socket_path.clone();
+        let result = Endpoint::try_from("http://[::]:50051")
+            .context("failed to create endpoint")?
+            .connect_with_connector(service_fn(move |_: Uri| {
+                let path = socket_path_clone.clone();
+                async move {
+                    let stream = tokio::net::UnixStream::connect(path).await?;
+                    Ok::<_, std::io::Error>(hyper_util::rt::TokioIo::new(stream))
+                }
+            }))
+            .await;
 
-    Ok(OrchestratorServiceClient::new(channel))
+        match result {
+            Ok(channel) => return Ok(OrchestratorServiceClient::new(channel)),
+            Err(e) => {
+                if attempt < max_attempts {
+                    eprintln!(
+                        "daemon connection attempt {}/{} failed, retrying in 1s…",
+                        attempt, max_attempts,
+                    );
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+                last_err = Some(e);
+            }
+        }
+    }
+
+    Err(last_err.unwrap()).with_context(|| {
+        format!(
+            "failed to connect to daemon at {} after {} attempts. Is the daemon running?",
+            socket_path.display(),
+            max_attempts,
+        )
+    })
 }
 
 async fn connect_secure(config_path: &Path) -> Result<OrchestratorServiceClient<Channel>> {

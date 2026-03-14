@@ -54,6 +54,13 @@ pub fn cleanup(socket_path: &Path, pid_path: &Path) {
     let _ = std::fs::remove_file(pid_path);
 }
 
+/// Remove only the PID file, leaving the socket intact.
+/// Used before exec() so the new process writes its own PID while the stale
+/// socket is cleaned up by the new binary's normal startup path.
+pub fn cleanup_pid_only(pid_path: &Path) {
+    let _ = std::fs::remove_file(pid_path);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
