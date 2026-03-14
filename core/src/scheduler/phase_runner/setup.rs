@@ -1,4 +1,5 @@
 use crate::config::PromptDelivery;
+use crate::config_ext::OrchestratorConfigExt as _;
 use crate::config_load::now_ts;
 use crate::events::insert_event;
 use crate::runner::{validate_execution_profile_support, ResolvedExecutionProfile};

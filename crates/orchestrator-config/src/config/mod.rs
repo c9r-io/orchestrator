@@ -46,8 +46,8 @@ pub use trigger::*;
 pub use workflow::*;
 pub use workflow_store::*;
 
-use crate::crd::store::ResourceStore;
-use crate::crd::types::{CustomResource, CustomResourceDefinition};
+use crate::crd_types::{CustomResource, CustomResourceDefinition};
+use crate::resource_store::ResourceStore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -72,24 +72,6 @@ pub struct OrchestratorConfig {
 }
 
 impl OrchestratorConfig {
-    /// Convenience accessor: runner config from RuntimePolicy.
-    pub fn runner(&self) -> RunnerConfig {
-        self.runtime_policy().runner
-    }
-
-    /// Convenience accessor: resume config from RuntimePolicy.
-    pub fn resume(&self) -> ResumeConfig {
-        self.runtime_policy().resume
-    }
-
-    /// Access the RuntimePolicy projection from the resource store.
-    /// Returns defaults if the store has no RuntimePolicy CR (cold start).
-    pub fn runtime_policy(&self) -> crate::crd::projection::RuntimePolicyProjection {
-        self.resource_store
-            .project_singleton::<crate::crd::projection::RuntimePolicyProjection>()
-            .unwrap_or_default()
-    }
-
     /// Resolves a caller-supplied project ID to the effective project namespace.
     pub fn effective_project_id<'a>(&'a self, project_id: Option<&'a str>) -> &'a str {
         project_id
@@ -153,10 +135,6 @@ mod tests {
     fn test_orchestrator_config_default() {
         let cfg = OrchestratorConfig::default();
         assert!(cfg.projects.is_empty());
-        // RuntimePolicy from resource store defaults
-        let rp = cfg.runtime_policy();
-        assert!(!rp.resume.auto);
-        assert_eq!(rp.observability, ObservabilityConfig::default());
     }
 
     #[test]

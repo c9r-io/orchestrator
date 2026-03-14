@@ -54,6 +54,7 @@ dependencies = [
  "glob",
  "libc",
  "nix",
+ "orchestrator-config",
  "orchestrator-proto",
  "pathdiff",
  "rand",
@@ -1266,6 +1267,22 @@ dependencies = [
  "tokio-stream",
  "tonic",
  "tower",
+]
+
+[[package]]
+name = "orchestrator-config"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "glob",
+ "serde",
+ "serde_json",
+ "serde_yml",
+ "tempfile",
+ "tracing",
+ "uuid",
+ "walkdir",
 ]
 
 [[package]]

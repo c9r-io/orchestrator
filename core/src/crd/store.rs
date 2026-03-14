@@ -1,167 +1,20 @@
+pub use orchestrator_config::resource_store::*;
+
 use crate::crd::projection::CrdProjectable;
-use crate::crd::types::CustomResource;
-use crate::resource::ApplyResult;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Project namespace for singleton/cluster-scoped resources (RuntimePolicy, Project, CRDs).
-pub const SYSTEM_PROJECT: &str = "_system";
-
-/// Returns true for resource kinds that must belong to a project (not `_system`).
-pub fn is_project_scoped(kind: &str) -> bool {
-    matches!(
-        kind,
-        "Agent"
-            | "Workflow"
-            | "Workspace"
-            | "StepTemplate"
-            | "ExecutionProfile"
-            | "EnvStore"
-            | "SecretStore"
-    )
-}
-
-/// Unified resource store — single source of truth for all resource instances.
-///
-/// All resources use 3-segment keys: `kind/project/name`.
-/// Singleton/cluster-scoped resources use `_system` as their project namespace.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ResourceStore {
-    #[serde(default)]
-    resources: HashMap<String, CustomResource>,
-    #[serde(skip)]
-    generation: u64,
-}
-
-impl ResourceStore {
-    fn storage_key(kind: &str, metadata: &crate::cli_types::ResourceMetadata) -> String {
-        let project = metadata
-            .project
-            .as_deref()
-            .filter(|p| !p.trim().is_empty())
-            .unwrap_or(SYSTEM_PROJECT);
-        format!("{}/{}/{}", kind, project, metadata.name)
-    }
-
-    /// Get a resource by kind and name (delegates to `_system` project).
-    pub fn get(&self, kind: &str, name: &str) -> Option<&CustomResource> {
-        self.get_namespaced(kind, SYSTEM_PROJECT, name)
-    }
-
-    /// Get a mutable reference to a resource by its storage key.
-    pub fn get_mut_by_key(&mut self, key: &str) -> Option<&mut CustomResource> {
-        self.resources.get_mut(key)
-    }
-
-    /// Get a namespaced resource by kind, project, and name.
-    pub fn get_namespaced(&self, kind: &str, project: &str, name: &str) -> Option<&CustomResource> {
-        let key = format!("{}/{}/{}", kind, project, name);
-        self.resources.get(&key)
-    }
-
-    /// List all resources of a given kind.
-    pub fn list_by_kind(&self, kind: &str) -> Vec<&CustomResource> {
-        let prefix = format!("{}/", kind);
-        self.resources
-            .iter()
-            .filter(|(k, _)| k.starts_with(&prefix))
-            .map(|(_, v)| v)
-            .collect()
-    }
-
-    /// Insert or update a resource. Returns the apply result.
-    /// For project-scoped kinds with no project, auto-assigns DEFAULT_PROJECT_ID.
-    pub fn put(&mut self, mut cr: CustomResource) -> ApplyResult {
-        // Auto-assign DEFAULT_PROJECT_ID for project-scoped kinds with no/empty project
-        if is_project_scoped(&cr.kind)
-            && cr
-                .metadata
-                .project
-                .as_deref()
-                .filter(|p| !p.trim().is_empty())
-                .is_none()
-        {
-            cr.metadata.project = Some(crate::config::DEFAULT_PROJECT_ID.to_string());
-        }
-        let key = Self::storage_key(&cr.kind, &cr.metadata);
-        self.generation += 1;
-
-        match self.resources.get(&key) {
-            None => {
-                self.resources.insert(key, cr);
-                ApplyResult::Created
-            }
-            Some(existing) => {
-                if existing.spec == cr.spec
-                    && existing.api_version == cr.api_version
-                    && existing.metadata == cr.metadata
-                {
-                    ApplyResult::Unchanged
-                } else {
-                    self.resources.insert(key, cr);
-                    ApplyResult::Configured
-                }
-            }
-        }
-    }
-
-    /// Remove a resource by kind and name (delegates to `_system` project).
-    pub fn remove(&mut self, kind: &str, name: &str) -> Option<CustomResource> {
-        self.remove_namespaced(kind, SYSTEM_PROJECT, name)
-    }
-
-    /// Remove a resource by kind and name from any project namespace.
-    /// Scans all entries of the form `kind/*/name`.
-    pub fn remove_first_by_kind_name(&mut self, kind: &str, name: &str) -> Option<CustomResource> {
-        let suffix = format!("/{}", name);
-        let prefix = format!("{}/", kind);
-        let key = self
-            .resources
-            .keys()
-            .find(|k| k.starts_with(&prefix) && k.ends_with(&suffix) && k.matches('/').count() == 2)
-            .cloned();
-        if let Some(key) = key {
-            let removed = self.resources.remove(&key);
-            if removed.is_some() {
-                self.generation += 1;
-            }
-            return removed;
-        }
-        None
-    }
-
-    /// Removes one project-scoped resource by kind, project, and name.
-    pub fn remove_namespaced(
-        &mut self,
-        kind: &str,
-        project: &str,
-        name: &str,
-    ) -> Option<CustomResource> {
-        let key = format!("{}/{}/{}", kind, project, name);
-        let removed = self.resources.remove(&key);
-        if removed.is_some() {
-            self.generation += 1;
-        }
-        removed
-    }
-
-    /// Current generation counter (incremented on each mutation).
-    pub fn generation(&self) -> u64 {
-        self.generation
-    }
-
-    /// Whether the store has no resources.
-    pub fn is_empty(&self) -> bool {
-        self.resources.is_empty()
-    }
-
-    /// Number of resources in the store.
-    pub fn len(&self) -> usize {
-        self.resources.len()
-    }
-
+/// Extension trait adding CRD projection methods to ResourceStore.
+/// These methods require the CrdProjectable trait which stays in core
+/// because its implementations depend on resource converters.
+pub trait ResourceStoreExt {
     /// Project all CRs of a given kind into a typed HashMap.
-    pub fn project_map<T: CrdProjectable>(&self) -> HashMap<String, T> {
+    fn project_map<T: CrdProjectable>(&self) -> HashMap<String, T>;
+    /// Project a singleton CR of a given kind.
+    fn project_singleton<T: CrdProjectable>(&self) -> Option<T>;
+}
+
+impl ResourceStoreExt for ResourceStore {
+    fn project_map<T: CrdProjectable>(&self) -> HashMap<String, T> {
         let kind = T::crd_kind();
         let mut result = HashMap::new();
         for cr in self.list_by_kind(kind) {
@@ -172,24 +25,13 @@ impl ResourceStore {
         result
     }
 
-    /// Project a singleton CR of a given kind.
-    pub fn project_singleton<T: CrdProjectable>(&self) -> Option<T> {
+    fn project_singleton<T: CrdProjectable>(&self) -> Option<T> {
         let kind = T::crd_kind();
         let items = self.list_by_kind(kind);
         items
             .into_iter()
             .next()
             .and_then(|cr| T::from_cr_spec(&cr.spec).ok())
-    }
-
-    /// Access the underlying resource map (for iteration/serialization).
-    pub fn resources(&self) -> &HashMap<String, CustomResource> {
-        &self.resources
-    }
-
-    /// Mutable access to the underlying resource map.
-    pub fn resources_mut(&mut self) -> &mut HashMap<String, CustomResource> {
-        &mut self.resources
     }
 }
 
@@ -199,6 +41,7 @@ mod tests {
     use crate::cli_types::ResourceMetadata;
     use crate::config::{AgentConfig, StepTemplateConfig};
     use crate::crd::projection::CrdProjectable;
+    use crate::crd::types::CustomResource;
 
     fn make_cr(kind: &str, name: &str, spec: serde_json::Value) -> CustomResource {
         CustomResource {
@@ -324,23 +167,14 @@ mod tests {
         assert_eq!(loaded.prompt, "do qa");
     }
 
-    // ── Edge case tests ─────────────────────────────────────────────────────
-
     #[test]
     fn cross_kind_key_isolation() {
-        // Same name under different kinds must not collide.
-        // Use non-project-scoped kinds so they go to _system.
         let mut store = ResourceStore::default();
-        store.put(make_cr(
-            "RuntimePolicy",
-            "alpha",
-            serde_json::json!({"a": 1}),
-        ));
+        store.put(make_cr("RuntimePolicy", "alpha", serde_json::json!({"a": 1})));
         store.put(make_cr("Project", "alpha", serde_json::json!({"w": 2})));
         assert_eq!(store.len(), 2);
         assert_eq!(store.get("RuntimePolicy", "alpha").unwrap().spec["a"], 1);
         assert_eq!(store.get("Project", "alpha").unwrap().spec["w"], 2);
-        // Removing one kind doesn't affect the other.
         store.remove("RuntimePolicy", "alpha");
         assert!(store.get("RuntimePolicy", "alpha").is_none());
         assert!(store.get("Project", "alpha").is_some());
@@ -348,7 +182,6 @@ mod tests {
 
     #[test]
     fn list_by_kind_does_not_match_prefix_substring() {
-        // "Foo" list should not include "FooBar" entries.
         let mut store = ResourceStore::default();
         store.put(make_cr("Foo", "x", serde_json::json!({})));
         store.put(make_cr("FooBar", "y", serde_json::json!({})));
@@ -367,7 +200,6 @@ mod tests {
 
     #[test]
     fn generation_increments_on_unchanged_put() {
-        // Even an unchanged put increments generation (it's a write attempt).
         let mut store = ResourceStore::default();
         let cr = make_cr("X", "a", serde_json::json!({}));
         store.put(cr.clone());
@@ -379,7 +211,6 @@ mod tests {
     #[test]
     fn get_namespaced_uses_three_segment_key() {
         let mut store = ResourceStore::default();
-        // Manually insert a namespaced key.
         let cr = CustomResource {
             kind: "Agent".to_string(),
             api_version: "orchestrator.dev/v2".to_string(),
@@ -394,13 +225,9 @@ mod tests {
             created_at: "t".to_string(),
             updated_at: "t".to_string(),
         };
-        // Use the three-segment key directly.
-        store
-            .resources
-            .insert("Agent/proj1/my-agent".to_string(), cr);
+        store.resources_mut().insert("Agent/proj1/my-agent".to_string(), cr);
         assert!(store.get_namespaced("Agent", "proj1", "my-agent").is_some());
         assert!(store.get_namespaced("Agent", "proj2", "my-agent").is_none());
-        // Regular get won't find it (different key format).
         assert!(store.get("Agent", "my-agent").is_none());
     }
 
@@ -424,21 +251,14 @@ mod tests {
 
     #[test]
     fn project_map_skips_corrupted_specs() {
-        // A CR with an unparseable spec should be silently skipped, not panic.
         let mut store = ResourceStore::default();
-        // Valid agent
         let good = AgentConfig {
             enabled: true,
             command: "echo ok".to_string(),
             ..Default::default()
         };
         store.put(make_cr("Agent", "good", good.to_cr_spec()));
-        // Corrupted — missing required `command` field
-        store.put(make_cr(
-            "Agent",
-            "bad",
-            serde_json::json!({"not_command": 42}),
-        ));
+        store.put(make_cr("Agent", "bad", serde_json::json!({"not_command": 42})));
         let map: HashMap<String, AgentConfig> = store.project_map();
         assert_eq!(map.len(), 1);
         assert!(map.contains_key("good"));
@@ -456,18 +276,13 @@ mod tests {
     #[test]
     fn put_auto_assigns_default_project_for_project_scoped_kinds() {
         let mut store = ResourceStore::default();
-        let cr = make_cr(
-            "Agent",
-            "my-agent",
-            serde_json::json!({"command": "echo test"}),
-        );
+        let cr = make_cr("Agent", "my-agent", serde_json::json!({"command": "echo test"}));
         assert!(cr.metadata.project.is_none());
         store.put(cr);
-        // Should be stored under DEFAULT_PROJECT_ID, not _system
         assert!(store
             .get_namespaced("Agent", crate::config::DEFAULT_PROJECT_ID, "my-agent")
             .is_some());
-        assert!(store.get("Agent", "my-agent").is_none()); // not in _system
+        assert!(store.get("Agent", "my-agent").is_none());
     }
 
     #[test]
@@ -475,7 +290,7 @@ mod tests {
         let mut store = ResourceStore::default();
         let cr = make_cr("RuntimePolicy", "runtime", serde_json::json!({}));
         store.put(cr);
-        assert!(store.get("RuntimePolicy", "runtime").is_some()); // in _system
+        assert!(store.get("RuntimePolicy", "runtime").is_some());
     }
 
     #[test]
@@ -483,7 +298,6 @@ mod tests {
         let mut store = ResourceStore::default();
         let cr1 = make_cr("Agent", "a", serde_json::json!({"command": "echo x"}));
         store.put(cr1);
-        // Same spec, different metadata (add label).
         let mut cr2 = make_cr("Agent", "a", serde_json::json!({"command": "echo x"}));
         cr2.metadata.labels = Some([("env".to_string(), "prod".to_string())].into());
         assert_eq!(store.put(cr2), ApplyResult::Configured);

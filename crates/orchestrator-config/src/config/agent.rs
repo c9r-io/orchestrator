@@ -1,5 +1,5 @@
 use crate::cli_types::AgentEnvEntry;
-use crate::metrics::{SelectionStrategy, SelectionWeights};
+use crate::selection::{SelectionStrategy, SelectionWeights};
 use serde::{Deserialize, Serialize};
 
 /// How the rendered prompt reaches the agent process.

@@ -219,9 +219,9 @@ pub struct TaskRuntimeContext {
     /// Whether the one-time init step has already completed.
     pub init_done: bool,
     /// Dynamic step definitions available to the planner.
-    pub dynamic_steps: Arc<Vec<crate::dynamic_orchestration::DynamicStepConfig>>,
+    pub dynamic_steps: Arc<Vec<crate::dynamic_step::DynamicStepConfig>>,
     /// Optional adaptive planning configuration.
-    pub adaptive: Arc<Option<crate::dynamic_orchestration::AdaptivePlannerConfig>>,
+    pub adaptive: Arc<Option<crate::adaptive::AdaptivePlannerConfig>>,
     /// Pipeline variables accumulated across steps in the current cycle
     pub pipeline_vars: PipelineVariables,
     /// Safety configuration
@@ -246,12 +246,12 @@ pub struct TaskRuntimeContext {
 
 impl TaskRuntimeContext {
     /// Returns the adaptive planner configuration when adaptive orchestration is enabled.
-    pub fn adaptive_config(&self) -> Option<&crate::dynamic_orchestration::AdaptivePlannerConfig> {
+    pub fn adaptive_config(&self) -> Option<&crate::adaptive::AdaptivePlannerConfig> {
         self.adaptive.as_ref().as_ref()
     }
 
     /// Returns the currently resolved dynamic step definitions.
-    pub fn dynamic_step_configs(&self) -> &[crate::dynamic_orchestration::DynamicStepConfig] {
+    pub fn dynamic_step_configs(&self) -> &[crate::dynamic_step::DynamicStepConfig] {
         self.dynamic_steps.as_ref().as_slice()
     }
 }

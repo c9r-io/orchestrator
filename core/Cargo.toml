@@ -8,6 +8,7 @@ edition = "2021"
 rust-version = "1.77"
 
 [dependencies]
+orchestrator-config = { path = "../crates/orchestrator-config" }
 orchestrator-proto = { path = "../crates/proto" }
 anyhow = "1.0"
 arc-swap = "1.7"

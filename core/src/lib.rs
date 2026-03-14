@@ -25,9 +25,11 @@ pub mod anomaly;
 /// Async SQLite access helpers backed by `tokio_rusqlite`.
 pub mod async_database;
 /// K8s-style declarative resource types shared by the CLI surface.
-pub mod cli_types;
+pub use orchestrator_config::cli_types;
 pub mod collab;
-pub mod config;
+/// Extension trait adding CRD-projected accessors to `OrchestratorConfig`.
+pub mod config_ext;
+pub use orchestrator_config::config;
 /// Configuration loading, overlaying, and validation helpers.
 pub mod config_load;
 /// Custom resource definitions and resource store projections.
@@ -40,7 +42,7 @@ pub mod db_write;
 pub mod dto;
 pub mod dynamic_orchestration;
 /// Environment resolution utilities for command execution.
-pub mod env_resolve;
+pub use orchestrator_config::env_resolve;
 /// Canonical error categories and error classification helpers.
 pub mod error;
 /// TTL-based event cleanup, archival, and statistics.

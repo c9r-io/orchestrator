@@ -91,7 +91,7 @@ impl ExecutionProfileConfig {
     /// # Examples
     ///
     /// ```rust
-    /// use agent_orchestrator::config::{ExecutionProfileConfig, ExecutionProfileMode};
+    /// use orchestrator_config::config::{ExecutionProfileConfig, ExecutionProfileMode};
     ///
     /// let profile = ExecutionProfileConfig::implicit_host();
     /// assert_eq!(profile.mode, ExecutionProfileMode::Host);

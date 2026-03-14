@@ -126,7 +126,7 @@ pub struct WorkflowExecutionConfig {
 /// # Examples
 ///
 /// ```rust
-/// use agent_orchestrator::config::{LoopMode, WorkflowConfig};
+/// use orchestrator_config::config::{LoopMode, WorkflowConfig};
 ///
 /// let workflow = WorkflowConfig::default();
 /// assert!(workflow.steps.is_empty());
@@ -157,10 +157,10 @@ pub struct WorkflowConfig {
     pub retest: Option<String>,
     /// Dynamically eligible steps that can be added at runtime.
     #[serde(default)]
-    pub dynamic_steps: Vec<crate::dynamic_orchestration::DynamicStepConfig>,
+    pub dynamic_steps: Vec<crate::dynamic_step::DynamicStepConfig>,
     /// Adaptive planning configuration for agent-driven DAG generation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub adaptive: Option<crate::dynamic_orchestration::AdaptivePlannerConfig>,
+    pub adaptive: Option<crate::adaptive::AdaptivePlannerConfig>,
     /// Safety configuration for self-bootstrap scenarios
     #[serde(default)]
     pub safety: SafetyConfig,

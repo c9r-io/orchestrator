@@ -1,7 +1,7 @@
 /// K8s-style YAML types for declarative resource management via `apply` command.
 /// Resources follow Kubernetes manifest conventions: apiVersion, kind, metadata, spec.
 use crate::config::PromptDelivery;
-use crate::metrics::{SelectionStrategy, SelectionWeights};
+use crate::selection::{SelectionStrategy, SelectionWeights};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -638,7 +638,7 @@ pub struct WorkflowSpec {
 
     /// Optional adaptive planner configuration.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub adaptive: Option<crate::dynamic_orchestration::AdaptivePlannerConfig>,
+    pub adaptive: Option<crate::adaptive::AdaptivePlannerConfig>,
 
     /// Safety configuration for self-bootstrap scenarios
     #[serde(default)]

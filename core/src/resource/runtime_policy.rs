@@ -78,6 +78,7 @@ impl Resource for RuntimePolicyResource {
         _project_id: Option<&str>,
     ) -> Option<Self> {
         // RuntimePolicy is a global singleton, not scoped to a project.
+        use crate::config_ext::OrchestratorConfigExt as _;
         let rp = config.runtime_policy();
         Some(Self {
             metadata: super::metadata_with_name("runtime"),

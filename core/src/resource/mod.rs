@@ -60,16 +60,7 @@ pub(crate) use crate::cli_types::ResourceMetadata;
 
 // ── Core types ────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-/// Result of applying a manifest resource into an `OrchestratorConfig`.
-pub enum ApplyResult {
-    /// Resource did not exist and was created.
-    Created,
-    /// Resource existed and its stored representation changed.
-    Configured,
-    /// Resource already matched the requested representation.
-    Unchanged,
-}
+pub use orchestrator_config::resource_store::ApplyResult;
 
 /// Common behavior implemented by builtin manifest resource adapters.
 pub trait Resource: Sized {

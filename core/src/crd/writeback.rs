@@ -1,5 +1,6 @@
 use crate::config::{EnvStoreConfig, ExecutionProfileConfig, OrchestratorConfig};
 use crate::crd::projection::{CrdProjectable, RuntimePolicyProjection, SecretStoreProjection};
+use crate::crd::store::ResourceStoreExt;
 
 /// Reconciles one builtin kind from the resource store back into legacy config fields.
 pub fn reconcile_builtin_kind(config: &mut OrchestratorConfig, kind: &str) {

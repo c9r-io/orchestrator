@@ -1,6 +1,7 @@
 //! Log streaming and file tailing utilities.
 
 use crate::anomaly::AnomalyRule;
+use crate::config_ext::OrchestratorConfigExt as _;
 use crate::config_load::read_loaded_config;
 use crate::dto::LogChunk;
 use crate::env_resolve::collect_all_sensitive_store_values;

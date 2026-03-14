@@ -1,0 +1,25 @@
+[package]
+name = "orchestrator-config"
+version = "0.1.0"
+description = "Configuration models and loading for the Agent Orchestrator"
+authors = [""]
+license = "MIT"
+edition = "2021"
+rust-version = "1.77"
+
+[dependencies]
+anyhow = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+glob = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yml = "0.0.12"
+tracing = "0.1"
+uuid = { version = "1.11", features = ["serde", "v4"] }
+walkdir = "2.5"
+
+[features]
+test-harness = []
+
+[dev-dependencies]
+tempfile = "3.26.0"

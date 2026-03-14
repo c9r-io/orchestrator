@@ -1,4 +1,5 @@
 use crate::config::{LogLevel, LoggingConfig, LoggingFormat, OrchestratorConfig};
+use crate::config_ext::OrchestratorConfigExt as _;
 use anyhow::{Context, Result};
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
