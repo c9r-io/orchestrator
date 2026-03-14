@@ -16,7 +16,7 @@ mod tests;
 
 pub use command_run::NewCommandRun;
 pub use trait_def::TaskRepository;
-pub use write_ops::CompletedRunRecord;
+pub use write_ops::{CompletedRunRecord, InflightRunRecord};
 pub use types::{
     DbEventRecord, NewTaskGraphRun, NewTaskGraphSnapshot, TaskLogRunRow, TaskRepositoryConn,
     TaskRepositorySource, TaskRuntimeRow,
@@ -231,7 +231,7 @@ impl TaskRepository for SqliteTaskRepository {
     fn find_inflight_command_runs_for_task(
         &self,
         task_id: &str,
-    ) -> Result<Vec<(String, String, String, Option<i64>)>> {
+    ) -> Result<Vec<InflightRunRecord>> {
         let conn = self.connection()?;
         write_ops::find_inflight_command_runs_for_task(&conn, task_id)
     }
@@ -684,7 +684,7 @@ impl AsyncSqliteTaskRepository {
     pub async fn find_inflight_command_runs_for_task(
         &self,
         task_id: &str,
-    ) -> Result<Vec<(String, String, String, Option<i64>)>> {
+    ) -> Result<Vec<InflightRunRecord>> {
         let task_id = task_id.to_owned();
         self.async_db
             .reader()

@@ -125,7 +125,7 @@ pub async fn count_stale_pending_items(state: &InnerState, task_id: &str) -> Res
 pub async fn find_inflight_command_runs_for_task(
     state: &InnerState,
     task_id: &str,
-) -> Result<Vec<(String, String, String, Option<i64>)>> {
+) -> Result<Vec<crate::task_repository::InflightRunRecord>> {
     state
         .task_repo
         .find_inflight_command_runs_for_task(task_id)

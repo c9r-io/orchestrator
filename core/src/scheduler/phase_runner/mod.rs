@@ -312,6 +312,7 @@ async fn handle_sandbox_backend_error(
 /// Handles a `DaemonPidGuardBlocked` error by recording an audit event and
 /// returning a successful (skipped) result so the step does not produce false
 /// failure tickets.
+#[allow(clippy::too_many_arguments)]
 async fn handle_daemon_pid_guard_blocked(
     state: &Arc<InnerState>,
     err: &anyhow::Error,

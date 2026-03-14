@@ -155,7 +155,7 @@ impl DbWriteCoordinator {
     pub async fn find_inflight_command_runs_for_task(
         &self,
         task_id: &str,
-    ) -> Result<Vec<(String, String, String, Option<i64>)>> {
+    ) -> Result<Vec<crate::task_repository::InflightRunRecord>> {
         self.repo
             .find_inflight_command_runs_for_task(task_id)
             .await

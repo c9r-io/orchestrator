@@ -129,9 +129,11 @@ pub(crate) fn repair_unquoted_json(input: &str) -> String {
                     }
                     let token = input[start..i].trim();
                     // Check if it's a number, bool, or null — leave as-is
-                    if token == "true" || token == "false" || token == "null" {
-                        out.push_str(token);
-                    } else if token.parse::<f64>().is_ok() {
+                    if token == "true"
+                        || token == "false"
+                        || token == "null"
+                        || token.parse::<f64>().is_ok()
+                    {
                         out.push_str(token);
                     } else {
                         out.push('"');
@@ -225,10 +227,8 @@ fn scan_for_json_with_path(text: &str, path: &str) -> Option<Vec<Value>> {
         let slice = &text[i..];
         let mut de = serde_json::Deserializer::from_str(slice);
         if let Ok(root) = <Value as Deserialize>::deserialize(&mut de) {
-            if let Ok(target) = resolve_path(&root, path) {
-                if let Value::Array(arr) = target {
-                    return Some(arr.clone());
-                }
+            if let Ok(Value::Array(arr)) = resolve_path(&root, path) {
+                return Some(arr.clone());
             }
         }
         // Fallback: try repairing unquoted JSON in this slice
@@ -236,10 +236,8 @@ fn scan_for_json_with_path(text: &str, path: &str) -> Option<Vec<Value>> {
         if repaired != slice {
             let mut de = serde_json::Deserializer::from_str(&repaired);
             if let Ok(root) = <Value as Deserialize>::deserialize(&mut de) {
-                if let Ok(target) = resolve_path(&root, path) {
-                    if let Value::Array(arr) = target {
-                        return Some(arr.clone());
-                    }
+                if let Ok(Value::Array(arr)) = resolve_path(&root, path) {
+                    return Some(arr.clone());
                 }
             }
         }

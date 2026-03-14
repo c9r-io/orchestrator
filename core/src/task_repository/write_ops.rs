@@ -5,6 +5,9 @@ use rusqlite::{params, Connection};
 use super::command_run::NewCommandRun;
 use super::types::DbEventRecord;
 
+/// In-flight command run record: (run_id, item_id, phase, pid).
+pub type InflightRunRecord = (String, String, String, Option<i64>);
+
 pub(crate) fn extract_event_promoted_fields(
     payload_json: &str,
 ) -> (Option<String>, Option<String>, Option<i64>) {
@@ -187,7 +190,7 @@ pub struct CompletedRunRecord {
 pub fn find_inflight_command_runs_for_task(
     conn: &Connection,
     task_id: &str,
-) -> Result<Vec<(String, String, String, Option<i64>)>> {
+) -> Result<Vec<InflightRunRecord>> {
     let mut stmt = conn.prepare(
         "SELECT cr.id, cr.task_item_id, cr.phase, cr.pid
          FROM command_runs cr

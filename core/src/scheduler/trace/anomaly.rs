@@ -373,6 +373,40 @@ pub(super) fn detect_degenerate_loop(
     }
 }
 
+pub(super) fn detect_low_output_steps(events: &[&EventDto], anomalies: &mut Vec<Anomaly>) {
+    let mut seen_steps = HashSet::new();
+
+    for event in events {
+        if event.event_type != "step_heartbeat" {
+            continue;
+        }
+        let output_state = event.payload["output_state"].as_str();
+        let pid_alive = event.payload["pid_alive"].as_bool().unwrap_or(false);
+        if output_state != Some("low_output") || !pid_alive {
+            continue;
+        }
+
+        let step = event.payload["step"]
+            .as_str()
+            .or_else(|| event.payload["step_id"].as_str())
+            .unwrap_or("unknown");
+        if !seen_steps.insert(step.to_string()) {
+            continue;
+        }
+
+        let elapsed_secs = event.payload["elapsed_secs"].as_u64().unwrap_or(0);
+        let stagnant_heartbeats = event.payload["stagnant_heartbeats"].as_u64().unwrap_or(0);
+        anomalies.push(Anomaly::new(
+            AnomalyRule::LowOutput,
+            format!(
+                "Step '{}' entered low-output state after {}s with {} quiet heartbeats",
+                step, elapsed_secs, stagnant_heartbeats
+            ),
+            Some(event.created_at.clone()),
+        ));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -449,39 +483,5 @@ mod tests {
             anomalies.is_empty(),
             "expected no anomaly when a success interrupts the failure streak"
         );
-    }
-}
-
-pub(super) fn detect_low_output_steps(events: &[&EventDto], anomalies: &mut Vec<Anomaly>) {
-    let mut seen_steps = HashSet::new();
-
-    for event in events {
-        if event.event_type != "step_heartbeat" {
-            continue;
-        }
-        let output_state = event.payload["output_state"].as_str();
-        let pid_alive = event.payload["pid_alive"].as_bool().unwrap_or(false);
-        if output_state != Some("low_output") || !pid_alive {
-            continue;
-        }
-
-        let step = event.payload["step"]
-            .as_str()
-            .or_else(|| event.payload["step_id"].as_str())
-            .unwrap_or("unknown");
-        if !seen_steps.insert(step.to_string()) {
-            continue;
-        }
-
-        let elapsed_secs = event.payload["elapsed_secs"].as_u64().unwrap_or(0);
-        let stagnant_heartbeats = event.payload["stagnant_heartbeats"].as_u64().unwrap_or(0);
-        anomalies.push(Anomaly::new(
-            AnomalyRule::LowOutput,
-            format!(
-                "Step '{}' entered low-output state after {}s with {} quiet heartbeats",
-                step, elapsed_secs, stagnant_heartbeats
-            ),
-            Some(event.created_at.clone()),
-        ));
     }
 }

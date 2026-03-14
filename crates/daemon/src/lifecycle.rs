@@ -61,6 +61,27 @@ pub fn cleanup_pid_only(pid_path: &Path) {
     let _ = std::fs::remove_file(pid_path);
 }
 
+/// Wait for SIGTERM or SIGINT, then initiate graceful shutdown.
+pub async fn shutdown_signal(state: Arc<InnerState>) -> Result<()> {
+    let ctrl_c = tokio::signal::ctrl_c();
+    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        .context("failed to install SIGTERM handler")?;
+
+    tokio::select! {
+        _ = ctrl_c => {
+            tracing::info!("received SIGINT, shutting down");
+            state.daemon_runtime.request_shutdown();
+        }
+        _ = sigterm.recv() => {
+            tracing::info!("received SIGTERM, shutting down");
+            state.daemon_runtime.request_shutdown();
+        }
+    }
+
+    // Worker draining and cleanup handled by main.rs after gRPC server stops.
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -88,25 +109,4 @@ mod tests {
         let pid_path = dir.path().join("daemon.pid");
         assert!(!detect_stale_pid(&pid_path));
     }
-}
-
-/// Wait for SIGTERM or SIGINT, then initiate graceful shutdown.
-pub async fn shutdown_signal(state: Arc<InnerState>) -> Result<()> {
-    let ctrl_c = tokio::signal::ctrl_c();
-    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-        .context("failed to install SIGTERM handler")?;
-
-    tokio::select! {
-        _ = ctrl_c => {
-            tracing::info!("received SIGINT, shutting down");
-            state.daemon_runtime.request_shutdown();
-        }
-        _ = sigterm.recv() => {
-            tracing::info!("received SIGTERM, shutting down");
-            state.daemon_runtime.request_shutdown();
-        }
-    }
-
-    // Worker draining and cleanup handled by main.rs after gRPC server stops.
-    Ok(())
 }

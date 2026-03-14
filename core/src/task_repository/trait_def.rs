@@ -89,7 +89,7 @@ pub trait TaskRepository {
     fn find_inflight_command_runs_for_task(
         &self,
         task_id: &str,
-    ) -> Result<Vec<(String, String, String, Option<i64>)>>;
+    ) -> Result<Vec<super::write_ops::InflightRunRecord>>;
     /// Returns completed runs whose parent items are still `pending` (FR-038).
     fn find_completed_runs_for_pending_items(
         &self,

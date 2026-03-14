@@ -660,7 +660,12 @@ async fn wait_for_inflight_runs(state: &Arc<InnerState>, task_id: &str) -> Resul
 
         // Check if all known PIDs are dead
         let all_dead = remaining.iter().all(|(_, _, _, pid)| {
-            pid.map_or(true, |p| unsafe { libc::kill(p as i32, 0) } != 0)
+            pid.map_or(true, |p| {
+                // SAFETY: libc::kill with signal 0 only checks process existence,
+                // it does not send any signal. The pid comes from our own database.
+                let ret = unsafe { libc::kill(p as i32, 0) };
+                ret != 0
+            })
         });
         if all_dead {
             break;

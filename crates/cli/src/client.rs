@@ -125,13 +125,20 @@ async fn connect_uds() -> Result<OrchestratorServiceClient<Channel>> {
         }
     }
 
-    Err(last_err.unwrap()).with_context(|| {
-        format!(
+    match last_err {
+        Some(e) => Err(e).with_context(|| {
+            format!(
+                "failed to connect to daemon at {} after {} attempts. Is the daemon running?",
+                socket_path.display(),
+                max_attempts,
+            )
+        }),
+        None => anyhow::bail!(
             "failed to connect to daemon at {} after {} attempts. Is the daemon running?",
             socket_path.display(),
             max_attempts,
-        )
-    })
+        ),
+    }
 }
 
 async fn connect_secure(config_path: &Path) -> Result<OrchestratorServiceClient<Channel>> {
