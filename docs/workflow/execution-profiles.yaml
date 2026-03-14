@@ -21,6 +21,7 @@ spec:
     - core/src
     - crates
     - tests
+    - proto
   network_mode: inherit    # agents need API access (Claude, etc.)
 ---
 apiVersion: orchestrator.dev/v2
