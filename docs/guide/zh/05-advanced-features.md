@@ -4,7 +4,7 @@
 
 ## 自定义资源定义（CRD）
 
-CRD 允许你在内置的 Workspace/Agent/Workflow/StepTemplate 之外定义新的资源类型。适用于领域特定的配置（提示词库、评估标准等）。
+CRD 允许你在内置类型（Workspace、Agent、Workflow、StepTemplate、ExecutionProfile、SecretStore、EnvStore、WorkflowStore、Trigger、RuntimePolicy）之外定义新的资源类型。适用于领域特定的配置（提示词库、评估标准等）。
 
 ### 定义 CRD
 

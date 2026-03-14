@@ -147,5 +147,5 @@ spec:
 
 ## 下一步
 
-- [02 - 资源模型](02-resource-model.md) —— 了解四种资源类型
+- [02 - 资源模型](02-resource-model.md) —— 了解资源类型
 - [03 - 工作流配置](03-workflow-configuration.md) —— 设计多步骤工作流

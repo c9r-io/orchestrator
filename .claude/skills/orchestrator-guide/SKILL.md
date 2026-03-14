@@ -3,13 +3,14 @@ name: orchestrator-guide
 description: >-
   Guide for working with the Agent Orchestrator — a CLI tool for AI-native SDLC
   automation. Use when writing or editing YAML manifests (Workspace, Agent,
-  Workflow, StepTemplate, ExecutionProfile, SecretStore, EnvStore, CRD), running
-  orchestrator CLI commands, designing workflow step pipelines, writing CEL
-  prehook/finalize expressions, or configuring self-bootstrap workflows.
+  Workflow, StepTemplate, ExecutionProfile, SecretStore, EnvStore, Trigger, CRD),
+  running orchestrator CLI commands, designing workflow step pipelines, writing
+  CEL prehook/finalize expressions, configuring triggers (cron/event-driven task
+  creation), or configuring self-bootstrap workflows.
   Triggers: any mention of orchestrator config, YAML manifests with
   "orchestrator.dev/v2", workflow steps, prehooks, finalize rules, task
   create/start/pause, agent capabilities, StepTemplate prompts, execution
-  profiles, sandbox configuration, or secret management.
+  profiles, sandbox configuration, secret management, or trigger/cron scheduling.
 ---
 
 # Agent Orchestrator Guide
@@ -63,6 +64,7 @@ All resources use `apiVersion: orchestrator.dev/v2` with `metadata.name` and `sp
 | SecretStore | project | Encrypted key-value pairs for sensitive data (API keys, tokens) |
 | EnvStore | project | Plain key-value pairs for environment variables |
 | WorkflowStore | project | Cross-task persistent key-value store (WP01) |
+| Trigger | project | Cron-scheduled or event-driven automatic task creation |
 | RuntimePolicy | singleton | Runner shell config, resume behavior, observability, redaction patterns |
 | Project | cluster | Namespace for organizing resources |
 | CustomResourceDefinition | cluster | Extensible resource types with JSON Schema + CEL validation |

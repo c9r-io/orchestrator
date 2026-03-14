@@ -1,6 +1,6 @@
 # 02 - 资源模型
 
-编排器管理九种核心资源类型，以及可扩展的自定义资源定义（CRD）。所有资源遵循 Kubernetes 风格的清单格式。
+编排器管理十种核心资源类型，以及可扩展的自定义资源定义（CRD）。所有资源遵循 Kubernetes 风格的清单格式。
 
 ## 清单结构
 
@@ -262,6 +262,62 @@ spec:
 ```
 
 代理通过 `env` 条目引用存储（参见上文 Agent spec）。
+
+## 10. Trigger（触发器）
+
+Trigger 支持基于 cron 定时或任务生命周期事件（如 task_completed）自动创建任务。遵循 Kubernetes CronJob 心智模型。
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: nightly-qa
+spec:
+  cron:
+    schedule: "0 0 2 * * *"           # 6 段 cron：秒 分 时 日 月 周
+    timezone: "Asia/Shanghai"          # IANA 时区（可选，默认 UTC）
+  action:
+    workflow: full-qa                  # 触发时运行的工作流
+    workspace: main-workspace          # 任务所用的工作区
+  concurrencyPolicy: Forbid            # Allow | Forbid | Replace
+  suspend: false
+  historyLimit: 5                      # 保留的已完成任务上限
+```
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `cron` | cron/event 二选一 | 定时触发，支持可选时区 |
+| `event` | cron/event 二选一 | 事件驱动触发（source + filter） |
+| `action.workflow` | 是 | 触发时运行的工作流 |
+| `action.workspace` | 是 | 任务关联的工作区 |
+| `concurrencyPolicy` | 否 | `Allow`（默认）、`Forbid`（有活跃任务时跳过）、`Replace`（取消活跃任务后创建） |
+| `suspend` | 否 | 暂停触发器但不删除（默认：`false`） |
+| `historyLimit` | 否 | 每个触发器保留的已完成任务上限（默认：5） |
+
+### 事件触发
+
+事件触发器在匹配的任务生命周期事件发生时触发：
+
+```yaml
+spec:
+  event:
+    source: task_completed             # task_completed | task_failed
+    filter:
+      workflow: build-pipeline         # 仅匹配来自此工作流的任务
+  action:
+    workflow: deploy
+    workspace: prod
+```
+
+### 触发器生命周期
+
+```bash
+orchestrator trigger suspend <name>    # 暂停触发器
+orchestrator trigger resume <name>     # 恢复触发器
+orchestrator trigger fire <name>       # 手动触发（立即创建任务）
+orchestrator get triggers              # 列出所有触发器
+orchestrator delete trigger/<name>     # 删除触发器
+```
 
 ## 资源生命周期
 

@@ -10,7 +10,7 @@
 ## Background
 
 The orchestrator previously maintained two parallel resource pipelines:
-- **Builtin pipeline**: YAML → `OrchestratorResource` (strongly-typed `ResourceSpec` enum) → 9 independent `HashMap` fields
+- **Builtin pipeline**: YAML → `OrchestratorResource` (strongly-typed `ResourceSpec` enum) → 10 independent `HashMap` fields
 - **CRD pipeline**: YAML → `CustomResourceManifest` (`serde_json::Value`) → schema/CEL validation → single `custom_resources` HashMap
 
 These were unified into a **single ResourceStore** that acts as the write point for all resources (builtin + user-defined CRDs). Builtin resource instances such as Agent, Workflow, Workspace, Project, RuntimePolicy, StepTemplate, EnvStore, and SecretStore are stored in the ResourceStore and projected back into the in-memory config snapshot. Project-scoped resources are written under `projects.<id>.*` and stored with namespaced keys in the ResourceStore.
@@ -72,7 +72,7 @@ Verify that `normalize_config` ensures builtin CRD definitions exist and that th
    ${ORCH:-orchestrator} get agent/test-bootstrap-agent -o yaml
    ```
 
-4. Verify via unit tests that all 9 builtin CRDs are registered:
+4. Verify via unit tests that all 10 builtin CRDs are registered:
    ```
    cargo test --lib "config_load::normalize::tests::normalize_config_populates_builtin_crds"
    ```
@@ -85,7 +85,7 @@ Verify that `normalize_config` ensures builtin CRD definitions exist and that th
 ### Expected
 - `init` succeeds with exit code 0
 - Agent is created and retrievable
-- Builtin CRD definitions are present after normalization
+- 10 builtin CRD definitions are present after normalization
 - ResourceStore contains entries matching the project-scoped config snapshot after normalization
 
 ### Troubleshooting
@@ -97,7 +97,7 @@ Verify that `normalize_config` ensures builtin CRD definitions exist and that th
 
 ---
 
-## Scenario 2: CrdProjectable Round-Trip for All 9 Types
+## Scenario 2: CrdProjectable Round-Trip for All 10 Types
 
 ### Preconditions
 - Orchestrator binary is built
@@ -278,7 +278,7 @@ Verify ResourceStore correctness for edge cases: cross-kind key isolation, prefi
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Builtin CRD Bootstrap on Normalize | PASS | 2026-03-05 | claude | 44 normalize tests pass, 9 builtin CRDs confirmed |
+| 1 | Builtin CRD Bootstrap on Normalize | PASS | 2026-03-05 | claude | 44 normalize tests pass, 10 builtin CRDs confirmed |
 | 2 | CrdProjectable Round-Trip for All 9 Types | PASS | 2026-03-05 | claude | 12 projection tests pass |
 | 3 | Targeted Writeback — write_back_single and remove_from_legacy | PASS | 2026-03-05 | claude | 27 writeback tests pass |
 | 4 | apply_to_store / delete_from_store Integration | PASS | 2026-03-05 | claude | 11 resource tests pass, legacy seeding verified |

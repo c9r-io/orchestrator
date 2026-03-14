@@ -147,5 +147,5 @@ Then start it manually:
 
 ## Next Steps
 
-- [02 - Resource Model](02-resource-model.md) — understand the four resource kinds
+- [02 - Resource Model](02-resource-model.md) — understand the resource kinds
 - [03 - Workflow Configuration](03-workflow-configuration.md) — design multi-step workflows

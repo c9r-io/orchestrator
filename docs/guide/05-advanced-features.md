@@ -4,7 +4,7 @@ This chapter covers advanced workflow primitives: Custom Resource Definitions, P
 
 ## Custom Resource Definitions (CRDs)
 
-CRDs let you define new resource types beyond the built-in Workspace/Agent/Workflow/StepTemplate. This is useful for domain-specific configuration (prompt libraries, evaluation rubrics, etc.).
+CRDs let you define new resource types beyond the built-in kinds (Workspace, Agent, Workflow, StepTemplate, ExecutionProfile, SecretStore, EnvStore, WorkflowStore, Trigger, RuntimePolicy). This is useful for domain-specific configuration (prompt libraries, evaluation rubrics, etc.).
 
 ### Defining a CRD
 

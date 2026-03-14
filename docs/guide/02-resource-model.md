@@ -1,6 +1,6 @@
 # 02 - Resource Model
 
-The orchestrator manages nine core resource kinds, plus extensible Custom Resource Definitions (CRDs). All resources follow a Kubernetes-style manifest format.
+The orchestrator manages ten core resource kinds, plus extensible Custom Resource Definitions (CRDs). All resources follow a Kubernetes-style manifest format.
 
 ## Manifest Structure
 
@@ -262,6 +262,62 @@ spec:
 ```
 
 Agents reference stores via `env` entries (see Agent spec above).
+
+## 10. Trigger
+
+A Trigger enables automatic task creation on a cron schedule or in response to task lifecycle events (e.g., task_completed). It follows the Kubernetes CronJob mental model.
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: nightly-qa
+spec:
+  cron:
+    schedule: "0 0 2 * * *"           # 6-field cron: sec min hour day month weekday
+    timezone: "Asia/Shanghai"          # IANA timezone (optional, default UTC)
+  action:
+    workflow: full-qa                  # workflow to run
+    workspace: main-workspace          # workspace for the task
+  concurrencyPolicy: Forbid            # Allow | Forbid | Replace
+  suspend: false
+  historyLimit: 5                      # max completed tasks to retain
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `cron` | One of cron/event | Cron schedule with optional timezone |
+| `event` | One of cron/event | Event-driven trigger (source + filter) |
+| `action.workflow` | Yes | Workflow to run when triggered |
+| `action.workspace` | Yes | Workspace for the created task |
+| `concurrencyPolicy` | No | `Allow` (default), `Forbid` (skip if active task), `Replace` (cancel active + create new) |
+| `suspend` | No | Pause the trigger without deleting (default: `false`) |
+| `historyLimit` | No | Max completed tasks to keep per trigger (default: 5) |
+
+### Event Trigger
+
+An event trigger fires when a matching task lifecycle event occurs:
+
+```yaml
+spec:
+  event:
+    source: task_completed             # task_completed | task_failed
+    filter:
+      workflow: build-pipeline         # only match tasks from this workflow
+  action:
+    workflow: deploy
+    workspace: prod
+```
+
+### Trigger Lifecycle
+
+```bash
+orchestrator trigger suspend <name>    # pause trigger
+orchestrator trigger resume <name>     # resume trigger
+orchestrator trigger fire <name>       # manually fire (create task immediately)
+orchestrator get triggers              # list all triggers
+orchestrator delete trigger/<name>     # remove trigger
+```
 
 ## Resource Lifecycle
 

@@ -7,6 +7,7 @@
 - [ExecutionProfile](#executionprofile)
 - [SecretStore & EnvStore](#secretstore--envstore)
 - [RuntimePolicy](#runtimepolicy)
+- [Trigger](#trigger)
 - [Pipeline Variables](#pipeline-variables)
 - [Step Fields](#step-fields)
 - [Known Step IDs](#known-step-ids)
@@ -166,6 +167,60 @@ spec:
       - "sk-ant-[a-zA-Z0-9]+"
   resume:
     auto: true
+```
+
+## Trigger
+
+A Trigger enables cron-scheduled or event-driven automatic task creation. Follows the K8s CronJob mental model.
+
+```yaml
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: nightly-qa
+spec:
+  cron:
+    schedule: "0 0 2 * * *"       # 6-field cron (sec min hour day month weekday)
+    timezone: "Asia/Shanghai"      # IANA timezone (optional, default UTC)
+  action:
+    workflow: full-qa
+    workspace: main-workspace
+  concurrencyPolicy: Forbid        # Allow | Forbid | Replace
+  suspend: false
+  historyLimit: 5                  # max completed tasks to retain
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `cron` | One of cron/event | Cron schedule with optional timezone |
+| `event` | One of cron/event | Event-driven trigger (source + filter) |
+| `action.workflow` | Yes | Workflow to run when triggered |
+| `action.workspace` | Yes | Workspace for the created task |
+| `concurrencyPolicy` | No | `Allow` (default), `Forbid` (skip if active), `Replace` (cancel + create) |
+| `suspend` | No | Pause trigger without deleting (default: `false`) |
+| `historyLimit` | No | Max completed tasks to keep (default: 5) |
+
+### Event Trigger Example
+
+```yaml
+spec:
+  event:
+    source: task_completed
+    filter:
+      workflow: build-pipeline
+  action:
+    workflow: deploy
+    workspace: prod
+```
+
+### Trigger Lifecycle Commands
+
+```bash
+orchestrator trigger suspend <name>   # pause trigger
+orchestrator trigger resume <name>    # unpause trigger
+orchestrator trigger fire <name>      # manually fire (create task now)
+orchestrator get triggers             # list all triggers
+orchestrator delete trigger/<name>    # remove trigger
 ```
 
 ## Pipeline Variables

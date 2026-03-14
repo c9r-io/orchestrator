@@ -11,6 +11,7 @@
 - [Agent Management](#agent-management)
 - [Secret Management](#secret-management)
 - [Persistent Store](#persistent-store)
+- [Trigger Management](#trigger-management)
 - [Event Management](#event-management)
 - [QA & Database](#qa--database)
 - [Other Commands](#other-commands)
@@ -40,6 +41,7 @@
 | edit | e |
 | config | cfg |
 | check | ck |
+| trigger | tg |
 
 ## Daemon Lifecycle
 
@@ -186,6 +188,17 @@ orchestrator store get <store> <key>
 orchestrator store list <store>
 orchestrator store delete <store> <key>
 orchestrator store prune <store>
+```
+
+## Trigger Management
+
+```bash
+orchestrator get triggers                # list all triggers
+orchestrator get trigger/<name> -o yaml  # get single trigger
+orchestrator trigger suspend <name>      # pause trigger (no auto-fire)
+orchestrator trigger resume <name>       # unpause trigger
+orchestrator trigger fire <name>         # manually fire (create task now)
+orchestrator delete trigger/<name>       # remove trigger
 ```
 
 ## Event Management

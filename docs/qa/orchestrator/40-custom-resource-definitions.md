@@ -9,9 +9,9 @@
 
 ## Background
 
-The CRD extension system allows users to define new resource types beyond the 9 builtin kinds (Workspace, Agent, Workflow, Project, Defaults, RuntimePolicy, StepTemplate, EnvStore, SecretStore). A CRD defines the kind name, plural form, short aliases, API group, versioned JSON Schema, CEL validation rules, and lifecycle hooks. Custom resource instances are validated against their CRD's schema and CEL rules before being persisted.
+The CRD extension system allows users to define new resource types beyond the 10 builtin kinds (Workspace, Agent, Workflow, Project, Defaults, RuntimePolicy, StepTemplate, EnvStore, SecretStore, Trigger). A CRD defines the kind name, plural form, short aliases, API group, versioned JSON Schema, CEL validation rules, and lifecycle hooks. Custom resource instances are validated against their CRD's schema and CEL rules before being persisted.
 
-> **Note**: Since the unified CRD migration (see `42-crd-unified-resource-store.md`), the 9 builtin types are themselves registered as CRDs with `builtin: true`. All resources (builtin + user-defined) flow through the same ResourceStore pipeline. This document covers **user-defined CRD** behavior; for builtin CRD store mechanics, projection writeback, and normalization, see doc 42.
+> **Note**: Since the unified CRD migration (see `42-crd-unified-resource-store.md`), the 10 builtin types are themselves registered as CRDs with `builtin: true`. All resources (builtin + user-defined) flow through the same ResourceStore pipeline. This document covers **user-defined CRD** behavior; for builtin CRD store mechanics, projection writeback, and normalization, see doc 42.
 
 **Key design principles**:
 - All resources stored in unified `ResourceStore` with composite key `"{Kind}/{name}"`
