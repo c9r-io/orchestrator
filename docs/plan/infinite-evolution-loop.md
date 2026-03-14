@@ -19,33 +19,37 @@ self-evolution 和 self-bootstrap 已分别完成端到端验证：
 
 ### 方案
 
-在 pipeline 中引入 `git_commit` 步骤类型（或 post-action），在关键节点自动 commit：
+使用现有的 command step，在 workflow YAML 中编排 git 操作，**无需核心代码改动**：
 
 ```yaml
 - id: git_commit
-  kind: shell
   command: |
     cd {workspace_root}
     git add -A
     git diff --cached --quiet && echo "nothing to commit" || \
     git commit -m "[orchestrator] {task_name} cycle {cycle} — {step_id}"
-  run_after:
-    - self_test   # 只在测试通过后才 commit
 ```
 
 关键设计点：
 
-1. **Commit 时机**: `self_test` 通过后、下一轮开始前
+1. **Commit 时机**: 放在 `self_test` 通过之后，通过 prehook 确保只在测试通过时执行
 2. **Commit 消息**: 包含 task_name、cycle 号、workflow 名，便于追溯
 3. **空 commit 保护**: `git diff --cached --quiet` 避免无变更时报错
-4. **Branch 策略**: 在 feature branch 上操作（`evo/{task_id}`），不直接动 main
+4. **Branch 策略**: 在 feature branch 上操作（见下节），不直接动 main
 5. **Rollback 支持**: checkpoint 与 git commit 关联，失败时可 `git revert`
 
-### 实现范围
+### Feature Branch 自动管理
 
-- `core/src/scheduler/item_executor/dispatch.rs`: 新增 `shell` step 类型的 `git_commit` 语义
-- 或更通用：在现有 `shell` step 中直接写 git 命令（无需引擎改动，纯 YAML 编排）
-- 可选增强：引擎内置 `git_commit` post-action，自动关联 checkpoint tag
+同样通过 command step 实现，放在 `init_once` 或 cycle 1 的首个步骤：
+
+```yaml
+- id: init_once
+  command: |
+    cd {workspace_root}
+    git checkout -b auto/{task_name} 2>/dev/null || git checkout auto/{task_name}
+```
+
+任务结束后由人工决定是否 merge 到 main。
 
 ---
 
@@ -53,7 +57,7 @@ self-evolution 和 self-bootstrap 已分别完成端到端验证：
 
 ### 方案 A: 单 Workflow 内交替（推荐起步）
 
-一个 workflow 包含完整的 evolution + bootstrap 段，用 `LoopMode::Converge` 驱动多轮：
+一个 workflow 包含完整的 evolution + bootstrap 段，用循环模式驱动多轮：
 
 ```
 Cycle N:
@@ -68,33 +72,57 @@ Cycle N:
   loop_guard: 检查本轮 diff 是否足够小 / 测试是否全绿 / 无新 clippy warning
 ```
 
+所有步骤均可用现有 workflow 原语表达：
+- evolution 段的 `generate_items` post-action 生成候选项
+- item-scoped 步骤并行实现和评测
+- `captures` 提取 benchmark 分数到 pipeline 变量
+- prehook CEL 表达式控制条件执行
+
 **优点**: 紧凑，状态在 pipeline vars 内自然传递，无需跨 workflow 通信
 **缺点**: workflow YAML 较长
 
-### 方案 B: Workflow 级联
+### 方案 B: Workflow 级联（通过 Trigger 资源）
 
-两个独立 workflow 通过 finalize rule 互相触发：
+两个独立 workflow 通过 Trigger 资源（FR-039，已实现）互相触发：
 
+```yaml
+# Trigger: evolution 完成后启动 bootstrap
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: evo-to-bootstrap
+  project: self-evolution
+spec:
+  event:
+    source: task_completed
+    filter:
+      workflow: self-evolution
+  action:
+    workspace: self
+    workflow: self-bootstrap
+    goal: "打磨上一轮 evolution 的产出"
+  concurrency_policy: Forbid
+
+# Trigger: bootstrap 完成后启动下一轮 evolution
+apiVersion: orchestrator.dev/v2
+kind: Trigger
+metadata:
+  name: bootstrap-to-evo
+  project: self-evolution
+spec:
+  event:
+    source: task_completed
+    filter:
+      workflow: self-bootstrap
+  action:
+    workspace: self
+    workflow: self-evolution
+    goal: "探索下一个改进方向"
+  concurrency_policy: Forbid
 ```
-self-evolution:
-  finalize:
-    - when: "task_status == 'completed'"
-      action: create_task
-      params:
-        workflow: self-bootstrap
-        goal: "{prev_evolution_goal}"
 
-self-bootstrap:
-  finalize:
-    - when: "task_status == 'completed' && improvement_delta > threshold"
-      action: create_task
-      params:
-        workflow: self-evolution
-        goal: "继续探索 {next_topic}"
-```
-
-**优点**: 各 workflow 独立演进，职责清晰
-**缺点**: 需要实现 `create_task` finalize action（当前 finalize 只支持状态变更）
+**优点**: 各 workflow 独立演进，职责清晰，可单独测试
+**缺点**: 跨 workflow 状态传递需通过 Store 资源中转
 
 ### 建议
 
@@ -104,7 +132,26 @@ self-bootstrap:
 
 ## 收敛条件
 
-无限循环需要合理的停止条件，避免无意义空转：
+无限循环需要合理的停止条件，避免无意义空转。
+
+已提交 **FR-043**（`docs/feature_request/FR-043-convergence-expression.md`），为 `loop_guard` 增加 CEL 表达式驱动的收敛判断：
+
+```yaml
+loop:
+  mode: infinite
+  max_cycles: 10          # 硬上限安全阀
+  convergence_expr:
+    engine: cel
+    when: "delta_lines < 5 && cycle >= 2"
+    reason: "code diff converged"
+```
+
+在 FR-043 实现之前，可通过现有机制近似实现：
+- `max_cycles` 硬停
+- `loop_guard` builtin 的 `stop_when_no_unresolved` 标志
+- prehook 条件跳过不必要的步骤
+
+收敛维度参考：
 
 1. **Diff 收敛**: 连续 N 轮的 diff 行数低于阈值（如 < 5 行）
 2. **Score 收敛**: evolution 阶段两个候选的 benchmark score 差距低于阈值
@@ -112,27 +159,44 @@ self-bootstrap:
 4. **Budget 上限**: 最大循环次数 or 最大 agent 调用次数
 5. **人工中断**: `task pause` 随时可介入
 
-可通过 `LoopMode::Converge` 的 `convergence_expr` 表达：
+---
+
+## 课题自动发现
+
+通过 agent step + `spawn_tasks` post-action 实现，**无需核心代码改动**：
 
 ```yaml
-loop:
-  mode: converge
-  max_cycles: 10
-  convergence_expr: "diff_lines < 5 && score_delta < 3"
+- id: discover_topics
+  required_capability: plan
+  template: topic_discovery    # prompt 引导 agent 分析代码库找改进点
+  behavior:
+    post_actions:
+      - type: spawn_tasks
+        from_var: discover_output
+        json_path: "$.topics"
+        mapping:
+          goal: "$.description"
+          workflow: "self-evolution"
+          name: "$.slug"
+        max_tasks: 3
 ```
+
+agent 分析代码库输出 JSON 列表 → `spawn_tasks` 自动创建子任务。配合 Trigger 资源可形成持续发现闭环。
 
 ---
 
 ## 实现优先级
 
-| 优先级 | 任务 | 依赖 |
-|--------|------|------|
-| P0 | Git commit 机制（shell step 方式，纯 YAML） | 无 |
-| P0 | Branch 策略（自动创建 feature branch） | Git commit |
-| P1 | 单 workflow 交替编排（方案 A） | Git commit |
-| P1 | 收敛条件表达式 | LoopMode::Converge |
-| P2 | Workflow 级联触发（方案 B） | Finalize action 扩展 |
-| P2 | 课题自动发现（从 TODO/issue 中提取下一轮课题） | Evolution pipeline |
+| 优先级 | 任务 | 实现方式 | 依赖 |
+|--------|------|----------|------|
+| P0 | Git commit 机制 | command step（纯 YAML） | 无 |
+| P0 | Feature branch 自动管理 | command step（纯 YAML） | 无 |
+| P1 | 单 workflow 交替编排（方案 A） | workflow YAML 编写 | Git commit |
+| P1 | 收敛条件表达式（FR-043） | 核心代码改动 | loop_guard CEL 扩展 |
+| P2 | Workflow 级联触发（方案 B） | Trigger 资源（纯 YAML） | 已具备（FR-039） |
+| P2 | 课题自动发现 | agent step + spawn_tasks（纯 YAML） | topic_discovery template |
+
+> **注**: P0/P1 中仅 FR-043 需要核心代码改动，其余均可通过 workflow YAML 编排实现。
 
 ---
 
