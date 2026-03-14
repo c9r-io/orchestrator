@@ -30,6 +30,7 @@
 | FR-039 | Trigger 资源 — Cron 与事件驱动的任务自动创建 | P1 | Closed |
 | FR-040 | QA Agent 子进程绕过 Daemon PID Guard 杀死 Daemon | P1 | Closed |
 | FR-041 | Self-Restart 后 Socket 连接断裂导致后续步骤不可达 | P1 | Closed |
+| FR-042 | follow_task_logs 流式回调重构 — gRPC TaskFollow 空流修复 | P1 | Proposed |
 
 ## 说明
 
