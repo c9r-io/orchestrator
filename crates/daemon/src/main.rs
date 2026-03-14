@@ -157,6 +157,17 @@ fn main() -> Result<()> {
         // Detect stale PID from a previous crash before overwriting
         let stale_pid_detected = lifecycle::detect_stale_pid(&pid_path);
 
+        // Refuse to start if another daemon instance is already running.
+        // This prevents socket destruction when multiple daemons race to bind
+        // the same UDS path (e.g. after a self-restart exec() where the PID is
+        // preserved but the socket is transiently unavailable).
+        if let Some(existing_pid) = lifecycle::detect_running_daemon(&pid_path) {
+            anyhow::bail!(
+                "another orchestratord is already running (PID {existing_pid}); \
+                 not starting a second instance"
+            );
+        }
+
         // Write PID file
         lifecycle::write_pid_file(&pid_path)?;
 
@@ -501,19 +512,16 @@ fn main() -> Result<()> {
         // Check if this was a restart request
         if let Some(binary_path) = restart_rx.borrow().clone() {
             info!(binary = %binary_path.display(), "exec-ing new daemon binary");
-            // Only remove PID file; leave socket for the new binary to clean up
-            // at startup (it already calls remove_file on the socket path).
-            // This avoids a window where both socket and PID are gone if exec() fails.
-            lifecycle::cleanup_pid_only(&pid_path);
+            // Keep the PID file intact: exec() preserves the PID, so the file
+            // remains valid and prevents other processes from starting a
+            // competing daemon during the restart window.
 
             use std::os::unix::process::CommandExt;
             let err = std::process::Command::new(&binary_path)
                 .args(std::env::args_os().skip(1))
                 .exec();
-            // exec() only returns on error — write PID so stale detection works
-            // on next manual start.
+            // exec() only returns on error
             error!("exec failed: {}", err);
-            let _ = lifecycle::write_pid_file(&pid_path);
             std::process::exit(1);
         }
 

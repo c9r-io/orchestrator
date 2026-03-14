@@ -48,18 +48,23 @@ pub fn detect_stale_pid(pid_path: &Path) -> bool {
     }
 }
 
+/// Check whether another daemon instance is already running.
+/// Returns `Some(pid)` if a PID file exists, the process is alive, and it is
+/// NOT the current process (i.e. not a post-exec() self-check).
+#[cfg(unix)]
+pub fn detect_running_daemon(pid_path: &Path) -> Option<u32> {
+    match read_pid_file(pid_path) {
+        Some(pid) if pid != std::process::id() && is_process_alive(pid) => Some(pid),
+        _ => None,
+    }
+}
+
 /// Clean up socket and PID file on shutdown.
 pub fn cleanup(socket_path: &Path, pid_path: &Path) {
     let _ = std::fs::remove_file(socket_path);
     let _ = std::fs::remove_file(pid_path);
 }
 
-/// Remove only the PID file, leaving the socket intact.
-/// Used before exec() so the new process writes its own PID while the stale
-/// socket is cleaned up by the new binary's normal startup path.
-pub fn cleanup_pid_only(pid_path: &Path) {
-    let _ = std::fs::remove_file(pid_path);
-}
 
 /// Wait for SIGTERM or SIGINT, then initiate graceful shutdown.
 pub async fn shutdown_signal(state: Arc<InnerState>) -> Result<()> {
@@ -108,5 +113,29 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let pid_path = dir.path().join("daemon.pid");
         assert!(!detect_stale_pid(&pid_path));
+    }
+
+    #[test]
+    fn detect_running_daemon_returns_none_for_own_pid() {
+        let dir = tempfile::tempdir().unwrap();
+        let pid_path = dir.path().join("daemon.pid");
+        std::fs::write(&pid_path, std::process::id().to_string()).unwrap();
+        // After exec(), the PID is preserved — should not block startup.
+        assert!(detect_running_daemon(&pid_path).is_none());
+    }
+
+    #[test]
+    fn detect_running_daemon_returns_none_for_dead_pid() {
+        let dir = tempfile::tempdir().unwrap();
+        let pid_path = dir.path().join("daemon.pid");
+        std::fs::write(&pid_path, "2000000000").unwrap();
+        assert!(detect_running_daemon(&pid_path).is_none());
+    }
+
+    #[test]
+    fn detect_running_daemon_returns_none_when_no_pid_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let pid_path = dir.path().join("daemon.pid");
+        assert!(detect_running_daemon(&pid_path).is_none());
     }
 }

@@ -2,7 +2,7 @@
 
 **Module**: orchestrator
 **Scope**: Verify socket and PID file consistency across self_restart exec() lifecycle
-**Scenarios**: 4
+**Scenarios**: 5
 
 ---
 
@@ -56,7 +56,7 @@
 ### Expected
 
 - Log shows `exec-ing new daemon binary`
-- Only PID file is removed before exec() (not the socket)
+- PID file is kept intact before exec() (exec preserves the PID)
 - New daemon process starts, removes stale socket, binds fresh socket
 - `daemon_socket_ready` event is emitted after bind
 - CLI can connect within 3 seconds of exec()
@@ -75,8 +75,35 @@
 ### Expected
 
 - Error logged: `exec failed: ...`
-- PID file is re-written with the current process PID before exit
+- Daemon process exits with code 1
 - On next daemon start, stale PID detection correctly identifies the dead process
 - `daemon_crash_recovered` event emitted on recovery start
+
+---
+
+## Scenario 5: Duplicate daemon instance blocked during restart window
+
+**Precondition**: Daemon is running or restarting via exec()
+
+### Steps
+
+1. With daemon running, attempt to start a second instance:
+   ```bash
+   ./target/release/orchestratord --foreground --workers 1
+   ```
+2. Verify the second instance is rejected
+
+### Expected
+
+- Second instance exits with error: `another orchestratord is already running (PID <N>); not starting a second instance`
+- Original daemon's socket file is NOT removed
+- Original daemon continues operating normally
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Socket disappears after restart | Multiple daemons racing to bind UDS | This scenario guards against it; ensure no manual `orchestratord` launches during restart |
+| "daemon socket not found" after self_restart | qa_testing agent spawned competing daemon | Check `pgrep -f orchestratord` for duplicate PIDs; kill extras |
 
 ---
