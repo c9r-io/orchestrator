@@ -107,6 +107,7 @@ pub(super) async fn apply_step_results(
                     ) {
                         Ok(Some(ticket_path)) => {
                             acc.created_ticket_files.push(ticket_path.clone());
+                            acc.active_tickets.push(ticket_path.clone());
                             insert_event(
                                 state,
                                 task_id,
