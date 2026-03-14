@@ -373,6 +373,46 @@ pub(super) fn detect_degenerate_loop(
     }
 }
 
+/// FR-044: Detects sandbox denial events and aggregates them per step.
+pub(super) fn detect_sandbox_denied(events: &[&EventDto], anomalies: &mut Vec<Anomaly>) {
+    let mut step_denials: HashMap<String, (u32, String)> = HashMap::new();
+
+    for event in events {
+        if event.event_type != "sandbox_denied" {
+            continue;
+        }
+        let step = event
+            .payload
+            .get("step")
+            .or_else(|| event.payload.get("step_id"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let reason = event
+            .payload
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let entry = step_denials
+            .entry(step.to_string())
+            .or_insert_with(|| (0, event.created_at.clone()));
+        entry.0 += 1;
+        if entry.0 == 1 && !reason.is_empty() {
+            entry.1 = format!("{} ({})", event.created_at, reason);
+        }
+    }
+
+    for (step, (count, first_at)) in &step_denials {
+        anomalies.push(Anomaly::new(
+            AnomalyRule::SandboxDenied,
+            format!(
+                "Step '{}' had {} sandbox denial(s); first at {}",
+                step, count, first_at,
+            ),
+            Some(first_at.clone()),
+        ));
+    }
+}
+
 pub(super) fn detect_low_output_steps(events: &[&EventDto], anomalies: &mut Vec<Anomaly>) {
     let mut seen_steps = HashSet::new();
 
@@ -464,6 +504,59 @@ mod tests {
             anomalies.is_empty(),
             "expected no anomaly for fewer than 3 consecutive failures"
         );
+    }
+
+    #[test]
+    fn sandbox_denied_emits_anomaly_per_step() {
+        let events = vec![
+            EventDto {
+                id: 1,
+                task_id: "t1".to_string(),
+                task_item_id: Some("item-a".to_string()),
+                event_type: "sandbox_denied".to_string(),
+                payload: serde_json::json!({"step": "implement", "reason": "EPERM on proto/foo.proto"}),
+                created_at: "2026-01-01T00:00:01Z".to_string(),
+            },
+            EventDto {
+                id: 2,
+                task_id: "t1".to_string(),
+                task_item_id: Some("item-a".to_string()),
+                event_type: "sandbox_denied".to_string(),
+                payload: serde_json::json!({"step": "implement", "reason": "EPERM on proto/bar.proto"}),
+                created_at: "2026-01-01T00:00:02Z".to_string(),
+            },
+            EventDto {
+                id: 3,
+                task_id: "t1".to_string(),
+                task_item_id: Some("item-a".to_string()),
+                event_type: "step_started".to_string(),
+                payload: serde_json::json!({"step": "implement"}),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+            },
+        ];
+        let refs: Vec<&EventDto> = events.iter().collect();
+        let mut anomalies = Vec::new();
+        detect_sandbox_denied(&refs, &mut anomalies);
+        assert_eq!(anomalies.len(), 1, "expected one anomaly for step 'implement'");
+        assert_eq!(anomalies[0].rule, "sandbox_denied");
+        assert!(anomalies[0].message.contains("implement"));
+        assert!(anomalies[0].message.contains("2"));
+    }
+
+    #[test]
+    fn sandbox_denied_no_anomaly_when_no_denial_events() {
+        let events = vec![EventDto {
+            id: 1,
+            task_id: "t1".to_string(),
+            task_item_id: Some("item-a".to_string()),
+            event_type: "step_started".to_string(),
+            payload: serde_json::json!({"step": "implement"}),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+        }];
+        let refs: Vec<&EventDto> = events.iter().collect();
+        let mut anomalies = Vec::new();
+        detect_sandbox_denied(&refs, &mut anomalies);
+        assert!(anomalies.is_empty());
     }
 
     #[test]

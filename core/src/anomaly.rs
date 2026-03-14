@@ -62,6 +62,8 @@ pub enum AnomalyRule {
     UnexpandedTemplateVar,
     /// FR-035: An item-phase pair failed repeatedly, indicating a degenerate loop.
     DegenerateLoop,
+    /// FR-044: The sandbox denied one or more file-system writes during step execution.
+    SandboxDenied,
 }
 
 impl AnomalyRule {
@@ -80,6 +82,7 @@ impl AnomalyRule {
             AnomalyRule::NonzeroExit => "nonzero_exit",
             AnomalyRule::UnexpandedTemplateVar => "unexpanded_template_var",
             AnomalyRule::DegenerateLoop => "degenerate_loop",
+            AnomalyRule::SandboxDenied => "sandbox_denied",
         }
     }
 
@@ -89,7 +92,8 @@ impl AnomalyRule {
             AnomalyRule::DuplicateRunner
             | AnomalyRule::OverlappingCycles
             | AnomalyRule::OverlappingSteps
-            | AnomalyRule::DegenerateLoop => Severity::Error,
+            | AnomalyRule::DegenerateLoop
+            | AnomalyRule::SandboxDenied => Severity::Error,
 
             AnomalyRule::LowOutput
             | AnomalyRule::MissingStepEnd
@@ -109,7 +113,8 @@ impl AnomalyRule {
             | AnomalyRule::DuplicateRunner
             | AnomalyRule::OverlappingCycles
             | AnomalyRule::OverlappingSteps
-            | AnomalyRule::DegenerateLoop => Escalation::Intervene,
+            | AnomalyRule::DegenerateLoop
+            | AnomalyRule::SandboxDenied => Escalation::Intervene,
 
             AnomalyRule::NonzeroExit
             | AnomalyRule::OrphanCommand
@@ -136,6 +141,7 @@ impl AnomalyRule {
             AnomalyRule::NonzeroExit => "NONZERO_EXIT",
             AnomalyRule::UnexpandedTemplateVar => "UNEXPANDED_TEMPLATE_VAR",
             AnomalyRule::DegenerateLoop => "DEGENERATE_LOOP",
+            AnomalyRule::SandboxDenied => "SANDBOX_DENIED",
         }
     }
 
@@ -154,6 +160,7 @@ impl AnomalyRule {
             "nonzero_exit" => Some(AnomalyRule::NonzeroExit),
             "unexpanded_template_var" => Some(AnomalyRule::UnexpandedTemplateVar),
             "degenerate_loop" => Some(AnomalyRule::DegenerateLoop),
+            "sandbox_denied" => Some(AnomalyRule::SandboxDenied),
             _ => None,
         }
     }
@@ -206,6 +213,7 @@ mod tests {
         AnomalyRule::NonzeroExit,
         AnomalyRule::UnexpandedTemplateVar,
         AnomalyRule::DegenerateLoop,
+        AnomalyRule::SandboxDenied,
     ];
 
     #[test]
@@ -238,6 +246,10 @@ mod tests {
         );
         assert_eq!(
             AnomalyRule::DegenerateLoop.default_severity(),
+            Severity::Error
+        );
+        assert_eq!(
+            AnomalyRule::SandboxDenied.default_severity(),
             Severity::Error
         );
 
@@ -284,6 +296,10 @@ mod tests {
         );
         assert_eq!(
             AnomalyRule::DegenerateLoop.escalation(),
+            Escalation::Intervene
+        );
+        assert_eq!(
+            AnomalyRule::SandboxDenied.escalation(),
             Escalation::Intervene
         );
 

@@ -32,7 +32,7 @@
 | FR-040 | QA Agent 子进程绕过 Daemon PID Guard 杀死 Daemon | P1 | Closed |
 | FR-041 | Self-Restart 后 Socket 连接断裂导致后续步骤不可达 | P1 | Closed |
 | FR-042 | follow_task_logs 流式回调重构 — gRPC TaskFollow 空流修复 | P1 | Closed |
-| FR-044 | Sandbox 写入拒绝检测与 writable_paths 完善 | P1 | Proposed |
+| FR-044 | Sandbox 写入拒绝检测与 writable_paths 完善 | P1 | Closed |
 | FR-045 | QA Agent 长生命周期命令防护 | P1 | Proposed |
 
 ## 说明
@@ -84,3 +84,4 @@
 - FR-002 已闭环；其设计与验证信息现由 `docs/design_doc/orchestrator/22-control-plane-security.md` 与 `docs/qa/orchestrator/58-control-plane-security.md` 承载（mTLS、RBAC 授权、审计日志均已实现）
 - FR-005 已闭环；其设计与验证信息现由 `docs/design_doc/orchestrator/24-daemon-lifecycle-runtime-metrics.md` 与 `docs/qa/orchestrator/60-daemon-lifecycle-runtime-metrics.md` 承载（生命周期状态机、运行时指标、优雅 drain 均已实现）
 - FR-011 已闭环；代码已自然实现 validate/scheduler/runner 的职责分离（config_load/validate/、output_validation.rs、runner/sandbox.rs 各司其职），无需进一步重构
+- FR-044 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/56-sandbox-denial-detection.md` 与 `docs/qa/orchestrator/56-sandbox-denial-anomaly-trace.md` 承载

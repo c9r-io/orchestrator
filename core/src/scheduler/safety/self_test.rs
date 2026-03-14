@@ -23,6 +23,42 @@ pub async fn execute_self_test_step(
 ) -> Result<SelfTestResult> {
     let cargo_bin = std::env::var("ORCH_SELF_TEST_CARGO").unwrap_or_else(|_| "cargo".to_string());
 
+    // FR-044: detect empty changes before running cargo check
+    state.emit_event(
+        task_id,
+        Some(item_id),
+        "self_test_phase",
+        json!({"phase": "empty_change_check"}),
+    );
+    let diff_output = tokio::process::Command::new("git")
+        .args(["diff", "--stat", "HEAD"])
+        .current_dir(workspace_root)
+        .output()
+        .await
+        .ok();
+    let has_changes = diff_output
+        .as_ref()
+        .map(|o| {
+            if !o.status.success() {
+                return true; // not a git repo or other git error — skip check
+            }
+            !o.stdout.is_empty()
+        })
+        .unwrap_or(true); // assume changes if git command fails to spawn
+    state.emit_event(
+        task_id,
+        Some(item_id),
+        "self_test_phase",
+        json!({"phase": "empty_change_check", "passed": has_changes}),
+    );
+    if !has_changes {
+        return Ok(SelfTestResult {
+            exit_code: 1,
+            error_output: "[empty_change_check] no code changes detected after implement step"
+                .to_string(),
+        });
+    }
+
     state.emit_event(
         task_id,
         Some(item_id),
