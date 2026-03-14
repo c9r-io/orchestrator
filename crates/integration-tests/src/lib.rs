@@ -428,22 +428,16 @@ impl OrchestratorService for TestOrchestratorServer {
         let state = self.state.clone();
         let (tx, rx) = tokio::sync::mpsc::channel(64);
         tokio::spawn(async move {
-            let line_tx = tx.clone();
-            let send_fn = move |line: String| {
-                let tx = line_tx.clone();
-                async move {
-                    let _ = tx
-                        .send(Ok(TaskLogLine {
-                            line,
-                            timestamp: String::new(),
-                        }))
-                        .await;
-                }
-            };
             let _ = agent_orchestrator::service::task::follow_task_logs_stream(
                 &state,
                 &req.task_id,
-                send_fn,
+                |line: String, _is_stderr: bool| {
+                    let _ = tx.try_send(Ok(TaskLogLine {
+                        line,
+                        timestamp: String::new(),
+                    }));
+                    Ok(())
+                },
             )
             .await;
         });

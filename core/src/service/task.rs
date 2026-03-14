@@ -9,7 +9,6 @@ use crate::scheduler_service::enqueue_task as enqueue_task_impl;
 use crate::state::InnerState;
 use crate::task_ops::{create_task_impl, reset_task_item_for_retry};
 use anyhow::Context;
-use std::future::Future;
 use std::sync::Arc;
 
 /// Create a new task (synchronous — no async DB ops needed).
@@ -136,23 +135,21 @@ pub async fn get_task_logs(
         .map_err(|err| classify_task_error("task.logs", err))
 }
 
-/// Follow task logs via a callback for each line.
-/// The callback receives each log line as a String.
-pub async fn follow_task_logs_stream<F, Fut>(
+/// Follow task logs via a synchronous callback for each chunk.
+///
+/// `send_fn(text, is_stderr)` is called for every log chunk.
+pub async fn follow_task_logs_stream<F>(
     state: &InnerState,
     task_id: &str,
-    _send_fn: F,
+    mut send_fn: F,
 ) -> Result<()>
 where
-    F: Fn(String) -> Fut + Send + 'static,
-    Fut: Future<Output = ()> + Send,
+    F: FnMut(String, bool) -> anyhow::Result<()>,
 {
     let resolved_id = resolve_task_id(state, task_id)
         .await
         .map_err(|err| classify_task_error("task.follow", err))?;
-    // For now, delegate to the existing stdout-based implementation.
-    // TODO: Phase 3 — refactor follow_task_logs to use a channel/callback instead of stdout.
-    follow_task_logs(state, &resolved_id)
+    follow_task_logs(state, &resolved_id, &mut send_fn)
         .await
         .map_err(|err| classify_task_error("task.follow", err))
 }

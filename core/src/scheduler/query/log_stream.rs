@@ -100,8 +100,17 @@ pub async fn stream_task_logs_impl(
     Ok(chunks)
 }
 
-/// Follow task logs in real-time.
-pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
+/// Follow task logs in real-time, sending each chunk via `output_fn`.
+///
+/// `output_fn(text, is_stderr)` is called synchronously for every log chunk.
+pub async fn follow_task_logs<F>(
+    state: &InnerState,
+    task_id: &str,
+    output_fn: &mut F,
+) -> Result<()>
+where
+    F: FnMut(String, bool) -> anyhow::Result<()>,
+{
     let redaction_patterns = {
         let active = read_loaded_config(state)?;
         let mut patterns = active.config.runtime_policy().runner.redaction_patterns;
@@ -127,12 +136,12 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
             Ok(Some(info)) => info,
             Ok(None) => {
                 if !waiting_notice_printed {
-                    eprintln!("[waiting for first log stream]");
+                    output_fn("[waiting for first log stream]\n".to_string(), true)?;
                     waiting_notice_printed = true;
                 }
                 if let Ok(Some(status)) = state.task_repo.load_task_status(task_id).await {
                     if status == "completed" || status == "failed" {
-                        eprintln!("\n--- task {} ---", status);
+                        output_fn(format!("\n--- task {} ---\n", status), true)?;
                         return Ok(());
                     }
                 }
@@ -152,7 +161,10 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
 
         if phase != current_phase {
             if !current_phase.is_empty() {
-                eprintln!("\n--- step changed: {} -> {} ---", current_phase, phase);
+                output_fn(
+                    format!("\n--- step changed: {} -> {} ---\n", current_phase, phase),
+                    true,
+                )?;
             }
             current_phase = phase;
             stdout_pos = 0;
@@ -161,7 +173,8 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
         waiting_notice_printed = false;
 
         if let Err(err) =
-            follow_one_stream(&stdout_path, &mut stdout_pos, false, &redaction_patterns).await
+            follow_one_stream(&stdout_path, &mut stdout_pos, false, &redaction_patterns, output_fn)
+                .await
         {
             emit_anomaly_warning(
                 &AnomalyRule::TransientReadError,
@@ -171,7 +184,8 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
         }
 
         if let Err(err) =
-            follow_one_stream(&stderr_path, &mut stderr_pos, true, &redaction_patterns).await
+            follow_one_stream(&stderr_path, &mut stderr_pos, true, &redaction_patterns, output_fn)
+                .await
         {
             emit_anomaly_warning(
                 &AnomalyRule::TransientReadError,
@@ -183,7 +197,7 @@ pub async fn follow_task_logs(state: &InnerState, task_id: &str) -> Result<()> {
         if let Ok(Some(status)) = state.task_repo.load_task_status(task_id).await {
             if status == "completed" || status == "failed" {
                 tokio::time::sleep(Duration::from_millis(200)).await;
-                eprintln!("\n--- task {} ---", status);
+                output_fn(format!("\n--- task {} ---\n", status), true)?;
                 return Ok(());
             }
         }
@@ -243,12 +257,16 @@ pub(crate) fn tail_lines(path: &Path, limit: usize) -> Result<String> {
     Ok(String::from_utf8_lossy(&data).trim_end().to_string())
 }
 
-async fn follow_one_stream(
+async fn follow_one_stream<F>(
     path: &str,
     pos: &mut u64,
     stderr: bool,
     redaction_patterns: &[String],
-) -> Result<()> {
+    output_fn: &mut F,
+) -> Result<()>
+where
+    F: FnMut(String, bool) -> anyhow::Result<()>,
+{
     use tokio::io::AsyncReadExt;
     use tokio::io::AsyncSeekExt;
 
@@ -276,11 +294,7 @@ async fn follow_one_stream(
     }
 
     let text = redact_text(&String::from_utf8_lossy(&buf[..read]), redaction_patterns);
-    if stderr {
-        eprint!("{text}");
-    } else {
-        print!("{text}");
-    }
+    output_fn(text, stderr)?;
     *pos += read as u64;
     Ok(())
 }
@@ -836,6 +850,115 @@ mod tests {
         assert!(chunks
             .iter()
             .any(|chunk| chunk.content.contains(LOG_UNAVAILABLE_MARKER)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn follow_one_stream_uses_callback_for_stdout() {
+        let dir = test_dir("follow-cb-stdout");
+        let path = dir.join("stdout.log");
+        std::fs::write(&path, "hello world\nsecond line\n").expect("write test log");
+
+        let mut captured: Vec<(String, bool)> = Vec::new();
+        let mut pos: u64 = 0;
+        follow_one_stream(
+            path.to_str().unwrap(),
+            &mut pos,
+            false,
+            &[],
+            &mut |text, is_stderr| {
+                captured.push((text, is_stderr));
+                Ok(())
+            },
+        )
+        .await
+        .expect("follow_one_stream should succeed");
+
+        assert_eq!(captured.len(), 1);
+        assert!(captured[0].0.contains("hello world"));
+        assert!(captured[0].0.contains("second line"));
+        assert!(!captured[0].1, "is_stderr should be false for stdout");
+        assert_eq!(pos, 24); // "hello world\nsecond line\n" = 24 bytes
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn follow_one_stream_uses_callback_for_stderr() {
+        let dir = test_dir("follow-cb-stderr");
+        let path = dir.join("stderr.log");
+        std::fs::write(&path, "error: something broke\n").expect("write test log");
+
+        let mut captured: Vec<(String, bool)> = Vec::new();
+        let mut pos: u64 = 0;
+        follow_one_stream(
+            path.to_str().unwrap(),
+            &mut pos,
+            true,
+            &[],
+            &mut |text, is_stderr| {
+                captured.push((text, is_stderr));
+                Ok(())
+            },
+        )
+        .await
+        .expect("follow_one_stream should succeed");
+
+        assert_eq!(captured.len(), 1);
+        assert!(captured[0].0.contains("error: something broke"));
+        assert!(captured[0].1, "is_stderr should be true for stderr");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn follow_one_stream_callback_incremental_read() {
+        let dir = test_dir("follow-cb-incr");
+        let path = dir.join("incr.log");
+        std::fs::write(&path, "first chunk\n").expect("write initial");
+
+        let mut captured: Vec<String> = Vec::new();
+        let mut pos: u64 = 0;
+
+        // First read
+        follow_one_stream(
+            path.to_str().unwrap(),
+            &mut pos,
+            false,
+            &[],
+            &mut |text, _| {
+                captured.push(text);
+                Ok(())
+            },
+        )
+        .await
+        .expect("first read");
+        assert_eq!(captured.len(), 1);
+        assert!(captured[0].contains("first chunk"));
+
+        // Append more data
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .expect("open for append");
+        write!(f, "second chunk\n").expect("append");
+        drop(f);
+
+        // Second read should only get new data
+        follow_one_stream(
+            path.to_str().unwrap(),
+            &mut pos,
+            false,
+            &[],
+            &mut |text, _| {
+                captured.push(text);
+                Ok(())
+            },
+        )
+        .await
+        .expect("second read");
+        assert_eq!(captured.len(), 2);
+        assert!(captured[1].contains("second chunk"));
+        assert!(!captured[1].contains("first chunk"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
