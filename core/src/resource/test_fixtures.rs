@@ -98,6 +98,7 @@ pub fn workflow_manifest(name: &str) -> OrchestratorResource {
                 enabled: true,
                 stop_when_no_unresolved: true,
                 agent_template: None,
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeSpec {
                 rules: vec![WorkflowFinalizeRuleSpec {

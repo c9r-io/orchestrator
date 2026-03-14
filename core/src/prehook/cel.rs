@@ -1,8 +1,12 @@
-use crate::config::{ItemFinalizeContext, StepPrehookContext, WorkflowFinalizeRule};
+use crate::config::{
+    ConvergenceContext, ItemFinalizeContext, StepPrehookContext, WorkflowFinalizeRule,
+};
 use anyhow::Result;
 use cel_interpreter::{Program, Value as CelValue};
 
-use super::context::{build_finalize_cel_context, build_step_prehook_cel_context};
+use super::context::{
+    build_convergence_cel_context, build_finalize_cel_context, build_step_prehook_cel_context,
+};
 
 /// Evaluates a step prehook CEL expression against the provided context.
 pub fn evaluate_step_prehook_expression(
@@ -56,5 +60,24 @@ pub fn evaluate_finalize_rule_expression(
             rule.id,
             other
         ),
+    }
+}
+
+/// Evaluates a convergence CEL expression against the provided context.
+pub fn evaluate_convergence_expression(
+    expression: &str,
+    context: &ConvergenceContext,
+) -> Result<bool> {
+    let compiled = std::panic::catch_unwind(|| Program::compile(expression))
+        .map_err(|_| anyhow::anyhow!("convergence_expr compilation panicked"))?;
+    let program = compiled
+        .map_err(|err| anyhow::anyhow!("convergence_expr compilation failed: {}", err))?;
+    let cel_context = build_convergence_cel_context(context)?;
+    let value = program
+        .execute(&cel_context)
+        .map_err(|err| anyhow::anyhow!("convergence_expr execution failed: {}", err))?;
+    match value {
+        CelValue::Bool(v) => Ok(v),
+        other => anyhow::bail!("convergence_expr must return bool, got {:?}", other),
     }
 }

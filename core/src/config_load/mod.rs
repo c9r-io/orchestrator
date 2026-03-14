@@ -107,6 +107,7 @@ pub(crate) mod tests {
                     enabled: false,
                     ..WorkflowLoopGuardConfig::default()
                 },
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeConfig { rules: vec![] },
             qa: None,

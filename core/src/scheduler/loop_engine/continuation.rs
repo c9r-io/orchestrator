@@ -1,5 +1,6 @@
-use crate::config::{InvariantCheckPoint, LoopMode};
+use crate::config::{ConvergenceContext, InvariantCheckPoint, LoopMode};
 use crate::events::insert_event;
+use crate::prehook::evaluate_convergence_expression;
 use crate::scheduler::item_executor::execute_guard_step;
 use crate::scheduler::task_state::{
     count_unresolved_items, record_task_execution_metric, set_task_status,
@@ -112,26 +113,64 @@ pub(super) async fn evaluate_loop_continuation(
         unresolved,
     );
 
-    let should_continue = if let Some((continue_loop, _)) = loop_mode_check {
-        continue_loop
+    let (mut should_continue, mut reason) = if let Some((cont, r)) = loop_mode_check {
+        (cont, r)
     } else if task_ctx
         .execution_plan
         .loop_policy
         .guard
         .stop_when_no_unresolved
+        && unresolved == 0
     {
-        unresolved > 0
+        (false, "no_unresolved_items".to_string())
     } else {
-        true
+        (true, "continue".to_string())
     };
 
-    let reason = if let Some((_, reason)) = loop_mode_check {
-        reason
-    } else if !should_continue {
-        "no_unresolved_items".to_string()
-    } else {
-        "continue".to_string()
-    };
+    // FR-043: Evaluate convergence expressions when the loop would otherwise continue.
+    if should_continue {
+        if let Some(exprs) = &task_ctx.execution_plan.loop_policy.convergence_expr {
+            let conv_ctx = ConvergenceContext {
+                cycle: task_ctx.current_cycle,
+                active_ticket_count: unresolved,
+                self_test_passed: task_ctx
+                    .pipeline_vars
+                    .vars
+                    .get("self_test_passed")
+                    .map(|v| v == "true")
+                    .unwrap_or(false),
+                max_cycles: task_ctx
+                    .execution_plan
+                    .loop_policy
+                    .guard
+                    .max_cycles
+                    .unwrap_or(0),
+                vars: task_ctx.pipeline_vars.vars.clone(),
+            };
+            for entry in exprs {
+                match evaluate_convergence_expression(entry.when.trim(), &conv_ctx) {
+                    Ok(true) => {
+                        should_continue = false;
+                        reason = entry
+                            .reason
+                            .clone()
+                            .unwrap_or_else(|| "convergence_expr".to_string());
+                        break;
+                    }
+                    Ok(false) => {}
+                    Err(e) => {
+                        tracing::warn!(
+                            task_id,
+                            cycle = task_ctx.current_cycle,
+                            expr = entry.when.as_str(),
+                            "convergence_expr evaluation error: {}",
+                            e
+                        );
+                    }
+                }
+            }
+        }
+    }
     insert_event(
         state,
         task_id,

@@ -135,3 +135,35 @@ async fn multi_cycle_loop() {
     .await
     .expect("test timed out");
 }
+
+#[tokio::test]
+async fn convergence_expr_stops_loop() {
+    timeout(TEST_TIMEOUT, async {
+        let manifest = common::load_manifest("echo-convergence.yaml");
+        let harness = TestHarness::start_with_manifest(&manifest).await;
+
+        let info = run_task_to_completion(&harness, "convergence_test").await;
+        let task = info.task.expect("task missing from info");
+
+        assert_eq!(
+            task.status, "completed",
+            "convergence-driven task should complete"
+        );
+
+        // Verify that a loop_guard_decision event carries the convergence reason
+        let convergence_decision = info.events.iter().find(|e| {
+            e.event_type == "loop_guard_decision"
+                && e.payload_json.contains("test_convergence")
+        });
+        assert!(
+            convergence_decision.is_some(),
+            "should have loop_guard_decision event with convergence reason, events: {:?}",
+            info.events
+                .iter()
+                .map(|e| format!("{}:{}", e.event_type, &e.payload_json))
+                .collect::<Vec<_>>()
+        );
+    })
+    .await
+    .expect("test timed out");
+}

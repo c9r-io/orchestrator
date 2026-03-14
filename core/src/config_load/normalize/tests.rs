@@ -42,6 +42,7 @@ fn normalize_workflow_sets_builtin_for_self_test() {
                 enabled: false,
                 ..crate::config::WorkflowLoopGuardConfig::default()
             },
+            convergence_expr: None,
         },
         finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
         qa: None,
@@ -172,6 +173,7 @@ fn normalize_workflow_preserves_multiple_self_test_steps() {
                 enabled: false,
                 ..crate::config::WorkflowLoopGuardConfig::default()
             },
+            convergence_expr: None,
         },
         finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
         qa: None,

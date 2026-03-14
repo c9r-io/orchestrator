@@ -332,6 +332,21 @@ pub struct StepPrehookContext {
     pub self_referential_safe: bool,
 }
 
+/// Context provided to convergence expression CEL evaluation.
+#[derive(Debug, Clone, Default)]
+pub struct ConvergenceContext {
+    /// One-based cycle counter.
+    pub cycle: u32,
+    /// Number of open tickets for the task.
+    pub active_ticket_count: i64,
+    /// Whether the last self_test step passed.
+    pub self_test_passed: bool,
+    /// Max cycles configured for the workflow.
+    pub max_cycles: u32,
+    /// User-defined pipeline variables (from step captures).
+    pub vars: std::collections::HashMap<String, String>,
+}
+
 /// Artifact summary
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ArtifactSummary {

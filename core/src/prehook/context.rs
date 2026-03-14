@@ -1,4 +1,4 @@
-use crate::config::{ItemFinalizeContext, StepPrehookContext};
+use crate::config::{ConvergenceContext, ItemFinalizeContext, StepPrehookContext};
 use anyhow::Result;
 use cel_interpreter::Context as CelContext;
 
@@ -398,5 +398,43 @@ pub(super) fn build_finalize_cel_context(context: &ItemFinalizeContext) -> Resul
     cel_context
         .add_variable("is_last_cycle", context.is_last_cycle)
         .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    Ok(cel_context)
+}
+
+pub(super) fn build_convergence_cel_context(context: &ConvergenceContext) -> Result<CelContext<'_>> {
+    let mut cel_context = CelContext::default();
+    let err_msg = "convergence context build failed";
+    cel_context
+        .add_variable("cycle", context.cycle as i64)
+        .map_err(|e| anyhow::anyhow!("{}: {}", err_msg, e))?;
+    cel_context
+        .add_variable("active_ticket_count", context.active_ticket_count)
+        .map_err(|e| anyhow::anyhow!("{}: {}", err_msg, e))?;
+    cel_context
+        .add_variable("self_test_passed", context.self_test_passed)
+        .map_err(|e| anyhow::anyhow!("{}: {}", err_msg, e))?;
+    cel_context
+        .add_variable("max_cycles", context.max_cycles as i64)
+        .map_err(|e| anyhow::anyhow!("{}: {}", err_msg, e))?;
+    // Inject user-defined pipeline variables. Try parsing as i64/f64/bool first.
+    for (key, val) in &context.vars {
+        if let Ok(i) = val.parse::<i64>() {
+            cel_context
+                .add_variable(key.as_str(), i)
+                .map_err(|e| anyhow::anyhow!("{}: {}", err_msg, e))?;
+        } else if let Ok(f) = val.parse::<f64>() {
+            cel_context
+                .add_variable(key.as_str(), f)
+                .map_err(|e| anyhow::anyhow!("{}: {}", err_msg, e))?;
+        } else if let Ok(b) = val.parse::<bool>() {
+            cel_context
+                .add_variable(key.as_str(), b)
+                .map_err(|e| anyhow::anyhow!("{}: {}", err_msg, e))?;
+        } else {
+            cel_context
+                .add_variable(key.as_str(), val.clone())
+                .map_err(|e| anyhow::anyhow!("{}: {}", err_msg, e))?;
+        }
+    }
     Ok(cel_context)
 }

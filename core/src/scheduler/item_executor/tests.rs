@@ -409,6 +409,7 @@ fn make_task_ctx(
                     max_cycles,
                     agent_template: None,
                 },
+                convergence_expr: None,
             },
             finalize: Default::default(),
             max_parallel: None,

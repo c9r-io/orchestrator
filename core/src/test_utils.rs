@@ -110,6 +110,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                                         max_cycles: None,
                                         agent_template: None,
                                     },
+                                    convergence_expr: None,
                                 },
                                 finalize: WorkflowFinalizeConfig { rules: vec![] },
                                 qa: None,

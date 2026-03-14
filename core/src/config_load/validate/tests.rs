@@ -1,7 +1,7 @@
 use super::*;
 use crate::config::{
-    CaptureDecl, CaptureSource, LoopMode, OrchestratorConfig, StepBehavior, StepScope,
-    WorkflowConfig, WorkflowStepConfig,
+    CaptureDecl, CaptureSource, ConvergenceExprEntry, LoopMode, OrchestratorConfig, StepBehavior,
+    StepHookEngine, StepScope, WorkflowConfig, WorkflowStepConfig,
 };
 use crate::config_load::tests::{
     make_builtin_step, make_command_step, make_config_with_agent, make_config_with_default_project,
@@ -72,6 +72,7 @@ fn validate_workflow_config_allows_multiple_self_test_steps() {
                 enabled: false,
                 ..crate::config::WorkflowLoopGuardConfig::default()
             },
+            convergence_expr: None,
         },
         finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
         qa: None,
@@ -154,6 +155,7 @@ fn validate_workflow_config_allows_multiple_implement_steps() {
                 enabled: false,
                 ..crate::config::WorkflowLoopGuardConfig::default()
             },
+            convergence_expr: None,
         },
         finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
         qa: None,
@@ -236,6 +238,7 @@ fn validate_workflow_config_rejects_duplicate_step_ids() {
                 enabled: false,
                 ..crate::config::WorkflowLoopGuardConfig::default()
             },
+            convergence_expr: None,
         },
         finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
         qa: None,
@@ -304,6 +307,7 @@ fn validate_workflow_config_rejects_json_path_on_exit_code_capture() {
                 enabled: false,
                 ..crate::config::WorkflowLoopGuardConfig::default()
             },
+            convergence_expr: None,
         },
         finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
         qa: None,
@@ -357,6 +361,7 @@ fn validate_self_referential_safety_errors_missing_self_test() {
         loop_policy: crate::config::WorkflowLoopConfig {
             mode: LoopMode::Once,
             guard: crate::config::WorkflowLoopGuardConfig::default(),
+            convergence_expr: None,
         },
         finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
         qa: None,
@@ -444,6 +449,7 @@ fn validate_self_referential_safety_passes_with_self_test() {
         loop_policy: crate::config::WorkflowLoopConfig {
             mode: LoopMode::Once,
             guard: crate::config::WorkflowLoopGuardConfig::default(),
+            convergence_expr: None,
         },
         finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
         qa: None,
@@ -476,6 +482,7 @@ fn validate_self_referential_safety_errors_without_checkpoint_strategy() {
         loop_policy: crate::config::WorkflowLoopConfig {
             mode: LoopMode::Once,
             guard: crate::config::WorkflowLoopGuardConfig::default(),
+            convergence_expr: None,
         },
         finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
         qa: None,
@@ -1882,6 +1889,62 @@ fn with_agents_skips_disabled_steps() {
         result.is_ok(),
         "disabled step should be skipped: {:?}",
         result.err()
+    );
+}
+
+#[test]
+fn with_agents_rejects_invalid_convergence_expr_cel() {
+    let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+    workflow.loop_policy.mode = LoopMode::Once;
+    workflow.loop_policy.convergence_expr = Some(vec![ConvergenceExprEntry {
+        engine: StepHookEngine::Cel,
+        when: "this is not valid %%% CEL syntax !!!".to_string(),
+        reason: Some("should fail".to_string()),
+    }]);
+    let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+    let err = validate_workflow_config_with_agents(&agents, &workflow, "wf1")
+        .expect_err("invalid CEL in convergence_expr should fail");
+    assert!(
+        err.to_string().contains("invalid CEL"),
+        "error should mention invalid CEL: {}",
+        err
+    );
+}
+
+#[test]
+fn with_agents_accepts_valid_convergence_expr_cel() {
+    let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+    workflow.loop_policy.mode = LoopMode::Once;
+    workflow.loop_policy.convergence_expr = Some(vec![ConvergenceExprEntry {
+        engine: StepHookEngine::Cel,
+        when: "cycle >= 2".to_string(),
+        reason: Some("converged".to_string()),
+    }]);
+    let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+    let result = validate_workflow_config_with_agents(&agents, &workflow, "wf1");
+    assert!(
+        result.is_ok(),
+        "valid CEL convergence_expr should pass: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn with_agents_rejects_empty_convergence_expr_when() {
+    let mut workflow = make_workflow(vec![make_builtin_step("self_test", "self_test", true)]);
+    workflow.loop_policy.mode = LoopMode::Once;
+    workflow.loop_policy.convergence_expr = Some(vec![ConvergenceExprEntry {
+        engine: StepHookEngine::Cel,
+        when: "   ".to_string(),
+        reason: None,
+    }]);
+    let agents: HashMap<String, &crate::config::AgentConfig> = HashMap::new();
+    let err = validate_workflow_config_with_agents(&agents, &workflow, "wf1")
+        .expect_err("empty when should fail");
+    assert!(
+        err.to_string().contains("empty"),
+        "error should mention empty: {}",
+        err
     );
 }
 

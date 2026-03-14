@@ -1,4 +1,5 @@
-use crate::config::{ExecutionMode, TaskExecutionStep, TaskRuntimeContext};
+use crate::config::{ConvergenceContext, ExecutionMode, TaskExecutionStep, TaskRuntimeContext};
+use crate::prehook::evaluate_convergence_expression;
 use crate::selection::{select_agent_advanced, select_agent_by_preference};
 use crate::state::InnerState;
 use anyhow::Result;
@@ -38,13 +39,51 @@ pub async fn execute_guard_step(
                 .guard
                 .stop_when_no_unresolved
                 && unresolved == 0;
+            if should_stop {
+                return Ok(GuardResult {
+                    should_stop: true,
+                    reason: "no_unresolved".to_string(),
+                });
+            }
+            // FR-043: Evaluate convergence expressions when present.
+            if let Some(exprs) = &task_ctx.execution_plan.loop_policy.convergence_expr {
+                let conv_ctx = ConvergenceContext {
+                    cycle: task_ctx.current_cycle,
+                    active_ticket_count: unresolved,
+                    self_test_passed: task_ctx.pipeline_vars.vars.get("self_test_passed")
+                        .map(|v| v == "true")
+                        .unwrap_or(false),
+                    max_cycles: task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(0),
+                    vars: task_ctx.pipeline_vars.vars.clone(),
+                };
+                for entry in exprs {
+                    match evaluate_convergence_expression(entry.when.trim(), &conv_ctx) {
+                        Ok(true) => {
+                            let reason = entry
+                                .reason
+                                .clone()
+                                .unwrap_or_else(|| "convergence_expr".to_string());
+                            return Ok(GuardResult {
+                                should_stop: true,
+                                reason,
+                            });
+                        }
+                        Ok(false) => {}
+                        Err(e) => {
+                            tracing::warn!(
+                                task_id,
+                                cycle = task_ctx.current_cycle,
+                                expr = entry.when.as_str(),
+                                "convergence_expr evaluation error: {}",
+                                e
+                            );
+                        }
+                    }
+                }
+            }
             return Ok(GuardResult {
-                should_stop,
-                reason: if should_stop {
-                    "no_unresolved".to_string()
-                } else {
-                    "has_unresolved".to_string()
-                },
+                should_stop: false,
+                reason: "has_unresolved".to_string(),
             });
         }
     }

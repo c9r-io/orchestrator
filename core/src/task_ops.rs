@@ -312,6 +312,7 @@ mod tests {
                     max_cycles: None,
                     agent_template: None,
                 },
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeConfig { rules: vec![] },
             qa: None,

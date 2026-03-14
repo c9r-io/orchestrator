@@ -436,6 +436,7 @@ mod tests {
                     enabled: true,
                     ..WorkflowLoopGuardConfig::default()
                 },
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeConfig { rules: vec![] },
             qa: None,
@@ -478,6 +479,7 @@ mod tests {
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Fixed,
                 guard: WorkflowLoopGuardConfig::default(),
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeConfig { rules: vec![] },
             qa: None,

@@ -488,6 +488,7 @@ mod tests {
             loop_policy: WorkflowLoopConfig {
                 mode: LoopMode::Once,
                 guard: WorkflowLoopGuardConfig::default(),
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeConfig { rules: vec![] },
             qa: None,

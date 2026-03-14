@@ -1,0 +1,89 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: default
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa/orchestrator
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_echo
+spec:
+  capabilities:
+    - qa
+    - loop_guard
+  command: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"pass\",\"description\":\"ok\",\"severity\":\"info\"}]}]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: s1_convergence
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: infinite
+    max_cycles: 10
+    stop_when_no_unresolved: false
+    convergence_expr:
+      - engine: cel
+        when: "cycle >= 2"
+        reason: "test_convergence"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: s2_no_convergence
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: fixed
+    max_cycles: 3
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: s3_multi_convergence
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: infinite
+    max_cycles: 10
+    stop_when_no_unresolved: false
+    convergence_expr:
+      - engine: cel
+        when: "cycle >= 2"
+        reason: "first_rule_matched"
+      - engine: cel
+        when: "cycle >= 5"
+        reason: "second_rule_matched"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: s6_max_cycles_cap
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: infinite
+    max_cycles: 3
+    stop_when_no_unresolved: false
+    convergence_expr:
+      - engine: cel
+        when: "cycle >= 999"
+        reason: "never_matches"

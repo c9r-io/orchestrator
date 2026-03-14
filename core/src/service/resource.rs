@@ -1289,6 +1289,7 @@ mod tests {
                     loop_policy: crate::config::WorkflowLoopConfig {
                         mode: crate::config::LoopMode::Once,
                         guard: crate::config::WorkflowLoopGuardConfig::default(),
+                        convergence_expr: None,
                     },
                     finalize: crate::config::WorkflowFinalizeConfig::default(),
                     qa: None,

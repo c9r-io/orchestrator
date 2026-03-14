@@ -845,6 +845,27 @@ pub struct WorkflowLoopSpec {
     /// Optional agent template used for generated loop steps.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_template: Option<String>,
+
+    /// Optional CEL convergence expressions evaluated each cycle by the loop guard.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub convergence_expr: Option<Vec<ConvergenceExprSpec>>,
+}
+
+/// A single convergence expression entry in the CRD spec.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ConvergenceExprSpec {
+    /// Expression engine (currently only "cel").
+    #[serde(default = "default_cel_engine")]
+    pub engine: String,
+    /// CEL expression that returns bool — `true` means converged.
+    pub when: String,
+    /// Human-readable reason logged when expression triggers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+fn default_cel_engine() -> String {
+    "cel".to_string()
 }
 
 impl Default for WorkflowLoopSpec {
@@ -855,6 +876,7 @@ impl Default for WorkflowLoopSpec {
             enabled: true,
             stop_when_no_unresolved: true,
             agent_template: None,
+            convergence_expr: None,
         }
     }
 }

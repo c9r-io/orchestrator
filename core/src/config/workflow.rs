@@ -3,7 +3,8 @@ use std::str::FromStr;
 
 use super::{
     CostPreference, ItemIsolationConfig, ItemSelectConfig, SafetyConfig, StepBehavior,
-    StepPrehookConfig, StepScope, StoreInputConfig, StoreOutputConfig, WorkflowFinalizeConfig,
+    StepHookEngine, StepPrehookConfig, StepScope, StoreInputConfig, StoreOutputConfig,
+    WorkflowFinalizeConfig,
 };
 
 /// Workflow step configuration.
@@ -225,6 +226,19 @@ impl Default for WorkflowLoopGuardConfig {
     }
 }
 
+/// A single convergence expression evaluated by the loop guard.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConvergenceExprEntry {
+    /// Expression engine (only CEL supported).
+    #[serde(default)]
+    pub engine: StepHookEngine,
+    /// CEL expression that returns bool — `true` means "converged, stop".
+    pub when: String,
+    /// Human-readable reason logged when expression triggers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
 /// Loop policy combining mode and guard settings.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct WorkflowLoopConfig {
@@ -233,6 +247,9 @@ pub struct WorkflowLoopConfig {
     /// Guard settings evaluated after each cycle.
     #[serde(default)]
     pub guard: WorkflowLoopGuardConfig,
+    /// Optional CEL convergence expressions evaluated each cycle by the loop guard.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub convergence_expr: Option<Vec<ConvergenceExprEntry>>,
 }
 
 #[cfg(test)]
@@ -292,6 +309,29 @@ mod tests {
         let cfg = WorkflowLoopConfig::default();
         assert!(matches!(cfg.mode, LoopMode::Once));
         assert!(cfg.guard.enabled);
+        assert!(cfg.convergence_expr.is_none());
+    }
+
+    #[test]
+    fn test_convergence_expr_serde_round_trip() {
+        let cfg = WorkflowLoopConfig {
+            mode: LoopMode::Infinite,
+            guard: WorkflowLoopGuardConfig {
+                max_cycles: Some(20),
+                ..WorkflowLoopGuardConfig::default()
+            },
+            convergence_expr: Some(vec![ConvergenceExprEntry {
+                engine: StepHookEngine::default(),
+                when: "cycle >= 2".to_string(),
+                reason: Some("test convergence".to_string()),
+            }]),
+        };
+        let json = serde_json::to_string(&cfg).expect("serialize");
+        let decoded: WorkflowLoopConfig = serde_json::from_str(&json).expect("deserialize");
+        let exprs = decoded.convergence_expr.expect("convergence_expr present");
+        assert_eq!(exprs.len(), 1);
+        assert_eq!(exprs[0].when, "cycle >= 2");
+        assert_eq!(exprs[0].reason.as_deref(), Some("test convergence"));
     }
 
     #[test]

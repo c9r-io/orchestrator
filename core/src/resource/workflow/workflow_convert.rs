@@ -1,12 +1,12 @@
 use crate::cli_types::{
-    DynamicStepSpec, SafetySpec, WorkflowFinalizeRuleSpec, WorkflowFinalizeSpec, WorkflowLoopSpec,
-    WorkflowPrehookSpec, WorkflowSpec, WorkflowStepSpec,
+    ConvergenceExprSpec, DynamicStepSpec, SafetySpec, WorkflowFinalizeRuleSpec,
+    WorkflowFinalizeSpec, WorkflowLoopSpec, WorkflowPrehookSpec, WorkflowSpec, WorkflowStepSpec,
 };
 use crate::config::{
-    normalize_step_execution_mode, CheckpointStrategy, CostPreference, LoopMode, SafetyConfig,
-    StepHookEngine, StepPrehookConfig, StepPrehookUiConfig, StepScope, WorkflowConfig,
-    WorkflowFinalizeConfig, WorkflowFinalizeRule, WorkflowLoopConfig, WorkflowLoopGuardConfig,
-    WorkflowSafetyProfile, WorkflowStepConfig,
+    normalize_step_execution_mode, CheckpointStrategy, ConvergenceExprEntry, CostPreference,
+    LoopMode, SafetyConfig, StepHookEngine, StepPrehookConfig, StepPrehookUiConfig, StepScope,
+    WorkflowConfig, WorkflowFinalizeConfig, WorkflowFinalizeRule, WorkflowLoopConfig,
+    WorkflowLoopGuardConfig, WorkflowSafetyProfile, WorkflowStepConfig,
 };
 use anyhow::{anyhow, Result};
 
@@ -32,6 +32,16 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
         .map(workflow_step_spec_to_config)
         .collect::<Result<Vec<_>>>()?;
 
+    let convergence_expr = spec.loop_policy.convergence_expr.as_ref().map(|entries| {
+        entries
+            .iter()
+            .map(|e| ConvergenceExprEntry {
+                engine: parse_hook_engine(&e.engine),
+                when: e.when.clone(),
+                reason: e.reason.clone(),
+            })
+            .collect()
+    });
     let loop_policy = WorkflowLoopConfig {
         mode: parse_loop_mode(&spec.loop_policy.mode)?,
         guard: WorkflowLoopGuardConfig {
@@ -40,6 +50,7 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
             stop_when_no_unresolved: spec.loop_policy.stop_when_no_unresolved,
             agent_template: spec.loop_policy.agent_template.clone(),
         },
+        convergence_expr,
     };
 
     let finalize = WorkflowFinalizeConfig {
@@ -118,6 +129,18 @@ pub(crate) fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
         enabled: config.loop_policy.guard.enabled,
         stop_when_no_unresolved: config.loop_policy.guard.stop_when_no_unresolved,
         agent_template: config.loop_policy.guard.agent_template.clone(),
+        convergence_expr: config.loop_policy.convergence_expr.as_ref().map(|entries| {
+            entries
+                .iter()
+                .map(|e| ConvergenceExprSpec {
+                    engine: match e.engine {
+                        StepHookEngine::Cel => "cel".to_string(),
+                    },
+                    when: e.when.clone(),
+                    reason: e.reason.clone(),
+                })
+                .collect()
+        }),
     };
 
     let finalize = WorkflowFinalizeSpec {
@@ -486,6 +509,7 @@ mod tests {
                 enabled: true,
                 stop_when_no_unresolved: false,
                 agent_template: Some("guard_template".to_string()),
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeSpec {
                 rules: vec![WorkflowFinalizeRuleSpec {
@@ -625,6 +649,7 @@ mod tests {
                 enabled: true,
                 stop_when_no_unresolved: true,
                 agent_template: None,
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
@@ -683,6 +708,7 @@ mod tests {
                 enabled: true,
                 stop_when_no_unresolved: true,
                 agent_template: None,
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
@@ -733,6 +759,7 @@ mod tests {
                 enabled: true,
                 stop_when_no_unresolved: true,
                 agent_template: None,
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
@@ -786,6 +813,7 @@ mod tests {
                 enabled: true,
                 stop_when_no_unresolved: true,
                 agent_template: None,
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
@@ -831,6 +859,7 @@ mod tests {
                 enabled: true,
                 stop_when_no_unresolved: true,
                 agent_template: None,
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
@@ -875,6 +904,7 @@ mod tests {
                 enabled: true,
                 stop_when_no_unresolved: true,
                 agent_template: None,
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
@@ -942,6 +972,7 @@ mod tests {
                 enabled: true,
                 stop_when_no_unresolved: true,
                 agent_template: None,
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
@@ -1001,6 +1032,7 @@ mod tests {
                 enabled: true,
                 stop_when_no_unresolved: true,
                 agent_template: None,
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
@@ -1119,6 +1151,7 @@ mod tests {
                     stop_when_no_unresolved: true,
                     agent_template: None,
                 },
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeConfig { rules: vec![] },
             qa: None,
@@ -1176,6 +1209,7 @@ mod tests {
                     stop_when_no_unresolved: false,
                     agent_template: None,
                 },
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeConfig { rules: vec![] },
             qa: None,
@@ -1247,6 +1281,7 @@ mod tests {
                     stop_when_no_unresolved: true,
                     agent_template: None,
                 },
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeConfig { rules: vec![] },
             qa: None,
@@ -1306,6 +1341,7 @@ mod tests {
                     stop_when_no_unresolved: true,
                     agent_template: None,
                 },
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeConfig {
                 rules: vec![
@@ -1424,6 +1460,7 @@ mod tests {
                 enabled: true,
                 stop_when_no_unresolved: true,
                 agent_template: None,
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeSpec { rules: vec![] },
             dynamic_steps: vec![],
@@ -1494,6 +1531,7 @@ mod tests {
                     stop_when_no_unresolved: true,
                     agent_template: None,
                 },
+                convergence_expr: None,
             },
             finalize: WorkflowFinalizeConfig { rules: vec![] },
             qa: None,

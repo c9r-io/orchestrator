@@ -74,6 +74,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                         loop_policy: WorkflowLoopConfig {
                             mode: LoopMode::Once,
                             guard: WorkflowLoopGuardConfig::default(),
+                            convergence_expr: None,
                         },
                         finalize: WorkflowFinalizeConfig { rules: vec![] },
                         qa: None,
@@ -838,6 +839,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                         loop_policy: WorkflowLoopConfig {
                             mode: LoopMode::Once,
                             guard: WorkflowLoopGuardConfig::default(),
+                            convergence_expr: None,
                         },
                         finalize: WorkflowFinalizeConfig { rules: vec![] },
                         qa: None,
@@ -1001,6 +1003,7 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
         loop_policy: WorkflowLoopConfig {
             mode: LoopMode::Once,
             guard: WorkflowLoopGuardConfig::default(),
+            convergence_expr: None,
         },
         finalize: WorkflowFinalizeConfig { rules: vec![] },
         qa: None,

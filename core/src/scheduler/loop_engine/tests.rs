@@ -24,6 +24,7 @@ fn make_loop_policy(mode: LoopMode, max_cycles: Option<u32>) -> WorkflowLoopConf
             max_cycles,
             ..Default::default()
         },
+        convergence_expr: None,
     }
 }
 
@@ -120,6 +121,7 @@ fn dynamic_dag_workflow() -> WorkflowConfig {
                 max_cycles: Some(1),
                 agent_template: None,
             },
+            convergence_expr: None,
         },
         finalize: WorkflowFinalizeConfig { rules: vec![] },
         qa: None,
