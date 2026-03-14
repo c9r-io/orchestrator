@@ -359,8 +359,8 @@ spec:
       tty: false
       prehook:
         engine: cel
-        when: "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\")"
-        reason: "QA testing deferred to final cycle and restricted to QA markdown documents"
+        when: "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && self_referential_safe"
+        reason: "QA testing deferred to final cycle; restricted to QA markdown documents; skips self-referential-unsafe docs"
 
     - id: ticket_fix
       type: ticket_fix
