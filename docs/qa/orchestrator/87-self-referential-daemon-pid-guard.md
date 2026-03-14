@@ -1,3 +1,6 @@
+---
+self_referential_safe: false
+---
 # Self-Referential Daemon PID Guard
 
 **Module**: orchestrator

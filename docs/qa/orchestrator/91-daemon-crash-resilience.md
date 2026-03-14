@@ -1,3 +1,6 @@
+---
+self_referential_safe: false
+---
 # QA: Daemon 进程崩溃韧性与 Worker 存活保障 (FR-032)
 
 验证 daemon worker 崩溃恢复、健康监控、crash 日志与启动恢复机制是否正确工作。

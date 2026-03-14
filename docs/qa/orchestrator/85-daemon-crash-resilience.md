@@ -1,3 +1,6 @@
+---
+self_referential_safe: false
+---
 # Orchestrator - Daemon Crash Resilience And Worker Survival
 
 **Module**: orchestrator

@@ -1,3 +1,6 @@
+---
+self_referential_safe: false
+---
 # Orchestrator - Orphaned Running Items Auto-Recovery
 
 **Module**: orchestrator

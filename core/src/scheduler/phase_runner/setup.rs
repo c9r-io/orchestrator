@@ -84,10 +84,16 @@ pub(super) async fn setup_phase_execution(
     // Inject daemon PID for self-referential workspaces so the runner can
     // guard against kill commands targeting the daemon process itself.
     if self_referential {
+        let daemon_pid = std::process::id();
         resolved_extra_env.insert(
             "ORCHESTRATOR_DAEMON_PID".to_string(),
-            std::process::id().to_string(),
+            daemon_pid.to_string(),
         );
+        // Inject CLAUDE.md safety instructions and PreToolUse hook into the
+        // workspace so agent subprocesses (Claude Code) cannot kill the daemon.
+        if let Err(e) = super::agent_guard::inject_agent_daemon_guard(workspace_root, daemon_pid) {
+            tracing::warn!("failed to inject agent daemon guard: {e:#}");
+        }
     }
 
     let mut redaction_patterns = runner.redaction_patterns.clone();

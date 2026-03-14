@@ -1,3 +1,6 @@
+---
+self_referential_safe: false
+---
 # Self-Restart Socket Continuity
 
 **Module**: orchestrator
