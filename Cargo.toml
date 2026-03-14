@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "core",
     "crates/orchestrator-config",
+    "crates/orchestrator-scheduler",
     "crates/proto",
     "crates/daemon",
     "crates/cli",

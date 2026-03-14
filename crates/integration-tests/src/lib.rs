@@ -166,14 +166,14 @@ impl OrchestratorService for TestOrchestratorServer {
             spawn_reason: None,
         };
 
-        let created = agent_orchestrator::service::task::create_task(&self.state, payload)
+        let created = orchestrator_scheduler::service::task::create_task(&self.state, payload)
             .map_err(map_core_error)?;
 
         let mut status = "created".to_string();
         let mut message = format!("Task created: {}", created.id);
 
         if !req.no_start {
-            agent_orchestrator::service::task::enqueue_task(&self.state, &created.id)
+            orchestrator_scheduler::service::task::enqueue_task(&self.state, &created.id)
                 .await
                 .map_err(map_core_error)?;
             status = "enqueued".to_string();
@@ -192,7 +192,7 @@ impl OrchestratorService for TestOrchestratorServer {
         request: Request<TaskStartRequest>,
     ) -> Result<Response<TaskStartResponse>, Status> {
         let req = request.into_inner();
-        let id = agent_orchestrator::service::task::resolve_start_id(
+        let id = orchestrator_scheduler::service::task::resolve_start_id(
             &self.state,
             req.task_id.as_deref(),
             req.latest,
@@ -200,7 +200,7 @@ impl OrchestratorService for TestOrchestratorServer {
         .await
         .map_err(map_core_error)?;
 
-        agent_orchestrator::service::task::enqueue_task(&self.state, &id)
+        orchestrator_scheduler::service::task::enqueue_task(&self.state, &id)
             .await
             .map_err(map_core_error)?;
         Ok(Response::new(TaskStartResponse {
@@ -215,10 +215,10 @@ impl OrchestratorService for TestOrchestratorServer {
         request: Request<TaskPauseRequest>,
     ) -> Result<Response<TaskPauseResponse>, Status> {
         let req = request.into_inner();
-        let id = agent_orchestrator::service::task::resolve_id(&self.state, &req.task_id)
+        let id = orchestrator_scheduler::service::task::resolve_id(&self.state, &req.task_id)
             .await
             .map_err(map_core_error)?;
-        agent_orchestrator::service::task::pause_task(self.state.clone(), &id)
+        orchestrator_scheduler::service::task::pause_task(self.state.clone(), &id)
             .await
             .map_err(map_core_error)?;
         Ok(Response::new(TaskPauseResponse {
@@ -232,10 +232,10 @@ impl OrchestratorService for TestOrchestratorServer {
         request: Request<TaskResumeRequest>,
     ) -> Result<Response<TaskResumeResponse>, Status> {
         let req = request.into_inner();
-        let id = agent_orchestrator::service::task::resolve_id(&self.state, &req.task_id)
+        let id = orchestrator_scheduler::service::task::resolve_id(&self.state, &req.task_id)
             .await
             .map_err(map_core_error)?;
-        agent_orchestrator::service::task::enqueue_task(&self.state, &id)
+        orchestrator_scheduler::service::task::enqueue_task(&self.state, &id)
             .await
             .map_err(map_core_error)?;
         Ok(Response::new(TaskResumeResponse {
@@ -255,10 +255,10 @@ impl OrchestratorService for TestOrchestratorServer {
                 "use --force to confirm task deletion",
             ));
         }
-        let id = agent_orchestrator::service::task::resolve_id(&self.state, &req.task_id)
+        let id = orchestrator_scheduler::service::task::resolve_id(&self.state, &req.task_id)
             .await
             .map_err(map_core_error)?;
-        agent_orchestrator::service::task::delete_task(self.state.clone(), &id)
+        orchestrator_scheduler::service::task::delete_task(self.state.clone(), &id)
             .await
             .map_err(map_core_error)?;
         Ok(Response::new(TaskDeleteResponse {
@@ -277,9 +277,9 @@ impl OrchestratorService for TestOrchestratorServer {
             ));
         }
         let task_id =
-            agent_orchestrator::service::task::retry_task_item(&self.state, &req.task_item_id)
+            orchestrator_scheduler::service::task::retry_task_item(&self.state, &req.task_item_id)
                 .map_err(map_core_error)?;
-        agent_orchestrator::service::task::enqueue_task(&self.state, &task_id)
+        orchestrator_scheduler::service::task::enqueue_task(&self.state, &task_id)
             .await
             .map_err(map_core_error)?;
         Ok(Response::new(TaskRetryResponse {
@@ -294,10 +294,10 @@ impl OrchestratorService for TestOrchestratorServer {
         request: Request<TaskRecoverRequest>,
     ) -> Result<Response<TaskRecoverResponse>, Status> {
         let req = request.into_inner();
-        let id = agent_orchestrator::service::task::resolve_id(&self.state, &req.task_id)
+        let id = orchestrator_scheduler::service::task::resolve_id(&self.state, &req.task_id)
             .await
             .map_err(map_core_error)?;
-        let recovered = agent_orchestrator::service::task::recover_task(&self.state, &id)
+        let recovered = orchestrator_scheduler::service::task::recover_task(&self.state, &id)
             .await
             .map_err(map_core_error)?;
         let count = recovered.len() as u64;
@@ -318,7 +318,7 @@ impl OrchestratorService for TestOrchestratorServer {
         request: Request<TaskListRequest>,
     ) -> Result<Response<TaskListResponse>, Status> {
         let req = request.into_inner();
-        let tasks = agent_orchestrator::service::task::list_tasks(&self.state)
+        let tasks = orchestrator_scheduler::service::task::list_tasks(&self.state)
             .await
             .map_err(map_core_error)?;
         let filtered: Vec<_> = tasks
@@ -341,7 +341,7 @@ impl OrchestratorService for TestOrchestratorServer {
         request: Request<TaskInfoRequest>,
     ) -> Result<Response<TaskInfoResponse>, Status> {
         let req = request.into_inner();
-        let detail = agent_orchestrator::service::task::get_task_detail(&self.state, &req.task_id)
+        let detail = orchestrator_scheduler::service::task::get_task_detail(&self.state, &req.task_id)
             .await
             .map_err(map_core_error)?;
 
@@ -394,7 +394,7 @@ impl OrchestratorService for TestOrchestratorServer {
         request: Request<TaskLogsRequest>,
     ) -> Result<Response<Self::TaskLogsStream>, Status> {
         let req = request.into_inner();
-        let logs = agent_orchestrator::service::task::get_task_logs(
+        let logs = orchestrator_scheduler::service::task::get_task_logs(
             &self.state,
             &req.task_id,
             req.tail as usize,
@@ -428,7 +428,7 @@ impl OrchestratorService for TestOrchestratorServer {
         let state = self.state.clone();
         let (tx, rx) = tokio::sync::mpsc::channel(64);
         tokio::spawn(async move {
-            let _ = agent_orchestrator::service::task::follow_task_logs_stream(
+            let _ = orchestrator_scheduler::service::task::follow_task_logs_stream(
                 &state,
                 &req.task_id,
                 |line: String, _is_stderr: bool| {
@@ -462,14 +462,14 @@ impl OrchestratorService for TestOrchestratorServer {
             let interval = std::time::Duration::from_secs(interval_secs);
             loop {
                 let summary =
-                    match agent_orchestrator::service::task::load_summary(&state, &req.task_id)
+                    match orchestrator_scheduler::service::task::load_summary(&state, &req.task_id)
                         .await
                     {
                         Ok(s) => s,
                         Err(_) => break,
                     };
                 let detail =
-                    match agent_orchestrator::service::task::get_task_detail(&state, &req.task_id)
+                    match orchestrator_scheduler::service::task::get_task_detail(&state, &req.task_id)
                         .await
                     {
                         Ok(d) => d,
@@ -713,7 +713,7 @@ impl OrchestratorService for TestOrchestratorServer {
         request: Request<CheckRequest>,
     ) -> Result<Response<CheckResponse>, Status> {
         let req = request.into_inner();
-        let report = agent_orchestrator::service::system::run_check(
+        let report = orchestrator_scheduler::service::system::run_check(
             &self.state,
             req.workflow.as_deref(),
             &req.output_format,
@@ -728,7 +728,7 @@ impl OrchestratorService for TestOrchestratorServer {
                 .report
                 .checks
                 .iter()
-                .map(agent_orchestrator::service::system::diagnostic_entry_from_check)
+                .map(orchestrator_scheduler::service::system::diagnostic_entry_from_check)
                 .collect(),
         }))
     }
@@ -799,7 +799,7 @@ impl OrchestratorService for TestOrchestratorServer {
         request: Request<TaskTraceRequest>,
     ) -> Result<Response<TaskTraceResponse>, Status> {
         let req = request.into_inner();
-        let result = agent_orchestrator::service::task::get_task_trace(
+        let result = orchestrator_scheduler::service::task::get_task_trace(
             &self.state,
             &req.task_id,
             req.verbose,

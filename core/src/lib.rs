@@ -78,8 +78,7 @@ pub mod runner;
 pub mod runtime;
 /// Sandbox network allowlist parsing and validation.
 pub mod sandbox_network;
-/// Task scheduling, guard evaluation, and trace rendering.
-pub mod scheduler;
+// NOTE: scheduler module moved to orchestrator-scheduler crate.
 /// High-level scheduler service orchestration entry points.
 pub mod scheduler_service;
 /// Secret key audit reports and validation routines.

@@ -2,7 +2,6 @@ use super::daemon::runtime_snapshot;
 use crate::config_load::read_active_config;
 use crate::error::{classify_system_error, OrchestratorError, Result};
 use crate::persistence::migration;
-use crate::scheduler::check::{run_checks, CheckReport, CheckResult};
 use crate::scheduler_service::{pending_task_count, worker_stop_signal_path};
 use crate::state::InnerState;
 use anyhow::Context;
@@ -21,16 +20,8 @@ pub struct ManifestValidationReport {
     pub diagnostics: Vec<orchestrator_proto::DiagnosticEntry>,
 }
 
-/// Rendered result of `orchestrator check`.
-#[derive(Debug, Clone)]
-pub struct RenderedCheckReport {
-    /// Structured report returned by the scheduler checks.
-    pub report: CheckReport,
-    /// Human-readable report body.
-    pub content: String,
-    /// Process exit code recommended for the check result.
-    pub exit_code: i32,
-}
+// NOTE: RenderedCheckReport, run_check, and diagnostic_entry_from_check
+// moved to orchestrator-scheduler crate (service::system module).
 
 /// Get debug information for a component.
 pub fn debug_info(state: &InnerState, component: Option<&str>) -> Result<String> {
@@ -344,80 +335,6 @@ pub fn validate_manifests(
     }
 }
 
-/// Run preflight checks. Returns (content, exit_code).
-/// When `project_id` is Some, checks are scoped to that project's resources.
-pub fn run_check(
-    state: &InnerState,
-    workflow: Option<&str>,
-    output_format: &str,
-    project_id: Option<&str>,
-) -> Result<RenderedCheckReport> {
-    let active = read_active_config(state)?;
-    let report = run_checks(&active, &state.app_root, workflow, project_id);
-
-    let content = match output_format {
-        "json" => serde_json::to_string_pretty(&report)?,
-        "yaml" => serde_yml::to_string(&report)?,
-        _ => {
-            let mut buf = String::new();
-            buf.push_str("orchestrator check — preflight validation\n\n");
-            for check in &report.checks {
-                let icon = if check.passed {
-                    "\u{2713}"
-                } else {
-                    match check.severity {
-                        crate::anomaly::Severity::Error => "\u{2717}",
-                        crate::anomaly::Severity::Warning => "\u{26a0}",
-                        crate::anomaly::Severity::Info => "\u{2139}",
-                    }
-                };
-                buf.push_str(&format!("{} [{}] {}\n", icon, check.rule, check.message));
-                if let Some(actual) = check.actual.as_deref() {
-                    buf.push_str(&format!("  actual: {actual}\n"));
-                }
-                if let Some(expected) = check.expected.as_deref() {
-                    buf.push_str(&format!("  expected: {expected}\n"));
-                }
-                if let Some(risk) = check.risk.as_deref() {
-                    buf.push_str(&format!("  risk: {risk}\n"));
-                }
-                if let Some(fix) = check.suggested_fix.as_deref() {
-                    buf.push_str(&format!("  suggested_fix: {fix}\n"));
-                }
-            }
-            buf.push_str(&format!(
-                "\n{} passed, {} errors, {} warnings\n",
-                report.summary.passed, report.summary.errors, report.summary.warnings
-            ));
-            buf
-        }
-    };
-
-    let exit_code = if report.summary.errors > 0 { 1 } else { 0 };
-    Ok(RenderedCheckReport {
-        report,
-        content,
-        exit_code,
-    })
-}
-
-/// Converts a preflight check result into the protobuf diagnostic entry shape.
-pub fn diagnostic_entry_from_check(check: &CheckResult) -> orchestrator_proto::DiagnosticEntry {
-    orchestrator_proto::DiagnosticEntry {
-        source: check.source.clone(),
-        rule: check.rule.clone(),
-        severity: format!("{:?}", check.severity).to_lowercase(),
-        passed: check.passed,
-        blocking: check.blocking,
-        message: check.message.clone(),
-        context: check.context.clone(),
-        scope: check.scope.clone(),
-        actual: check.actual.clone(),
-        expected: check.expected.clone(),
-        risk: check.risk.clone(),
-        suggested_fix: check.suggested_fix.clone(),
-    }
-}
 
 fn diagnostic_entry_from_error(
     rule: impl Into<String>,
@@ -593,30 +510,5 @@ mod tests {
         assert!(!invalid.errors.is_empty());
     }
 
-    #[test]
-    fn run_check_supports_text_json_and_yaml_outputs() {
-        let mut fixture = TestState::new();
-        let state = fixture.build();
-        apply_manifests(
-            &state,
-            &workflow_manifest("checkable"),
-            false,
-            Some(crate::config::DEFAULT_PROJECT_ID),
-            false,
-        )
-        .expect("apply workflow manifest");
-
-        let text = run_check(&state, None, "text", None).expect("text check");
-        assert!(text.content.contains("orchestrator check"));
-        assert_eq!(text.exit_code, 0);
-
-        let json = run_check(&state, None, "json", None).expect("json check");
-        assert!(json.content.contains("\"summary\""));
-        assert_eq!(json.exit_code, 0);
-        assert!(!json.report.checks.is_empty());
-
-        let yaml = run_check(&state, None, "yaml", None).expect("yaml check");
-        assert!(yaml.content.contains("summary:"));
-        assert_eq!(yaml.exit_code, 0);
-    }
+    // NOTE: run_check tests moved to orchestrator-scheduler crate.
 }

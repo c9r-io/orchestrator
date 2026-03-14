@@ -66,7 +66,7 @@ pub(crate) async fn check(
 ) -> Result<Response<CheckResponse>, Status> {
     super::authorize(server, &request, "Check").map_err(Status::from)?;
     let req = request.into_inner();
-    let report = agent_orchestrator::service::system::run_check(
+    let report = orchestrator_scheduler::service::system::run_check(
         &server.state,
         req.workflow.as_deref(),
         &req.output_format,
@@ -82,7 +82,7 @@ pub(crate) async fn check(
             .report
             .checks
             .iter()
-            .map(agent_orchestrator::service::system::diagnostic_entry_from_check)
+            .map(orchestrator_scheduler::service::system::diagnostic_entry_from_check)
             .collect(),
     }))
 }

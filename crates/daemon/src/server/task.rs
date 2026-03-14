@@ -47,14 +47,14 @@ pub(crate) async fn task_create(
         spawn_reason: None,
     };
 
-    let created = agent_orchestrator::service::task::create_task(&server.state, payload)
+    let created = orchestrator_scheduler::service::task::create_task(&server.state, payload)
         .map_err(map_core_error)?;
 
     let mut status = "created".to_string();
     let mut message = format!("Task created: {}", created.id);
 
     if !req.no_start {
-        agent_orchestrator::service::task::enqueue_task(&server.state, &created.id)
+        orchestrator_scheduler::service::task::enqueue_task(&server.state, &created.id)
             .await
             .map_err(map_core_error)?;
         status = "enqueued".to_string();
@@ -77,7 +77,7 @@ pub(crate) async fn task_start(
         return Err(status);
     }
     let req = request.into_inner();
-    let id = agent_orchestrator::service::task::resolve_start_id(
+    let id = orchestrator_scheduler::service::task::resolve_start_id(
         &server.state,
         req.task_id.as_deref(),
         req.latest,
@@ -85,7 +85,7 @@ pub(crate) async fn task_start(
     .await
     .map_err(map_core_error)?;
 
-    agent_orchestrator::service::task::enqueue_task(&server.state, &id)
+    orchestrator_scheduler::service::task::enqueue_task(&server.state, &id)
         .await
         .map_err(map_core_error)?;
     Ok(Response::new(TaskStartResponse {
@@ -101,10 +101,10 @@ pub(crate) async fn task_pause(
 ) -> Result<Response<TaskPauseResponse>, Status> {
     super::authorize(server, &request, "TaskPause").map_err(Status::from)?;
     let req = request.into_inner();
-    let id = agent_orchestrator::service::task::resolve_id(&server.state, &req.task_id)
+    let id = orchestrator_scheduler::service::task::resolve_id(&server.state, &req.task_id)
         .await
         .map_err(map_core_error)?;
-    agent_orchestrator::service::task::pause_task(server.state.clone(), &id)
+    orchestrator_scheduler::service::task::pause_task(server.state.clone(), &id)
         .await
         .map_err(map_core_error)?;
     Ok(Response::new(TaskPauseResponse {
@@ -122,13 +122,13 @@ pub(crate) async fn task_resume(
         return Err(status);
     }
     let req = request.into_inner();
-    let id = agent_orchestrator::service::task::resolve_id(&server.state, &req.task_id)
+    let id = orchestrator_scheduler::service::task::resolve_id(&server.state, &req.task_id)
         .await
         .map_err(map_core_error)?;
 
     // FR-035: reset blocked items before resuming if requested
     if req.reset_blocked {
-        let count = agent_orchestrator::scheduler::reset_blocked_items(
+        let count = orchestrator_scheduler::scheduler::reset_blocked_items(
             &server.state, &id,
         )
         .await
@@ -138,7 +138,7 @@ pub(crate) async fn task_resume(
         }
     }
 
-    agent_orchestrator::service::task::enqueue_task(&server.state, &id)
+    orchestrator_scheduler::service::task::enqueue_task(&server.state, &id)
         .await
         .map_err(map_core_error)?;
     Ok(Response::new(TaskResumeResponse {
@@ -159,10 +159,10 @@ pub(crate) async fn task_delete(
             "use --force to confirm task deletion",
         ));
     }
-    let id = agent_orchestrator::service::task::resolve_id(&server.state, &req.task_id)
+    let id = orchestrator_scheduler::service::task::resolve_id(&server.state, &req.task_id)
         .await
         .map_err(map_core_error)?;
-    agent_orchestrator::service::task::delete_task(server.state.clone(), &id)
+    orchestrator_scheduler::service::task::delete_task(server.state.clone(), &id)
         .await
         .map_err(map_core_error)?;
     Ok(Response::new(TaskDeleteResponse {
@@ -185,10 +185,10 @@ pub(crate) async fn task_retry(
         ));
     }
     let task_id =
-        agent_orchestrator::service::task::retry_task_item(&server.state, &req.task_item_id)
+        orchestrator_scheduler::service::task::retry_task_item(&server.state, &req.task_item_id)
             .map_err(map_core_error)?;
 
-    agent_orchestrator::service::task::enqueue_task(&server.state, &task_id)
+    orchestrator_scheduler::service::task::enqueue_task(&server.state, &task_id)
         .await
         .map_err(map_core_error)?;
     Ok(Response::new(TaskRetryResponse {
@@ -204,10 +204,10 @@ pub(crate) async fn task_recover(
 ) -> Result<Response<TaskRecoverResponse>, Status> {
     super::authorize(server, &request, "TaskRecover").map_err(Status::from)?;
     let req = request.into_inner();
-    let id = agent_orchestrator::service::task::resolve_id(&server.state, &req.task_id)
+    let id = orchestrator_scheduler::service::task::resolve_id(&server.state, &req.task_id)
         .await
         .map_err(map_core_error)?;
-    let recovered = agent_orchestrator::service::task::recover_task(&server.state, &id)
+    let recovered = orchestrator_scheduler::service::task::recover_task(&server.state, &id)
         .await
         .map_err(map_core_error)?;
     let count = recovered.len() as u64;
@@ -229,7 +229,7 @@ pub(crate) async fn task_list(
 ) -> Result<Response<TaskListResponse>, Status> {
     super::authorize(server, &request, "TaskList").map_err(Status::from)?;
     let req = request.into_inner();
-    let tasks = agent_orchestrator::service::task::list_tasks(&server.state)
+    let tasks = orchestrator_scheduler::service::task::list_tasks(&server.state)
         .await
         .map_err(map_core_error)?;
 
@@ -255,7 +255,7 @@ pub(crate) async fn task_info(
 ) -> Result<Response<TaskInfoResponse>, Status> {
     super::authorize(server, &request, "TaskInfo").map_err(Status::from)?;
     let req = request.into_inner();
-    let detail = agent_orchestrator::service::task::get_task_detail(&server.state, &req.task_id)
+    let detail = orchestrator_scheduler::service::task::get_task_detail(&server.state, &req.task_id)
         .await
         .map_err(map_core_error)?;
 
@@ -311,7 +311,7 @@ pub(crate) async fn task_logs(
 ) -> Result<Response<TaskLogsStream>, Status> {
     super::authorize(server, &request, "TaskLogs").map_err(Status::from)?;
     let req = request.into_inner();
-    let logs = agent_orchestrator::service::task::get_task_logs(
+    let logs = orchestrator_scheduler::service::task::get_task_logs(
         &server.state,
         &req.task_id,
         req.tail as usize,
@@ -348,7 +348,7 @@ pub(crate) async fn task_follow(
     let (tx, rx) = tokio::sync::mpsc::channel(64);
 
     tokio::spawn(async move {
-        let _ = agent_orchestrator::service::task::follow_task_logs_stream(
+        let _ = orchestrator_scheduler::service::task::follow_task_logs_stream(
             &state,
             &req.task_id,
             |line: String, _is_stderr: bool| {
@@ -397,12 +397,12 @@ pub(crate) async fn task_watch(
             }
 
             let summary =
-                match agent_orchestrator::service::task::load_summary(&state, &req.task_id).await {
+                match orchestrator_scheduler::service::task::load_summary(&state, &req.task_id).await {
                     Ok(s) => s,
                     Err(_) => break,
                 };
 
-            let detail = match agent_orchestrator::service::task::get_task_detail(
+            let detail = match orchestrator_scheduler::service::task::get_task_detail(
                 &state,
                 &req.task_id,
             )
@@ -446,7 +446,7 @@ pub(crate) async fn task_trace(
     super::authorize(server, &request, "TaskTrace").map_err(Status::from)?;
     let req = request.into_inner();
     let result =
-        agent_orchestrator::service::task::get_task_trace(&server.state, &req.task_id, req.verbose)
+        orchestrator_scheduler::service::task::get_task_trace(&server.state, &req.task_id, req.verbose)
             .await
             .map_err(map_core_error)?;
 

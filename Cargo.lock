@@ -1293,6 +1293,7 @@ dependencies = [
  "anyhow",
  "futures",
  "orchestrator-proto",
+ "orchestrator-scheduler",
  "serde_json",
  "tokio",
  "tokio-stream",
@@ -1312,6 +1313,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "orchestrator-scheduler"
+version = "0.1.0"
+dependencies = [
+ "agent-orchestrator",
+ "anyhow",
+ "arc-swap",
+ "async-trait",
+ "cel-interpreter",
+ "chrono",
+ "glob",
+ "libc",
+ "nix",
+ "orchestrator-config",
+ "orchestrator-proto",
+ "pathdiff",
+ "rand",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "serde_yml",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tokio-rusqlite",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "orchestratord"
 version = "0.1.0"
 dependencies = [
@@ -1324,6 +1354,7 @@ dependencies = [
  "libc",
  "nix",
  "orchestrator-proto",
+ "orchestrator-scheduler",
  "pem",
  "pin-project-lite",
  "prost",

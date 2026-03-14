@@ -939,3 +939,15 @@ mod tests {
         assert!(result.is_err(), "should fail for nonexistent item");
     }
 }
+
+/// Service-layer wrapper around [`create_task_impl`] with error classification.
+///
+/// This exists so that core modules (trigger_engine, service/resource) can
+/// create tasks without depending on the `orchestrator-scheduler` service layer.
+pub fn create_task_as_service(
+    state: &crate::state::InnerState,
+    payload: CreateTaskPayload,
+) -> crate::error::Result<TaskSummary> {
+    create_task_impl(state, payload)
+        .map_err(|err| crate::error::classify_task_error("task.create", err))
+}

@@ -8,5 +8,3 @@ pub mod resource;
 pub mod store;
 /// System and diagnostics service helpers.
 pub mod system;
-/// Task lifecycle service helpers.
-pub mod task;

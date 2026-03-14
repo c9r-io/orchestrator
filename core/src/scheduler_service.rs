@@ -49,6 +49,19 @@ pub fn worker_stop_signal_path(state: &InnerState) -> PathBuf {
     state.app_root.join("data").join("worker.stop")
 }
 
+/// Service-layer wrapper around [`enqueue_task`] with error classification.
+///
+/// This exists so that core modules (trigger_engine) can enqueue tasks
+/// without depending on the `orchestrator-scheduler` service layer.
+pub async fn enqueue_task_as_service(
+    state: &InnerState,
+    task_id: &str,
+) -> crate::error::Result<()> {
+    enqueue_task(state, task_id)
+        .await
+        .map_err(|err| crate::error::classify_task_error("task.enqueue", err))
+}
+
 /// Removes the worker stop marker if it exists.
 pub fn clear_worker_stop_signal(state: &InnerState) -> Result<()> {
     let path = worker_stop_signal_path(state);
@@ -337,6 +350,7 @@ mod tests {
 
     #[test]
     fn worker_signal_paths_are_under_data_dir() {
+
         let mut fixture = TestState::new();
         let state = fixture.build();
 

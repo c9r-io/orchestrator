@@ -798,7 +798,7 @@ pub fn fire_trigger(
         spawn_reason: Some(format!("manual fire of trigger '{}'", trigger_name)),
     };
 
-    let created = crate::service::task::create_task(state, payload)
+    let created = crate::task_ops::create_task_as_service(state, payload)
         .map_err(|err| classify_resource_error("trigger.fire", err))?;
 
     Ok(created.id)

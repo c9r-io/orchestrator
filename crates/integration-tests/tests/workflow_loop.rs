@@ -30,7 +30,7 @@ async fn run_task_to_completion(harness: &TestHarness, workflow_id: &str) -> Tas
     let state = harness.state().clone();
     let tid = task_id.clone();
     let handle = tokio::spawn(async move {
-        let _ = agent_orchestrator::service::task::start_task_blocking(state, &tid).await;
+        let _ = orchestrator_scheduler::service::task::start_task_blocking(state, &tid).await;
     });
 
     // Wait for completion

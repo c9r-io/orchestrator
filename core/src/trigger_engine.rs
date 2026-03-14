@@ -6,12 +6,43 @@
 
 use crate::config::{TriggerConfig, TriggerCronConfig};
 use crate::dto::CreateTaskPayload;
+use crate::events::insert_event;
 use crate::state::InnerState;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
+
+/// Cancels a running task for the Replace trigger policy.
+///
+/// This is a simplified version of `scheduler::stop_task_runtime` that avoids
+/// a dependency on the scheduler crate.
+async fn cancel_task_for_trigger(state: &InnerState, task_id: &str) -> Result<()> {
+    // Signal the in-process running task to stop, if present.
+    let runtime = {
+        let running = state.running.lock().await;
+        running.get(task_id).cloned()
+    };
+    if let Some(rt) = runtime {
+        rt.stop_flag.store(true, Ordering::SeqCst);
+    }
+    // Update task status to cancelled.
+    state
+        .db_writer
+        .set_task_status(task_id, "cancelled", false)
+        .await?;
+    insert_event(
+        state,
+        task_id,
+        None,
+        "task_control",
+        serde_json::json!({"status": "cancelled"}),
+    )
+    .await?;
+    Ok(())
+}
 
 // ── Public types ─────────────────────────────────────────────────────────────
 
@@ -305,7 +336,7 @@ impl TriggerEngine {
             spawn_reason: None,
         };
 
-        match crate::service::task::create_task(&self.state, payload) {
+        match crate::task_ops::create_task_as_service(&self.state, payload) {
             Ok(summary) => {
                 let task_id = summary.id.clone();
                 info!(
@@ -335,7 +366,7 @@ impl TriggerEngine {
                     let state = self.state.clone();
                     let tid = task_id.clone();
                     tokio::spawn(async move {
-                        if let Err(e) = crate::service::task::enqueue_task(&state, &tid).await {
+                        if let Err(e) = crate::scheduler_service::enqueue_task_as_service(&state, &tid).await {
                             error!(task_id = tid.as_str(), error = %e, "failed to enqueue triggered task");
                         } else {
                             state.worker_notify.notify_one();
@@ -493,7 +524,7 @@ impl TriggerEngine {
             .await;
 
         if let Ok(Some(task_id)) = result {
-            if let Err(e) = crate::scheduler::stop_task_runtime(self.state.clone(), &task_id, "cancelled").await {
+            if let Err(e) = cancel_task_for_trigger(&self.state, &task_id).await {
                 warn!(
                     trigger = trigger_name,
                     task_id = task_id.as_str(),

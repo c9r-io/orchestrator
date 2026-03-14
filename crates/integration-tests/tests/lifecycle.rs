@@ -49,7 +49,7 @@ async fn task_create_start_complete() {
         let state = harness.state().clone();
         let tid = task_id.clone();
         tokio::spawn(async move {
-            let _ = agent_orchestrator::service::task::start_task_blocking(state, &tid).await;
+            let _ = orchestrator_scheduler::service::task::start_task_blocking(state, &tid).await;
         });
 
         // Poll until completed or failed

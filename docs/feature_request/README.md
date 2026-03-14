@@ -36,7 +36,7 @@
 | FR-045 | QA Agent 长生命周期命令防护 | P1 | Closed |
 | FR-046 | Agent 子进程 Daemon PID Guard 穿透防护 | P1 | Closed |
 | FR-047 | Core Crate 拆分 Phase 1 — orchestrator-config 提取 | P2 | Closed |
-| FR-048 | Core Crate 拆分 Phase 2 — orchestrator-scheduler 提取 | P2 | Proposed |
+| FR-048 | Core Crate 拆分 Phase 2 — orchestrator-scheduler 提取 | P2 | Closed |
 
 ## 说明
 
@@ -91,3 +91,4 @@
 - FR-045 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/57-long-lived-command-guard.md` 与 `docs/qa/orchestrator/99-long-lived-command-guard.md` 承载
 - FR-046 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/58-agent-subprocess-daemon-pid-guard.md` 与 `docs/qa/orchestrator/100-agent-subprocess-daemon-pid-guard.md` 承载
 - FR-047 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/59-core-crate-split-config.md` 与 `docs/qa/orchestrator/101-core-crate-split-config.md` 承载
+- FR-048 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/60-core-crate-split-scheduler.md` 与 `docs/qa/orchestrator/102-core-crate-split-scheduler.md` 承载

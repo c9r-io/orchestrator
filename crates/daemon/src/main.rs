@@ -23,8 +23,8 @@ use tonic::transport::Server;
 use tracing::{error, info};
 
 use agent_orchestrator::events::insert_event;
-use agent_orchestrator::scheduler::safety::RestartRequestedError;
-use agent_orchestrator::scheduler::{
+use orchestrator_scheduler::scheduler::safety::RestartRequestedError;
+use orchestrator_scheduler::scheduler::{
     load_task_summary, register_running_task, run_task_loop, shutdown_running_tasks,
     unregister_running_task, RunningTask,
 };
