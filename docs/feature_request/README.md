@@ -32,6 +32,8 @@
 | FR-040 | QA Agent 子进程绕过 Daemon PID Guard 杀死 Daemon | P1 | Closed |
 | FR-041 | Self-Restart 后 Socket 连接断裂导致后续步骤不可达 | P1 | Closed |
 | FR-042 | follow_task_logs 流式回调重构 — gRPC TaskFollow 空流修复 | P1 | Closed |
+| FR-044 | Sandbox 写入拒绝检测与 writable_paths 完善 | P1 | Proposed |
+| FR-045 | QA Agent 长生命周期命令防护 | P1 | Proposed |
 
 ## 说明
 
