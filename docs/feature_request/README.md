@@ -6,9 +6,10 @@
 
 | ID | 标题 | 优先级 | 状态 |
 |----|------|--------|------|
-| FR-002 | Daemon 控制面认证、鉴权与传输安全 | P0 | Proposed |
-| FR-005 | Daemon 生命周期治理与运行态指标补完 | P1 | Proposed |
-| FR-011 | validate/scheduler/runner 职责拆分与验证逻辑去重 | P1 | Proposed |
+| FR-002 | Daemon 控制面认证、鉴权与传输安全 | P0 | Closed |
+| FR-005 | Daemon 生命周期治理与运行态指标补完 | P1 | Closed |
+| FR-011 | validate/scheduler/runner 职责拆分与验证逻辑去重 | P1 | Closed |
+| FR-043 | loop_guard 收敛条件表达式 | P1 | Proposed |
 | FR-017 | Agent Drain 与 Enabled 开关 | P1 | Implemented |
 | FR-018 | 用户指南编译验证对齐 | P1 | Implemented |
 | FR-019 | 修复 libc 类型编译错误 | P0 | Implemented |
@@ -77,3 +78,6 @@
 - FR-040 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/52-prehook-self-referential-safe-filter.md` 与 `docs/qa/orchestrator/95-prehook-self-referential-safe-filter.md` 承载
 - FR-041 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/53-self-restart-socket-continuity.md` 与 `docs/qa/orchestrator/96-self-restart-socket-continuity.md` 承载
 - FR-042 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/54-follow-task-logs-callback.md` 与 `docs/qa/orchestrator/97-follow-task-logs-callback.md` 承载
+- FR-002 已闭环；其设计与验证信息现由 `docs/design_doc/orchestrator/22-control-plane-security.md` 与 `docs/qa/orchestrator/58-control-plane-security.md` 承载（mTLS、RBAC 授权、审计日志均已实现）
+- FR-005 已闭环；其设计与验证信息现由 `docs/design_doc/orchestrator/24-daemon-lifecycle-runtime-metrics.md` 与 `docs/qa/orchestrator/60-daemon-lifecycle-runtime-metrics.md` 承载（生命周期状态机、运行时指标、优雅 drain 均已实现）
+- FR-011 已闭环；代码已自然实现 validate/scheduler/runner 的职责分离（config_load/validate/、output_validation.rs、runner/sandbox.rs 各司其职），无需进一步重构
