@@ -5,7 +5,7 @@ use crate::dto::TaskSummary;
 use crate::state::InnerState;
 use anyhow::Result;
 use std::fmt::Write as _;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::format::{colorize_status, format_bytes, format_duration};
 use super::is_transient_query_error;
@@ -15,11 +15,28 @@ use crate::events::{
 };
 
 /// Watch a task in real-time, updating the display at the specified interval.
-pub async fn watch_task(state: &InnerState, task_id: &str, interval_secs: u64) -> Result<()> {
+///
+/// When `timeout_secs` is `Some(n)` and `n > 0`, the watch loop exits after
+/// `n` seconds with a final status snapshot printed to stderr.
+pub async fn watch_task(
+    state: &InnerState,
+    task_id: &str,
+    interval_secs: u64,
+    timeout_secs: Option<u64>,
+) -> Result<()> {
     let interval = Duration::from_secs(interval_secs);
+    let deadline = timeout_secs
+        .filter(|&t| t > 0)
+        .map(|t| Instant::now() + Duration::from_secs(t));
     let mut last_warning: Option<String> = None;
 
     loop {
+        if let Some(dl) = deadline {
+            if Instant::now() >= dl {
+                eprintln!("watch: timeout after {}s", timeout_secs.unwrap_or(0));
+                return Ok(());
+            }
+        }
         let task = match load_task_summary(state, task_id).await {
             Ok(task) => task,
             Err(err) if is_transient_query_error(&err) => {

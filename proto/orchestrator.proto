@@ -280,6 +280,7 @@ message TaskLogLine {
 message TaskWatchRequest {
   string task_id = 1;
   uint64 interval_secs = 2;
+  uint64 timeout_secs = 3;
 }
 
 message TaskWatchSnapshot {

@@ -172,19 +172,47 @@ pub(crate) async fn dispatch(
             Ok(())
         }
 
-        TaskCommands::Watch { task_id, interval } => {
+        TaskCommands::Watch {
+            task_id,
+            interval,
+            timeout,
+        } => {
             let mut stream = client
                 .task_watch(orchestrator_proto::TaskWatchRequest {
                     task_id,
                     interval_secs: interval,
+                    timeout_secs: timeout,
                 })
                 .await?
                 .into_inner();
 
+            let deadline = if timeout > 0 {
+                Some(tokio::time::Instant::now() + std::time::Duration::from_secs(timeout))
+            } else {
+                None
+            };
+
             use tokio_stream::StreamExt;
-            while let Some(snapshot) = stream.next().await {
-                match snapshot {
-                    Ok(s) => {
+            loop {
+                let next = if let Some(dl) = deadline {
+                    let remaining = dl.saturating_duration_since(tokio::time::Instant::now());
+                    if remaining.is_zero() {
+                        eprintln!("watch: timeout after {}s", timeout);
+                        break;
+                    }
+                    match tokio::time::timeout(remaining, stream.next()).await {
+                        Ok(item) => item,
+                        Err(_) => {
+                            eprintln!("watch: timeout after {}s", timeout);
+                            break;
+                        }
+                    }
+                } else {
+                    stream.next().await
+                };
+
+                match next {
+                    Some(Ok(s)) => {
                         if let Some(task) = &s.task {
                             println!(
                                 "[{}] status={} items={}/{} failed={}",
@@ -203,10 +231,11 @@ pub(crate) async fn dispatch(
                             }
                         }
                     }
-                    Err(e) => {
+                    Some(Err(e)) => {
                         eprintln!("watch error: {}", e);
                         break;
                     }
+                    None => break,
                 }
             }
             Ok(())

@@ -529,4 +529,31 @@ mod cases {
     fn shell_escape_only_single_quote() {
         assert_eq!(shell_escape("'"), "''\\'''");
     }
+
+    #[test]
+    fn heartbeat_reaches_stall_auto_kill_threshold() {
+        let mut progress = HeartbeatProgress::default();
+        // Simulate STALL_AUTO_KILL_CONSECUTIVE_HEARTBEATS stagnant heartbeats
+        for i in 1..=STALL_AUTO_KILL_CONSECUTIVE_HEARTBEATS {
+            let elapsed = LOW_OUTPUT_MIN_ELAPSED_SECS + (i as u64 * 30);
+            let sample = sample_heartbeat_progress(&mut progress, 0, 0, elapsed, true);
+            if i >= LOW_OUTPUT_CONSECUTIVE_HEARTBEATS {
+                assert_eq!(sample.output_state, "low_output");
+            }
+        }
+        assert_eq!(
+            progress.stagnant_heartbeats,
+            STALL_AUTO_KILL_CONSECUTIVE_HEARTBEATS
+        );
+        // Verify the final sample would trigger auto-kill
+        let final_sample = sample_heartbeat_progress(
+            &mut progress,
+            0,
+            0,
+            LOW_OUTPUT_MIN_ELAPSED_SECS + ((STALL_AUTO_KILL_CONSECUTIVE_HEARTBEATS as u64 + 1) * 30),
+            true,
+        );
+        assert_eq!(final_sample.output_state, "low_output");
+        assert!(final_sample.stagnant_heartbeats >= STALL_AUTO_KILL_CONSECUTIVE_HEARTBEATS);
+    }
 }

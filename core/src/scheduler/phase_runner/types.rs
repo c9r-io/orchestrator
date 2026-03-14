@@ -10,6 +10,8 @@ pub(super) const HEARTBEAT_INTERVAL_SECS: u64 = 30;
 pub(super) const LOW_OUTPUT_DELTA_THRESHOLD_BYTES: u64 = 32;
 pub(super) const LOW_OUTPUT_MIN_ELAPSED_SECS: u64 = 90;
 pub(super) const LOW_OUTPUT_CONSECUTIVE_HEARTBEATS: u32 = 3;
+/// Auto-kill a step after this many consecutive stagnant heartbeats (30 × 30s = 900s).
+pub(super) const STALL_AUTO_KILL_CONSECUTIVE_HEARTBEATS: u32 = 30;
 pub(super) const VALIDATION_FAILED_EXIT_CODE: i64 = -6;
 pub(super) const SANDBOX_STDERR_EXCERPT_MAX_BYTES: u64 = 1024;
 

@@ -381,9 +381,21 @@ pub(crate) async fn task_watch(
     };
     let (tx, rx) = tokio::sync::mpsc::channel(16);
 
+    let timeout_secs = req.timeout_secs;
     tokio::spawn(async move {
         let interval = std::time::Duration::from_secs(interval_secs);
+        let deadline = if timeout_secs > 0 {
+            Some(tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs))
+        } else {
+            None
+        };
         loop {
+            if let Some(dl) = deadline {
+                if tokio::time::Instant::now() >= dl {
+                    break;
+                }
+            }
+
             let summary =
                 match agent_orchestrator::service::task::load_summary(&state, &req.task_id).await {
                     Ok(s) => s,

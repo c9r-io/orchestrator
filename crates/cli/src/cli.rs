@@ -543,6 +543,10 @@ pub enum TaskCommands {
         /// Refresh interval in seconds.
         #[arg(long, default_value = "2")]
         interval: u64,
+
+        /// Exit after this many seconds (0 = no timeout).
+        #[arg(long, default_value = "0")]
+        timeout: u64,
     },
 
     /// Render the structured task trace.

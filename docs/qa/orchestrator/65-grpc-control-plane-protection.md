@@ -238,13 +238,13 @@ Verify `TaskWatch` consumes a stream permit until disconnect and the second conc
    ```
 4. Open the first watch in the background (with timeout to prevent stalling):
    ```bash
-   timeout 30 /Volumes/Yotta/ai_native_sdlc/target/release/orchestrator task watch "$TASK_ID" --interval 1 > first-watch.log 2>&1 &
+   /Volumes/Yotta/ai_native_sdlc/target/release/orchestrator task watch "$TASK_ID" --interval 1 --timeout 30 > first-watch.log 2>&1 &
    WATCH_PID=$!
    sleep 2
    ```
 5. Attempt a second watch from the same client (with timeout):
    ```bash
-   timeout 10 /Volumes/Yotta/ai_native_sdlc/target/release/orchestrator task watch "$TASK_ID" --interval 1 2>&1 | tee second-watch.log || true
+   /Volumes/Yotta/ai_native_sdlc/target/release/orchestrator task watch "$TASK_ID" --interval 1 --timeout 10 2>&1 | tee second-watch.log || true
    ```
 6. Query audit rows, then clean up:
    ```bash
@@ -261,7 +261,7 @@ Verify `TaskWatch` consumes a stream permit until disconnect and the second conc
 | Symptom | Likely Cause | Fix |
 |---------|-------------|-----|
 | Both watches succeed; audit rows show empty `traffic_class`/`decision`/`reason_code` | `protection.yaml` not placed at `$QA_ROOT/data/control-plane/protection.yaml` or uses default limits (`max_active_streams: 2`) | Verify the protection.yaml file exists and contains `max_active_streams: 1` for the TaskWatch override |
-| Second watch hangs instead of returning `RESOURCE_EXHAUSTED` | Missing `timeout` wrapper on streaming commands | Always wrap `task watch` with `timeout` in non-interactive contexts |
+| Second watch hangs instead of returning `RESOURCE_EXHAUSTED` | Missing `--timeout` flag on streaming commands | Always use `--timeout` flag on `task watch` in non-interactive contexts |
 | First watch exits before second watch starts | `sleep 2` too short or daemon slow to respond | Increase sleep to 3–5 seconds; verify first watch PID is still running before step 5 |
 
 ### Expected

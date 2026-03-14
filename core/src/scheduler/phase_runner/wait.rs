@@ -146,6 +146,34 @@ pub(super) async fn wait_for_process(
                 )
                 .await?;
 
+                // Stall auto-kill: if low_output persists for too many consecutive
+                // heartbeats, automatically kill the step to prevent pipeline stalls.
+                if heartbeat.output_state == "low_output"
+                    && heartbeat.stagnant_heartbeats
+                        >= super::types::STALL_AUTO_KILL_CONSECUTIVE_HEARTBEATS
+                {
+                    let mut child_lock = runtime.child.lock().await;
+                    if let Some(ref mut child) = *child_lock {
+                        kill_child_process_group(child).await;
+                    }
+                    insert_event(
+                        state,
+                        task_id,
+                        Some(item_id),
+                        "step_stall_killed",
+                        json!({
+                            "step": phase,
+                            "step_id": step_id,
+                            "step_scope": step_scope_label(step_scope),
+                            "elapsed_secs": elapsed.as_secs(),
+                            "stagnant_heartbeats": heartbeat.stagnant_heartbeats,
+                            "pid": child_pid,
+                        }),
+                    )
+                    .await?;
+                    break (-7, None);
+                }
+
                 // Cross-process pause: check if another process (e.g. `task pause`)
                 // has marked this task as paused in the DB.
                 if super::super::task_state::is_task_paused_in_db(state, task_id).await? {
