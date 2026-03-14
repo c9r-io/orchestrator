@@ -35,6 +35,8 @@
 | FR-044 | Sandbox 写入拒绝检测与 writable_paths 完善 | P1 | Closed |
 | FR-045 | QA Agent 长生命周期命令防护 | P1 | Closed |
 | FR-046 | Agent 子进程 Daemon PID Guard 穿透防护 | P1 | Closed |
+| FR-047 | Core Crate 拆分 Phase 1 — orchestrator-config 提取 | P2 | Proposed |
+| FR-048 | Core Crate 拆分 Phase 2 — orchestrator-scheduler 提取 | P2 | Proposed |
 
 ## 说明
 
