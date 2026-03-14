@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Control Plane Security
 
 **Module**: orchestrator
