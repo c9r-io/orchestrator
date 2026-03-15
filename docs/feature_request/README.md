@@ -39,6 +39,7 @@
 | FR-048 | Core Crate 拆分 Phase 2 — orchestrator-scheduler 提取 | P2 | Closed |
 | FR-049 | Prehook CEL 表达式接入 Pipeline Variables | P1 | Closed |
 | FR-050 | CLI UDS 连接回退鲁棒性 | P2 | Closed |
+| FR-051 | Workflow YAML 步骤定义未知字段警告 | P1 | Open |
 
 ## 说明
 

@@ -305,11 +305,11 @@ spec:
       enabled: true
       repeatable: false
       tty: false
-      capture:
-        - var: regression_target_ids
-          source: stdout
-          json_path: "$.regression_targets[*].id"
       behavior:
+        captures:
+          - var: regression_target_ids
+            source: stdout
+            json_path: "$.regression_targets[*].id"
         post_actions:
           # Narrows the QA item set for the downstream Item segment (qa_testing).
           # Deferred: buffers here, executes after the Task segment ends.
