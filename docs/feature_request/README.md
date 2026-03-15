@@ -41,6 +41,7 @@
 | FR-050 | CLI UDS 连接回退鲁棒性 | P2 | Closed |
 | FR-051 | Workflow YAML 步骤定义未知字段警告 | P1 | Closed |
 | FR-053 | Full-QA Workflow 大规模 Item 分发中断 — max_cycles_enforced 过早触发 | P0 | Closed |
+| FR-054 | Item 进度增量更新 — finalize_items 延迟导致 Progress 长时间为零 | P1 | Open |
 
 ## 说明
 
