@@ -15,7 +15,7 @@ spec:
   qa_targets:
     - docs/qa
   ticket_dir: docs/ticket
-  self_referential: true
+  self_referential: false
 ---
 # ── Agents ─────────────────────────────────────────────────────────────
 # Reuse existing StepTemplates from self-bootstrap.yaml (they are
@@ -91,7 +91,7 @@ spec:
       required_capability: ticket_fix
       template: ticket_fix
       execution_profile: sandbox_write
-      enabled: true
+      enabled: false
       repeatable: true
       tty: false
       max_parallel: 2
@@ -106,7 +106,7 @@ spec:
       scope: task
       required_capability: align_tests
       template: align_tests
-      enabled: true
+      enabled: false
       repeatable: true
       tty: false
 
@@ -118,6 +118,13 @@ spec:
       enabled: true
       repeatable: true
       tty: false
+
+    # Self-test gate (required by self-referential safety policy)
+    - id: self_test
+      type: self_test
+      enabled: true
+      repeatable: true
+      builtin: self_test
 
     # Loop guard (builtin, always last)
     - id: loop_guard
@@ -136,6 +143,6 @@ spec:
 
   safety:
     max_consecutive_failures: 5   # higher tolerance — many QA docs may fail
-    auto_rollback: false          # no code changes to roll back
+    auto_rollback: true           # required by policy (no-op: no code changes)
     checkpoint_strategy: git_tag
     binary_snapshot: false        # not rebuilding
