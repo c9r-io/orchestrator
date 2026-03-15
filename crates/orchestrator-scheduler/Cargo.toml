@@ -37,4 +37,5 @@ nix = { version = "0.29", default-features = false, features = ["user"] }
 test-harness = ["agent-orchestrator/test-harness"]
 
 [dev-dependencies]
+agent-orchestrator = { path = "../../core", features = ["test-harness"] }
 tempfile = "3.26.0"

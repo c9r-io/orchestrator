@@ -9,7 +9,7 @@ Verify that benchmark scores can be extracted from agent JSON output into pipeli
 ### S-01: Capture schema accepts optional `json_path`
 
 **Steps**:
-1. Run `cargo test -p agent-orchestrator capture_decl_deserializes -- --nocapture`
+1. Run `cargo test -p orchestrator-config capture_decl_deserializes -- --nocapture`
 
 **Expected**:
 - capture declarations deserialize both with and without `json_path`
@@ -18,7 +18,7 @@ Verify that benchmark scores can be extracted from agent JSON output into pipeli
 ### S-02: Plain JSON stdout captures benchmark score
 
 **Steps**:
-1. Run `cargo test -p agent-orchestrator apply_captures_stdout_json_path_extracts_score -- --nocapture`
+1. Run `cargo test -p orchestrator-scheduler --lib -- apply_captures_stdout_json_path_extracts_score -- --nocapture`
 
 **Expected**:
 - `source: stdout`
@@ -28,7 +28,7 @@ Verify that benchmark scores can be extracted from agent JSON output into pipeli
 ### S-03: Stream-JSON stdout captures benchmark score
 
 **Steps**:
-1. Run `cargo test -p agent-orchestrator apply_captures_stdout_json_path_extracts_stream_json_score -- --nocapture`
+1. Run `cargo test -p orchestrator-scheduler --lib -- apply_captures_stdout_json_path_extracts_stream_json_score -- --nocapture`
 
 **Expected**:
 - scheduler resolves the last stream-json `result` payload first
@@ -37,7 +37,7 @@ Verify that benchmark scores can be extracted from agent JSON output into pipeli
 ### S-04: Missing JSON field degrades safely
 
 **Steps**:
-1. Run `cargo test -p agent-orchestrator apply_captures_stdout_json_path_falls_back_to_empty_string_on_missing_field -- --nocapture`
+1. Run `cargo test -p orchestrator-scheduler --lib -- apply_captures_stdout_json_path_falls_back_to_empty_string_on_missing_field -- --nocapture`
 
 **Expected**:
 - capture does not panic or abort the step
@@ -47,7 +47,7 @@ Verify that benchmark scores can be extracted from agent JSON output into pipeli
 ### S-05: Higher captured score wins selection
 
 **Steps**:
-1. Run `cargo test -p agent-orchestrator benchmark_score_capture_can_drive_item_select_max -- --nocapture`
+1. Run `cargo test -p orchestrator-scheduler --lib -- benchmark_score_capture_can_drive_item_select_max -- --nocapture`
 
 **Expected**:
 - two candidates receive different captured `score` values
@@ -56,7 +56,7 @@ Verify that benchmark scores can be extracted from agent JSON output into pipeli
 ### S-06: Invalid source combinations are rejected
 
 **Steps**:
-1. Run `cargo test -p agent-orchestrator validate_workflow_config_rejects_json_path_on_exit_code_capture -- --nocapture`
+1. Run `cargo test -p agent-orchestrator --lib -- validate_workflow_config_rejects_json_path_on_exit_code_capture --nocapture`
 
 **Expected**:
 - workflow validation rejects `json_path` when used with `exit_code`

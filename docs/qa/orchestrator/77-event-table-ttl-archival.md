@@ -36,6 +36,10 @@
 - running/pending 状态 task 的事件数量不变
 - 返回实际删除数量
 
+> **注意**：`--older-than 0` 会被 daemon 视为未指定，自动回退到默认值 30 天。
+> 这是 protobuf `uint32` 默认值（0）的安全防护机制，CLI 默认值已设置为 30。
+> 若数据库中无超过指定天数的事件，清理结果为 0 属正常行为。
+
 ## 场景 4：event cleanup --archive 归档
 
 **步骤**：
@@ -56,6 +60,10 @@
 **期望**：
 - daemon 日志中出现 `event cleanup: deleted old events` 或无事件时无输出
 - 清理过程不影响并发的 task 创建和执行
+
+> **注意**：此场景需要重启 daemon 使自定义参数生效。若当前 daemon 受安全约束保护
+> 无法重启，应跳过此场景。可通过单元测试 `cleanup_deletes_only_terminal_old_events`
+> 和 `cleanup_respects_batch_limit` 间接验证清理逻辑正确性。
 
 ## 单元测试覆盖
 

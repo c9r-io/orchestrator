@@ -8,7 +8,7 @@ Verify that item-scoped self-evolution candidates execute in separate git worktr
 
 1. Run:
    ```bash
-   cargo test -p agent-orchestrator workflow_config_item_isolation_round_trips_through_serde workflow_item_isolation_round_trip_through_spec_conversion -- --nocapture
+   cargo test -p orchestrator-config workflow_config_item_isolation_round_trips_through_serde -- --nocapture && cargo test -p agent-orchestrator workflow_item_isolation_round_trip_through_spec_conversion -- --nocapture
    ```
 2. Confirm both tests pass.
 

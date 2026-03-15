@@ -58,6 +58,9 @@
 
 **Expected:** No compilation errors. All tests pass.
 
+> **注意**：`orchestrator-scheduler` 的测试依赖 `agent-orchestrator/test-harness` feature。
+> 该 feature 已通过 dev-dependencies 自动激活，无需手动传递 `--features`。
+
 ---
 
 ## Checklist
