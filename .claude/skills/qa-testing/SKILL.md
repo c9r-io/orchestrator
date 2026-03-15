@@ -287,7 +287,7 @@ For **full runtime re-initialization** (only when DB is missing or schema needs 
 
 ```bash
 # Only if DB does not exist or is corrupted
-orchestrator init --force
+orchestrator init
 ```
 
 **CRITICAL**: Do NOT use `rm -f data/agent_orchestrator.db` during routine QA. This destroys all in-flight task state, bootstrap config, and event history.
@@ -304,10 +304,10 @@ orchestrator delete project/<project> --force
 orchestrator apply -f fixtures/manifests/bundles/<fixture>.yaml --project <project>
 
 # Only if DB does not exist at all:
-orchestrator init --force
+orchestrator init
 
 # Or with custom root path
-orchestrator init --root /path/to/project
+orchestrator init /path/to/project
 ```
 
 **CRITICAL**: Do NOT use `rm -f data/agent_orchestrator.db` for QA resets. This destroys all state including bootstrap config, in-flight tasks, and event history. Use `delete project/<project> --force` for per-project isolation.
