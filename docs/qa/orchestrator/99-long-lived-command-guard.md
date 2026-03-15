@@ -8,9 +8,9 @@ Verifies FR-045: `task watch --timeout`, stall auto-termination, and QA agent ti
 
 ### Steps
 
-1. Start the daemon:
+1. Ensure the daemon is running:
    ```bash
-   orchestrator daemon start --workspace ./test-workspace
+   orchestratord --foreground --workers 1 &
    ```
 2. Create a task (do not start it, so it stays in `pending`):
    ```bash
