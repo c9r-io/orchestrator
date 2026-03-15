@@ -1,7 +1,7 @@
 # Orchestrator - Config Self-Heal Auditability
 
 **Module**: orchestrator
-**Scope**: `config heal-log` command, `check` enhancement for persisted self-heal audit, `config_heal_log` table
+**Scope**: `query_heal_log_entries` backend function, `check` enhancement for persisted self-heal audit, `config_heal_log` table
 **Scenarios**: 5
 **Priority**: High
 
@@ -12,7 +12,7 @@
 The orchestrator auto-heals persisted config drift on startup (e.g., removing `required_capability` from builtin steps). Previously, self-heal results were only visible as in-memory notices that disappeared on process restart. Phase 3 Task 03 adds:
 
 - A `config_heal_log` table that persists structured change details alongside the healed config version
-- A `config heal-log` CLI command for querying self-heal history
+- A `query_heal_log_entries` backend function for querying self-heal history (no CLI surface — the `config` subcommand is not implemented)
 - Enhanced `check` command that reads persisted heal records when no in-memory notice exists
 
 ### Key Files
@@ -60,70 +60,53 @@ Verify that `build_active_config_with_self_heal` writes structured entries to `c
 
 ---
 
-## Scenario 2: Config Heal-Log CLI - Table Output
+## Scenario 2: Heal Log Query Backend - Table Output
 
 ### Preconditions
 
-- Orchestrator binary built
-- At least one self-heal event has occurred (or seed one manually)
+- Orchestrator crate compiles
 
 ### Goal
 
-Verify `config heal-log` renders a human-readable table grouped by version.
+Verify `query_heal_log_entries` returns structured heal log data. Note: the `config heal-log` CLI command is not implemented; heal log data is queryable programmatically via the backend function.
 
 ### Steps
 
-1. If no self-heal events exist, trigger one by seeding a drifted config:
+1. Run the query_heal_log_entries unit tests:
    ```bash
-   orchestrator apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml
-   ```
-   Then manually introduce a `required_capability` on a builtin step in the DB and restart.
-
-2. Run heal-log:
-   ```bash
-   orchestrator config heal-log
-   ```
-
-3. Run with limit:
-   ```bash
-   orchestrator config heal-log --limit 5
+   cd core && cargo test --lib query_heal_log_entries -- --nocapture
    ```
 
 ### Expected
 
-- If no heal events: output is `config heal-log — no self-heal events recorded`
-- If heal events exist: output shows version header with timestamp and triggered-by error, followed by indented change entries showing `workflow_id/step_id  RuleName` and detail line
-- `--limit` restricts the number of entries shown
+- `query_heal_log_entries` tests pass
+- Entries are returned in DESC order by creation time
+- Each entry contains: version, original_error, workflow_id, step_id, rule, detail, created_at
 - Exit code 0
 
 ---
 
-## Scenario 3: Config Heal-Log CLI - JSON Output
+## Scenario 3: Heal Log Query Backend - JSON Serialization
 
 ### Preconditions
 
-- Same as Scenario 2
+- Orchestrator crate compiles
 
 ### Goal
 
-Verify `config heal-log --json` produces valid, structured JSON.
+Verify that heal log entries serialize correctly to JSON. Note: the `config heal-log --json` CLI command does not exist; JSON serialization is tested via unit tests for the query function.
 
 ### Steps
 
-1. Run heal-log with JSON:
+1. Run the query_heal_log_entries unit tests (covers serialization):
    ```bash
-   orchestrator config heal-log --json
-   ```
-
-2. Validate JSON structure:
-   ```bash
-   orchestrator config heal-log --json | jq '.[0] | keys'
+   cd core && cargo test --lib query_heal_log_entries -- --nocapture
    ```
 
 ### Expected
 
-- Output is valid JSON array
-- Each entry has keys: `version`, `original_error`, `workflow_id`, `step_id`, `rule`, `detail`, `created_at`
+- Tests pass
+- Each entry has fields: `version`, `original_error`, `workflow_id`, `step_id`, `rule`, `detail`, `created_at`
 - `rule` values are stable enum labels (e.g., `"DropRequiredCapabilityFromBuiltinStep"`, `"NormalizeStepExecutionMode"`)
 - Exit code 0
 
@@ -142,19 +125,13 @@ Verify that `check` falls back to DB-persisted heal log when no in-memory notice
 
 ### Steps
 
-1. Run the unit test:
-   ```bash
-   cd core && cargo test --lib append_persisted_heal_notice -- --nocapture
-   ```
-
-2. Run the query_latest_heal_summary tests:
+1. Run the query_latest_heal_summary tests:
    ```bash
    cd core && cargo test --lib query_latest_heal_summary -- --nocapture
    ```
 
 ### Expected
 
-- `append_persisted_heal_notice_adds_warning_check` passes: rule is `config_auto_healed_persisted`, severity is Warning, message includes version and change count
 - `query_latest_heal_summary_returns_none_when_empty` passes
 - `query_latest_heal_summary_returns_summary_for_matching_version` passes: returns summary when DB heal version matches current config version
 - `query_latest_heal_summary_returns_none_for_non_matching_version` passes: returns None when config version has advanced past the heal version
@@ -203,7 +180,7 @@ Verify that `ConfigSelfHealRule` has stable Display and Serialize representation
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
 | 1 | Heal Log Persisted During Self-Heal | ☐ | | | |
-| 2 | Config Heal-Log CLI - Table Output | ☐ | | | |
-| 3 | Config Heal-Log CLI - JSON Output | ☐ | | | |
+| 2 | Heal Log Query Backend - Table Output | ☐ | | | |
+| 3 | Heal Log Query Backend - JSON Serialization | ☐ | | | |
 | 4 | Check Command Shows Persisted Heal Warning | ☐ | | | |
 | 5 | ConfigSelfHealRule Display and Serialize Stability | ☐ | | | |

@@ -225,7 +225,7 @@ pub fn get_resource(
         }
         let parts: Vec<&str> = resource.splitn(2, '/').collect();
         let (kind, name) = (parts[0], parts[1]);
-        get_single_resource(proj_cfg, kind, name, output_format, project_id, &config.resource_store)
+        get_single_resource(proj_cfg, kind, name, output_format, project_id, &config.resource_store, config)
     } else {
         get_list_resource(
             proj_cfg,
@@ -234,6 +234,7 @@ pub fn get_resource(
             output_format,
             project_id,
             &config.resource_store,
+            config,
         )
     }
 }
@@ -245,6 +246,7 @@ fn get_single_resource(
     output_format: &str,
     project_id: &str,
     resource_store: &crate::crd::store::ResourceStore,
+    config: &crate::config::OrchestratorConfig,
 ) -> Result<String> {
     let crd_kind = match kind {
         "ws" | "workspace" => "Workspace",
@@ -252,6 +254,19 @@ fn get_single_resource(
         "agent" => "Agent",
         "trigger" | "tg" => "Trigger",
         _ => {
+            // CRD-defined custom resource fallback (non-builtin CRDs only)
+            if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(config, kind) {
+                if !crd.builtin {
+                    let storage_key = format!("{}/{}", crd.kind, name);
+                    if let Some(cr) = config.custom_resources.get(&storage_key) {
+                        return format_output(cr, output_format);
+                    }
+                    return Err(classify_resource_error(
+                        "resource.get",
+                        anyhow::anyhow!("{} not found: {}", crd.kind, name),
+                    ));
+                }
+            }
             return Err(classify_resource_error(
                 "resource.get",
                 anyhow::anyhow!("unknown resource type: {}", kind),
@@ -313,6 +328,7 @@ fn get_list_resource(
     output_format: &str,
     project_id: &str,
     resource_store: &crate::crd::store::ResourceStore,
+    config: &crate::config::OrchestratorConfig,
 ) -> Result<String> {
     let (names, crd_kind): (Vec<&String>, &str) = match resource_type {
         "ws" | "workspace" | "workspaces" => (project.workspaces.keys().collect(), "Workspace"),
@@ -320,6 +336,37 @@ fn get_list_resource(
         "wf" | "workflow" | "workflows" => (project.workflows.keys().collect(), "Workflow"),
         "trigger" | "triggers" | "tg" => (project.triggers.keys().collect(), "Trigger"),
         _ => {
+            // CRD-defined custom resource list fallback (non-builtin CRDs only)
+            if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(config, resource_type) {
+              if !crd.builtin {
+                let prefix = format!("{}/", crd.kind);
+                let cr_names: Vec<String> = config
+                    .custom_resources
+                    .keys()
+                    .filter(|key| key.starts_with(&prefix))
+                    .map(|key| key[prefix.len()..].to_string())
+                    .collect();
+
+                let filtered: Vec<&String> = if let Some(sel) = selector {
+                    let conditions = parse_label_selector(sel)?;
+                    cr_names
+                        .iter()
+                        .filter(|name| {
+                            let storage_key = format!("{}{}", prefix, name);
+                            let labels = config
+                                .custom_resources
+                                .get(&storage_key)
+                                .and_then(|cr| cr.metadata.labels.as_ref());
+                            match_labels(labels, &conditions)
+                        })
+                        .collect()
+                } else {
+                    cr_names.iter().collect()
+                };
+
+                return format_output(&filtered, output_format);
+              }
+            }
             return Err(classify_resource_error(
                 "resource.get",
                 anyhow::anyhow!("unknown list resource type: {}", resource_type),
@@ -428,6 +475,31 @@ pub fn delete_resource(
                 ));
             }
         }
+        // CRD dry-run check
+        if kind == "crd" || kind == "customresourcedefinition" {
+            if config.custom_resource_definitions.contains_key(name) {
+                return Ok(());
+            } else {
+                return Err(classify_resource_error(
+                    "resource.delete",
+                    anyhow::anyhow!("CRD '{}' not found", name),
+                ));
+            }
+        }
+        // Custom resource dry-run check (non-builtin CRDs only)
+        if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(&config, kind) {
+            if !crd.builtin {
+                let storage_key = format!("{}/{}", crd.kind, name);
+                if config.custom_resources.contains_key(&storage_key) {
+                    return Ok(());
+                } else {
+                    return Err(classify_resource_error(
+                        "resource.delete",
+                        anyhow::anyhow!("{}/{} not found", crd.kind, name),
+                    ));
+                }
+            }
+        }
         let project_id = project.unwrap_or(crate::config::DEFAULT_PROJECT_ID);
         let proj_cfg = config
             .projects
@@ -455,6 +527,36 @@ pub fn delete_resource(
     }
 
     let mut config = config;
+
+    // Handle CRD and custom resource deletion (not project-scoped)
+    if kind == "crd" || kind == "customresourcedefinition" {
+        let deleted = crd::delete_crd(&mut config, name)?;
+        if !deleted {
+            return Err(classify_resource_error(
+                "resource.delete",
+                anyhow::anyhow!("CRD '{}' not found", name),
+            ));
+        }
+        persist_config_for_delete(state, config, "daemon-delete", &[])?;
+        crate::trigger_engine::notify_trigger_reload(state);
+        return Ok(());
+    }
+
+    if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(&config, kind) {
+        if !crd.builtin {
+            let crd_kind = crd.kind.clone();
+            let deleted = crd::delete_custom_resource(&mut config, &crd_kind, name)?;
+            if !deleted {
+                return Err(classify_resource_error(
+                    "resource.delete",
+                    anyhow::anyhow!("{}/{} not found", crd_kind, name),
+                ));
+            }
+            persist_config_for_delete(state, config, "daemon-delete", &[])?;
+            crate::trigger_engine::notify_trigger_reload(state);
+            return Ok(());
+        }
+    }
 
     if kind == "project" {
         // 1. Clear task data (tasks, items, runs, events)

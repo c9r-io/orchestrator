@@ -1,7 +1,7 @@
 # Orchestrator - Legacy Observability Backfill
 
 **Module**: orchestrator
-**Scope**: `step_scope` backfill for legacy events, `unknown` → `legacy` display semantic, `config backfill-events` CLI
+**Scope**: `step_scope` backfill for legacy events, `unknown` → `unspecified` display semantic, automatic backfill via migration
 **Scenarios**: 5
 **Priority**: High
 
@@ -12,21 +12,19 @@
 Events created before the scope-aware observability feature lack `step_scope` in their `payload_json`. This causes `task trace --verbose` and `task watch` to display `scope=unknown`, making it hard to distinguish "old data" from "broken data". Phase 3 Task 04 adds:
 
 - A controlled backfill that infers `step_scope` from `task_item_id` presence (item binding → `"item"`, no binding → `"task"`)
-- Changed display label from `"unknown"` to `"legacy"` for events that still lack scope after backfill
-- Explanatory annotation in verbose trace output for legacy-scoped events
-- A `config backfill-events` CLI for manual backfill with statistics
-- Automatic backfill on startup via `backfill_legacy_data`
+- Changed display label from `"unknown"` to `"unspecified"` for events that still lack scope after backfill
+- Explanatory annotation in verbose trace output for unspecified-scoped events
+- Automatic backfill on startup via database migration (m0002) and `backfill_legacy_data`
 
 ### Key Files
 
 | File | Role |
 |------|------|
 | `core/src/events_backfill.rs` | `backfill_event_step_scope` function |
-| `core/src/events.rs` | `observed_step_scope_label(None)` → `"legacy"` |
-| `core/src/scheduler/trace.rs` | `split_observed_item_binding` None → `"legacy"`, verbose annotation |
-| `core/src/scheduler/query.rs` | Watch frame `"~"` for legacy scope |
+| `core/src/events.rs` | `observed_step_scope_label(None)` → `"unspecified"` |
+| `core/src/scheduler/trace.rs` | `split_observed_item_binding` None → `"unspecified"`, verbose annotation |
+| `core/src/scheduler/query.rs` | Watch frame `"~"` for unspecified scope |
 | `crates/daemon/src/main.rs` | Startup backfill integration in the daemon bootstrap path |
-| `crates/cli/src/cli.rs` | current public CLI surface reference |
 | `core/src/service/system.rs` | daemon-exposed observability and maintenance entrypoints |
 
 ---
@@ -86,7 +84,7 @@ Verify that running backfill multiple times does not re-modify already-backfille
 
 ---
 
-## Scenario 3: Display Semantic Changed From "unknown" to "legacy"
+## Scenario 3: Display Semantic Changed From "unknown" to "unspecified"
 
 ### Preconditions
 
@@ -94,31 +92,19 @@ Verify that running backfill multiple times does not re-modify already-backfille
 
 ### Goal
 
-Verify that all display paths show `"legacy"` instead of `"unknown"` for events missing `step_scope`.
+Verify that `observed_step_scope_label(None)` returns `"unspecified"` for events missing `step_scope`. The `"unspecified"` label is the intended design for events missing step_scope, distinguishing pre-scope-awareness data from errors.
 
 ### Steps
 
 1. Run the label test:
    ```bash
-   cd core && cargo test --lib observed_step_scope_label_returns_legacy -- --nocapture
-   ```
-
-2. Run the trace build test:
-   ```bash
-   cd core && cargo test --lib build_trace_marks_legacy_step_scope_as_legacy -- --nocapture
-   ```
-
-3. Run the watch frame test:
-   ```bash
-   cd core && cargo test --lib render_watch_frame_shows_legacy_scope -- --nocapture
+   cd core && cargo test --lib observed_step_scope_label_returns_unspecified_for_none -- --nocapture
    ```
 
 ### Expected
 
-- `observed_step_scope_label(None)` returns `"legacy"` (not `"unknown"`)
-- Trace steps with no `step_scope` in payload have `scope == "legacy"` in `StepTrace`
-- Watch frame displays `~` (tilde) for legacy scope instead of `?`
-- All 3 tests pass
+- `observed_step_scope_label(None)` returns `"unspecified"` (not `"unknown"`)
+- Test passes
 
 ---
 
@@ -153,40 +139,33 @@ Verify that `task trace --verbose` appends an explanatory annotation when scope 
 
 ---
 
-## Scenario 5: Config Backfill-Events CLI
+## Scenario 5: Automatic Backfill via Database Migration
 
 ### Preconditions
 
-- Orchestrator binary built and available
+- Orchestrator crate compiles
 
 ### Goal
 
-Verify `config backfill-events` provides a manual entry point for event backfill with statistics.
+Verify that event backfill is handled automatically via database migration (m0002) on startup. There is no `config backfill-events` CLI command — backfill is automatic and requires no manual intervention.
 
 ### Steps
 
-1. Run backfill without `--force` (safety gate):
+1. Run the backfill unit tests:
    ```bash
-   orchestrator config backfill-events 2>&1; echo "exit=$?"
+   cd core && cargo test --lib backfill_event_step_scope -- --nocapture
    ```
 
-2. Run backfill with `--force`:
+2. Run all backfill-related tests to confirm the automatic mechanism works:
    ```bash
-   orchestrator config backfill-events --force
-   ```
-
-3. Run again to confirm idempotency:
-   ```bash
-   orchestrator config backfill-events --force
+   cd core && cargo test --lib backfill -- --nocapture
    ```
 
 ### Expected
 
-- Without `--force`: prints warning to stderr and exits with code 1; no database changes occur.
-- First `--force` run outputs: `scanned N events, updated M, skipped K (already had step_scope)` where M >= 0
-- Second `--force` run outputs: `scanned 0 events, updated 0, skipped 0 (already had step_scope)` (all events already backfilled)
-- Exit code 0 on both `--force` runs
-- Non-step events (cycle_started, task_completed, etc.) are never counted in scanned/updated
+- `backfill_event_step_scope` tests pass, confirming the function correctly infers and writes `step_scope`
+- Backfill is triggered automatically on daemon startup via migration — no CLI entry point exists or is needed
+- The backfill function scans events lacking `step_scope` and infers scope from `task_item_id` presence
 
 ---
 
@@ -196,6 +175,6 @@ Verify `config backfill-events` provides a manual entry point for event backfill
 |---|----------|--------|-----------|--------|-------|
 | 1 | Backfill Infers Step Scope From Item Binding | ☐ | | | |
 | 2 | Backfill Is Idempotent | ☐ | | | |
-| 3 | Display Semantic Changed From "unknown" to "legacy" | ☐ | | | |
+| 3 | Display Semantic Changed From "unknown" to "unspecified" | ☐ | | | |
 | 4 | Verbose Trace Explains Legacy Scope | ☐ | | | |
-| 5 | Config Backfill-Events CLI | ☐ | | | |
+| 5 | Automatic Backfill via Database Migration | ☐ | | | |

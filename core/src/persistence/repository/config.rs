@@ -490,6 +490,16 @@ fn load_config_from_resources_table(
             );
         }
     }
+    // Populate custom_resources from resource_store for non-builtin CRD kinds
+    for (crd_kind, _crd) in &config.custom_resource_definitions {
+        if crate::crd::resolve::is_builtin_kind(crd_kind) {
+            continue;
+        }
+        for cr in config.resource_store.list_by_kind(crd_kind) {
+            let storage_key = format!("{}/{}", cr.kind, cr.metadata.name);
+            config.custom_resources.insert(storage_key, cr.clone());
+        }
+    }
     Ok(Some((
         crate::config_load::normalize_config(config),
         query_max_resource_version(db_path)?,

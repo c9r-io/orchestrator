@@ -63,6 +63,16 @@ pub(crate) fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorCo
         config.resource_store.put(cr);
     }
 
+    // Restore custom resource instances (non-builtin CRD kinds) from the old store
+    for (crd_kind, crd) in &config.custom_resource_definitions {
+        if crd.builtin {
+            continue;
+        }
+        for cr in old_store.list_by_kind(crd_kind) {
+            config.resource_store.put(cr.clone());
+        }
+    }
+
     crate::crd::writeback::restore_metadata_from_previous_store(&mut config, &old_store);
 
     config

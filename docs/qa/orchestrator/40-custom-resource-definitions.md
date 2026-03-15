@@ -241,8 +241,8 @@ Verify that CRD definitions and custom resource instances are included in `manif
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | CRD Registration and Custom Resource Creation | PASS | 2026-03-04 | claude | CRD created, CR created, list/get work |
+| 1 | CRD Registration and Custom Resource Creation | PASS | 2026-03-15 | claude | CRD+CR persist to DB, get/list work after daemon restart, re-apply shows unchanged |
 | 2 | Schema and CEL Validation Rejects Invalid Resources | PASS | 2026-03-04 | claude | Exit 1, "missing required field 'prompts'" |
-| 3 | Custom Resource Get, Describe, and Label Selector | PASS | 2026-03-04 | claude | JSON/YAML/describe/label selector all correct |
-| 4 | Custom Resource Delete and CRD Cascade Protection | PASS | 2026-03-04 | claude | Cascade protection, CR delete, CRD delete, error on post-delete list |
-| 5 | Manifest Export Round-Trip with CRD and CR | PASS | 2026-03-04 | claude | Export contains CRD+CR, re-apply shows unchanged |
+| 3 | Custom Resource Get, Describe, and Label Selector | PASS | 2026-03-15 | claude | JSON/YAML/describe/label selector all correct via service layer CRD fallback |
+| 4 | Custom Resource Delete and CRD Cascade Protection | PASS | 2026-03-15 | claude | Cascade protection, CR delete, CRD delete via service layer CRD routing |
+| 5 | Manifest Export Round-Trip with CRD and CR | PASS | 2026-03-15 | claude | Export contains CRD+CR, re-apply shows unchanged (CR persisted to DB) |

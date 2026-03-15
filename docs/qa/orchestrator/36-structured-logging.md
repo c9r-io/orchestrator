@@ -12,7 +12,8 @@
 This document validates the structured logging bootstrap introduced for the Rust CLI:
 
 - `tracing`-based runtime diagnostics
-- global `--log-level` and `--log-format` CLI overrides
+- Logging configured via environment variables: `ORCHESTRATOR_LOG` or `RUST_LOG` for level, `ORCHESTRATOR_LOG_FORMAT` for format
+- CLI flag `-v, --verbose` for debug-level override
 - default rolling file logs under `data/logs/system`
 - preservation of human-readable command results on stdout
 
@@ -28,7 +29,7 @@ Entry point: `orchestrator`
 
 ### Goal
 
-Ensure the latest binary is built before QA execution and exposes the new global log flags.
+Ensure the latest binary is built before QA execution and exposes the logging configuration surface. Note: `--log-level` and `--log-format` CLI flags do not exist. Logging is configured via environment variables (`ORCHESTRATOR_LOG` or `RUST_LOG` for level, `ORCHESTRATOR_LOG_FORMAT` for format) and the `-v, --verbose` CLI flag for debug-level override.
 
 ### Steps
 
@@ -36,15 +37,20 @@ Ensure the latest binary is built before QA execution and exposes the new global
    ```bash
    cargo build --release -p orchestratord -p orchestrator-cli
    ```
-2. Verify the new flags appear in help:
+2. Verify the verbose flag appears in help:
    ```bash
-   orchestrator --help | rg -- "--log-level|--log-format"
+   orchestrator --help | rg -- "-v|--verbose"
+   ```
+3. Verify env var logging works:
+   ```bash
+   ORCHESTRATOR_LOG=debug orchestrator --help > /dev/null 2>&1; echo "exit=$?"
    ```
 
 ### Expected
 
 - Release build exits with code `0`
-- Top-level help lists both `--log-level` and `--log-format`
+- Top-level help lists `-v, --verbose` flag
+- Environment variable `ORCHESTRATOR_LOG` is accepted without error
 
 ---
 
@@ -77,7 +83,7 @@ Ensure preflight command results remain on stdout even when structured logging i
 
 ---
 
-## Scenario 3: JSON Console Logging Works Via CLI Override
+## Scenario 3: JSON Console Logging Works Via Environment Variable
 
 ### Preconditions
 
@@ -85,13 +91,13 @@ Ensure preflight command results remain on stdout even when structured logging i
 
 ### Goal
 
-Ensure `--log-format json` switches console logging to JSON on stderr.
+Ensure `ORCHESTRATOR_LOG_FORMAT=json` switches console logging to JSON on stderr. Note: `--log-format` CLI flag does not exist; use the environment variable instead.
 
 ### Steps
 
-1. Run `init` with JSON console logging:
+1. Run `init` with JSON console logging via env var:
    ```bash
-   orchestrator --log-format json init > /tmp/orch-json-stdout.txt 2> /tmp/orch-json-stderr.txt
+   ORCHESTRATOR_LOG_FORMAT=json orchestrator init > /tmp/orch-json-stdout.txt 2> /tmp/orch-json-stderr.txt
    ```
 2. Inspect stderr:
    ```bash
@@ -164,8 +170,8 @@ Ensure config defaults and CLI override precedence for structured logging remain
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Release Build Includes Logging Surface | ✅ | 2026-03-02 | Codex | `cargo build --release`; help lists `--log-level` and `--log-format` |
+| 1 | Release Build Includes Logging Surface | ☐ | | | Previous result based on non-existent `--log-level`/`--log-format` flags |
 | 2 | `init` Preserves stdout Contract | ✅ | 2026-03-02 | Codex | stdout retained human-readable success line; stderr contained structured log |
-| 3 | JSON Console Logging Works Via CLI Override | ✅ | 2026-03-02 | Codex | stderr emitted JSON log with `structured logging initialized` |
-| 4 | Rolling File Logs Are Written | ✅ | 2026-03-02 | Codex | `data/logs/system/orchestrator.log.2026-03-02` contains JSON records |
+| 3 | JSON Console Logging Works Via Environment Variable | ☐ | | | Previous result based on non-existent `--log-format` flag |
+| 4 | Rolling File Logs Are Written | ☐ | | | Needs re-verification |
 | 5 | Logging Config Resolution Unit Tests Pass | ✅ | 2026-03-02 | Codex | focused `config::observability` and `observability::init` tests passed |

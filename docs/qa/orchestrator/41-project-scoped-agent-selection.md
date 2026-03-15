@@ -132,18 +132,27 @@ fails with a clear error instead of silently falling back to another project.
 
 ### Steps
 
-1. Reset and apply (project agents only have `qa` capability):
+1. Reset and apply `multi-echo.yaml` (project agents only have `qa` capability):
    ```bash
    orchestrator delete project/qa-nofallback --force
    orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-nofallback
    ```
 
-2. Confirm project agents only have `qa`:
+2. Also apply `echo-workflow.yaml` to get the `qa_fix` workflow (which requires `fix` capability).
+   Note: `multi-echo.yaml` only contains the `multi_agent_qa` workflow (type `qa`). The `qa_fix`
+   workflow is defined in `echo-workflow.yaml` and includes a step of type `fix`:
+   ```bash
+   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project qa-nofallback
+   ```
+
+3. Confirm project agents only have `qa` (the `mock_echo` agent from `echo-workflow.yaml` has
+   `fix` capability, but `mock_echo_alpha`/`mock_echo_beta` from `multi-echo.yaml` do not).
+   To isolate the test, delete the `mock_echo` agent so only `qa`-capable agents remain:
    ```bash
    orchestrator get agents --project qa-nofallback -o json
    ```
 
-3. Attempt a workflow that requires `fix` capability:
+4. Attempt the workflow that requires `fix` capability:
    ```bash
    orchestrator task create \
      --project qa-nofallback \
@@ -158,6 +167,7 @@ fails with a clear error instead of silently falling back to another project.
 - Task creation succeeds but queued execution fails with a clear error about missing `fix` capability.
 - No agents from other projects are selected — strict project isolation is enforced.
 - `task info` / `task trace` surfaces the failure after the daemon worker runs it.
+- Note: The `qa_fix` workflow (from `echo-workflow.yaml`) requires `fix` capability at its `fix` step, which `mock_echo_alpha`/`mock_echo_beta` (from `multi-echo.yaml`) do not provide.
 
 ---
 
@@ -263,6 +273,6 @@ Validate that agents from one project never leak into another project's tasks.
 |---|----------|--------|-----------|--------|-------|
 | 1 | Apply --project Routes to Project Scope | ✅ | 2026-03-09 | Claude | Agents in project scope only, not global |
 | 2 | Project-Scoped Agent Selection Isolation | ✅ | 2026-03-09 | Claude | Only project agents in command_runs |
-| 3 | Missing Capability Fails Without Fallback | ✅ | 2026-03-09 | Claude | Strict isolation, clear error, no fallback |
+| 3 | Missing Capability Fails Without Fallback | ☐ | | | Previous result used `qa_fix` workflow not present in `multi-echo.yaml`; steps updated to apply both fixtures |
 | 4 | QA Project Reset Cleans Auto-Tickets | ✅ | 2026-03-09 | Claude | auto_*.md cleaned, manual tickets preserved |
 | 5 | Cross-Project Agent Isolation | ✅ | 2026-03-09 | Claude | No agent leakage between projects |

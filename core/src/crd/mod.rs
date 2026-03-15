@@ -96,6 +96,7 @@ pub fn apply_custom_resource(
                 created_at: now.clone(),
                 updated_at: now,
             };
+            config.resource_store.put(cr.clone());
             config.custom_resources.insert(storage_key, cr);
             ApplyResult::Created
         }
@@ -115,6 +116,7 @@ pub fn apply_custom_resource(
                     created_at: existing.created_at.clone(),
                     updated_at: now,
                 };
+                config.resource_store.put(cr.clone());
                 config.custom_resources.insert(storage_key, cr);
                 ApplyResult::Configured
             }
@@ -144,6 +146,7 @@ pub fn delete_custom_resource(
     }
 
     config.custom_resources.remove(&storage_key);
+    config.resource_store.remove_first_by_kind_name(kind, name);
     Ok(true)
 }
 
