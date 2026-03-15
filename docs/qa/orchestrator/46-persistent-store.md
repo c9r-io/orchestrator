@@ -315,7 +315,7 @@ Verify that the two new builtin CRDs (WorkflowStore, StoreBackendProvider) are r
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
 | 1 | Store Put / Get / Delete via CLI | ✅ | 2026-03-07 | claude | |
-| 2 | WorkflowStore CRD with Schema Validation | ✅ | 2026-03-07 | claude | |
-| 3 | StoreBackendProvider CRD and Command Adapter | ✅ | 2026-03-07 | claude | |
+| 2 | WorkflowStore CRD with Schema Validation | PASS | 2026-03-15 | claude | Fixed: `get workflowstores` now routes through CRD fallback (was blocked by `!crd.builtin` guard) |
+| 3 | StoreBackendProvider CRD and Command Adapter | PASS | 2026-03-15 | claude | Fixed: `get storebackendproviders` now routes through CRD fallback |
 | 4 | Store List / Output Formats / Upsert / Project Isolation | ✅ | 2026-03-07 | claude | |
-| 5 | Builtin CRD Count and Describe Validation | ✅ | 2026-03-07 | claude | |
+| 5 | Builtin CRD Count and Describe Validation | PASS | 2026-03-15 | claude | 11 builtin CRDs verified; short names (wfs/sbp) fixed via CRD fallback guard |

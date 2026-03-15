@@ -254,9 +254,10 @@ fn get_single_resource(
         "agent" => "Agent",
         "trigger" | "tg" => "Trigger",
         _ => {
-            // CRD-defined custom resource fallback (non-builtin CRDs only)
+            // CRD-defined custom resource fallback (skip kinds with dedicated ProjectConfig
+            // projections — those are handled by the match arms above)
             if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(config, kind) {
-                if !crd.builtin {
+                if !crate::crd::resolve::is_builtin_kind(&crd.kind) {
                     let storage_key = format!("{}/{}", crd.kind, name);
                     if let Some(cr) = config.custom_resources.get(&storage_key) {
                         return format_output(cr, output_format);
@@ -336,9 +337,10 @@ fn get_list_resource(
         "wf" | "workflow" | "workflows" => (project.workflows.keys().collect(), "Workflow"),
         "trigger" | "triggers" | "tg" => (project.triggers.keys().collect(), "Trigger"),
         _ => {
-            // CRD-defined custom resource list fallback (non-builtin CRDs only)
+            // CRD-defined custom resource list fallback (skip kinds with dedicated ProjectConfig
+            // projections — those are handled by the match arms above)
             if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(config, resource_type) {
-              if !crd.builtin {
+              if !crate::crd::resolve::is_builtin_kind(&crd.kind) {
                 let prefix = format!("{}/", crd.kind);
                 let cr_names: Vec<String> = config
                     .custom_resources
@@ -486,9 +488,9 @@ pub fn delete_resource(
                 ));
             }
         }
-        // Custom resource dry-run check (non-builtin CRDs only)
+        // Custom resource dry-run check (skip kinds with dedicated ProjectConfig projections)
         if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(&config, kind) {
-            if !crd.builtin {
+            if !crate::crd::resolve::is_builtin_kind(&crd.kind) {
                 let storage_key = format!("{}/{}", crd.kind, name);
                 if config.custom_resources.contains_key(&storage_key) {
                     return Ok(());
@@ -543,7 +545,7 @@ pub fn delete_resource(
     }
 
     if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(&config, kind) {
-        if !crd.builtin {
+        if !crate::crd::resolve::is_builtin_kind(&crd.kind) {
             let crd_kind = crd.kind.clone();
             let deleted = crd::delete_custom_resource(&mut config, &crd_kind, name)?;
             if !deleted {
