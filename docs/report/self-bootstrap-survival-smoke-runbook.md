@@ -7,7 +7,7 @@ Entry CLI: `orchestrator`
 This runbook is a reproducible, copy-paste oriented smoke process that validates
 the orchestrator's self-bootstrap workflow **and** the 4-layer survival mechanism
 end-to-end with real execution evidence. Once verified, it supersedes
-`docs/plan/orchestrator-usage-manual-testing.md`.
+`docs/showcases/orchestrator-usage-manual-testing.md`.
 
 ---
 
@@ -657,7 +657,7 @@ fi
 ## 10. What This Runbook Supersedes
 
 When all checks pass, this runbook replaces:
-- `docs/plan/orchestrator-usage-manual-testing.md` (V1 — basic CLI and workflow smoke)
+- `docs/showcases/orchestrator-usage-manual-testing.md` (V1 — basic CLI and workflow smoke)
 - `docs/report/self-bootstrap-smoke-runbook.md` (earlier runbook — plan_output propagation focus)
 
 V1 coverage fully absorbed into §2 (prerequisites), §6 (chain execution), and §9 (cleanup).

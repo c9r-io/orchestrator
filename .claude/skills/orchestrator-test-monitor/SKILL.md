@@ -2,10 +2,10 @@
 name: orchestrator-test-monitor
 description: >
   Monitor and evaluate orchestrator test execution plans end-to-end.
-  Use when the user wants to run a test execution plan from docs/plan/,
+  Use when the user wants to run a test execution plan from docs/showcases/,
   observe the orchestrator's full-pipeline processing, and get a final assessment.
   Triggers on: "run test plan", "execute plan", "monitor orchestrator", "test the orchestrator",
-  "run execution plan", or any request to observe/evaluate orchestrator behavior on a plan.
+  "run execution plan", "run showcase", or any request to observe/evaluate orchestrator behavior on a showcase plan.
   This skill is OBSERVE-ONLY — never intervene in the orchestrator's execution.
 ---
 
@@ -17,7 +17,7 @@ Observe and evaluate the orchestrator's execution of a test plan. **You are a mo
 
 ### Phase 1: Plan Selection
 
-1. List all files under `docs/plan/` in the project working directory
+1. List all files under `docs/showcases/` in the project working directory
 2. Present each plan with a one-line summary (read the "Task Goal" or opening section)
 3. Ask the user which plan to execute
 4. Read the selected plan thoroughly — extract:

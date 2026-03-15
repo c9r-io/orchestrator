@@ -155,12 +155,12 @@ Verify that when `self_restart` fires at the end of Cycle 1's task segment, the 
 - Self-bootstrap mock bundle applied
 
 ### Goal
-Verify that the `plan` step outputs its plan to stdout only and does not create any files in the user workspace (e.g., `docs/plan/*.md`).
+Verify that the `plan` step outputs its plan to stdout only and does not create any files in the user workspace (e.g., `docs/showcases/*.md`).
 
 ### Steps
 1. Record baseline file list:
    ```bash
-   ls docs/plan/ 2>/dev/null | sort > /tmp/plan-before.txt
+   ls docs/showcases/ 2>/dev/null | sort > /tmp/plan-before.txt
    ```
 2. Reset and run a self-bootstrap task:
    ```bash
@@ -175,12 +175,12 @@ Verify that the `plan` step outputs its plan to stdout only and does not create 
    ```
 4. Check for new files:
    ```bash
-   ls docs/plan/ 2>/dev/null | sort > /tmp/plan-after.txt
+   ls docs/showcases/ 2>/dev/null | sort > /tmp/plan-after.txt
    diff /tmp/plan-before.txt /tmp/plan-after.txt
    ```
 
 ### Expected
-- No new files appear in `docs/plan/` after the plan step executes
+- No new files appear in `docs/showcases/` after the plan step executes
 - The plan output is captured in the pipeline variable `plan_output` (check via DB or trace)
 - `diff` shows no differences
 

@@ -14,8 +14,8 @@
 
 建议参考历史实例：
 
-1. [`docs/plan/self-evolution-execution.md`](/Volumes/Yotta/ai_native_sdlc/docs/plan/self-evolution-execution.md)（首次实测课题）
-2. [`docs/plan/self-bootstrap-execution-template.md`](/Volumes/Yotta/ai_native_sdlc/docs/plan/self-bootstrap-execution-template.md)（对比：线性迭代模板）
+1. [`docs/showcases/self-evolution-execution.md`](self-evolution-execution.md)（首次实测课题）
+2. [`docs/showcases/self-bootstrap-execution-template.md`](self-bootstrap-execution-template.md)（对比：线性迭代模板）
 
 ---
 

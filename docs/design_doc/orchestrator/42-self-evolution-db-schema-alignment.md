@@ -6,7 +6,7 @@ Implemented
 
 ## Context
 
-The self-evolution workflow requires three database tables to function correctly: `task_items` (for dynamic candidate items), `workflow_store_entries` (for persisting item selection results), and `events` (for monitoring lifecycle events). FR-030 was raised to audit whether the schema, runtime code, and monitoring queries from the self-evolution execution plan (`docs/plan/self-evolution-execution.md`) are properly aligned.
+The self-evolution workflow requires three database tables to function correctly: `task_items` (for dynamic candidate items), `workflow_store_entries` (for persisting item selection results), and `events` (for monitoring lifecycle events). FR-030 was raised to audit whether the schema, runtime code, and monitoring queries from the self-evolution execution plan (`docs/showcases/self-evolution-execution.md`) are properly aligned.
 
 ## Decision
 
@@ -64,7 +64,7 @@ evo_plan (post_action: generate_items)
 
 ### Monitoring Queries Validated
 
-All three queries from `docs/plan/self-evolution-execution.md` section 4.2 execute without SQL errors:
+All three queries from `docs/showcases/self-evolution-execution.md` section 4.2 execute without SQL errors:
 
 1. `SELECT payload_json FROM events WHERE task_id=? AND event_type='items_generated'`
 2. `SELECT id, label, source, status FROM task_items WHERE task_id=?`

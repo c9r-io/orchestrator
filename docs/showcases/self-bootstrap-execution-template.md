@@ -4,8 +4,8 @@
 
 建议参考历史实例：
 
-1. [`docs/plan/resource-rs-refactor-execution.md`](/Volumes/Yotta/ai_native_sdlc/docs/plan/resource-rs-refactor-execution.md)（如该文件仍保留）
-2. [`docs/plan/self-bootstrap-builtin-self-test-workaround-execution.md`](/Volumes/Yotta/ai_native_sdlc/docs/plan/self-bootstrap-builtin-self-test-workaround-execution.md)
+1. [`docs/showcases/resource-rs-refactor-execution.md`](resource-rs-refactor-execution.md)（如该文件仍保留）
+2. [`docs/showcases/self-bootstrap-builtin-self-test-workaround-execution.md`](self-bootstrap-builtin-self-test-workaround-execution.md)
 
 ---
 
