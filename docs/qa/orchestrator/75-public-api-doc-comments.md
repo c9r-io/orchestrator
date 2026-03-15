@@ -64,17 +64,6 @@ rg -n '#!\\[deny\\(missing_docs\\)\\]' core/src/lib.rs crates/cli/src/main.rs cr
 - 三个文件都能命中。
 - 说明 `core`、`orchestrator-cli`、`orchestratord` 已进入强制文档门禁。
 
-## 场景 6: 遗留豁免已清理
-
-**步骤**:
-```bash
-rg -n '#\\[allow\\(missing_docs\\)\\]' crates/cli crates/daemon core || true
-```
-
-**预期**:
-- 命令无结果。
-- 说明此前 CLI / daemon 的局部兜底已被移除。
-
 ---
 
 ## Checklist
@@ -82,3 +71,5 @@ rg -n '#\\[allow\\(missing_docs\\)\\]' crates/cli crates/daemon core || true
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
 | 1 | All scenarios verified | ☐ | |
+
+See also: `docs/qa/orchestrator/75b-public-api-doc-comments-legacy.md` for legacy exemption cleanup verification.

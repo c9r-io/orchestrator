@@ -66,27 +66,6 @@ self_referential_safe: false
 - [ ] `record_worker_restart()` 使用 `fetch_add(1, SeqCst)` 原子递增
 - [ ] `snapshot()` 方法正确读取并返回该计数器
 
-## 场景 6: 优雅关闭不受影响（代码审查）
-
-**步骤:**
-1. 检查 daemon shutdown 序列（SIGTERM/SIGINT 处理）
-
-**预期结果:**
-- [ ] `request_shutdown()` 将 lifecycle 切换为 `Draining`
-- [ ] shutdown_tx 通知所有 worker 退出循环
-- [ ] 5s grace period 等待运行中任务完成
-- [ ] supervisor 在 30s timeout 内等待所有 worker handle join
-- [ ] 正常关闭不触发 `worker_panic_recovered` 或 `daemon_crash_recovered` 事件
-
-## 场景 7: 全量单元测试通过
-
-**步骤:**
-1. 运行 `cd {source_tree} && cargo test --workspace --lib`
-
-**预期结果:**
-- [ ] 所有测试通过，无 failure
-- [ ] 无新增编译警告
-
 ---
 
 ## Checklist
@@ -94,3 +73,5 @@ self_referential_safe: false
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
 | 1 | All scenarios verified | ☐ | |
+
+See also: `docs/qa/orchestrator/91b-daemon-crash-resilience-shutdown.md` for graceful shutdown and full regression tests.

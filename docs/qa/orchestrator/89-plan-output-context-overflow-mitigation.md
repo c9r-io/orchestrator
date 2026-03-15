@@ -64,27 +64,6 @@
 - [ ] 下游 step command 中的 `{plan_output}` 包含 "truncated" 截断标记
 - [ ] `{plan_output_path}` 指向包含完整内容的 spill 文件
 
-## 场景 6: 现有 Spill 机制回归测试
-
-**步骤:**
-1. 运行 `cd {source_tree}/core && cargo test spill`
-
-**预期结果:**
-- [ ] 所有 20+ 个 spill 相关测试全部通过
-- [ ] UTF-8 多字节字符边界截断测试通过
-- [ ] spill_to_file 小值/大值分支均正确
-
-## 场景 7: extract_stream_json_result 提取逻辑测试
-
-**步骤:**
-1. 运行 `cd {source_tree}/core && cargo test extract_stream_json`
-
-**预期结果:**
-- [ ] 所有 extract_stream_json 测试通过
-- [ ] 多 result 行时取最后一条
-- [ ] 含 [REDACTED] 的行仍能提取
-- [ ] 无 result 行时返回 None
-
 ---
 
 ## Checklist
@@ -92,3 +71,5 @@
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
 | 1 | All scenarios verified | ☐ | |
+
+See also: `docs/qa/orchestrator/89b-plan-output-spill-regression.md` for spill regression and stream-JSON extraction tests.

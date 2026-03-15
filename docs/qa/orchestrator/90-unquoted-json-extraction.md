@@ -53,53 +53,6 @@
 - [ ] 测试通过
 - [ ] 数字 42、布尔 true、null 保持原始类型，不被引号包裹
 
-## 场景 6: 文件路径 Value 修复（单元测试）
-
-**步骤:**
-1. 运行 `cd {source_tree}/core && cargo test repair_unquoted_json_file_paths`
-
-**预期结果:**
-- [ ] 测试通过
-- [ ] 包含 `/` 和 `.` 的文件路径 value 被正确引号包裹
-
-## 场景 7: 端到端 Unquoted Regression Targets 提取（单元测试）
-
-**步骤:**
-1. 运行 `cd {source_tree}/core && cargo test extract_array_unquoted_regression_targets`
-
-**预期结果:**
-- [ ] 测试通过
-- [ ] 从 5 个 unquoted object 的 array 中正确提取 5 个 item
-- [ ] JSONPath `$.regression_targets` 解析成功
-
-## 场景 8: 混合文本 + Unquoted JSON 提取（单元测试）
-
-**步骤:**
-1. 运行 `cd {source_tree}/core && cargo test extract_array_mixed_text_unquoted`
-
-**预期结果:**
-- [ ] 测试通过
-- [ ] 前后包含自然语言文本的 unquoted JSON 被正确提取
-
-## 场景 9: extract_dynamic_items 全流程集成（单元测试）
-
-**步骤:**
-1. 运行 `cd {source_tree}/core && cargo test test_extract_dynamic_items_unquoted_json`
-
-**预期结果:**
-- [ ] 测试通过
-- [ ] 从 unquoted pipeline variable 中提取 2 个 dynamic item
-- [ ] item_id 和 vars 均正确映射
-
-## 场景 10: 标准 JSON 回归保护（单元测试）
-
-**步骤:**
-1. 运行 `cd {source_tree}/core && cargo test extract_array_pure_json_still_works`
-
-**预期结果:**
-- [ ] 测试通过
-- [ ] 标准 JSON 输入不经过 repair 路径，直接解析成功
-
 ---
 
 ## Checklist
@@ -107,3 +60,5 @@
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
 | 1 | All scenarios verified | ☐ | |
+
+See also: `docs/qa/orchestrator/90b-unquoted-json-extraction-advanced.md` for file path repair, e2e extraction, and regression tests.

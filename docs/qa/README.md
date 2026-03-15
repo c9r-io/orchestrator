@@ -166,9 +166,11 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/70-libc-cross-platform-compilation.md` | 5 | FR-019: libc workspace dep unification, cfg(unix) gating, SIGXCPU test guard, and 5-target cross-compile CI |
 | orchestrator | `docs/qa/orchestrator/71-automate-protoc-dependency.md` | - | FR-020: automate protoc dependency, PROTOC env var override, CI enforcement |
 | orchestrator | `docs/qa/orchestrator/72-audit-reduce-expect-calls.md` | - | FR-021: audit and reduce expect() calls, deny-level lint enforcement |
-| orchestrator | `docs/qa/orchestrator/73-integration-test-coverage.md` | - | FR-023: integration test coverage for CLI-daemon-core interaction |
+| orchestrator | `docs/qa/orchestrator/73-integration-test-coverage.md` | 5 | FR-023: integration test coverage for CLI-daemon-core interaction |
+| orchestrator | `docs/qa/orchestrator/73b-integration-test-coverage-advanced.md` | 3 | FR-023: multi-cycle loop, gRPC compat, full regression (split from doc 73) |
 | orchestrator | `docs/qa/orchestrator/74-audit-unsafe-blocks.md` | - | FR-024: audit unsafe blocks, SAFETY comment enforcement |
-| orchestrator | `docs/qa/orchestrator/75-public-api-doc-comments.md` | - | FR-022: public API doc comment governance and lint enforcement |
+| orchestrator | `docs/qa/orchestrator/75-public-api-doc-comments.md` | 5 | FR-022: public API doc comment governance and lint enforcement |
+| orchestrator | `docs/qa/orchestrator/75b-public-api-doc-comments-legacy.md` | 1 | FR-022: legacy exemption cleanup (split from doc 75) |
 | orchestrator | `docs/qa/orchestrator/76-config-load-module-split.md` | - | FR-025: config_load module split and responsibility segregation |
 | orchestrator | `docs/qa/orchestrator/77-event-table-ttl-archival.md` | - | Event table TTL and archival: event stats, cleanup, archive to JSONL |
 | orchestrator | `docs/qa/orchestrator/78-worker-notify-wakeup.md` | - | FR-027: worker notify wakeup governance, wake-file removal |
@@ -182,9 +184,12 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/86-orphaned-running-items-recovery.md` | 5 | FR-033: orphaned running items auto-recovery, startup recovery, stall detection, CLI task recover, audit events |
 | orchestrator | `docs/qa/orchestrator/87-self-referential-daemon-pid-guard.md` | 4 | FR-034: daemon PID kill guard for self-referential workspace safety |
 | orchestrator | `docs/qa/orchestrator/88-degenerate-cycle-loop-guard.md` | 5 | FR-035: rapid cycle detection (L2), degenerate loop trace anomaly, blocked item recovery, circuit breaker unit tests |
-| orchestrator | `docs/qa/orchestrator/89-plan-output-context-overflow-mitigation.md` | - | FR-036: plan output context overflow mitigation, stream-JSON result extraction |
-| orchestrator | `docs/qa/orchestrator/90-unquoted-json-extraction.md` | - | FR-031: generate_items unquoted JSON extraction, LLM non-standard output tolerance |
-| orchestrator | `docs/qa/orchestrator/91-daemon-crash-resilience.md` | - | FR-032: daemon crash resilience, worker survival, health monitoring |
+| orchestrator | `docs/qa/orchestrator/89-plan-output-context-overflow-mitigation.md` | 5 | FR-036: plan output context overflow mitigation, stream-JSON result extraction |
+| orchestrator | `docs/qa/orchestrator/89b-plan-output-spill-regression.md` | 2 | FR-036: spill regression and stream-JSON extraction (split from doc 89) |
+| orchestrator | `docs/qa/orchestrator/90-unquoted-json-extraction.md` | 5 | FR-031: generate_items unquoted JSON extraction, LLM non-standard output tolerance |
+| orchestrator | `docs/qa/orchestrator/90b-unquoted-json-extraction-advanced.md` | 5 | FR-031: file path repair, e2e extraction, regression (split from doc 90) |
+| orchestrator | `docs/qa/orchestrator/91-daemon-crash-resilience.md` | 5 | FR-032: daemon crash resilience, worker survival, health monitoring |
+| orchestrator | `docs/qa/orchestrator/91b-daemon-crash-resilience-shutdown.md` | 2 | FR-032: graceful shutdown and full regression (split from doc 91) |
 | orchestrator | `docs/qa/orchestrator/92-dynamic-items-cycle-overflow.md` | 4 | FR-037: max_cycles proactive enforcement, dynamic items cycle overflow |
 | orchestrator | `docs/qa/orchestrator/93-inflight-step-completion-race.md` | 5 | FR-038: daemon restart in-flight step completion race condition |
 | orchestrator | `docs/qa/orchestrator/94-trigger-resource-cron-event-driven.md` | 5 | FR-039: trigger resource cron & event-driven task creation |
