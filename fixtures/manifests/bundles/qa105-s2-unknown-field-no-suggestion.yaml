@@ -1,0 +1,34 @@
+# Test workflow for S2: unknown field without suggestion
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: test-s2
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa/orchestrator
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_echo
+spec:
+  capabilities:
+    - qa
+    - fix
+  command: "echo '{\"confidence\":0.93}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: test_s2_unknown_field
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+      foobar:  # Unknown field with no suggestion
+        - test
+  loop:
+    mode: once

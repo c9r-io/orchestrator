@@ -1,0 +1,40 @@
+# Test workflow for S4: prehook references undeclared capture variable
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: test-s4
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa/orchestrator
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_echo
+spec:
+  capabilities:
+    - qa
+    - fix
+  command: "echo '{\"confidence\":0.93}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: test_s4_prehook_undeclared
+spec:
+  steps:
+    - id: step_a
+      type: qa
+      enabled: true
+      # No captures defined
+    - id: step_b
+      type: fix
+      enabled: true
+      prehook:
+        engine: cel
+        when: "size(regression_target_ids) > 0"
+        # References undeclared capture variable
+  loop:
+    mode: once

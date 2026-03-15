@@ -1,0 +1,9 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: test-workspace-dryrun
+spec:
+  root_path: /tmp/test-ws-dr
+  qa_targets:
+    - docs/qa
+  ticket_dir: fixtures/ticket

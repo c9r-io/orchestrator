@@ -1,0 +1,36 @@
+# Test workflow for S1: capture at step level (wrong placement)
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: test-s1
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa/orchestrator
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_echo
+spec:
+  capabilities:
+    - qa
+    - fix
+  command: "echo '{\"confidence\":0.93}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: test_s1_capture_wrong_level
+spec:
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+      capture:  # Wrong: should be under behavior.captures
+        - var: test_var
+          source: stdout
+          json_path: "$.test"
+  loop:
+    mode: once
