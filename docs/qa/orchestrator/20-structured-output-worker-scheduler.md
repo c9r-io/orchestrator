@@ -46,14 +46,14 @@ Entry point: `orchestrator` (CLI client) or `orchestratord` (daemon)
 
 ### Preconditions
 - Runtime initialized.
-- Fixture bundle applied.
+- **Project `qa-plain` must be freshly deleted and re-applied** (step 1 below) to clear any stale daemon health state from prior runs. Skipping the delete will cause "No healthy agent found" if the agent was diseased previously.
 - A QA-capable agent/template exists that prints plain text (non-JSON) for `qa`.
 
 ### Goal
 Verify strict-mode validation fails phase output when `qa` stdout is not JSON.
 
 ### Steps
-1. Reset and apply the plain-text-agent fixture into project scope:
+1. **Reset** and apply the plain-text-agent fixture into project scope (delete is mandatory to clear stale health state):
    ```bash
    orchestrator delete project/qa-plain --force
    orchestrator apply -f fixtures/manifests/bundles/plain-text-agent.yaml --project qa-plain
@@ -81,6 +81,7 @@ Verify strict-mode validation fails phase output when `qa` stdout is not JSON.
 | Agents from another project selected instead of `plain_text_agent` | Fixture not applied with `--project`, or task created under the wrong project | Use `apply -f ... --project qa-plain` and create the task with `--project qa-plain` |
 | Task fails with "No healthy agent found" after first few items | Agent marked diseased after consecutive validation failures | Expected behavior — strict validation correctly fails non-JSON output, and health system diseases the agent after 2 consecutive errors |
 | Task immediately fails with "No healthy agent found" before any runs | Agent exists in config but was diseased from a prior run, or daemon health state is stale | Delete and re-apply the project (`orchestrator delete project/qa-plain --force` then re-apply) to clear stale health/lifecycle state. Verify with `orchestrator get agents --project qa-plain` before creating the task |
+| Suspected missing `metadata.cost` causes selection failure | Red herring — missing cost defaults to 50 internally (`cost.unwrap_or(50)`); cost only affects scoring, never filtering | No fix needed. If agent is not selected, check health state (diseased from prior run) rather than cost config |
 
 ### Expected Data State
 ```sql
