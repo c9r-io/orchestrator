@@ -40,8 +40,8 @@ If the build fails, report the error to the user and stop — do NOT proceed wit
 
 #### 2.2 Restart the daemon
 
-**IMPORTANT**: Check `.claude/CLAUDE.md` for a daemon-pid-guard section first. If the
-orchestrator daemon is managing this session (i.e., this skill was triggered BY the
+**IMPORTANT**: Check `.claude/CLAUDE.md` for a daemon-pid-guard section first. If
+`orchestratord` is managing this session (i.e., this skill was triggered BY the
 orchestrator), you MUST NOT kill the daemon. In that case, skip the restart and reuse the
 running daemon.
 
