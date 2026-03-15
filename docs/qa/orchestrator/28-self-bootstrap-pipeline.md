@@ -137,8 +137,8 @@ SELECT COUNT(*) FROM events WHERE task_id = '{task_id}'
 
 | # | Scenario | Status | Date | Tester | Notes |
 |---|----------|--------|------|--------|-------|
-| 6 | Full Simplified SDLC Pipeline | | | | |
-| 7 | QA Testing → Ticket Fix Chain | | | | |
-| 8 | Clean QA Testing → Ticket Fix Skipped | | | | |
-| 9 | Pipeline Variable Propagation | | | | |
-| 10 | Align Tests as Safety Net | | | | |
+| 6 | Full Simplified SDLC Pipeline | ☐ | | | Fixed: added self_test, self_restart steps to fixture |
+| 7 | QA Testing → Ticket Fix Chain | PASS | 2026-03-15 | | |
+| 8 | Clean QA Testing → Ticket Fix Skipped | PASS | 2026-03-15 | | |
+| 9 | Pipeline Variable Propagation | PASS | 2026-03-15 | | |
+| 10 | Align Tests as Safety Net | PASS | 2026-03-15 | | |

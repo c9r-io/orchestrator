@@ -130,7 +130,7 @@ pub(crate) fn runner_spec_to_config(spec: &RunnerSpec) -> RunnerConfig {
         shell: spec.shell.clone(),
         shell_arg: spec.shell_arg.clone(),
         policy: match spec.policy.as_str() {
-            "unsafe" => RunnerPolicy::Unsafe,
+            "unsafe" | "legacy" => RunnerPolicy::Unsafe,
             _ => RunnerPolicy::Allowlist,
         },
         executor: match spec.executor.as_str() {
@@ -332,6 +332,24 @@ mod tests {
             shell: "/bin/sh".to_string(),
             shell_arg: "-c".to_string(),
             policy: "unsafe".to_string(),
+            executor: "shell".to_string(),
+            allowed_shells: vec![],
+            allowed_shell_args: vec![],
+            env_allowlist: vec![],
+            redaction_patterns: vec![],
+        };
+        let config = runner_spec_to_config(&spec);
+        assert!(matches!(config.policy, RunnerPolicy::Unsafe));
+        let back = runner_config_to_spec(&config);
+        assert_eq!(back.policy, "unsafe");
+    }
+
+    #[test]
+    fn runner_spec_legacy_policy_normalizes_to_unsafe() {
+        let spec = RunnerSpec {
+            shell: "/bin/sh".to_string(),
+            shell_arg: "-c".to_string(),
+            policy: "legacy".to_string(),
             executor: "shell".to_string(),
             allowed_shells: vec![],
             allowed_shell_args: vec![],

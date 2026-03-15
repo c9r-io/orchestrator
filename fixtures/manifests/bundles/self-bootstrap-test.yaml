@@ -217,7 +217,7 @@ spec:
     auto_rollback: false
     checkpoint_strategy: git_tag
 ---
-# S6: Full simplified SDLC pipeline — plan→qa_doc_gen→implement→qa_testing→align_tests→doc_governance
+# S6: Full simplified SDLC pipeline — plan→qa_doc_gen→implement→self_test→self_restart→qa_testing→align_tests→doc_governance
 # No separate build/test/lint steps — covered by qa_testing (rebuilds CLI) and align_tests (test+clippy+build)
 apiVersion: orchestrator.dev/v2
 kind: Workflow
@@ -237,6 +237,16 @@ spec:
       type: implement
       enabled: true
       repeatable: true
+    - id: self_test
+      type: self_test
+      enabled: true
+      repeatable: false
+      builtin: self_test
+    - id: self_restart
+      type: self_restart
+      enabled: true
+      repeatable: false
+      builtin: self_restart
     - id: qa_testing
       type: qa_testing
       enabled: true

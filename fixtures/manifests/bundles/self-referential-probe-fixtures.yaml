@@ -32,6 +32,10 @@ spec:
       type: implement
       enabled: true
       command: "bash -lc 'for i in 1 2 3 4; do echo runtime-tick-$i; sleep 15; done'"
+    - id: self_test
+      type: self_test
+      enabled: true
+      builtin: self_test
   loop:
     mode: once
   safety:
@@ -49,6 +53,10 @@ spec:
       type: implement
       enabled: true
       command: "bash -lc 'sleep 125'"
+    - id: self_test
+      type: self_test
+      enabled: true
+      builtin: self_test
   loop:
     mode: once
   safety:
@@ -66,6 +74,10 @@ spec:
       type: implement
       enabled: true
       command: "bash -lc 'for i in 1 2 3 4; do printf \"active-output-%02d-abcdefghijklmnopqrstuvwxyz0123456789\\n\" \"$i\"; sleep 30; done'"
+    - id: self_test
+      type: self_test
+      enabled: true
+      builtin: self_test
   loop:
     mode: once
   safety:

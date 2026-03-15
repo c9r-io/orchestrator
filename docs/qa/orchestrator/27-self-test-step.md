@@ -44,17 +44,17 @@ Verify self_test step type validates correctly
 
 1. Run unit test:
    ```bash
-   cd core && cargo test --lib self_test_step_type_validates_correctly
+   cargo test -p orchestrator-config test_validate_step_type_known_ids
    ```
 
 ### Expected
 
 - Test passes
-- `validate_step_type("self_test")` returns Ok("self_test")
+- `validate_step_type("self_test")` returns Ok — self_test is included in the known valid step type list
 
 ---
 
-## Scenario 2: Self-Test YAML Parsing
+## Scenario 2: Self-Test YAML Parsing and Conversion
 
 ### Preconditions
 
@@ -62,19 +62,21 @@ Verify self_test step type validates correctly
 
 ### Goal
 
-Verify YAML with self_test step parses correctly
+Verify WorkflowSpec with self_test step converts correctly to WorkflowConfig with builtin execution
 
 ### Steps
 
 1. Run unit test:
    ```bash
-   cd core && cargo test --lib parse_workflow_yaml_with_self_test_step
+   cd core && cargo test --lib workflow_spec_to_config_self_test_sets_builtin_execution
    ```
 
 ### Expected
 
 - Test passes
-- Workflow contains self_test step with id = "self_test"
+- self_test step has `builtin = Some("self_test")`
+- self_test step has `behavior.execution = ExecutionMode::Builtin { name: "self_test" }`
+- `required_capability` is None (builtin steps don't use agent dispatch)
 
 ---
 
@@ -144,21 +146,22 @@ Validate self_test step executes and code compiles (survival smoke test)
 
 ### Steps
 
-1. Run the survival smoke test directly:
+1. Execute self_test via scheduler using a workflow with self_test step:
    ```bash
-   cd core && cargo test --lib self_test_survives_smoke_test
+   orchestrator task create --project "${QA_PROJECT}" --workflow sdlc_full_pipeline --goal "smoke chain survival test"
    ```
-
-2. Alternatively, execute self_test via scheduler (requires workflow with self_test step):
+2. Wait for task completion and query self_test events:
    ```bash
-   # Create workflow with self_test step if needed
-   orchestrator task create --project "${QA_PROJECT}" --workflow <workflow-with-self_test> --goal "test self_test"
+   TASK_ID=$(orchestrator task list --project "${QA_PROJECT}" -o json | jq -r '.[0].id')
+   orchestrator task watch "${TASK_ID}" --interval 2 --timeout 120
+   sqlite3 data/agent_orchestrator.db "SELECT event_type, json_extract(payload_json, '$.step'), json_extract(payload_json, '$.phase') FROM events WHERE task_id = '${TASK_ID}' AND json_extract(payload_json, '$.step') = 'self_test' ORDER BY created_at;"
    ```
 
 ### Expected
 
+- Task completes successfully
+- self_test step starts and finishes (step_started + step_finished events)
 - cargo check passes (exit code 0)
-- Test completes without assertion failure
 - Event "self_test_phase" emitted with phase = "cargo_check"
 
 ---

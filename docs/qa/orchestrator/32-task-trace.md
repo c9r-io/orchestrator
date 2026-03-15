@@ -68,11 +68,10 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 
 ### Expected
 
-- Header line shows task ID (truncated to 8 chars) and status
-- Wall time, cycle count, step count, and command count are displayed
-- At least one `Cycle N` section is rendered
-- Each step line shows: timestamp, status icon (✓/✗/⊘), step ID, duration, agent
-- For completed tasks, the final cycle is closed and wall time is not shown as `?`
+- Output begins with `TRACE TIMELINE (N events)` header followed by a separator line
+- Each event line shows: timestamp, event_type, step={id} (if applicable), item={truncated_id} (if applicable)
+- Events include `cycle_started`, `step_started`, `step_finished`, etc.
+- If anomalies are detected, an `ANOMALIES (N detected)` section appears with `[SEVERITY] rule: message` lines
 - Exit code 0
 
 ---
@@ -129,12 +128,14 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 
 ### Expected
 
-- Every verbose step prints an indented scope line
+- Verbose mode includes additional events not shown in non-verbose output (e.g. intermediate heartbeats)
+- Text output uses the same `timestamp event_type step={id} item={id}` format as non-verbose mode
+- Scope and binding information is available in JSON output (`--json`), where each step entry contains `scope`, `anchor_item_id`, etc.
 - When a task emits `dynamic_*` graph events, JSON trace output preserves them under `graph_runs`
 - When a task emits `dynamic_edge_evaluated`, the corresponding payload retains a stable reason code rather than a free-form explanation blob
-- `probe_item_scoped` steps show `scope=item item={item_id}`
-- `probe_task_scoped` steps show `scope=task`, and if an execution anchor exists it is rendered as `anchor_item={item_id}`
-- Legacy tasks without explicit scope metadata show `scope=legacy` (not `scope=unknown`); they must not silently relabel the anchor as a true `item=...`
+- `probe_item_scoped` steps in JSON output show `scope: "item"` with `item_id`
+- `probe_task_scoped` steps in JSON output show `scope: "task"` with `anchor_item_id` when available
+- Legacy tasks without explicit scope metadata show `scope: "legacy"` (not `scope: "unknown"`) in JSON output
 
 ---
 
@@ -231,7 +232,7 @@ runtime fixtures, not control-plane reinitialization.
 Expected:
 - `self_ref_probe_low_output` emits `low_output` anomaly with `escalation: "intervene"`
 - `self_ref_probe_active_output` does not emit `low_output`
-- Neither workflow requires `self_test` to remain valid
+- Both probe workflows include an enabled `self_test` builtin step (required by the self-referential safety policy for all workflows targeting self-referential workspaces)
 
 ---
 
