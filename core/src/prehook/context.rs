@@ -6,6 +6,42 @@ pub(super) fn build_step_prehook_cel_context(
     context: &StepPrehookContext,
 ) -> Result<CelContext<'_>> {
     let mut cel_context = CelContext::default();
+    let err_msg_prefix = format!("step '{}' prehook context build failed", context.step);
+    // Inject user-defined pipeline variables first so built-in variables take
+    // precedence when names collide (built-ins are added below and overwrite).
+    for (key, val) in &context.vars {
+        // Skip spilled / truncated values — they are too large for CEL evaluation.
+        if val.contains("[truncated") {
+            continue;
+        }
+        // Try JSON array → CEL list<string>
+        if val.starts_with('[') {
+            if let Ok(arr) = serde_json::from_str::<Vec<String>>(val) {
+                cel_context
+                    .add_variable(key.as_str(), arr)
+                    .map_err(|e| anyhow::anyhow!("{}: {}", err_msg_prefix, e))?;
+                continue;
+            }
+        }
+        // Type inference: i64 → f64 → bool → string
+        if let Ok(i) = val.parse::<i64>() {
+            cel_context
+                .add_variable(key.as_str(), i)
+                .map_err(|e| anyhow::anyhow!("{}: {}", err_msg_prefix, e))?;
+        } else if let Ok(f) = val.parse::<f64>() {
+            cel_context
+                .add_variable(key.as_str(), f)
+                .map_err(|e| anyhow::anyhow!("{}: {}", err_msg_prefix, e))?;
+        } else if let Ok(b) = val.parse::<bool>() {
+            cel_context
+                .add_variable(key.as_str(), b)
+                .map_err(|e| anyhow::anyhow!("{}: {}", err_msg_prefix, e))?;
+        } else {
+            cel_context
+                .add_variable(key.as_str(), val.clone())
+                .map_err(|e| anyhow::anyhow!("{}: {}", err_msg_prefix, e))?;
+        }
+    }
     cel_context
         .add_variable("context", context.clone())
         .map_err(|err| {

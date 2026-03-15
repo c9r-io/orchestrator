@@ -179,6 +179,16 @@ impl StepExecutionAccumulator {
                 &item.qa_file_path,
                 task_ctx.self_referential,
             ),
+            vars: {
+                let mut merged = task_ctx.pipeline_vars.vars.clone();
+                merged.extend(
+                    self.pipeline_vars
+                        .vars
+                        .iter()
+                        .map(|(k, v)| (k.clone(), v.clone())),
+                );
+                merged
+            },
         }
     }
 

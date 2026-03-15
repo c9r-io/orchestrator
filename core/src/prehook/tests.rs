@@ -146,6 +146,7 @@ fn test_evaluate_step_prehook_expression_true() {
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,
         self_referential_safe: true,
+        vars: Default::default(),
     };
     let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
     assert!(result.is_ok());
@@ -185,6 +186,7 @@ fn test_evaluate_step_prehook_expression_false() {
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,
         self_referential_safe: true,
+        vars: Default::default(),
     };
     let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
     assert!(result.is_ok());
@@ -224,6 +226,7 @@ fn test_evaluate_step_prehook_expression_invalid() {
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,
         self_referential_safe: true,
+        vars: Default::default(),
     };
     let result = evaluate_step_prehook_expression("invalid @#$ expression", &context);
     assert!(result.is_err());
@@ -262,6 +265,7 @@ fn test_evaluate_step_prehook_expression_qa_failed() {
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,
         self_referential_safe: true,
+        vars: Default::default(),
     };
     let result = evaluate_step_prehook_expression("qa_failed == true", &context);
     assert!(result.is_ok());
@@ -301,6 +305,7 @@ fn test_evaluate_step_prehook_expression_compound() {
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,
         self_referential_safe: true,
+        vars: Default::default(),
     };
     let result = evaluate_step_prehook_expression(
         "active_ticket_count > 0 && cycle >= 2 && qa_exit_code == 0",
@@ -344,6 +349,7 @@ fn test_build_errors_prehook_expression() {
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,
         self_referential_safe: true,
+        vars: Default::default(),
     };
     let result = evaluate_step_prehook_expression(
         "build_errors > 0 || test_failures > 0",
@@ -406,6 +412,7 @@ fn default_step_prehook_context() -> StepPrehookContext {
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,
         self_referential_safe: true,
+        vars: Default::default(),
     }
 }
 
@@ -497,6 +504,7 @@ fn test_max_cycles_and_is_last_cycle_cel_variables() {
         last_sandbox_denied: false,
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,
+        vars: Default::default(),
     };
     // cycle 1 of 2: not last cycle, skip qa_testing
     let result = evaluate_step_prehook_expression("is_last_cycle", &context);
@@ -1763,6 +1771,7 @@ fn make_prehook_ctx() -> StepPrehookContext {
         last_sandbox_denied: false,
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,
+        vars: Default::default(),
     }
 }
 
@@ -2289,4 +2298,90 @@ fn test_finalize_cel_context_sandbox_combined_expression() {
         None,
     );
     assert!(evaluate_finalize_rule_expression(&rule, &ctx).unwrap());
+}
+
+// ── Pipeline variable injection tests ──
+
+#[test]
+fn test_prehook_pipeline_var_string() {
+    let mut ctx = make_prehook_ctx();
+    ctx.vars
+        .insert("my_var".to_string(), "hello".to_string());
+    let result = evaluate_step_prehook_expression("my_var == 'hello'", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_pipeline_var_int() {
+    let mut ctx = make_prehook_ctx();
+    ctx.vars.insert("my_count".to_string(), "42".to_string());
+    let result = evaluate_step_prehook_expression("my_count > 10", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_pipeline_var_bool() {
+    let mut ctx = make_prehook_ctx();
+    ctx.vars
+        .insert("feature_on".to_string(), "true".to_string());
+    let result = evaluate_step_prehook_expression("feature_on", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_pipeline_var_float() {
+    let mut ctx = make_prehook_ctx();
+    ctx.vars
+        .insert("score".to_string(), "3.14".to_string());
+    let result = evaluate_step_prehook_expression("score > 3.0", &ctx);
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_pipeline_var_json_array_in_operator() {
+    let mut ctx = make_prehook_ctx();
+    ctx.vars.insert(
+        "regression_target_ids".to_string(),
+        r#"["docs/qa/test.md","docs/qa/other.md"]"#.to_string(),
+    );
+    let result = evaluate_step_prehook_expression(
+        "qa_file_path in regression_target_ids",
+        &ctx,
+    );
+    assert!(result.unwrap());
+}
+
+#[test]
+fn test_prehook_pipeline_var_json_array_not_in() {
+    let mut ctx = make_prehook_ctx();
+    ctx.vars.insert(
+        "regression_target_ids".to_string(),
+        r#"["docs/qa/other.md"]"#.to_string(),
+    );
+    let result = evaluate_step_prehook_expression(
+        "qa_file_path in regression_target_ids",
+        &ctx,
+    );
+    assert!(!result.unwrap());
+}
+
+#[test]
+fn test_prehook_pipeline_var_truncated_skipped() {
+    let mut ctx = make_prehook_ctx();
+    ctx.vars.insert(
+        "big_var".to_string(),
+        "partial...\n[truncated — full content at /tmp/spill.txt]".to_string(),
+    );
+    // big_var should not be in the CEL context — expression referencing it should fail
+    let result = evaluate_step_prehook_expression("big_var == 'anything'", &ctx);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_prehook_pipeline_var_builtin_takes_precedence() {
+    let mut ctx = make_prehook_ctx();
+    // Try to override built-in `cycle` — built-in should win (cycle == 2 from make_prehook_ctx)
+    ctx.vars.insert("cycle".to_string(), "999".to_string());
+    let result = evaluate_step_prehook_expression("cycle == 2", &ctx);
+    assert!(result.unwrap());
 }

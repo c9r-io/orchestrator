@@ -305,6 +305,10 @@ spec:
       enabled: true
       repeatable: false
       tty: false
+      capture:
+        - var: regression_target_ids
+          source: stdout
+          json_path: "$.regression_targets[*].id"
       behavior:
         post_actions:
           # Narrows the QA item set for the downstream Item segment (qa_testing).
@@ -364,8 +368,8 @@ spec:
       tty: false
       prehook:
         engine: cel
-        when: "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && self_referential_safe"
-        reason: "QA testing deferred to final cycle; restricted to QA markdown documents; skips self-referential-unsafe docs"
+        when: "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && self_referential_safe && (size(regression_target_ids) == 0 || qa_file_path in regression_target_ids)"
+        reason: "QA testing deferred to final cycle; restricted to QA markdown documents; skips self-referential-unsafe docs; filtered by regression targets when available"
 
     - id: ticket_fix
       type: ticket_fix

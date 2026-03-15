@@ -330,6 +330,10 @@ pub struct StepPrehookContext {
     /// Whether this QA doc is safe to run in a self-referential workspace
     #[serde(default = "default_true")]
     pub self_referential_safe: bool,
+    /// User-defined pipeline variables (from step captures).
+    /// Available in prehook CEL expressions with automatic type inference.
+    #[serde(default)]
+    pub vars: std::collections::HashMap<String, String>,
 }
 
 /// Context provided to convergence expression CEL evaluation.

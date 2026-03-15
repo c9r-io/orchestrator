@@ -1202,6 +1202,7 @@ fn build_dynamic_step_context(
         sandbox_denied_count: prehook_ctx.sandbox_denied_count,
         last_sandbox_denial_reason: prehook_ctx.last_sandbox_denial_reason,
         self_referential_safe: prehook_ctx.self_referential_safe,
+        vars: prehook_ctx.vars,
     }
 }
 

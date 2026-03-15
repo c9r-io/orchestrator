@@ -74,6 +74,43 @@ These variables are available inside prehook `when` expressions:
 |----------|------|-------------|
 | `self_referential_safe` | `bool` | Whether this item is safe for self-referential execution |
 
+### Pipeline Variables
+
+All pipeline variables captured by previous steps are available in prehook expressions. Variables are injected with automatic type inference:
+
+| Source Value | CEL Type | Example |
+|---|---|---|
+| `"42"` | `int` | `my_count > 10` |
+| `"3.14"` | `double` | `score >= 0.8` |
+| `"true"` / `"false"` | `bool` | `feature_enabled` |
+| `'["a","b","c"]'` | `list(string)` | `qa_file_path in regression_target_ids` |
+| anything else | `string` | `my_var == "hello"` |
+
+**Precedence**: Built-in variables (e.g. `cycle`, `step`) always take precedence over pipeline variables with the same name.
+
+**Truncated values**: Variables that were spilled to disk (exceeding the 4 KB inline limit) are automatically excluded from the CEL context.
+
+**Scope merging**: Both task-scoped and item-scoped pipeline variables are available. When names collide, item-scoped values take precedence.
+
+#### Example: Filter by Regression Targets
+
+```yaml
+# qa_doc_gen captures regression_target_ids as a JSON array
+capture:
+  - var: regression_target_ids
+    source: stdout
+    json_path: "$.regression_targets[*].id"
+
+# qa_testing filters items using the captured list
+prehook:
+  engine: cel
+  when: >-
+    is_last_cycle
+    && qa_file_path in regression_target_ids
+    && self_referential_safe
+  reason: "Filtered by regression targets from qa_doc_gen"
+```
+
 ## Common Patterns
 
 ### Defer to Last Cycle
