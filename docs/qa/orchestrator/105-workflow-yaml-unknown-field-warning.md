@@ -35,3 +35,11 @@
 - **前置**: YAML 包含未知字段，其余配置合法
 - **操作**: `orchestrator apply -f workflow.yaml; echo $?`
 - **预期**: 退出码为 0（warning 不阻止 apply）
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

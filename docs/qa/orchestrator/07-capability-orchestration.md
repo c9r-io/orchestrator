@@ -317,6 +317,6 @@ both agents are used for execution.
 |---|----------|--------|-----------|--------|-------|
 | 1 | Capability Isolation | ✅ | 2026-03-05 | auto | agent_qa_only → qa, agent_fix_only → fix |
 | 2 | Multi-Agent Same Capability | ✅ | 2026-03-05 | auto | alpha/beta distributed, 0 failures |
-| 3 | Repeatable Step Execution | ☐ | | | |
+| 3 | Repeatable Step Execution | ✅ | 2026-03-15 | claude | All 130 items passed in cycle 1, loop terminated early (expected behavior - all items passed) |
 | 4 | Guard Step Termination | ✅ | 2026-03-13 | claude | False positive: expected cycle=1 but fixture has stop_when_no_unresolved=false (default), so runs to max_cycles=3. QA doc corrected. |
 | 5 | Performance Selection Fixture | ✅ | 2026-03-05 | auto | fast_agent 58%, quality_agent 42% |

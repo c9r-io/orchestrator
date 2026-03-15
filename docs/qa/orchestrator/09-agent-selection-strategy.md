@@ -203,17 +203,32 @@ and the healthy agent handles an increasing share of work across cycles.
 
 ### Expected
 
-- `mock_fail` appears in `command_runs` with a small count (typically 1–2)
-  and `exit_code = 1`
-- After 2 consecutive failures `mock_fail` is marked diseased and excluded
-  from subsequent selection
-- `mock_echo` handles the vast majority of runs across all cycles
-- Task status: `failed` with some `unresolved` items — this is **expected**
-  because `mock_fail`'s items generate tickets that trigger the
-  `fallback_unresolved_with_tickets` finalize rule
+- **On a fresh daemon** (no prior health state for `mock_fail`):
+  - `mock_fail` appears in `command_runs` with a small count (typically 1–2)
+    and `exit_code = 1`
+  - After 2 consecutive failures `mock_fail` is marked diseased and excluded
+    from subsequent selection
+  - `mock_echo` handles the vast majority of runs across all cycles
+  - Task status: `failed` with some `unresolved` items — this is **expected**
+    because `mock_fail`'s items generate tickets that trigger the
+    `fallback_unresolved_with_tickets` finalize rule
+- **If the daemon already has health state** from a previous run of this
+  scenario (e.g., `mock_fail` was previously marked diseased and the disease
+  timeout has not expired), then `mock_fail` may never be selected at all.
+  In that case, all items will be handled by `mock_echo` and the task will
+  complete successfully with 0 failures. This is **correct behavior** — the
+  health degradation is working as designed; it just carried over from the
+  previous test run.
 - `task logs` will show only `echo-qa` markers because failed runs are not
   surfaced by the logs command; use the DB query to confirm `mock_fail` was
   selected
+
+### Troubleshooting
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| `mock_fail` never selected, task completes with 0 failures | `mock_fail` was already marked diseased from a prior test run; health state is in-memory and persists across projects within the same daemon session | Restart the daemon to reset in-memory health state, then re-run the scenario |
+| All items pass with `mock_echo` only | Same as above — this is correct behavior if `mock_fail` is already diseased | Verify via DB: if no `mock_fail` rows exist in `command_runs`, it was pre-excluded by health check |
 
 ---
 

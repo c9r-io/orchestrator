@@ -192,34 +192,78 @@ WHERE task_id = '{task_id}'
 ## Scenario 4: Scheduler Template Placeholders
 
 ### Preconditions
-- Agent template uses placeholders.
+- An agent whose `command` field contains template placeholders must be applied.
+- **Important**: The default `echo-workflow.yaml` fixture uses a hardcoded
+  `echo` command with no placeholders, so it cannot validate placeholder
+  rendering. You must also apply `fixtures/template-agent.yaml`, which
+  contains `{phase}` and `{cycle}` placeholders in its command.
 
 ### Goal
-Verify scheduler path renders supported placeholders.
+Verify scheduler path renders supported placeholders into concrete values
+before command execution.
 
 ### Steps
-1. Configure/verify template containing placeholders:
-   - `{rel_path}`
-   - `{ticket_paths}`
-   - `{phase}`
-   - `{cycle}`
-2. Run task and inspect command records:
+1. Reset and apply fixtures (base workspace + placeholder-bearing agent):
    ```bash
-   sqlite3 data/agent_orchestrator.db "SELECT command FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='{task_id}') ORDER BY started_at DESC LIMIT 5;"
+   orchestrator delete project/qa-template --force
+   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project qa-template
+   orchestrator apply -f fixtures/template-agent.yaml --project qa-template
+   ```
+2. Create and run a task that will select the template agent:
+   ```bash
+   TASK_ID=$(orchestrator task create \
+     --project qa-template \
+     --name "placeholder-render-test" \
+     --goal "Validate placeholder rendering" \
+     --workspace default \
+     --workflow qa_only \
+     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   orchestrator task start "${TASK_ID}" || true
+   ```
+3. Inspect rendered command records:
+   ```bash
+   sqlite3 data/agent_orchestrator.db \
+     "SELECT agent_id, command FROM command_runs
+      WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='${TASK_ID}')
+      ORDER BY started_at DESC LIMIT 5;"
    ```
 
+### Supported Placeholders
+
+The template engine (`core/src/qa_utils.rs`) supports these placeholders:
+
+| Placeholder | Source |
+|---|---|
+| `{rel_path}` | Workspace-relative target path |
+| `{ticket_paths}` | Space-joined ticket file paths |
+| `{phase}` | Current step phase name |
+| `{task_id}` | Task identifier |
+| `{cycle}` | Loop cycle number |
+| `{unresolved_items}` | Count of unresolved items |
+
 ### Expected
-- Stored command text includes rendered values for supported placeholders.
+- For `template-agent` rows: command text contains concrete rendered values
+  (e.g., `phase=qa` rather than literal `{phase}`).
+- For `mock_echo` rows: command is unchanged (no placeholders to render).
 - Guard command path supports `{task_id}` and `{cycle}`.
+
+### Troubleshooting
+
+| Symptom | Root Cause | Fix |
+|---|---|---|
+| All commands are identical hardcoded `echo` strings | Only `mock_echo` was selected; `template-agent` fixture not applied | Apply `fixtures/template-agent.yaml` into the project |
+| `template-agent` never selected | Agent lacks required capability for the workflow step | Verify `template-agent.yaml` lists the `qa` capability |
 
 ### Expected Data State
 ```sql
-SELECT command
+SELECT agent_id, command
 FROM command_runs
 WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
 ORDER BY started_at DESC
 LIMIT 5;
--- Expected: command contains concrete values (no unresolved supported placeholders)
+-- Expected: template-agent rows show rendered values (e.g., 'phase=qa cycle=1')
+-- Expected: mock_echo rows show the original hardcoded echo command
+-- Expected: no rows contain literal unresolved '{phase}' or '{cycle}' strings
 ```
 
 ---

@@ -30,3 +30,11 @@
 - **前置**: 未设置任何环境变量，无 socket 文件，无 home-dir 配置
 - **操作**: 执行 `orchestrator task list`
 - **预期**: CLI 报错提示 daemon 未运行，包含 `orchestratord --foreground --workers 2` 提示
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

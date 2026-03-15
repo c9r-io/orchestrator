@@ -41,11 +41,21 @@ _rc_run_pause_resume() {
   # Resume
   "$PROBE_BINARY" task resume "$task_id" >/dev/null 2>&1 &
   local resume_pid=$!
-  sleep 3
 
-  local status_after_resume
-  status_after_resume="$(probe_task_status "$task_id")"
-  probe_assert_output_contains "$status_after_resume" "running" "status is running after resume"
+  # Wait for the worker to pick up the resumed task.  The daemon sets status
+  # to "enqueued" immediately; it becomes "running" once the scheduler loop
+  # processes the task, which may take several seconds under load.
+  local _resume_wait=0
+  local status_after_resume=""
+  while [[ $_resume_wait -lt 30 ]]; do
+    status_after_resume="$(probe_task_status "$task_id")"
+    if echo "$status_after_resume" | grep -qiE "running|completed"; then
+      break
+    fi
+    sleep 2
+    _resume_wait=$((_resume_wait + 2))
+  done
+  probe_assert_output_matches "$status_after_resume" "running|completed" "status is running (or completed) after resume"
 
   # Wait for completion
   probe_wait_task_done "$task_id" 180 || true

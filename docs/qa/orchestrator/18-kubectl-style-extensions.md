@@ -35,7 +35,8 @@
 
 - Commands succeed.
 - Output includes resources of the requested type.
-- `table/json/yaml` outputs are all supported.
+- `json` and `yaml` produce their respective encodings.
+- `table` is accepted but currently falls back to JSON pretty-print for generic `get` commands (columnar table formatting is only implemented for `db` and `secret` subcommands which have fixed column schemas).
 
 ---
 

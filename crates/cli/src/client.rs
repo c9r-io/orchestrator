@@ -391,6 +391,10 @@ contexts:
         // connect() priority chain.  This is a unit-level verification of the
         // priority ordering documented in connect()'s doc comment.
         let temp = tempfile::tempdir().expect("tempdir");
+        // Clear ORCHESTRATOR_SOCKET so discover_socket_path falls through to
+        // the ORCHESTRATOR_ROOT branch (env vars are process-global and another
+        // test may have set ORCHESTRATOR_SOCKET).
+        std::env::remove_var("ORCHESTRATOR_SOCKET");
         std::env::set_var("ORCHESTRATOR_ROOT", temp.path());
 
         let socket = discover_socket_path();

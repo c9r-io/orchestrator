@@ -202,6 +202,9 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/100-agent-subprocess-daemon-pid-guard.md` | 4 | FR-046: agent subprocess daemon PID guard with CLAUDE.md + hooks injection |
 | orchestrator | `docs/qa/orchestrator/101-core-crate-split-config.md` | 8 | FR-047: core crate split phase 1 — orchestrator-config extraction |
 | orchestrator | `docs/qa/orchestrator/102-core-crate-split-scheduler.md` | 7 | FR-048: core crate split phase 2 — orchestrator-scheduler extraction |
+| orchestrator | `docs/qa/orchestrator/103-prehook-pipeline-vars.md` | 10 | FR-049: prehook CEL pipeline variables — type inference, JSON array `in`, truncation skip, builtin precedence |
+| orchestrator | `docs/qa/orchestrator/104-cli-uds-fallback-robustness.md` | 5 | FR-050: CLI UDS fallback robustness — local socket priority, env override, home-dir TCP fallback |
+| orchestrator | `docs/qa/orchestrator/105-workflow-yaml-unknown-field-warning.md` | 6 | FR-051: workflow YAML unknown field warnings and CEL prehook variable cross-check |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |
