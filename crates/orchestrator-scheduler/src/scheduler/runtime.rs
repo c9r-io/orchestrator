@@ -381,6 +381,7 @@ pub async fn load_task_runtime_context(
         spawn_depth: runtime_row.spawn_depth,
         item_step_failures: std::collections::HashMap::new(),
         item_retry_after: std::collections::HashMap::new(),
+        restart_completed_steps: std::collections::HashSet::new(),
     })
 }
 

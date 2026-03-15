@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -242,6 +242,9 @@ pub struct TaskRuntimeContext {
     pub item_step_failures: HashMap<(String, String), u32>,
     /// FR-035: Per-item retry-after timestamp for exponential backoff
     pub item_retry_after: HashMap<String, Instant>,
+    /// Steps that already completed in this cycle before a self_restart.
+    /// Populated when resuming from restart_pending to avoid re-running steps.
+    pub restart_completed_steps: HashSet<String>,
 }
 
 impl TaskRuntimeContext {

@@ -227,6 +227,86 @@ pub async fn query_recent_cycle_timestamps(
         .map_err(agent_orchestrator::async_database::flatten_err)
 }
 
+/// Detect whether this task is resuming from a self_restart.
+///
+/// Returns `true` if a `self_restart_ready` event exists that has not been
+/// acknowledged by a subsequent `restart_resumed` event.
+pub async fn detect_restart_resume(state: &InnerState, task_id: &str) -> Result<bool> {
+    let task_id = task_id.to_owned();
+    state
+        .async_database
+        .reader()
+        .call(move |conn| {
+            let has_unacked_restart: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM events
+                     WHERE task_id = ?1 AND event_type = 'self_restart_ready'
+                     AND id > COALESCE(
+                         (SELECT MAX(id) FROM events WHERE task_id = ?1 AND event_type = 'restart_resumed'),
+                         0
+                     )",
+                    rusqlite::params![task_id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+            Ok(has_unacked_restart)
+        })
+        .await
+        .map_err(agent_orchestrator::async_database::flatten_err)
+}
+
+/// Query step IDs that already finished in a given cycle for this task.
+///
+/// Used after restart to avoid re-running steps that completed before the
+/// restart was triggered.
+pub async fn query_completed_steps_in_cycle(
+    state: &InnerState,
+    task_id: &str,
+    cycle: u32,
+) -> Result<std::collections::HashSet<String>> {
+    let task_id = task_id.to_owned();
+    state
+        .async_database
+        .reader()
+        .call(move |conn| {
+            let mut stmt = conn.prepare(
+                "SELECT DISTINCT json_extract(payload_json, '$.step')
+                 FROM events
+                 WHERE task_id = ?1
+                   AND event_type = 'step_finished'
+                   AND cycle = ?2
+                   AND json_extract(payload_json, '$.step') IS NOT NULL",
+            )?;
+            let rows = stmt
+                .query_map(rusqlite::params![task_id, cycle], |row| {
+                    row.get::<_, String>(0)
+                })?
+                .filter_map(|r| r.ok())
+                .collect();
+            Ok(rows)
+        })
+        .await
+        .map_err(agent_orchestrator::async_database::flatten_err)
+}
+
+/// Mark a command run as killed by the system after inflight_wait_timeout.
+pub async fn mark_command_run_killed(state: &InnerState, run_id: &str) -> Result<()> {
+    let run_id = run_id.to_owned();
+    let now = agent_orchestrator::config_load::now_ts();
+    state
+        .async_database
+        .writer()
+        .call(move |conn| {
+            conn.execute(
+                "UPDATE command_runs SET exit_code = -9, ended_at = ?2 WHERE id = ?1 AND exit_code = -1",
+                rusqlite::params![run_id, now],
+            )?;
+            Ok(())
+        })
+        .await
+        .map_err(agent_orchestrator::async_database::flatten_err)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

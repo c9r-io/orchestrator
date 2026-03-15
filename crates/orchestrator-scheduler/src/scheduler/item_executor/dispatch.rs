@@ -167,6 +167,18 @@ pub async fn process_item_filtered(
         if !step.repeatable && task_ctx.current_cycle > 1 {
             continue;
         }
+        // Skip steps that already completed before a self_restart in this cycle.
+        if task_ctx.restart_completed_steps.contains(&step.id) {
+            insert_event(
+                state,
+                task_id,
+                Some(&item.id),
+                "step_skipped",
+                json!({"step": step.id, "reason": "already_completed_before_restart"}),
+            )
+            .await?;
+            continue;
+        }
 
         match execute_step(
             state,

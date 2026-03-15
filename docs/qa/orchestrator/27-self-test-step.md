@@ -159,10 +159,13 @@ Validate self_test step executes and code compiles (survival smoke test)
 
 ### Expected
 
-- Task completes successfully
 - self_test step starts and finishes (step_started + step_finished events)
-- cargo check passes (exit code 0)
-- Event "self_test_phase" emitted with phase = "cargo_check"
+- **Mock fixture limitation**: Mock agents do not create real git changes, so `empty_change_check` detects no diff and self_test fails early with exit_code=1. This is expected behavior (FR-044).
+- `self_test_phase` events emitted with phase = "empty_change_check" (passed = false)
+- `cargo_check` phase is **not reached** because `empty_change_check` returns early
+- The task may still complete (depending on workflow `on_failure` policy) since self_test failure is non-fatal in the pipeline
+
+> **Note**: To verify the full self_test chain (cargo_check + cargo_test_lib), use a workflow where the implement step makes real code changes and commits them. This scenario only validates the smoke chain wiring.
 
 ---
 

@@ -430,6 +430,7 @@ fn make_task_ctx(
         spawn_depth: 0,
         item_step_failures: HashMap::new(),
         item_retry_after: HashMap::new(),
+        restart_completed_steps: std::collections::HashSet::new(),
     }
 }
 

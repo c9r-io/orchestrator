@@ -25,10 +25,11 @@ use super::runtime::load_task_runtime_context;
 use super::safety::RestartRequestedError;
 use super::task_state::query_recent_cycle_timestamps;
 use super::task_state::{
-    count_stale_pending_items, count_unresolved_items, find_completed_runs_for_pending_items,
-    find_inflight_command_runs_for_task, first_task_item_id, is_task_paused_in_db,
-    list_task_items_for_cycle, record_task_execution_metric, set_task_status,
-    update_task_cycle_state,
+    count_stale_pending_items, count_unresolved_items, detect_restart_resume,
+    find_completed_runs_for_pending_items, find_inflight_command_runs_for_task,
+    first_task_item_id, is_task_paused_in_db, list_task_items_for_cycle,
+    mark_command_run_killed, query_completed_steps_in_cycle, record_task_execution_metric,
+    set_task_status, update_task_cycle_state,
 };
 use super::RunningTask;
 
@@ -85,6 +86,32 @@ async fn run_task_loop_core(
     runtime: RunningTask,
 ) -> Result<()> {
     let mut task_ctx = load_task_runtime_context(&state, task_id).await?;
+
+    // Detect resumption from self_restart: if the task was restart_pending,
+    // the cycle was already started.  Decrement current_cycle so the upcoming
+    // `+= 1` brings us back to the same cycle, and record which steps already
+    // finished so dispatch can skip them.
+    if detect_restart_resume(&state, task_id).await.unwrap_or(false) && task_ctx.current_cycle > 0
+    {
+        let resuming_cycle = task_ctx.current_cycle;
+        task_ctx.restart_completed_steps =
+            query_completed_steps_in_cycle(&state, task_id, resuming_cycle as u32)
+                .await
+                .unwrap_or_default();
+        task_ctx.current_cycle -= 1; // will be incremented back at top of cycle loop
+
+        insert_event(
+            &state,
+            task_id,
+            None,
+            "restart_resumed",
+            json!({
+                "resuming_cycle": resuming_cycle,
+                "skipping_steps": task_ctx.restart_completed_steps.iter().collect::<Vec<_>>(),
+            }),
+        )
+        .await?;
+    }
 
     run_init_once_if_needed(&state, task_id, &mut task_ctx, &runtime).await?;
 
@@ -632,6 +659,7 @@ async fn wait_for_inflight_runs(state: &Arc<InnerState>, task_id: &str) -> Resul
     let timeout = std::time::Duration::from_secs(120);
     let poll_interval = std::time::Duration::from_secs(2);
     let start = std::time::Instant::now();
+    let mut timed_out = false;
 
     loop {
         if start.elapsed() >= timeout {
@@ -643,6 +671,7 @@ async fn wait_for_inflight_runs(state: &Arc<InnerState>, task_id: &str) -> Resul
                 json!({ "elapsed_secs": start.elapsed().as_secs() }),
             )
             .await?;
+            timed_out = true;
             break;
         }
 
@@ -666,6 +695,69 @@ async fn wait_for_inflight_runs(state: &Arc<InnerState>, task_id: &str) -> Resul
             break;
         }
     }
+
+    // Reap orphaned processes after timeout to prevent zombies.
+    if timed_out {
+        reap_inflight_runs(state, task_id).await?;
+    }
+
+    Ok(())
+}
+
+/// Reap orphaned child processes after inflight_wait_timeout.
+///
+/// Sends SIGTERM to remaining in-flight PIDs, waits briefly for graceful
+/// shutdown, then sends SIGKILL to any survivors.  Updates the database to
+/// mark the runs as killed (exit_code = -9, ended_at = now).
+async fn reap_inflight_runs(state: &Arc<InnerState>, task_id: &str) -> Result<()> {
+    let remaining = find_inflight_command_runs_for_task(state, task_id).await?;
+    if remaining.is_empty() {
+        return Ok(());
+    }
+
+    let mut killed_pids = Vec::new();
+
+    // Phase 1: SIGTERM
+    for (_, _, _, pid) in &remaining {
+        if let Some(p) = pid {
+            // SAFETY: SIGTERM is a standard graceful-shutdown signal.
+            // The pid comes from our own spawned child processes.
+            unsafe {
+                libc::kill(*p as i32, libc::SIGTERM);
+            }
+            killed_pids.push(*p);
+        }
+    }
+
+    // Grace period for graceful shutdown
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+    // Phase 2: SIGKILL any survivors
+    for pid in &killed_pids {
+        let alive = unsafe { libc::kill(*pid as i32, 0) } == 0;
+        if alive {
+            unsafe {
+                libc::kill(*pid as i32, libc::SIGKILL);
+            }
+        }
+    }
+
+    // Phase 3: Update DB for all remaining runs
+    for (run_id, _, _, _) in &remaining {
+        let _ = mark_command_run_killed(state, run_id).await;
+    }
+
+    insert_event(
+        state,
+        task_id,
+        None,
+        "inflight_runs_reaped",
+        json!({
+            "run_count": remaining.len(),
+            "pids": killed_pids,
+        }),
+    )
+    .await?;
 
     Ok(())
 }

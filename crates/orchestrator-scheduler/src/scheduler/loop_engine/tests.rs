@@ -15,7 +15,7 @@ use agent_orchestrator::dynamic_orchestration::{AdaptiveFallbackMode, AdaptivePl
 use agent_orchestrator::task_ops::create_task_impl;
 use agent_orchestrator::test_utils::TestState;
 use rusqlite::params;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 fn make_loop_policy(mode: LoopMode, max_cycles: Option<u32>) -> WorkflowLoopConfig {
     WorkflowLoopConfig {
@@ -435,6 +435,7 @@ fn build_segments_groups_contiguous_scopes() {
         spawn_depth: 0,
         item_step_failures: HashMap::new(),
         item_retry_after: HashMap::new(),
+        restart_completed_steps: HashSet::new(),
     };
 
     let segments = build_scope_segments(&task_ctx);
@@ -537,6 +538,7 @@ fn build_segments_skips_guards() {
         spawn_depth: 0,
         item_step_failures: HashMap::new(),
         item_retry_after: HashMap::new(),
+        restart_completed_steps: HashSet::new(),
     };
 
     let segments = build_scope_segments(&task_ctx);
@@ -762,6 +764,7 @@ fn collect_remaining_item_step_steps_returns_only_item_steps_after_segment() {
         spawn_depth: 0,
         item_step_failures: HashMap::new(),
         item_retry_after: HashMap::new(),
+        restart_completed_steps: HashSet::new(),
     };
     let segments = build_scope_segments(&task_ctx);
 
@@ -829,6 +832,7 @@ fn collect_remaining_item_step_steps_skips_non_repeatable_steps_after_first_cycl
         spawn_depth: 0,
         item_step_failures: HashMap::new(),
         item_retry_after: HashMap::new(),
+        restart_completed_steps: HashSet::new(),
     };
     let segments = build_scope_segments(&task_ctx);
 
@@ -972,6 +976,7 @@ fn build_segments_skips_disabled_steps() {
         spawn_depth: 0,
         item_step_failures: HashMap::new(),
         item_retry_after: HashMap::new(),
+        restart_completed_steps: HashSet::new(),
     };
 
     let segments = build_scope_segments(&task_ctx);
@@ -1009,6 +1014,7 @@ fn build_segments_empty_when_no_steps() {
         spawn_depth: 0,
         item_step_failures: HashMap::new(),
         item_retry_after: HashMap::new(),
+        restart_completed_steps: HashSet::new(),
     };
 
     let segments = build_scope_segments(&task_ctx);
@@ -1233,6 +1239,7 @@ fn collect_remaining_item_step_steps_from_start_index_2() {
         spawn_depth: 0,
         item_step_failures: HashMap::new(),
         item_retry_after: HashMap::new(),
+        restart_completed_steps: HashSet::new(),
     };
     let segments = build_scope_segments(&task_ctx);
     assert_eq!(segments.len(), 3);
@@ -1374,6 +1381,7 @@ fn build_segments_item_select_is_task_scoped() {
         spawn_depth: 0,
         item_step_failures: HashMap::new(),
         item_retry_after: HashMap::new(),
+        restart_completed_steps: HashSet::new(),
     };
 
     let segments = build_scope_segments(&task_ctx);
