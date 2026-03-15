@@ -37,6 +37,7 @@
 | FR-046 | Agent 子进程 Daemon PID Guard 穿透防护 | P1 | Closed |
 | FR-047 | Core Crate 拆分 Phase 1 — orchestrator-config 提取 | P2 | Closed |
 | FR-048 | Core Crate 拆分 Phase 2 — orchestrator-scheduler 提取 | P2 | Closed |
+| FR-049 | Prehook CEL 表达式接入 Pipeline Variables | P1 | Proposed |
 
 ## 说明
 

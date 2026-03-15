@@ -279,8 +279,8 @@ SELECT
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Task Summary Timestamp Mapping Correctness | ☐ | | | |
-| 2 | Start Preparation Transaction Resets Failed-Unresolved Items | ☐ | | | |
-| 3 | Command Run Persistence Remains Complete After Refactor | ☐ | | | |
-| 4 | Task Logs Missing File Is Explicitly Observable | ☐ | | | |
-| 5 | Task Delete Cleans Persistent Task Graph | ☐ | | | |
+| 1 | Task Summary Timestamp Mapping Correctness | FAIL | 2026-03-15 | chenhan | created_at/updated_at null in CLI output |
+| 2 | Start Preparation Transaction Resets Failed-Unresolved Items | PASS | 2026-03-15 | chenhan | Task started; intermediate reset verified by design |
+| 3 | Command Run Persistence Remains Complete After Refactor | PASS | 2026-03-15 | chenhan | 228 runs with all fields populated |
+| 4 | Task Logs Missing File Is Explicitly Observable | FAIL | 2026-03-15 | chenhan | Error lacks path context; exit code 0 |
+| 5 | Task Delete Cleans Persistent Task Graph | PASS | 2026-03-15 | chenhan | All dependent records cleaned up |
