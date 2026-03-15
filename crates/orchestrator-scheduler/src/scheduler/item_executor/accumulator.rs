@@ -1,7 +1,7 @@
 use agent_orchestrator::config::{
     CaptureSource, ItemFinalizeContext, PipelineVariables, StepPrehookContext, TaskRuntimeContext,
 };
-use agent_orchestrator::json_extract::{extract_field, extract_stream_json_result};
+use agent_orchestrator::json_extract::{extract_field, extract_stream_json_result, repair_unquoted_json};
 use std::collections::HashMap;
 use std::path::Path;
 use tracing::warn;
@@ -407,7 +407,11 @@ fn capture_text_field(raw: &str, var_name: &str, json_path: Option<&str>) -> Opt
     };
 
     let effective = extract_stream_json_result(raw).unwrap_or_else(|| raw.to_string());
-    match serde_json::from_str::<serde_json::Value>(&effective) {
+    let parsed = serde_json::from_str::<serde_json::Value>(&effective).or_else(|_| {
+        let repaired = repair_unquoted_json(&effective);
+        serde_json::from_str::<serde_json::Value>(&repaired)
+    });
+    match parsed {
         Ok(value) => match extract_field(&value, json_path) {
             Some(extracted) => Some(extracted),
             None => {

@@ -7,7 +7,7 @@ use serde_json::Value;
 /// Handles LLM output like `{id: docs/qa/foo.md, count: 42, ok: true}` and
 /// converts it to valid JSON. Idempotent on already-valid JSON since all
 /// keys/strings are already quoted.
-pub(crate) fn repair_unquoted_json(input: &str) -> String {
+pub fn repair_unquoted_json(input: &str) -> String {
     #[derive(Clone, Copy, PartialEq)]
     enum Context {
         Object,
