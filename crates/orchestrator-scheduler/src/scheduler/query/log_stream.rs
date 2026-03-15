@@ -66,7 +66,7 @@ pub async fn stream_task_logs_impl(
         };
 
         let log_body = if stdout_tail.is_empty() && stderr_tail.is_empty() {
-            LOG_UNAVAILABLE_MARKER.to_string()
+            format!("{} (stdout={}, stderr={})", LOG_UNAVAILABLE_MARKER, stdout_path, stderr_path)
         } else {
             redact_text(&stdout_tail, &redaction_patterns)
         };
@@ -698,6 +698,10 @@ mod tests {
             .expect("stream task logs");
         assert_eq!(chunks.len(), 1);
         assert!(chunks[0].content.contains(LOG_UNAVAILABLE_MARKER));
+        assert!(
+            chunks[0].content.contains("/nonexistent/stdout.log"),
+            "should include stdout path in unavailable marker"
+        );
     }
 
     #[tokio::test]

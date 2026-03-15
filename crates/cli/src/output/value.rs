@@ -37,6 +37,8 @@ pub(super) fn task_summary_value(task: &TaskSummary) -> Value {
         "parent_task_id": task.parent_task_id,
         "spawn_reason": task.spawn_reason,
         "spawn_depth": task.spawn_depth,
+        "created_at": task.created_at,
+        "updated_at": task.updated_at,
     })
 }
 

@@ -304,4 +304,4 @@ Ensure `qa doctor` exposes new metrics fields in JSON and table outputs.
 | 2 | Runtime Policy Blocks Disallowed Shell | ✅ | 2026-03-02 | cursor | `runner.shell '/bin/sh' is not in runner.allowed_shells`; task transitions to `failed` |
 | 3 | Structured Output and Log Redaction | ✅ | 2026-03-02 | cursor | `policy: unsafe` + redaction: logs/output_json contain `[REDACTED]`, secret token absent |
 | 4 | task_execution_metrics Persistence | ✅ | 2026-03-02 | cursor | row persisted with terminal status and command_runs count |
-| 5 | QA Doctor Exposes Observability Metrics | ✅ | 2026-03-02 | cursor | json contains total/last_24h/completion_rate fields |
+| 5 | QA Doctor Exposes Observability Metrics | SKIP | 2026-03-15 | chenhan | `orchestrator qa doctor` command not yet implemented; scenario blocked until CLI subcommand is added |

@@ -80,6 +80,7 @@ Verify strict-mode validation fails phase output when `qa` stdout is not JSON.
 |---------|-----------|-----|
 | Agents from another project selected instead of `plain_text_agent` | Fixture not applied with `--project`, or task created under the wrong project | Use `apply -f ... --project qa-plain` and create the task with `--project qa-plain` |
 | Task fails with "No healthy agent found" after first few items | Agent marked diseased after consecutive validation failures | Expected behavior — strict validation correctly fails non-JSON output, and health system diseases the agent after 2 consecutive errors |
+| Task immediately fails with "No healthy agent found" before any runs | Agent exists in config but was diseased from a prior run, or daemon health state is stale | Delete and re-apply the project (`orchestrator delete project/qa-plain --force` then re-apply) to clear stale health/lifecycle state. Verify with `orchestrator get agents --project qa-plain` before creating the task |
 
 ### Expected Data State
 ```sql

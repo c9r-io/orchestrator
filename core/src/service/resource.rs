@@ -225,7 +225,7 @@ pub fn get_resource(
         }
         let parts: Vec<&str> = resource.splitn(2, '/').collect();
         let (kind, name) = (parts[0], parts[1]);
-        get_single_resource(proj_cfg, kind, name, output_format)
+        get_single_resource(proj_cfg, kind, name, output_format, project_id, &config.resource_store)
     } else {
         get_list_resource(
             proj_cfg,
@@ -243,7 +243,28 @@ fn get_single_resource(
     kind: &str,
     name: &str,
     output_format: &str,
+    project_id: &str,
+    resource_store: &crate::crd::store::ResourceStore,
 ) -> Result<String> {
+    let crd_kind = match kind {
+        "ws" | "workspace" => "Workspace",
+        "wf" | "workflow" => "Workflow",
+        "agent" => "Agent",
+        "trigger" | "tg" => "Trigger",
+        _ => {
+            return Err(classify_resource_error(
+                "resource.get",
+                anyhow::anyhow!("unknown resource type: {}", kind),
+            ))
+        }
+    };
+
+    // Try to serve from the resource_store first (includes metadata with labels).
+    if let Some(cr) = resource_store.get_namespaced(crd_kind, project_id, name) {
+        return format_output(&cr, output_format);
+    }
+
+    // Fallback: serve from the in-memory config (without labels/annotations).
     match kind {
         "ws" | "workspace" => {
             let ws = project.workspaces.get(name).ok_or_else(|| {
@@ -281,10 +302,7 @@ fn get_single_resource(
             })?;
             format_output(trigger, output_format)
         }
-        _ => Err(classify_resource_error(
-            "resource.get",
-            anyhow::anyhow!("unknown resource type: {}", kind),
-        )),
+        _ => unreachable!(),
     }
 }
 

@@ -7,13 +7,13 @@ use super::{
     WorkspaceResource, API_VERSION,
 };
 
-fn project_metadata(project_id: &str, name: &str) -> crate::cli_types::ResourceMetadata {
-    crate::cli_types::ResourceMetadata {
-        name: name.to_owned(),
-        project: Some(project_id.to_owned()),
-        labels: None,
-        annotations: None,
-    }
+fn project_metadata(
+    config: &OrchestratorConfig,
+    kind: &str,
+    project_id: &str,
+    name: &str,
+) -> crate::cli_types::ResourceMetadata {
+    super::helpers::metadata_from_store(config, kind, name, Some(project_id))
 }
 
 /// Exports all builtin resources from config as typed manifest resources.
@@ -33,7 +33,7 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
     for (project_id, project) in &config.projects {
         for (name, workspace) in &project.workspaces {
             resources.push(RegisteredResource::Workspace(WorkspaceResource {
-                metadata: project_metadata(project_id, name),
+                metadata: project_metadata(config, "Workspace", project_id, name),
                 spec: crate::cli_types::WorkspaceSpec {
                     root_path: workspace.root_path.clone(),
                     qa_targets: workspace.qa_targets.clone(),
@@ -44,19 +44,19 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
         }
         for (name, agent) in &project.agents {
             resources.push(RegisteredResource::Agent(Box::new(AgentResource {
-                metadata: project_metadata(project_id, name),
+                metadata: project_metadata(config, "Agent", project_id, name),
                 spec: super::agent::agent_config_to_spec(agent),
             })));
         }
         for (name, workflow) in &project.workflows {
             resources.push(RegisteredResource::Workflow(WorkflowResource {
-                metadata: project_metadata(project_id, name),
+                metadata: project_metadata(config, "Workflow", project_id, name),
                 spec: super::workflow::workflow_config_to_spec(workflow),
             }));
         }
         for (name, template) in &project.step_templates {
             resources.push(RegisteredResource::StepTemplate(StepTemplateResource {
-                metadata: project_metadata(project_id, name),
+                metadata: project_metadata(config, "StepTemplate", project_id, name),
                 spec: crate::cli_types::StepTemplateSpec {
                     prompt: template.prompt.clone(),
                     description: template.description.clone(),
@@ -66,7 +66,7 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
         for (name, profile) in &project.execution_profiles {
             resources.push(RegisteredResource::ExecutionProfile(
                 ExecutionProfileResource {
-                    metadata: project_metadata(project_id, name),
+                    metadata: project_metadata(config, "ExecutionProfile", project_id, name),
                     spec: crate::resource::execution_profile::execution_profile_config_to_spec(
                         profile,
                     ),
@@ -74,7 +74,8 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
             ));
         }
         for (name, store) in &project.env_stores {
-            let metadata = project_metadata(project_id, name);
+            let store_kind = if store.sensitive { "SecretStore" } else { "EnvStore" };
+            let metadata = project_metadata(config, store_kind, project_id, name);
             let spec = crate::cli_types::EnvStoreSpec {
                 data: store.data.clone(),
             };
