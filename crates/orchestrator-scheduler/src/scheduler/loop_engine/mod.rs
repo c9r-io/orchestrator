@@ -28,7 +28,8 @@ use super::task_state::{
     count_stale_pending_items, count_unresolved_items, detect_restart_resume,
     find_completed_runs_for_pending_items, find_inflight_command_runs_for_task,
     first_task_item_id, is_task_paused_in_db, list_task_items_for_cycle,
-    mark_command_run_killed, query_completed_steps_in_cycle, record_task_execution_metric,
+    count_recent_heartbeats_for_items, mark_command_run_killed,
+    query_completed_steps_in_cycle, record_task_execution_metric,
     set_task_status, update_task_cycle_state,
 };
 use super::RunningTask;
@@ -303,8 +304,8 @@ async fn run_task_loop_core(
         // rollback at before_complete is treated as warn-only
     }
 
-    // FR-038: Wait for in-flight command runs before deciding task fate.
-    wait_for_inflight_runs(&state, task_id).await?;
+    // FR-038/FR-052: Wait for in-flight command runs before deciding task fate.
+    wait_for_inflight_runs(&state, task_id, &task_ctx.safety).await?;
 
     // FR-038: Compensate pending items whose runs completed during recovery.
     let compensated = compensate_pending_items(&state, task_id, &task_ctx).await?;
@@ -629,12 +630,22 @@ pub(crate) fn proactive_max_cycles(policy: &agent_orchestrator::config::Workflow
     }
 }
 
-/// FR-038: Wait for in-flight command runs to finish before deciding task fate.
+/// FR-038/FR-052: Wait for in-flight command runs to finish before deciding task fate.
 ///
-/// Polls for up to 120 seconds (2-second intervals) checking whether any
-/// command runs for this task still have `exit_code = -1` (active). If all
-/// runs complete or their PIDs are dead, returns immediately.
-async fn wait_for_inflight_runs(state: &Arc<InnerState>, task_id: &str) -> Result<()> {
+/// Polls at 2-second intervals checking whether any command runs for this task
+/// still have `exit_code = -1` (active). If all runs complete or their PIDs are
+/// dead, returns immediately.
+///
+/// FR-052 enhancements:
+/// - Timeout is configurable via `safety.inflight_wait_timeout_secs` (default 300s).
+/// - Heartbeat-aware: if any in-flight run has a recent heartbeat within
+///   `safety.inflight_heartbeat_grace_secs`, the timeout timer resets.
+/// - Enhanced diagnostic event on timeout.
+async fn wait_for_inflight_runs(
+    state: &Arc<InnerState>,
+    task_id: &str,
+    safety: &agent_orchestrator::config::SafetyConfig,
+) -> Result<()> {
     let inflight = find_inflight_command_runs_for_task(state, task_id).await?;
     if inflight.is_empty() {
         return Ok(());
@@ -656,19 +667,37 @@ async fn wait_for_inflight_runs(state: &Arc<InnerState>, task_id: &str) -> Resul
         json!({ "count": inflight.len(), "pids": pids }),
     );
 
-    let timeout = std::time::Duration::from_secs(120);
+    let timeout = std::time::Duration::from_secs(safety.inflight_wait_timeout_secs);
+    let grace = std::time::Duration::from_secs(safety.inflight_heartbeat_grace_secs);
     let poll_interval = std::time::Duration::from_secs(2);
     let start = std::time::Instant::now();
+    let mut last_activity = std::time::Instant::now();
     let mut timed_out = false;
 
     loop {
-        if start.elapsed() >= timeout {
+        if last_activity.elapsed() >= timeout {
+            // FR-052/R4: Enhanced timeout diagnostic event.
+            let remaining = find_inflight_command_runs_for_task(state, task_id).await?;
+            let remaining_item_ids: Vec<&str> = remaining
+                .iter()
+                .map(|(_, item_id, _, _)| item_id.as_str())
+                .collect();
+            let remaining_pids: Vec<i64> =
+                remaining.iter().filter_map(|(_, _, _, pid)| *pid).collect();
             insert_event(
                 state,
                 task_id,
                 None,
                 "inflight_wait_timeout",
-                json!({ "elapsed_secs": start.elapsed().as_secs() }),
+                json!({
+                    "elapsed_secs": start.elapsed().as_secs(),
+                    "since_last_activity_secs": last_activity.elapsed().as_secs(),
+                    "remaining_runs": remaining.len(),
+                    "remaining_items": remaining_item_ids,
+                    "pids": remaining_pids,
+                    "timeout_secs": safety.inflight_wait_timeout_secs,
+                    "grace_secs": safety.inflight_heartbeat_grace_secs,
+                }),
             )
             .await?;
             timed_out = true;
@@ -680,6 +709,20 @@ async fn wait_for_inflight_runs(state: &Arc<InnerState>, task_id: &str) -> Resul
         let remaining = find_inflight_command_runs_for_task(state, task_id).await?;
         if remaining.is_empty() {
             break;
+        }
+
+        // FR-052/R1: Check heartbeat activity — reset timeout if any run is active.
+        let item_ids: Vec<String> = remaining
+            .iter()
+            .map(|(_, item_id, _, _)| item_id.clone())
+            .collect();
+        let cutoff = (chrono::Utc::now()
+            - chrono::Duration::seconds(grace.as_secs() as i64))
+            .to_rfc3339();
+        let hb_count =
+            count_recent_heartbeats_for_items(state, task_id, &item_ids, &cutoff).await?;
+        if hb_count > 0 {
+            last_activity = std::time::Instant::now();
         }
 
         // Check if all known PIDs are dead

@@ -238,6 +238,39 @@ pub fn find_completed_runs_for_pending_items(
     Ok(rows)
 }
 
+/// FR-052: Counts recent heartbeat events for the given item IDs since a cutoff timestamp.
+pub fn count_recent_heartbeats_for_items(
+    conn: &Connection,
+    task_id: &str,
+    item_ids: &[String],
+    cutoff_ts: &str,
+) -> Result<i64> {
+    if item_ids.is_empty() {
+        return Ok(0);
+    }
+    // Build dynamic IN clause — rusqlite doesn't support array binding.
+    let placeholders: Vec<String> = (0..item_ids.len())
+        .map(|i| format!("?{}", i + 3))
+        .collect();
+    let sql = format!(
+        "SELECT COUNT(*) FROM events
+         WHERE task_id = ?1 AND event_type = 'step_heartbeat'
+           AND task_item_id IN ({})
+           AND created_at >= ?2",
+        placeholders.join(", ")
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+    param_values.push(Box::new(task_id.to_owned()));
+    param_values.push(Box::new(cutoff_ts.to_owned()));
+    for id in item_ids {
+        param_values.push(Box::new(id.clone()));
+    }
+    let refs: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|b| b.as_ref()).collect();
+    let count: i64 = stmt.query_row(refs.as_slice(), |row| row.get(0))?;
+    Ok(count)
+}
+
 pub fn update_task_item_tickets(
     conn: &Connection,
     task_item_id: &str,

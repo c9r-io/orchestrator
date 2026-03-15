@@ -97,6 +97,13 @@ pub trait TaskRepository {
     ) -> Result<Vec<super::write_ops::CompletedRunRecord>>;
     /// Counts stale pending items (FR-038).
     fn count_stale_pending_items(&self, task_id: &str) -> Result<i64>;
+    /// Counts recent heartbeat events for specified item IDs since cutoff (FR-052).
+    fn count_recent_heartbeats_for_items(
+        &self,
+        task_id: &str,
+        item_ids: &[String],
+        cutoff_ts: &str,
+    ) -> Result<i64>;
     /// Persists the serialized pipeline-variable map for a task.
     fn update_task_pipeline_vars(&self, task_id: &str, pipeline_vars_json: &str) -> Result<()>;
     /// Persists the active ticket lists and preview content for a task item.

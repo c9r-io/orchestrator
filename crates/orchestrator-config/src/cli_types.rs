@@ -692,6 +692,12 @@ pub struct SafetySpec {
     /// FR-035: Minimum cycle interval in seconds; rapid cycles below this trigger pause
     #[serde(default = "default_min_cycle_interval_secs")]
     pub min_cycle_interval_secs: u64,
+    /// FR-052: Maximum seconds to wait for in-flight runs when no heartbeat activity
+    #[serde(default = "default_inflight_wait_timeout_secs")]
+    pub inflight_wait_timeout_secs: u64,
+    /// FR-052: Heartbeat must be within this many seconds to be considered active
+    #[serde(default = "default_inflight_heartbeat_grace_secs")]
+    pub inflight_heartbeat_grace_secs: u64,
 }
 
 fn default_max_consecutive_failures() -> u32 {
@@ -700,6 +706,14 @@ fn default_max_consecutive_failures() -> u32 {
 
 fn default_max_item_step_failures() -> u32 {
     3
+}
+
+fn default_inflight_wait_timeout_secs() -> u64 {
+    300
+}
+
+fn default_inflight_heartbeat_grace_secs() -> u64 {
+    60
 }
 
 fn default_min_cycle_interval_secs() -> u64 {

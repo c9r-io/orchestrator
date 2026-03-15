@@ -2,7 +2,7 @@
 
 **关联 FR**: FR-052
 **前置**: FR-038 (Design Doc 50)
-**状态**: Proposed
+**状态**: Implemented
 **日期**: 2026-03-15
 
 ---

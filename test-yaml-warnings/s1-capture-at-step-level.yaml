@@ -1,0 +1,31 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: test-workspace
+spec:
+  root_path: "."
+  ticket_dir: "fixtures/ticket"
+  qa_targets:
+    - docs/qa/orchestrator
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: test_agent
+spec:
+  capabilities:
+    - qa
+  command: "echo test"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: test_unknown_field
+spec:
+  steps:
+    - id: step_a
+      type: qa
+      enabled: true
+      capture:
+        - var: test_var
+          source: output

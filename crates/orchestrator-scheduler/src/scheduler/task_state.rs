@@ -289,6 +289,19 @@ pub async fn query_completed_steps_in_cycle(
         .map_err(agent_orchestrator::async_database::flatten_err)
 }
 
+/// FR-052: Counts recent heartbeat events for specified item IDs since cutoff.
+pub async fn count_recent_heartbeats_for_items(
+    state: &InnerState,
+    task_id: &str,
+    item_ids: &[String],
+    cutoff_ts: &str,
+) -> Result<i64> {
+    state
+        .task_repo
+        .count_recent_heartbeats_for_items(task_id, item_ids, cutoff_ts)
+        .await
+}
+
 /// Mark a command run as killed by the system after inflight_wait_timeout.
 pub async fn mark_command_run_killed(state: &InnerState, run_id: &str) -> Result<()> {
     let run_id = run_id.to_owned();

@@ -110,6 +110,8 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
             spawn_cooldown_seconds: spec.safety.spawn_cooldown_seconds,
             max_item_step_failures: spec.safety.max_item_step_failures,
             min_cycle_interval_secs: spec.safety.min_cycle_interval_secs,
+            inflight_wait_timeout_secs: spec.safety.inflight_wait_timeout_secs,
+            inflight_heartbeat_grace_secs: spec.safety.inflight_heartbeat_grace_secs,
         },
         max_parallel: spec.max_parallel,
         item_isolation: spec.item_isolation.clone(),
@@ -326,6 +328,8 @@ pub(super) fn safety_config_to_spec(config: &SafetyConfig) -> SafetySpec {
         spawn_cooldown_seconds: config.spawn_cooldown_seconds,
         max_item_step_failures: config.max_item_step_failures,
         min_cycle_interval_secs: config.min_cycle_interval_secs,
+        inflight_wait_timeout_secs: config.inflight_wait_timeout_secs,
+        inflight_heartbeat_grace_secs: config.inflight_heartbeat_grace_secs,
     }
 }
 

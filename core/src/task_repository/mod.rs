@@ -246,6 +246,16 @@ impl TaskRepository for SqliteTaskRepository {
         queries::count_stale_pending_items(&conn, task_id)
     }
 
+    fn count_recent_heartbeats_for_items(
+        &self,
+        task_id: &str,
+        item_ids: &[String],
+        cutoff_ts: &str,
+    ) -> Result<i64> {
+        let conn = self.connection()?;
+        write_ops::count_recent_heartbeats_for_items(&conn, task_id, item_ids, cutoff_ts)
+    }
+
     fn update_task_pipeline_vars(&self, task_id: &str, pipeline_vars_json: &str) -> Result<()> {
         let conn = self.connection()?;
         write_ops::update_task_pipeline_vars(&conn, task_id, pipeline_vars_json)
@@ -716,6 +726,26 @@ impl AsyncSqliteTaskRepository {
             .reader()
             .call(move |conn| {
                 queries::count_stale_pending_items(conn, &task_id)
+                    .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
+    /// FR-052: Counts recent heartbeat events for specified item IDs since cutoff.
+    pub async fn count_recent_heartbeats_for_items(
+        &self,
+        task_id: &str,
+        item_ids: &[String],
+        cutoff_ts: &str,
+    ) -> Result<i64> {
+        let task_id = task_id.to_owned();
+        let item_ids = item_ids.to_vec();
+        let cutoff_ts = cutoff_ts.to_owned();
+        self.async_db
+            .reader()
+            .call(move |conn| {
+                write_ops::count_recent_heartbeats_for_items(conn, &task_id, &item_ids, &cutoff_ts)
                     .map_err(|err| tokio_rusqlite::Error::Other(err.into()))
             })
             .await

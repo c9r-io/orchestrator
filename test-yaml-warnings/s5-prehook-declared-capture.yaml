@@ -1,0 +1,37 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: test-workspace
+spec:
+  root_path: "."
+  ticket_dir: "fixtures/ticket"
+  qa_targets:
+    - docs/qa/orchestrator
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: test_agent
+spec:
+  capabilities:
+    - qa
+  command: "echo test"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: test_prehook_declared
+spec:
+  steps:
+    - id: step_a
+      type: qa
+      enabled: true
+      behavior:
+        captures:
+          - var: regression_target_ids
+            source: stdout
+    - id: step_b
+      type: qa
+      enabled: true
+      prehook:
+        when: len(steps.step_a.regression_target_ids) > 0

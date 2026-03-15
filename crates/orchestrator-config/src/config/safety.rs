@@ -45,6 +45,12 @@ pub struct SafetyConfig {
     /// FR-035: Minimum cycle interval in seconds; rapid cycles below this trigger pause
     #[serde(default = "default_min_cycle_interval_secs")]
     pub min_cycle_interval_secs: u64,
+    /// FR-052: Maximum seconds to wait for in-flight runs when no heartbeat activity
+    #[serde(default = "default_inflight_wait_timeout_secs")]
+    pub inflight_wait_timeout_secs: u64,
+    /// FR-052: Heartbeat must be within this many seconds to be considered active
+    #[serde(default = "default_inflight_heartbeat_grace_secs")]
+    pub inflight_heartbeat_grace_secs: u64,
 }
 
 fn default_max_consecutive_failures() -> u32 {
@@ -56,6 +62,14 @@ fn default_max_item_step_failures() -> u32 {
 }
 
 fn default_min_cycle_interval_secs() -> u64 {
+    60
+}
+
+fn default_inflight_wait_timeout_secs() -> u64 {
+    300
+}
+
+fn default_inflight_heartbeat_grace_secs() -> u64 {
     60
 }
 
@@ -74,6 +88,8 @@ impl Default for SafetyConfig {
             spawn_cooldown_seconds: None,
             max_item_step_failures: 3,
             min_cycle_interval_secs: 60,
+            inflight_wait_timeout_secs: 300,
+            inflight_heartbeat_grace_secs: 60,
         }
     }
 }
@@ -159,6 +175,8 @@ mod tests {
         assert!(!cfg.binary_snapshot);
         assert_eq!(cfg.max_item_step_failures, 3);
         assert_eq!(cfg.min_cycle_interval_secs, 60);
+        assert_eq!(cfg.inflight_wait_timeout_secs, 300);
+        assert_eq!(cfg.inflight_heartbeat_grace_secs, 60);
     }
 
     #[test]
@@ -194,6 +212,32 @@ mod tests {
         assert_eq!(cfg.profile, WorkflowSafetyProfile::Standard);
         assert_eq!(cfg.max_item_step_failures, 3);
         assert_eq!(cfg.min_cycle_interval_secs, 60);
+        assert_eq!(cfg.inflight_wait_timeout_secs, 300);
+        assert_eq!(cfg.inflight_heartbeat_grace_secs, 60);
+    }
+
+    #[test]
+    fn test_fr052_fields_serde_round_trip() {
+        let cfg = SafetyConfig {
+            inflight_wait_timeout_secs: 600,
+            inflight_heartbeat_grace_secs: 120,
+            ..SafetyConfig::default()
+        };
+        let json = serde_json::to_string(&cfg).expect("serialize FR-052 safety config");
+        let cfg2: SafetyConfig =
+            serde_json::from_str(&json).expect("deserialize FR-052 safety config");
+        assert_eq!(cfg2.inflight_wait_timeout_secs, 600);
+        assert_eq!(cfg2.inflight_heartbeat_grace_secs, 120);
+    }
+
+    #[test]
+    fn test_fr052_fields_explicit_json_deserialization() {
+        let json = r#"{"inflight_wait_timeout_secs": 10, "inflight_heartbeat_grace_secs": 30}"#;
+        let cfg: SafetyConfig =
+            serde_json::from_str(json).expect("deserialize explicit FR-052 fields");
+        assert_eq!(cfg.inflight_wait_timeout_secs, 10);
+        assert_eq!(cfg.inflight_heartbeat_grace_secs, 30);
+        assert_eq!(cfg.max_consecutive_failures, 3);
     }
 
     #[test]
