@@ -38,6 +38,7 @@
 | FR-047 | Core Crate 拆分 Phase 1 — orchestrator-config 提取 | P2 | Closed |
 | FR-048 | Core Crate 拆分 Phase 2 — orchestrator-scheduler 提取 | P2 | Closed |
 | FR-049 | Prehook CEL 表达式接入 Pipeline Variables | P1 | Closed |
+| FR-050 | CLI UDS 连接回退鲁棒性 | P2 | Closed |
 
 ## 说明
 
@@ -94,3 +95,4 @@
 - FR-047 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/59-core-crate-split-config.md` 与 `docs/qa/orchestrator/101-core-crate-split-config.md` 承载
 - FR-048 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/60-core-crate-split-scheduler.md` 与 `docs/qa/orchestrator/102-core-crate-split-scheduler.md` 承载
 - FR-049 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/61-prehook-pipeline-vars.md` 与 `docs/qa/orchestrator/103-prehook-pipeline-vars.md` 承载
+- FR-050 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/62-cli-uds-fallback-robustness.md` 与 `docs/qa/orchestrator/104-cli-uds-fallback-robustness.md` 承载
