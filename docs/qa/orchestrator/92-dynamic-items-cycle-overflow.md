@@ -193,3 +193,11 @@ sqlite3 data/agent_orchestrator.db \
 | `proactive_max_cycles_once_mode_passthrough` | Once mode 不干预（u32::MAX） |
 
 **运行命令**: `cargo test --workspace --lib -- loop_engine::tests::proactive_max_cycles`
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

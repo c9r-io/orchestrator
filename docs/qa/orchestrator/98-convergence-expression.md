@@ -40,3 +40,11 @@
 - S1: `crates/integration-tests/tests/workflow_loop.rs::convergence_expr_stops_loop`
 - S2: `crates/integration-tests/tests/workflow_loop.rs::multi_cycle_loop`（回归）
 - S4: `core/src/config_load/validate/loop_policy.rs` 单元测试
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

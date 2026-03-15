@@ -67,3 +67,11 @@ cargo test -p orchestrator-config
 ## Result
 
 All scenarios verified. FR-047 is closed.
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

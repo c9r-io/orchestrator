@@ -68,3 +68,11 @@
 
 - 如果 core 修改了 `state.rs`、`events.rs`、`db_write.rs` 等被 scheduler 引用的模块，scheduler 需要同步更新
 - `trigger_engine.rs` 中的 `cancel_task_for_trigger()` 是 `stop_task_runtime()` 的简化版，如 scheduler 的任务取消逻辑变化需同步更新
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

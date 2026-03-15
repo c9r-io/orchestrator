@@ -148,6 +148,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/53-client-server-architecture.md` | 5 | C/S architecture: daemon lifecycle, gRPC communication, embedded workers, service layer |
 | orchestrator | `docs/qa/orchestrator/54-step-execution-profiles.md` | 5 | Step-level ExecutionProfile: resource round-trip, validation, mixed host/sandbox routing, compatibility default |
 | orchestrator | `docs/qa/orchestrator/55-sandbox-write-boundaries.md` | 2 | Sandbox file write boundaries: deny workspace-root writes, allow declared writable subtree |
+| orchestrator | `docs/qa/orchestrator/56-sandbox-denial-anomaly-trace.md` | 2 | Sandbox denial anomaly trace and empty-change guard |
 | orchestrator | `docs/qa/orchestrator/56-sandbox-resource-network-enforcement.md` | 3 | Sandbox resource/network enforcement: open-files limit event, network deny event, unsupported allowlist gating |
 | orchestrator | `docs/qa/orchestrator/57-sandbox-resource-limits-extended.md` | 3 | Sandbox resource limits for CPU, memory, processes |
 | orchestrator | `docs/qa/orchestrator/58-control-plane-security.md` | 5 | Secure TCP control plane: mTLS bootstrap, host-user client config, role-based RPC authorization, audit persistence |
@@ -184,6 +185,18 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/89-plan-output-context-overflow-mitigation.md` | - | FR-036: plan output context overflow mitigation, stream-JSON result extraction |
 | orchestrator | `docs/qa/orchestrator/90-unquoted-json-extraction.md` | - | FR-031: generate_items unquoted JSON extraction, LLM non-standard output tolerance |
 | orchestrator | `docs/qa/orchestrator/91-daemon-crash-resilience.md` | - | FR-032: daemon crash resilience, worker survival, health monitoring |
+| orchestrator | `docs/qa/orchestrator/92-dynamic-items-cycle-overflow.md` | 4 | FR-037: max_cycles proactive enforcement, dynamic items cycle overflow |
+| orchestrator | `docs/qa/orchestrator/93-inflight-step-completion-race.md` | 5 | FR-038: daemon restart in-flight step completion race condition |
+| orchestrator | `docs/qa/orchestrator/94-trigger-resource-cron-event-driven.md` | 5 | FR-039: trigger resource cron & event-driven task creation |
+| orchestrator | `docs/qa/orchestrator/94b-trigger-resource-advanced.md` | 2 | FR-039: trigger suspend/resume and preflight check (split from doc 94) |
+| orchestrator | `docs/qa/orchestrator/95-prehook-self-referential-safe-filter.md` | 3 | Prehook self-referential safe filter for QA doc execution |
+| orchestrator | `docs/qa/orchestrator/96-self-restart-socket-continuity.md` | 5 | Self-restart socket and PID file continuity across exec() lifecycle |
+| orchestrator | `docs/qa/orchestrator/97-follow-task-logs-callback.md` | 3 | FR-042: follow_task_logs callback refactor, gRPC TaskFollow log delivery |
+| orchestrator | `docs/qa/orchestrator/98-convergence-expression.md` | 6 | FR-043: convergence_expr CEL-based loop termination |
+| orchestrator | `docs/qa/orchestrator/99-long-lived-command-guard.md` | 4 | FR-045: task watch --timeout, stall auto-termination, QA agent timeout guidance |
+| orchestrator | `docs/qa/orchestrator/100-agent-subprocess-daemon-pid-guard.md` | 4 | FR-046: agent subprocess daemon PID guard with CLAUDE.md + hooks injection |
+| orchestrator | `docs/qa/orchestrator/101-core-crate-split-config.md` | 8 | FR-047: core crate split phase 1 — orchestrator-config extraction |
+| orchestrator | `docs/qa/orchestrator/102-core-crate-split-scheduler.md` | 7 | FR-048: core crate split phase 2 — orchestrator-scheduler extraction |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |

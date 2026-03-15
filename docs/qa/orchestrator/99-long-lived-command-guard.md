@@ -14,7 +14,7 @@ Verifies FR-045: `task watch --timeout`, stall auto-termination, and QA agent ti
    ```
 2. Create a task (do not start it, so it stays in `pending`):
    ```bash
-   TASK_ID=$(orchestrator task create --workspace test-workspace --goal "timeout test" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
+   TASK_ID=$(orchestrator task create --workspace test-workspace --project default --goal "timeout test" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
    ```
 3. Watch with a 5-second timeout:
    ```bash
@@ -76,3 +76,11 @@ Verifies FR-045: `task watch --timeout`, stall auto-termination, and QA agent ti
 
 - The template prompt contains guidance about using `--timeout` or `timeout` wrapper for streaming commands.
 - Example command in prompt uses `--timeout` flag.
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

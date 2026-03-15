@@ -109,49 +109,10 @@ orchestrator delete trigger/test-cron --force
 
 ---
 
-## Scenario 6: Trigger suspend/resume (手动验证)
+## Checklist
 
-**步骤**:
-```bash
-# Apply trigger first
-orchestrator apply -f /tmp/test-trigger.yaml
-# Suspend
-orchestrator trigger suspend test-cron
-# Verify suspended
-orchestrator get trigger  # should show suspend=true or similar
-# Resume
-orchestrator trigger resume test-cron
-# Fire manually
-orchestrator trigger fire test-cron
-```
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |
 
-**预期**:
-- suspend 后 trigger 不再自动触发
-- resume 后恢复
-- fire 创建一个 task 并返回 task ID
-
----
-
-## Scenario 7: Preflight check validates trigger references
-
-**步骤**:
-```bash
-cat <<'EOF' > /tmp/bad-trigger.yaml
-apiVersion: orchestrator.dev/v2
-kind: Trigger
-metadata:
-  name: bad-ref
-spec:
-  cron:
-    schedule: "0 0 * * * *"
-  action:
-    workflow: nonexistent-workflow
-    workspace: nonexistent-workspace
-EOF
-
-orchestrator apply -f /tmp/bad-trigger.yaml
-orchestrator check
-```
-
-**预期**:
-- `orchestrator check` 输出包含 trigger_workflow_ref 和 trigger_workspace_ref 错误，指出引用不存在的 workflow/workspace
+See also: `docs/qa/orchestrator/94b-trigger-resource-advanced.md` for suspend/resume and preflight scenarios.

@@ -56,3 +56,11 @@ cargo test -p agent-orchestrator --lib follow_one_stream_callback_incremental_re
 ```
 
 **Expected**: Test passes; first call delivers initial content, second call delivers only appended content
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

@@ -74,3 +74,11 @@ Post-loop 判定使用 `effective_unresolved = unresolved + stale_pending`，确
 - 正常 items（无 command_runs）不被误计（`count_stale_pending_items` 要求 EXISTS completed run）
 - in-flight items 不被误计（要求 NOT EXISTS exit_code=-1 run）
 - 仅 recovery 后遗留的真正 stale items 被计入
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

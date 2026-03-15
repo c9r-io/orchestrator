@@ -110,3 +110,9 @@ self_referential_safe: false
 | "daemon socket not found" after self_restart | qa_testing agent spawned competing daemon | Check `pgrep -f orchestratord` for duplicate PIDs; kill extras |
 
 ---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

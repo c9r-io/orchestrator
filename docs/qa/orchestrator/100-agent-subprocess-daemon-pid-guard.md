@@ -86,3 +86,11 @@ self_referential_safe: false
 - CLAUDE.md 仅包含一个 guard block（2 个 marker）
 - Guard block 显示 PID 222，不含 PID 111
 - settings.local.json 仅包含一个 daemon-pid-guard hook 条目
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |
