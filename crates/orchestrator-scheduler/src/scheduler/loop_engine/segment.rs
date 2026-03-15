@@ -320,6 +320,7 @@ pub(super) async fn execute_item_segment(
         let shared_ctx = Arc::new(task_ctx.clone());
         let shared_filter = Arc::new(segment.step_ids.clone());
         let mut join_set = JoinSet::new();
+        let mut dispatched_count: usize = 0;
 
         for item in items {
             let mut seeded_acc = item_state
@@ -361,6 +362,7 @@ pub(super) async fn execute_item_segment(
                 .await;
                 (item_id, acc, result)
             });
+            dispatched_count += 1;
         }
 
         // Collect all results (no fail-fast)
@@ -386,6 +388,32 @@ pub(super) async fn execute_item_segment(
                 .collect::<Vec<_>>()
                 .join("; ");
             anyhow::bail!("parallel item execution failed: {}", msg);
+        }
+
+        // FR-053: Completeness check — ensure every item was dispatched into the
+        // JoinSet.  If the for-loop exited early (cancellation, semaphore closure,
+        // or any `?` propagation in the setup path), `dispatched_count` will be
+        // less than `items.len()`.  Fail explicitly so the cycle does not proceed
+        // as if all items were processed.
+        let expected = items.len();
+        if dispatched_count < expected {
+            let msg = format!(
+                "parallel item segment incomplete: dispatched {}/{} items",
+                dispatched_count, expected
+            );
+            warn!(dispatched_count, expected, "FR-053 completeness check failed");
+            insert_event(
+                state,
+                task_id,
+                None,
+                "parallel_dispatch_incomplete",
+                json!({
+                    "dispatched": dispatched_count,
+                    "expected": expected,
+                }),
+            )
+            .await?;
+            anyhow::bail!("{}", msg);
         }
     }
 

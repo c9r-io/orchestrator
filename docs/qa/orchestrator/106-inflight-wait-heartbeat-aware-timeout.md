@@ -51,3 +51,11 @@
 2. 启动 daemon 并运行 task
 
 **预期**: 编译通过，运行正常，使用默认值 300s/60s
+
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☐ | |

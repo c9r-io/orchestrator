@@ -176,7 +176,7 @@ Verify phase result publication is observable through persisted events.
 ### Expected
 - `phase_output_published` appears on successful publish path.
 - `bus_publish_failed` appears only on degraded publish path.
-- MessageBus debug component reports implementation at `src/collab.rs`.
+- `orchestrator debug --component messagebus` returns without error and produces non-empty output.
 
 ### Expected Data State
 ```sql

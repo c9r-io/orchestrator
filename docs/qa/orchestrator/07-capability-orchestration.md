@@ -220,10 +220,10 @@ Validate that a guard step can terminate the workflow loop.
 > **Note**: The `loop_guard` step type uses the **builtin** guard implementation.
 > The builtin guard terminates based on `stop_when_no_unresolved` configuration
 > and `max_cycles` limit — it does not parse agent JSON output.
-> Since the fixture uses `stop_when_no_unresolved: false` (the default) and
-> `max_cycles: 3`, the loop runs all 3 cycles regardless of item status.
-> To terminate early on no-unresolved, `stop_when_no_unresolved: true` must be
-> set explicitly in the workflow's `loop` config.
+> Since `stop_when_no_unresolved` defaults to `true`, the loop terminates after
+> cycle 1 when all items pass. The loop only runs up to `max_cycles` when there
+> are unresolved items remaining, or when `stop_when_no_unresolved` is explicitly
+> set to `false` in the workflow's `loop` config.
 
 ### Steps
 
@@ -254,7 +254,8 @@ Validate that a guard step can terminate the workflow loop.
 
 - Workflow `guard_test` appears in config
 - Task creation and execution succeed — status: `completed`, failed: 0
-- Loop runs up to `max_cycles` (3) because `stop_when_no_unresolved` defaults to false
+- current_cycle = 1 — the loop terminates after cycle 1 because all items pass
+  and `stop_when_no_unresolved` defaults to `true`
 
 ---
 
@@ -318,5 +319,5 @@ both agents are used for execution.
 | 1 | Capability Isolation | ✅ | 2026-03-05 | auto | agent_qa_only → qa, agent_fix_only → fix |
 | 2 | Multi-Agent Same Capability | ✅ | 2026-03-05 | auto | alpha/beta distributed, 0 failures |
 | 3 | Repeatable Step Execution | ✅ | 2026-03-15 | claude | All 130 items passed in cycle 1, loop terminated early (expected behavior - all items passed) |
-| 4 | Guard Step Termination | ✅ | 2026-03-13 | claude | False positive: expected cycle=1 but fixture has stop_when_no_unresolved=false (default), so runs to max_cycles=3. QA doc corrected. |
+| 4 | Guard Step Termination | ✅ | 2026-03-16 | claude | current_cycle=1 correct: stop_when_no_unresolved defaults to true, loop terminates early when all items pass |
 | 5 | Performance Selection Fixture | ✅ | 2026-03-05 | auto | fast_agent 58%, quality_agent 42% |
