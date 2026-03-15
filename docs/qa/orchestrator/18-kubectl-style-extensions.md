@@ -1,8 +1,8 @@
 # Orchestrator - kubectl-Style Extensions
 
 **Module**: orchestrator  
-**Scope**: `get <resource-type>` lists, resource `create`, stdin apply, label selector  
-**Scenarios**: 4  
+**Scope**: `get <resource-type>` lists, stdin apply, label selector
+**Scenarios**: 3
 **Priority**: High
 
 ---
@@ -44,7 +44,7 @@
 ### Preconditions
 
 - Database initialized.
-- At least one resource has labels (via `create --label` or `apply` manifest metadata).
+- At least one resource has labels (via `apply` manifest metadata).
 
 ### Steps
 
@@ -71,55 +71,7 @@
 
 ---
 
-## Scenario 3: Create Commands (Dry Run + Persist)
-
-### Preconditions
-
-- Database initialized.
-
-### Steps
-
-1. Workspace create dry run:
-   ```bash
-   orchestrator workspace create ws-demo \
-     --root-path workspace/ws-demo \
-     --qa-target docs/qa \
-     --label env=dev \
-     --dry-run -o yaml
-   ```
-
-2. Agent create persist:
-   ```bash
-   orchestrator agent create qa-agent \
-     --template-qa 'echo qa {rel_path}' \
-     --capability qa \
-     --label env=dev
-   ```
-
-3. Workflow create persist:
-   ```bash
-   orchestrator workflow create qa-flow \
-     --step qa --step fix \
-     --loop-mode infinite \
-     --max-cycles 3 \
-     --label env=dev
-   ```
-
-4. Verify created resources are queryable:
-   ```bash
-   orchestrator get agents -l env=dev
-   orchestrator get workflows -l env=dev
-   ```
-
-### Expected Result
-
-- Dry run prints manifest only, does not mutate config.
-- Persist mode creates/configures resources successfully.
-- Label metadata is queryable via `get -l`.
-
----
-
-## Scenario 4: Stdin Apply (`-f -`)
+## Scenario 3: Stdin Apply (`-f -`)
 
 ### Preconditions
 
@@ -156,7 +108,7 @@
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| Label selector returns empty but `get agents` shows the resource | Labels lost during config normalization | Fixed in normalize.rs — `restore_metadata_from_old_store` preserves labels across normalization cycles |
+| Label selector returns empty but `get agents` shows the resource | Labels lost during `apply_to_project` bypassing resource_store | Fixed in `apply.rs` — `apply_to_project` now uses `apply_to_store` which preserves labels/annotations in the resource_store |
 | `get steptemplates` or `get envstores` returns empty | Builtin CRD types not resolving through resource_store | Fixed in cli_handler/resource.rs — CRD fallback chains `resource_store.get()` |
 
 ---
@@ -167,5 +119,4 @@
 |---|----------|--------|-----------|--------|-------|
 | 1 | List-Style Get | ☐ | | | |
 | 2 | Label Selector on Get List | ☐ | | | |
-| 3 | Create Commands (Dry Run + Persist) | ☐ | | | |
-| 4 | Stdin Apply (`-f -`) | ☐ | | | |
+| 3 | Stdin Apply (`-f -`) | ☐ | | | |

@@ -1,94 +1,99 @@
+use crate::cli_types::ResourceMetadata;
 use crate::config::OrchestratorConfig;
 use anyhow::Result;
 
-use super::helpers::apply_to_map;
+use super::helpers::apply_to_store;
 use super::registry::RegisteredResource;
-use super::{agent, workflow, workspace, ApplyResult, Resource};
+use super::{ApplyResult, Resource};
+
+/// Helper: clone metadata with project set to the target project scope.
+fn scoped_metadata(metadata: &ResourceMetadata, project: &str) -> ResourceMetadata {
+    let mut m = metadata.clone();
+    m.project = Some(project.to_string());
+    m
+}
 
 /// Apply a resource into a specific project scope.
-/// Builtin resources are routed to `config.projects[project].<kind>`.
+/// Builtin resources are routed to `config.projects[project].<kind>` via
+/// `apply_to_store` which stores the full CR (including labels/annotations)
+/// in the resource_store and reconciles back to the config snapshot.
 pub fn apply_to_project(
     resource: &RegisteredResource,
     config: &mut OrchestratorConfig,
     project: &str,
 ) -> Result<ApplyResult> {
-    use crate::config::ProjectConfig;
-
-    let project_entry = config
-        .projects
-        .entry(project.to_string())
-        .or_insert_with(|| ProjectConfig {
-            description: None,
-            workspaces: Default::default(),
-            agents: Default::default(),
-            workflows: Default::default(),
-            step_templates: Default::default(),
-            env_stores: Default::default(),
-            execution_profiles: Default::default(),
-            triggers: Default::default(),
-        });
+    // Ensure the target project entry exists before apply_to_store runs.
+    config.ensure_project(Some(project));
 
     match resource {
         RegisteredResource::Agent(agent) => {
-            let incoming = agent::agent_spec_to_config(&agent.spec);
-            Ok(apply_to_map(
-                &mut project_entry.agents,
+            let metadata = scoped_metadata(&agent.metadata, project);
+            Ok(apply_to_store(
+                config,
+                "Agent",
                 agent.name(),
-                incoming,
+                &metadata,
+                serde_json::to_value(&agent.spec)?,
             ))
         }
         RegisteredResource::Workflow(workflow) => {
-            let incoming = workflow::workflow_spec_to_config(&workflow.spec)?;
-            Ok(apply_to_map(
-                &mut project_entry.workflows,
+            let metadata = scoped_metadata(&workflow.metadata, project);
+            Ok(apply_to_store(
+                config,
+                "Workflow",
                 workflow.name(),
-                incoming,
+                &metadata,
+                serde_json::to_value(&workflow.spec)?,
             ))
         }
         RegisteredResource::Workspace(ws) => {
-            let incoming = workspace::workspace_spec_to_config(&ws.spec);
-            Ok(apply_to_map(
-                &mut project_entry.workspaces,
+            let metadata = scoped_metadata(&ws.metadata, project);
+            Ok(apply_to_store(
+                config,
+                "Workspace",
                 ws.name(),
-                incoming,
+                &metadata,
+                serde_json::to_value(&ws.spec)?,
             ))
         }
         RegisteredResource::StepTemplate(template) => {
-            let incoming = crate::config::StepTemplateConfig {
-                prompt: template.spec.prompt.clone(),
-                description: template.spec.description.clone(),
-            };
-            Ok(apply_to_map(
-                &mut project_entry.step_templates,
+            let metadata = scoped_metadata(&template.metadata, project);
+            Ok(apply_to_store(
+                config,
+                "StepTemplate",
                 template.name(),
-                incoming,
+                &metadata,
+                serde_json::to_value(&template.spec)?,
             ))
         }
         RegisteredResource::EnvStore(store) => {
-            let incoming = crate::config::EnvStoreConfig {
-                data: store.spec.data.clone(),
-                sensitive: false,
-            };
-            Ok(apply_to_map(
-                &mut project_entry.env_stores,
+            let metadata = scoped_metadata(&store.metadata, project);
+            Ok(apply_to_store(
+                config,
+                "EnvStore",
                 store.name(),
-                incoming,
+                &metadata,
+                serde_json::to_value(&store.spec)?,
             ))
         }
-        RegisteredResource::ExecutionProfile(profile) => Ok(apply_to_map(
-            &mut project_entry.execution_profiles,
-            profile.name(),
-            crate::resource::execution_profile::execution_profile_spec_to_config(&profile.spec),
-        )),
+        RegisteredResource::ExecutionProfile(profile) => {
+            let metadata = scoped_metadata(&profile.metadata, project);
+            Ok(apply_to_store(
+                config,
+                "ExecutionProfile",
+                profile.name(),
+                &metadata,
+                serde_json::to_value(&profile.spec)?,
+            ))
+        }
         RegisteredResource::SecretStore(store) => {
-            let incoming = crate::config::EnvStoreConfig {
-                data: store.spec.data.clone(),
-                sensitive: true,
-            };
-            Ok(apply_to_map(
-                &mut project_entry.env_stores,
+            let metadata = scoped_metadata(&store.metadata, project);
+            Ok(apply_to_store(
+                config,
+                "SecretStore",
                 store.name(),
-                incoming,
+                &metadata,
+                serde_json::to_value(&store.spec)?,
             ))
         }
         _ => resource.apply(config),

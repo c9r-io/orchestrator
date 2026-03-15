@@ -51,7 +51,7 @@ pub(crate) use helpers::{
     validate_resource_name,
 };
 pub use registry::*;
-// apply_to_map is used by submodules via super:: and by apply.rs directly
+// apply_to_map is used by individual resource apply methods via super::
 pub use apply::apply_to_project;
 
 // ── Re-exports (cli_types used by submodules via super::) ─────────────────────
