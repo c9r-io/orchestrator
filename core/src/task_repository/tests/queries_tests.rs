@@ -1139,3 +1139,137 @@ fn load_task_status_returns_none_for_missing_task() {
         .expect("load_task_status should succeed");
     assert_eq!(status, None);
 }
+
+// ── FR-052: count_recent_heartbeats_for_items ──────────
+
+#[test]
+fn fr052_count_recent_heartbeats_returns_zero_when_no_events() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let item_ids = vec!["item-1".to_string()];
+    let cutoff = "2000-01-01T00:00:00+00:00";
+    let count = repo
+        .count_recent_heartbeats_for_items(&task_id, &item_ids, cutoff)
+        .expect("query should succeed");
+    assert_eq!(count, 0);
+}
+
+#[test]
+fn fr052_count_recent_heartbeats_returns_zero_for_empty_item_ids() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let count = repo
+        .count_recent_heartbeats_for_items(&task_id, &[], "2000-01-01T00:00:00+00:00")
+        .expect("query should succeed");
+    assert_eq!(count, 0);
+}
+
+#[test]
+fn fr052_count_recent_heartbeats_finds_matching_events() {
+    use super::fixtures::get_item_id;
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let item_id = get_item_id(&state, &task_id);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+
+    let now = crate::config_load::now_ts();
+    conn.execute(
+        "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at)
+         VALUES (?1, ?2, 'step_heartbeat', '{}', ?3)",
+        params![task_id, item_id, now],
+    )
+    .expect("insert heartbeat event");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let item_ids = vec![item_id.clone()];
+    // Cutoff far in the past — should find the heartbeat
+    let count = repo
+        .count_recent_heartbeats_for_items(&task_id, &item_ids, "2000-01-01T00:00:00+00:00")
+        .expect("query should succeed");
+    assert_eq!(count, 1);
+}
+
+#[test]
+fn fr052_count_recent_heartbeats_excludes_old_events() {
+    use super::fixtures::get_item_id;
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let item_id = get_item_id(&state, &task_id);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+
+    // Insert heartbeat with an old timestamp
+    conn.execute(
+        "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at)
+         VALUES (?1, ?2, 'step_heartbeat', '{}', '2020-01-01T00:00:00+00:00')",
+        params![task_id, item_id],
+    )
+    .expect("insert old heartbeat event");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let item_ids = vec![item_id.clone()];
+    // Cutoff after the event — should NOT find it
+    let count = repo
+        .count_recent_heartbeats_for_items(&task_id, &item_ids, "2025-01-01T00:00:00+00:00")
+        .expect("query should succeed");
+    assert_eq!(count, 0);
+}
+
+#[test]
+fn fr052_count_recent_heartbeats_ignores_non_heartbeat_events() {
+    use super::fixtures::get_item_id;
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let item_id = get_item_id(&state, &task_id);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+
+    let now = crate::config_load::now_ts();
+    // Insert a non-heartbeat event
+    conn.execute(
+        "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at)
+         VALUES (?1, ?2, 'step_completed', '{}', ?3)",
+        params![task_id, item_id, now],
+    )
+    .expect("insert non-heartbeat event");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    let item_ids = vec![item_id.clone()];
+    let count = repo
+        .count_recent_heartbeats_for_items(&task_id, &item_ids, "2000-01-01T00:00:00+00:00")
+        .expect("query should succeed");
+    assert_eq!(count, 0, "non-heartbeat events should be excluded");
+}
+
+#[test]
+fn fr052_count_recent_heartbeats_filters_by_item_id() {
+    use super::fixtures::get_item_id;
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let item_id = get_item_id(&state, &task_id);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+
+    let now = crate::config_load::now_ts();
+    // Insert heartbeat for our item
+    conn.execute(
+        "INSERT INTO events (task_id, task_item_id, event_type, payload_json, created_at)
+         VALUES (?1, ?2, 'step_heartbeat', '{}', ?3)",
+        params![task_id, item_id, now],
+    )
+    .expect("insert heartbeat event");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    // Query with a different item_id — should not find anything
+    let other_ids = vec!["nonexistent-item".to_string()];
+    let count = repo
+        .count_recent_heartbeats_for_items(&task_id, &other_ids, "2000-01-01T00:00:00+00:00")
+        .expect("query should succeed");
+    assert_eq!(count, 0, "should not match different item IDs");
+
+    // Query with the correct item_id — should find it
+    let correct_ids = vec![item_id];
+    let count = repo
+        .count_recent_heartbeats_for_items(&task_id, &correct_ids, "2000-01-01T00:00:00+00:00")
+        .expect("query should succeed");
+    assert_eq!(count, 1);
+}

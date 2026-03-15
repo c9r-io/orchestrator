@@ -16,3 +16,4 @@ output.json
 target/
 dist/
 .DS_Store
+fixtures/*/*.md
