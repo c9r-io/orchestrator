@@ -69,7 +69,7 @@ Verifies FR-045: `task watch --timeout`, stall auto-termination, and QA agent ti
 
 ### Steps
 
-1. Read `docs/workflow/self-bootstrap.yaml`.
+1. Read `fixtures/workflow/self-bootstrap.yaml`.
 2. Find the `qa_testing` step template.
 
 ### Expected

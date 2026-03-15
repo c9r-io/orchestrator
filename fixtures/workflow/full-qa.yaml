@@ -1,0 +1,138 @@
+# ── QA Fixture Copy of docs/workflow/full-qa.yaml ──
+# This is a read-only reference copy for QA scenario verification.
+# ticket_dir points to fixtures/ticket to avoid polluting docs/ticket.
+# DO NOT use this to run real workflows — use docs/workflow/full-qa.yaml instead.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: full-qa
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: fixtures/ticket
+  self_referential: false
+---
+# ── Agents ─────────────────────────────────────────────────────────────
+# Reuse existing StepTemplates from self-bootstrap.yaml (they are
+# project-scoped, not workspace-scoped). Only declare agents here.
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: qa-tester
+  description: "QA tester agent — executes QA scenarios and creates tickets"
+spec:
+  capabilities:
+    - qa_testing
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-opus
+    - fromRef: minimax
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: qa-fixer
+  description: "QA fixer agent — fixes tickets and aligns tests"
+spec:
+  capabilities:
+    - ticket_fix
+    - align_tests
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-opus
+    - fromRef: minimax
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: qa-reviewer
+  description: "QA reviewer agent — doc governance"
+spec:
+  capabilities:
+    - doc_governance
+    - loop_guard
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: minimax
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: full-qa
+spec:
+  max_parallel: 4
+
+  steps:
+    - id: qa_testing
+      type: qa_testing
+      scope: item
+      required_capability: qa_testing
+      template: qa_testing
+      execution_profile: host
+      enabled: true
+      repeatable: true
+      tty: false
+      prehook:
+        engine: cel
+        when: "qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && self_referential_safe"
+        reason: "Run all QA markdown documents; skip self-referential-unsafe docs"
+
+    - id: ticket_fix
+      type: ticket_fix
+      scope: item
+      required_capability: ticket_fix
+      template: ticket_fix
+      execution_profile: sandbox_write
+      enabled: false
+      repeatable: true
+      tty: false
+      max_parallel: 2
+      prehook:
+        engine: cel
+        when: "qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && active_ticket_count > 0"
+        reason: "Only fix tickets for QA docs that have active tickets"
+
+    - id: align_tests
+      type: align_tests
+      scope: task
+      required_capability: align_tests
+      template: align_tests
+      enabled: false
+      repeatable: true
+      tty: false
+
+    - id: doc_governance
+      type: doc_governance
+      scope: task
+      required_capability: doc_governance
+      template: doc_governance
+      enabled: true
+      repeatable: true
+      tty: false
+
+    - id: self_test
+      type: self_test
+      enabled: true
+      repeatable: true
+      builtin: self_test
+
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+    stop_when_no_unresolved: false
+
+  safety:
+    max_consecutive_failures: 5
+    auto_rollback: true
+    checkpoint_strategy: git_tag
+    binary_snapshot: false

@@ -129,7 +129,7 @@ Ensure a workflow cannot reference a non-existent project-scoped profile.
    spec:
      root_path: "."
      qa_targets: [docs/qa]
-     ticket_dir: docs/ticket
+     ticket_dir: fixtures/ticket
    ---
    apiVersion: orchestrator.dev/v2
    kind: Agent

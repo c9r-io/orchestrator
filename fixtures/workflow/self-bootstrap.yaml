@@ -1,0 +1,402 @@
+# ── QA Fixture Copy of docs/workflow/self-bootstrap.yaml ──
+# This is a read-only reference copy for QA scenario verification.
+# ticket_dir points to fixtures/ticket to avoid polluting docs/ticket.
+# DO NOT use this to run real agent workflows — use docs/workflow/self-bootstrap.yaml instead.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: self
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: fixtures/ticket
+  self_referential: true
+---
+# ── Step Templates ──────────────────────────────────────────────────────
+# Prompts are decoupled from agents. Each template defines the prompt for
+# a workflow step; the agent's `command` injects it via the {prompt} placeholder.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: plan
+spec:
+  description: "Architecture-guided implementation planning"
+  prompt: >-
+    You are working on the Agent Orchestrator project at {source_tree}.
+    Your task: create a detailed implementation plan for: {goal}.
+    Output ONLY a plan document to stdout — do NOT write any code or create any
+    files. Do NOT use the Write or Edit tools. Your plan output will be captured
+    automatically by the orchestrator pipeline.
+
+    Use /arch-guidance — read docs/architecture.md first.
+    Use /rust-conventions for coding patterns.
+
+    Create a detailed implementation plan with these sections:
+
+    ## Files to Change
+    Identify exactly which files need changes and what changes each file needs.
+
+    ## Approach
+    Design the approach with minimal blast radius. Do NOT introduce new
+    abstractions (traits, generics, wrapper types) unless they are immediately
+    used by at least two call sites. Prefer simple, direct code.
+
+    ## Scope Boundary
+    Explicitly list what is IN scope and OUT of scope. Any change not listed
+    here must not be made during implementation.
+
+    ## Test Strategy
+    Unit tests are required for all new logic.
+
+    ## QA Strategy
+    Classify this task and define the appropriate QA approach:
+    - For REFACTORING tasks: QA should focus on behavioral equivalence —
+      verify that given identical inputs, outputs remain unchanged. This is
+      best validated through unit tests, not scenario-based QA documents.
+      State explicitly if new QA docs are NOT needed.
+    - For NEW FEATURE tasks: QA should cover happy path, error cases, and
+      boundary conditions via scenario-based QA documents under docs/qa/.
+    - For BUG FIX tasks: QA should verify the fix and add a regression test.
+
+    Current diff in this cycle: {diff}
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: qa_doc_gen
+spec:
+  description: "Generate executable QA test documents from the plan"
+  prompt: >-
+    /qa-doc-gen
+
+    Project: {source_tree}
+
+    IMPORTANT: First read the full plan file at {plan_output_path} to understand
+    the complete implementation plan, including its QA Strategy section.
+
+    Follow the QA Strategy defined in the plan:
+    - If the plan says QA docs are NOT needed (e.g. refactoring tasks where
+      behavioral equivalence is validated by unit tests), DO NOT generate new docs.
+      Instead, identify 3-10 existing QA documents under docs/qa/ that are most
+      relevant for regression testing this change (covering affected code paths,
+      APIs, and integration points). Output ONLY a JSON object:
+      {"regression_targets": [{"id": "path/to/doc.md", "name": "path/to/doc.md"}]}
+      Use the relative path (e.g. "docs/qa/orchestrator/02-cli-task-lifecycle.md")
+      as both the id and name. Output NO other text — just the JSON.
+    - If the plan calls for scenario-based QA docs, generate them under
+      docs/qa/ following existing conventions. After generation, output a JSON
+      object listing the new docs:
+      {"regression_targets": [{"id": "docs/qa/.../new-doc.md", "name": "docs/qa/.../new-doc.md"}]}
+
+    Do NOT generate QA documents that duplicate what unit tests already cover.
+    Focus on integration-level and end-to-end behaviors that unit tests cannot
+    verify (CLI commands, cross-module interactions, YAML round-trips).
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: implement
+spec:
+  description: "Code generation following the plan"
+  prompt: >-
+    You are working on the Agent Orchestrator project at {source_tree}.
+
+    Use /rust-conventions for all Rust code.
+    Use /test-authoring — add unit tests for new logic.
+
+    IMPORTANT: Read the plan at {plan_output_path} and implement it exactly.
+    Follow the plan exactly — implement only what is listed in the plan's
+    'Files to Change' and 'Scope Boundary' sections. Do NOT add abstractions,
+    traits, or types that are not specified in the plan.
+
+    If a previous build failed, the errors are at {self_test_errors_path}
+    (set by the self_test builtin step when cargo check/test fails).
+    Read that file FIRST and fix those specific compilation/test errors
+    before proceeding with any other implementation work.
+
+    After writing code, run 'cd {source_tree}/core && cargo check'
+    to verify compilation before finishing.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: ticket_fix
+spec:
+  description: "Fix QA tickets by reading, verifying, and resolving them"
+  prompt: >-
+    /ticket-fix {ticket_paths}
+
+    Fix the QA tickets. Read tickets from {ticket_paths}, verify the issue, apply fixes,
+    re-run the failing scenario, and delete the ticket once verified.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: align_tests
+spec:
+  description: "Run cargo test + clippy + build, iterate until all pass"
+  prompt: >-
+    /align-tests
+
+    Run unit tests, analyze failures caused by the recent changes,
+    update tests and/or implementation to align, iterate until stable.
+    Also fix all clippy warnings and compilation warnings.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: qa_testing
+spec:
+  description: "Execute QA scenarios and create tickets for failures"
+  prompt: >-
+    /qa-testing {rel_path}
+
+    Read the QA document at {rel_path}, then execute each scenario step by step.
+    Verify expected outcomes. Create tickets for any failures.
+
+    IMPORTANT: When running streaming or long-lived CLI commands (e.g. `task watch`,
+    `task follow`, `task logs`), always use `--timeout` where available or wrap with
+    the shell `timeout` command to prevent indefinite blocking. Example:
+      orchestrator task watch <task_id> --interval 1 --timeout 30
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: doc_governance
+spec:
+  description: "Audit QA documentation quality"
+  prompt: >-
+    /qa-doc-governance
+
+    Audit QA documentation quality across docs/qa/.
+    Fix doc drift, enforce scenario limits and checklist conventions,
+    ensure README/manifest consistency.
+---
+apiVersion: orchestrator.dev/v2
+kind: StepTemplate
+metadata:
+  name: review
+spec:
+  description: "Read-only code analysis (optional, not in default pipeline)"
+  prompt: >-
+    Review the code changes in {source_tree}.
+
+    Diff: {diff}
+
+    Check for:
+    1. Security issues (OWASP top 10)
+    2. Error handling correctness
+    3. Test coverage gaps
+    4. Rust conventions compliance
+
+    Report findings as structured JSON with severity levels.
+---
+# ── Agents ──────────────────────────────────────────────────────────────
+# Agents are now capability + command only. The {prompt} placeholder is
+# filled at runtime from the StepTemplate resolved by the workflow step.
+---
+# Architect agent — planning and QA doc design (model via env: claude-opus or minimax)
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: architect
+  description: "architect agent — planning and QA doc generation"
+spec:
+  capabilities:
+    - plan
+    - qa_doc_gen
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-opus
+    - fromRef: minimax
+---
+# Coder agent — code generation, fixing, and test alignment (model via env: claude-opus or claude-sonnet)
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: coder
+  description: "coder agent — implementation, ticket fixing, and test alignment"
+spec:
+  capabilities:
+    - implement
+    - ticket_fix
+    - align_tests
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-opus
+    # - fromRef: claude-sonnet
+    - fromRef: minimax
+---
+# Tester agent — QA scenario execution (model via env: claude-sonnet or minimax)
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: tester
+  description: "tester agent — QA scenario execution and ticket creation"
+spec:
+  capabilities:
+    - qa_testing
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    # - fromRef: claude-sonnet
+    - fromRef: minimax
+---
+# Reviewer agent — doc audit and code review (model via env: claude-haiku or minimax)
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: reviewer
+  description: "reviewer agent — doc governance and code review"
+spec:
+  capabilities:
+    - doc_governance
+    - review
+    - loop_guard
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    # - fromRef: claude-haiku
+    - fromRef: minimax
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: self-bootstrap
+spec:
+  max_parallel: 2
+
+  steps:
+    - id: plan
+      type: plan
+      scope: task
+      required_capability: plan
+      template: plan
+      enabled: true
+      repeatable: false
+      tty: false
+
+    - id: qa_doc_gen
+      type: qa_doc_gen
+      scope: task
+      required_capability: qa_doc_gen
+      template: qa_doc_gen
+      enabled: true
+      repeatable: false
+      tty: false
+      behavior:
+        captures:
+          - var: regression_target_ids
+            source: stdout
+            json_path: "$.regression_targets[*].id"
+        post_actions:
+          - type: generate_items
+            from_var: qa_doc_gen_output
+            json_path: "$.regression_targets"
+            mapping:
+              item_id: "$.id"
+              label: "$.name"
+            replace: true
+
+    - id: implement
+      type: implement
+      scope: task
+      required_capability: implement
+      template: implement
+      execution_profile: sandbox_write
+      enabled: true
+      repeatable: true
+      tty: false
+
+    - id: self_test
+      type: self_test
+      scope: task
+      builtin: self_test
+      enabled: true
+      repeatable: true
+      tty: false
+
+    - id: self_restart
+      type: self_restart
+      scope: task
+      builtin: self_restart
+      enabled: true
+      repeatable: false
+      tty: false
+      behavior:
+        on_failure:
+          action: continue
+
+    - id: qa_testing
+      type: qa_testing
+      scope: item
+      required_capability: qa_testing
+      template: qa_testing
+      execution_profile: host
+      enabled: true
+      repeatable: true
+      tty: false
+      prehook:
+        engine: cel
+        when: "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && self_referential_safe && (size(regression_target_ids) == 0 || qa_file_path in regression_target_ids)"
+        reason: "QA testing deferred to final cycle; restricted to QA markdown documents; skips self-referential-unsafe docs; filtered by regression targets when available"
+
+    - id: ticket_fix
+      type: ticket_fix
+      scope: item
+      required_capability: ticket_fix
+      template: ticket_fix
+      execution_profile: sandbox_write
+      enabled: true
+      repeatable: true
+      tty: false
+      max_parallel: 2
+      prehook:
+        engine: cel
+        when: "is_last_cycle && qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && active_ticket_count > 0"
+        reason: "Only fix tickets on last cycle for QA markdown documents when there are active tickets"
+
+    - id: align_tests
+      type: align_tests
+      scope: task
+      required_capability: align_tests
+      template: align_tests
+      enabled: true
+      repeatable: true
+      tty: false
+      prehook:
+        engine: cel
+        when: "is_last_cycle"
+        reason: "Test alignment deferred to final cycle"
+
+    - id: doc_governance
+      type: doc_governance
+      scope: task
+      required_capability: doc_governance
+      template: doc_governance
+      enabled: true
+      repeatable: true
+      tty: false
+      prehook:
+        engine: cel
+        when: "is_last_cycle"
+        reason: "Doc governance deferred to final cycle"
+
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+
+  loop:
+    mode: fixed
+    max_cycles: 2
+    enabled: true
+    stop_when_no_unresolved: false
+
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: true
+    checkpoint_strategy: git_tag
+    binary_snapshot: true

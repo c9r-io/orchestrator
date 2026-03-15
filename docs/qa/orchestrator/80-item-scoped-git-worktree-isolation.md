@@ -47,7 +47,7 @@ Expected:
 
 ## Scenario 4: Self-Evolution Manifest Uses Worktree Isolation
 
-1. Open [self-evolution.yaml](/Volumes/Yotta/c9r-io/orchestrator/docs/workflow/self-evolution.yaml).
+1. Open `fixtures/workflow/self-evolution.yaml`.
 2. Confirm workflow spec contains:
    - `item_isolation.strategy: git_worktree`
    - `cleanup: after_workflow`
