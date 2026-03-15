@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Self-Bootstrap Tests - Scenario 3: Binary Snapshot Skip When Disabled
 
 **Module**: self-bootstrap  

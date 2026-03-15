@@ -15,7 +15,7 @@ spec:
   qa_targets:
     - docs/qa
   ticket_dir: docs/ticket
-  self_referential: false
+  self_referential: true
 ---
 # ── Agents ─────────────────────────────────────────────────────────────
 # Reuse existing StepTemplates from self-bootstrap.yaml (they are

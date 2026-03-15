@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Self-Bootstrap - Cycle 2 Validation Chain & Runtime Timestamps
 
 **Module**: self-bootstrap

@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - gRPC Control Plane Protection
 
 **Module**: orchestrator

@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Self-Bootstrap Tests - Scenario 2: Binary Snapshot Restoration on Auto-Rollback
 
 **Module**: self-bootstrap  

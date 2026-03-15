@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Structured Output Mainline and Worker Scheduler
 
 **Module**: orchestrator

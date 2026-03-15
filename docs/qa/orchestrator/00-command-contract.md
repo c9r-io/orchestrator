@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - QA Command Contract
 
 **Module**: orchestrator  

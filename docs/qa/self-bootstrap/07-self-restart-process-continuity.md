@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Self-Bootstrap - Self-Restart and Process Continuity
 
 **Module**: self-bootstrap

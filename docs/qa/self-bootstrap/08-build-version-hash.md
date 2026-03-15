@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Self-Bootstrap - Build Version Hash
 
 **Module**: self-bootstrap

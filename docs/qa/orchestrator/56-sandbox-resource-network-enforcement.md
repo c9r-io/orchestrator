@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Sandbox Resource And Network Enforcement
 
 **Module**: orchestrator

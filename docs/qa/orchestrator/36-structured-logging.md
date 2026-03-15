@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Structured Logging Bootstrap
 
 **Module**: orchestrator

@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Performance IO and Queue Optimization Regression
 
 **Module**: orchestrator

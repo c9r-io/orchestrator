@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Self-Bootstrap - Self-Referential Enforcement & Watchdog
 
 **Module**: self-bootstrap

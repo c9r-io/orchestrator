@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Self-Bootstrap - Binary Checkpoint & Self-Test Acceptance Gate
 
 **Module**: self-bootstrap
