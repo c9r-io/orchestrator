@@ -1,0 +1,141 @@
+# Full QA workflow — single-cycle, all-docs comprehensive QA testing.
+#
+# Usage:
+#   orchestrator apply -f docs/workflow/full-qa.yaml --project self-bootstrap
+#
+# This workflow skips plan/implement/self_test/self_restart and goes straight
+# to QA testing all docs under docs/qa/. Designed for rapid full-regression
+# validation of the current codebase without any code changes.
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: full-qa
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
+  self_referential: true
+---
+# ── Agents ─────────────────────────────────────────────────────────────
+# Reuse existing StepTemplates from self-bootstrap.yaml (they are
+# project-scoped, not workspace-scoped). Only declare agents here.
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: qa-tester
+  description: "QA tester agent — executes QA scenarios and creates tickets"
+spec:
+  capabilities:
+    - qa_testing
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-opus
+    - fromRef: minimax
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: qa-fixer
+  description: "QA fixer agent — fixes tickets and aligns tests"
+spec:
+  capabilities:
+    - ticket_fix
+    - align_tests
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: claude-opus
+    - fromRef: minimax
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: qa-reviewer
+  description: "QA reviewer agent — doc governance"
+spec:
+  capabilities:
+    - doc_governance
+    - loop_guard
+  command: claude -p "{prompt}" --dangerously-skip-permissions --verbose --output-format stream-json
+  env:
+    - fromRef: minimax
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: full-qa
+spec:
+  # Higher parallelism — QA-only, no code changes, safe to fan out wider
+  max_parallel: 4
+
+  steps:
+    # ── Item segment: qa_testing + ticket_fix (fan out per QA file) ──
+    - id: qa_testing
+      type: qa_testing
+      scope: item
+      required_capability: qa_testing
+      template: qa_testing
+      execution_profile: host
+      enabled: true
+      repeatable: true
+      tty: false
+      prehook:
+        engine: cel
+        when: "qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && self_referential_safe"
+        reason: "Run all QA markdown documents; skip self-referential-unsafe docs"
+
+    - id: ticket_fix
+      type: ticket_fix
+      scope: item
+      required_capability: ticket_fix
+      template: ticket_fix
+      execution_profile: sandbox_write
+      enabled: true
+      repeatable: true
+      tty: false
+      max_parallel: 2
+      prehook:
+        engine: cel
+        when: "qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && active_ticket_count > 0"
+        reason: "Only fix tickets for QA docs that have active tickets"
+
+    # ── Task segment: align_tests + doc_governance ──
+    - id: align_tests
+      type: align_tests
+      scope: task
+      required_capability: align_tests
+      template: align_tests
+      enabled: true
+      repeatable: true
+      tty: false
+
+    - id: doc_governance
+      type: doc_governance
+      scope: task
+      required_capability: doc_governance
+      template: doc_governance
+      enabled: true
+      repeatable: true
+      tty: false
+
+    # Loop guard (builtin, always last)
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+
+  # Single cycle — no plan/implement, just test everything once
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+    stop_when_no_unresolved: false
+
+  safety:
+    max_consecutive_failures: 5   # higher tolerance — many QA docs may fail
+    auto_rollback: false          # no code changes to roll back
+    checkpoint_strategy: git_tag
+    binary_snapshot: false        # not rebuilding
