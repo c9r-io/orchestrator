@@ -71,6 +71,8 @@ spec:
 ---
 # S2: Rapid cycle detection — qa_testing succeeds instantly, but min_cycle_interval_secs
 # is set to 600 so all cycles appear "too fast". Task should pause after 4 rapid cycles.
+# stop_when_no_unresolved=false is required so the loop continues past cycle 1 even
+# though items pass QA (become resolved).
 apiVersion: orchestrator.dev/v2
 kind: Workflow
 metadata:
@@ -86,6 +88,7 @@ spec:
   loop:
     mode: infinite
     max_cycles: 8
+    stop_when_no_unresolved: false
   safety:
     max_consecutive_failures: 10
     auto_rollback: false

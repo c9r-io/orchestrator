@@ -37,7 +37,7 @@ echo "QA_PROJECT=${QA_PROJECT}"
 Fixture: `fixtures/manifests/bundles/degenerate-loop-guard.yaml`
 - Workspace: `fixtures/qa-fr035/` (2 narrow QA target files)
 - `circuit_breaker_test`: item-scoped `qa_testing` always exits 1, `min_cycle_interval_secs: 1`, `max_item_step_failures: 3`, up to 8 cycles
-- `rapid_cycle_test`: item-scoped `qa_testing` succeeds instantly, `min_cycle_interval_secs: 600`, up to 8 cycles
+- `rapid_cycle_test`: item-scoped `qa_testing` succeeds instantly, `min_cycle_interval_secs: 600`, `stop_when_no_unresolved: false`, up to 8 cycles
 - `normal_flow_test`: single `qa_testing` succeeds, mode once
 
 ### Troubleshooting
@@ -45,6 +45,7 @@ Fixture: `fixtures/manifests/bundles/degenerate-loop-guard.yaml`
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
 | Rapid cycle detection not triggered | Task finishes before 4 cycles | Increase `max_cycles` or verify loop mode is `infinite` |
+| Task completes after 1 cycle with `no_unresolved_items` | `stop_when_no_unresolved` defaults to `true`; items resolved after first QA pass | Set `stop_when_no_unresolved: false` in the workflow loop config |
 | Stale agents interfere with selection | `apply` is additive; other fixtures injected agents | Recreate isolated project with fresh `QA_PROJECT` |
 | No degenerate_loop anomaly in trace | Fewer than 3 command_runs for the same item-phase pair | Verify command_runs table has 3+ failing entries |
 
