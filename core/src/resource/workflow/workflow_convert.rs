@@ -308,6 +308,7 @@ fn workflow_step_config_to_spec(step: &WorkflowStepConfig) -> WorkflowStepSpec {
         item_select_config: step.item_select_config.clone(),
         store_inputs: step.store_inputs.clone(),
         store_outputs: step.store_outputs.clone(),
+        extra: Default::default(),
     }
 }
 
@@ -502,6 +503,7 @@ mod tests {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                extra: Default::default(),
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "fixed".to_string(),
@@ -610,6 +612,7 @@ mod tests {
                         item_select_config: None,
                         store_inputs: vec![],
                         store_outputs: vec![],
+                        extra: Default::default(),
                     },
                     WorkflowStepSpec {
                         id: "review".to_string(),
@@ -633,6 +636,7 @@ mod tests {
                         item_select_config: None,
                         store_inputs: vec![],
                         store_outputs: vec![],
+                        extra: Default::default(),
                     },
                 ],
                 scope: None,
@@ -642,6 +646,7 @@ mod tests {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                extra: Default::default(),
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -701,6 +706,7 @@ mod tests {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                extra: Default::default(),
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -752,6 +758,7 @@ mod tests {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                extra: Default::default(),
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -806,6 +813,7 @@ mod tests {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                extra: Default::default(),
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -852,6 +860,7 @@ mod tests {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                extra: Default::default(),
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -897,6 +906,7 @@ mod tests {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                extra: Default::default(),
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -965,6 +975,7 @@ mod tests {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                extra: Default::default(),
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -1025,6 +1036,7 @@ mod tests {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                extra: Default::default(),
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -1453,6 +1465,7 @@ mod tests {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                extra: Default::default(),
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),

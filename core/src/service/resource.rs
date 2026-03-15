@@ -33,6 +33,7 @@ pub fn apply_manifests(
 
     let mut results = Vec::new();
     let mut errors = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
     let mut prunable_manifest_names: HashMap<&'static str, HashSet<String>> = HashMap::new();
 
     let cli_project = project
@@ -60,6 +61,10 @@ pub fn apply_manifests(
                         error
                     ));
                     continue;
+                }
+                // Collect warnings for workflow resources (unknown fields, uncaptured vars)
+                if let crate::resource::RegisteredResource::Workflow(ref wf) = registered {
+                    warnings.extend(wf.collect_warnings());
                 }
                 if let Some(meta_project) = registered.metadata_project() {
                     if meta_project != cli_project {
@@ -192,6 +197,7 @@ pub fn apply_manifests(
         results,
         config_version,
         errors,
+        warnings,
     })
 }
 

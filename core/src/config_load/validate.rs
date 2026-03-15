@@ -15,6 +15,7 @@ mod workflow_steps;
 pub use agent_env::{validate_agent_env_store_refs, validate_agent_env_store_refs_for_project};
 pub use root_path::ensure_within_root;
 pub use self_referential::validate_self_referential_safety;
+pub use workflow_steps::collect_step_warnings;
 
 use crate::config::{OrchestratorConfig, WorkflowConfig, WorkflowSafetyProfile};
 use anyhow::Result;

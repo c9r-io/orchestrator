@@ -791,6 +791,10 @@ pub struct WorkflowStepSpec {
     /// WP01: Store outputs — write pipeline vars to workflow stores after step execution
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub store_outputs: Vec<crate::config::StoreOutputConfig>,
+
+    /// Captures unknown YAML fields for apply-time warning diagnostics.
+    #[serde(flatten, default, skip_serializing)]
+    pub extra: std::collections::HashMap<String, serde_yml::Value>,
 }
 
 fn default_true() -> bool {

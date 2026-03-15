@@ -39,7 +39,7 @@
 | FR-048 | Core Crate 拆分 Phase 2 — orchestrator-scheduler 提取 | P2 | Closed |
 | FR-049 | Prehook CEL 表达式接入 Pipeline Variables | P1 | Closed |
 | FR-050 | CLI UDS 连接回退鲁棒性 | P2 | Closed |
-| FR-051 | Workflow YAML 步骤定义未知字段警告 | P1 | Open |
+| FR-051 | Workflow YAML 步骤定义未知字段警告 | P1 | Closed |
 
 ## 说明
 
@@ -97,3 +97,4 @@
 - FR-048 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/60-core-crate-split-scheduler.md` 与 `docs/qa/orchestrator/102-core-crate-split-scheduler.md` 承载
 - FR-049 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/61-prehook-pipeline-vars.md` 与 `docs/qa/orchestrator/103-prehook-pipeline-vars.md` 承载
 - FR-050 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/62-cli-uds-fallback-robustness.md` 与 `docs/qa/orchestrator/104-cli-uds-fallback-robustness.md` 承载
+- FR-051 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/63-workflow-yaml-unknown-field-warning.md` 与 `docs/qa/orchestrator/105-workflow-yaml-unknown-field-warning.md` 承载

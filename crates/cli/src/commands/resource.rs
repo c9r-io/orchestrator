@@ -46,6 +46,9 @@ pub(crate) async fn dispatch(
             if let Some(version) = resp.config_version {
                 println!("configuration version: {}", version);
             }
+            for warning in &resp.warnings {
+                eprintln!("Warning: {}", warning);
+            }
             for err in &resp.errors {
                 eprintln!("Error: {}", err);
             }

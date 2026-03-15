@@ -91,6 +91,7 @@ pub fn workflow_manifest(name: &str) -> OrchestratorResource {
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
+                extra: Default::default(),
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),

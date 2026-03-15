@@ -107,6 +107,13 @@ impl Resource for WorkflowResource {
     }
 }
 
+impl WorkflowResource {
+    /// Collect apply-time warnings (unknown fields, uncaptured prehook vars).
+    pub fn collect_warnings(&self) -> Vec<String> {
+        crate::config_load::collect_step_warnings(&self.spec.steps, &self.metadata.name)
+    }
+}
+
 /// Builds a typed `WorkflowResource` from a generic manifest wrapper.
 pub(super) fn build_workflow(resource: OrchestratorResource) -> Result<RegisteredResource> {
     let OrchestratorResource {
@@ -191,6 +198,7 @@ mod tests {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                    extra: Default::default(),
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "once".to_string(),
@@ -239,6 +247,7 @@ mod tests {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                    extra: Default::default(),
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "once".to_string(),
@@ -287,6 +296,7 @@ mod tests {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                    extra: Default::default(),
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "fixed".to_string(),
@@ -335,6 +345,7 @@ mod tests {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                    extra: Default::default(),
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "fixed".to_string(),
@@ -383,6 +394,7 @@ mod tests {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                    extra: Default::default(),
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "fixed".to_string(),
@@ -497,6 +509,7 @@ mod tests {
                     item_select_config: None,
                     store_inputs: vec![],
                     store_outputs: vec![],
+                    extra: Default::default(),
                 }],
                 loop_policy: WorkflowLoopSpec {
                     mode: "once".to_string(),

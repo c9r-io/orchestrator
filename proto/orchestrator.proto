@@ -308,6 +308,7 @@ message ApplyResponse {
   repeated ApplyResultEntry results = 1;
   optional int64 config_version = 2;
   repeated string errors = 3;
+  repeated string warnings = 4;
 }
 
 message GetRequest {
