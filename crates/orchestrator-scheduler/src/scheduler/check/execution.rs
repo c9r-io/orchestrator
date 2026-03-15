@@ -37,12 +37,13 @@ pub(super) fn check_execution_profile_backend_support(
             let resolved =
                 ResolvedExecutionProfile::from_config(profile_name, profile, &workspace_root, &[]);
             for issue in sandbox_backend_preflight_issues(&resolved) {
-                let severity =
-                    if resolved.network_mode == agent_orchestrator::config::ExecutionNetworkMode::Allowlist {
-                        Severity::Error
-                    } else {
-                        Severity::Warning
-                    };
+                let severity = if resolved.network_mode
+                    == agent_orchestrator::config::ExecutionNetworkMode::Allowlist
+                {
+                    Severity::Error
+                } else {
+                    Severity::Warning
+                };
                 out.push(CheckResult::simple(
                     "execution_profile_backend_support",
                     severity,

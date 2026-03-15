@@ -163,9 +163,8 @@ pub fn recover_orphaned_running_items_for_task(
     let now = now_ts();
 
     let item_ids: Vec<String> = {
-        let mut stmt = tx.prepare(
-            "SELECT id FROM task_items WHERE task_id = ?1 AND status = 'running'",
-        )?;
+        let mut stmt =
+            tx.prepare("SELECT id FROM task_items WHERE task_id = ?1 AND status = 'running'")?;
         let mapped = stmt
             .query_map(params![task_id], |row| row.get(0))?
             .collect::<std::result::Result<Vec<_>, _>>()?;

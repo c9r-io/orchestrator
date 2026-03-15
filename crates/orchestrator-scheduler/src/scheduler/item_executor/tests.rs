@@ -1,12 +1,12 @@
 use super::accumulator::StepExecutionAccumulator;
 use super::dispatch::is_execution_hard_failure;
 use super::spill::{spill_large_var, spill_to_file};
+use crate::scheduler::item_select::{execute_item_select, ItemEvalState};
 use agent_orchestrator::config::PIPELINE_VAR_INLINE_LIMIT;
 use agent_orchestrator::config::{
     CaptureDecl, CaptureSource, ExecutionMode, ItemSelectConfig, PipelineVariables,
     SelectionStrategy, StepBehavior, TieBreak,
 };
-use crate::scheduler::item_select::{execute_item_select, ItemEvalState};
 use std::collections::HashMap;
 
 fn temp_dir(name: &str) -> std::path::PathBuf {
@@ -1329,17 +1329,19 @@ fn to_finalize_context_confidence_and_quality() {
 #[test]
 fn to_finalize_context_artifacts() {
     let mut acc = StepExecutionAccumulator::new(empty_pipeline());
-    acc.phase_artifacts.push(agent_orchestrator::collab::Artifact::new(
-        agent_orchestrator::collab::ArtifactKind::Ticket {
-            severity: agent_orchestrator::collab::artifact::Severity::Medium,
-            category: "qa".to_string(),
-        },
-    ));
-    acc.phase_artifacts.push(agent_orchestrator::collab::Artifact::new(
-        agent_orchestrator::collab::ArtifactKind::CodeChange {
-            files: vec!["f.rs".to_string()],
-        },
-    ));
+    acc.phase_artifacts
+        .push(agent_orchestrator::collab::Artifact::new(
+            agent_orchestrator::collab::ArtifactKind::Ticket {
+                severity: agent_orchestrator::collab::artifact::Severity::Medium,
+                category: "qa".to_string(),
+            },
+        ));
+    acc.phase_artifacts
+        .push(agent_orchestrator::collab::Artifact::new(
+            agent_orchestrator::collab::ArtifactKind::CodeChange {
+                files: vec!["f.rs".to_string()],
+            },
+        ));
 
     let item = make_item("item-1", "test.md");
     let ctx = make_task_ctx(vec![], Some(1), 1);

@@ -1,5 +1,7 @@
 use agent_orchestrator::config::{GenerateItemsAction, NewDynamicItem};
-use agent_orchestrator::json_extract::{extract_field, extract_json_array, extract_stream_json_result};
+use agent_orchestrator::json_extract::{
+    extract_field, extract_json_array, extract_stream_json_result,
+};
 use agent_orchestrator::state::InnerState;
 use anyhow::{Context, Result};
 use rusqlite::params;

@@ -1,7 +1,7 @@
+use crate::scheduler::check::{run_checks, CheckReport, CheckResult};
 use agent_orchestrator::config_load::read_active_config;
 use agent_orchestrator::error::Result;
 use agent_orchestrator::state::InnerState;
-use crate::scheduler::check::{run_checks, CheckReport, CheckResult};
 
 /// Rendered result of `orchestrator check`.
 #[derive(Debug, Clone)]

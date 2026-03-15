@@ -189,11 +189,14 @@ pub(super) async fn detect_sandbox_violation(
 
     if matches!(
         execution_profile.network_mode,
-        agent_orchestrator::config::ExecutionNetworkMode::Deny | agent_orchestrator::config::ExecutionNetworkMode::Allowlist
+        agent_orchestrator::config::ExecutionNetworkMode::Deny
+            | agent_orchestrator::config::ExecutionNetworkMode::Allowlist
     ) && looks_like_network_denial(&lower_stderr)
     {
         let reason_code = match execution_profile.network_mode {
-            agent_orchestrator::config::ExecutionNetworkMode::Allowlist => "network_allowlist_blocked",
+            agent_orchestrator::config::ExecutionNetworkMode::Allowlist => {
+                "network_allowlist_blocked"
+            }
             _ => "network_blocked",
         };
         return SandboxViolationInfo {

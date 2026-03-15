@@ -2305,8 +2305,7 @@ fn test_finalize_cel_context_sandbox_combined_expression() {
 #[test]
 fn test_prehook_pipeline_var_string() {
     let mut ctx = make_prehook_ctx();
-    ctx.vars
-        .insert("my_var".to_string(), "hello".to_string());
+    ctx.vars.insert("my_var".to_string(), "hello".to_string());
     let result = evaluate_step_prehook_expression("my_var == 'hello'", &ctx);
     assert!(result.unwrap());
 }
@@ -2331,8 +2330,7 @@ fn test_prehook_pipeline_var_bool() {
 #[test]
 fn test_prehook_pipeline_var_float() {
     let mut ctx = make_prehook_ctx();
-    ctx.vars
-        .insert("score".to_string(), "3.14".to_string());
+    ctx.vars.insert("score".to_string(), "3.14".to_string());
     let result = evaluate_step_prehook_expression("score > 3.0", &ctx);
     assert!(result.unwrap());
 }
@@ -2344,10 +2342,7 @@ fn test_prehook_pipeline_var_json_array_in_operator() {
         "regression_target_ids".to_string(),
         r#"["docs/qa/test.md","docs/qa/other.md"]"#.to_string(),
     );
-    let result = evaluate_step_prehook_expression(
-        "qa_file_path in regression_target_ids",
-        &ctx,
-    );
+    let result = evaluate_step_prehook_expression("qa_file_path in regression_target_ids", &ctx);
     assert!(result.unwrap());
 }
 
@@ -2358,10 +2353,7 @@ fn test_prehook_pipeline_var_json_array_not_in() {
         "regression_target_ids".to_string(),
         r#"["docs/qa/other.md"]"#.to_string(),
     );
-    let result = evaluate_step_prehook_expression(
-        "qa_file_path in regression_target_ids",
-        &ctx,
-    );
+    let result = evaluate_step_prehook_expression("qa_file_path in regression_target_ids", &ctx);
     assert!(!result.unwrap());
 }
 

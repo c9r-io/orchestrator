@@ -341,9 +341,10 @@ impl OrchestratorService for TestOrchestratorServer {
         request: Request<TaskInfoRequest>,
     ) -> Result<Response<TaskInfoResponse>, Status> {
         let req = request.into_inner();
-        let detail = orchestrator_scheduler::service::task::get_task_detail(&self.state, &req.task_id)
-            .await
-            .map_err(map_core_error)?;
+        let detail =
+            orchestrator_scheduler::service::task::get_task_detail(&self.state, &req.task_id)
+                .await
+                .map_err(map_core_error)?;
 
         let agent_states = {
             use agent_orchestrator::config_load::read_active_config;
@@ -468,13 +469,15 @@ impl OrchestratorService for TestOrchestratorServer {
                         Ok(s) => s,
                         Err(_) => break,
                     };
-                let detail =
-                    match orchestrator_scheduler::service::task::get_task_detail(&state, &req.task_id)
-                        .await
-                    {
-                        Ok(d) => d,
-                        Err(_) => break,
-                    };
+                let detail = match orchestrator_scheduler::service::task::get_task_detail(
+                    &state,
+                    &req.task_id,
+                )
+                .await
+                {
+                    Ok(d) => d,
+                    Err(_) => break,
+                };
                 let terminal = matches!(
                     summary.status.as_str(),
                     "completed" | "failed" | "cancelled" | "deleted"

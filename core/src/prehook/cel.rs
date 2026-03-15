@@ -70,8 +70,8 @@ pub fn evaluate_convergence_expression(
 ) -> Result<bool> {
     let compiled = std::panic::catch_unwind(|| Program::compile(expression))
         .map_err(|_| anyhow::anyhow!("convergence_expr compilation panicked"))?;
-    let program = compiled
-        .map_err(|err| anyhow::anyhow!("convergence_expr compilation failed: {}", err))?;
+    let program =
+        compiled.map_err(|err| anyhow::anyhow!("convergence_expr compilation failed: {}", err))?;
     let cel_context = build_convergence_cel_context(context)?;
     let value = program
         .execute(&cel_context)

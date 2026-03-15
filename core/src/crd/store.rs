@@ -170,7 +170,11 @@ mod tests {
     #[test]
     fn cross_kind_key_isolation() {
         let mut store = ResourceStore::default();
-        store.put(make_cr("RuntimePolicy", "alpha", serde_json::json!({"a": 1})));
+        store.put(make_cr(
+            "RuntimePolicy",
+            "alpha",
+            serde_json::json!({"a": 1}),
+        ));
         store.put(make_cr("Project", "alpha", serde_json::json!({"w": 2})));
         assert_eq!(store.len(), 2);
         assert_eq!(store.get("RuntimePolicy", "alpha").unwrap().spec["a"], 1);
@@ -225,7 +229,9 @@ mod tests {
             created_at: "t".to_string(),
             updated_at: "t".to_string(),
         };
-        store.resources_mut().insert("Agent/proj1/my-agent".to_string(), cr);
+        store
+            .resources_mut()
+            .insert("Agent/proj1/my-agent".to_string(), cr);
         assert!(store.get_namespaced("Agent", "proj1", "my-agent").is_some());
         assert!(store.get_namespaced("Agent", "proj2", "my-agent").is_none());
         assert!(store.get("Agent", "my-agent").is_none());
@@ -258,7 +264,11 @@ mod tests {
             ..Default::default()
         };
         store.put(make_cr("Agent", "good", good.to_cr_spec()));
-        store.put(make_cr("Agent", "bad", serde_json::json!({"not_command": 42})));
+        store.put(make_cr(
+            "Agent",
+            "bad",
+            serde_json::json!({"not_command": 42}),
+        ));
         let map: HashMap<String, AgentConfig> = store.project_map();
         assert_eq!(map.len(), 1);
         assert!(map.contains_key("good"));
@@ -276,7 +286,11 @@ mod tests {
     #[test]
     fn put_auto_assigns_default_project_for_project_scoped_kinds() {
         let mut store = ResourceStore::default();
-        let cr = make_cr("Agent", "my-agent", serde_json::json!({"command": "echo test"}));
+        let cr = make_cr(
+            "Agent",
+            "my-agent",
+            serde_json::json!({"command": "echo test"}),
+        );
         assert!(cr.metadata.project.is_none());
         store.put(cr);
         assert!(store

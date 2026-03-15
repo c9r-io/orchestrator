@@ -67,12 +67,7 @@ impl ResourceStore {
     }
 
     /// Get a namespaced resource by kind, project, and name.
-    pub fn get_namespaced(
-        &self,
-        kind: &str,
-        project: &str,
-        name: &str,
-    ) -> Option<&CustomResource> {
+    pub fn get_namespaced(&self, kind: &str, project: &str, name: &str) -> Option<&CustomResource> {
         let key = format!("{}/{}/{}", kind, project, name);
         self.resources.get(&key)
     }
@@ -136,9 +131,7 @@ impl ResourceStore {
         let key = self
             .resources
             .keys()
-            .find(|k| {
-                k.starts_with(&prefix) && k.ends_with(&suffix) && k.matches('/').count() == 2
-            })
+            .find(|k| k.starts_with(&prefix) && k.ends_with(&suffix) && k.matches('/').count() == 2)
             .cloned();
         if let Some(key) = key {
             let removed = self.resources.remove(&key);

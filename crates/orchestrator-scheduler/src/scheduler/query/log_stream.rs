@@ -66,7 +66,10 @@ pub async fn stream_task_logs_impl(
         };
 
         let log_body = if stdout_tail.is_empty() && stderr_tail.is_empty() {
-            format!("{} (stdout={}, stderr={})", LOG_UNAVAILABLE_MARKER, stdout_path, stderr_path)
+            format!(
+                "{} (stdout={}, stderr={})",
+                LOG_UNAVAILABLE_MARKER, stdout_path, stderr_path
+            )
         } else {
             redact_text(&stdout_tail, &redaction_patterns)
         };
@@ -104,11 +107,7 @@ pub async fn stream_task_logs_impl(
 /// Follow task logs in real-time, sending each chunk via `output_fn`.
 ///
 /// `output_fn(text, is_stderr)` is called synchronously for every log chunk.
-pub async fn follow_task_logs<F>(
-    state: &InnerState,
-    task_id: &str,
-    output_fn: &mut F,
-) -> Result<()>
+pub async fn follow_task_logs<F>(state: &InnerState, task_id: &str, output_fn: &mut F) -> Result<()>
 where
     F: FnMut(String, bool) -> anyhow::Result<()>,
 {
@@ -132,7 +131,8 @@ where
     let mut last_warning_at: Option<Instant> = None;
 
     loop {
-        let latest = agent_orchestrator::events::query_latest_step_log_paths_async(state, task_id).await;
+        let latest =
+            agent_orchestrator::events::query_latest_step_log_paths_async(state, task_id).await;
         let (phase, stdout_path, stderr_path) = match latest {
             Ok(Some(info)) => info,
             Ok(None) => {
@@ -173,9 +173,14 @@ where
         }
         waiting_notice_printed = false;
 
-        if let Err(err) =
-            follow_one_stream(&stdout_path, &mut stdout_pos, false, &redaction_patterns, output_fn)
-                .await
+        if let Err(err) = follow_one_stream(
+            &stdout_path,
+            &mut stdout_pos,
+            false,
+            &redaction_patterns,
+            output_fn,
+        )
+        .await
         {
             emit_anomaly_warning(
                 &AnomalyRule::TransientReadError,
@@ -184,9 +189,14 @@ where
             );
         }
 
-        if let Err(err) =
-            follow_one_stream(&stderr_path, &mut stderr_pos, true, &redaction_patterns, output_fn)
-                .await
+        if let Err(err) = follow_one_stream(
+            &stderr_path,
+            &mut stderr_pos,
+            true,
+            &redaction_patterns,
+            output_fn,
+        )
+        .await
         {
             emit_anomaly_warning(
                 &AnomalyRule::TransientReadError,
@@ -945,7 +955,7 @@ mod tests {
             .append(true)
             .open(&path)
             .expect("open for append");
-        write!(f, "second chunk\n").expect("append");
+        writeln!(f, "second chunk").expect("append");
         drop(f);
 
         // Second read should only get new data

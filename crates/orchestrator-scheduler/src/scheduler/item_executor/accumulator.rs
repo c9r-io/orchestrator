@@ -288,14 +288,18 @@ impl StepExecutionAccumulator {
             fix_confidence: self.fix_confidence,
             fix_quality_score: self.fix_quality_score,
             total_artifacts: self.phase_artifacts.len() as i64,
-            has_ticket_artifacts: self
-                .phase_artifacts
-                .iter()
-                .any(|a| matches!(a.kind, agent_orchestrator::collab::ArtifactKind::Ticket { .. })),
-            has_code_change_artifacts: self
-                .phase_artifacts
-                .iter()
-                .any(|a| matches!(a.kind, agent_orchestrator::collab::ArtifactKind::CodeChange { .. })),
+            has_ticket_artifacts: self.phase_artifacts.iter().any(|a| {
+                matches!(
+                    a.kind,
+                    agent_orchestrator::collab::ArtifactKind::Ticket { .. }
+                )
+            }),
+            has_code_change_artifacts: self.phase_artifacts.iter().any(|a| {
+                matches!(
+                    a.kind,
+                    agent_orchestrator::collab::ArtifactKind::CodeChange { .. }
+                )
+            }),
             is_last_cycle: task_ctx.current_cycle
                 >= task_ctx
                     .execution_plan

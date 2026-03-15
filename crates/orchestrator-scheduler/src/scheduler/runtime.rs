@@ -313,7 +313,8 @@ pub async fn load_task_runtime_context(
             self_referential,
         )?;
         if self_referential
-            || workflow.safety.profile == agent_orchestrator::config::WorkflowSafetyProfile::SelfReferentialProbe
+            || workflow.safety.profile
+                == agent_orchestrator::config::WorkflowSafetyProfile::SelfReferentialProbe
         {
             insert_event(
                 state,
@@ -352,7 +353,9 @@ pub async fn load_task_runtime_context(
         pipeline_vars: {
             let mut pv = match runtime_row.pipeline_vars_json.as_deref() {
                 Some(json) if !json.is_empty() => {
-                    match serde_json::from_str::<agent_orchestrator::config::PipelineVariables>(json) {
+                    match serde_json::from_str::<agent_orchestrator::config::PipelineVariables>(
+                        json,
+                    ) {
                         Ok(vars) => vars,
                         Err(e) => {
                             tracing::warn!(
@@ -518,7 +521,8 @@ mod tests {
                 .get_mut(&workflow_id)
                 .expect("default workflow");
             workflow.safety.profile = WorkflowSafetyProfile::SelfReferentialProbe;
-            workflow.safety.checkpoint_strategy = agent_orchestrator::config::CheckpointStrategy::GitTag;
+            workflow.safety.checkpoint_strategy =
+                agent_orchestrator::config::CheckpointStrategy::GitTag;
             workflow.safety.auto_rollback = true;
             (next, ())
         });
@@ -694,12 +698,14 @@ mod tests {
             unsafe_mode: true,
             async_database: base.async_database.clone(),
             logs_dir: base.logs_dir.clone(),
-            config_runtime: arc_swap::ArcSwap::from_pointee(agent_orchestrator::state::ConfigRuntimeSnapshot {
-                active_config: agent_orchestrator::config_load::read_loaded_config(base)
-                    .expect("read active config"),
-                active_config_error: None,
-                active_config_notice: None,
-            }),
+            config_runtime: arc_swap::ArcSwap::from_pointee(
+                agent_orchestrator::state::ConfigRuntimeSnapshot {
+                    active_config: agent_orchestrator::config_load::read_loaded_config(base)
+                        .expect("read active config"),
+                    active_config_error: None,
+                    active_config_notice: None,
+                },
+            ),
             running: tokio::sync::Mutex::new(std::collections::HashMap::new()),
             agent_health: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             agent_metrics: tokio::sync::RwLock::new(std::collections::HashMap::new()),

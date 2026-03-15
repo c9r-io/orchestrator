@@ -150,7 +150,9 @@ pub async fn execute_self_test_step(
     if manifest_path.exists() {
         let validate_passed = match std::fs::read_to_string(&manifest_path) {
             Ok(content) => {
-                match agent_orchestrator::service::system::validate_manifests(state, &content, project_id) {
+                match agent_orchestrator::service::system::validate_manifests(
+                    state, &content, project_id,
+                ) {
                     Ok(report) => {
                         if !report.valid {
                             for err in &report.errors {

@@ -120,11 +120,7 @@ pub(crate) fn repair_unquoted_json(input: &str) -> String {
                     out.push('"');
                 } else {
                     // Value or ArrayElement: accumulate until , } ] or end
-                    while i < len
-                        && bytes[i] != b','
-                        && bytes[i] != b'}'
-                        && bytes[i] != b']'
-                    {
+                    while i < len && bytes[i] != b',' && bytes[i] != b'}' && bytes[i] != b']' {
                         i += 1;
                     }
                     let token = input[start..i].trim();
@@ -429,8 +425,7 @@ mod tests {
 ```
 
 Done."#;
-        let arr =
-            extract_json_array(fenced, "$.items").expect("should extract from fenced block");
+        let arr = extract_json_array(fenced, "$.items").expect("should extract from fenced block");
         assert_eq!(arr.len(), 3);
     }
 
@@ -442,8 +437,8 @@ Done."#;
 {"goals": ["x", "y"]}
 ```
 "#;
-        let arr = extract_json_array(fenced, "$.goals")
-            .expect("should extract from unfenced block");
+        let arr =
+            extract_json_array(fenced, "$.goals").expect("should extract from unfenced block");
         assert_eq!(arr.len(), 2);
     }
 

@@ -128,11 +128,9 @@ pub(crate) async fn task_resume(
 
     // FR-035: reset blocked items before resuming if requested
     if req.reset_blocked {
-        let count = orchestrator_scheduler::scheduler::reset_blocked_items(
-            &server.state, &id,
-        )
-        .await
-        .map_err(|e| Status::internal(e.to_string()))?;
+        let count = orchestrator_scheduler::scheduler::reset_blocked_items(&server.state, &id)
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
         if count > 0 {
             tracing::info!(task_id = %id, count, "reset {count} blocked items to unresolved");
         }
@@ -255,9 +253,10 @@ pub(crate) async fn task_info(
 ) -> Result<Response<TaskInfoResponse>, Status> {
     super::authorize(server, &request, "TaskInfo").map_err(Status::from)?;
     let req = request.into_inner();
-    let detail = orchestrator_scheduler::service::task::get_task_detail(&server.state, &req.task_id)
-        .await
-        .map_err(map_core_error)?;
+    let detail =
+        orchestrator_scheduler::service::task::get_task_detail(&server.state, &req.task_id)
+            .await
+            .map_err(map_core_error)?;
 
     // Collect agent lifecycle states for observability
     let agent_states = {
@@ -397,20 +396,20 @@ pub(crate) async fn task_watch(
             }
 
             let summary =
-                match orchestrator_scheduler::service::task::load_summary(&state, &req.task_id).await {
+                match orchestrator_scheduler::service::task::load_summary(&state, &req.task_id)
+                    .await
+                {
                     Ok(s) => s,
                     Err(_) => break,
                 };
 
-            let detail = match orchestrator_scheduler::service::task::get_task_detail(
-                &state,
-                &req.task_id,
-            )
-            .await
-            {
-                Ok(d) => d,
-                Err(_) => break,
-            };
+            let detail =
+                match orchestrator_scheduler::service::task::get_task_detail(&state, &req.task_id)
+                    .await
+                {
+                    Ok(d) => d,
+                    Err(_) => break,
+                };
 
             let terminal = matches!(
                 summary.status.as_str(),
@@ -445,10 +444,13 @@ pub(crate) async fn task_trace(
 ) -> Result<Response<TaskTraceResponse>, Status> {
     super::authorize(server, &request, "TaskTrace").map_err(Status::from)?;
     let req = request.into_inner();
-    let result =
-        orchestrator_scheduler::service::task::get_task_trace(&server.state, &req.task_id, req.verbose)
-            .await
-            .map_err(map_core_error)?;
+    let result = orchestrator_scheduler::service::task::get_task_trace(
+        &server.state,
+        &req.task_id,
+        req.verbose,
+    )
+    .await
+    .map_err(map_core_error)?;
 
     let entries = result
         .entries

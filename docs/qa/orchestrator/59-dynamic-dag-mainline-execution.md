@@ -90,7 +90,7 @@ Verify the trace builder emits graph-level execution information for dynamic DAG
 ### Steps
 1. Run the focused trace regression:
    ```bash
-   cargo test -p agent-orchestrator build_trace_includes_dynamic_graph_events -- --nocapture
+   cargo test -p orchestrator-scheduler build_trace_includes_dynamic_graph_events -- --nocapture
    ```
 2. Inspect trace model fields:
    ```bash
@@ -120,7 +120,7 @@ Verify task detail queries can return persisted graph debug bundles without reco
    ```
 2. Run the service-level detail regression:
    ```bash
-   cargo test -p agent-orchestrator get_task_details_impl_returns_items_and_empty_runs -- --nocapture
+   cargo test -p orchestrator-scheduler get_task_details_impl_returns_items_and_empty_runs -- --nocapture
    ```
 3. Inspect the query and proto wiring:
    ```bash

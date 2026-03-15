@@ -9,21 +9,21 @@ mod tests;
 pub use continuation::evaluate_loop_guard_rules;
 
 use agent_orchestrator::config::{InvariantCheckPoint, StepScope};
-use chrono::TimeZone;
 use agent_orchestrator::events::insert_event;
 use agent_orchestrator::state::InnerState;
 use anyhow::Result;
+use chrono::TimeZone;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
+use super::item_executor::finalize_item_execution;
 use super::item_executor::{process_item, StepExecutionAccumulator};
-use super::task_state::query_recent_cycle_timestamps;
 use super::phase_runner::{run_phase_with_rotation, RotatingPhaseRunRequest};
 use super::runtime::load_task_runtime_context;
 use super::safety::RestartRequestedError;
-use super::item_executor::finalize_item_execution;
+use super::task_state::query_recent_cycle_timestamps;
 use super::task_state::{
     count_stale_pending_items, count_unresolved_items, find_completed_runs_for_pending_items,
     find_inflight_command_runs_for_task, first_task_item_id, is_task_paused_in_db,
@@ -64,8 +64,7 @@ pub async fn run_task_loop(
                 json!({"error": e.to_string()}),
             );
             let unresolved = count_unresolved_items(&state, task_id).await.unwrap_or(0);
-            let _ =
-                record_task_execution_metric(&state, task_id, "failed", 0, unresolved).await;
+            let _ = record_task_execution_metric(&state, task_id, "failed", 0, unresolved).await;
         }
     }
     result
@@ -176,13 +175,7 @@ async fn run_task_loop_core(
 
         // FR-035 L2: Rapid cycle detection — pause task if last 3 cycles were too fast
         if task_ctx.current_cycle >= 4 {
-            if let Ok(true) = detect_rapid_cycles(
-                &state,
-                task_id,
-                &task_ctx,
-            )
-            .await
-            {
+            if let Ok(true) = detect_rapid_cycles(&state, task_id, &task_ctx).await {
                 insert_event(
                     &state,
                     task_id,
@@ -602,7 +595,9 @@ fn parse_cycle_timestamp(ts: &str) -> Option<chrono::DateTime<chrono::FixedOffse
 pub(crate) fn proactive_max_cycles(policy: &agent_orchestrator::config::WorkflowLoopConfig) -> u32 {
     match policy.mode {
         agent_orchestrator::config::LoopMode::Fixed => policy.guard.max_cycles.unwrap_or(1),
-        agent_orchestrator::config::LoopMode::Infinite => policy.guard.max_cycles.unwrap_or(u32::MAX),
+        agent_orchestrator::config::LoopMode::Infinite => {
+            policy.guard.max_cycles.unwrap_or(u32::MAX)
+        }
         _ => u32::MAX, // Once mode: handled by evaluate_loop_guard_rules
     }
 }
@@ -690,8 +685,10 @@ async fn compensate_pending_items(
     }
 
     // Group by item_id
-    let mut grouped: std::collections::BTreeMap<String, Vec<&agent_orchestrator::task_repository::CompletedRunRecord>> =
-        std::collections::BTreeMap::new();
+    let mut grouped: std::collections::BTreeMap<
+        String,
+        Vec<&agent_orchestrator::task_repository::CompletedRunRecord>,
+    > = std::collections::BTreeMap::new();
     for run in &completed_runs {
         grouped
             .entry(run.task_item_id.clone())
@@ -710,8 +707,7 @@ async fn compensate_pending_items(
         let mut acc = StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone());
 
         for run in runs {
-            acc.exit_codes
-                .insert(run.phase.clone(), run.exit_code);
+            acc.exit_codes.insert(run.phase.clone(), run.exit_code);
             acc.step_ran.insert(run.phase.clone(), true);
 
             // Populate qa-specific fields

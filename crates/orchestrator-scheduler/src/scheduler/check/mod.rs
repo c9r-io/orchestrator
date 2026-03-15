@@ -414,7 +414,9 @@ mod tests {
         }
     }
 
-    fn default_project_mut(cfg: &mut ActiveConfig) -> &mut agent_orchestrator::config::ProjectConfig {
+    fn default_project_mut(
+        cfg: &mut ActiveConfig,
+    ) -> &mut agent_orchestrator::config::ProjectConfig {
         cfg.config
             .project_mut(None)
             .expect("default project should exist")

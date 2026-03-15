@@ -23,16 +23,16 @@ use tonic::transport::Server;
 use tracing::{error, info};
 
 use agent_orchestrator::events::insert_event;
-use orchestrator_scheduler::scheduler::safety::RestartRequestedError;
-use orchestrator_scheduler::scheduler::{
-    load_task_summary, register_running_task, run_task_loop, shutdown_running_tasks,
-    unregister_running_task, RunningTask,
-};
 use agent_orchestrator::scheduler_service::{
     claim_next_pending_task, clear_worker_stop_signal, worker_stop_signal_path,
 };
 use agent_orchestrator::state::{task_semaphore, InnerState};
 use orchestrator_proto::OrchestratorServiceServer;
+use orchestrator_scheduler::scheduler::safety::RestartRequestedError;
+use orchestrator_scheduler::scheduler::{
+    load_task_summary, register_running_task, run_task_loop, shutdown_running_tasks,
+    unregister_running_task, RunningTask,
+};
 
 #[derive(Debug, Parser)]
 #[command(name = "orchestratord", version, about = "Agent Orchestrator daemon")]
@@ -802,7 +802,10 @@ async fn worker_supervisor(
         let mut respawn_indices = Vec::new();
         for (idx, (worker_idx, handle)) in handles.iter().enumerate() {
             if handle.is_finished() {
-                info!(worker = worker_idx + 1, "detected dead worker, scheduling respawn");
+                info!(
+                    worker = worker_idx + 1,
+                    "detected dead worker, scheduling respawn"
+                );
                 respawn_indices.push((idx, *worker_idx));
             }
         }

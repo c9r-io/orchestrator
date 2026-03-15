@@ -1,4 +1,6 @@
-use agent_orchestrator::config::{InvariantCheckPoint, InvariantConfig, InvariantResult, OnViolation};
+use agent_orchestrator::config::{
+    InvariantCheckPoint, InvariantConfig, InvariantResult, OnViolation,
+};
 use anyhow::Result;
 use std::path::Path;
 use tracing::warn;

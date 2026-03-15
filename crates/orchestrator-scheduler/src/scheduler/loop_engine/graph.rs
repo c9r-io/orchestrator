@@ -6,13 +6,6 @@ use anyhow::{anyhow, Result};
 use serde_json::json;
 use uuid::Uuid;
 
-use agent_orchestrator::config::{DagFallbackMode, StepScope, TaskRuntimeContext};
-use agent_orchestrator::dynamic_orchestration::{
-    build_adaptive_execution_graph, build_static_execution_graph, AdaptiveFailureClass,
-    AdaptivePlanExecutor, AdaptivePlanSource, AdaptivePlanner, EffectiveExecutionGraph,
-    ExecutionGraphNode, ExecutionGraphNodeSpec, ExecutionGraphSource,
-};
-use agent_orchestrator::events::insert_event;
 use crate::scheduler::item_executor::{
     execute_dynamic_step_config, process_item_filtered, ProcessItemRequest,
     StepExecutionAccumulator,
@@ -22,6 +15,13 @@ use crate::scheduler::task_state::{
     is_task_paused_in_db, list_task_items_for_cycle, set_task_status,
 };
 use crate::scheduler::RunningTask;
+use agent_orchestrator::config::{DagFallbackMode, StepScope, TaskRuntimeContext};
+use agent_orchestrator::dynamic_orchestration::{
+    build_adaptive_execution_graph, build_static_execution_graph, AdaptiveFailureClass,
+    AdaptivePlanExecutor, AdaptivePlanSource, AdaptivePlanner, EffectiveExecutionGraph,
+    ExecutionGraphNode, ExecutionGraphNodeSpec, ExecutionGraphSource,
+};
+use agent_orchestrator::events::insert_event;
 use agent_orchestrator::state::InnerState;
 
 use super::{cycle_safety, segment};
@@ -653,10 +653,12 @@ fn should_skip_node(
             None => StepExecutionAccumulator::new(task_ctx.pipeline_vars.clone())
                 .to_prehook_context(task_id, anchor_item, task_ctx, &node.id),
         };
-    Ok(!agent_orchestrator::prehook::evaluate_step_prehook_expression(
-        &prehook.when,
-        &prehook_ctx,
-    )?)
+    Ok(
+        !agent_orchestrator::prehook::evaluate_step_prehook_expression(
+            &prehook.when,
+            &prehook_ctx,
+        )?,
+    )
 }
 
 fn evaluate_edge(

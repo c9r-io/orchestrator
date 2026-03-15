@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod cases {
+    use crate::scheduler::phase_runner::types::*;
+    use crate::scheduler::phase_runner::util::*;
     use agent_orchestrator::config::StepScope;
     use agent_orchestrator::config::{ExecutionFsMode, ExecutionNetworkMode, ExecutionProfileMode};
     use agent_orchestrator::runner::ResolvedExecutionProfile;
-    use crate::scheduler::phase_runner::types::*;
-    use crate::scheduler::phase_runner::util::*;
 
     #[test]
     fn shell_escape_simple_string() {
@@ -550,7 +550,8 @@ mod cases {
             &mut progress,
             0,
             0,
-            LOW_OUTPUT_MIN_ELAPSED_SECS + ((STALL_AUTO_KILL_CONSECUTIVE_HEARTBEATS as u64 + 1) * 30),
+            LOW_OUTPUT_MIN_ELAPSED_SECS
+                + ((STALL_AUTO_KILL_CONSECUTIVE_HEARTBEATS as u64 + 1) * 30),
             true,
         );
         assert_eq!(final_sample.output_state, "low_output");

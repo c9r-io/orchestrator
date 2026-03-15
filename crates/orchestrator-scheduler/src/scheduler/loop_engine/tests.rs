@@ -2,6 +2,8 @@ use super::continuation::*;
 use super::cycle_safety::*;
 use super::graph;
 use super::segment::*;
+use crate::scheduler::item_executor::StepExecutionAccumulator;
+use crate::scheduler::{load_task_runtime_context, set_task_status, update_task_cycle_state};
 use agent_orchestrator::config::{
     LoopMode, PipelineVariables, StepBehavior, StepHookEngine, StepPrehookConfig, StepScope,
     WorkflowConfig, WorkflowExecutionConfig, WorkflowExecutionMode, WorkflowFinalizeConfig,
@@ -10,8 +12,6 @@ use agent_orchestrator::config::{
 use agent_orchestrator::db::open_conn;
 use agent_orchestrator::dto::CreateTaskPayload;
 use agent_orchestrator::dynamic_orchestration::{AdaptiveFallbackMode, AdaptivePlannerConfig};
-use crate::scheduler::item_executor::StepExecutionAccumulator;
-use crate::scheduler::{load_task_runtime_context, set_task_status, update_task_cycle_state};
 use agent_orchestrator::task_ops::create_task_impl;
 use agent_orchestrator::test_utils::TestState;
 use rusqlite::params;
@@ -135,8 +135,11 @@ fn dynamic_dag_workflow() -> WorkflowConfig {
     }
 }
 
-async fn seed_dynamic_graph_task() -> (TestState, std::sync::Arc<agent_orchestrator::state::InnerState>, String)
-{
+async fn seed_dynamic_graph_task() -> (
+    TestState,
+    std::sync::Arc<agent_orchestrator::state::InnerState>,
+    String,
+) {
     let mut fixture = TestState::new().with_workflow("dynamic-graph", dynamic_dag_workflow());
     let state = fixture.build();
     let qa_file = state
@@ -1704,7 +1707,8 @@ async fn execute_cycle_graph_returns_static_segment_fallback_on_fail_closed_plan
 async fn execute_cycle_graph_uses_deterministic_dag_fallback_graph_on_fail_closed_planner_error() {
     let (_fixture, state, task_id) = seed_dynamic_graph_task().await;
     let mut task_ctx = load_cycle_context(&state, &task_id).await;
-    task_ctx.execution.fallback_mode = agent_orchestrator::config::DagFallbackMode::DeterministicDag;
+    task_ctx.execution.fallback_mode =
+        agent_orchestrator::config::DagFallbackMode::DeterministicDag;
     task_ctx.adaptive = std::sync::Arc::new(Some(AdaptivePlannerConfig {
         enabled: true,
         planner_agent: None,

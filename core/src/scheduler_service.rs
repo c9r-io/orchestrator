@@ -101,7 +101,9 @@ mod tests {
         let created = create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
 
         // Task starts in 'created' status; enqueue to make it 'pending' and claimable
-        enqueue_task(&state, &created.id).await.expect("enqueue task");
+        enqueue_task(&state, &created.id)
+            .await
+            .expect("enqueue task");
 
         let claimed = claim_next_pending_task(&state)
             .await
@@ -128,7 +130,9 @@ mod tests {
             .join("workspace/default/docs/qa/scheduler_service_test.md");
         std::fs::write(&qa_file, "# scheduler service test\n").expect("seed qa file");
         let _created = create_task_impl(&state, CreateTaskPayload::default()).expect("create task");
-        enqueue_task(&state, &_created.id).await.expect("enqueue task");
+        enqueue_task(&state, &_created.id)
+            .await
+            .expect("enqueue task");
         let state_a = state.clone();
         let state_b = state.clone();
 
@@ -350,7 +354,6 @@ mod tests {
 
     #[test]
     fn worker_signal_paths_are_under_data_dir() {
-
         let mut fixture = TestState::new();
         let state = fixture.build();
 

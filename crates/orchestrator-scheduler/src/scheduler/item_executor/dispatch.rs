@@ -285,7 +285,10 @@ fn build_step_skipped_payload(
     payload
 }
 
-fn synthetic_chain_result(step: &TaskExecutionStep, success: bool) -> agent_orchestrator::dto::RunResult {
+fn synthetic_chain_result(
+    step: &TaskExecutionStep,
+    success: bool,
+) -> agent_orchestrator::dto::RunResult {
     let output = agent_orchestrator::collab::AgentOutput::new(
         uuid::Uuid::new_v4(),
         "chain".to_string(),
@@ -818,8 +821,10 @@ async fn execute_agent_step(
                     // Extract result text from stream-json output when available;
                     // fall back to raw stdout for non-stream-json agents.
                     let effective_output =
-                        agent_orchestrator::json_extract::extract_stream_json_result(&output.stdout)
-                            .unwrap_or_else(|| output.stdout.clone());
+                        agent_orchestrator::json_extract::extract_stream_json_result(
+                            &output.stdout,
+                        )
+                        .unwrap_or_else(|| output.stdout.clone());
                     spill_large_var(
                         &state.logs_dir,
                         task_id,
@@ -1350,10 +1355,7 @@ pub(crate) async fn execute_dynamic_step_config(
                     agent_id
                 )
             })?;
-            (
-                agent.command.clone(),
-                agent.prompt_delivery,
-            )
+            (agent.command.clone(), agent.prompt_delivery)
         };
         run_phase_with_selected_agent(
             state,

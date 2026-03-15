@@ -1,10 +1,10 @@
 use super::{CheckResult, KNOWN_SYSTEM_VARS};
+use crate::scheduler::trace::find_template_vars;
 use agent_orchestrator::anomaly::Severity;
 use agent_orchestrator::config::{
     is_known_builtin_step_name, resolve_step_semantic_kind, ExecutionMode, StepSemanticKind,
     WorkflowStepConfig,
 };
-use crate::scheduler::trace::find_template_vars;
 use std::collections::HashSet;
 
 pub(super) fn check_builtin_names(
@@ -175,7 +175,10 @@ fn check_steps_pipe_to(
 }
 
 pub(super) fn check_template_vars(
-    step_templates: &std::collections::HashMap<String, agent_orchestrator::config::StepTemplateConfig>,
+    step_templates: &std::collections::HashMap<
+        String,
+        agent_orchestrator::config::StepTemplateConfig,
+    >,
     workflows: &std::collections::HashMap<String, agent_orchestrator::config::WorkflowConfig>,
     workflow_filter: Option<&str>,
     out: &mut Vec<CheckResult>,

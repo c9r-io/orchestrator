@@ -16,11 +16,11 @@ mod tests;
 
 pub use command_run::NewCommandRun;
 pub use trait_def::TaskRepository;
-pub use write_ops::{CompletedRunRecord, InflightRunRecord};
 pub use types::{
     DbEventRecord, NewTaskGraphRun, NewTaskGraphSnapshot, TaskLogRunRow, TaskRepositoryConn,
     TaskRepositorySource, TaskRuntimeRow,
 };
+pub use write_ops::{CompletedRunRecord, InflightRunRecord};
 
 use crate::async_database::{flatten_err, AsyncDatabase};
 use crate::dto::{CommandRunDto, EventDto, TaskGraphDebugBundle, TaskItemDto};
@@ -228,10 +228,7 @@ impl TaskRepository for SqliteTaskRepository {
         write_ops::find_active_child_pids(&conn, task_id)
     }
 
-    fn find_inflight_command_runs_for_task(
-        &self,
-        task_id: &str,
-    ) -> Result<Vec<InflightRunRecord>> {
+    fn find_inflight_command_runs_for_task(&self, task_id: &str) -> Result<Vec<InflightRunRecord>> {
         let conn = self.connection()?;
         write_ops::find_inflight_command_runs_for_task(&conn, task_id)
     }
@@ -799,9 +796,7 @@ impl AsyncSqliteTaskRepository {
     }
 
     /// Recovers all orphaned running items across all tasks.
-    pub async fn recover_orphaned_running_items(
-        &self,
-    ) -> Result<Vec<(String, Vec<String>)>> {
+    pub async fn recover_orphaned_running_items(&self) -> Result<Vec<(String, Vec<String>)>> {
         self.async_db
             .writer()
             .call(move |conn| {

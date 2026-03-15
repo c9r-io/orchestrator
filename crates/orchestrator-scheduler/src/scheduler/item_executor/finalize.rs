@@ -51,15 +51,22 @@ pub async fn finalize_item_execution(
     }
 
     let has_ticket_artifacts = !acc.created_ticket_files.is_empty()
-        || acc
-            .phase_artifacts
-            .iter()
-            .any(|a| matches!(a.kind, agent_orchestrator::collab::ArtifactKind::Ticket { .. }));
+        || acc.phase_artifacts.iter().any(|a| {
+            matches!(
+                a.kind,
+                agent_orchestrator::collab::ArtifactKind::Ticket { .. }
+            )
+        });
     if has_ticket_artifacts {
         let ticket_content: Vec<&serde_json::Value> = acc
             .phase_artifacts
             .iter()
-            .filter(|a| matches!(a.kind, agent_orchestrator::collab::ArtifactKind::Ticket { .. }))
+            .filter(|a| {
+                matches!(
+                    a.kind,
+                    agent_orchestrator::collab::ArtifactKind::Ticket { .. }
+                )
+            })
             .filter_map(|a| a.content.as_ref())
             .collect();
         let files_json =

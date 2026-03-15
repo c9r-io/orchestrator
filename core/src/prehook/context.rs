@@ -437,7 +437,9 @@ pub(super) fn build_finalize_cel_context(context: &ItemFinalizeContext) -> Resul
     Ok(cel_context)
 }
 
-pub(super) fn build_convergence_cel_context(context: &ConvergenceContext) -> Result<CelContext<'_>> {
+pub(super) fn build_convergence_cel_context(
+    context: &ConvergenceContext,
+) -> Result<CelContext<'_>> {
     let mut cel_context = CelContext::default();
     let err_msg = "convergence context build failed";
     cel_context

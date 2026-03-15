@@ -173,10 +173,13 @@ fn to_config(spec: &TriggerSpec) -> TriggerConfig {
         },
         concurrency_policy: spec.concurrency_policy,
         suspend: spec.suspend,
-        history_limit: spec.history_limit.as_ref().map(|h| TriggerHistoryLimitConfig {
-            successful: h.successful,
-            failed: h.failed,
-        }),
+        history_limit: spec
+            .history_limit
+            .as_ref()
+            .map(|h| TriggerHistoryLimitConfig {
+                successful: h.successful,
+                failed: h.failed,
+            }),
         throttle: spec.throttle.as_ref().map(|t| TriggerThrottleConfig {
             min_interval: t.min_interval,
         }),
@@ -312,8 +315,7 @@ spec:
     workflow: wf
     workspace: ws
 "#;
-        let resource: OrchestratorResource =
-            serde_yml::from_str(yaml).expect("should parse YAML");
+        let resource: OrchestratorResource = serde_yml::from_str(yaml).expect("should parse YAML");
         let registered = dispatch_resource(resource).expect("dispatch");
         let err = registered.validate().expect_err("should reject both");
         assert!(err.to_string().contains("not both"));
@@ -331,8 +333,7 @@ spec:
     workflow: wf
     workspace: ws
 "#;
-        let resource: OrchestratorResource =
-            serde_yml::from_str(yaml).expect("should parse YAML");
+        let resource: OrchestratorResource = serde_yml::from_str(yaml).expect("should parse YAML");
         let registered = dispatch_resource(resource).expect("dispatch");
         let err = registered.validate().expect_err("should reject neither");
         assert!(err.to_string().contains("must be set"));
@@ -404,8 +405,7 @@ spec:
     successful: 3
     failed: 3
 "#;
-        let resource: OrchestratorResource =
-            serde_yml::from_str(yaml).expect("should parse YAML");
+        let resource: OrchestratorResource = serde_yml::from_str(yaml).expect("should parse YAML");
         resource
             .validate_version()
             .expect("version should be valid");
@@ -446,8 +446,7 @@ spec:
   throttle:
     minInterval: 300
 "#;
-        let resource: OrchestratorResource =
-            serde_yml::from_str(yaml).expect("should parse YAML");
+        let resource: OrchestratorResource = serde_yml::from_str(yaml).expect("should parse YAML");
         assert_eq!(resource.kind, ResourceKind::Trigger);
         if let ResourceSpec::Trigger(ref spec) = resource.spec {
             assert!(spec.event.is_some());

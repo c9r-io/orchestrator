@@ -71,7 +71,10 @@ pub(super) mod test_fixtures {
     /// Create a TestState, seed a QA file, create a task, return (state, task_id).
     pub fn seed_task(
         fixture: &mut TestState,
-    ) -> (std::sync::Arc<agent_orchestrator::state::InnerState>, String) {
+    ) -> (
+        std::sync::Arc<agent_orchestrator::state::InnerState>,
+        String,
+    ) {
         let state = fixture.build();
         let qa_file = state
             .app_root

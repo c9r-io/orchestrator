@@ -491,7 +491,7 @@ fn load_config_from_resources_table(
         }
     }
     // Populate custom_resources from resource_store for non-builtin CRD kinds
-    for (crd_kind, _crd) in &config.custom_resource_definitions {
+    for crd_kind in config.custom_resource_definitions.keys() {
         if crate::crd::resolve::is_builtin_kind(crd_kind) {
             continue;
         }

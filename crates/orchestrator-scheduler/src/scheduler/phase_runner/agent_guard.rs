@@ -183,7 +183,10 @@ mod tests {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(&script_path).unwrap().permissions().mode();
+            let mode = std::fs::metadata(&script_path)
+                .unwrap()
+                .permissions()
+                .mode();
             assert!(mode & 0o111 != 0, "script should be executable");
         }
 

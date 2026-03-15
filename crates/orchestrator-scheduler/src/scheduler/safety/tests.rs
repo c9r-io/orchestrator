@@ -400,7 +400,10 @@ async fn test_execute_self_test_step_returns_nonzero_when_cargo_check_fails() {
     test_remove_env!("ORCH_SELF_TEST_CARGO");
 
     assert_eq!(result.exit_code, 9);
-    assert!(!result.error_output.is_empty(), "should capture error output on failure");
+    assert!(
+        !result.error_output.is_empty(),
+        "should capture error output on failure"
+    );
     let log = std::fs::read_to_string(&cargo_log).expect("read cargo log");
     assert!(log.contains("check") && log.contains("--message-format=short"));
     assert!(!log.contains("test --lib"));
@@ -742,7 +745,10 @@ async fn test_execute_self_test_step_cargo_test_fails() {
     test_remove_env!("ORCH_SELF_TEST_CARGO");
 
     assert_eq!(result.exit_code, 7);
-    assert!(!result.error_output.is_empty(), "should capture error output on test failure");
+    assert!(
+        !result.error_output.is_empty(),
+        "should capture error output on test failure"
+    );
     let log = std::fs::read_to_string(&cargo_log).expect("read cargo log");
     assert!(
         log.contains("check") && log.contains("--message-format=short"),
@@ -781,7 +787,10 @@ async fn test_execute_self_test_step_no_manifest_script() {
     test_remove_env!("FAKE_CARGO_LOG");
     test_remove_env!("ORCH_SELF_TEST_CARGO");
 
-    assert_eq!(result.exit_code, 0, "should succeed when manifest script is absent");
+    assert_eq!(
+        result.exit_code, 0,
+        "should succeed when manifest script is absent"
+    );
 }
 
 #[tokio::test]

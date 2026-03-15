@@ -65,7 +65,6 @@ pub fn cleanup(socket_path: &Path, pid_path: &Path) {
     let _ = std::fs::remove_file(pid_path);
 }
 
-
 /// Wait for SIGTERM or SIGINT, then initiate graceful shutdown.
 pub async fn shutdown_signal(state: Arc<InnerState>) -> Result<()> {
     let ctrl_c = tokio::signal::ctrl_c();

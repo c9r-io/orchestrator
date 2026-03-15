@@ -251,7 +251,7 @@ pub fn validate_manifests(
                     errors.push(message);
                     continue;
                 }
-                let registered = match dispatch_resource(resource) {
+                let registered = match dispatch_resource(*resource) {
                     Ok(r) => r,
                     Err(error) => {
                         let message = format!("document {}: {}", index + 1, error);
@@ -335,7 +335,6 @@ pub fn validate_manifests(
     }
 }
 
-
 fn diagnostic_entry_from_error(
     rule: impl Into<String>,
     message: impl Into<String>,
@@ -359,7 +358,6 @@ fn diagnostic_entry_from_error(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::service::resource::apply_manifests;
     use crate::task_ops::create_task_impl;
     use crate::test_utils::TestState;
 
@@ -399,8 +397,8 @@ mod tests {
             .app_root
             .join("workspace/default/docs/qa/system-worker.md");
         std::fs::write(&qa_file, "# worker\n").expect("seed qa file");
-        let created =
-            create_task_impl(&state, crate::dto::CreateTaskPayload::default()).expect("create task");
+        let created = create_task_impl(&state, crate::dto::CreateTaskPayload::default())
+            .expect("create task");
         crate::scheduler_service::enqueue_task(&state, &created.id)
             .await
             .expect("enqueue task");

@@ -607,7 +607,10 @@ fn recover_stalled_running_items_respects_threshold() {
 
     // Threshold of 3 hours → should NOT recover (item is only 2h old)
     let recovered = state::recover_stalled_running_items(&conn, 3 * 3600).expect("recover");
-    assert!(recovered.is_empty(), "should not recover items within threshold");
+    assert!(
+        recovered.is_empty(),
+        "should not recover items within threshold"
+    );
 
     // Verify item is still running
     let status: String = conn

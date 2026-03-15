@@ -74,7 +74,11 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
             ));
         }
         for (name, store) in &project.env_stores {
-            let store_kind = if store.sensitive { "SecretStore" } else { "EnvStore" };
+            let store_kind = if store.sensitive {
+                "SecretStore"
+            } else {
+                "EnvStore"
+            };
             let metadata = project_metadata(config, store_kind, project_id, name);
             let spec = crate::cli_types::EnvStoreSpec {
                 data: store.data.clone(),

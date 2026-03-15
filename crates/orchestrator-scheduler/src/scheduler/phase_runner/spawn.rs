@@ -143,7 +143,9 @@ pub(super) async fn spawn_phase_process(
                 execution_profile: setup.execution_profile.name.clone(),
                 execution_mode: match setup.execution_profile.mode {
                     agent_orchestrator::config::ExecutionProfileMode::Host => "host".to_string(),
-                    agent_orchestrator::config::ExecutionProfileMode::Sandbox => "sandbox".to_string(),
+                    agent_orchestrator::config::ExecutionProfileMode::Sandbox => {
+                        "sandbox".to_string()
+                    }
                 },
                 sandbox_denied: false,
                 sandbox_denial_reason: None,

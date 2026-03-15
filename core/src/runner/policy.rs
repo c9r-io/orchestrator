@@ -89,8 +89,9 @@ pub fn guard_daemon_pid_kill(command: &str, daemon_pid: u32) -> Result<(), Daemo
     }
 
     // Pattern 3: kill ... $ORCHESTRATOR_DAEMON_PID or ${ORCHESTRATOR_DAEMON_PID}
-    if command.contains("kill") && (command.contains("$ORCHESTRATOR_DAEMON_PID")
-        || command.contains("${ORCHESTRATOR_DAEMON_PID}"))
+    if command.contains("kill")
+        && (command.contains("$ORCHESTRATOR_DAEMON_PID")
+            || command.contains("${ORCHESTRATOR_DAEMON_PID}"))
     {
         return Err(DaemonPidGuardBlocked {
             reason: format!(
@@ -268,8 +269,10 @@ mod tests {
 
     #[test]
     fn blocks_kill_pid_in_compound_command() {
-        let result =
-            guard_daemon_pid_kill("echo start && kill $(cat data/daemon.pid) && echo done", 12345);
+        let result = guard_daemon_pid_kill(
+            "echo start && kill $(cat data/daemon.pid) && echo done",
+            12345,
+        );
         assert!(result.is_err());
     }
 

@@ -18,8 +18,8 @@ mod spawn;
 mod step;
 mod step_template;
 mod store_backend_provider;
-mod trigger;
 mod store_io;
+mod trigger;
 mod workflow;
 mod workflow_store;
 

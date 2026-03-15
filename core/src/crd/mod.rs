@@ -28,7 +28,7 @@ use types::{CrdManifest, CustomResource, CustomResourceManifest};
 /// Tri-state parse result for YAML manifests.
 pub enum ParsedManifest {
     /// A builtin resource kind (Workspace, Agent, Workflow, etc.)
-    Builtin(OrchestratorResource),
+    Builtin(Box<OrchestratorResource>),
     /// A CustomResourceDefinition manifest
     Crd(CrdManifest),
     /// A custom resource instance (kind defined by a CRD)

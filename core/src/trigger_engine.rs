@@ -79,9 +79,7 @@ impl TriggerEngineHandle {
     /// Uses `try_send` so it can be called from synchronous code paths
     /// like `apply_manifests`. Returns `true` if the notification was sent.
     pub fn reload_sync(&self) -> bool {
-        self.reload_tx
-            .try_send(TriggerReloadEvent::Reload)
-            .is_ok()
+        self.reload_tx.try_send(TriggerReloadEvent::Reload).is_ok()
     }
 }
 
@@ -366,7 +364,9 @@ impl TriggerEngine {
                     let state = self.state.clone();
                     let tid = task_id.clone();
                     tokio::spawn(async move {
-                        if let Err(e) = crate::scheduler_service::enqueue_task_as_service(&state, &tid).await {
+                        if let Err(e) =
+                            crate::scheduler_service::enqueue_task_as_service(&state, &tid).await
+                        {
                             error!(task_id = tid.as_str(), error = %e, "failed to enqueue triggered task");
                         } else {
                             state.worker_notify.notify_one();
@@ -575,12 +575,7 @@ impl TriggerEngine {
     }
 
     fn emit_trigger_event(&self, trigger_name: &str, event_type: &str, reason: &str) {
-        debug!(
-            trigger = trigger_name,
-            event_type,
-            reason,
-            "trigger event"
-        );
+        debug!(trigger = trigger_name, event_type, reason, "trigger event");
         self.state.emit_event(
             "",
             None,

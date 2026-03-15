@@ -1,12 +1,12 @@
-use agent_orchestrator::config::InvariantCheckPoint;
-use agent_orchestrator::config::OnViolation;
-use agent_orchestrator::events::insert_event;
 use crate::scheduler::invariant::{
     evaluate_invariants, has_halting_violation, has_rollback_violation,
 };
 use crate::scheduler::safety::{
     create_checkpoint, restore_binary_snapshot, rollback_to_checkpoint, snapshot_binary,
 };
+use agent_orchestrator::config::InvariantCheckPoint;
+use agent_orchestrator::config::OnViolation;
+use agent_orchestrator::events::insert_event;
 use agent_orchestrator::state::InnerState;
 use anyhow::Result;
 use serde_json::json;

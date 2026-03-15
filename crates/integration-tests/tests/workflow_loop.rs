@@ -152,8 +152,7 @@ async fn convergence_expr_stops_loop() {
 
         // Verify that a loop_guard_decision event carries the convergence reason
         let convergence_decision = info.events.iter().find(|e| {
-            e.event_type == "loop_guard_decision"
-                && e.payload_json.contains("test_convergence")
+            e.event_type == "loop_guard_decision" && e.payload_json.contains("test_convergence")
         });
         assert!(
             convergence_decision.is_some(),

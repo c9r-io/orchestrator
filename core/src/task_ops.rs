@@ -278,7 +278,10 @@ fn resolve_task_item_id(conn: &rusqlite::Connection, id_or_prefix: &str) -> Resu
         .query_map(params![pattern], |row| row.get(0))?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     match matches.len() {
-        1 => Ok(matches.into_iter().next().unwrap()),
+        1 => Ok(matches
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("unexpected empty matches"))?),
         0 => anyhow::bail!("task item not found: {}", id_or_prefix),
         _ => anyhow::bail!(
             "multiple task items match prefix '{}': {:?}",
@@ -286,6 +289,18 @@ fn resolve_task_item_id(conn: &rusqlite::Connection, id_or_prefix: &str) -> Resu
             matches
         ),
     }
+}
+
+/// Service-layer wrapper around [`create_task_impl`] with error classification.
+///
+/// This exists so that core modules (trigger_engine, service/resource) can
+/// create tasks without depending on the `orchestrator-scheduler` service layer.
+pub fn create_task_as_service(
+    state: &crate::state::InnerState,
+    payload: CreateTaskPayload,
+) -> crate::error::Result<TaskSummary> {
+    create_task_impl(state, payload)
+        .map_err(|err| crate::error::classify_task_error("task.create", err))
 }
 
 #[cfg(test)]
@@ -938,16 +953,4 @@ mod tests {
         let result = reset_task_item_for_retry(&state, "nonexistent-item-id");
         assert!(result.is_err(), "should fail for nonexistent item");
     }
-}
-
-/// Service-layer wrapper around [`create_task_impl`] with error classification.
-///
-/// This exists so that core modules (trigger_engine, service/resource) can
-/// create tasks without depending on the `orchestrator-scheduler` service layer.
-pub fn create_task_as_service(
-    state: &crate::state::InnerState,
-    payload: CreateTaskPayload,
-) -> crate::error::Result<TaskSummary> {
-    create_task_impl(state, payload)
-        .map_err(|err| crate::error::classify_task_error("task.create", err))
 }

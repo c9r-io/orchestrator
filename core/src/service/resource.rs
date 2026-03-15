@@ -45,7 +45,7 @@ pub fn apply_manifests(
                     errors.push(format!("document {}: {}", index + 1, error));
                     continue;
                 }
-                let registered = match dispatch_resource(resource) {
+                let registered = match dispatch_resource(*resource) {
                     Ok(r) => r,
                     Err(error) => {
                         errors.push(format!("document {}: {}", index + 1, error));
@@ -225,7 +225,15 @@ pub fn get_resource(
         }
         let parts: Vec<&str> = resource.splitn(2, '/').collect();
         let (kind, name) = (parts[0], parts[1]);
-        get_single_resource(proj_cfg, kind, name, output_format, project_id, &config.resource_store, config)
+        get_single_resource(
+            proj_cfg,
+            kind,
+            name,
+            output_format,
+            project_id,
+            &config.resource_store,
+            config,
+        )
     } else {
         get_list_resource(
             proj_cfg,
@@ -271,7 +279,7 @@ fn get_single_resource(
             return Err(classify_resource_error(
                 "resource.get",
                 anyhow::anyhow!("unknown resource type: {}", kind),
-            ))
+            ));
         }
     };
 
@@ -339,35 +347,36 @@ fn get_list_resource(
         _ => {
             // CRD-defined custom resource list fallback (skip kinds with dedicated ProjectConfig
             // projections — those are handled by the match arms above)
-            if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(config, resource_type) {
-              if !crate::crd::resolve::is_builtin_kind(&crd.kind) {
-                let prefix = format!("{}/", crd.kind);
-                let cr_names: Vec<String> = config
-                    .custom_resources
-                    .keys()
-                    .filter(|key| key.starts_with(&prefix))
-                    .map(|key| key[prefix.len()..].to_string())
-                    .collect();
+            if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(config, resource_type)
+            {
+                if !crate::crd::resolve::is_builtin_kind(&crd.kind) {
+                    let prefix = format!("{}/", crd.kind);
+                    let cr_names: Vec<String> = config
+                        .custom_resources
+                        .keys()
+                        .filter(|key| key.starts_with(&prefix))
+                        .map(|key| key[prefix.len()..].to_string())
+                        .collect();
 
-                let filtered: Vec<&String> = if let Some(sel) = selector {
-                    let conditions = parse_label_selector(sel)?;
-                    cr_names
-                        .iter()
-                        .filter(|name| {
-                            let storage_key = format!("{}{}", prefix, name);
-                            let labels = config
-                                .custom_resources
-                                .get(&storage_key)
-                                .and_then(|cr| cr.metadata.labels.as_ref());
-                            match_labels(labels, &conditions)
-                        })
-                        .collect()
-                } else {
-                    cr_names.iter().collect()
-                };
+                    let filtered: Vec<&String> = if let Some(sel) = selector {
+                        let conditions = parse_label_selector(sel)?;
+                        cr_names
+                            .iter()
+                            .filter(|name| {
+                                let storage_key = format!("{}{}", prefix, name);
+                                let labels = config
+                                    .custom_resources
+                                    .get(&storage_key)
+                                    .and_then(|cr| cr.metadata.labels.as_ref());
+                                match_labels(labels, &conditions)
+                            })
+                            .collect()
+                    } else {
+                        cr_names.iter().collect()
+                    };
 
-                return format_output(&filtered, output_format);
-              }
+                    return format_output(&filtered, output_format);
+                }
             }
             return Err(classify_resource_error(
                 "resource.get",
@@ -870,11 +879,7 @@ pub fn suspend_trigger(
 }
 
 /// Resume a suspended trigger by clearing its `suspend` flag.
-pub fn resume_trigger(
-    state: &InnerState,
-    trigger_name: &str,
-    project: Option<&str>,
-) -> Result<()> {
+pub fn resume_trigger(state: &InnerState, trigger_name: &str, project: Option<&str>) -> Result<()> {
     set_trigger_suspend(state, trigger_name, project, false)
 }
 
@@ -889,8 +894,8 @@ pub fn fire_trigger(
         .filter(|v| !v.trim().is_empty())
         .unwrap_or(crate::config::DEFAULT_PROJECT_ID);
 
-    let active = read_active_config(state)
-        .map_err(|err| classify_resource_error("trigger.fire", err))?;
+    let active =
+        read_active_config(state).map_err(|err| classify_resource_error("trigger.fire", err))?;
     let proj_cfg = active.config.projects.get(project_id).ok_or_else(|| {
         classify_resource_error(
             "trigger.fire",

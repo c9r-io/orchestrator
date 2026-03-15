@@ -48,7 +48,7 @@ pub fn parse_manifests_from_yaml(content: &str) -> Result<Vec<ParsedManifest>> {
             }
             Some(kind) if is_builtin_kind(kind) => {
                 let resource: OrchestratorResource = serde_yml::from_value(value)?;
-                ParsedManifest::Builtin(resource)
+                ParsedManifest::Builtin(Box::new(resource))
             }
             Some(_) => {
                 // Unknown kind → treat as custom resource
@@ -58,7 +58,7 @@ pub fn parse_manifests_from_yaml(content: &str) -> Result<Vec<ParsedManifest>> {
             None => {
                 // No kind field — try as builtin (will error later on dispatch)
                 let resource: OrchestratorResource = serde_yml::from_value(value)?;
-                ParsedManifest::Builtin(resource)
+                ParsedManifest::Builtin(Box::new(resource))
             }
         };
         manifests.push(manifest);

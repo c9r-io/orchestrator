@@ -1,11 +1,11 @@
-use agent_orchestrator::config::StepScope;
-use agent_orchestrator::events::insert_event;
 use crate::scheduler::item_executor::{
     finalize_item_execution, process_item_filtered, process_item_filtered_owned,
     OwnedProcessItemRequest, ProcessItemRequest, StepExecutionAccumulator,
 };
 use crate::scheduler::task_state::{list_task_items_for_cycle, set_item_blocked, set_task_status};
 use crate::scheduler::RunningTask;
+use agent_orchestrator::config::StepScope;
+use agent_orchestrator::events::insert_event;
 use agent_orchestrator::state::InnerState;
 use anyhow::Result;
 use serde_json::json;
@@ -123,14 +123,8 @@ pub(super) async fn execute_task_segment(
                     .await;
             }
             // Flush pending generate_items — creates dynamic items in the DB
-            flush_pending_generate_items(
-                state,
-                task_id,
-                &mut task_acc,
-                items,
-                task_item_paths,
-            )
-            .await;
+            flush_pending_generate_items(state, task_id, &mut task_acc, items, task_item_paths)
+                .await;
         }
     }
     process_result?;
@@ -275,10 +269,7 @@ pub(super) async fn execute_item_segment(
                 }
                 let key = (item.id.clone(), step_id.clone());
                 if exit_code != 0 {
-                    let count = task_ctx
-                        .item_step_failures
-                        .entry(key)
-                        .or_insert(0);
+                    let count = task_ctx.item_step_failures.entry(key).or_insert(0);
                     *count += 1;
                     if *count >= max_item_failures {
                         set_item_blocked(state, task_id, &item.id).await?;
@@ -312,8 +303,7 @@ pub(super) async fn execute_item_segment(
                         };
                         task_ctx.item_retry_after.insert(
                             item.id.clone(),
-                            std::time::Instant::now()
-                                + std::time::Duration::from_secs(delay_secs),
+                            std::time::Instant::now() + std::time::Duration::from_secs(delay_secs),
                         );
                     }
                 } else {
@@ -565,7 +555,10 @@ pub(super) async fn emit_skipped_item_step_events(
 }
 
 /// Check if a segment contains an item_select builtin step.
-fn has_item_select_step(segment: &ScopeSegment, plan: &agent_orchestrator::config::TaskExecutionPlan) -> bool {
+fn has_item_select_step(
+    segment: &ScopeSegment,
+    plan: &agent_orchestrator::config::TaskExecutionPlan,
+) -> bool {
     for step_id in &segment.step_ids {
         if let Some(step) = plan.step_by_id(step_id) {
             if step.builtin.as_deref() == Some("item_select") {

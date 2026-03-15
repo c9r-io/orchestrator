@@ -1,4 +1,6 @@
-use agent_orchestrator::config::{ConvergenceContext, ExecutionMode, TaskExecutionStep, TaskRuntimeContext};
+use agent_orchestrator::config::{
+    ConvergenceContext, ExecutionMode, TaskExecutionStep, TaskRuntimeContext,
+};
 use agent_orchestrator::prehook::evaluate_convergence_expression;
 use agent_orchestrator::selection::{select_agent_advanced, select_agent_by_preference};
 use agent_orchestrator::state::InnerState;
@@ -50,10 +52,18 @@ pub async fn execute_guard_step(
                 let conv_ctx = ConvergenceContext {
                     cycle: task_ctx.current_cycle,
                     active_ticket_count: unresolved,
-                    self_test_passed: task_ctx.pipeline_vars.vars.get("self_test_passed")
+                    self_test_passed: task_ctx
+                        .pipeline_vars
+                        .vars
+                        .get("self_test_passed")
                         .map(|v| v == "true")
                         .unwrap_or(false),
-                    max_cycles: task_ctx.execution_plan.loop_policy.guard.max_cycles.unwrap_or(0),
+                    max_cycles: task_ctx
+                        .execution_plan
+                        .loop_policy
+                        .guard
+                        .max_cycles
+                        .unwrap_or(0),
                     vars: task_ctx.pipeline_vars.vars.clone(),
                 };
                 for entry in exprs {

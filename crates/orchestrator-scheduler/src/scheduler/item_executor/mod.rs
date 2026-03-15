@@ -17,6 +17,3 @@ pub use dispatch::{
 };
 pub use finalize::finalize_item_execution;
 pub use guard::{execute_guard_step, GuardResult};
-// Re-exported for tests in parent scheduler module
-#[cfg(test)]
-pub(crate) use spill::{spill_large_var, spill_to_file};

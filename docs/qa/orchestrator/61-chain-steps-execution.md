@@ -28,18 +28,25 @@ This doc validates the contract introduced by FR-008 governance:
 
 ### Steps
 
-1. Run the runtime regression:
+1. Run the execution-plan regression:
    ```bash
-   cargo test -p agent-orchestrator smoke_chain_execution_plan_preserves_chain_steps_at_runtime -- --nocapture
+   cargo test -p agent-orchestrator build_execution_plan_includes_chain_steps -- --nocapture
+   ```
+
+2. Run the chain-step check regression:
+   ```bash
+   cargo test -p orchestrator-scheduler chain_steps_checked -- --nocapture
    ```
 
 ### Expected
 
-- The test passes
-- The runtime command phases execute as `plan -> review -> qa_doc_gen`
-- The emitted `chain_step_started` / `chain_step_finished` events include `parent_step = smoke_chain`
+- Both tests pass
+- Chain child steps are preserved in the runtime execution plan
 - The loaded runtime context resolves the parent step to `ExecutionMode::Chain`
 - The runtime plan still contains the expected child-step count
+
+> **Note:** Runtime chain event emission (`chain_step_started`/`chain_step_finished`) is validated
+> separately in Scenario 4 via the trace-compatibility test.
 
 ---
 
@@ -111,7 +118,7 @@ This doc validates the contract introduced by FR-008 governance:
 
 1. Run the trace event compatibility regression:
    ```bash
-   cargo test -p agent-orchestrator chain_and_dynamic_step_events_handled -- --nocapture
+   cargo test -p orchestrator-scheduler chain_and_dynamic_step_events_handled -- --nocapture
    ```
 
 ### Expected

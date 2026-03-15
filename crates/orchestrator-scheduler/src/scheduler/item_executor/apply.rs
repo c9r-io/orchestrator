@@ -1,13 +1,15 @@
+use crate::scheduler::spawn::{
+    execute_spawn_task, execute_spawn_tasks, validate_spawn_depth, SpawnContext,
+};
 use agent_orchestrator::config::{
     OnFailureAction, OnSuccessAction, PostAction, TaskExecutionStep, TaskRuntimeContext,
 };
 use agent_orchestrator::events::insert_event;
-use crate::scheduler::spawn::{
-    execute_spawn_task, execute_spawn_tasks, validate_spawn_depth, SpawnContext,
-};
 use agent_orchestrator::state::InnerState;
 use agent_orchestrator::store::StoreOp;
-use agent_orchestrator::ticket::{create_ticket_for_qa_failure, scan_active_tickets_for_task_items};
+use agent_orchestrator::ticket::{
+    create_ticket_for_qa_failure, scan_active_tickets_for_task_items,
+};
 use anyhow::Result;
 use serde_json::json;
 use std::sync::Arc;
@@ -245,7 +247,12 @@ pub(super) async fn apply_step_results(
         let ticket_artifact_count = acc
             .phase_artifacts
             .iter()
-            .filter(|a| matches!(a.kind, agent_orchestrator::collab::ArtifactKind::Ticket { .. }))
+            .filter(|a| {
+                matches!(
+                    a.kind,
+                    agent_orchestrator::collab::ArtifactKind::Ticket { .. }
+                )
+            })
             .count();
         if ticket_artifact_count > 0 {
             acc.active_tickets = (0..ticket_artifact_count)

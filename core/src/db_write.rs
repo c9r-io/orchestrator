@@ -156,9 +156,7 @@ impl DbWriteCoordinator {
         &self,
         task_id: &str,
     ) -> Result<Vec<crate::task_repository::InflightRunRecord>> {
-        self.repo
-            .find_inflight_command_runs_for_task(task_id)
-            .await
+        self.repo.find_inflight_command_runs_for_task(task_id).await
     }
 
     /// Returns completed runs whose parent items are still `pending` (FR-038).

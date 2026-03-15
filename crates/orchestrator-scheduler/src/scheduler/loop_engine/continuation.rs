@@ -1,11 +1,11 @@
-use agent_orchestrator::config::{ConvergenceContext, InvariantCheckPoint, LoopMode};
-use agent_orchestrator::events::insert_event;
-use agent_orchestrator::prehook::evaluate_convergence_expression;
 use crate::scheduler::item_executor::execute_guard_step;
 use crate::scheduler::task_state::{
     count_unresolved_items, record_task_execution_metric, set_task_status,
 };
 use crate::scheduler::RunningTask;
+use agent_orchestrator::config::{ConvergenceContext, InvariantCheckPoint, LoopMode};
+use agent_orchestrator::events::insert_event;
+use agent_orchestrator::prehook::evaluate_convergence_expression;
 use agent_orchestrator::state::InnerState;
 use anyhow::Result;
 use serde_json::json;

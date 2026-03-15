@@ -329,10 +329,7 @@ pub(super) fn detect_long_running_steps(cycles: &[CycleTrace], anomalies: &mut V
 }
 
 /// FR-035: Detects item-phase pairs with 3+ consecutive failures (degenerate loop pattern).
-pub(super) fn detect_degenerate_loop(
-    command_runs: &[CommandRunDto],
-    anomalies: &mut Vec<Anomaly>,
-) {
+pub(super) fn detect_degenerate_loop(command_runs: &[CommandRunDto], anomalies: &mut Vec<Anomaly>) {
     // Group runs by (item_id, phase), ordered by started_at (already sorted by caller).
     let mut groups: HashMap<(&str, &str), Vec<&CommandRunDto>> = HashMap::new();
     for run in command_runs {
@@ -473,14 +470,18 @@ mod tests {
     #[test]
     fn degenerate_loop_emits_anomaly_on_three_consecutive_failures() {
         let runs = vec![
-            make_run("r1", "item-a", "run", Some(0)),   // success — resets baseline
-            make_run("r2", "item-a", "run", Some(1)),   // failure 1
-            make_run("r3", "item-a", "run", Some(1)),   // failure 2
-            make_run("r4", "item-a", "run", Some(2)),   // failure 3 — threshold reached
+            make_run("r1", "item-a", "run", Some(0)), // success — resets baseline
+            make_run("r2", "item-a", "run", Some(1)), // failure 1
+            make_run("r3", "item-a", "run", Some(1)), // failure 2
+            make_run("r4", "item-a", "run", Some(2)), // failure 3 — threshold reached
         ];
         let mut anomalies = Vec::new();
         detect_degenerate_loop(&runs, &mut anomalies);
-        assert_eq!(anomalies.len(), 1, "expected exactly one DegenerateLoop anomaly");
+        assert_eq!(
+            anomalies.len(),
+            1,
+            "expected exactly one DegenerateLoop anomaly"
+        );
         assert_eq!(anomalies[0].rule, "degenerate_loop");
         assert!(
             anomalies[0].message.contains("item-a"),
@@ -495,8 +496,8 @@ mod tests {
     #[test]
     fn degenerate_loop_no_anomaly_when_fewer_than_three_consecutive_failures() {
         let runs = vec![
-            make_run("r1", "item-b", "run", Some(1)),   // failure 1
-            make_run("r2", "item-b", "run", Some(1)),   // failure 2 — below threshold
+            make_run("r1", "item-b", "run", Some(1)), // failure 1
+            make_run("r2", "item-b", "run", Some(1)), // failure 2 — below threshold
         ];
         let mut anomalies = Vec::new();
         detect_degenerate_loop(&runs, &mut anomalies);
@@ -508,7 +509,7 @@ mod tests {
 
     #[test]
     fn sandbox_denied_emits_anomaly_per_step() {
-        let events = vec![
+        let events = [
             EventDto {
                 id: 1,
                 task_id: "t1".to_string(),
@@ -537,7 +538,11 @@ mod tests {
         let refs: Vec<&EventDto> = events.iter().collect();
         let mut anomalies = Vec::new();
         detect_sandbox_denied(&refs, &mut anomalies);
-        assert_eq!(anomalies.len(), 1, "expected one anomaly for step 'implement'");
+        assert_eq!(
+            anomalies.len(),
+            1,
+            "expected one anomaly for step 'implement'"
+        );
         assert_eq!(anomalies[0].rule, "sandbox_denied");
         assert!(anomalies[0].message.contains("implement"));
         assert!(anomalies[0].message.contains("2"));
@@ -545,7 +550,7 @@ mod tests {
 
     #[test]
     fn sandbox_denied_no_anomaly_when_no_denial_events() {
-        let events = vec![EventDto {
+        let events = [EventDto {
             id: 1,
             task_id: "t1".to_string(),
             task_item_id: Some("item-a".to_string()),
@@ -564,11 +569,11 @@ mod tests {
         // Three failures but a success breaks the streak at the tail; the trailing
         // run window (success + 2 failures counting backwards) is only 2 failures.
         let runs = vec![
-            make_run("r1", "item-c", "run", Some(1)),   // failure
-            make_run("r2", "item-c", "run", Some(1)),   // failure
-            make_run("r3", "item-c", "run", Some(0)),   // success — breaks streak
-            make_run("r4", "item-c", "run", Some(1)),   // failure
-            make_run("r5", "item-c", "run", Some(1)),   // failure — streak of 2, not 3
+            make_run("r1", "item-c", "run", Some(1)), // failure
+            make_run("r2", "item-c", "run", Some(1)), // failure
+            make_run("r3", "item-c", "run", Some(0)), // success — breaks streak
+            make_run("r4", "item-c", "run", Some(1)), // failure
+            make_run("r5", "item-c", "run", Some(1)), // failure — streak of 2, not 3
         ];
         let mut anomalies = Vec::new();
         detect_degenerate_loop(&runs, &mut anomalies);

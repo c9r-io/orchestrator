@@ -98,7 +98,8 @@ pub struct InnerState {
     /// In-process wakeup channel for idle workers.
     pub worker_notify: Arc<Notify>,
     /// Broadcast channel for trigger-relevant task events (task_completed / task_failed).
-    pub trigger_event_tx: tokio::sync::broadcast::Sender<crate::trigger_engine::TriggerEventPayload>,
+    pub trigger_event_tx:
+        tokio::sync::broadcast::Sender<crate::trigger_engine::TriggerEventPayload>,
     /// Handle for notifying the trigger engine of config changes.
     pub trigger_engine_handle: std::sync::Mutex<Option<crate::trigger_engine::TriggerEngineHandle>>,
 }
