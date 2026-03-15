@@ -61,7 +61,7 @@ ps aux | grep orchestratord | grep -v grep
 # orchestrator delete project/full-qa --force
 
 # 初始化
-orchestrator init -f
+orchestrator init
 
 # 加载 secrets 和 execution profiles
 orchestrator apply -f docs/workflow/claude-secret.yaml --project self-bootstrap

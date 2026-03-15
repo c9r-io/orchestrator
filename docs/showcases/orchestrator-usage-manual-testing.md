@@ -34,7 +34,7 @@ orchestrator task --help
 
 ```bash
 orchestrator delete project/<project> --force
-orchestrator init -f
+orchestrator init
 ```
 
 Runtime data locations:

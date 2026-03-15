@@ -40,6 +40,13 @@ If the build fails, report the error to the user and stop — do NOT proceed wit
 
 #### 2.2 Restart the daemon
 
+**IMPORTANT**: Check `.claude/CLAUDE.md` for a daemon-pid-guard section first. If the
+orchestrator daemon is managing this session (i.e., this skill was triggered BY the
+orchestrator), you MUST NOT kill the daemon. In that case, skip the restart and reuse the
+running daemon.
+
+If it is safe to restart:
+
 ```bash
 # Stop old daemon if running
 kill $(cat data/daemon.pid 2>/dev/null) 2>/dev/null; sleep 2
@@ -54,7 +61,20 @@ pgrep -f orchestratord
 
 If the daemon fails to start, check `/tmp/orchestratord.log` and report the error.
 
-#### 2.3 Collect baseline state
+#### 2.3 Set up CLI environment
+
+The CLI uses Unix Domain Socket (UDS) to connect to the daemon. If the CLI fails to
+connect (e.g., "failed to connect to https://..."), set the `ORCHESTRATOR_SOCKET` env var
+to force UDS transport:
+
+```bash
+export ORCHESTRATOR_SOCKET=data/orchestrator.sock
+```
+
+Prefix all subsequent `orchestrator` commands with this env var, or export it once.
+Verify connectivity: `orchestrator task list`.
+
+#### 2.4 Collect baseline state
 
 1. Note the current git state: `git status`, `git log --oneline -3`
 2. Note existing tasks: `orchestrator task list`

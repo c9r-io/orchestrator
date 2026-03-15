@@ -120,7 +120,7 @@ orchestrator task list -o json
 
 ```bash
 orchestrator delete project/self-evolution --force
-orchestrator init -f
+orchestrator init
 orchestrator apply -f docs/workflow/claude-secret.yaml --project self-evolution
 orchestrator apply -f docs/workflow/minimax-secret.yaml --project self-evolution
 # 如需使用 Claude 原生 API，注释上行即可（claude-* 的模型配置将生效）

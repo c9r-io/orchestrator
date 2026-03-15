@@ -94,7 +94,7 @@ orchestrator task list -o json
 
 ```bash
 orchestrator delete project/self-bootstrap --force
-orchestrator init -f
+orchestrator init
 orchestrator apply -f docs/workflow/claude-secret.yaml --project self-bootstrap
 orchestrator apply -f docs/workflow/minimax-secret.yaml --project self-bootstrap
 # 如需使用 Claude 原生 API，注释上行即可（claude-* 的模型配置将生效）

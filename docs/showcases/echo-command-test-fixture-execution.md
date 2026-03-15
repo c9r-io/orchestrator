@@ -109,7 +109,7 @@ grep -n "echo" crates/daemon/src/server/system.rs
 
 ```bash
 orchestrator delete project/self-bootstrap --force
-orchestrator init -f
+orchestrator init
 orchestrator apply -f docs/workflow/claude-secret.yaml --project self-bootstrap
 orchestrator apply -f docs/workflow/minimax-secret.yaml --project self-bootstrap
 orchestrator apply -f docs/workflow/execution-profiles.yaml --project self-bootstrap
