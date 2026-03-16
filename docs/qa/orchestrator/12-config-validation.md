@@ -265,19 +265,12 @@ Entry point: `orchestrator <command>`
   builds the full active config internally via `build_active_config()` to catch
   integration issues early before `apply`.
 
-### Known Issue
-
-> **Bug**: `--project` 当前未正确隔离验证——`validate_manifests()` 始终只验证
-> default 项目。在该 bug 修复前，如果 default 项目 DB 中已存在具有 `qa`
-> capability 的 agent，本场景可能误过。
-> 见 ticket: `docs/ticket/manifest-validate-project-isolation.md`
-
 ### Troubleshooting
 
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
 | Validation fails with `no agent supports capability` | Workflow step requires a capability not provided by any agent in the manifest | Add an agent with the required capability, or remove/disable the step |
-| Validation passes despite missing capability | `--project` 隔离 bug — 验证仍检查 default 项目而非指定项目 | 等待 bug 修复；临时可在无残留 agent 的环境中验证 |
+| Validation passes despite missing capability | An agent with the matching capability already exists in the active DB config from a prior `apply` | Use `-p <unique-project>` to isolate validation from residual DB state |
 
 ---
 
