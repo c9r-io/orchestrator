@@ -155,15 +155,20 @@ both used successfully.
 
 ### Goal
 
-Validate that after repeated failures, the failing agent is marked diseased
+Validate that after repeated **infrastructure failures** (e.g., invalid output
+format, sandbox denial, process crash), the failing agent is marked diseased
 and the healthy agent handles an increasing share of work across cycles.
+
+> **Note:** Only infrastructure failures trigger disease — not negative task
+> conclusions (`exit_code > 0`). An agent that correctly completes its work
+> but reports a negative finding (e.g., QA found a bug) is **not** penalized.
 
 ### Fixture
 
 `fixtures/manifests/bundles/mixed-health.yaml`
 
 - `mock_echo` — capabilities: `[qa]`, template emits structured analysis JSON (always succeeds)
-- `mock_fail` — capabilities: `[qa]`, template emits structured ticket JSON and `exit 1` (always fails)
+- `mock_fail` — capabilities: `[qa]`, template emits invalid JSON (triggers validation failure = infrastructure error)
 - Workflow `health_test` — steps: qa, loop mode: infinite, max_cycles: 3
 
 ### Steps
@@ -205,9 +210,9 @@ and the healthy agent handles an increasing share of work across cycles.
 
 - **On a fresh daemon** (no prior health state for `mock_fail`):
   - `mock_fail` appears in `command_runs` with a small count (typically 1–2)
-    and `exit_code = 1`
-  - After 2 consecutive failures `mock_fail` is marked diseased and excluded
-    from subsequent selection
+    and `exit_code = -6` (validation failure)
+  - After 2 consecutive infrastructure failures `mock_fail` is marked diseased
+    and excluded from subsequent selection
   - `mock_echo` handles the vast majority of runs across all cycles
   - Task status: `failed` with some `unresolved` items — this is **expected**
     because `mock_fail`'s items generate tickets that trigger the
@@ -275,8 +280,10 @@ Validate that `task retry` resets a failed item to pending and re-queues it.
   to `unresolved` if the underlying issue persists)
 - Automatic retry with agent rotation is **not implemented** — the same agent
   may be selected again
-- After 2+ consecutive failures, the failing agent is marked diseased and
-  excluded from future selection via health tracking
+- After 2+ consecutive **infrastructure failures** (crash, timeout, sandbox
+  denial, validation failure), the failing agent is marked diseased and
+  excluded from future selection via health tracking. Negative task conclusions
+  (`exit_code > 0`) do **not** count toward disease.
 
 ---
 

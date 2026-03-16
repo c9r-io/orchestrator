@@ -36,8 +36,7 @@ to the fix-capable agent when capabilities are disjoint.
 
 `fixtures/manifests/bundles/capability-test.yaml`
 
-- Workspace targets: `fixtures/qa-capability-test` (single file to avoid agent
-  disease from repeated failures)
+- Workspace targets: `fixtures/qa-capability-test` (single file for simplicity)
 - `agent_qa_only` — capabilities: `[qa]`, template emits structured ticket JSON and `exit 1`
   (QA intentionally fails to create tickets, triggering the fix step)
 - `agent_fix_only` — capabilities: `[fix]`, template emits structured code-change JSON

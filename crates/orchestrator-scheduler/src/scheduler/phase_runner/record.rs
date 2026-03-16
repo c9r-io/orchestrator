@@ -168,7 +168,14 @@ pub(super) async fn record_phase_results(
 
     agent_orchestrator::agent_lifecycle::decrement_in_flight_and_check(state, agent_id).await;
 
-    if !validated.success {
+    // Agent infrastructure failure — the agent itself could not function.
+    // Distinct from "task conclusion is negative" (exit_code > 0) where
+    // the agent completed its work correctly.
+    let agent_infra_failed = validated.final_exit_code < 0
+        || validated.sandbox_denied
+        || validated.validation_status == "failed";
+
+    if agent_infra_failed {
         let errors = increment_consecutive_errors(state, agent_id).await;
         if errors >= 2 {
             mark_agent_diseased(state, agent_id).await;

@@ -25,7 +25,7 @@ metadata:
 spec:
   capabilities:
     - qa
-  command: "echo '{\"confidence\":0.35,\"quality_score\":0.2,\"artifacts\":[{\"kind\":\"ticket\",\"severity\":\"high\",\"category\":\"regression\",\"content\":{\"title\":\"qa-failed\",\"qa_file\":\"target-file\"}}]}' && exit 1"
+  command: "echo 'INVALID_JSON_not_a_valid_output' && exit 1"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow
