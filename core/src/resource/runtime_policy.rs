@@ -74,14 +74,15 @@ impl Resource for RuntimePolicyResource {
 
     fn get_from_project(
         config: &OrchestratorConfig,
-        _name: &str,
-        _project_id: Option<&str>,
+        name: &str,
+        project_id: Option<&str>,
     ) -> Option<Self> {
-        // RuntimePolicy is a global singleton, not scoped to a project.
         use crate::config_ext::OrchestratorConfigExt as _;
-        let rp = config.runtime_policy();
+        let pid = project_id.unwrap_or(crate::config::DEFAULT_PROJECT_ID);
+        let rp = config.runtime_policy_for_project(pid);
+        let metadata = super::metadata_from_store(config, "RuntimePolicy", name, project_id);
         Some(Self {
-            metadata: super::metadata_with_name("runtime"),
+            metadata,
             spec: RuntimePolicySpec {
                 runner: runner_config_to_spec(&rp.runner),
                 resume: ResumeSpec {

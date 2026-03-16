@@ -732,9 +732,14 @@ mod apply_to_project_tests {
         let mut config = make_config();
         let resource = dispatch_resource(runtime_policy_manifest()).expect("dispatch runtime");
 
-        let result = apply_to_project(&resource, &mut config, "ignored-project").expect("apply");
+        // RuntimePolicy is project-scoped: applying to a new project creates a
+        // project-specific override (Created), not updating the _system default.
+        let result = apply_to_project(&resource, &mut config, "my-project").expect("apply");
+        assert_eq!(result, ApplyResult::Created);
 
-        assert_eq!(result, ApplyResult::Configured);
+        // Applying again to the same project updates it (Configured or Unchanged).
+        let result2 = apply_to_project(&resource, &mut config, "my-project").expect("apply again");
+        assert_eq!(result2, ApplyResult::Unchanged);
     }
 }
 

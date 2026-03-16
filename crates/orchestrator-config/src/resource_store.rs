@@ -31,6 +31,7 @@ pub fn is_project_scoped(kind: &str) -> bool {
             | "ExecutionProfile"
             | "EnvStore"
             | "SecretStore"
+            | "RuntimePolicy"
     )
 }
 

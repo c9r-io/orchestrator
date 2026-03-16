@@ -96,6 +96,16 @@ pub fn apply_to_project(
                 serde_json::to_value(&store.spec)?,
             ))
         }
+        RegisteredResource::RuntimePolicy(rp) => {
+            let metadata = scoped_metadata(&rp.metadata, project);
+            Ok(apply_to_store(
+                config,
+                "RuntimePolicy",
+                rp.name(),
+                &metadata,
+                serde_json::to_value(&rp.spec)?,
+            ))
+        }
         _ => resource.apply(config),
     }
 }

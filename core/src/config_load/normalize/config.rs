@@ -36,13 +36,15 @@ pub(crate) fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorCo
     let old_store = std::mem::take(&mut config.resource_store);
     crate::crd::writeback::sync_config_snapshot_to_store(&mut config);
 
-    if let Some(rp_cr) = old_store
+    let rp_crs: Vec<_> = old_store
         .list_by_kind("RuntimePolicy")
         .into_iter()
-        .next()
         .cloned()
-    {
-        config.resource_store.put(rp_cr);
+        .collect();
+    if !rp_crs.is_empty() {
+        for rp_cr in rp_crs {
+            config.resource_store.put(rp_cr);
+        }
     } else {
         let rp = crate::crd::projection::RuntimePolicyProjection::default();
         let now = chrono::Utc::now().to_rfc3339();

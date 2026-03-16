@@ -181,17 +181,15 @@ mod tests {
     #[test]
     fn cross_kind_key_isolation() {
         let mut store = ResourceStore::default();
-        store.put(make_cr(
-            "RuntimePolicy",
-            "alpha",
-            serde_json::json!({"a": 1}),
-        ));
+        // Use Trigger (cluster-scoped) and Project (cluster-scoped) to test
+        // cross-kind key isolation without project-scoping complications.
+        store.put(make_cr("Trigger", "alpha", serde_json::json!({"a": 1})));
         store.put(make_cr("Project", "alpha", serde_json::json!({"w": 2})));
         assert_eq!(store.len(), 2);
-        assert_eq!(store.get("RuntimePolicy", "alpha").unwrap().spec["a"], 1);
+        assert_eq!(store.get("Trigger", "alpha").unwrap().spec["a"], 1);
         assert_eq!(store.get("Project", "alpha").unwrap().spec["w"], 2);
-        store.remove("RuntimePolicy", "alpha");
-        assert!(store.get("RuntimePolicy", "alpha").is_none());
+        store.remove("Trigger", "alpha");
+        assert!(store.get("Trigger", "alpha").is_none());
         assert!(store.get("Project", "alpha").is_some());
     }
 
@@ -313,9 +311,27 @@ mod tests {
     #[test]
     fn put_keeps_system_project_for_cluster_scoped_kinds() {
         let mut store = ResourceStore::default();
+        // Project is cluster-scoped — stays in _system when no project specified.
+        let cr = make_cr("Project", "my-project", serde_json::json!({}));
+        store.put(cr);
+        assert!(store.get("Project", "my-project").is_some());
+    }
+
+    #[test]
+    fn put_assigns_default_project_for_runtime_policy() {
+        let mut store = ResourceStore::default();
+        // RuntimePolicy is project-scoped — auto-assigned to DEFAULT_PROJECT_ID.
         let cr = make_cr("RuntimePolicy", "runtime", serde_json::json!({}));
         store.put(cr);
-        assert!(store.get("RuntimePolicy", "runtime").is_some());
+        assert!(store
+            .get_namespaced(
+                "RuntimePolicy",
+                crate::config::DEFAULT_PROJECT_ID,
+                "runtime"
+            )
+            .is_some());
+        // Not in _system
+        assert!(store.get("RuntimePolicy", "runtime").is_none());
     }
 
     #[test]

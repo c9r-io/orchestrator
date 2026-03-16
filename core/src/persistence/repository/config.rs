@@ -208,8 +208,11 @@ fn persist_resource(
         .filter(|project| !project.trim().is_empty())
         .unwrap_or(crate::crd::store::SYSTEM_PROJECT);
 
+    // RuntimePolicy is project-scoped but also has a system-level default in
+    // _system that serves as fallback for projects without their own policy.
     if crate::crd::store::is_project_scoped(&cr.kind)
         && project == crate::crd::store::SYSTEM_PROJECT
+        && cr.kind != "RuntimePolicy"
     {
         anyhow::bail!(
             "project-scoped resource {}/{} must have an explicit project, not _system",

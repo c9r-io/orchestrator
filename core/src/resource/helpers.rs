@@ -114,17 +114,7 @@ pub(crate) fn apply_to_store(
     // If the store doesn't have this entry yet but the config snapshot does,
     // seed the store from the current snapshot so that put() can correctly
     // detect Unchanged vs Configured (instead of always returning Created).
-    let is_project_scoped = matches!(
-        kind,
-        "Agent"
-            | "Workflow"
-            | "Workspace"
-            | "StepTemplate"
-            | "ExecutionProfile"
-            | "EnvStore"
-            | "SecretStore"
-    );
-    let default_project = if is_project_scoped {
+    let default_project = if crate::crd::store::is_project_scoped(kind) {
         crate::config::DEFAULT_PROJECT_ID
     } else {
         crate::crd::store::SYSTEM_PROJECT
