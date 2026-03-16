@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA 94: Trigger Resource — Cron & Event-Driven Task Creation
 
 **关联 FR**: FR-039

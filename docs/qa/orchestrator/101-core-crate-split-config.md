@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA 101: Core Crate Split Phase 1 — orchestrator-config
 
 Verifies FR-047: extraction of config models into `crates/orchestrator-config`.

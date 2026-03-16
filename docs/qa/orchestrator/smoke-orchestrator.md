@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Smoke Test: Orchestrator Core
 
 **Marker:** ORC_SMOKE_20260227

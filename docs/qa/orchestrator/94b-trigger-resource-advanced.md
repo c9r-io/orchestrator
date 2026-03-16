@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA 94b: Trigger Resource — Advanced (Suspend/Resume & Preflight)
 
 **关联 FR**: FR-039

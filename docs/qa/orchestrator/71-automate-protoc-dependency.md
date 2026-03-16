@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA #71: Automate protoc Dependency (FR-020)
 
 ## Scope

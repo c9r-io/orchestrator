@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA 93: Daemon Restart In-Flight Step Completion Race Condition
 
 **关联 FR**: FR-038

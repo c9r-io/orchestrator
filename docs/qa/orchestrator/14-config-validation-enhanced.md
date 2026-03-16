@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - 增强配置校验系统
 
 **Module**: orchestrator

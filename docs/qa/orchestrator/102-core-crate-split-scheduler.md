@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA 102: Core Crate Split Phase 2 — orchestrator-scheduler Extraction
 
 ## 验证目标

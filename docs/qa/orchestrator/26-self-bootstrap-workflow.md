@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Self-Bootstrap & AI Native SDLC Workflow
 
 **Module**: orchestrator

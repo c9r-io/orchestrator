@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Primitive Composition (WP05)
 
 **Module**: orchestrator

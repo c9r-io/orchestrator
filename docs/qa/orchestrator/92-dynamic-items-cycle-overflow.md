@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA 92: Dynamic Items Cycle Overflow — max_cycles Proactive Enforcement
 
 **关联 FR**: FR-037
