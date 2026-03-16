@@ -109,6 +109,7 @@ pub struct PhaseRunRequest<'a> {
     pub agent_id: &'a str,
     pub runtime: &'a RunningTask,
     pub step_timeout_secs: Option<u64>,
+    pub stall_timeout_secs: Option<u64>,
     pub step_scope: StepScope,
     /// How the prompt payload is delivered to the agent process.
     pub prompt_delivery: PromptDelivery,
@@ -138,6 +139,7 @@ pub struct RotatingPhaseRunRequest<'a> {
     pub runtime: &'a RunningTask,
     pub pipeline_vars: Option<&'a PipelineVariables>,
     pub step_timeout_secs: Option<u64>,
+    pub stall_timeout_secs: Option<u64>,
     pub step_scope: StepScope,
     /// Prompt from a resolved StepTemplate, injected into the agent command's {prompt} placeholder
     pub step_template_prompt: Option<&'a str>,
@@ -165,6 +167,7 @@ pub struct SelectedPhaseRunRequest<'a> {
     pub runtime: &'a RunningTask,
     pub pipeline_vars: Option<&'a PipelineVariables>,
     pub step_timeout_secs: Option<u64>,
+    pub stall_timeout_secs: Option<u64>,
     pub step_scope: StepScope,
     pub step_template_prompt: Option<&'a str>,
     /// Project ID for project-scoped agent env resolution (empty = non-project).

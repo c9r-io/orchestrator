@@ -65,7 +65,41 @@ Verifies FR-045: `task watch --timeout`, stall auto-termination, and QA agent ti
 
 ---
 
-## Scenario 4: qa_testing template includes timeout guidance
+## Scenario 4: stall_timeout_secs overrides default threshold
+
+### Steps
+
+1. Create a workflow YAML with a step that sets `stall_timeout_secs`:
+   ```yaml
+   safety:
+     stall_timeout_secs: 120   # global: 2 minutes
+   steps:
+     - id: slow_step
+       type: qa_testing
+       stall_timeout_secs: 180  # per-step override: 3 minutes
+   ```
+2. Apply the manifest and start a task that exercises the `slow_step`.
+3. In a separate session, create a step that produces no output (`sleep 99999`)
+   using a workflow where `stall_timeout_secs: 90`.
+4. Monitor heartbeat events.
+
+### Expected
+
+- The per-step `stall_timeout_secs` (180s = 6 heartbeats) takes priority over
+  global `safety.stall_timeout_secs` (120s = 4 heartbeats).
+- If neither is set, the built-in default (900s = 30 heartbeats) applies.
+- The `step_stall_killed` event fires after the expected heartbeat count.
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| Step killed after 900s despite `stall_timeout_secs` set | Field not reaching phase runner — check manifest apply | Verify with `orchestrator task show` that safety config is persisted |
+| Step killed too early | `stall_timeout_secs` too low for the workload | Increase value; minimum effective is 30s (1 heartbeat) |
+
+---
+
+## Scenario 5: qa_testing template includes timeout guidance
 
 ### Steps
 

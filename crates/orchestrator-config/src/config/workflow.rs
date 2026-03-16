@@ -68,6 +68,9 @@ pub struct WorkflowStepConfig {
     /// Per-step timeout in seconds (overrides global safety.step_timeout_secs)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_secs: Option<u64>,
+    /// Per-step stall auto-kill threshold in seconds (overrides global safety.stall_timeout_secs)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stall_timeout_secs: Option<u64>,
     /// WP03: Configuration for item_select builtin step
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_select_config: Option<ItemSelectConfig>,

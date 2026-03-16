@@ -29,13 +29,35 @@ printing a final status snapshot.
 Extended the existing heartbeat monitoring in `phase_runner/wait.rs` to
 automatically kill steps that exhibit prolonged `low_output` stagnation.
 
-- **Threshold**: 30 consecutive stagnant heartbeats (30 x 30s = 900s)
+- **Default threshold**: 30 consecutive stagnant heartbeats (30 x 30s = 900s)
 - **Action**: Kill process group, insert `step_stall_killed` event, exit code -7
 - **Constant**: `STALL_AUTO_KILL_CONSECUTIVE_HEARTBEATS` in `phase_runner/types.rs`
+- **Configurable**: `stall_timeout_secs` at workflow `safety` level or per-step
 
 This builds on the existing `low_output` detection (3 consecutive heartbeats
 with <= 32 bytes delta after 90s elapsed) but adds enforcement rather than just
 observation.
+
+#### Per-step override
+
+The stall threshold can be overridden globally or per step to accommodate
+long-running operations like full compilation that produce low output:
+
+```yaml
+# Global: workflow-level safety setting
+safety:
+  stall_timeout_secs: 1800   # 30 minutes
+
+# Per-step: overrides global for this step only
+steps:
+  - id: qa_testing
+    type: qa_testing
+    stall_timeout_secs: 2400  # 40 minutes for compilation-heavy QA
+```
+
+When `stall_timeout_secs` is set, it is converted to heartbeat count
+(`secs / 30`, minimum 1) and used in place of the built-in 900s default.
+Per-step values take priority over global `safety.stall_timeout_secs`.
 
 ### 3. QA Agent Timeout Guidance
 
@@ -46,6 +68,6 @@ commands.
 ## Trade-offs
 
 - The 900s stall threshold is conservative to avoid false positives from
-  legitimate slow operations (e.g., large compilation). If needed, this can be
-  made configurable per step template.
+  legitimate slow operations (e.g., large compilation). The `stall_timeout_secs`
+  field allows per-step or global overrides for workflows that need longer.
 - `--timeout 0` (default) preserves backward compatibility for interactive use.

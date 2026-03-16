@@ -434,6 +434,7 @@ impl AdaptivePlanExecutor for GraphAdaptiveExecutor<'_> {
                 runtime: self.runtime,
                 pipeline_vars: None,
                 step_timeout_secs: self.task_ctx.safety.step_timeout_secs,
+                stall_timeout_secs: self.task_ctx.safety.stall_timeout_secs,
                 step_scope: StepScope::Item,
                 step_template_prompt: Some(prompt),
                 project_id: &self.task_ctx.project_id,

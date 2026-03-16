@@ -692,6 +692,9 @@ pub struct SafetySpec {
     /// FR-035: Minimum cycle interval in seconds; rapid cycles below this trigger pause
     #[serde(default = "default_min_cycle_interval_secs")]
     pub min_cycle_interval_secs: u64,
+    /// Stall auto-kill threshold in seconds (overrides built-in 900s default)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stall_timeout_secs: Option<u64>,
     /// FR-052: Maximum seconds to wait for in-flight runs when no heartbeat activity
     #[serde(default = "default_inflight_wait_timeout_secs")]
     pub inflight_wait_timeout_secs: u64,
@@ -789,6 +792,10 @@ pub struct WorkflowStepSpec {
     /// Per-step timeout in seconds (overrides global safety.step_timeout_secs)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_secs: Option<u64>,
+
+    /// Per-step stall auto-kill threshold in seconds (overrides global safety.stall_timeout_secs)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stall_timeout_secs: Option<u64>,
 
     /// Declarative step behavior (on_failure, captures, post_actions, etc.)
     #[serde(default)]

@@ -26,6 +26,7 @@ pub(super) async fn wait_for_process(
     phase: &str,
     step_scope: StepScope,
     step_timeout_secs: Option<u64>,
+    stall_timeout_secs: Option<u64>,
     runtime: &RunningTask,
     child_pid: Option<u32>,
     output_capture: Option<OutputCaptureHandles>,
@@ -33,6 +34,13 @@ pub(super) async fn wait_for_process(
     stderr_path: &Path,
 ) -> Result<WaitResult> {
     let step_timeout_secs = resolved_step_timeout_secs(step_timeout_secs);
+    let stall_kill_heartbeats = stall_timeout_secs
+        .map(|secs| {
+            let hb = secs / HEARTBEAT_INTERVAL_SECS;
+            // At least 1 heartbeat to avoid instant kill; cap at u32::MAX.
+            (hb.max(1) as u32).min(u32::MAX)
+        })
+        .unwrap_or(super::types::STALL_AUTO_KILL_CONSECUTIVE_HEARTBEATS);
     let start = Instant::now();
     let deadline = start + std::time::Duration::from_secs(step_timeout_secs);
     let heartbeat_interval = std::time::Duration::from_secs(HEARTBEAT_INTERVAL_SECS);
@@ -149,8 +157,7 @@ pub(super) async fn wait_for_process(
                 // Stall auto-kill: if low_output persists for too many consecutive
                 // heartbeats, automatically kill the step to prevent pipeline stalls.
                 if heartbeat.output_state == "low_output"
-                    && heartbeat.stagnant_heartbeats
-                        >= super::types::STALL_AUTO_KILL_CONSECUTIVE_HEARTBEATS
+                    && heartbeat.stagnant_heartbeats >= stall_kill_heartbeats
                 {
                     let mut child_lock = runtime.child.lock().await;
                     if let Some(ref mut child) = *child_lock {

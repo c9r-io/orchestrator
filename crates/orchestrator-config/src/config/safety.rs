@@ -45,6 +45,11 @@ pub struct SafetyConfig {
     /// FR-035: Minimum cycle interval in seconds; rapid cycles below this trigger pause
     #[serde(default = "default_min_cycle_interval_secs")]
     pub min_cycle_interval_secs: u64,
+    /// Stall auto-kill threshold in seconds. When a step produces less than
+    /// `LOW_OUTPUT_DELTA_THRESHOLD_BYTES` per heartbeat for this duration, the
+    /// step is killed with exit_code=-7. Default (None) uses the built-in 900s.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stall_timeout_secs: Option<u64>,
     /// FR-052: Maximum seconds to wait for in-flight runs when no heartbeat activity
     #[serde(default = "default_inflight_wait_timeout_secs")]
     pub inflight_wait_timeout_secs: u64,
@@ -86,6 +91,7 @@ impl Default for SafetyConfig {
             max_spawned_tasks: None,
             max_spawn_depth: None,
             spawn_cooldown_seconds: None,
+            stall_timeout_secs: None,
             max_item_step_failures: 3,
             min_cycle_interval_secs: 60,
             inflight_wait_timeout_secs: 300,
@@ -172,6 +178,7 @@ mod tests {
         assert!(!cfg.auto_rollback);
         assert!(matches!(cfg.checkpoint_strategy, CheckpointStrategy::None));
         assert!(cfg.step_timeout_secs.is_none());
+        assert!(cfg.stall_timeout_secs.is_none());
         assert!(!cfg.binary_snapshot);
         assert_eq!(cfg.max_item_step_failures, 3);
         assert_eq!(cfg.min_cycle_interval_secs, 60);

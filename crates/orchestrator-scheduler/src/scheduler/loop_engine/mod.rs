@@ -407,6 +407,7 @@ async fn run_init_once_if_needed(
                     runtime,
                     pipeline_vars: None,
                     step_timeout_secs: task_ctx.safety.step_timeout_secs,
+                    stall_timeout_secs: task_ctx.safety.stall_timeout_secs,
                     step_scope: StepScope::Task,
                     step_template_prompt: None,
                     project_id: &task_ctx.project_id,

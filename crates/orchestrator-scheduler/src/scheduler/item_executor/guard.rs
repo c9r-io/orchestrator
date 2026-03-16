@@ -151,6 +151,7 @@ pub async fn execute_guard_step(
             agent_id: &agent_id,
             runtime,
             step_timeout_secs: None,
+            stall_timeout_secs: None,
             step_scope: agent_orchestrator::config::StepScope::Task,
             prompt_delivery: agent_orchestrator::config::PromptDelivery::Arg,
             prompt_payload: None,

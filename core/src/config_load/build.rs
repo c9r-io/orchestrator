@@ -180,6 +180,7 @@ pub(crate) fn task_step_from_workflow_step(
         behavior: normalized.behavior.clone(),
         max_parallel: normalized.max_parallel,
         timeout_secs: normalized.timeout_secs,
+        stall_timeout_secs: normalized.stall_timeout_secs,
         item_select_config: normalized.item_select_config.clone(),
         store_inputs: normalized.store_inputs.clone(),
         store_outputs: normalized.store_outputs.clone(),

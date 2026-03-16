@@ -71,6 +71,7 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                 behavior: StepBehavior::default(),
                 max_parallel: None,
                 timeout_secs: None,
+                stall_timeout_secs: None,
                 item_select_config: None,
                 store_inputs: vec![],
                 store_outputs: vec![],
