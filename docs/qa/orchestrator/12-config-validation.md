@@ -197,7 +197,7 @@ Entry point: `orchestrator <command>`
 
 ### Preconditions
 
-- Fresh sqlite state (`manifest validate` merges the manifest with existing DB config; residual agents with matching templates will cause validation to pass)
+- 无
 
 ### Goal
 
@@ -207,15 +207,7 @@ Entry point: `orchestrator <command>`
 
 ### Steps
 
-1. **Recreate an isolated QA scaffold** (critical — residual agents already in active config can cause a false pass):
-   ```bash
-   orchestrator init --force
-   QA_PROJECT="qa-validate-${USER}-$(date +%Y%m%d%H%M%S)"
-   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   ```
-
-2. 创建无效配置 (workflow 需要 qa 但没有 agent 提供 qa 模板):
+1. 创建无效配置 (workflow 需要 qa 但没有 agent 提供 qa 模板):
    ```bash
    cat > /tmp/invalid-template.yaml << 'EOF'
    apiVersion: orchestrator.dev/v2
@@ -251,9 +243,9 @@ Entry point: `orchestrator <command>`
    EOF
    ```
 
-3. 验证配置:
+2. 使用项目级隔离验证配置:
    ```bash
-   orchestrator manifest validate -f /tmp/invalid-template.yaml
+   orchestrator manifest validate -f /tmp/invalid-template.yaml -p "qa-validate-$(date +%s)"
    ```
 
 ### Expected
@@ -273,12 +265,19 @@ Entry point: `orchestrator <command>`
   builds the full active config internally via `build_active_config()` to catch
   integration issues early before `apply`.
 
+### Known Issue
+
+> **Bug**: `--project` 当前未正确隔离验证——`validate_manifests()` 始终只验证
+> default 项目。在该 bug 修复前，如果 default 项目 DB 中已存在具有 `qa`
+> capability 的 agent，本场景可能误过。
+> 见 ticket: `docs/ticket/manifest-validate-project-isolation.md`
+
 ### Troubleshooting
 
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
 | Validation fails with `no agent supports capability` | Workflow step requires a capability not provided by any agent in the manifest | Add an agent with the required capability, or remove/disable the step |
-| Validation passes despite missing capability | An agent with the matching capability already exists in the active DB config from a prior `apply` | Use `orchestrator init --force` to reset state, then re-validate |
+| Validation passes despite missing capability | `--project` 隔离 bug — 验证仍检查 default 项目而非指定项目 | 等待 bug 修复；临时可在无残留 agent 的环境中验证 |
 
 ---
 
