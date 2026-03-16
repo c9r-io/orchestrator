@@ -122,9 +122,10 @@ const BUILTIN_CEL_VARS: &[&str] = &[
     "test_exit_code",
     "self_test_exit_code",
     "self_referential_safe",
+    "steps",
 ];
 
-/// CEL keywords and literals that are not variable references.
+/// CEL keywords, literals, and built-in functions that are not variable references.
 const CEL_KEYWORDS: &[&str] = &[
     "true",
     "false",
@@ -132,6 +133,7 @@ const CEL_KEYWORDS: &[&str] = &[
     "in",
     "has",
     "size",
+    "len",
     "type",
     "int",
     "uint",
@@ -147,6 +149,11 @@ const CEL_KEYWORDS: &[&str] = &[
     "contains",
     "exists",
     "all",
+    "filter",
+    "map",
+    "exists_one",
+    "duration",
+    "timestamp",
 ];
 
 /// Extract identifiers from a CEL expression via simple lexical scan.
@@ -182,6 +189,7 @@ pub fn collect_step_warnings(steps: &[WorkflowStepSpec], workflow_id: &str) -> V
     let cel_keywords: HashSet<&str> = CEL_KEYWORDS.iter().copied().collect();
     let mut warnings = Vec::new();
     let mut captured_vars: HashSet<String> = HashSet::new();
+    let mut prior_step_ids: HashSet<String> = HashSet::new();
 
     for step in steps {
         // 1. Unknown field detection
@@ -213,6 +221,10 @@ pub fn collect_step_warnings(steps: &[WorkflowStepSpec], workflow_id: &str) -> V
                 if id.len() <= 1 {
                     continue;
                 }
+                // Skip prior step IDs (used in `steps.<step_id>.<var>` access)
+                if prior_step_ids.contains(id) {
+                    continue;
+                }
                 if !captured_vars.contains(id) {
                     warnings.push(format!(
                         "workflow '{}' step '{}' prehook references '{}' but no prior step captures this variable",
@@ -221,6 +233,9 @@ pub fn collect_step_warnings(steps: &[WorkflowStepSpec], workflow_id: &str) -> V
                 }
             }
         }
+
+        // Track step ID for subsequent steps (for `steps.<id>.<var>` access)
+        prior_step_ids.insert(step.id.clone());
 
         // Accumulate captured vars for subsequent steps
         for capture in &step.behavior.captures {
@@ -380,6 +395,41 @@ mod tests {
                 |w| w.contains("regression_target_ids") && w.contains("no prior step captures")
             ),
             "expected uncaptured var warning, got: {:?}",
+            warnings
+        );
+    }
+
+    #[test]
+    fn prehook_no_warning_for_steps_dot_step_id_access() {
+        let capture_step = WorkflowStepSpec {
+            id: "step_a".to_string(),
+            step_type: "qa_doc_gen".to_string(),
+            behavior: crate::config::StepBehavior {
+                captures: vec![crate::config::CaptureDecl {
+                    var: "regression_target_ids".to_string(),
+                    source: crate::config::CaptureSource::Stdout,
+                    json_path: None,
+                }],
+                ..Default::default()
+            },
+            ..default_step_spec()
+        };
+        let prehook_step = WorkflowStepSpec {
+            id: "step_b".to_string(),
+            step_type: "qa_testing".to_string(),
+            prehook: Some(crate::cli_types::WorkflowPrehookSpec {
+                engine: "cel".to_string(),
+                when: "len(steps.step_a.regression_target_ids) > 0".to_string(),
+                reason: None,
+                ui: None,
+                extended: false,
+            }),
+            ..default_step_spec()
+        };
+        let warnings = collect_step_warnings(&[capture_step, prehook_step], "test-workflow");
+        assert!(
+            warnings.is_empty(),
+            "expected no warnings for steps.step_a.var access, got: {:?}",
             warnings
         );
     }

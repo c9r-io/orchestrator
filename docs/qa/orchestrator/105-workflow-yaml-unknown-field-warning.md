@@ -42,4 +42,4 @@
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | All scenarios verified | ☑ | S5 false positive warnings fixed — added `len` to CEL keywords, `steps` to builtin vars, and prior step IDs to allowed identifiers |

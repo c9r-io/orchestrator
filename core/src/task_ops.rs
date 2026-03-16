@@ -252,10 +252,17 @@ pub fn reset_task_item_for_retry(
         params![resolved_id],
         |row| row.get(0),
     )?;
-    conn.execute(
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
         "UPDATE task_items SET status = 'pending', ticket_files_json = '[]', ticket_content_json = '[]', fix_required = 0, fixed = 0, last_error = '', started_at = NULL, completed_at = NULL, updated_at = ?2 WHERE id = ?1",
         params![resolved_id, now_ts()],
     )?;
+    // Clear old command runs so compensation doesn't re-finalize with stale results
+    tx.execute(
+        "DELETE FROM command_runs WHERE task_item_id = ?1",
+        params![resolved_id],
+    )?;
+    tx.commit()?;
     Ok(task_id)
 }
 

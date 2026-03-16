@@ -58,4 +58,4 @@
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | S3/S5 verified via unit test + apply | ☑ | S1/S2/S4 require long-running agents that outlive step execution; echo/mock agents exit immediately so `exit_code != -1` by the time `wait_for_inflight_runs()` runs. Detection logic works (inflight_runs_detected emitted). Fixture redesign needed for timeout-path scenarios. |

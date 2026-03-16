@@ -275,6 +275,13 @@ SELECT
 
 ---
 
+## Troubleshooting
+
+| Symptom | Cause | Resolution |
+|---------|-------|-----------|
+| `sqlite3` CLI shows 0 events but daemon reports thousands | SQLite WAL mode: external readers may not see uncommitted WAL pages while daemon holds writer lock. Also, event retention/archival may have cleaned old events. | Use `orchestrator event stats` (queries via gRPC) for authoritative counts. For direct DB queries, ensure no daemon is actively writing, or use `PRAGMA wal_checkpoint(FULL)` first. |
+| `task create` via CLI creates task but daemon doesn't see it | CLI routes `task create` via gRPC to daemon; if daemon is unreachable, CLI falls back to local DB write which is invisible to daemon | Ensure daemon is running and CLI connects via socket (`data/orchestrator.sock`). Check `ORCHESTRATOR_SOCKET` env var. |
+
 ## Checklist
 
 | # | Scenario | Status | Test Date | Tester | Notes |

@@ -75,7 +75,7 @@ Entry point: `orchestrator <command>`
    rm -rf "workspace/${QA_PROJECT}"
    orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
    orchestrator init
-   orchestrator workspace list
+   orchestrator get workspaces
    ```
 
 2. 导入自定义 manifest 叠加资源：
@@ -85,7 +85,7 @@ Entry point: `orchestrator <command>`
 
 3. 再次验证：
    ```bash
-   orchestrator workspace list
+   orchestrator get workspaces
    orchestrator task list
    ```
 
