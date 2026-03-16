@@ -44,10 +44,8 @@
 
 **Expected**: Field is preserved through spec -> config -> spec round-trip.
 
-## Scenario 6: No unknown-field warning
+## Checklist
 
-**Steps**:
-1. Create workflow YAML with `stagger_delay_ms` field
-2. Load and validate the workflow
-
-**Expected**: No unknown-field warning (FR-051) for `stagger_delay_ms`.
+| # | Check | Status |
+|---|-------|--------|
+| 1 | All scenarios verified against implementation | ☑ |

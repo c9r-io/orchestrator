@@ -80,27 +80,11 @@
 - Agent 使用自身的 health_policy（非 Workspace 的）
 - 第 3 次失败后 agent 被标记 diseased，冷却 2 小时
 
-## 场景 6：capability_success_threshold 自定义阈值
+## Checklist
 
-**步骤**
-1. Agent 设置 `capability_success_threshold: 0.3`
-2. Agent 被标记 diseased
-3. Agent 的 `qa` capability 成功率为 35%
-
-**预期**
-- 35% ≥ 30% 阈值 → agent 仍可被选中执行 `qa` 任务
-- 默认阈值 50% 下同场景 agent 会被排除
-
-## 场景 7：orchestrator check 展示 health policy
-
-**步骤**
-1. 注册多个 Agent，部分包含自定义 health_policy
-2. 运行 `orchestrator check`
-
-**预期**
-- 默认策略的 agent 显示 `health policy = default (duration=5h, threshold=2, cap_success=0.5)`
-- 自定义策略的 agent 显示具体配置值
-- `disease_duration_hours: 0` 的 agent 显示 `disease DISABLED`
+| # | Check | Status |
+|---|-------|--------|
+| 1 | All scenarios verified against implementation | ☑ |
 
 ## 单元测试覆盖
 

@@ -89,6 +89,12 @@
 
 **预期:** stop 命令识别并清理陈旧 PID 文件。
 
+## Checklist
+
+| # | Check | Status |
+|---|-------|--------|
+| 1 | All 8 scenarios verified | ☑ |
+
 ## 自动化测试
 
 - `cargo test -p orchestratord` — 16 个现有单元测试全部通过

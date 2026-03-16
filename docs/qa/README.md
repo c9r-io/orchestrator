@@ -206,6 +206,13 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/104-cli-uds-fallback-robustness.md` | 5 | FR-050: CLI UDS fallback robustness — local socket priority, env override, home-dir TCP fallback |
 | orchestrator | `docs/qa/orchestrator/105-workflow-yaml-unknown-field-warning.md` | 6 | FR-051: workflow YAML unknown field warnings and CEL prehook variable cross-check |
 | orchestrator | `docs/qa/orchestrator/106-inflight-wait-heartbeat-aware-timeout.md` | 5 | FR-052: inflight wait heartbeat-aware timeout, configurable grace period, diagnostic events |
+| orchestrator | `docs/qa/orchestrator/107-parallel-dispatch-completeness-guard.md` | 4 | FR-053: parallel dispatch completeness guard, dispatched_count accuracy, error propagation |
+| orchestrator | `docs/qa/orchestrator/108-incremental-item-progress.md` | 5 | FR-054: incremental item progress, real-time step-level counters, batch finalize idempotency |
+| orchestrator | `docs/qa/orchestrator/109-parallel-spawn-stagger-delay.md` | 5 | FR-055: parallel spawn stagger delay, workflow/step-level config, sequential path bypass |
+| orchestrator | `docs/qa/orchestrator/109b-parallel-spawn-stagger-delay-compat.md` | 1 | FR-055: unknown-field warning compatibility (split from doc 109) |
+| orchestrator | `docs/qa/orchestrator/110-agent-health-policy-configuration.md` | 5 | FR-056: agent health policy configuration, workspace fallback, disease disable, agent override |
+| orchestrator | `docs/qa/orchestrator/110b-agent-health-policy-advanced.md` | 2 | FR-056: capability threshold and check output (split from doc 110) |
+| orchestrator | `docs/qa/orchestrator/111-daemon-proper-daemonize.md` | 8 | FR-057: proper Unix daemonization, SIGHUP survival, daemon stop/status CLI |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |
 | orchestrator | `docs/qa/orchestrator/smoke-orchestrator.md` | - | Smoke test: core CLI and DB initialization |

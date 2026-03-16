@@ -51,6 +51,12 @@
 1. 即使增量 finalize 已写入终态，批量 `finalize_items` 仍应正常执行（幂等）
 2. **预期**: 不应出现 duplicate key 错误或状态不一致
 
+## Checklist
+
+| # | Check | Status |
+|---|-------|--------|
+| 1 | All scenarios verified against implementation | ☑ |
+
 ## 关联
 
 - 设计文档: `docs/design_doc/orchestrator/66-incremental-item-progress.md`
