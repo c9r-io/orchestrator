@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Workflow Execution (Phases and Lifecycle)
 
 **Module**: orchestrator

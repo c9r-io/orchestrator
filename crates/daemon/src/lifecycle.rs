@@ -1,8 +1,106 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 
 use agent_orchestrator::state::InnerState;
+
+/// Stores the PID of the process that sent SIGTERM (captured via `SA_SIGINFO`).
+/// A value of 0 means no sender PID has been recorded yet.
+static SIGTERM_SENDER_PID: AtomicI32 = AtomicI32::new(0);
+
+/// The previous SIGTERM handler (tokio's) that we chain to after capturing the
+/// sender PID.  Stored as a raw `sigaction` struct so we can invoke it from
+/// our signal handler.
+///
+/// Accessed via raw pointer (`addr_of!`/`addr_of_mut!`) to avoid creating
+/// references to mutable statics (UB since Rust 2024 edition).
+static mut PREV_SIGTERM_ACTION: std::mem::MaybeUninit<libc::sigaction> =
+    std::mem::MaybeUninit::uninit();
+
+/// Signal handler for SIGTERM installed via `sigaction` with `SA_SIGINFO`.
+///
+/// Stores `siginfo_t.si_pid` into the global atomic, then chains to the
+/// previous handler (tokio's) so the self-pipe wakeup still fires.
+///
+/// # Safety
+///
+/// This is a signal handler — it must only call async-signal-safe functions.
+/// `AtomicI32::store` is safe in a signal context.
+extern "C" fn sigterm_sigaction_handler(
+    sig: libc::c_int,
+    info: *mut libc::siginfo_t,
+    ucontext: *mut libc::c_void,
+) {
+    if !info.is_null() {
+        // SAFETY: `info` is a valid pointer provided by the kernel to a
+        // SA_SIGINFO handler.
+        let sender_pid = unsafe { (*info).si_pid };
+        SIGTERM_SENDER_PID.store(sender_pid, Ordering::SeqCst);
+    }
+
+    // SAFETY: `PREV_SIGTERM_ACTION` was initialised by
+    // `install_sigterm_siginfo_handler` before this handler can fire.
+    // We read it via raw pointer to avoid creating a reference to a
+    // mutable static.
+    unsafe {
+        let prev = &*std::ptr::addr_of!(PREV_SIGTERM_ACTION).cast::<libc::sigaction>();
+        let handler = prev.sa_sigaction;
+        if handler == libc::SIG_DFL || handler == libc::SIG_IGN {
+            return;
+        }
+        if prev.sa_flags & libc::SA_SIGINFO != 0 {
+            // Previous handler also uses SA_SIGINFO — call with 3 args.
+            let func: extern "C" fn(libc::c_int, *mut libc::siginfo_t, *mut libc::c_void) =
+                std::mem::transmute(handler);
+            func(sig, info, ucontext);
+        } else {
+            // Previous handler is a simple sa_handler.
+            let func: extern "C" fn(libc::c_int) = std::mem::transmute(handler);
+            func(sig);
+        }
+    }
+}
+
+/// Install a `sigaction`-based SIGTERM handler that captures the sender PID
+/// and chains to the previous (tokio) handler.
+///
+/// Must be called **after** tokio has registered its SIGTERM listener (via
+/// `tokio::signal::unix::signal(SignalKind::terminate())`) so that we layer
+/// on top and can forward to tokio's handler.
+fn install_sigterm_siginfo_handler() -> Result<()> {
+    // SAFETY: We initialise a `sigaction` struct with `SA_SIGINFO` and a
+    // valid extern "C" handler.  `libc::sigaction` is a POSIX call.
+    // We store the old handler in `PREV_SIGTERM_ACTION` for chaining.
+    // This is only called once, before any SIGTERM can arrive, so the
+    // write to `PREV_SIGTERM_ACTION` is not racy.
+    unsafe {
+        let mut sa: libc::sigaction = std::mem::zeroed();
+        sa.sa_sigaction = sigterm_sigaction_handler as *const () as usize;
+        sa.sa_flags = libc::SA_SIGINFO;
+        libc::sigemptyset(&mut sa.sa_mask);
+
+        let mut old_sa: libc::sigaction = std::mem::zeroed();
+        if libc::sigaction(libc::SIGTERM, &sa, &mut old_sa) != 0 {
+            return Err(anyhow::anyhow!(
+                "sigaction(SIGTERM) failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        std::ptr::addr_of_mut!(PREV_SIGTERM_ACTION).cast::<libc::sigaction>().write(old_sa);
+    }
+    Ok(())
+}
+
+/// Return the PID that sent SIGTERM, or `None` if not yet captured.
+pub fn sigterm_sender_pid() -> Option<i32> {
+    let pid = SIGTERM_SENDER_PID.load(Ordering::SeqCst);
+    if pid != 0 {
+        Some(pid)
+    } else {
+        None
+    }
+}
 
 /// Returns the path to the daemon Unix Domain Socket.
 pub fn socket_path(app_root: &Path) -> PathBuf {
@@ -74,6 +172,12 @@ pub async fn shutdown_signal(state: Arc<InnerState>) -> Result<()> {
     let mut sighup = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())
         .context("failed to install SIGHUP handler")?;
 
+    // Layer our SA_SIGINFO handler on top of tokio's SIGTERM handler so we
+    // can capture the sender PID before forwarding to tokio's self-pipe.
+    if let Err(e) = install_sigterm_siginfo_handler() {
+        tracing::warn!(error = %e, "failed to install SA_SIGINFO SIGTERM handler; sender PID will not be logged");
+    }
+
     loop {
         tokio::select! {
             result = tokio::signal::ctrl_c() => {
@@ -85,7 +189,11 @@ pub async fn shutdown_signal(state: Arc<InnerState>) -> Result<()> {
                 break;
             }
             _ = sigterm.recv() => {
-                tracing::info!("received SIGTERM, shutting down");
+                if let Some(sender) = sigterm_sender_pid() {
+                    tracing::info!(sender_pid = sender, "received SIGTERM, shutting down");
+                } else {
+                    tracing::info!("received SIGTERM, shutting down (sender PID unknown)");
+                }
                 state.daemon_runtime.request_shutdown();
                 break;
             }

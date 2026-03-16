@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Dynamic YAML Integration
 
 **Module**: orchestrator

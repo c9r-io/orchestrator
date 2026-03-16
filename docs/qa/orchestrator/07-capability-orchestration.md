@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Capability-Driven Orchestration (Routing Correctness)
 
 **Module**: orchestrator
