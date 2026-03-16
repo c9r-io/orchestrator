@@ -1,7 +1,9 @@
 use agent_orchestrator::config::{
     CaptureSource, ItemFinalizeContext, PipelineVariables, StepPrehookContext, TaskRuntimeContext,
 };
-use agent_orchestrator::json_extract::{extract_field, extract_stream_json_result, repair_unquoted_json};
+use agent_orchestrator::json_extract::{
+    extract_field, extract_stream_json_result, repair_unquoted_json,
+};
 use std::collections::HashMap;
 use std::path::Path;
 use tracing::warn;

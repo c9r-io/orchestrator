@@ -249,9 +249,7 @@ pub fn count_recent_heartbeats_for_items(
         return Ok(0);
     }
     // Build dynamic IN clause — rusqlite doesn't support array binding.
-    let placeholders: Vec<String> = (0..item_ids.len())
-        .map(|i| format!("?{}", i + 3))
-        .collect();
+    let placeholders: Vec<String> = (0..item_ids.len()).map(|i| format!("?{}", i + 3)).collect();
     let sql = format!(
         "SELECT COUNT(*) FROM events
          WHERE task_id = ?1 AND event_type = 'step_heartbeat'

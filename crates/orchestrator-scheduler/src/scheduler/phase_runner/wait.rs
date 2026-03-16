@@ -37,8 +37,8 @@ pub(super) async fn wait_for_process(
     let stall_kill_heartbeats = stall_timeout_secs
         .map(|secs| {
             let hb = secs / HEARTBEAT_INTERVAL_SECS;
-            // At least 1 heartbeat to avoid instant kill; cap at u32::MAX.
-            (hb.max(1) as u32).min(u32::MAX)
+            // At least 1 heartbeat to avoid instant kill.
+            hb.max(1) as u32
         })
         .unwrap_or(super::types::STALL_AUTO_KILL_CONSECUTIVE_HEARTBEATS);
     let start = Instant::now();

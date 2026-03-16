@@ -370,7 +370,10 @@ contexts:
         let _guard = std::env::var("ORCHESTRATOR_CONTROL_PLANE_CONFIG");
         std::env::remove_var("ORCHESTRATOR_CONTROL_PLANE_CONFIG");
         let result = discover_explicit_control_plane_config(None).expect("no error");
-        assert!(result.is_none(), "should return None without explicit config");
+        assert!(
+            result.is_none(),
+            "should return None without explicit config"
+        );
     }
 
     #[test]
@@ -383,10 +386,9 @@ contexts:
         )
         .expect("write config");
 
-        let result =
-            discover_explicit_control_plane_config(Some(path.to_str().expect("utf8")))
-                .expect("no error")
-                .expect("should find config");
+        let result = discover_explicit_control_plane_config(Some(path.to_str().expect("utf8")))
+            .expect("no error")
+            .expect("should find config");
         assert_eq!(result, path);
     }
 

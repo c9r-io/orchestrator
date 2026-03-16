@@ -435,7 +435,10 @@ pub(super) async fn execute_item_segment(
                 "parallel item segment incomplete: dispatched {}/{} items",
                 dispatched_count, expected
             );
-            warn!(dispatched_count, expected, "FR-053 completeness check failed");
+            warn!(
+                dispatched_count,
+                expected, "FR-053 completeness check failed"
+            );
             insert_event(
                 state,
                 task_id,

@@ -55,11 +55,7 @@ pub(super) fn print(resp: &TaskInfoResponse, format: OutputFormat) {
                             running
                         );
                     } else {
-                        println!(
-                            "    {:<20} {} completed",
-                            format!("{}:", phase),
-                            completed
-                        );
+                        println!("    {:<20} {} completed", format!("{}:", phase), completed);
                     }
                 }
             }

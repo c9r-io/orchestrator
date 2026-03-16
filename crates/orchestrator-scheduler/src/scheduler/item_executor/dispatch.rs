@@ -899,7 +899,9 @@ pub(crate) async fn execute_builtin_step(
                 agent_id: "builtin",
                 runtime,
                 step_timeout_secs: step.timeout_secs,
-                stall_timeout_secs: step.stall_timeout_secs.or(task_ctx.safety.stall_timeout_secs),
+                stall_timeout_secs: step
+                    .stall_timeout_secs
+                    .or(task_ctx.safety.stall_timeout_secs),
                 step_scope: step.resolved_scope(),
                 prompt_delivery: agent_orchestrator::config::PromptDelivery::Arg,
                 prompt_payload: None,
@@ -936,7 +938,9 @@ pub(crate) async fn execute_builtin_step(
                 runtime,
                 pipeline_vars: Some(pipeline_vars),
                 step_timeout_secs: step.timeout_secs.or(task_ctx.safety.step_timeout_secs),
-                stall_timeout_secs: step.stall_timeout_secs.or(task_ctx.safety.stall_timeout_secs),
+                stall_timeout_secs: step
+                    .stall_timeout_secs
+                    .or(task_ctx.safety.stall_timeout_secs),
                 step_scope: step.resolved_scope(),
                 step_template_prompt: resolved_prompt.as_deref(),
                 project_id: &task_ctx.project_id,

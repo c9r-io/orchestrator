@@ -126,9 +126,27 @@ const BUILTIN_CEL_VARS: &[&str] = &[
 
 /// CEL keywords and literals that are not variable references.
 const CEL_KEYWORDS: &[&str] = &[
-    "true", "false", "null", "in", "has", "size", "type", "int", "uint",
-    "double", "bool", "string", "bytes", "list", "map", "matches",
-    "startsWith", "endsWith", "contains", "exists", "all",
+    "true",
+    "false",
+    "null",
+    "in",
+    "has",
+    "size",
+    "type",
+    "int",
+    "uint",
+    "double",
+    "bool",
+    "string",
+    "bytes",
+    "list",
+    "map",
+    "matches",
+    "startsWith",
+    "endsWith",
+    "contains",
+    "exists",
+    "all",
 ];
 
 /// Extract identifiers from a CEL expression via simple lexical scan.
@@ -211,8 +229,7 @@ pub fn collect_step_warnings(steps: &[WorkflowStepSpec], workflow_id: &str) -> V
 
         // Recurse into chain_steps
         if !step.chain_steps.is_empty() {
-            let chain_warnings =
-                collect_step_warnings(&step.chain_steps, workflow_id);
+            let chain_warnings = collect_step_warnings(&step.chain_steps, workflow_id);
             warnings.extend(chain_warnings);
         }
     }
@@ -352,12 +369,16 @@ mod tests {
         );
         let warnings = collect_step_warnings(&steps, "test-wf");
         assert!(
-            warnings.iter().any(|w| w.contains("capture") && w.contains("behavior.captures")),
+            warnings
+                .iter()
+                .any(|w| w.contains("capture") && w.contains("behavior.captures")),
             "expected 'did you mean' warning, got: {:?}",
             warnings
         );
         assert!(
-            warnings.iter().any(|w| w.contains("regression_target_ids") && w.contains("no prior step captures")),
+            warnings.iter().any(
+                |w| w.contains("regression_target_ids") && w.contains("no prior step captures")
+            ),
             "expected uncaptured var warning, got: {:?}",
             warnings
         );

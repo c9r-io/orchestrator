@@ -25,12 +25,11 @@ use super::runtime::load_task_runtime_context;
 use super::safety::RestartRequestedError;
 use super::task_state::query_recent_cycle_timestamps;
 use super::task_state::{
-    count_stale_pending_items, count_unresolved_items, detect_restart_resume,
-    find_completed_runs_for_pending_items, find_inflight_command_runs_for_task,
-    first_task_item_id, is_task_paused_in_db, list_task_items_for_cycle,
-    count_recent_heartbeats_for_items, mark_command_run_killed,
-    query_completed_steps_in_cycle, record_task_execution_metric,
-    set_task_status, update_task_cycle_state,
+    count_recent_heartbeats_for_items, count_stale_pending_items, count_unresolved_items,
+    detect_restart_resume, find_completed_runs_for_pending_items,
+    find_inflight_command_runs_for_task, first_task_item_id, is_task_paused_in_db,
+    list_task_items_for_cycle, mark_command_run_killed, query_completed_steps_in_cycle,
+    record_task_execution_metric, set_task_status, update_task_cycle_state,
 };
 use super::RunningTask;
 
@@ -92,7 +91,10 @@ async fn run_task_loop_core(
     // the cycle was already started.  Decrement current_cycle so the upcoming
     // `+= 1` brings us back to the same cycle, and record which steps already
     // finished so dispatch can skip them.
-    if detect_restart_resume(&state, task_id).await.unwrap_or(false) && task_ctx.current_cycle > 0
+    if detect_restart_resume(&state, task_id)
+        .await
+        .unwrap_or(false)
+        && task_ctx.current_cycle > 0
     {
         let resuming_cycle = task_ctx.current_cycle;
         task_ctx.restart_completed_steps =
@@ -717,9 +719,8 @@ async fn wait_for_inflight_runs(
             .iter()
             .map(|(_, item_id, _, _)| item_id.clone())
             .collect();
-        let cutoff = (chrono::Utc::now()
-            - chrono::Duration::seconds(grace.as_secs() as i64))
-            .to_rfc3339();
+        let cutoff =
+            (chrono::Utc::now() - chrono::Duration::seconds(grace.as_secs() as i64)).to_rfc3339();
         let hb_count =
             count_recent_heartbeats_for_items(state, task_id, &item_ids, &cutoff).await?;
         if hb_count > 0 {
@@ -778,8 +779,11 @@ async fn reap_inflight_runs(state: &Arc<InnerState>, task_id: &str) -> Result<()
 
     // Phase 2: SIGKILL any survivors
     for pid in &killed_pids {
+        // SAFETY: libc::kill with signal 0 checks if a process exists without sending a signal.
+        // The pid comes from a previously spawned child process.
         let alive = unsafe { libc::kill(*pid as i32, 0) } == 0;
         if alive {
+            // SAFETY: Sending SIGKILL to a child process we previously spawned and confirmed alive above.
             unsafe {
                 libc::kill(*pid as i32, libc::SIGKILL);
             }
