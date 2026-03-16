@@ -1,3 +1,6 @@
+---
+self_referential_safe: false
+---
 # QA 109: Parallel Spawn Stagger Delay (FR-055)
 
 ## Scenario 1: Default behavior (no stagger)
