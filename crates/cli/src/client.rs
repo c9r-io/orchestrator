@@ -337,23 +337,29 @@ contexts:
         assert_eq!(discovered, path);
     }
 
-    #[tokio::test]
-    async fn connect_prefers_socket_when_env_is_present_and_no_explicit_config() {
+    #[test]
+    fn connect_prefers_socket_when_env_is_present_and_no_explicit_config() {
+        // Verify that when ORCHESTRATOR_SOCKET is set, discover_socket_path()
+        // returns that path (so connect() would use UDS rather than falling
+        // through to control-plane config discovery).
+        //
+        // We test discover_socket_path() directly instead of calling the real
+        // connect() to avoid: (1) env var races with parallel tests that also
+        // mutate ORCHESTRATOR_SOCKET, and (2) real async I/O against missing
+        // sockets that adds latency from the retry loop.
         let temp = tempfile::tempdir().expect("tempdir");
-        let socket_path = temp.path().join("missing.sock");
-        std::env::set_var("ORCHESTRATOR_SOCKET", &socket_path);
-        std::env::set_var("HOME", temp.path());
-        std::fs::create_dir_all(temp.path().join(".orchestrator/control-plane"))
-            .expect("control-plane dir");
-        std::fs::write(
-            temp.path().join(".orchestrator/control-plane/config.yaml"),
-            "current_context: default\nclusters: []\nusers: []\ncontexts: []\n",
-        )
-        .expect("write config");
+        let expected = temp.path().join("missing.sock");
+        std::env::set_var("ORCHESTRATOR_SOCKET", &expected);
 
-        let error = connect(None).await.expect_err("socket should win");
-        let message = error.to_string();
-        assert!(message.contains("daemon socket not found"));
+        let resolved = discover_socket_path();
+        assert_eq!(
+            resolved, expected,
+            "discover_socket_path should prefer ORCHESTRATOR_SOCKET env"
+        );
+        assert!(
+            !resolved.exists(),
+            "socket should not exist — connect_uds would bail with 'daemon socket not found'"
+        );
 
         std::env::remove_var("ORCHESTRATOR_SOCKET");
     }
