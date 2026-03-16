@@ -81,4 +81,4 @@ orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "$
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Multiple Target Files | ☐ | | | |
+| 1 | Multiple Target Files | ❌ | 2026-03-16 | chenhan | Ticket: `docs/ticket/orchestrator_15-workflow-multi-target-files_scenario1_20260316_194500.md` |

@@ -1,0 +1,59 @@
+# Test fixture for stagger_delay_ms testing
+# Scenario 2: max_parallel: 4, stagger_delay_ms: 3000 (workflow-level stagger)
+---
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: stagger-test
+spec:
+  root_path: "fixtures/qa-items"
+  qa_targets:
+    - docs/qa
+  ticket_dir: fixtures/ticket
+  self_referential: false
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: stagger-mock-agent
+spec:
+  capabilities:
+    - plan
+    - implement
+    - qa_testing
+  command: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: stagger-workflow-level
+spec:
+  # Scenario 2: max_parallel: 4, stagger_delay_ms: 3000
+  max_parallel: 4
+  stagger_delay_ms: 3000
+  steps:
+    - id: process
+      type: plan
+      scope: item
+      enabled: true
+      repeatable: false
+      command: "echo '{\"confidence\":0.95}'"
+      behavior:
+        captures:
+          - var: output
+            source: stdout
+
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none
