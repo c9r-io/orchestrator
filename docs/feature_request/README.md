@@ -43,6 +43,7 @@
 | FR-053 | Full-QA Workflow 大规模 Item 分发中断 — max_cycles_enforced 过早触发 | P0 | Closed |
 | FR-054 | Item 进度增量更新 — finalize_items 延迟导致 Progress 长时间为零 | P1 | Closed |
 | FR-055 | Parallel Spawn Stagger Delay — 并行 Agent 启动间隔延迟 | P1 | Closed |
+| FR-056 | Agent Health Policy 可配置化 — Disease 策略按 Agent/Workspace 设定 | P1 | Proposed |
 
 ## 说明
 
