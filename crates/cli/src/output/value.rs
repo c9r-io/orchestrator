@@ -4,8 +4,31 @@ use orchestrator_proto::{
 use serde_json::{json, Value};
 
 pub(super) fn task_detail_value(task: &TaskSummary, resp: &TaskInfoResponse) -> Value {
+    // FR-054: Aggregate step-level progress from runs
+    let mut phase_stats: std::collections::BTreeMap<&str, (u32, u32)> =
+        std::collections::BTreeMap::new();
+    for run in &resp.runs {
+        let entry = phase_stats.entry(run.phase.as_str()).or_default();
+        if run.exit_code.is_some() {
+            entry.0 += 1;
+        } else {
+            entry.1 += 1;
+        }
+    }
+    let step_progress: Vec<Value> = phase_stats
+        .iter()
+        .map(|(phase, (completed, running))| {
+            json!({
+                "phase": phase,
+                "completed": completed,
+                "running": running,
+            })
+        })
+        .collect();
+
     json!({
         "task": task_summary_value(task),
+        "step_progress": step_progress,
         "items": resp.items.iter().map(task_item_value).collect::<Vec<_>>(),
         "runs": resp.runs.iter().map(command_run_value).collect::<Vec<_>>(),
         "events": resp.events.iter().map(event_value).collect::<Vec<_>>(),

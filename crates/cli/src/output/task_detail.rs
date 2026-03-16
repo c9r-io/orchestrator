@@ -32,6 +32,37 @@ pub(super) fn print(resp: &TaskInfoResponse, format: OutputFormat) {
                 "  Progress: {}/{} items",
                 task.finished_items, task.total_items
             );
+            // FR-054: Step-level progress breakdown from runs
+            if !resp.runs.is_empty() {
+                let mut phase_stats: std::collections::BTreeMap<
+                    &str,
+                    (u32, u32), // (completed, running)
+                > = std::collections::BTreeMap::new();
+                for run in &resp.runs {
+                    let entry = phase_stats.entry(run.phase.as_str()).or_default();
+                    if run.exit_code.is_some() {
+                        entry.0 += 1;
+                    } else {
+                        entry.1 += 1;
+                    }
+                }
+                for (phase, (completed, running)) in &phase_stats {
+                    if *running > 0 {
+                        println!(
+                            "    {:<20} {} completed, {} running",
+                            format!("{}:", phase),
+                            completed,
+                            running
+                        );
+                    } else {
+                        println!(
+                            "    {:<20} {} completed",
+                            format!("{}:", phase),
+                            completed
+                        );
+                    }
+                }
+            }
             println!("  Failed: {}", task.failed_items);
             if !task.goal.is_empty() {
                 println!("  Goal: {}", task.goal);

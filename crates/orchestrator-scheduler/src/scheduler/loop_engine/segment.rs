@@ -261,6 +261,14 @@ pub(super) async fn execute_item_segment(
             )
             .await?;
 
+            // FR-054: Incremental finalize — write terminal status to DB
+            // immediately when this is the last item-scope segment, so that
+            // `Progress: X/N` updates in real-time.  The batch `finalize_items`
+            // call later will re-evaluate the same item (idempotent).
+            if run_dynamic_steps {
+                finalize_item_execution(state, task_id, item, task_ctx, acc).await?;
+            }
+
             // FR-035 L1: Track per-item per-step failures and apply circuit breaker
             let acc = item_state.get(&item.id).expect("acc just inserted");
             for (step_id, &exit_code) in &acc.exit_codes {
@@ -350,9 +358,9 @@ pub(super) async fn execute_item_segment(
                     &state,
                     OwnedProcessItemRequest {
                         task_id: task_id.clone(),
-                        item,
+                        item: item.clone(),
                         task_item_paths: paths,
-                        task_ctx: ctx,
+                        task_ctx: ctx.clone(),
                         runtime: item_runtime,
                         step_filter: Some(filter),
                         run_dynamic_steps,
@@ -360,6 +368,17 @@ pub(super) async fn execute_item_segment(
                     &mut acc,
                 )
                 .await;
+                // FR-054: Incremental finalize — write terminal status to DB
+                // immediately so `Progress: X/N` updates in real-time.
+                // The batch `finalize_items` call later will re-evaluate
+                // the same item (idempotent).
+                if run_dynamic_steps && result.is_ok() {
+                    if let Err(e) =
+                        finalize_item_execution(&state, &task_id, &item, &ctx, &mut acc).await
+                    {
+                        return (item_id, acc, Err(e));
+                    }
+                }
                 (item_id, acc, result)
             });
             dispatched_count += 1;

@@ -41,7 +41,7 @@
 | FR-050 | CLI UDS 连接回退鲁棒性 | P2 | Closed |
 | FR-051 | Workflow YAML 步骤定义未知字段警告 | P1 | Closed |
 | FR-053 | Full-QA Workflow 大规模 Item 分发中断 — max_cycles_enforced 过早触发 | P0 | Closed |
-| FR-054 | Item 进度增量更新 — finalize_items 延迟导致 Progress 长时间为零 | P1 | Open |
+| FR-054 | Item 进度增量更新 — finalize_items 延迟导致 Progress 长时间为零 | P1 | Closed |
 
 ## 说明
 
@@ -102,3 +102,4 @@
 - FR-051 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/63-workflow-yaml-unknown-field-warning.md` 与 `docs/qa/orchestrator/105-workflow-yaml-unknown-field-warning.md` 承载
 - FR-052 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/64-inflight-wait-heartbeat-aware-timeout.md` 与 `docs/qa/orchestrator/106-inflight-wait-heartbeat-aware-timeout.md` 承载
 - FR-053 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/65-parallel-dispatch-completeness-guard.md` 与 `docs/qa/orchestrator/107-parallel-dispatch-completeness-guard.md` 承载
+- FR-054 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/66-incremental-item-progress.md` 与 `docs/qa/orchestrator/108-incremental-item-progress.md` 承载
