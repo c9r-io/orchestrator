@@ -190,16 +190,39 @@ pub fn run_checks(
     safety::check_self_referential_policy(workspaces, workflows, workflow_filter, &mut checks);
 
     // Health policy summary per agent.
+    // Resolve effective policy: agent-explicit > workspace-inherited > default.
+    let ws_health_policy: Option<&agent_orchestrator::config::HealthPolicyConfig> = workspaces
+        .values()
+        .map(|ws| &ws.health_policy)
+        .find(|hp| !hp.is_default());
     for (name, agent) in agents {
         let hp = &agent.health_policy;
         if hp.is_default() {
-            checks.push(CheckResult::simple(
-                "agent_health_policy",
-                Severity::Info,
-                true,
-                format!("agent \"{name}\": health policy = default (duration=5h, threshold=2, cap_success=0.5)"),
-                None,
-            ));
+            if let Some(ws_hp) = ws_health_policy {
+                let disease_note = if ws_hp.disease_duration_hours == 0 {
+                    "disease DISABLED".to_string()
+                } else {
+                    format!("duration={}h", ws_hp.disease_duration_hours)
+                };
+                checks.push(CheckResult::simple(
+                    "agent_health_policy",
+                    Severity::Info,
+                    true,
+                    format!(
+                        "agent \"{name}\": health policy = inherited from workspace ({disease_note}, threshold={}, cap_success={})",
+                        ws_hp.disease_threshold, ws_hp.capability_success_threshold
+                    ),
+                    None,
+                ));
+            } else {
+                checks.push(CheckResult::simple(
+                    "agent_health_policy",
+                    Severity::Info,
+                    true,
+                    format!("agent \"{name}\": health policy = default (duration=5h, threshold=2, cap_success=0.5)"),
+                    None,
+                ));
+            }
         } else {
             let disease_note = if hp.disease_duration_hours == 0 {
                 "disease DISABLED".to_string()

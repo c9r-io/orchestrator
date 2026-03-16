@@ -171,7 +171,7 @@ Entry point: `orchestrator <command>`
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | init 后默认配置已存在，命令可正常执行 | ☐ | | | |
-| 2 | init 后必须 apply manifest | ☐ | | | |
-| 3 | apply 非法 Manifest 失败 | ☐ | | | |
-| 4 | apply 语法损坏文件失败 | ☐ | | | |
+| 1 | init 后默认配置已存在，命令可正常执行 | ☑ | 2026-03-16 | chenhan | |
+| 2 | init 后必须 apply manifest | ☑ | 2026-03-16 | chenhan | |
+| 3 | apply 非法 Manifest 失败 | ☑ | 2026-03-16 | chenhan | |
+| 4 | apply 语法损坏文件失败 | ☑ | 2026-03-16 | chenhan | |

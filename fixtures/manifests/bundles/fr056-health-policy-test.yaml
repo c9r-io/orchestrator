@@ -20,6 +20,18 @@ spec:
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
+  name: default-agent-fail
+spec:
+  command: "echo 'infra-fail' && exit -1"
+  capabilities:
+    - qa_testing
+  health_policy:
+    disease_duration_hours: 5
+    disease_threshold: 2
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
   name: custom-agent
 spec:
   command: "echo '{\"confidence\":1.0}'"
@@ -33,9 +45,33 @@ spec:
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
+  name: custom-agent-fail
+spec:
+  command: "echo 'infra-fail' && exit -1"
+  capabilities:
+    - qa_testing
+  health_policy:
+    disease_duration_hours: 1
+    disease_threshold: 5
+    capability_success_threshold: 0.3
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
   name: nodisease-agent
 spec:
   command: "echo '{\"confidence\":1.0}'"
+  capabilities:
+    - qa_testing
+  health_policy:
+    disease_duration_hours: 0
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: nodisease-agent-fail
+spec:
+  command: "echo 'infra-fail' && exit -1"
   capabilities:
     - qa_testing
   health_policy:

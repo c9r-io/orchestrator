@@ -41,7 +41,7 @@ pub(super) async fn setup_phase_execution(
 
     let (runner, execution_profile, mut resolved_extra_env, sensitive_values) = {
         let active = agent_orchestrator::config_load::read_active_config(state)?;
-        let mut runner = active.config.runtime_policy().runner;
+        let mut runner = active.config.runtime_policy_for_project(project_id).runner;
         if state.unsafe_mode {
             runner.policy = agent_orchestrator::config::RunnerPolicy::Unsafe;
         }

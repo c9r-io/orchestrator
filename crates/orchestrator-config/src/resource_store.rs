@@ -82,6 +82,16 @@ impl ResourceStore {
             .collect()
     }
 
+    /// List resources of a given kind within a specific project.
+    pub fn list_by_kind_for_project(&self, kind: &str, project: &str) -> Vec<&CustomResource> {
+        let prefix = format!("{}/{}/", kind, project);
+        self.resources
+            .iter()
+            .filter(|(k, _)| k.starts_with(&prefix))
+            .map(|(_, v)| v)
+            .collect()
+    }
+
     /// Insert or update a resource. Returns the apply result.
     /// For project-scoped kinds with no project, auto-assigns DEFAULT_PROJECT_ID.
     pub fn put(&mut self, mut cr: CustomResource) -> ApplyResult {

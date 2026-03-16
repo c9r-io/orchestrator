@@ -11,6 +11,8 @@ pub trait ResourceStoreExt {
     fn project_map<T: CrdProjectable>(&self) -> HashMap<String, T>;
     /// Project a singleton CR of a given kind.
     fn project_singleton<T: CrdProjectable>(&self) -> Option<T>;
+    /// Project a singleton CR of a given kind within a specific project scope.
+    fn project_singleton_for_project<T: CrdProjectable>(&self, project: &str) -> Option<T>;
 }
 
 impl ResourceStoreExt for ResourceStore {
@@ -28,6 +30,15 @@ impl ResourceStoreExt for ResourceStore {
     fn project_singleton<T: CrdProjectable>(&self) -> Option<T> {
         let kind = T::crd_kind();
         let items = self.list_by_kind(kind);
+        items
+            .into_iter()
+            .next()
+            .and_then(|cr| T::from_cr_spec(&cr.spec).ok())
+    }
+
+    fn project_singleton_for_project<T: CrdProjectable>(&self, project: &str) -> Option<T> {
+        let kind = T::crd_kind();
+        let items = self.list_by_kind_for_project(kind, project);
         items
             .into_iter()
             .next()
