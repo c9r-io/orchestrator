@@ -30,8 +30,7 @@ pub fn daemonize(log_path: &Path) -> Result<()> {
     }
 
     // Create a pipe so the grandchild can send its PID back to the original parent.
-    let (pipe_read, pipe_write) =
-        nix::unistd::pipe().context("failed to create pipe")?;
+    let (pipe_read, pipe_write) = nix::unistd::pipe().context("failed to create pipe")?;
     let pipe_read_fd = pipe_read.as_raw_fd();
 
     // First fork — parent waits for grandchild PID, prints it, then exits
@@ -87,8 +86,7 @@ pub fn daemonize(log_path: &Path) -> Result<()> {
     }
 
     // Redirect stdin → /dev/null
-    let devnull =
-        File::open("/dev/null").context("failed to open /dev/null")?;
+    let devnull = File::open("/dev/null").context("failed to open /dev/null")?;
     nix::unistd::dup2(devnull.as_raw_fd(), 0).context("dup2 stdin failed")?;
 
     // Redirect stdout/stderr → log file (append)

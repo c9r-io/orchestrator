@@ -64,9 +64,7 @@ async fn stop(pid_path: &Path) -> Result<()> {
             return Ok(());
         }
         if tokio::time::Instant::now() >= deadline {
-            anyhow::bail!(
-                "orchestratord (PID {pid}) did not exit within 30 seconds"
-            );
+            anyhow::bail!("orchestratord (PID {pid}) did not exit within 30 seconds");
         }
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     }
