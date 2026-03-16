@@ -197,7 +197,7 @@ fn contains_kill_pid(command: &str, pid_str: &str) -> bool {
 /// - `orchestrator daemon stop 2>&1`
 fn contains_daemon_stop_subcommand(command: &str) -> bool {
     // Split on shell separators to handle compound commands like `echo foo && orchestrator daemon stop`
-    for segment in command.split(|c: char| matches!(c, ';' | '&' | '|')) {
+    for segment in command.split([';', '&', '|']) {
         let tokens: Vec<&str> = segment.split_whitespace().collect();
         // Find a token ending with "orchestrator" (handles path prefixes) followed by "daemon" then "stop"
         for window in tokens.windows(3) {

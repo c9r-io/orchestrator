@@ -177,7 +177,7 @@ impl TriggerEngine {
         // Collect the current set of triggers to update stabilization tracking.
         let mut current_triggers: HashSet<(String, String)> = HashSet::new();
         for (project_id, project) in &config.projects {
-            for (name, _trigger) in &project.triggers {
+            for name in project.triggers.keys() {
                 current_triggers.insert((project_id.clone(), name.clone()));
             }
         }
