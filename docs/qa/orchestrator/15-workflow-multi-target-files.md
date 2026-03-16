@@ -38,6 +38,7 @@ orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "$
 - Workspace and workflow are available.
 - Multiple target files exist in repository.
 - Project scaffold is freshly recreated: `delete project/<project> --force` + `rm -rf "workspace/${QA_PROJECT}"` + `apply -f <fixture> --project`
+- **Ticket directory is clean**: remove any stale ticket files before running (`rm -f fixtures/ticket/auto_*.md`). Stale tickets matching a target file's QA path will cause `active_ticket_count > 0`, triggering the `fix_disabled_with_tickets` finalize rule and marking that item as "unresolved" even though QA passed.
 
 ### Steps
 
@@ -74,6 +75,7 @@ orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "$
 |---------|-----------|-----|
 | `Error: active config is not runnable ... loop.guard enabled but no agent has loop_guard template` | Residual workflow from a prior test run is still present because fixture application is additive | Re-apply `fixtures/manifests/bundles/echo-workflow.yaml`, then recreate the isolated QA project scaffold (`delete project/<project> --force` + `rm -rf workspace/<project>` + `apply -f <fixture> --project`) |
 | `Error: load task details failed ... task not found` | Task failed during execution and info lookup uses wrong project scope | Ensure `--project "${QA_PROJECT}"` is passed to `task info` |
+| Task shows "failed" with some items "unresolved" despite all runs exit=0 | Stale ticket files in `fixtures/ticket/` match a target file's QA path, causing `active_ticket_count > 0`. The `fix_disabled_with_tickets` finalize rule fires → "unresolved" | Run `rm -f fixtures/ticket/auto_*.md` before the test to clear stale tickets |
 
 ---
 
@@ -81,4 +83,4 @@ orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "$
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Multiple Target Files | ❌ | 2026-03-16 | chenhan | Ticket: `docs/ticket/orchestrator_15-workflow-multi-target-files_scenario1_20260316_194500.md` |
+| 1 | Multiple Target Files | ☑ | 2026-03-16 | chenhan | False positive: stale ticket files in fixtures/ticket/ contaminated finalize. Preconditions updated. |

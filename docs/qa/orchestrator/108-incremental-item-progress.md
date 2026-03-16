@@ -29,6 +29,12 @@
    ```
 3. 所有 item 完成后统计数应与 total_items 一致
 
+> **Note**: Step progress counts **CommandRuns**, not items. "completed" means the run's command has exited (exit_code is set), regardless of whether the item has been finalized to a terminal status. During execution, step progress "completed" count can be higher than the `Progress: X/N` item count because:
+> - Runs complete before incremental finalize writes the item's terminal status
+> - Items with retries have multiple runs (each with an exit_code)
+>
+> This is expected behavior. Only compare step progress to item progress after the task reaches a terminal state.
+
 ### 场景 3: Step 级进度展示（JSON 格式）
 
 1. 任务执行中运行 `orchestrator task info -o json`

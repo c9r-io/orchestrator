@@ -49,8 +49,8 @@
 
 **预期**
 - Agent 始终保持 healthy
-- 不触发 `increment_consecutive_errors`
-- 不触发 `mark_agent_diseased`
+- `increment_consecutive_errors` 不被调用（`disease_duration_hours > 0` 守卫跳过）
+- `mark_agent_diseased` 不被调用
 
 ## 场景 4：Workspace 级别 health_policy 作为 agent 缺省值
 
@@ -85,6 +85,18 @@
 | # | Check | Status |
 |---|-------|--------|
 | 1 | All scenarios verified against implementation | ☑ |
+
+## Runtime Integration
+
+Health tracking functions are wired into the production execution path:
+
+- **Caller**: `crates/orchestrator-scheduler/src/scheduler/phase_runner/record.rs` → `record_phase_results()`
+- **Trigger**: After every phase execution, if infrastructure failure detected (`exit_code < 0`, sandbox denial, or validation failure)
+- **Flow**: `increment_consecutive_errors()` → if threshold met → `mark_agent_diseased()`
+- **Reset**: `reset_consecutive_errors()` on successful execution
+- **Selection**: `core/src/selection.rs` → `is_capability_healthy()` filters diseased agents
+
+> **Note**: When verifying runtime behavior, search for callers in `crates/orchestrator-scheduler/`, not just `core/src/`. The health functions are defined in `core/` but called from the scheduler crate.
 
 ## 单元测试覆盖
 
