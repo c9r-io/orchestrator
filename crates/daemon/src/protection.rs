@@ -751,9 +751,9 @@ impl Default for ProtectionConfig {
                     max_active_streams: Some(2),
                 },
                 admin: BudgetPolicy {
-                    rate_per_sec: 1,
-                    burst: 2,
-                    max_in_flight: Some(1),
+                    rate_per_sec: 10,
+                    burst: 20,
+                    max_in_flight: Some(8),
                     max_active_streams: None,
                 },
             },
@@ -777,9 +777,9 @@ impl Default for ProtectionConfig {
                     max_active_streams: Some(32),
                 },
                 admin: BudgetPolicy {
-                    rate_per_sec: 5,
-                    burst: 10,
-                    max_in_flight: Some(4),
+                    rate_per_sec: 50,
+                    burst: 100,
+                    max_in_flight: Some(32),
                     max_active_streams: None,
                 },
             },
@@ -810,9 +810,9 @@ impl Default for TrafficPolicies {
                 max_active_streams: Some(2),
             },
             admin: BudgetPolicy {
-                rate_per_sec: 1,
-                burst: 2,
-                max_in_flight: Some(1),
+                rate_per_sec: 10,
+                burst: 20,
+                max_in_flight: Some(8),
                 max_active_streams: None,
             },
         }
@@ -855,8 +855,8 @@ fn apply_override(
 fn classify_rpc(rpc: &str) -> TrafficClass {
     match rpc {
         "TaskFollow" | "TaskWatch" => TrafficClass::Stream,
-        "Shutdown" | "Init" | "TaskDelete" | "Delete" | "StorePrune" | "SecretKeyRotate"
-        | "SecretKeyRevoke" => TrafficClass::Admin,
+        "Shutdown" | "Init" | "TaskDelete" | "TaskDeleteBulk" | "Delete" | "StorePrune"
+        | "SecretKeyRotate" | "SecretKeyRevoke" => TrafficClass::Admin,
         "TaskCreate" | "TaskStart" | "TaskPause" | "TaskResume" | "TaskRetry" | "Apply"
         | "StorePut" | "StoreDelete" => TrafficClass::Write,
         _ => TrafficClass::Read,
@@ -874,6 +874,7 @@ fn rpc_from_path(path: &str) -> Option<&'static str> {
         "/orchestrator.OrchestratorService/TaskPause" => Some("TaskPause"),
         "/orchestrator.OrchestratorService/TaskResume" => Some("TaskResume"),
         "/orchestrator.OrchestratorService/TaskDelete" => Some("TaskDelete"),
+        "/orchestrator.OrchestratorService/TaskDeleteBulk" => Some("TaskDeleteBulk"),
         "/orchestrator.OrchestratorService/TaskRetry" => Some("TaskRetry"),
         "/orchestrator.OrchestratorService/TaskList" => Some("TaskList"),
         "/orchestrator.OrchestratorService/TaskInfo" => Some("TaskInfo"),

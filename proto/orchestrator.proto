@@ -10,6 +10,7 @@ service OrchestratorService {
   rpc TaskPause(TaskPauseRequest)     returns (TaskPauseResponse);
   rpc TaskResume(TaskResumeRequest)   returns (TaskResumeResponse);
   rpc TaskDelete(TaskDeleteRequest)   returns (TaskDeleteResponse);
+  rpc TaskDeleteBulk(TaskDeleteBulkRequest) returns (TaskDeleteBulkResponse);
   rpc TaskRetry(TaskRetryRequest)     returns (TaskRetryResponse);
   rpc TaskRecover(TaskRecoverRequest) returns (TaskRecoverResponse);
 
@@ -128,6 +129,20 @@ message TaskDeleteRequest {
 
 message TaskDeleteResponse {
   string message = 1;
+}
+
+message TaskDeleteBulkRequest {
+  repeated string task_ids = 1;
+  bool force = 2;
+  string status_filter = 3;
+  string project_filter = 4;
+}
+
+message TaskDeleteBulkResponse {
+  int32 deleted = 1;
+  int32 failed = 2;
+  repeated string errors = 3;
+  string message = 4;
 }
 
 message TaskRetryRequest {

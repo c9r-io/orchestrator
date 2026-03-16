@@ -112,6 +112,77 @@ async fn task_crud_roundtrip() {
 }
 
 #[tokio::test]
+async fn task_delete_bulk_roundtrip() {
+    timeout(TEST_TIMEOUT, async {
+        let manifest = common::load_manifest("echo-basic.yaml");
+        let harness = TestHarness::start_with_manifest(&manifest).await;
+        harness.seed_qa_file();
+        let mut client = harness.client();
+
+        // Create 3 tasks
+        let mut task_ids = Vec::new();
+        for _ in 0..3 {
+            let resp = client
+                .task_create(TaskCreateRequest {
+                    no_start: true,
+                    workflow_id: Some("qa_only".into()),
+                    ..Default::default()
+                })
+                .await
+                .expect("task_create failed")
+                .into_inner();
+            task_ids.push(resp.task_id);
+        }
+
+        // Verify all 3 exist
+        let list_resp = client
+            .task_list(TaskListRequest {
+                status_filter: None,
+                project_filter: None,
+            })
+            .await
+            .expect("task_list failed")
+            .into_inner();
+        assert!(list_resp.tasks.len() >= 3);
+
+        // Bulk delete all 3
+        let bulk_resp = client
+            .task_delete_bulk(TaskDeleteBulkRequest {
+                task_ids: task_ids.clone(),
+                force: true,
+                status_filter: String::new(),
+                project_filter: String::new(),
+            })
+            .await
+            .expect("task_delete_bulk failed")
+            .into_inner();
+
+        assert_eq!(bulk_resp.deleted, 3);
+        assert_eq!(bulk_resp.failed, 0);
+        assert!(bulk_resp.errors.is_empty());
+
+        // Verify all gone
+        let list_resp = client
+            .task_list(TaskListRequest {
+                status_filter: None,
+                project_filter: None,
+            })
+            .await
+            .expect("task_list after bulk delete failed")
+            .into_inner();
+
+        for id in &task_ids {
+            assert!(
+                !list_resp.tasks.iter().any(|t| &t.id == id),
+                "deleted task {id} should not appear in list"
+            );
+        }
+    })
+    .await
+    .expect("test timed out");
+}
+
+#[tokio::test]
 async fn apply_get_describe_roundtrip() {
     timeout(TEST_TIMEOUT, async {
         let manifest = common::load_manifest("echo-basic.yaml");

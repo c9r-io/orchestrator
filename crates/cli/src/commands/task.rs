@@ -139,12 +139,39 @@ pub(crate) async fn dispatch(
             Ok(())
         }
 
-        TaskCommands::Delete { task_id, force } => {
-            let resp = client
-                .task_delete(orchestrator_proto::TaskDeleteRequest { task_id, force })
-                .await?
-                .into_inner();
-            println!("{}", resp.message);
+        TaskCommands::Delete {
+            task_ids,
+            all,
+            status,
+            project,
+            force,
+        } => {
+            if task_ids.len() == 1 && !all {
+                // Single-task delete — use original RPC for backward compat
+                let resp = client
+                    .task_delete(orchestrator_proto::TaskDeleteRequest {
+                        task_id: task_ids.into_iter().next().unwrap(),
+                        force,
+                    })
+                    .await?
+                    .into_inner();
+                println!("{}", resp.message);
+            } else {
+                // Bulk delete — explicit IDs or --all with optional filters
+                let resp = client
+                    .task_delete_bulk(orchestrator_proto::TaskDeleteBulkRequest {
+                        task_ids,
+                        force,
+                        status_filter: status.unwrap_or_default(),
+                        project_filter: project.unwrap_or_default(),
+                    })
+                    .await?
+                    .into_inner();
+                println!("{}", resp.message);
+                for err in &resp.errors {
+                    eprintln!("  error: {}", err);
+                }
+            }
             Ok(())
         }
 

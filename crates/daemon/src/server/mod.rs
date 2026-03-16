@@ -117,6 +117,13 @@ impl OrchestratorService for OrchestratorServer {
         task::task_delete(self, request).await
     }
 
+    async fn task_delete_bulk(
+        &self,
+        request: Request<TaskDeleteBulkRequest>,
+    ) -> Result<Response<TaskDeleteBulkResponse>, Status> {
+        task::task_delete_bulk(self, request).await
+    }
+
     async fn task_retry(
         &self,
         request: Request<TaskRetryRequest>,

@@ -522,10 +522,23 @@ pub enum TaskCommands {
     },
 
     #[command(alias = "rm")]
-    /// Delete a task.
+    /// Delete one or more tasks.
     Delete {
-        /// Task identifier.
-        task_id: String,
+        /// Task identifier(s).
+        #[arg(required_unless_present = "all")]
+        task_ids: Vec<String>,
+
+        /// Delete all tasks (optionally filtered by --status and/or --project).
+        #[arg(long)]
+        all: bool,
+
+        /// Only delete tasks matching this status (used with --all).
+        #[arg(long)]
+        status: Option<String>,
+
+        /// Only delete tasks in this project (used with --all).
+        #[arg(long, short = 'p')]
+        project: Option<String>,
 
         /// Skip interactive confirmation.
         #[arg(short, long)]

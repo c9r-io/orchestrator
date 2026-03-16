@@ -266,6 +266,60 @@ impl OrchestratorService for TestOrchestratorServer {
         }))
     }
 
+    async fn task_delete_bulk(
+        &self,
+        request: Request<TaskDeleteBulkRequest>,
+    ) -> Result<Response<TaskDeleteBulkResponse>, Status> {
+        let req = request.into_inner();
+        if !req.force {
+            return Err(Status::failed_precondition(
+                "use --force to confirm bulk task deletion",
+            ));
+        }
+
+        let ids: Vec<String> = if !req.task_ids.is_empty() {
+            req.task_ids
+        } else {
+            let tasks = orchestrator_scheduler::service::task::list_tasks(&self.state)
+                .await
+                .map_err(map_core_error)?;
+            tasks
+                .into_iter()
+                .filter(|t| {
+                    if !req.status_filter.is_empty() && t.status != req.status_filter {
+                        return false;
+                    }
+                    if !req.project_filter.is_empty() && t.project_id != req.project_filter {
+                        return false;
+                    }
+                    true
+                })
+                .map(|t| t.id)
+                .collect()
+        };
+
+        let mut deleted: i32 = 0;
+        let mut failed: i32 = 0;
+        let mut errors: Vec<String> = Vec::new();
+
+        for id in &ids {
+            match orchestrator_scheduler::service::task::delete_task(self.state.clone(), id).await {
+                Ok(_) => deleted += 1,
+                Err(e) => {
+                    failed += 1;
+                    errors.push(format!("{id}: {e}"));
+                }
+            }
+        }
+
+        Ok(Response::new(TaskDeleteBulkResponse {
+            deleted,
+            failed,
+            errors,
+            message: format!("Deleted {deleted} task(s) ({failed} error(s))"),
+        }))
+    }
+
     async fn task_retry(
         &self,
         request: Request<TaskRetryRequest>,

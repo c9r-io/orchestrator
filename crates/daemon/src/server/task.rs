@@ -168,6 +168,63 @@ pub(crate) async fn task_delete(
     }))
 }
 
+pub(crate) async fn task_delete_bulk(
+    server: &OrchestratorServer,
+    request: Request<TaskDeleteBulkRequest>,
+) -> Result<Response<TaskDeleteBulkResponse>, Status> {
+    super::authorize(server, &request, "TaskDeleteBulk").map_err(Status::from)?;
+    let req = request.into_inner();
+    if !req.force {
+        return Err(Status::failed_precondition(
+            "use --force to confirm bulk task deletion",
+        ));
+    }
+
+    // Resolve target task IDs: explicit list or filter-based
+    let ids: Vec<String> = if !req.task_ids.is_empty() {
+        req.task_ids
+    } else {
+        let tasks = orchestrator_scheduler::service::task::list_tasks(&server.state)
+            .await
+            .map_err(map_core_error)?;
+        tasks
+            .into_iter()
+            .filter(|t| {
+                if !req.status_filter.is_empty() && t.status != req.status_filter {
+                    return false;
+                }
+                if !req.project_filter.is_empty() && t.project_id != req.project_filter {
+                    return false;
+                }
+                true
+            })
+            .map(|t| t.id)
+            .collect()
+    };
+
+    let mut deleted: i32 = 0;
+    let mut failed: i32 = 0;
+    let mut errors: Vec<String> = Vec::new();
+
+    for id in &ids {
+        match orchestrator_scheduler::service::task::delete_task(server.state.clone(), id).await {
+            Ok(_) => deleted += 1,
+            Err(e) => {
+                failed += 1;
+                errors.push(format!("{id}: {e}"));
+            }
+        }
+    }
+
+    let message = format!("Deleted {deleted} task(s) ({failed} error(s))");
+    Ok(Response::new(TaskDeleteBulkResponse {
+        deleted,
+        failed,
+        errors,
+        message,
+    }))
+}
+
 pub(crate) async fn task_retry(
     server: &OrchestratorServer,
     request: Request<TaskRetryRequest>,
