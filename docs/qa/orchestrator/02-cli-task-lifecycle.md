@@ -112,6 +112,17 @@ always creates non-self-referential workspaces.
 Do not pair these probe checks with `delete project/<name> --force`; they must keep
 the active runtime config intact and only apply the dedicated probe fixtures.
 
+**Prerequisite**: The `default` project must not contain stale workflows that lack
+self-referential safety settings (`safety.auto_rollback`, `safety.checkpoint_strategy`,
+and an enabled `self_test` step). When the self-referential workspace `self_ref_probe_ws`
+is applied, the safety validation checks ALL workflows in the same project. If any
+workflow lacks these settings, the apply will fail with `SELF_REF_POLICY_VIOLATION`.
+
+If this happens, delete the offending workflows first:
+```bash
+orchestrator delete workflow/<name> --force
+```
+
 1. Apply the self-referential probe fixtures:
    ```bash
    orchestrator apply -f fixtures/manifests/bundles/self-referential-probe-fixtures.yaml
@@ -121,10 +132,14 @@ the active runtime config intact and only apply the dedicated probe fixtures.
 4. Submit a task directly against the global workspace `self_ref_probe_ws` using `self_ref_probe_active_output`.
 
 Expected:
-- The self-referential probe workflows create and run without requiring `self_test`.
-- They do not need to borrow `build` or any strict-output phase.
+- The self-referential probe workflows apply and run successfully.
+- They include `self_test`, `auto_rollback`, and `checkpoint_strategy` as required by the safety policy.
 - `self_ref_probe_low_output` surfaces `LOW_OUTPUT [INTERVENE]` during execution.
 - `self_ref_probe_active_output` does not surface `LOW_OUTPUT`.
+
+| Failure Mode | Root Cause | Fix |
+|---|---|---|
+| `SELF_REF_POLICY_VIOLATION` on apply | Stale workflows in `default` project lack safety settings | Delete offending workflows or apply probes into a clean project |
 
 ---
 
