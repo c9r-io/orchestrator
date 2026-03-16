@@ -1,4 +1,3 @@
-mod agent_guard;
 mod record;
 mod setup;
 mod spawn;

@@ -94,11 +94,6 @@ pub(super) async fn setup_phase_execution(
             "ORCHESTRATOR_DAEMON_PID".to_string(),
             daemon_pid.to_string(),
         );
-        // Inject CLAUDE.md safety instructions and PreToolUse hook into the
-        // workspace so agent subprocesses (Claude Code) cannot kill the daemon.
-        if let Err(e) = super::agent_guard::inject_agent_daemon_guard(workspace_root, daemon_pid) {
-            tracing::warn!("failed to inject agent daemon guard: {e:#}");
-        }
     }
 
     let mut redaction_patterns = runner.redaction_patterns.clone();

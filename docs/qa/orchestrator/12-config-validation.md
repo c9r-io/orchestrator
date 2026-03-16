@@ -258,21 +258,27 @@ Entry point: `orchestrator <command>`
 
 ### Expected
 
-- `manifest validate` reports "Manifest is valid" — structural validation passes
-  because each individual resource is valid on its own.
-- **Note**: `manifest validate` performs **structural** validation only (YAML
-  syntax, required fields, type constraints). Cross-resource semantic validation
-  (e.g., "workflow requires `qa` capability but no agent provides it") happens
-  at **`apply` time** when the manifest is merged with the active config, and at
-  **task creation time** when capability-to-agent resolution is performed. This
-  is by design: a standalone manifest may be combined with other manifests at
-  apply time, so individual resource validity is all that can be checked.
+- `manifest validate` reports a **semantic validation error**: the workflow step
+  `qa` requires a capability that no agent in the manifest provides.
+- Example output:
+  ```
+  Config build failed
+    [config_build_failed] no agent supports capability for step 'qa' used by workflow 'test'
+  ```
+- Exit code: **1** (validation failure).
+- **Note**: `manifest validate` performs both **structural** validation (YAML
+  syntax, required fields, type constraints) and **semantic** validation
+  (cross-resource checks such as capability-to-agent resolution, env-store
+  references, execution profile existence). This is by design: the command
+  builds the full active config internally via `build_active_config()` to catch
+  integration issues early before `apply`.
 
 ### Troubleshooting
 
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
-| Validation passes for a manifest with unresolved capability references | `manifest validate` only checks structural validity; capability-to-agent mapping is validated at `apply` and task creation time | Use `apply -f --project <name>` followed by `task create --project <name>` to trigger full semantic validation |
+| Validation fails with `no agent supports capability` | Workflow step requires a capability not provided by any agent in the manifest | Add an agent with the required capability, or remove/disable the step |
+| Validation passes despite missing capability | An agent with the matching capability already exists in the active DB config from a prior `apply` | Use `orchestrator init --force` to reset state, then re-validate |
 
 ---
 

@@ -6,9 +6,9 @@ kind: Workspace
 metadata:
   name: stagger-test
 spec:
-  root_path: "fixtures/qa-items"
+  root_path: "."
   qa_targets:
-    - docs/qa
+    - fixtures/qa-items
   ticket_dir: fixtures/ticket
   self_referential: false
 ---
@@ -21,6 +21,7 @@ spec:
     - plan
     - implement
     - qa_testing
+    - loop_guard
   command: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[]}'"
 ---
 apiVersion: orchestrator.dev/v2
