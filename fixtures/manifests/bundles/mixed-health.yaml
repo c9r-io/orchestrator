@@ -25,7 +25,7 @@ metadata:
 spec:
   capabilities:
     - qa
-  command: "echo 'INVALID_JSON_not_a_valid_output' && exit 1"
+  command: "echo 'INVALID_JSON_not_a_valid_output'"
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow

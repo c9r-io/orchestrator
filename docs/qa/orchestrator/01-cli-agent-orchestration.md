@@ -63,14 +63,15 @@ Validate task creation and execution with mock bash agent completes successfully
 
 ### Steps
 
-1. Create a new task with mock echo agent:
+1. Create a new task with mock echo agent (use `--no-start` to keep it in "created" state):
    ```bash
    ./target/release/orchestrator task create \
      --name "test-task-echo" \
      --goal "Test agent orchestration" \
      --project "${QA_PROJECT}" \
      --workspace default \
-     --workflow qa_only
+     --workflow qa_only \
+     --no-start
    ```
 
 2. List tasks to verify creation:
@@ -88,6 +89,12 @@ Validate task creation and execution with mock bash agent completes successfully
 - Task created successfully with status "created" (tasks start in "created" status and only transition to "pending" when enqueued via `task start`)
 - Task list shows the new task
 - Task details show correct name, goal, workspace, and workflow
+
+### Troubleshooting
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| Task auto-enqueues with status "running" instead of "created" | `--no-start` flag was omitted from the `task create` command; without it, tasks auto-enqueue immediately | Add `--no-start` to the `task create` command |
 
 ---
 

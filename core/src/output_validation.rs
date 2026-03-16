@@ -46,7 +46,25 @@ fn is_strict_phase(phase: &str) -> bool {
     // SDLC phases (qa_testing, qa_doc_gen, ticket_fix, align_tests, doc_governance)
     // use interactive CLI agents with stream-json output (multiple JSON lines),
     // which cannot be parsed as a single JSON value.
-    matches!(phase, "qa" | "fix" | "retest" | "guard" | "adaptive_plan")
+    //
+    // The `phase` parameter may be a step ID (e.g., "run_qa") rather than the
+    // canonical step type (e.g., "qa"), because `TaskExecutionStep` only carries
+    // the step `id`.  Match both exact types and IDs that end with `_<type>`,
+    // but exclude known SDLC phases that happen to share a suffix (e.g., ticket_fix).
+    const SDLC_PHASES: &[&str] = &[
+        "qa_testing",
+        "qa_doc_gen",
+        "ticket_fix",
+        "align_tests",
+        "doc_governance",
+    ];
+    if SDLC_PHASES.contains(&phase) {
+        return false;
+    }
+    const STRICT: &[&str] = &["qa", "fix", "retest", "guard", "adaptive_plan"];
+    STRICT
+        .iter()
+        .any(|s| phase == *s || phase.ends_with(&format!("_{}", s)))
 }
 
 /// Returns true for phases that produce build/test structured output
@@ -346,6 +364,18 @@ mod tests {
             .expect("validation should return outcome");
         assert_eq!(outcome.status, "failed");
         assert!(outcome.error.is_some());
+    }
+
+    #[test]
+    fn strict_phase_suffix_match_requires_json() {
+        // Step IDs like "run_qa" should be treated as strict (matching "_qa" suffix)
+        let outcome =
+            validate_phase_output("run_qa", Uuid::new_v4(), "agent", 0, "plain-text", "")
+                .expect("validation should return outcome");
+        assert_eq!(
+            outcome.status, "failed",
+            "step ID 'run_qa' should be strict via suffix match"
+        );
     }
 
     #[test]
