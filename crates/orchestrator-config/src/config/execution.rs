@@ -71,6 +71,9 @@ pub struct TaskExecutionStep {
     /// Maximum parallel items for item-scoped steps (per-step override)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_parallel: Option<usize>,
+    /// Stagger delay in ms between parallel agent spawns (per-step override)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stagger_delay_ms: Option<u64>,
     /// Per-step timeout in seconds (overrides global safety.step_timeout_secs)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_secs: Option<u64>,
@@ -192,6 +195,9 @@ pub struct TaskExecutionPlan {
     /// Default max parallelism for item-scoped segments (1 = sequential)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_parallel: Option<usize>,
+    /// Default stagger delay in ms between parallel agent spawns
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stagger_delay_ms: Option<u64>,
     /// Workflow-level item isolation for item-scoped execution.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_isolation: Option<ItemIsolationConfig>,
@@ -527,6 +533,7 @@ mod tests {
             scope: None,
             behavior: StepBehavior::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             timeout_secs: None,
             stall_timeout_secs: None,
             item_select_config: None,
@@ -556,6 +563,7 @@ mod tests {
             scope: Some(StepScope::Task), // explicit override
             behavior: StepBehavior::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             timeout_secs: None,
             stall_timeout_secs: None,
             item_select_config: None,
@@ -586,6 +594,7 @@ mod tests {
             scope: None,
             behavior: StepBehavior::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             timeout_secs: None,
             stall_timeout_secs: None,
             item_select_config: None,
@@ -616,6 +625,7 @@ mod tests {
             scope: None,
             behavior: StepBehavior::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             timeout_secs: None,
             stall_timeout_secs: None,
             item_select_config: None,
@@ -648,6 +658,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    stagger_delay_ms: None,
                     timeout_secs: None,
                     stall_timeout_secs: None,
                     item_select_config: None,
@@ -673,6 +684,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    stagger_delay_ms: None,
                     timeout_secs: None,
                     stall_timeout_secs: None,
                     item_select_config: None,
@@ -683,6 +695,7 @@ mod tests {
             loop_policy: WorkflowLoopConfig::default(),
             finalize: WorkflowFinalizeConfig::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         };
 
@@ -702,6 +715,7 @@ mod tests {
             loop_policy: WorkflowLoopConfig::default(),
             finalize: WorkflowFinalizeConfig::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         };
         assert!(plan.step_by_id("fix").is_none());

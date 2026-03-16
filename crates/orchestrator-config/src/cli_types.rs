@@ -648,6 +648,10 @@ pub struct WorkflowSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_parallel: Option<usize>,
 
+    /// Delay in ms between successive parallel agent spawns (0 = no delay)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stagger_delay_ms: Option<u64>,
+
     /// Workflow-level item isolation for item-scoped execution.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_isolation: Option<crate::config::ItemIsolationConfig>,
@@ -788,6 +792,10 @@ pub struct WorkflowStepSpec {
     /// Maximum parallel items for item-scoped steps (per-step override)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_parallel: Option<usize>,
+
+    /// Per-step stagger delay override in ms between parallel spawns
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stagger_delay_ms: Option<u64>,
 
     /// Per-step timeout in seconds (overrides global safety.step_timeout_secs)
     #[serde(default, skip_serializing_if = "Option::is_none")]

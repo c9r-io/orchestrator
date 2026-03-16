@@ -1432,6 +1432,7 @@ mod tests {
                     adaptive: None,
                     safety: crate::config::SafetyConfig::default(),
                     max_parallel: None,
+                    stagger_delay_ms: None,
                     item_isolation: None,
                 },
             )]),

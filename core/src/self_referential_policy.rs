@@ -463,6 +463,7 @@ mod tests {
             scope: Some(StepScope::Task),
             behavior: StepBehavior::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             timeout_secs: None,
             stall_timeout_secs: None,
             item_select_config: None,
@@ -505,6 +506,7 @@ mod tests {
                 ..SafetyConfig::default()
             },
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         }
     }

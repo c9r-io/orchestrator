@@ -33,6 +33,8 @@ pub(super) struct ScopeSegment {
     pub step_ids: HashSet<String>,
     /// Resolved concurrency limit for item-scoped segments (1 = sequential).
     pub max_parallel: usize,
+    /// Delay in ms between successive parallel agent spawns (0 = no delay).
+    pub stagger_delay_ms: u64,
 }
 
 /// Group execution plan steps into contiguous segments of the same scope.
@@ -41,6 +43,7 @@ pub(super) fn build_scope_segments(
     task_ctx: &agent_orchestrator::config::TaskRuntimeContext,
 ) -> Vec<ScopeSegment> {
     let plan_default = task_ctx.execution_plan.max_parallel;
+    let plan_stagger = task_ctx.execution_plan.stagger_delay_ms;
     let mut segments: Vec<ScopeSegment> = Vec::new();
     for step in &task_ctx.execution_plan.steps {
         if step.is_guard || !step.enabled {
@@ -61,10 +64,17 @@ pub(super) fn build_scope_segments(
         } else {
             1 // task-scoped segments are always sequential
         };
+        // FR-055: Resolve stagger_delay_ms: step override > plan default > 0
+        let stagger_delay_ms = if scope == StepScope::Item {
+            step.stagger_delay_ms.or(plan_stagger).unwrap_or(0)
+        } else {
+            0
+        };
         segments.push(ScopeSegment {
             scope,
             step_ids: ids,
             max_parallel,
+            stagger_delay_ms,
         });
     }
     segments
@@ -382,6 +392,11 @@ pub(super) async fn execute_item_segment(
                 (item_id, acc, result)
             });
             dispatched_count += 1;
+            // FR-055: stagger delay between parallel spawns
+            let stagger_ms = segment.stagger_delay_ms;
+            if stagger_ms > 0 && dispatched_count < items.len() {
+                tokio::time::sleep(std::time::Duration::from_millis(stagger_ms)).await;
+            }
         }
 
         // Collect all results (no fail-fast)

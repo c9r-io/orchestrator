@@ -86,6 +86,7 @@ pub fn workflow_manifest(name: &str) -> OrchestratorResource {
                 chain_steps: vec![],
                 scope: None,
                 max_parallel: None,
+                stagger_delay_ms: None,
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 behavior: Default::default(),
@@ -115,6 +116,7 @@ pub fn workflow_manifest(name: &str) -> OrchestratorResource {
             adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         }),
     }

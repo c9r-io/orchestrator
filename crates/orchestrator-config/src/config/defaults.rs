@@ -30,6 +30,7 @@ fn step_config(
         scope: None,
         behavior: StepBehavior::default(),
         max_parallel: None,
+        stagger_delay_ms: None,
         timeout_secs: None,
         stall_timeout_secs: None,
         item_select_config: None,

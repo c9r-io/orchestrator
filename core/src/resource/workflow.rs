@@ -193,6 +193,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     max_parallel: None,
+                    stagger_delay_ms: None,
                     timeout_secs: None,
                     stall_timeout_secs: None,
                     behavior: Default::default(),
@@ -214,6 +215,7 @@ mod tests {
                 adaptive: None,
                 safety: SafetySpec::default(),
                 max_parallel: None,
+                stagger_delay_ms: None,
                 item_isolation: None,
             },
         };
@@ -243,6 +245,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     max_parallel: None,
+                    stagger_delay_ms: None,
                     timeout_secs: None,
                     stall_timeout_secs: None,
                     behavior: Default::default(),
@@ -264,6 +267,7 @@ mod tests {
                 adaptive: None,
                 safety: SafetySpec::default(),
                 max_parallel: None,
+                stagger_delay_ms: None,
                 item_isolation: None,
             },
         };
@@ -293,6 +297,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     max_parallel: None,
+                    stagger_delay_ms: None,
                     timeout_secs: None,
                     stall_timeout_secs: None,
                     behavior: Default::default(),
@@ -314,6 +319,7 @@ mod tests {
                 adaptive: None,
                 safety: SafetySpec::default(),
                 max_parallel: None,
+                stagger_delay_ms: None,
                 item_isolation: None,
             },
         };
@@ -343,6 +349,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     max_parallel: None,
+                    stagger_delay_ms: None,
                     timeout_secs: None,
                     stall_timeout_secs: None,
                     behavior: Default::default(),
@@ -364,6 +371,7 @@ mod tests {
                 adaptive: None,
                 safety: SafetySpec::default(),
                 max_parallel: None,
+                stagger_delay_ms: None,
                 item_isolation: None,
             },
         };
@@ -393,6 +401,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     max_parallel: None,
+                    stagger_delay_ms: None,
                     timeout_secs: None,
                     stall_timeout_secs: None,
                     behavior: Default::default(),
@@ -414,6 +423,7 @@ mod tests {
                 adaptive: None,
                 safety: SafetySpec::default(),
                 max_parallel: None,
+                stagger_delay_ms: None,
                 item_isolation: None,
             },
         };
@@ -444,6 +454,7 @@ mod tests {
                 adaptive: None,
                 safety: SafetySpec::default(),
                 max_parallel: None,
+                stagger_delay_ms: None,
                 item_isolation: None,
             },
         };
@@ -509,6 +520,7 @@ mod tests {
                     chain_steps: vec![],
                     scope: None,
                     max_parallel: None,
+                    stagger_delay_ms: None,
                     timeout_secs: None,
                     stall_timeout_secs: None,
                     behavior: Default::default(),
@@ -530,6 +542,7 @@ mod tests {
                 adaptive: None,
                 safety: SafetySpec::default(),
                 max_parallel: None,
+                stagger_delay_ms: None,
                 item_isolation: None,
             }),
         };

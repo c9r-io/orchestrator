@@ -115,6 +115,7 @@ pub(crate) fn workflow_spec_to_config(spec: &WorkflowSpec) -> Result<WorkflowCon
             inflight_heartbeat_grace_secs: spec.safety.inflight_heartbeat_grace_secs,
         },
         max_parallel: spec.max_parallel,
+        stagger_delay_ms: spec.stagger_delay_ms,
         item_isolation: spec.item_isolation.clone(),
     })
 }
@@ -182,6 +183,7 @@ pub(crate) fn workflow_config_to_spec(config: &WorkflowConfig) -> WorkflowSpec {
         adaptive: config.adaptive.clone(),
         safety: safety_config_to_spec(&config.safety),
         max_parallel: config.max_parallel,
+        stagger_delay_ms: config.stagger_delay_ms,
         item_isolation: config.item_isolation.clone(),
     }
 }
@@ -248,6 +250,7 @@ fn workflow_step_spec_to_config(step: &WorkflowStepSpec) -> Result<WorkflowStepC
         scope,
         behavior: step.behavior.clone(),
         max_parallel: step.max_parallel,
+        stagger_delay_ms: step.stagger_delay_ms,
         timeout_secs: step.timeout_secs,
         stall_timeout_secs: step.stall_timeout_secs,
         item_select_config: step.item_select_config.clone(),
@@ -307,6 +310,7 @@ fn workflow_step_config_to_spec(step: &WorkflowStepConfig) -> WorkflowStepSpec {
             }
         }),
         max_parallel: step.max_parallel,
+        stagger_delay_ms: step.stagger_delay_ms,
         timeout_secs: step.timeout_secs,
         stall_timeout_secs: step.stall_timeout_secs,
         behavior: step.behavior.clone(),
@@ -506,6 +510,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: Some("task".to_string()),
                 max_parallel: None,
+                stagger_delay_ms: None,
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 behavior: Default::default(),
@@ -544,6 +549,7 @@ mod tests {
             adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         };
 
@@ -616,6 +622,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: None,
                         max_parallel: None,
+                        stagger_delay_ms: None,
                         timeout_secs: None,
                         stall_timeout_secs: None,
                         behavior: Default::default(),
@@ -641,6 +648,7 @@ mod tests {
                         chain_steps: vec![],
                         scope: None,
                         max_parallel: None,
+                        stagger_delay_ms: None,
                         timeout_secs: None,
                         stall_timeout_secs: None,
                         behavior: Default::default(),
@@ -652,6 +660,7 @@ mod tests {
                 ],
                 scope: None,
                 max_parallel: None,
+                stagger_delay_ms: None,
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 behavior: Default::default(),
@@ -673,6 +682,7 @@ mod tests {
             adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         };
 
@@ -713,6 +723,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: None,
                 max_parallel: None,
+                stagger_delay_ms: None,
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 behavior: Default::default(),
@@ -734,6 +745,7 @@ mod tests {
             adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
@@ -766,6 +778,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: None,
                 max_parallel: None,
+                stagger_delay_ms: None,
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 behavior: Default::default(),
@@ -787,6 +800,7 @@ mod tests {
             adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         };
 
@@ -822,6 +836,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: None,
                 max_parallel: None,
+                stagger_delay_ms: None,
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 behavior: Default::default(),
@@ -843,6 +858,7 @@ mod tests {
             adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
@@ -870,6 +886,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: Some("item".to_string()),
                 max_parallel: None,
+                stagger_delay_ms: None,
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 behavior: Default::default(),
@@ -891,6 +908,7 @@ mod tests {
             adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
@@ -917,6 +935,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: None,
                 max_parallel: None,
+                stagger_delay_ms: None,
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 behavior: Default::default(),
@@ -950,6 +969,7 @@ mod tests {
                 ..SafetySpec::default()
             },
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
@@ -987,6 +1007,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: None,
                 max_parallel: None,
+                stagger_delay_ms: None,
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 behavior: Default::default(),
@@ -1020,6 +1041,7 @@ mod tests {
                 ..SafetySpec::default()
             },
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
@@ -1049,6 +1071,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: None,
                 max_parallel: None,
+                stagger_delay_ms: None,
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 behavior: Default::default(),
@@ -1082,6 +1105,7 @@ mod tests {
                 ..SafetySpec::default()
             },
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         };
         let config = workflow_spec_to_config(&spec).expect("convert workflow spec");
@@ -1117,6 +1141,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    stagger_delay_ms: None,
                     timeout_secs: None,
                     stall_timeout_secs: None,
                     item_select_config: None,
@@ -1143,6 +1168,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    stagger_delay_ms: None,
                     timeout_secs: None,
                     stall_timeout_secs: None,
                     item_select_config: None,
@@ -1169,6 +1195,7 @@ mod tests {
                     scope: None,
                     behavior: StepBehavior::default(),
                     max_parallel: None,
+                    stagger_delay_ms: None,
                     timeout_secs: None,
                     stall_timeout_secs: None,
                     item_select_config: None,
@@ -1195,6 +1222,7 @@ mod tests {
             adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         };
         let spec = workflow_config_to_spec(&config);
@@ -1229,6 +1257,7 @@ mod tests {
                 scope: None,
                 behavior: StepBehavior::default(),
                 max_parallel: None,
+                stagger_delay_ms: None,
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
@@ -1263,6 +1292,7 @@ mod tests {
             adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         };
         let spec = workflow_config_to_spec(&config);
@@ -1302,6 +1332,7 @@ mod tests {
                 scope: None,
                 behavior: StepBehavior::default(),
                 max_parallel: None,
+                stagger_delay_ms: None,
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
@@ -1327,6 +1358,7 @@ mod tests {
             adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         };
         let spec = workflow_config_to_spec(&config);
@@ -1363,6 +1395,7 @@ mod tests {
                 scope: None,
                 behavior: StepBehavior::default(),
                 max_parallel: None,
+                stagger_delay_ms: None,
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
@@ -1405,6 +1438,7 @@ mod tests {
             adaptive: None,
             safety: crate::config::SafetyConfig::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         };
         let spec = workflow_config_to_spec(&config);
@@ -1485,6 +1519,7 @@ mod tests {
                 chain_steps: vec![],
                 scope: None,
                 max_parallel: None,
+                stagger_delay_ms: None,
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 behavior: Default::default(),
@@ -1518,6 +1553,7 @@ mod tests {
                 ..SafetySpec::default()
             },
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         };
         let config = workflow_spec_to_config(&spec).expect("spec->config should succeed");
@@ -1556,6 +1592,7 @@ mod tests {
                 scope: None,
                 behavior: StepBehavior::default(),
                 max_parallel: None,
+                stagger_delay_ms: None,
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
@@ -1589,6 +1626,7 @@ mod tests {
                 ..SafetyConfig::default()
             },
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         };
         let spec = workflow_config_to_spec(&config);
@@ -1613,6 +1651,7 @@ mod tests {
             adaptive: None,
             safety: SafetySpec::default(),
             max_parallel: Some(1),
+            stagger_delay_ms: None,
             item_isolation: Some(crate::config::ItemIsolationConfig {
                 strategy: crate::config::ItemIsolationStrategy::GitWorktree,
                 branch_prefix: Some("evo-item".to_string()),

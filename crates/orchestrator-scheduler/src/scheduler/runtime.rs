@@ -262,6 +262,7 @@ pub async fn load_task_runtime_context(
                     loop_policy: agent_orchestrator::config::WorkflowLoopConfig::default(),
                     finalize: agent_orchestrator::config::default_workflow_finalize_config(),
                     max_parallel: None,
+                    stagger_delay_ms: None,
                     item_isolation: None,
                 })
             });

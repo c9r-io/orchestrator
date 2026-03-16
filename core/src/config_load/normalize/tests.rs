@@ -30,6 +30,7 @@ fn normalize_workflow_sets_builtin_for_self_test() {
             scope: None,
             behavior: StepBehavior::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             timeout_secs: None,
             stall_timeout_secs: None,
             item_select_config: None,
@@ -53,6 +54,7 @@ fn normalize_workflow_sets_builtin_for_self_test() {
         adaptive: None,
         safety: crate::config::SafetyConfig::default(),
         max_parallel: None,
+        stagger_delay_ms: None,
         item_isolation: None,
     };
 
@@ -136,6 +138,7 @@ fn normalize_workflow_preserves_multiple_self_test_steps() {
                 scope: None,
                 behavior: StepBehavior::default(),
                 max_parallel: None,
+                stagger_delay_ms: None,
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
@@ -162,6 +165,7 @@ fn normalize_workflow_preserves_multiple_self_test_steps() {
                 scope: None,
                 behavior: StepBehavior::default(),
                 max_parallel: None,
+                stagger_delay_ms: None,
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
@@ -186,6 +190,7 @@ fn normalize_workflow_preserves_multiple_self_test_steps() {
         adaptive: None,
         safety: crate::config::SafetyConfig::default(),
         max_parallel: None,
+        stagger_delay_ms: None,
         item_isolation: None,
     };
 
@@ -702,6 +707,7 @@ fn normalize_preserves_required_capability_on_custom_step_ids() {
         scope: None,
         behavior: StepBehavior::default(),
         max_parallel: None,
+        stagger_delay_ms: None,
         timeout_secs: None,
         stall_timeout_secs: None,
         item_select_config: None,

@@ -340,6 +340,7 @@ fn make_step(
             ..StepBehavior::default()
         },
         max_parallel: None,
+        stagger_delay_ms: None,
         timeout_secs: None,
         stall_timeout_secs: None,
         item_select_config: None,
@@ -414,6 +415,7 @@ fn make_task_ctx(
             },
             finalize: Default::default(),
             max_parallel: None,
+            stagger_delay_ms: None,
             item_isolation: None,
         }),
         execution: Default::default(),
