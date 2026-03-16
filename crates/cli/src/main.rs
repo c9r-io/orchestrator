@@ -18,9 +18,9 @@ use clap::Parser;
 
 /// Re-exported CLI argument model for integration tests and helper modules.
 pub use cli::{
-    AgentCommands, Cli, Commands, DbCommands, DbMigrationCommands, DebugCommands, EventCommands,
-    ManifestCommands, OutputFormat, SandboxProbeCommands, SecretCommands, SecretKeyCommands,
-    StoreCommands, TaskCommands, TriggerCommands,
+    AgentCommands, Cli, Commands, DaemonCommands, DbCommands, DbMigrationCommands,
+    DebugCommands, EventCommands, ManifestCommands, OutputFormat, SandboxProbeCommands,
+    SecretCommands, SecretKeyCommands, StoreCommands, TaskCommands, TriggerCommands,
 };
 
 fn main() -> Result<()> {
@@ -60,6 +60,7 @@ async fn run(cli: Cli) -> Result<()> {
             component: _,
             command: Some(debug_command),
         } => commands::debug::run_local(debug_command).await,
+        Commands::Daemon(cmd) => commands::daemon::dispatch(cmd).await,
         command => {
             let mut client = client::connect(control_plane_config.as_deref()).await?;
             commands::dispatch(&mut client, command).await

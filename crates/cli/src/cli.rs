@@ -178,12 +178,25 @@ pub enum Commands {
     #[command(alias = "tg", subcommand)]
     Trigger(TriggerCommands),
 
+    /// Daemon lifecycle operations (stop, status)
+    #[command(subcommand)]
+    Daemon(DaemonCommands),
+
     /// Show version
     Version {
         /// Emit JSON instead of human-readable text.
         #[arg(long)]
         json: bool,
     },
+}
+
+/// Daemon lifecycle commands that operate locally (no gRPC needed).
+#[derive(Subcommand, Debug, Clone)]
+pub enum DaemonCommands {
+    /// Stop the running daemon by sending SIGTERM
+    Stop,
+    /// Show whether the daemon is running and its PID
+    Status,
 }
 
 #[cfg(test)]

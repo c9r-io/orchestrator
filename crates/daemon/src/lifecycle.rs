@@ -66,19 +66,32 @@ pub fn cleanup(socket_path: &Path, pid_path: &Path) {
 }
 
 /// Wait for SIGTERM or SIGINT, then initiate graceful shutdown.
+///
+/// SIGHUP is continuously ignored so the daemon survives terminal closure.
 pub async fn shutdown_signal(state: Arc<InnerState>) -> Result<()> {
-    let ctrl_c = tokio::signal::ctrl_c();
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .context("failed to install SIGTERM handler")?;
+    let mut sighup = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())
+        .context("failed to install SIGHUP handler")?;
 
-    tokio::select! {
-        _ = ctrl_c => {
-            tracing::info!("received SIGINT, shutting down");
-            state.daemon_runtime.request_shutdown();
-        }
-        _ = sigterm.recv() => {
-            tracing::info!("received SIGTERM, shutting down");
-            state.daemon_runtime.request_shutdown();
+    loop {
+        tokio::select! {
+            result = tokio::signal::ctrl_c() => {
+                if let Err(e) = result {
+                    tracing::error!(error = %e, "ctrl_c handler failed");
+                }
+                tracing::info!("received SIGINT, shutting down");
+                state.daemon_runtime.request_shutdown();
+                break;
+            }
+            _ = sigterm.recv() => {
+                tracing::info!("received SIGTERM, shutting down");
+                state.daemon_runtime.request_shutdown();
+                break;
+            }
+            _ = sighup.recv() => {
+                tracing::info!("received SIGHUP, ignoring (daemon mode)");
+            }
         }
     }
 

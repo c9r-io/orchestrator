@@ -34,7 +34,7 @@ tower = "0.5"
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
-nix = { version = "0.29", default-features = false, features = ["signal"] }
+nix = { version = "0.29", default-features = false, features = ["signal", "process", "fs"] }
 
 [features]
 dev-insecure = []

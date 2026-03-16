@@ -44,6 +44,7 @@
 | FR-054 | Item 进度增量更新 — finalize_items 延迟导致 Progress 长时间为零 | P1 | Closed |
 | FR-055 | Parallel Spawn Stagger Delay — 并行 Agent 启动间隔延迟 | P1 | Closed |
 | FR-056 | Agent Health Policy 可配置化 — Disease 策略按 Agent/Workspace 设定 | P1 | Closed |
+| FR-057 | orchestratord 真正 Daemon 化 | P1 | Closed |
 
 ## 说明
 
@@ -107,3 +108,4 @@
 - FR-054 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/66-incremental-item-progress.md` 与 `docs/qa/orchestrator/108-incremental-item-progress.md` 承载
 - FR-055 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/67-parallel-spawn-stagger-delay.md` 与 `docs/qa/orchestrator/109-parallel-spawn-stagger-delay.md` 承载
 - FR-056 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/68-agent-health-policy-configuration.md` 与 `docs/qa/orchestrator/110-agent-health-policy-configuration.md` 承载
+- FR-057 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/69-daemon-proper-daemonize.md` 与 `docs/qa/orchestrator/111-daemon-proper-daemonize.md` 承载

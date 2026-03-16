@@ -1,5 +1,7 @@
 mod agent;
 mod common;
+/// Local daemon lifecycle commands (stop / status).
+pub mod daemon;
 mod db;
 mod event;
 mod manifest;
@@ -97,7 +99,7 @@ pub async fn dispatch(
         Commands::Manifest(cmd) => manifest::dispatch(client, cmd).await,
 
         // Handled before dispatch
-        Commands::Version { .. } => unreachable!(),
+        Commands::Version { .. } | Commands::Daemon(_) => unreachable!(),
         Commands::Apply { .. }
         | Commands::Get { .. }
         | Commands::Describe { .. }

@@ -9,6 +9,7 @@
 #![deny(clippy::undocumented_unsafe_blocks)]
 
 mod control_plane;
+mod daemonize;
 mod lifecycle;
 mod protection;
 mod server;
@@ -106,9 +107,21 @@ enum ControlPlaneCommands {
 fn main() -> Result<()> {
     let args = Args::parse();
 
+    // Daemonize before starting any threads or the tokio runtime.
+    // In daemon mode, stdout/stderr are redirected to data/daemon.log
+    // so ANSI escape codes are disabled.
+    let use_ansi = if args.foreground {
+        true
+    } else {
+        let app_root = agent_orchestrator::config_load::detect_app_root();
+        let log_path = app_root.join("data/daemon.log");
+        daemonize::daemonize(&log_path)?;
+        false
+    };
+
     let subscriber = tracing_subscriber::fmt()
         .with_target(false)
-        .with_ansi(true)
+        .with_ansi(use_ansi)
         .finish();
     tracing::subscriber::set_global_default(subscriber)
         .context("failed to set tracing subscriber")?;

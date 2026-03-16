@@ -1252,11 +1252,13 @@ checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 name = "orchestrator-cli"
 version = "0.1.0"
 dependencies = [
+ "agent-orchestrator",
  "anyhow",
  "clap",
  "clap_complete",
  "hyper-util",
  "libc",
+ "nix",
  "orchestrator-proto",
  "prost",
  "serde",
