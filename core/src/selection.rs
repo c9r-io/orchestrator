@@ -35,7 +35,12 @@ pub fn select_agent_advanced(
             if !cfg.supports_capability(capability) {
                 return false;
             }
-            is_capability_healthy(health_map, id, capability)
+            is_capability_healthy(
+                health_map,
+                id,
+                capability,
+                cfg.health_policy.capability_success_threshold,
+            )
         })
         .collect();
 

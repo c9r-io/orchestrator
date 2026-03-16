@@ -189,6 +189,36 @@ pub fn run_checks(
     workflow::check_empty_workflows(workflows, workflow_filter, &mut checks);
     safety::check_self_referential_policy(workspaces, workflows, workflow_filter, &mut checks);
 
+    // Health policy summary per agent.
+    for (name, agent) in agents {
+        let hp = &agent.health_policy;
+        if hp.is_default() {
+            checks.push(CheckResult::simple(
+                "agent_health_policy",
+                Severity::Info,
+                true,
+                format!("agent \"{name}\": health policy = default (duration=5h, threshold=2, cap_success=0.5)"),
+                None,
+            ));
+        } else {
+            let disease_note = if hp.disease_duration_hours == 0 {
+                "disease DISABLED".to_string()
+            } else {
+                format!("duration={}h", hp.disease_duration_hours)
+            };
+            checks.push(CheckResult::simple(
+                "agent_health_policy",
+                Severity::Info,
+                true,
+                format!(
+                    "agent \"{name}\": health policy = custom ({disease_note}, threshold={}, cap_success={})",
+                    hp.disease_threshold, hp.capability_success_threshold
+                ),
+                None,
+            ));
+        }
+    }
+
     // Trigger reference integrity: action.workflow and action.workspace must exist.
     if let Some(project) = oc.projects.get(effective_project) {
         for (name, trigger) in &project.triggers {
@@ -278,6 +308,7 @@ mod tests {
                 selection: AgentSelectionConfig::default(),
                 env: None,
                 prompt_delivery: PromptDelivery::default(),
+                health_policy: Default::default(),
             },
         );
 
@@ -290,6 +321,7 @@ mod tests {
                 qa_targets: vec!["docs/qa".into()],
                 ticket_dir: "tickets".into(),
                 self_referential: false,
+                health_policy: Default::default(),
             },
         );
 

@@ -32,6 +32,7 @@ pub fn workspace_manifest(name: &str, root_path: &str) -> OrchestratorResource {
             qa_targets: vec!["docs/qa".to_string()],
             ticket_dir: "docs/ticket".to_string(),
             self_referential: false,
+            health_policy: None,
         }),
     }
 }
@@ -54,6 +55,7 @@ pub fn agent_manifest(name: &str, command: &str) -> OrchestratorResource {
             selection: None,
             env: None,
             prompt_delivery: None,
+            health_policy: None,
         })),
     }
 }

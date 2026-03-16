@@ -26,6 +26,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                         qa_targets: vec!["docs/qa".to_string()],
                         ticket_dir: "docs/ticket".to_string(),
                         self_referential: false,
+                        health_policy: Default::default(),
                     },
                 )]
                 .into(),
@@ -39,6 +40,7 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                         selection: AgentSelectionConfig::default(),
                         env: None,
                         prompt_delivery: PromptDelivery::default(),
+                        health_policy: Default::default(),
                     },
                 )]
                 .into(),
@@ -344,6 +346,7 @@ fn delete_removes_workspace_from_config() {
             qa_targets: vec!["docs/qa".to_string()],
             ticket_dir: "docs/ticket".to_string(),
             self_referential: false,
+            health_policy: Default::default(),
         },
     );
 
@@ -579,6 +582,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
             selection: AgentSelectionConfig::default(),
             env: None,
             prompt_delivery: PromptDelivery::default(),
+            health_policy: Default::default(),
         }
     }
 
@@ -629,6 +633,7 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                         qa_targets: vec!["docs/qa".to_string()],
                         ticket_dir: "docs/ticket".to_string(),
                         self_referential: false,
+                        health_policy: Default::default(),
                     },
                 )]
                 .into(),

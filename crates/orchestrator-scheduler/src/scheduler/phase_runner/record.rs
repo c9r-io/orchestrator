@@ -176,9 +176,34 @@ pub(super) async fn record_phase_results(
         || validated.validation_status == "failed";
 
     if agent_infra_failed {
-        let errors = increment_consecutive_errors(state, agent_id).await;
-        if errors >= 2 {
-            mark_agent_diseased(state, agent_id).await;
+        // Resolve the agent's health policy: agent-level > workspace-level > global default.
+        let health_policy = {
+            let cfg_snap = state.config_runtime.load();
+            let project = cfg_snap
+                .active_config
+                .config
+                .projects
+                .values()
+                .find(|p| p.agents.contains_key(agent_id));
+            let agent_policy = project
+                .and_then(|p| p.agents.get(agent_id))
+                .map(|a| &a.health_policy);
+            if agent_policy.map_or(true, |p| p.is_default()) {
+                // Agent has no explicit override — try workspace fallback.
+                let ws_policy = project
+                    .and_then(|p| p.workspaces.get(workspace_id))
+                    .map(|ws| &ws.health_policy);
+                ws_policy.cloned().unwrap_or_default()
+            } else {
+                agent_policy.cloned().unwrap_or_default()
+            }
+        };
+
+        if health_policy.disease_duration_hours > 0 {
+            let errors = increment_consecutive_errors(state, agent_id).await;
+            if errors >= health_policy.disease_threshold {
+                mark_agent_diseased(state, agent_id, &health_policy).await;
+            }
         }
     } else {
         reset_consecutive_errors(state, agent_id).await;

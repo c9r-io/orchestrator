@@ -172,6 +172,7 @@ pub(crate) mod tests {
                 qa_targets: vec!["fixtures/qa-probe-targets".to_string()],
                 ticket_dir: "fixtures/ticket".to_string(),
                 self_referential: false,
+                health_policy: Default::default(),
             },
         );
         project.workflows.insert(

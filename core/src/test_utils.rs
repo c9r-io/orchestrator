@@ -46,6 +46,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                                 qa_targets: vec!["docs/qa".to_string()],
                                 ticket_dir: "docs/ticket".to_string(),
                                 self_referential: false,
+                                health_policy: Default::default(),
                             },
                         );
                         ws
@@ -67,6 +68,7 @@ fn create_minimal_test_config() -> OrchestratorConfig {
                                 selection: AgentSelectionConfig::default(),
                                 env: None,
                                 prompt_delivery: PromptDelivery::default(),
+                                health_policy: Default::default(),
                             },
                         );
                         agents
@@ -187,6 +189,7 @@ impl TestState {
                     qa_targets: vec!["docs/qa".to_string(), "docs/security".to_string()],
                     ticket_dir: "docs/ticket".to_string(),
                     self_referential: false,
+                    health_policy: Default::default(),
                 },
             );
         self

@@ -321,6 +321,7 @@ mod tests {
                             qa_targets: vec!["docs/qa".to_string()],
                             ticket_dir: "docs/ticket".to_string(),
                             self_referential: false,
+                            health_policy: Default::default(),
                         },
                     )]),
                     agents: HashMap::from([(

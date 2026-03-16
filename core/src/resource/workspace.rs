@@ -103,21 +103,49 @@ pub(super) fn build_workspace(resource: OrchestratorResource) -> Result<Register
 
 /// Converts a workspace manifest spec into runtime config.
 pub(crate) fn workspace_spec_to_config(spec: &WorkspaceSpec) -> WorkspaceConfig {
+    use crate::config::HealthPolicyConfig;
     WorkspaceConfig {
         root_path: spec.root_path.clone(),
         qa_targets: spec.qa_targets.clone(),
         ticket_dir: spec.ticket_dir.clone(),
         self_referential: spec.self_referential,
+        health_policy: spec
+            .health_policy
+            .as_ref()
+            .map(|hp| HealthPolicyConfig {
+                disease_duration_hours: hp
+                    .disease_duration_hours
+                    .unwrap_or_else(|| HealthPolicyConfig::default().disease_duration_hours),
+                disease_threshold: hp
+                    .disease_threshold
+                    .unwrap_or_else(|| HealthPolicyConfig::default().disease_threshold),
+                capability_success_threshold: hp
+                    .capability_success_threshold
+                    .unwrap_or_else(|| HealthPolicyConfig::default().capability_success_threshold),
+            })
+            .unwrap_or_default(),
     }
 }
 
 /// Converts runtime workspace config into its manifest spec representation.
 pub(crate) fn workspace_config_to_spec(config: &WorkspaceConfig) -> WorkspaceSpec {
+    use crate::cli_types::HealthPolicySpec;
     WorkspaceSpec {
         root_path: config.root_path.clone(),
         qa_targets: config.qa_targets.clone(),
         ticket_dir: config.ticket_dir.clone(),
         self_referential: config.self_referential,
+        health_policy: if config.health_policy.is_default() {
+            None
+        } else {
+            Some(HealthPolicySpec {
+                disease_duration_hours: Some(config.health_policy.disease_duration_hours),
+                disease_threshold: Some(config.health_policy.disease_threshold),
+                capability_success_threshold: Some(
+                    config.health_policy.capability_success_threshold,
+                ),
+            })
+        },
     }
 }
 
@@ -163,6 +191,7 @@ mod tests {
                 qa_targets: vec![],
                 ticket_dir: "tickets".to_string(),
                 self_referential: false,
+                health_policy: None,
             },
         };
         let err = ws.validate().expect_err("operation should fail");
@@ -178,6 +207,7 @@ mod tests {
                 qa_targets: vec![],
                 ticket_dir: "  ".to_string(),
                 self_referential: false,
+                health_policy: None,
             },
         };
         let err = ws.validate().expect_err("operation should fail");
@@ -195,6 +225,7 @@ mod tests {
                 qa_targets: vec![],
                 ticket_dir: "t".to_string(),
                 self_referential: false,
+                health_policy: Default::default(),
             },
         );
         let loaded = WorkspaceResource::get_from(&config, "bare-ws")
@@ -226,6 +257,7 @@ mod tests {
                 qa_targets: vec![],
                 ticket_dir: "t".to_string(),
                 self_referential: false,
+                health_policy: None,
             }),
         };
         let rr = dispatch_resource(resource).expect("dispatch workspace resource");
@@ -256,6 +288,7 @@ mod tests {
                 qa_targets: vec!["docs/qa".to_string(), "tests".to_string()],
                 ticket_dir: "tickets".to_string(),
                 self_referential: false,
+                health_policy: None,
             },
         };
         let yaml = workspace.to_yaml().expect("should serialize");
@@ -272,6 +305,7 @@ mod tests {
             qa_targets: vec!["src".to_string(), "tests".to_string()],
             ticket_dir: "docs/tickets".to_string(),
             self_referential: true,
+            health_policy: None,
         };
         let config = workspace_spec_to_config(&spec);
         assert_eq!(config.root_path, "/my/project");
@@ -302,6 +336,7 @@ mod tests {
                 qa_targets: vec![],
                 ticket_dir: "t".to_string(),
                 self_referential: false,
+                health_policy: None,
             }),
         };
         let rr = dispatch_resource(resource).expect("dispatch workspace resource");

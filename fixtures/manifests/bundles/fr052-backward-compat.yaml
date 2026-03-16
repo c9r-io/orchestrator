@@ -1,0 +1,33 @@
+# Test backward compatibility - old YAML without new safety fields
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: fr052-backward-compat
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa/orchestrator
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_echo_old
+spec:
+  capabilities:
+    - qa
+  command: "echo '{\"confidence\":0.93,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"old-yaml-pass\",\"description\":\"old yaml test passed\",\"severity\":\"info\"}]}]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: fr052-old-yaml-test
+spec:
+  max_parallel: 1
+  # No safety section at all - testing backward compatibility
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: once

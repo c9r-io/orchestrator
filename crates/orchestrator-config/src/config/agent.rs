@@ -2,6 +2,55 @@ use crate::cli_types::AgentEnvEntry;
 use crate::selection::{SelectionStrategy, SelectionWeights};
 use serde::{Deserialize, Serialize};
 
+/// Configurable health/disease policy for an agent.
+///
+/// Controls how aggressively the scheduler marks agents as "diseased"
+/// (temporarily unhealthy) after consecutive infrastructure failures.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HealthPolicyConfig {
+    /// Hours to keep an agent in "diseased" state after threshold is hit.
+    /// Set to 0 to disable disease entirely (agent always stays healthy).
+    #[serde(default = "default_disease_duration_hours")]
+    pub disease_duration_hours: u64,
+
+    /// Number of consecutive infrastructure failures before marking diseased.
+    #[serde(default = "default_disease_threshold")]
+    pub disease_threshold: u32,
+
+    /// Minimum per-capability success rate to remain schedulable while diseased.
+    #[serde(default = "default_capability_success_threshold")]
+    pub capability_success_threshold: f64,
+}
+
+fn default_disease_duration_hours() -> u64 {
+    5
+}
+
+fn default_disease_threshold() -> u32 {
+    2
+}
+
+fn default_capability_success_threshold() -> f64 {
+    0.5
+}
+
+impl Default for HealthPolicyConfig {
+    fn default() -> Self {
+        Self {
+            disease_duration_hours: default_disease_duration_hours(),
+            disease_threshold: default_disease_threshold(),
+            capability_success_threshold: default_capability_success_threshold(),
+        }
+    }
+}
+
+impl HealthPolicyConfig {
+    /// Returns `true` when all fields match the global defaults.
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
 /// How the rendered prompt reaches the agent process.
 ///
 /// - `Stdin`: prompt written to child stdin fd (zero shell risk)
@@ -69,6 +118,9 @@ pub struct AgentConfig {
     /// How the rendered prompt is delivered to the agent process.
     #[serde(default, skip_serializing_if = "PromptDelivery::is_default")]
     pub prompt_delivery: PromptDelivery,
+    /// Health/disease policy overrides for this agent.
+    #[serde(default, skip_serializing_if = "HealthPolicyConfig::is_default")]
+    pub health_policy: HealthPolicyConfig,
 }
 
 fn default_true() -> bool {
@@ -86,6 +138,7 @@ impl AgentConfig {
             selection: AgentSelectionConfig::default(),
             env: None,
             prompt_delivery: PromptDelivery::default(),
+            health_policy: HealthPolicyConfig::default(),
         }
     }
 

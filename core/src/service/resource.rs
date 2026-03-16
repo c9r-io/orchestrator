@@ -1394,6 +1394,7 @@ mod tests {
                     qa_targets: vec!["docs/qa".to_string()],
                     ticket_dir: "docs/ticket".to_string(),
                     self_referential: false,
+                    health_policy: Default::default(),
                 },
             )]),
             agents: HashMap::from([(
@@ -1412,6 +1413,7 @@ mod tests {
                     selection: crate::config::AgentSelectionConfig::default(),
                     env: None,
                     prompt_delivery: crate::config::PromptDelivery::default(),
+                    health_policy: Default::default(),
                 },
             )]),
             workflows: HashMap::from([(

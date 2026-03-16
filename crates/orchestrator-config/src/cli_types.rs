@@ -296,9 +296,28 @@ pub struct ResumeSpec {
     pub auto: bool,
 }
 
+/// Health policy specification for agent/workspace YAML manifests.
+/// All fields are optional; missing fields inherit from the next level
+/// (agent → workspace → global defaults).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct HealthPolicySpec {
+    /// Hours to keep an agent in "diseased" state. 0 disables disease.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disease_duration_hours: Option<u64>,
+
+    /// Consecutive infrastructure failures before marking diseased.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disease_threshold: Option<u32>,
+
+    /// Minimum per-capability success rate while diseased.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_success_threshold: Option<f64>,
+}
+
 /// Workspace resource specification.
 /// Defines a workspace configuration with root path and QA targets.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WorkspaceSpec {
     /// Root path of the workspace
     pub root_path: String,
@@ -313,6 +332,10 @@ pub struct WorkspaceSpec {
     /// When true, the workspace points to the orchestrator's own source tree
     #[serde(default)]
     pub self_referential: bool,
+
+    /// Default health policy for agents in this workspace.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health_policy: Option<HealthPolicySpec>,
 }
 
 /// Step template resource specification.
@@ -590,6 +613,10 @@ pub struct AgentSpec {
         rename = "promptDelivery"
     )]
     pub prompt_delivery: Option<PromptDelivery>,
+
+    /// Health/disease policy overrides for this agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health_policy: Option<HealthPolicySpec>,
 }
 
 /// Agent metadata specification.

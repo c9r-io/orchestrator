@@ -1,0 +1,54 @@
+# QA 108: Incremental Item Progress Test Fixture (Fail)
+# Tests incremental item progress with failures
+---
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: increment-test-ws
+spec:
+  root_path: "."
+  qa_targets:
+    - fixtures/qa-increment-test
+  ticket_dir: fixtures/ticket
+  self_referential: false
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_qa_agent_fail
+spec:
+  capabilities:
+    - qa_testing
+    - loop_guard
+  command: "sleep 1 && exit 1"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: increment-test-fail
+spec:
+  max_parallel: 2
+  steps:
+    - id: qa_testing
+      type: qa_testing
+      scope: item
+      required_capability: qa_testing
+      enabled: true
+      repeatable: true
+
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none

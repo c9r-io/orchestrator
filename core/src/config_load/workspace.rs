@@ -220,6 +220,7 @@ mod tests {
                             qa_targets: vec!["docs".to_string()],
                             ticket_dir: "tickets".to_string(),
                             self_referential: false,
+                            health_policy: Default::default(),
                         },
                     )]
                     .into(),
@@ -256,6 +257,7 @@ mod tests {
                             qa_targets: vec!["docs".to_string()],
                             ticket_dir: "tickets".to_string(),
                             self_referential: false,
+                            health_policy: Default::default(),
                         },
                     )]
                     .into(),
@@ -292,6 +294,7 @@ mod tests {
                             qa_targets: vec!["docs".to_string()],
                             ticket_dir: "tickets".to_string(),
                             self_referential: false,
+                            health_policy: Default::default(),
                         },
                     )]
                     .into(),
@@ -333,6 +336,7 @@ mod tests {
                             qa_targets: vec![],
                             ticket_dir: "tickets".to_string(),
                             self_referential: false,
+                            health_policy: Default::default(),
                         },
                     )]
                     .into(),
@@ -381,6 +385,7 @@ mod tests {
                             qa_targets: vec!["docs".to_string()],
                             ticket_dir: "tickets".to_string(),
                             self_referential: false,
+                            health_policy: Default::default(),
                         },
                     )]
                     .into(),
@@ -425,6 +430,7 @@ mod tests {
                 qa_targets: vec!["docs".to_string()],
                 ticket_dir: "tickets".to_string(),
                 self_referential: false,
+                health_policy: Default::default(),
             },
         );
         projects.insert(

@@ -1,0 +1,78 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: fr055-test
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa/orchestrator
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: stagger_echo
+spec:
+  capabilities:
+    - qa
+  command: "echo '{\"confidence\":0.9,\"quality_score\":0.9,\"artifacts\":[]}'"
+---
+# Scenario 1: Default behavior (no stagger) - max_parallel: 2, no stagger_delay_ms
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: stagger_none
+spec:
+  max_parallel: 2
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: once
+---
+# Scenario 2: Workflow-level stagger delay - stagger_delay_ms: 3000, max_parallel: 4
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: stagger_workflow
+spec:
+  max_parallel: 4
+  stagger_delay_ms: 3000
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: once
+---
+# Scenario 3: Step-level override - stagger_delay_ms: 5000 at workflow, 1000 at step
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: stagger_step_override
+spec:
+  max_parallel: 4
+  stagger_delay_ms: 5000
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+      stagger_delay_ms: 1000
+  loop:
+    mode: once
+---
+# Scenario 4: Sequential path - max_parallel: 1 with stagger_delay_ms: 3000
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: stagger_sequential
+spec:
+  max_parallel: 1
+  stagger_delay_ms: 3000
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: once

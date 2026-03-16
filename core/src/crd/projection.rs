@@ -295,6 +295,7 @@ mod tests {
             qa_targets: vec!["src".to_string()],
             ticket_dir: "tickets".to_string(),
             self_referential: false,
+            health_policy: Default::default(),
         };
         let spec = config.to_cr_spec();
         let back = WorkspaceConfig::from_cr_spec(&spec).expect("should deserialize");

@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::{
-    AgentConfig, EnvStoreConfig, ExecutionProfileConfig, InvariantConfig, StepTemplateConfig,
-    TriggerConfig, WorkflowConfig,
+    AgentConfig, EnvStoreConfig, ExecutionProfileConfig, HealthPolicyConfig, InvariantConfig,
+    StepTemplateConfig, TriggerConfig, WorkflowConfig,
 };
 
 /// Safety configuration for self-bootstrap and dangerous operations
@@ -136,6 +136,9 @@ pub struct WorkspaceConfig {
     /// When true, the workspace points to the orchestrator's own source tree
     #[serde(default)]
     pub self_referential: bool,
+    /// Default health policy for agents operating in this workspace.
+    #[serde(default, skip_serializing_if = "HealthPolicyConfig::is_default")]
+    pub health_policy: HealthPolicyConfig,
 }
 
 /// Project-level configuration

@@ -1,9 +1,10 @@
 use crate::cli_types::{
-    AgentMetadataSpec, AgentSelectionSpec, AgentSpec, OrchestratorResource, ResourceKind,
-    ResourceSpec,
+    AgentMetadataSpec, AgentSelectionSpec, AgentSpec, HealthPolicySpec, OrchestratorResource,
+    ResourceKind, ResourceSpec,
 };
 use crate::config::{
-    AgentConfig, AgentMetadata, AgentSelectionConfig, OrchestratorConfig, PromptDelivery,
+    AgentConfig, AgentMetadata, AgentSelectionConfig, HealthPolicyConfig, OrchestratorConfig,
+    PromptDelivery,
 };
 use anyhow::{anyhow, Result};
 
@@ -127,6 +128,21 @@ pub(crate) fn agent_spec_to_config(spec: &AgentSpec) -> AgentConfig {
             .unwrap_or_default(),
         env: spec.env.clone(),
         prompt_delivery: spec.prompt_delivery.unwrap_or_default(),
+        health_policy: spec
+            .health_policy
+            .as_ref()
+            .map(|hp| HealthPolicyConfig {
+                disease_duration_hours: hp
+                    .disease_duration_hours
+                    .unwrap_or_else(|| HealthPolicyConfig::default().disease_duration_hours),
+                disease_threshold: hp
+                    .disease_threshold
+                    .unwrap_or_else(|| HealthPolicyConfig::default().disease_threshold),
+                capability_success_threshold: hp
+                    .capability_success_threshold
+                    .unwrap_or_else(|| HealthPolicyConfig::default().capability_success_threshold),
+            })
+            .unwrap_or_default(),
     }
 }
 
@@ -157,6 +173,17 @@ pub(crate) fn agent_config_to_spec(config: &AgentConfig) -> AgentSpec {
             None
         } else {
             Some(config.prompt_delivery)
+        },
+        health_policy: if config.health_policy.is_default() {
+            None
+        } else {
+            Some(HealthPolicySpec {
+                disease_duration_hours: Some(config.health_policy.disease_duration_hours),
+                disease_threshold: Some(config.health_policy.disease_threshold),
+                capability_success_threshold: Some(
+                    config.health_policy.capability_success_threshold,
+                ),
+            })
         },
     }
 }
@@ -199,6 +226,7 @@ mod tests {
                 selection: None,
                 env: None,
                 prompt_delivery: None,
+                health_policy: None,
             },
         };
         let err = agent.validate().expect_err("operation should fail");
@@ -217,6 +245,7 @@ mod tests {
                 selection: None,
                 env: None,
                 prompt_delivery: None,
+                health_policy: None,
             },
         };
         assert!(agent.validate().is_ok());
@@ -235,6 +264,7 @@ mod tests {
                 selection: AgentSelectionConfig::default(),
                 env: None,
                 prompt_delivery: PromptDelivery::default(),
+                health_policy: Default::default(),
             },
         );
         let loaded =
@@ -284,6 +314,7 @@ mod tests {
                 selection: None,
                 env: None,
                 prompt_delivery: None,
+                health_policy: None,
             },
         };
         let yaml = agent.to_yaml().expect("should serialize");
@@ -308,6 +339,7 @@ mod tests {
             }),
             env: None,
             prompt_delivery: None,
+            health_policy: None,
         };
 
         let config = agent_spec_to_config(&spec);
@@ -333,6 +365,7 @@ mod tests {
             selection: AgentSelectionConfig::default(),
             env: None,
             prompt_delivery: PromptDelivery::default(),
+            health_policy: Default::default(),
         };
         let spec = agent_config_to_spec(&config);
         assert!(spec.capabilities.is_none());
@@ -353,6 +386,7 @@ mod tests {
             selection: AgentSelectionConfig::default(),
             env: None,
             prompt_delivery: PromptDelivery::default(),
+            health_policy: Default::default(),
         };
         let spec = agent_config_to_spec(&config);
         assert!(spec.metadata.is_none());
@@ -378,6 +412,7 @@ mod tests {
                 selection: None,
                 env: None,
                 prompt_delivery: None,
+                health_policy: None,
             })),
         };
         let rr = dispatch_resource(resource).expect("dispatch agent resource");

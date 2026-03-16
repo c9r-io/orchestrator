@@ -1,0 +1,63 @@
+# Test fixture for FR-052 inflight wait heartbeat-aware timeout
+# Uses short timeout values: 10s wait timeout, 5s heartbeat grace
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: fr052-test
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa/orchestrator
+  ticket_dir: fixtures/ticket
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_echo
+spec:
+  capabilities:
+    - qa
+    - fix
+    - retest
+  command: "echo '{\"confidence\":0.93,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-pass\",\"description\":\"qa passed\",\"severity\":\"info\"}]}]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: mock_sleep
+spec:
+  capabilities:
+    - qa
+  command: "sleep 30 && echo '{\"confidence\":0.93,\"quality_score\":0.9,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"slow-qa-pass\",\"description\":\"slow qa passed\",\"severity\":\"info\"}]}]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: fr052-heartbeat-test
+spec:
+  max_parallel: 1
+  safety:
+    inflight_wait_timeout_secs: 10
+    inflight_heartbeat_grace_secs: 5
+  steps:
+    - id: qa
+      type: qa
+      enabled: true
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: fr052-no-heartbeat-test
+spec:
+  max_parallel: 1
+  safety:
+    inflight_wait_timeout_secs: 10
+    inflight_heartbeat_grace_secs: 5
+  steps:
+    - id: slow_qa
+      type: qa
+      enabled: true
+  loop:
+    mode: once

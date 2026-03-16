@@ -575,6 +575,7 @@ mod tests {
                 qa_targets: vec![],
                 ticket_dir: "t".to_string(),
                 self_referential: false,
+                health_policy: Default::default(),
             },
         );
         remove_from_config_snapshot(&mut config, "Workspace", None, "ws1");
@@ -595,6 +596,7 @@ mod tests {
                 qa_targets: vec![],
                 ticket_dir: "t".to_string(),
                 self_referential: false,
+                health_policy: Default::default(),
             },
         );
         remove_from_config_snapshot(&mut config, "Workspace", Some(DEFAULT_PROJECT_ID), "ws2");
@@ -852,6 +854,7 @@ mod tests {
                 qa_targets: vec![],
                 ticket_dir: "t".to_string(),
                 self_referential: false,
+                health_policy: Default::default(),
             },
         );
         seed_store_from_config_snapshot(&mut config, "Workspace", "my-ws", "2024-01-01T00:00:00Z");
@@ -1062,6 +1065,7 @@ mod tests {
             qa_targets: vec![],
             ticket_dir: "t".to_string(),
             self_referential: false,
+            health_policy: Default::default(),
         };
         let cr = crate::crd::types::CustomResource {
             kind: "Workspace".to_string(),
@@ -1226,6 +1230,7 @@ mod tests {
                 qa_targets: vec![],
                 ticket_dir: "t".to_string(),
                 self_referential: false,
+                health_policy: Default::default(),
             },
         );
         config.ensure_project(None).step_templates.insert(

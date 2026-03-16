@@ -39,6 +39,7 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
                     qa_targets: workspace.qa_targets.clone(),
                     ticket_dir: workspace.ticket_dir.clone(),
                     self_referential: workspace.self_referential,
+                    health_policy: None,
                 },
             }));
         }
@@ -528,6 +529,7 @@ mod tests {
                 qa_targets: vec![],
                 ticket_dir: "tickets".to_string(),
                 self_referential: false,
+                health_policy: None,
             }),
         };
         let rr = dispatch_resource(resource).expect("dispatch labeled workspace");

@@ -631,6 +631,7 @@ mod tests {
                 qa_targets: vec!["docs".to_string()],
                 ticket_dir: "tickets".to_string(),
                 self_referential: false,
+                health_policy: Default::default(),
             },
         );
         let mut previous = OrchestratorConfig::default();

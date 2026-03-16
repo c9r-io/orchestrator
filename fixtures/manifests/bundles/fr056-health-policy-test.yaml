@@ -1,0 +1,50 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: qa-ws
+spec:
+  root_path: "."
+  qa_targets: []
+  ticket_dir: "docs/ticket"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: default-agent
+spec:
+  command: "echo '{\"confidence\":1.0}'"
+  capabilities:
+    - qa_testing
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: custom-agent
+spec:
+  command: "echo '{\"confidence\":1.0}'"
+  capabilities:
+    - qa_testing
+  health_policy:
+    disease_duration_hours: 1
+    disease_threshold: 5
+    capability_success_threshold: 0.3
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: nodisease-agent
+spec:
+  command: "echo '{\"confidence\":1.0}'"
+  capabilities:
+    - qa_testing
+  health_policy:
+    disease_duration_hours: 0
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: qa-test
+spec:
+  steps:
+    - id: qa
+      required_capability: qa_testing
