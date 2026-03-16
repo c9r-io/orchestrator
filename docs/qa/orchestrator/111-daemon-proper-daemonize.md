@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA-111 — orchestratord 真正 Daemon 化验证
 
 > FR-057 | 设计文档: `docs/design_doc/orchestrator/69-daemon-proper-daemonize.md`

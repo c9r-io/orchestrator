@@ -70,11 +70,11 @@ self_referential_safe: false
 当 workspace 设置 `self_referential: true` 时，系统读取 QA 文档的 frontmatter，
 `self_referential_safe: false` 的文档会被 prehook 跳过，不会被 agent 执行。
 
-### 2.2 标记为不安全的文档（26 个）
+### 2.2 标记为不安全的文档（27 个）
 
 以下文档包含 kill daemon、重启进程、重编译二进制等危险操作，已标记为 `self_referential_safe: false`：
 
-#### docs/qa/orchestrator/（19 个）
+#### docs/qa/orchestrator/（20 个）
 
 | 文件 | 危险操作 |
 |------|---------|
@@ -97,6 +97,7 @@ self_referential_safe: false
 | `91b-daemon-crash-resilience-shutdown.md` | SIGTERM/SIGINT 关闭回归 |
 | `96-self-restart-socket-continuity.md` | `exec()` 自替换测试 |
 | `100-agent-subprocess-daemon-pid-guard.md` | Agent subprocess kill guard 测试 |
+| `111-daemon-proper-daemonize.md` | `orchestrator daemon stop` 发送 SIGTERM 停止 daemon |
 
 #### docs/qa/self-bootstrap/（7 个）
 
@@ -110,7 +111,7 @@ self_referential_safe: false
 | `scenario2-binary-rollback.md` | 创建任务触发 self_restart |
 | `scenario3-binary-skip-disabled.md` | 创建任务触发 self_restart |
 
-### 2.3 安全 QA 文档（约 106 个）
+### 2.3 安全 QA 文档（约 105 个）
 
 未标记的文档默认 `self_referential_safe: true`，包括：
 - 纯单元测试文档（`cargo test --lib`）
@@ -167,8 +168,8 @@ orchestrator task create \
 ```
 
 > 不指定 `-t`，系统自动扫描 `qa_targets` 配置的 `docs/qa/` 下所有 `.md` 文件。
-> 预计约 132 个 item，其中约 26 个会被 prehook 自动跳过（`self_referential_safe: false`），
-> 实际执行约 106 个。
+> 预计约 132 个 item，其中约 27 个会被 prehook 自动跳过（`self_referential_safe: false`），
+> 实际执行约 105 个。
 
 记录返回的 `<task_id>`。
 
@@ -191,7 +192,7 @@ orchestrator task watch <task_id>
 2. qa_testing 步骤的 pass/fail/skipped 分布
 3. ticket_fix 是否正在处理活跃 ticket
 4. 是否有 item 长时间卡住
-5. prehook 跳过的不安全文档数量是否为 26
+5. prehook 跳过的不安全文档数量是否为 27
 
 ### 4.2 日志监控
 
@@ -237,7 +238,7 @@ sqlite3 data/agent_orchestrator.db \
 ### 5.1 安全检查点
 
 - [ ] `full-qa.yaml` workspace 的 `self_referential: true` 已生效
-- [ ] 26 个不安全 QA 文档被 prehook 跳过（`step_skipped` 事件）
+- [ ] 27 个不安全 QA 文档被 prehook 跳过（`step_skipped` 事件）
 - [ ] daemon 进程在整个执行过程中保持稳定（PID 不变）
 - [ ] 无 `cargo build --release -p orchestratord` 被执行
 
@@ -272,7 +273,7 @@ sqlite3 data/agent_orchestrator.db \
 
 1. orchestrator 完整跑完 `full-qa` workflow，在 `loop_guard` 正常收口。
 2. 安全 QA 场景通过率 ≥ 90%（允许部分环境依赖的场景失败）。
-3. 26 个不安全文档全部被正确跳过。
+3. 27 个不安全文档全部被正确跳过。
 4. 所有 ticket 被 ticket_fix 处理（修复或明确标记无法修复）。
 5. `align_tests` 确认单测和编译无回归。
 6. `doc_governance` 确认文档无漂移。
@@ -283,7 +284,7 @@ sqlite3 data/agent_orchestrator.db \
 
 | 异常 | 判断方式 | 处理 |
 |------|---------|------|
-| 不安全文档未被跳过 | `step_skipped` 数量 < 26 | 检查 workspace `self_referential` 设置、QA 文档 frontmatter |
+| 不安全文档未被跳过 | `step_skipped` 数量 < 27 | 检查 workspace `self_referential` 设置、QA 文档 frontmatter |
 | 大量 QA 文档同类失败 | 相同 pattern 的 ticket 超过 10 个 | 可能是系统性问题，暂停排查根因 |
 | agent 进程僵死 | `claude -p` 进程无输出超过 10 分钟 | 检查 API 配额和网络 |
 | ticket_fix 产生新问题 | 修复后 align_tests 失败 | 检查 ticket_fix 的改动范围 |
@@ -295,7 +296,7 @@ sqlite3 data/agent_orchestrator.db \
 ## 8. 预计执行时间
 
 - **约 106 个安全 QA 文档** × **每个约 2-5 分钟** = 约 50-130 分钟（4 并行）
-- 26 个不安全文档被跳过（< 1 秒）
+- 27 个不安全文档被跳过（< 1 秒）
 - ticket_fix 取决于 ticket 数量
 - align_tests + doc_governance 约 10-20 分钟
 

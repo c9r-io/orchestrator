@@ -74,8 +74,20 @@ impl std::error::Error for DaemonPidGuardBlocked {}
 /// 3. `kill ... $ORCHESTRATOR_DAEMON_PID` / `${ORCHESTRATOR_DAEMON_PID}` — env var reference
 /// 4. `pkill ... orchestratord` — process-name targeting
 /// 5. `killall ... orchestratord` — process-name targeting
+/// 6. `orchestrator daemon stop` — CLI sub-command that sends SIGTERM
 pub fn guard_daemon_pid_kill(command: &str, daemon_pid: u32) -> Result<(), DaemonPidGuardBlocked> {
     let pid_str = daemon_pid.to_string();
+
+    // Pattern 6: orchestrator daemon stop (CLI sends SIGTERM via nix::sys::signal::kill)
+    if contains_daemon_stop_subcommand(command) {
+        return Err(DaemonPidGuardBlocked {
+            reason: format!(
+                "command uses 'orchestrator daemon stop' which sends SIGTERM to daemon (PID {})",
+                daemon_pid
+            ),
+            matched_pattern: "orchestrator daemon stop".to_string(),
+        });
+    }
 
     // Pattern 1: kill ... $(cat ... daemon.pid)
     if command.contains("daemon.pid") && command.contains("kill") {
@@ -172,6 +184,29 @@ fn contains_kill_pid(command: &str, pid_str: &str) -> bool {
                 }
             }
             return true;
+        }
+    }
+    false
+}
+
+/// Returns true if the command contains an `orchestrator daemon stop` invocation.
+///
+/// Matches patterns like:
+/// - `orchestrator daemon stop`
+/// - `./target/release/orchestrator daemon stop`
+/// - `orchestrator daemon stop 2>&1`
+fn contains_daemon_stop_subcommand(command: &str) -> bool {
+    // Split on shell separators to handle compound commands like `echo foo && orchestrator daemon stop`
+    for segment in command.split(|c: char| matches!(c, ';' | '&' | '|')) {
+        let tokens: Vec<&str> = segment.split_whitespace().collect();
+        // Find a token ending with "orchestrator" (handles path prefixes) followed by "daemon" then "stop"
+        for window in tokens.windows(3) {
+            if window[0].ends_with("orchestrator")
+                && window[1] == "daemon"
+                && window[2] == "stop"
+            {
+                return true;
+            }
         }
     }
     false
@@ -299,6 +334,50 @@ mod tests {
     fn does_not_false_positive_on_pid_prefix() {
         // PID 12345 should not match 123456
         let result = guard_daemon_pid_kill("kill 123456", 12345);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn blocks_orchestrator_daemon_stop() {
+        let result = guard_daemon_pid_kill("orchestrator daemon stop", 12345);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .matched_pattern
+            .contains("orchestrator daemon stop"));
+    }
+
+    #[test]
+    fn blocks_orchestrator_daemon_stop_with_path() {
+        let result =
+            guard_daemon_pid_kill("./target/release/orchestrator daemon stop", 12345);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn blocks_orchestrator_daemon_stop_with_redirect() {
+        let result = guard_daemon_pid_kill("orchestrator daemon stop 2>&1", 12345);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn blocks_orchestrator_daemon_stop_in_compound() {
+        let result = guard_daemon_pid_kill(
+            "echo start && orchestrator daemon stop && echo done",
+            12345,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn allows_orchestrator_daemon_status() {
+        let result = guard_daemon_pid_kill("orchestrator daemon status", 12345);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn allows_orchestrator_task_stop() {
+        let result = guard_daemon_pid_kill("orchestrator task stop abc123", 12345);
         assert!(result.is_ok());
     }
 }
