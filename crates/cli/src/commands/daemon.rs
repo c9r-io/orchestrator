@@ -49,6 +49,17 @@ async fn stop(pid_path: &Path) -> Result<()> {
         }
     };
 
+    // Guard: refuse to stop the daemon if we are a descendant of it.
+    // This prevents agent processes spawned by the daemon from killing
+    // their own ancestor (the SIGTERM root cause in full-qa execution).
+    if is_descendant_of(pid) {
+        anyhow::bail!(
+            "refusing to stop orchestratord (PID {pid}): the calling process (PID {}) \
+             is a descendant of the daemon. An agent subprocess cannot stop its own parent.",
+            std::process::id()
+        );
+    }
+
     println!("stopping orchestratord (PID {pid})...");
     nix::sys::signal::kill(
         nix::unistd::Pid::from_raw(pid as i32),
@@ -70,6 +81,50 @@ async fn stop(pid_path: &Path) -> Result<()> {
     }
 }
 
+/// Check whether the current process is a descendant of `ancestor_pid`.
+///
+/// Walks the PPID chain from our PID upward until we reach PID 0/1 or find
+/// the ancestor.  Bounded to 64 iterations to avoid infinite loops.
+#[cfg(unix)]
+fn is_descendant_of(ancestor_pid: u32) -> bool {
+    let mut current = std::process::id();
+    for _ in 0..64 {
+        if current == ancestor_pid {
+            return true;
+        }
+        if current <= 1 {
+            return false;
+        }
+        match get_ppid(current) {
+            Some(ppid) if ppid != current => current = ppid,
+            _ => return false,
+        }
+    }
+    false
+}
+
+/// Get the parent PID of a process via `sysctl` (macOS) or `/proc` (Linux).
+#[cfg(target_os = "macos")]
+fn get_ppid(pid: u32) -> Option<u32> {
+    let output = std::process::Command::new("ps")
+        .args(["-o", "ppid=", "-p", &pid.to_string()])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let ppid_str = String::from_utf8_lossy(&output.stdout);
+    ppid_str.trim().parse().ok()
+}
+
+/// Get the parent PID of a process via `/proc` (Linux).
+#[cfg(target_os = "linux")]
+fn get_ppid(pid: u32) -> Option<u32> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    let after_comm = stat.rsplit_once(')')?.1;
+    after_comm.split_whitespace().nth(1)?.parse().ok()
+}
+
 /// Print the current daemon status.
 fn status(pid_path: &Path) -> Result<()> {
     match read_pid_file(pid_path) {
@@ -84,4 +139,25 @@ fn status(pid_path: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn descendant_of_init() {
+        // PID 1 (launchd/init) is an ancestor of every user process.
+        assert!(is_descendant_of(1));
+    }
+
+    #[test]
+    fn not_descendant_of_nonexistent() {
+        assert!(!is_descendant_of(2_000_000_000));
+    }
+
+    #[test]
+    fn descendant_of_self() {
+        assert!(is_descendant_of(std::process::id()));
+    }
 }

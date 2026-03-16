@@ -10,6 +10,7 @@ use crate::events::insert_event;
 use crate::state::InnerState;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -89,6 +90,11 @@ pub struct TriggerEngine {
     state: Arc<InnerState>,
     reload_rx: mpsc::Receiver<TriggerReloadEvent>,
     trigger_event_rx: tokio::sync::broadcast::Receiver<TriggerEventPayload>,
+    /// Triggers that have been present for at least one config reload cycle.
+    /// A freshly-created trigger (from an agent `apply`) must survive one
+    /// reload before it is eligible to fire — this prevents agent-applied
+    /// triggers from immediately spawning parasitic tasks.
+    stabilized_triggers: HashSet<(String, String)>,
 }
 
 impl TriggerEngine {
@@ -100,6 +106,7 @@ impl TriggerEngine {
             state,
             reload_rx,
             trigger_event_rx,
+            stabilized_triggers: HashSet::new(),
         };
         let handle = TriggerEngineHandle { reload_tx };
         (engine, handle)
@@ -162,14 +169,37 @@ impl TriggerEngine {
 
     // ── Cron helpers ─────────────────────────────────────────────────────────
 
-    fn build_cron_schedule(&self) -> Vec<CronEntry> {
+    fn build_cron_schedule(&mut self) -> Vec<CronEntry> {
         let snap = self.state.config_runtime.load();
         let config = &snap.active_config.config;
         let mut entries = Vec::new();
 
+        // Collect the current set of triggers to update stabilization tracking.
+        let mut current_triggers: HashSet<(String, String)> = HashSet::new();
+        for (project_id, project) in &config.projects {
+            for (name, _trigger) in &project.triggers {
+                current_triggers.insert((project_id.clone(), name.clone()));
+            }
+        }
+
+        // Promote triggers that were already known from a prior cycle.
+        // Triggers seen for the first time in THIS reload are NOT yet stabilized
+        // and will only become eligible after the next reload.
+        let previously_known = std::mem::take(&mut self.stabilized_triggers);
+        self.stabilized_triggers = current_triggers.clone();
+
         for (project_id, project) in &config.projects {
             for (name, trigger) in &project.triggers {
                 if trigger.suspend {
+                    continue;
+                }
+                // Skip triggers that are new (not in the previous cycle's set).
+                if !previously_known.contains(&(project_id.clone(), name.clone())) {
+                    debug!(
+                        trigger = name.as_str(),
+                        project = project_id.as_str(),
+                        "trigger not yet stabilized, skipping cron schedule"
+                    );
                     continue;
                 }
                 if let Some(ref cron_spec) = trigger.cron {
@@ -209,6 +239,13 @@ impl TriggerEngine {
         for (project_id, project) in &config.projects {
             for (name, trigger) in &project.triggers {
                 if trigger.suspend {
+                    continue;
+                }
+                // Skip triggers not yet stabilized (first seen in most recent reload).
+                if !self
+                    .stabilized_triggers
+                    .contains(&(project_id.clone(), name.clone()))
+                {
                     continue;
                 }
                 if let Some(ref event_spec) = trigger.event {
