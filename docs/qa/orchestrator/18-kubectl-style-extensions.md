@@ -51,6 +51,7 @@ self_referential_safe_scenarios: [S1, S2]
 
 - Database initialized.
 - At least one resource has labels (via `apply` manifest metadata).
+- **Note**: Built-in resource types (workspaces, agents, workflows) may not have labels by default. Label selector functionality is verified via Scenario 3's stdin apply (which creates a labeled agent) and via CRD resources that carry labels. Step 3 below validates the error path independently of label presence.
 
 ### Steps
 
@@ -71,7 +72,7 @@ self_referential_safe_scenarios: [S1, S2]
 
 ### Expected Result
 
-- List query returns only matching resources.
+- List query returns only matching resources (empty result is acceptable if no resources carry the queried labels; label selector mechanism is validated end-to-end in Scenario 3).
 - Selector supports `key=value[,key2=value2]` (AND).
 - Single-resource get with `-l` fails with clear error.
 

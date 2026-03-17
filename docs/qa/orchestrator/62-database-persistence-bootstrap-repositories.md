@@ -80,13 +80,13 @@ Verify business modules can no longer import or call a public `crate::db::ensure
    ```
 3. Search for the replacement private helper location:
    ```bash
-   rg -n "fn ensure_column_exists" core/src/migration.rs
+   rg -n "fn ensure_column_exists" core/src/persistence/migration_steps.rs
    ```
 
 ### Expected
 - Step 1 returns no matches.
 - Step 2 returns no matches.
-- Step 3 returns exactly one private helper definition in `core/src/migration.rs`.
+- Step 3 returns exactly one private helper definition in `core/src/persistence/migration_steps.rs`.
 
 ### Expected Data State
 ```sql

@@ -46,7 +46,7 @@ Verify that the database schema supports the self-evolution workflow's dynamic i
 ### S-04: `items_generated` event is emitted after dynamic item creation
 
 **Steps**:
-1. Inspect `core/src/scheduler/loop_engine/segment.rs` lines 176-183
+1. Inspect `crates/orchestrator-scheduler/src/scheduler/loop_engine/segment.rs` for the `items_generated` event emission
 2. Confirm `insert_event()` is called with `event_type="items_generated"` after `create_dynamic_task_items_async()`
 
 **Expected**:

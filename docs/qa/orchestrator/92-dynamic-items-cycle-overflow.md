@@ -54,10 +54,10 @@ sqlite3 data/agent_orchestrator.db \
    FROM events WHERE task_id='<task_id>' AND event_type='cycle_started'
    ORDER BY created_at"
 
-# 2. Check max_cycles_enforced event exists
+# 2. Check loop_guard_decision with fixed_cycles_complete reason
 sqlite3 data/agent_orchestrator.db \
   "SELECT event_type, payload_json FROM events
-   WHERE task_id='<task_id>' AND event_type='max_cycles_enforced'"
+   WHERE task_id='<task_id>' AND event_type='loop_guard_decision'"
 
 # 3. Verify NO degenerate_cycle_detected
 sqlite3 data/agent_orchestrator.db \
@@ -67,7 +67,7 @@ sqlite3 data/agent_orchestrator.db \
 
 **预期结果**:
 - `cycle_started` 事件仅出现 cycle=1 和 cycle=2
-- 存在 `max_cycles_enforced` 事件，payload 包含 `"current_cycle":2,"max_cycles":2`
+- 存在 `loop_guard_decision` 事件，payload 包含 `"reason":"fixed_cycles_complete"` (注意: Fixed mode 下，post-cycle continuation check 先于 proactive gate 触发，因此发出 `loop_guard_decision` 而非 `max_cycles_enforced`。`max_cycles_enforced` 仅在 infinite/dynamic mode 中由 proactive gate 发出。)
 - 不出现 cycle=3 的 `cycle_started`
 - `degenerate_cycle_detected` 计数为 0
 

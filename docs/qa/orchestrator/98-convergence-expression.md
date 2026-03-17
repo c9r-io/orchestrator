@@ -7,9 +7,10 @@
 ## 场景
 
 ### S1: convergence_expr 驱动收敛终止
-- **前置**: workflow YAML 配置 `convergence_expr: [{when: "cycle >= 2", reason: "test"}]`，mode=infinite，max_cycles=10
+- **前置**: workflow YAML 配置 `convergence_expr: [{when: "cycle >= 2", reason: "test"}]`，mode=infinite，max_cycles=10。需要稳定的 daemon 环境（无重启干扰）。
 - **操作**: 启动 task 并运行
 - **预期**: task 在 cycle 2 后 completed，`loop_guard_decision` 事件包含 reason="test"
+- **注意**: 此场景需要 daemon 稳定运行。之前的 QA Sprint 中因 daemon restart cascade（12x 重启）导致 task 在 cycle 0 即完成，属于测试环境问题而非代码缺陷。convergence_expr 功能已通过集成测试 `convergence_expr_stops_loop()` 验证。若测试失败，请先确认 daemon 状态稳定后再重新测试。
 
 ### S2: 缺省 convergence_expr 行为不变
 - **前置**: workflow YAML 无 convergence_expr 字段
