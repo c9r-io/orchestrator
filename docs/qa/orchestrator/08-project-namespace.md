@@ -89,8 +89,8 @@ Validate task creation with explicit project specification stores project_id in 
 ### Expected
 
 - Task created successfully
-- Task details show project_id = "default"
-- Database query returns project_id column with value "default"
+- Task details show project_id = "qa-scenario1"
+- Database query returns project_id column with value "qa-scenario1"
 
 ---
 

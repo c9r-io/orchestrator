@@ -44,6 +44,22 @@ apiVersion: orchestrator.dev/v2
 kind: Workflow
 metadata:
   name: qa_only
+  project: project-a
+spec:
+  steps:
+    - id: qa
+      type: qa
+      required_capability: qa
+      enabled: true
+      repeatable: false
+  loop:
+    mode: once
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: qa_only
+  project: project-b
 spec:
   steps:
     - id: qa

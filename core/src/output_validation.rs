@@ -369,9 +369,8 @@ mod tests {
     #[test]
     fn strict_phase_suffix_match_requires_json() {
         // Step IDs like "run_qa" should be treated as strict (matching "_qa" suffix)
-        let outcome =
-            validate_phase_output("run_qa", Uuid::new_v4(), "agent", 0, "plain-text", "")
-                .expect("validation should return outcome");
+        let outcome = validate_phase_output("run_qa", Uuid::new_v4(), "agent", 0, "plain-text", "")
+            .expect("validation should return outcome");
         assert_eq!(
             outcome.status, "failed",
             "step ID 'run_qa' should be strict via suffix match"

@@ -34,7 +34,7 @@ self_referential_safe: false
 3. Verify SIGXCPU test has unix guard:
 
    ```bash
-   cargo test -p agent-orchestrator phase_runner::tests::detect_sandbox_violation_detects_cpu_signal -- --nocapture
+   cargo test -p orchestrator-scheduler phase_runner::tests::detect_sandbox_violation_detects_cpu_signal -- --nocapture
    ```
 
    Expected:

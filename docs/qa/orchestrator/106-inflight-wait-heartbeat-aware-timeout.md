@@ -54,6 +54,10 @@
 
 ---
 
+## Known Limitations
+
+**Scenarios 1, 2, and 4** require a long-running agent fixture for proper E2E testing. The current mock agents (`mock_echo`, `mock_sleep`) exit too quickly — by the time `wait_for_inflight_runs()` executes post-loop, agent processes have already exited (`exit_code != -1`), so the inflight-wait timeout path is never exercised. A dedicated fixture with a persistent subprocess (e.g., `sleep 120 &` background process) is needed to keep `exit_code = -1` active long enough for the timeout logic to trigger. Unit tests (scenarios 3 and 5) confirm the implementation is correct.
+
 ## Checklist
 
 | # | Check | Status | Notes |

@@ -134,6 +134,7 @@ Verify that `task trace --verbose` appends an explanatory annotation when scope 
    ```bash
    cd core && cargo test --lib build_trace_marks_legacy -- --nocapture
    ```
+   > **Note**: The test `build_trace_marks_legacy` is pending implementation. This scenario can only be verified manually via `task trace --verbose` on a task with legacy events until the unit test is added.
 
 ### Expected
 

@@ -11,7 +11,7 @@ self_referential_safe: false
 1. Run runtime-context sharing regression:
 
    ```bash
-   cargo test -p agent-orchestrator scheduler::runtime::tests::load_task_runtime_context_clone_shares_heavy_fields -- --nocapture
+   cargo test -p orchestrator-scheduler scheduler::runtime::tests::load_task_runtime_context_clone_shares_heavy_fields -- --nocapture
    ```
 
    Expected:

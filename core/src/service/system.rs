@@ -316,7 +316,11 @@ pub fn validate_manifests(
     }
 
     // Try to build active config to validate the full configuration
-    match crate::config_load::build_active_config_for_project(&state.app_root, merged_config, effective_project_id) {
+    match crate::config_load::build_active_config_for_project(
+        &state.app_root,
+        merged_config,
+        effective_project_id,
+    ) {
         Ok(_) => Ok(ManifestValidationReport {
             valid: true,
             errors: vec![],

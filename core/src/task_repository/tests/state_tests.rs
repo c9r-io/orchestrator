@@ -82,7 +82,10 @@ fn prepare_task_for_start_batch_resets_unresolved_items_from_paused() {
             |row| row.get(0),
         )
         .expect("task_items query");
-    assert!(reset_count >= 1, "unresolved items should be reset to pending on resume from paused");
+    assert!(
+        reset_count >= 1,
+        "unresolved items should be reset to pending on resume from paused"
+    );
 }
 
 #[test]

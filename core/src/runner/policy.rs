@@ -201,10 +201,7 @@ fn contains_daemon_stop_subcommand(command: &str) -> bool {
         let tokens: Vec<&str> = segment.split_whitespace().collect();
         // Find a token ending with "orchestrator" (handles path prefixes) followed by "daemon" then "stop"
         for window in tokens.windows(3) {
-            if window[0].ends_with("orchestrator")
-                && window[1] == "daemon"
-                && window[2] == "stop"
-            {
+            if window[0].ends_with("orchestrator") && window[1] == "daemon" && window[2] == "stop" {
                 return true;
             }
         }
@@ -349,8 +346,7 @@ mod tests {
 
     #[test]
     fn blocks_orchestrator_daemon_stop_with_path() {
-        let result =
-            guard_daemon_pid_kill("./target/release/orchestrator daemon stop", 12345);
+        let result = guard_daemon_pid_kill("./target/release/orchestrator daemon stop", 12345);
         assert!(result.is_err());
     }
 
@@ -362,10 +358,8 @@ mod tests {
 
     #[test]
     fn blocks_orchestrator_daemon_stop_in_compound() {
-        let result = guard_daemon_pid_kill(
-            "echo start && orchestrator daemon stop && echo done",
-            12345,
-        );
+        let result =
+            guard_daemon_pid_kill("echo start && orchestrator daemon stop && echo done", 12345);
         assert!(result.is_err());
     }
 

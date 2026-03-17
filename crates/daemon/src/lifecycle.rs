@@ -87,7 +87,9 @@ fn install_sigterm_siginfo_handler() -> Result<()> {
                 std::io::Error::last_os_error()
             ));
         }
-        std::ptr::addr_of_mut!(PREV_SIGTERM_ACTION).cast::<libc::sigaction>().write(old_sa);
+        std::ptr::addr_of_mut!(PREV_SIGTERM_ACTION)
+            .cast::<libc::sigaction>()
+            .write(old_sa);
     }
     Ok(())
 }
