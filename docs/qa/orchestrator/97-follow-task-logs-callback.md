@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - follow_task_logs Callback
 
 **Module**: orchestrator

@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Config Self-Heal Auditability
 
 **Module**: orchestrator

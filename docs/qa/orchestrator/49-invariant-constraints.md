@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Invariant Constraints (WP04)
 
 **Module**: orchestrator

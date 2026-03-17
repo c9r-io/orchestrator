@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA #72: Audit and Reduce expect() Calls (FR-021)
 
 ## Scope

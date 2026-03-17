@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Error Semantics Governance
 
 **Scope**: Verify FR-014 boundary error classification and gRPC status mapping for task, resource, store, system, and secret-key critical paths.

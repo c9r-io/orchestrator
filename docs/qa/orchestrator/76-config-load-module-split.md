@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA #76: config_load Module Split and Responsibility Segregation (FR-025)
 
 ## Scope

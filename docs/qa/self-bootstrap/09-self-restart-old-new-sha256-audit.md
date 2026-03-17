@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Self-Bootstrap - Self-Restart Old/New Binary SHA256 Audit Chain
 
 **Module**: self-bootstrap

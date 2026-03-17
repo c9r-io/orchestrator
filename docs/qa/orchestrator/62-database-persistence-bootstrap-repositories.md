@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Database Persistence Bootstrap and Repository Boundaries
 
 **Module**: orchestrator

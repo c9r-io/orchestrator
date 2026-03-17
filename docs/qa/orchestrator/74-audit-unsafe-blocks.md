@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA: Audit Unsafe Blocks (FR-024)
 
 ## Verification Scenarios

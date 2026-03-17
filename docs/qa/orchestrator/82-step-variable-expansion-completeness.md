@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Step Variable Expansion Completeness
 
 **Module**: orchestrator

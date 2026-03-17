@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Unified Step Execution Model
 
 **Module**: orchestrator

@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA: Unquoted JSON Extraction — Advanced (FR-031)
 
 **Split from**: `docs/qa/orchestrator/90-unquoted-json-extraction.md`

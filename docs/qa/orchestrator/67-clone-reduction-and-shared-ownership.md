@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Clone Reduction and Shared Ownership
 
 **Scope**: Verify FR-015 clone reduction on scheduler runtime context sharing, daemon owned-summary mapping, workflow conversion, generic builtin execution, and trace reconstruction regressions.

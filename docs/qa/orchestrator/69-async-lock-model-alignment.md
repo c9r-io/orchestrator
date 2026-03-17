@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Async Lock Model Alignment
 
 **Scope**: Verify FR-016 runtime-state alignment for config snapshots, async telemetry locks, and the two retained synchronous exceptions.

@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA: Integration Test Coverage (FR-023)
 
 ## 验证范围

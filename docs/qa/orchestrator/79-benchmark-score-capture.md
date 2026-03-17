@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA #79: Benchmark Score Capture (FR-028)
 
 ## Scope

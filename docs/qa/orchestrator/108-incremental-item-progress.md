@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA 108: Incremental Item Progress (FR-054)
 
 ## 概述

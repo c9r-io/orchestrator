@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA: Plan Output Context Overflow Mitigation (FR-036)
 
 验证 plan output 自动摘要提取机制是否正确工作。

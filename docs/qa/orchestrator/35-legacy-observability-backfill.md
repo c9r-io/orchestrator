@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Legacy Observability Backfill
 
 **Module**: orchestrator

@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Database Migration Kernel and Repository Governance
 
 **Module**: orchestrator

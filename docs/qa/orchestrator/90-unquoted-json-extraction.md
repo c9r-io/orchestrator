@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA: generate_items 对 LLM 非标准 JSON 输出的容错解析 (FR-031)
 
 验证 `extract_json_array` 对 LLM 常见非标准 JSON 输出的容错解析能力。

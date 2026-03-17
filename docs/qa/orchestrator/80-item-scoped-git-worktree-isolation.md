@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Item-Scoped Git Worktree Isolation
 
 ## Scope

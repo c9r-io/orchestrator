@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Clone Reduction Follow-Up
 
 **Scope**: Verify FR-015 follow-up clone reduction on chain-step execution, graph replay/materialization, item fan-out, db-write owned fast-paths, manifest export helpers, and secret-key audit assembly.

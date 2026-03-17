@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA #81: Self-Evolution DB Schema Alignment (FR-030)
 
 ## Scope

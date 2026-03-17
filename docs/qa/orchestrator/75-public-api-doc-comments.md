@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA: Public API Doc Comments (FR-022)
 
 ## 验证范围

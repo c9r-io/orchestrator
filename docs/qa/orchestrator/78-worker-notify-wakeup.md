@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA #78: Worker Notify Wakeup Governance (FR-027)
 
 ## Scope

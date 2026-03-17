@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA: Integration Test Coverage — Advanced (FR-023)
 
 **Split from**: `docs/qa/orchestrator/73-integration-test-coverage.md`

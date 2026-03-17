@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA: Plan Output — Spill Regression & Stream-JSON Extraction (FR-036)
 
 **Split from**: `docs/qa/orchestrator/89-plan-output-context-overflow-mitigation.md`

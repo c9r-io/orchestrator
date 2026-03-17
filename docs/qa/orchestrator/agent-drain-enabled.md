@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Agent Drain 与 Enabled 开关
 
 **Scope**: 验证 FR-017 agent enabled 开关、drain 生命周期状态机、selection.rs 过滤、phase_runner in_flight 计数、drain_timeout_sweep 以及 CLI/gRPC 接口。

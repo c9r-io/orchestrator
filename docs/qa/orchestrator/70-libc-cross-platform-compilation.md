@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # libc Cross-Platform Compilation
 
 **Scope**: Verify FR-019 libc dependency gating, workspace version unification, test cfg guards, and cross-compile CI coverage.
