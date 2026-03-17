@@ -47,6 +47,45 @@ fn prepare_task_for_start_batch_resets_unresolved_items() {
 }
 
 #[test]
+fn prepare_task_for_start_batch_resets_unresolved_items_from_paused() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    conn.execute(
+        "UPDATE tasks SET status='paused' WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("mark task paused");
+    conn.execute(
+        "UPDATE task_items SET status='unresolved', fix_required=1, fixed=1, last_error='x' WHERE task_id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("mark unresolved");
+
+    let repo = SqliteTaskRepository::new(TaskRepositorySource::from(state.db_path.clone()));
+    repo.prepare_task_for_start_batch(&task_id)
+        .expect("prepare should succeed");
+
+    let task_status: String = conn
+        .query_row(
+            "SELECT status FROM tasks WHERE id = ?1",
+            params![task_id.clone()],
+            |row| row.get(0),
+        )
+        .expect("task status query");
+    assert_eq!(task_status, "running");
+
+    let reset_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM task_items WHERE task_id=?1 AND status='pending' AND fix_required=0 AND fixed=0",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .expect("task_items query");
+    assert!(reset_count >= 1, "unresolved items should be reset to pending on resume from paused");
+}
+
+#[test]
 fn prepare_task_for_start_batch_rejects_already_running() {
     let mut fixture = TestState::new();
     let (state, task_id) = seed_task(&mut fixture);

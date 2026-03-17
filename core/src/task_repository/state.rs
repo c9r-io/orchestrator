@@ -38,6 +38,36 @@ pub fn set_task_status(
     Ok(())
 }
 
+/// Resets unresolved items back to pending and resets the cycle counter
+/// when there are items to re-process, so the scheduler starts fresh.
+pub fn reset_unresolved_items(conn: &Connection, task_id: &str) -> Result<()> {
+    let unresolved: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM task_items WHERE task_id=?1 AND status='unresolved'",
+        params![task_id],
+        |row| row.get(0),
+    )?;
+    if unresolved > 0 {
+        conn.execute(
+            "UPDATE task_items SET status='pending', ticket_files_json='[]', ticket_content_json='[]', fix_required=0, fixed=0, last_error='', completed_at=NULL, updated_at=?2 WHERE task_id=?1 AND status='unresolved'",
+            params![task_id, now_ts()],
+        )?;
+    }
+    // Reset cycle counter when there are pending items so the scheduler
+    // re-processes them rather than declaring premature convergence.
+    let pending: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM task_items WHERE task_id=?1 AND status='pending'",
+        params![task_id],
+        |row| row.get(0),
+    )?;
+    if pending > 0 {
+        conn.execute(
+            "UPDATE tasks SET current_cycle=0, init_done=0, updated_at=?2 WHERE id=?1",
+            params![task_id, now_ts()],
+        )?;
+    }
+    Ok(())
+}
+
 pub fn prepare_task_for_start_batch(conn: &Connection, task_id: &str) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
     let status: Option<String> = tx
@@ -70,7 +100,7 @@ pub fn prepare_task_for_start_batch(conn: &Connection, task_id: &str) -> Result<
         return Ok(());
     }
 
-    if matches!(status.as_deref(), Some("failed")) {
+    if matches!(status.as_deref(), Some("failed") | Some("paused")) {
         tx.execute(
             "UPDATE task_items SET status='pending', ticket_files_json='[]', ticket_content_json='[]', fix_required=0, fixed=0, last_error='', completed_at=NULL, updated_at=?2 WHERE task_id=?1 AND status='unresolved'",
             params![task_id, now_ts()],

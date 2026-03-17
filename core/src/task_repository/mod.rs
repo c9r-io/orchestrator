@@ -504,6 +504,20 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Resets unresolved items back to pending without changing the task status.
+    /// Called before enqueuing a task so the worker can re-process them.
+    pub async fn reset_unresolved_items(&self, task_id: &str) -> Result<()> {
+        let task_id = task_id.to_owned();
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                state::reset_unresolved_items(conn, &task_id)
+                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
     /// Resets a task into a fresh batch-start state.
     pub async fn prepare_task_for_start_batch(&self, task_id: &str) -> Result<()> {
         let task_id = task_id.to_owned();

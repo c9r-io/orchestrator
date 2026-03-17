@@ -31,7 +31,7 @@ Entry point: `orchestrator manifest export`
 
 1. Export current runtime config to a temporary YAML file:
    ```bash
-   orchestrator manifest export -f /tmp/exported-config.yaml
+   orchestrator manifest export -o yaml > /tmp/exported-config.yaml
    ```
 
 2. Inspect agent fields:

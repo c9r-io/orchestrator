@@ -6,7 +6,12 @@ use serde_json::json;
 use std::path::PathBuf;
 
 /// Marks a task as pending and wakes the background worker.
+/// Resets unresolved items when resuming from paused/failed status.
 pub async fn enqueue_task(state: &InnerState, task_id: &str) -> Result<()> {
+    state
+        .task_repo
+        .reset_unresolved_items(task_id)
+        .await?;
     state
         .db_writer
         .set_task_status(task_id, "pending", false)
