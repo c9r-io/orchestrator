@@ -1,3 +1,8 @@
+---
+self_referential_safe: false
+self_referential_safe_scenarios: [S1, S2]
+---
+
 # QA-77 — Event Table TTL & Archival
 
 ## 前提条件
