@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Agent Collaboration Mainline Validation
 
 **Module**: orchestrator

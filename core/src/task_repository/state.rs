@@ -171,16 +171,50 @@ pub fn recover_orphaned_running_items(conn: &Connection) -> Result<Vec<(String, 
         params![now],
     )?;
 
-    // Set parent tasks from running to restart_pending
-    for task_id in grouped.keys() {
-        tx.execute(
+    // Only include items in the return value when the parent task was
+    // successfully transitioned from 'running' to 'restart_pending'.
+    // Items for paused/completed/failed tasks are still reset to pending
+    // (so they are ready if the task is later resumed) but are NOT returned,
+    // preventing spurious worker notifications.
+    let mut recovered: Vec<(String, Vec<String>)> = Vec::new();
+    for (task_id, item_ids) in grouped {
+        let changed = tx.execute(
             "UPDATE tasks SET status = 'restart_pending', completed_at = NULL, updated_at = ?2 WHERE id = ?1 AND status = 'running'",
             params![task_id, now],
         )?;
+        if changed > 0 {
+            recovered.push((task_id, item_ids));
+        }
     }
 
     tx.commit()?;
-    Ok(grouped.into_iter().collect())
+    Ok(recovered)
+}
+
+/// Blanket-pause all running tasks and reset their items to pending.
+/// Used during daemon shutdown before exec() to prevent orphaned state
+/// across process replacement.  Handles the race where a requesting worker
+/// already removed its task from `state.running` before
+/// `shutdown_running_tasks` could pause it.
+/// Returns the number of items reset.
+pub fn pause_all_running_tasks_and_items(conn: &Connection) -> Result<usize> {
+    let tx = conn.unchecked_transaction()?;
+    let now = now_ts();
+
+    // Pause all tasks that are still marked running
+    tx.execute(
+        "UPDATE tasks SET status = 'paused', updated_at = ?1 WHERE status = 'running'",
+        params![now],
+    )?;
+
+    // Reset all running items to pending
+    let count = tx.execute(
+        "UPDATE task_items SET status = 'pending', started_at = NULL, completed_at = NULL, updated_at = ?1 WHERE status = 'running'",
+        params![now],
+    )?;
+
+    tx.commit()?;
+    Ok(count)
 }
 
 /// Recover orphaned running items for a single task.

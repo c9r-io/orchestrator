@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Dynamic Items and Selection (WP03)
 
 **Module**: orchestrator

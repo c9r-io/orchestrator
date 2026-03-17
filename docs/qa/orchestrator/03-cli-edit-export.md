@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - CLI Edit and Export
 
 **Module**: orchestrator

@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Degenerate Cycle Loop Guard Verification
 
 **Module**: orchestrator

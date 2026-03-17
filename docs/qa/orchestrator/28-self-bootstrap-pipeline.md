@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Self-Bootstrap Workflow (Pipeline & Ticket Flow)
 
 **Module**: orchestrator

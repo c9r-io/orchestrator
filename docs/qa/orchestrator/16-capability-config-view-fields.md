@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Capability Manifest Export Fields
 
 **Module**: orchestrator

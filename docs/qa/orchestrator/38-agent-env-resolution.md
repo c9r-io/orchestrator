@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Agent Env Resolution and Runner Injection
 
 **Module**: orchestrator

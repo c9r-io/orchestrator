@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Task Trace Post-Mortem Diagnostics
 
 **Module**: orchestrator

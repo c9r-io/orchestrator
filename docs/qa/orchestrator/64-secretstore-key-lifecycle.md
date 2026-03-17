@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA 64: SecretStore Key Lifecycle
 
 **FR**: FR-012

@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Dynamic Orchestration & Adaptive Workflow
 
 **Module**: orchestrator

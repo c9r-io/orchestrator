@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Runner Security Boundary and Observability
 
 **Module**: orchestrator

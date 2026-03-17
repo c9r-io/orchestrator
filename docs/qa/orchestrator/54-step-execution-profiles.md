@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Step Execution Profiles
 
 **Module**: orchestrator

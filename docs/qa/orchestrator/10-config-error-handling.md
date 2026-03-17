@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - 配置缺失与 Manifest 错误处理
 
 **Module**: orchestrator

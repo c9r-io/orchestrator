@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Unified CRD Resource Store — Builtin Type Migration
 
 **Module**: orchestrator

@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Sandbox Denial Anomaly & Empty-Change Guard
 
 **Module**: orchestrator

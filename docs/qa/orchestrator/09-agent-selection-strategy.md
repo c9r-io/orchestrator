@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Agent Selection Strategy (Scoring and Health)
 
 **Module**: orchestrator

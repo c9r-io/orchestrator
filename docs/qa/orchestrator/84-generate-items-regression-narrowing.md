@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Generate Items Regression Narrowing
 
 **Module**: orchestrator

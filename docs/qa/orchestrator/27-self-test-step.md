@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Self-Test Step (SMOKE CHAIN)
 
 **Module**: orchestrator

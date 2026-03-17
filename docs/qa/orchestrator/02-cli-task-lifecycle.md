@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - CLI Task Lifecycle
 
 **Module**: orchestrator

@@ -533,6 +533,19 @@ fn main() -> Result<()> {
             // remains valid and prevents other processes from starting a
             // competing daemon during the restart window.
 
+            // Blanket-reset: ensure no running items/tasks survive across exec().
+            // Handles race where requesting worker already removed its task
+            // from state.running before shutdown_running_tasks could pause it.
+            match inner.task_repo.pause_all_running_tasks_and_items().await {
+                Ok(count) if count > 0 => {
+                    info!(count, "blanket-reset running items before exec");
+                }
+                Err(e) => {
+                    error!(error = %e, "failed to blanket-reset running items before exec");
+                }
+                _ => {}
+            }
+
             use std::os::unix::process::CommandExt;
             let err = std::process::Command::new(&binary_path)
                 .args(std::env::args_os().skip(1))

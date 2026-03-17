@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Self-Bootstrap Tests - Scenario 4: Self-Test Step Passes (All Three Phases)
 
 **Module**: self-bootstrap  

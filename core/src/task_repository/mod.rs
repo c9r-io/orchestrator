@@ -839,6 +839,19 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// Blanket-pause all running tasks and reset their items to pending.
+    /// Used during daemon shutdown before exec() to prevent orphaned state.
+    pub async fn pause_all_running_tasks_and_items(&self) -> Result<usize> {
+        self.async_db
+            .writer()
+            .call(move |conn| {
+                state::pause_all_running_tasks_and_items(conn)
+                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
     /// Recovers all orphaned running items across all tasks.
     pub async fn recover_orphaned_running_items(&self) -> Result<Vec<(String, Vec<String>)>> {
         self.async_db

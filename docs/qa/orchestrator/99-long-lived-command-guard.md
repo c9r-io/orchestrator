@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA: Long-Lived Command Guard
 
 Verifies FR-045: `task watch --timeout`, stall auto-termination, and QA agent timeout guidance.

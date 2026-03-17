@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - 配置创建流程测试
 
 **Module**: orchestrator

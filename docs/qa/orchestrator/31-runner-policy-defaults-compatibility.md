@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Runner Policy Defaults and Compatibility
 
 **Module**: orchestrator

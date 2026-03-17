@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Project-Scoped Agent Selection
 
 **Module**: orchestrator

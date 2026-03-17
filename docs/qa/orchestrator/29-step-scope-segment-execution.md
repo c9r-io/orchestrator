@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - StepScope & Segment-Based Execution
 
 **Module**: orchestrator

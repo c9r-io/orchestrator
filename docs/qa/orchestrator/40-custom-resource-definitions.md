@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Custom Resource Definitions (CRD) Extension System
 
 **Module**: orchestrator

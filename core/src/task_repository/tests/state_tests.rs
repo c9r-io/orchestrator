@@ -676,3 +676,148 @@ fn recover_stalled_running_items_respects_threshold() {
         .expect("item status");
     assert_eq!(status, "pending");
 }
+
+// ── recover_orphaned: paused task skipped in return value ──────────
+
+#[test]
+fn recover_orphaned_running_items_skips_paused_task_in_return() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id = get_item_id(&state, &task_id);
+
+    // Set task to paused but leave item in running state
+    // (simulates the state after shutdown_running_tasks paused the task
+    // but items were not reset before a crash)
+    conn.execute(
+        "UPDATE tasks SET status='paused' WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("mark task paused");
+    conn.execute(
+        "UPDATE task_items SET status='running', started_at='2026-01-01T00:00:00Z' WHERE id = ?1",
+        params![item_id.clone()],
+    )
+    .expect("mark item running");
+
+    let recovered = state::recover_orphaned_running_items(&conn).expect("recover should succeed");
+
+    // Return value should be EMPTY — paused task is not returned for worker notification
+    assert!(
+        recovered.is_empty(),
+        "paused task should not appear in recovered list, got: {:?}",
+        recovered
+    );
+
+    // But the item should still be reset to pending (ready for later resume)
+    let item_status: String = conn
+        .query_row(
+            "SELECT status FROM task_items WHERE id = ?1",
+            params![item_id],
+            |row| row.get(0),
+        )
+        .expect("query item status");
+    assert_eq!(
+        item_status, "pending",
+        "item should be reset to pending even for paused task"
+    );
+
+    // Task should remain paused (NOT changed to restart_pending)
+    let task_status: String = conn
+        .query_row(
+            "SELECT status FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .expect("query task status");
+    assert_eq!(
+        task_status, "paused",
+        "paused task should NOT be changed to restart_pending"
+    );
+}
+
+// ── pause_all_running_tasks_and_items ──────────────────────────────
+
+#[test]
+fn pause_all_running_tasks_and_items_pauses_tasks_and_resets_items() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id = get_item_id(&state, &task_id);
+
+    // Set task and item to running
+    conn.execute(
+        "UPDATE tasks SET status='running' WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("mark task running");
+    conn.execute(
+        "UPDATE task_items SET status='running', started_at='2026-01-01T00:00:00Z' WHERE id = ?1",
+        params![item_id.clone()],
+    )
+    .expect("mark item running");
+
+    let count =
+        state::pause_all_running_tasks_and_items(&conn).expect("blanket pause should succeed");
+    assert_eq!(count, 1, "should reset 1 running item");
+
+    // Task should be paused
+    let task_status: String = conn
+        .query_row(
+            "SELECT status FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .expect("query task status");
+    assert_eq!(task_status, "paused");
+
+    // Item should be pending with cleared started_at
+    let (item_status, started_at): (String, Option<String>) = conn
+        .query_row(
+            "SELECT status, started_at FROM task_items WHERE id = ?1",
+            params![item_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("query item");
+    assert_eq!(item_status, "pending");
+    assert!(started_at.is_none(), "started_at should be cleared");
+}
+
+#[test]
+fn pause_all_running_does_not_affect_paused_tasks() {
+    let mut fixture = TestState::new();
+    let (state, task_id) = seed_task(&mut fixture);
+    let conn = open_conn(&state.db_path).expect("open sqlite");
+    let item_id = get_item_id(&state, &task_id);
+
+    // Task is paused, item is pending (normal state)
+    conn.execute(
+        "UPDATE tasks SET status='paused' WHERE id = ?1",
+        params![task_id.clone()],
+    )
+    .expect("mark task paused");
+
+    let count =
+        state::pause_all_running_tasks_and_items(&conn).expect("blanket pause should succeed");
+    assert_eq!(count, 0, "should not reset any items");
+
+    // Task should remain paused
+    let task_status: String = conn
+        .query_row(
+            "SELECT status FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| row.get(0),
+        )
+        .expect("query task status");
+    assert_eq!(task_status, "paused");
+
+    // Item should remain pending
+    let item_status: String = conn
+        .query_row(
+            "SELECT status FROM task_items WHERE id = ?1",
+            params![item_id],
+            |row| row.get(0),
+        )
+        .expect("query item status");
+    assert_eq!(item_status, "pending");
+}

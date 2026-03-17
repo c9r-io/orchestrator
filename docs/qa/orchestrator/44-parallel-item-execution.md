@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Parallel Item-Scoped Step Execution
 
 **Module**: orchestrator

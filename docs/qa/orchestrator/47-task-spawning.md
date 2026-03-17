@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Task Spawning (WP02)
 
 **Module**: orchestrator

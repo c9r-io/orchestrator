@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - Fatal Agent Error Detection
 
 **Module**: orchestrator

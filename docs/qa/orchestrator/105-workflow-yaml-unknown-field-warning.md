@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # QA-105: Workflow YAML 步骤定义未知字段警告
 
 ## 关联

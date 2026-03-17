@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Orchestrator - CLI Config and Database
 
 **Module**: orchestrator
