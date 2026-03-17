@@ -3,7 +3,7 @@
 ## 状态
 
 - **优先级**: P1
-- **状态**: Proposed
+- **状态**: In Progress
 - **提出日期**: 2026-03-17
 
 ## 背景
@@ -65,13 +65,18 @@ full-qa workflow 已失去"全量回归"的意义。
 
 ## 实现方案
 
-### Phase 1: 直接恢复误标文档（预计恢复 6 个文档）
+### Phase 1: 直接恢复误标文档 ✅ 完成
 
-验证 6 个无实际危险操作的文档，确认安全后移除 `self_referential_safe: false`。
+审计 6 个候选文档，确认 4 个安全、2 个需保留标记：
 
-**验收标准**：
-- 6 个文档在 full-qa 中执行且不触发 daemon restart
-- 可执行文档数从 20 → 26
+- ✅ `108-incremental-item-progress.md` — 纯只读 task info 查询，已恢复
+- ✅ `109-parallel-spawn-stagger-delay.md` — 配置观察，无写操作，已恢复
+- ✅ `91-daemon-crash-resilience.md` — 纯代码审查，不执行危险操作，已恢复
+- ✅ `95-prehook-self-referential-safe-filter.md` — 过滤行为验证，已恢复
+- ❌ `47-task-spawning.md` — spawn_task 创建子任务，保留标记
+- ❌ `48-dynamic-items-selection.md` — item 删除/替换写操作，保留标记
+
+**结果**：可执行文档数从 20 → 24
 
 ### Phase 2: 场景级安全标注机制
 

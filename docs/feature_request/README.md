@@ -45,7 +45,7 @@
 | FR-055 | Parallel Spawn Stagger Delay — 并行 Agent 启动间隔延迟 | P1 | Closed |
 | FR-056 | Agent Health Policy 可配置化 — Disease 策略按 Agent/Workspace 设定 | P1 | Closed |
 | FR-057 | orchestratord 真正 Daemon 化 | P1 | Closed |
-| FR-058 | QA 自引用测试覆盖率恢复 — 场景级安全分级治理 | P1 | Proposed |
+| FR-058 | QA 自引用测试覆盖率恢复 — 场景级安全分级治理 | P1 | In Progress |
 
 ## 说明
 
