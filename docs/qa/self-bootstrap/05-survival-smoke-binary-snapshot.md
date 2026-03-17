@@ -4,6 +4,13 @@
 **Scope**: Verify snapshot_binary() and restore_binary_snapshot() functions work correctly with temp directories
 **Scenarios**: 5
 **Priority**: High
+**self_referential_safe**: false
+
+> **Note**: All 5 scenarios are **pending implementation**. The functions
+> `snapshot_binary` and `restore_binary_snapshot` referenced in
+> `core/src/scheduler/safety.rs` do not exist in the current codebase. The
+> module path does not exist either. These scenarios should not be executed
+> until the binary snapshot functionality is implemented.
 
 ---
 
@@ -147,8 +154,8 @@ Verify that content integrity is maintained through a full snapshot/restore cycl
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | snapshot_binary Creates Stable Copy | ✅ | 2026-03-04 | claude-sonnet-4-6 | `test_snapshot_binary_success` passes |
-| 2 | snapshot_binary Errors When Binary Missing | ✅ | 2026-03-04 | claude-sonnet-4-6 | `test_snapshot_binary_missing_release` passes |
-| 3 | restore_binary_snapshot Restores Binary | ✅ | 2026-03-04 | claude-sonnet-4-6 | `test_restore_binary_snapshot_success` passes (v1 compat path) |
-| 4 | restore_binary_snapshot Errors When Stable Missing | ✅ | 2026-03-04 | claude-sonnet-4-6 | `test_restore_binary_snapshot_missing_stable` passes |
-| 5 | Snapshot/Restore Cycle Preserves Content | ✅ | 2026-03-04 | claude-sonnet-4-6 | `test_snapshot_restore_content_integrity` passes |
+| 1 | snapshot_binary Creates Stable Copy | ⏳ PENDING | | | Pending implementation — functions do not exist |
+| 2 | snapshot_binary Errors When Binary Missing | ⏳ PENDING | | | Pending implementation — functions do not exist |
+| 3 | restore_binary_snapshot Restores Binary | ⏳ PENDING | | | Pending implementation — functions do not exist |
+| 4 | restore_binary_snapshot Errors When Stable Missing | ⏳ PENDING | | | Pending implementation — functions do not exist |
+| 5 | Snapshot/Restore Cycle Preserves Content | ⏳ PENDING | | | Pending implementation — functions do not exist |

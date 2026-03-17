@@ -560,6 +560,19 @@ async fn execute_cycle_segments(
         }
 
         segment::finalize_items(state, task_id, task_ctx, &items, &mut item_state).await?;
+
+        // Promote item-level captured pipeline vars to task context so that
+        // convergence expressions can reference variables captured from
+        // item-scoped steps (e.g. `delta_lines` from a QA capture).
+        for acc in item_state.values() {
+            for (key, val) in &acc.pipeline_vars.vars {
+                task_ctx
+                    .pipeline_vars
+                    .vars
+                    .entry(key.clone())
+                    .or_insert_with(|| val.clone());
+            }
+        }
     }
 
     Ok(CycleSegmentOutcome::Completed)

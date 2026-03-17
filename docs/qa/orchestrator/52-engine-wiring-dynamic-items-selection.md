@@ -42,7 +42,7 @@ Verify that after a task-scoped segment completes, `pending_generate_items` is c
 - `create_dynamic_task_items_async()` inserts new items into the database
 - Event emitted: `items_generated` with `count` and `replace` flag
 - The `items` and `task_item_paths` vectors are refreshed for subsequent segments
-- If `replace: true`, existing items are replaced; if `false`, items are appended
+- If `replace: true`, existing **dynamic** items (source='dynamic') are replaced; static items from qa_targets are preserved. If `false`, items are appended
 
 ---
 

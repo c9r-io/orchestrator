@@ -191,10 +191,20 @@ pub fn run_checks(
 
     // Health policy summary per agent.
     // Resolve effective policy: agent-explicit > workspace-inherited > default.
-    let ws_health_policy: Option<&agent_orchestrator::config::HealthPolicyConfig> = workspaces
-        .values()
-        .map(|ws| &ws.health_policy)
-        .find(|hp| !hp.is_default());
+    // When there is exactly one workspace, use its health policy as the
+    // workspace-level fallback.  When multiple workspaces exist, there is no
+    // agent-to-workspace mapping at config time, so fall back to the global
+    // default to avoid incorrectly attributing another workspace's policy.
+    let ws_health_policy: Option<&agent_orchestrator::config::HealthPolicyConfig> =
+        if workspaces.len() == 1 {
+            workspaces
+                .values()
+                .next()
+                .map(|ws| &ws.health_policy)
+                .filter(|hp| !hp.is_default())
+        } else {
+            None
+        };
     for (name, agent) in agents {
         let hp = &agent.health_policy;
         if hp.is_default() {
