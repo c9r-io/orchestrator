@@ -230,6 +230,7 @@ fn main() -> Result<()> {
                         items = total,
                         "startup orphan recovery complete"
                     );
+                    inner.worker_notify.notify_waiters();
                 }
             }
             Err(e) => {
@@ -371,6 +372,9 @@ fn main() -> Result<()> {
                                             )
                                             .await;
                                         }
+                                    }
+                                    if !recovered.is_empty() {
+                                        stall_state.worker_notify.notify_waiters();
                                     }
                                 }
                                 Err(e) => {

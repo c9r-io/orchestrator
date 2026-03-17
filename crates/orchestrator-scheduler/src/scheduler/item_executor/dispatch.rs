@@ -355,6 +355,27 @@ fn execute_step<'a>(
             return Ok(StepExecutionOutcome::EarlyReturn);
         }
 
+        // Built-in safety: skip self-referential-unsafe docs globally,
+        // regardless of whether the workflow configures a prehook.
+        if task_ctx.self_referential
+            && !agent_orchestrator::ticket::is_self_referential_safe(
+                &task_ctx.workspace_root,
+                &item.qa_file_path,
+                true,
+            )
+        {
+            acc.step_skipped.insert(step.id.clone(), true);
+            insert_event(
+                state,
+                task_id,
+                Some(item_id),
+                "step_skipped",
+                build_step_skipped_payload(step, "self_referential_unsafe", event_ctx.parent_step),
+            )
+            .await?;
+            return Ok(StepExecutionOutcome::Completed { success: true });
+        }
+
         let prehook_ctx = acc.to_prehook_context(task_id, item, task_ctx, &step.id);
         let should_run = evaluate_step_prehook(state, step.prehook.as_ref(), &prehook_ctx).await?;
         if !should_run {

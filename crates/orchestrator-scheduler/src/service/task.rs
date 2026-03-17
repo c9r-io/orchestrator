@@ -107,11 +107,15 @@ pub async fn recover_task(state: &InnerState, task_id: &str) -> Result<Vec<Strin
     let resolved = resolve_task_id(state, task_id)
         .await
         .map_err(|err| classify_task_error("task.recover", err))?;
-    state
+    let recovered = state
         .task_repo
         .recover_orphaned_running_items_for_task(&resolved)
         .await
-        .map_err(|err| classify_task_error("task.recover", err))
+        .map_err(|err| classify_task_error("task.recover", err))?;
+    if !recovered.is_empty() {
+        state.worker_notify.notify_waiters();
+    }
+    Ok(recovered)
 }
 
 /// Retry a failed task item. Returns the parent task ID.
