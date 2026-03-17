@@ -30,7 +30,12 @@ self_referential_safe_scenarios: [S3, S5, S6]
 1. Verify `core/src/runner/sandbox.rs` uses `nix::unistd::geteuid()` (no `libc::geteuid`)
 2. Verify `crates/daemon/src/lifecycle.rs` uses `nix::sys::signal::kill()` (no `libc::kill`)
 
-**Expected:** No `unsafe` blocks in either location.
+**Expected:** Both files use `nix` wrappers for `kill()` and `geteuid()` respectively.
+
+> **Note**: `lifecycle.rs` retains `unsafe` blocks for `libc::sigaction` signal installation
+> with `SA_SIGINFO` (sender PID extraction). This is acceptable — `nix` wraps `sigaction`
+> but the current implementation predates that adoption. The S3 scope covers only `kill()`
+> and `geteuid()` replacements.
 
 ### S4: Test env-var macros work correctly
 

@@ -757,18 +757,28 @@ async fn flush_pending_generate_items(
                         warn!(error = %e, "failed to emit items_generated event");
                     }
                     // Refresh items list — when dynamic items exist,
-                    // subsequent item-scoped steps target only dynamic items
+                    // subsequent item-scoped steps target only dynamic items.
+                    // Static items excluded by dynamic replacement are marked
+                    // "replaced" in the DB so they don't count as unresolved.
                     match list_task_items_for_cycle(state, task_id).await {
                         Ok(all_items) => {
                             let has_dynamic = all_items.iter().any(|i| i.source == "dynamic");
-                            *items = if has_dynamic {
-                                all_items
+                            if has_dynamic {
+                                // Mark static items as "replaced" so they don't
+                                // appear unresolved at task completion.
+                                for item in all_items.iter().filter(|i| i.source != "dynamic") {
+                                    let _ = state
+                                        .db_writer
+                                        .update_task_item_status(&item.id, "replaced")
+                                        .await;
+                                }
+                                *items = all_items
                                     .into_iter()
                                     .filter(|i| i.source == "dynamic")
-                                    .collect()
+                                    .collect();
                             } else {
-                                all_items
-                            };
+                                *items = all_items;
+                            }
                             *task_item_paths =
                                 items.iter().map(|i| i.qa_file_path.clone()).collect();
                         }
