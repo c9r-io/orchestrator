@@ -169,6 +169,16 @@ impl ResourceStore {
         removed
     }
 
+    /// Removes all resources belonging to a project.
+    pub fn remove_all_for_project(&mut self, project: &str) {
+        let pattern = format!("/{}/", project);
+        let before = self.resources.len();
+        self.resources.retain(|key, _| !key.contains(&pattern));
+        if self.resources.len() < before {
+            self.generation += 1;
+        }
+    }
+
     /// Current generation counter (incremented on each mutation).
     pub fn generation(&self) -> u64 {
         self.generation

@@ -46,7 +46,13 @@ Resource resolution:
 ### Preconditions
 
 - Orchestrator binary built at `./target/release/orchestrator`
-- Default project/workspace/workflow already initialized in SQLite config
+- A project with workspace and workflow must exist. The `default` project is only
+  a naming convention — it must be explicitly created via `orchestrator apply`.
+  Use a dedicated QA project to avoid depending on pre-existing global state:
+  ```bash
+  orchestrator init
+  orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project qa-scenario1
+  ```
 - Use `orchestrator` CLI for all commands
 
 ### Goal
@@ -60,7 +66,7 @@ Validate task creation with explicit project specification stores project_id in 
    ./target/release/orchestrator task create \
      --name "test-project-task" \
      --goal "Test project namespace" \
-     --project default \
+     --project qa-scenario1 \
      --workspace default \
      --workflow qa_fix_retest \
      --no-start

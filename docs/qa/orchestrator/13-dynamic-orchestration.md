@@ -175,6 +175,9 @@ N/A - Unit test verification
 - Workflow config supports `adaptive:` block
 - Adaptive planner agent uses capability `adaptive_plan`
 - Deterministic fixture available: `fixtures/manifests/bundles/adaptive-runtime.yaml`
+  **Note**: This fixture has not yet been created. Steps 1-2 (unit tests) can
+  be executed without it. Steps 3-6 (integration) are blocked until the fixture
+  is authored. Skip steps 3-6 if the fixture file does not exist.
 - Database already initialized: `test -f data/agent_orchestrator.db || orchestrator init`
 
 ### Steps
@@ -224,7 +227,7 @@ N/A - Unit test verification
 
 6. Check workflow export contains adaptive configuration:
    ```bash
-   orchestrator manifest export -f /tmp/exported-config.yaml
+   orchestrator manifest export -o yaml > /tmp/exported-config.yaml
    grep -A 8 "adaptive:" /tmp/exported-config.yaml || true
    ```
 

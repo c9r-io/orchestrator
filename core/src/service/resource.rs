@@ -604,8 +604,9 @@ pub fn delete_resource(
             }
         }
 
-        // 3. Remove project config entry
+        // 3. Remove project config entry and resource_store entries
         config.projects.remove(name);
+        config.resource_store.remove_all_for_project(name);
 
         // 4. Also remove resource DB rows for this project
         {
