@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S5]
 ---
 
 # QA: Public API Doc Comments (FR-022)

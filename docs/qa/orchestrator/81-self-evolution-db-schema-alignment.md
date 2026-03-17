@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S1, S2, S3, S4, S5, S6, S7]
 ---
 
 # QA #81: Self-Evolution DB Schema Alignment (FR-030)

@@ -306,6 +306,18 @@ pub(super) fn build_step_prehook_cel_context(
                 err
             )
         })?;
+    cel_context
+        .add_variable(
+            "self_referential_safe_scenarios",
+            context.self_referential_safe_scenarios.clone(),
+        )
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
     Ok(cel_context)
 }
 

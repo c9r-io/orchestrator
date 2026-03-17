@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S1]
 ---
 # QA: Daemon Crash Resilience — Graceful Shutdown & Regression (FR-032)
 

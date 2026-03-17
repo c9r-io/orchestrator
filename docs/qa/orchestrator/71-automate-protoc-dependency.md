@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S6]
 ---
 
 # QA #71: Automate protoc Dependency (FR-020)

@@ -146,6 +146,7 @@ fn test_evaluate_step_prehook_expression_true() {
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,
         self_referential_safe: true,
+        self_referential_safe_scenarios: vec![],
         vars: Default::default(),
     };
     let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
@@ -186,6 +187,7 @@ fn test_evaluate_step_prehook_expression_false() {
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,
         self_referential_safe: true,
+        self_referential_safe_scenarios: vec![],
         vars: Default::default(),
     };
     let result = evaluate_step_prehook_expression("active_ticket_count > 0", &context);
@@ -226,6 +228,7 @@ fn test_evaluate_step_prehook_expression_invalid() {
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,
         self_referential_safe: true,
+        self_referential_safe_scenarios: vec![],
         vars: Default::default(),
     };
     let result = evaluate_step_prehook_expression("invalid @#$ expression", &context);
@@ -265,6 +268,7 @@ fn test_evaluate_step_prehook_expression_qa_failed() {
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,
         self_referential_safe: true,
+        self_referential_safe_scenarios: vec![],
         vars: Default::default(),
     };
     let result = evaluate_step_prehook_expression("qa_failed == true", &context);
@@ -305,6 +309,7 @@ fn test_evaluate_step_prehook_expression_compound() {
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,
         self_referential_safe: true,
+        self_referential_safe_scenarios: vec![],
         vars: Default::default(),
     };
     let result = evaluate_step_prehook_expression(
@@ -349,6 +354,7 @@ fn test_build_errors_prehook_expression() {
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,
         self_referential_safe: true,
+        self_referential_safe_scenarios: vec![],
         vars: Default::default(),
     };
     let result = evaluate_step_prehook_expression(
@@ -412,6 +418,7 @@ fn default_step_prehook_context() -> StepPrehookContext {
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,
         self_referential_safe: true,
+        self_referential_safe_scenarios: vec![],
         vars: Default::default(),
     }
 }
@@ -501,6 +508,7 @@ fn test_max_cycles_and_is_last_cycle_cel_variables() {
         max_cycles: 2,
         is_last_cycle: false,
         self_referential_safe: true,
+        self_referential_safe_scenarios: vec![],
         last_sandbox_denied: false,
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,
@@ -573,6 +581,55 @@ fn test_self_referential_safe_combined_with_is_last_cycle() {
         evaluate_step_prehook_expression("is_last_cycle && self_referential_safe", &unsafe_context);
     assert!(result.is_ok());
     assert!(!result.expect("combined expression should be false when doc is unsafe"));
+}
+
+// ========================================================================
+// self_referential_safe_scenarios CEL variable
+// ========================================================================
+
+#[test]
+fn test_self_referential_safe_scenarios_empty() {
+    let context = StepPrehookContext {
+        self_referential_safe: false,
+        self_referential_safe_scenarios: vec![],
+        ..default_step_prehook_context()
+    };
+    let result = evaluate_step_prehook_expression(
+        "self_referential_safe || size(self_referential_safe_scenarios) > 0",
+        &context,
+    );
+    assert!(result.is_ok());
+    assert!(!result.expect("should be false when unsafe with no safe scenarios"));
+}
+
+#[test]
+fn test_self_referential_safe_scenarios_non_empty() {
+    let context = StepPrehookContext {
+        self_referential_safe: false,
+        self_referential_safe_scenarios: vec!["S2".to_string(), "S3".to_string()],
+        ..default_step_prehook_context()
+    };
+    let result = evaluate_step_prehook_expression(
+        "self_referential_safe || size(self_referential_safe_scenarios) > 0",
+        &context,
+    );
+    assert!(result.is_ok());
+    assert!(result.expect("should be true when has safe scenarios"));
+}
+
+#[test]
+fn test_self_referential_safe_scenarios_safe_doc_overrides() {
+    let context = StepPrehookContext {
+        self_referential_safe: true,
+        self_referential_safe_scenarios: vec![],
+        ..default_step_prehook_context()
+    };
+    let result = evaluate_step_prehook_expression(
+        "self_referential_safe || size(self_referential_safe_scenarios) > 0",
+        &context,
+    );
+    assert!(result.is_ok());
+    assert!(result.expect("should be true when doc is globally safe"));
 }
 
 // ========================================================================
@@ -1768,6 +1825,7 @@ fn make_prehook_ctx() -> StepPrehookContext {
         max_cycles: 3,
         is_last_cycle: false,
         self_referential_safe: true,
+        self_referential_safe_scenarios: vec![],
         last_sandbox_denied: false,
         sandbox_denied_count: 0,
         last_sandbox_denial_reason: None,

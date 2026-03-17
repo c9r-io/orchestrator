@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S1, S2, S3]
 ---
 
 # QA #76: config_load Module Split and Responsibility Segregation (FR-025)

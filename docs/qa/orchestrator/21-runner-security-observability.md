@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S5]
 ---
 
 # Orchestrator - Runner Security Boundary and Observability

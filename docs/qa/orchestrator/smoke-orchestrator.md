@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S2, S3, S5]
 ---
 
 # Smoke Test: Orchestrator Core

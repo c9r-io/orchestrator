@@ -64,6 +64,7 @@ prehook:
 | Variable | Type | Description |
 |----------|------|-------------|
 | `self_referential_safe` | bool | Safe for self-referential exec |
+| `self_referential_safe_scenarios` | list\<string\> | Scenario IDs safe in self-referential mode |
 
 ## CEL Syntax
 

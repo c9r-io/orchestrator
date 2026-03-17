@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S2]
 ---
 
 # Orchestrator - Database Persistence Bootstrap and Repository Boundaries

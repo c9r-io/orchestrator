@@ -356,13 +356,19 @@ fn execute_step<'a>(
         }
 
         // Built-in safety: skip self-referential-unsafe docs globally,
-        // regardless of whether the workflow configures a prehook.
+        // unless they have scenario-level safe annotations.
         if task_ctx.self_referential
             && !agent_orchestrator::ticket::is_self_referential_safe(
                 &task_ctx.workspace_root,
                 &item.qa_file_path,
                 true,
             )
+            && agent_orchestrator::ticket::get_self_referential_safe_scenarios(
+                &task_ctx.workspace_root,
+                &item.qa_file_path,
+                true,
+            )
+            .is_empty()
         {
             acc.step_skipped.insert(step.id.clone(), true);
             insert_event(
@@ -1247,6 +1253,7 @@ fn build_dynamic_step_context(
         sandbox_denied_count: prehook_ctx.sandbox_denied_count,
         last_sandbox_denial_reason: prehook_ctx.last_sandbox_denial_reason,
         self_referential_safe: prehook_ctx.self_referential_safe,
+        self_referential_safe_scenarios: prehook_ctx.self_referential_safe_scenarios,
         vars: prehook_ctx.vars,
     }
 }

@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S2]
 ---
 
 # QA 92: Dynamic Items Cycle Overflow — max_cycles Proactive Enforcement

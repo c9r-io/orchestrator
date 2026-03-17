@@ -50,6 +50,54 @@ pub fn is_self_referential_safe(
     }
 }
 
+/// Parse QA doc frontmatter to extract the list of scenarios that are safe
+/// to run in a self-referential workspace. Returns an empty vec if no
+/// `self_referential_safe_scenarios` field is found.
+pub fn parse_qa_doc_safe_scenarios(content: &str) -> Vec<String> {
+    let mut lines = content.lines();
+    match lines.next() {
+        Some(line) if line.trim() == "---" => {}
+        _ => return Vec::new(),
+    }
+    for line in lines {
+        let trimmed = line.trim();
+        if trimmed == "---" {
+            break;
+        }
+        if let Some(val) = trimmed.strip_prefix("self_referential_safe_scenarios:") {
+            let val = val.trim();
+            // Parse YAML-style inline list: [S1, S2, S3]
+            if val.starts_with('[') && val.ends_with(']') {
+                let inner = &val[1..val.len() - 1];
+                return inner
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+            }
+        }
+    }
+    Vec::new()
+}
+
+/// Get the list of safe scenarios for a QA doc in a self-referential workspace.
+/// Returns an empty vec if the workspace is not self-referential or the file
+/// has no scenario-level safety annotations.
+pub fn get_self_referential_safe_scenarios(
+    workspace_root: &Path,
+    qa_file_path: &str,
+    self_referential: bool,
+) -> Vec<String> {
+    if !self_referential {
+        return Vec::new();
+    }
+    let abs_path = workspace_root.join(qa_file_path);
+    match std::fs::read_to_string(&abs_path) {
+        Ok(content) => parse_qa_doc_safe_scenarios(&content),
+        Err(_) => Vec::new(),
+    }
+}
+
 /// Normalizes a relative path for stable ticket-to-QA matching.
 pub fn normalize_rel_path_for_match(raw: &str) -> String {
     let value = raw.trim().trim_matches('`').replace('\\', "/");
@@ -1432,5 +1480,40 @@ mod tests {
         assert!(result[0].contains("t1.md"));
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_parse_qa_doc_safe_scenarios_present() {
+        let content = "---\nself_referential_safe: false\nself_referential_safe_scenarios: [S2, S3, S5]\n---\n# Doc";
+        let result = parse_qa_doc_safe_scenarios(content);
+        assert_eq!(result, vec!["S2", "S3", "S5"]);
+    }
+
+    #[test]
+    fn test_parse_qa_doc_safe_scenarios_absent() {
+        let content = "---\nself_referential_safe: false\n---\n# Doc";
+        let result = parse_qa_doc_safe_scenarios(content);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_qa_doc_safe_scenarios_no_frontmatter() {
+        let content = "# Doc\nNo frontmatter here";
+        let result = parse_qa_doc_safe_scenarios(content);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_qa_doc_safe_scenarios_single() {
+        let content = "---\nself_referential_safe_scenarios: [S1]\n---\n# Doc";
+        let result = parse_qa_doc_safe_scenarios(content);
+        assert_eq!(result, vec!["S1"]);
+    }
+
+    #[test]
+    fn test_parse_qa_doc_safe_scenarios_empty_list() {
+        let content = "---\nself_referential_safe_scenarios: []\n---\n# Doc";
+        let result = parse_qa_doc_safe_scenarios(content);
+        assert!(result.is_empty());
     }
 }

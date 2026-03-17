@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S1, S2]
 ---
 
 # QA #72: Audit and Reduce expect() Calls (FR-021)

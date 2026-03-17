@@ -82,8 +82,8 @@ spec:
       tty: false
       prehook:
         engine: cel
-        when: "qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && self_referential_safe"
-        reason: "Run all QA markdown documents; skip self-referential-unsafe docs"
+        when: "qa_file_path.startsWith(\"docs/qa/\") && qa_file_path.endsWith(\".md\") && (self_referential_safe || size(self_referential_safe_scenarios) > 0)"
+        reason: "Run all QA markdown documents; skip self-referential-unsafe docs unless they have safe scenarios"
 
     - id: ticket_fix
       type: ticket_fix

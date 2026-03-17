@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S4, S5, S6]
 ---
 
 # QA 101: Core Crate Split Phase 1 — orchestrator-config

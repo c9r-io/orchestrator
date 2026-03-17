@@ -156,6 +156,11 @@ spec:
     Read the QA document at {rel_path}, then execute each scenario step by step.
     Verify expected outcomes. Create tickets for any failures.
 
+    IMPORTANT: If the document frontmatter contains `self_referential_safe_scenarios`,
+    ONLY execute the scenarios listed in that field (e.g. [S2, S3] means run only
+    Scenario 2 and Scenario 3). Skip all other scenarios — they contain operations
+    that are unsafe in self-referential mode (cargo build, task create, kill, etc.).
+
     IMPORTANT: When running streaming or long-lived CLI commands (e.g. `task watch`,
     `task follow`, `task logs`), always use `--timeout` where available or wrap with
     the shell `timeout` command to prevent indefinite blocking. Example:

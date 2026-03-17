@@ -342,6 +342,10 @@ pub struct StepPrehookContext {
     /// Whether this QA doc is safe to run in a self-referential workspace
     #[serde(default = "default_true")]
     pub self_referential_safe: bool,
+    /// Scenario IDs that are safe to run in self-referential mode.
+    /// Non-empty only when the doc is marked unsafe but has safe scenarios.
+    #[serde(default)]
+    pub self_referential_safe_scenarios: Vec<String>,
     /// User-defined pipeline variables (from step captures).
     /// Available in prehook CEL expressions with automatic type inference.
     #[serde(default)]

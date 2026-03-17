@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S3, S4, S5]
 ---
 
 # QA 93: Daemon Restart In-Flight Step Completion Race Condition

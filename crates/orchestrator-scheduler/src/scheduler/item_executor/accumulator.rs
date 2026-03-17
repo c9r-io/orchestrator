@@ -181,6 +181,12 @@ impl StepExecutionAccumulator {
                 &item.qa_file_path,
                 task_ctx.self_referential,
             ),
+            self_referential_safe_scenarios:
+                agent_orchestrator::ticket::get_self_referential_safe_scenarios(
+                    &task_ctx.workspace_root,
+                    &item.qa_file_path,
+                    task_ctx.self_referential,
+                ),
             vars: {
                 let mut merged = task_ctx.pipeline_vars.vars.clone();
                 merged.extend(

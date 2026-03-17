@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S3, S5, S6]
 ---
 
 # QA: Audit Unsafe Blocks (FR-024)

@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S3]
 ---
 
 # Orchestrator - Database Migration Kernel and Repository Governance

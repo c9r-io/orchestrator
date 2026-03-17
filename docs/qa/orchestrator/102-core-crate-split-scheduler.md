@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S3, S4, S5, S6, S7]
 ---
 
 # QA 102: Core Crate Split Phase 2 — orchestrator-scheduler Extraction
