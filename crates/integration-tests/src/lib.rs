@@ -727,6 +727,8 @@ impl OrchestratorService for TestOrchestratorServer {
             uptime_secs: runtime.uptime_secs.to_string(),
             shutdown_requested: runtime.shutdown_requested,
             lifecycle_state: runtime.lifecycle_state.as_str().to_string(),
+            maintenance_mode: runtime.maintenance_mode,
+            incarnation: runtime.incarnation,
         }))
     }
 
@@ -738,6 +740,21 @@ impl OrchestratorService for TestOrchestratorServer {
         self.shutdown_notify.notify_one();
         Ok(Response::new(ShutdownResponse {
             message: "shutdown initiated".to_string(),
+        }))
+    }
+
+    async fn maintenance_mode(
+        &self,
+        request: Request<MaintenanceModeRequest>,
+    ) -> Result<Response<MaintenanceModeResponse>, Status> {
+        let req = request.into_inner();
+        self.state
+            .daemon_runtime
+            .set_maintenance_mode(req.enable);
+        let state_str = if req.enable { "enabled" } else { "disabled" };
+        Ok(Response::new(MaintenanceModeResponse {
+            maintenance_mode: req.enable,
+            message: format!("maintenance mode {state_str}"),
         }))
     }
 

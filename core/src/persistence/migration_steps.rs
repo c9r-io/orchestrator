@@ -706,6 +706,20 @@ pub(crate) fn m0018_trigger_state(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn m0019_daemon_incarnation(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS daemon_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        INSERT OR IGNORE INTO daemon_meta (key, value) VALUES ('incarnation', '0');
+        "#,
+    )
+    .context("m0019_daemon_incarnation")?;
+    Ok(())
+}
+
 pub(crate) fn m0014_task_graph_debug_tables(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"

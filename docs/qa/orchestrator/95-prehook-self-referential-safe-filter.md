@@ -1,3 +1,6 @@
+---
+self_referential_safe: false
+---
 # Prehook Self-Referential Safe Filter
 
 **Module**: orchestrator

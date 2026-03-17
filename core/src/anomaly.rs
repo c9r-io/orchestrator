@@ -64,6 +64,8 @@ pub enum AnomalyRule {
     DegenerateLoop,
     /// FR-044: The sandbox denied one or more file-system writes during step execution.
     SandboxDenied,
+    /// The daemon restarted (exec() or cold start) during the task's lifetime.
+    IncarnationBoundary,
 }
 
 impl AnomalyRule {
@@ -83,6 +85,7 @@ impl AnomalyRule {
             AnomalyRule::UnexpandedTemplateVar => "unexpanded_template_var",
             AnomalyRule::DegenerateLoop => "degenerate_loop",
             AnomalyRule::SandboxDenied => "sandbox_denied",
+            AnomalyRule::IncarnationBoundary => "incarnation_boundary",
         }
     }
 
@@ -100,7 +103,8 @@ impl AnomalyRule {
             | AnomalyRule::OrphanCommand
             | AnomalyRule::NonzeroExit
             | AnomalyRule::UnexpandedTemplateVar
-            | AnomalyRule::TransientReadError => Severity::Warning,
+            | AnomalyRule::TransientReadError
+            | AnomalyRule::IncarnationBoundary => Severity::Warning,
 
             AnomalyRule::LongRunning | AnomalyRule::EmptyCycle => Severity::Info,
         }
@@ -120,7 +124,8 @@ impl AnomalyRule {
             | AnomalyRule::OrphanCommand
             | AnomalyRule::MissingStepEnd
             | AnomalyRule::UnexpandedTemplateVar
-            | AnomalyRule::TransientReadError => Escalation::Attention,
+            | AnomalyRule::TransientReadError
+            | AnomalyRule::IncarnationBoundary => Escalation::Attention,
 
             AnomalyRule::LongRunning | AnomalyRule::EmptyCycle => Escalation::Notice,
         }
@@ -142,6 +147,7 @@ impl AnomalyRule {
             AnomalyRule::UnexpandedTemplateVar => "UNEXPANDED_TEMPLATE_VAR",
             AnomalyRule::DegenerateLoop => "DEGENERATE_LOOP",
             AnomalyRule::SandboxDenied => "SANDBOX_DENIED",
+            AnomalyRule::IncarnationBoundary => "INCARNATION_BOUNDARY",
         }
     }
 
@@ -161,6 +167,7 @@ impl AnomalyRule {
             "unexpanded_template_var" => Some(AnomalyRule::UnexpandedTemplateVar),
             "degenerate_loop" => Some(AnomalyRule::DegenerateLoop),
             "sandbox_denied" => Some(AnomalyRule::SandboxDenied),
+            "incarnation_boundary" => Some(AnomalyRule::IncarnationBoundary),
             _ => None,
         }
     }
@@ -214,6 +221,7 @@ mod tests {
         AnomalyRule::UnexpandedTemplateVar,
         AnomalyRule::DegenerateLoop,
         AnomalyRule::SandboxDenied,
+        AnomalyRule::IncarnationBoundary,
     ];
 
     #[test]

@@ -190,13 +190,22 @@ pub enum Commands {
     },
 }
 
-/// Daemon lifecycle commands that operate locally (no gRPC needed).
+/// Daemon lifecycle commands.
 #[derive(Subcommand, Debug, Clone)]
 pub enum DaemonCommands {
     /// Stop the running daemon by sending SIGTERM
     Stop,
     /// Show whether the daemon is running and its PID
     Status,
+    /// Enable or disable maintenance mode (blocks new task creation)
+    Maintenance {
+        /// Enable maintenance mode
+        #[arg(long, conflicts_with = "disable")]
+        enable: bool,
+        /// Disable maintenance mode
+        #[arg(long, conflicts_with = "enable")]
+        disable: bool,
+    },
 }
 
 #[cfg(test)]

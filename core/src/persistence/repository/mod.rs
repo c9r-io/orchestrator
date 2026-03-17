@@ -1,4 +1,6 @@
 mod config;
+/// Daemon metadata persistence (incarnation counter, etc.).
+pub mod daemon_meta;
 mod scheduler;
 mod session;
 mod workflow_store;

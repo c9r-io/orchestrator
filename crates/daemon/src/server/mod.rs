@@ -47,6 +47,11 @@ impl OrchestratorServer {
                 snapshot.lifecycle_state.as_str()
             )));
         }
+        if snapshot.maintenance_mode {
+            return Some(Status::unavailable(format!(
+                "{rpc} rejected: daemon is in maintenance mode"
+            )));
+        }
         None
     }
 }
@@ -242,6 +247,13 @@ impl OrchestratorService for OrchestratorServer {
         request: Request<ShutdownRequest>,
     ) -> Result<Response<ShutdownResponse>, Status> {
         system::shutdown(self, request).await
+    }
+
+    async fn maintenance_mode(
+        &self,
+        request: Request<MaintenanceModeRequest>,
+    ) -> Result<Response<MaintenanceModeResponse>, Status> {
+        system::maintenance_mode(self, request).await
     }
 
     async fn config_debug(

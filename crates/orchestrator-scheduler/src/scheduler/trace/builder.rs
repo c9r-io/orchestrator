@@ -86,6 +86,7 @@ pub fn build_trace_with_meta(
     detect_low_output_steps(&sorted_events, &mut anomalies);
     detect_degenerate_loop(command_runs, &mut anomalies);
     detect_sandbox_denied(&sorted_events, &mut anomalies);
+    detect_incarnation_boundary(&sorted_events, &mut anomalies);
 
     let total_steps: u32 = cycles.iter().map(|c| c.steps.len() as u32).sum();
     let total_commands = command_runs.len() as u32;

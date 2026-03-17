@@ -1,7 +1,8 @@
-//! Local daemon lifecycle commands (stop / status).
+//! Daemon lifecycle commands (stop / status / maintenance).
 //!
-//! These commands operate directly on the PID file and process signals
-//! without requiring a gRPC connection to the daemon.
+//! Stop and status operate directly on the PID file and process signals
+//! without requiring a gRPC connection. Maintenance mode requires a gRPC
+//! connection to the running daemon.
 
 use std::path::Path;
 
@@ -17,7 +18,29 @@ pub async fn dispatch(cmd: DaemonCommands) -> Result<()> {
     match cmd {
         DaemonCommands::Stop => stop(&pid_path).await,
         DaemonCommands::Status => status(&pid_path),
+        DaemonCommands::Maintenance { enable, disable } => {
+            let flag = if enable {
+                true
+            } else if disable {
+                false
+            } else {
+                anyhow::bail!("specify --enable or --disable");
+            };
+            maintenance(flag).await
+        }
     }
+}
+
+/// Toggle maintenance mode via gRPC.
+async fn maintenance(enable: bool) -> Result<()> {
+    let mut client = crate::client::connect(None).await?;
+    let resp = client
+        .maintenance_mode(orchestrator_proto::MaintenanceModeRequest { enable })
+        .await
+        .context("failed to set maintenance mode")?
+        .into_inner();
+    println!("{}", resp.message);
+    Ok(())
 }
 
 /// Read the PID from the PID file, if present and parseable.

@@ -444,6 +444,34 @@ pub(super) fn detect_low_output_steps(events: &[&EventDto], anomalies: &mut Vec<
     }
 }
 
+/// Detects daemon incarnation boundaries during a task's lifetime.
+///
+/// If the daemon restarted (via exec() or cold start) while a task was running,
+/// multiple `daemon_incarnation_started` events will appear in the task's event
+/// window. Each transition between incarnation numbers is flagged as an anomaly.
+pub(super) fn detect_incarnation_boundary(events: &[&EventDto], anomalies: &mut Vec<Anomaly>) {
+    let mut incarnations: Vec<(u64, String)> = Vec::new();
+    for event in events {
+        if event.event_type == "daemon_incarnation_started" {
+            if let Some(inc) = event.payload.get("incarnation").and_then(|v| v.as_u64()) {
+                incarnations.push((inc, event.created_at.clone()));
+            }
+        }
+    }
+    if incarnations.len() > 1 {
+        for window in incarnations.windows(2) {
+            anomalies.push(Anomaly::new(
+                AnomalyRule::IncarnationBoundary,
+                format!(
+                    "Daemon restarted: incarnation {} -> {} at {}",
+                    window[0].0, window[1].0, window[1].1,
+                ),
+                Some(window[1].1.clone()),
+            ));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

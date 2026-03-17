@@ -164,6 +164,14 @@ fn main() -> Result<()> {
         let inner = state.inner.clone();
         inner.daemon_runtime.set_configured_workers(args.workers);
 
+        // Increment persistent incarnation counter on every startup (including exec() restarts)
+        let incarnation = agent_orchestrator::persistence::repository::daemon_meta::increment_incarnation(
+            &inner.async_database,
+        )
+        .await
+        .unwrap_or(0);
+        inner.daemon_runtime.set_incarnation(incarnation);
+
         let socket_path = lifecycle::socket_path(&inner.app_root);
         let pid_path = lifecycle::pid_path(&inner.app_root);
 
@@ -189,8 +197,20 @@ fn main() -> Result<()> {
             pid_file = %pid_path.display(),
             version = env!("CARGO_PKG_VERSION"),
             git_hash = env!("BUILD_GIT_HASH"),
+            incarnation,
             "orchestratord starting"
         );
+
+        emit_daemon_event(
+            &inner,
+            "daemon_incarnation_started",
+            serde_json::json!({
+                "incarnation": incarnation,
+                "version": env!("CARGO_PKG_VERSION"),
+                "git_hash": env!("BUILD_GIT_HASH"),
+            }),
+        )
+        .await;
 
         // Emit crash recovery event if stale PID was detected
         if stale_pid_detected {

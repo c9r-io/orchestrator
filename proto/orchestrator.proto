@@ -39,6 +39,7 @@ service OrchestratorService {
   // System
   rpc Ping(PingRequest)               returns (PingResponse);
   rpc Shutdown(ShutdownRequest)       returns (ShutdownResponse);
+  rpc MaintenanceMode(MaintenanceModeRequest) returns (MaintenanceModeResponse);
   rpc ConfigDebug(ConfigDebugRequest) returns (ConfigDebugResponse);
   rpc WorkerStatus(WorkerStatusRequest) returns (WorkerStatusResponse);
   rpc Check(CheckRequest)             returns (CheckResponse);
@@ -431,6 +432,8 @@ message PingResponse {
   string uptime_secs = 3;
   bool shutdown_requested = 4;
   string lifecycle_state = 5;
+  bool maintenance_mode = 6;
+  uint64 incarnation = 7;
 }
 
 message ShutdownRequest {
@@ -439,6 +442,15 @@ message ShutdownRequest {
 
 message ShutdownResponse {
   string message = 1;
+}
+
+message MaintenanceModeRequest {
+  bool enable = 1;
+}
+
+message MaintenanceModeResponse {
+  bool maintenance_mode = 1;
+  string message = 2;
 }
 
 message ConfigDebugRequest {

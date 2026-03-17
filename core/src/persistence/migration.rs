@@ -188,6 +188,11 @@ pub fn registered_migrations() -> Vec<Migration> {
             name: "m0018_trigger_state",
             up: crate::persistence::migration_steps::m0018_trigger_state,
         },
+        Migration {
+            version: 19,
+            name: "m0019_daemon_incarnation",
+            up: crate::persistence::migration_steps::m0019_daemon_incarnation,
+        },
     ]
 }
 

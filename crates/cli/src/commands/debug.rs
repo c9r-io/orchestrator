@@ -34,6 +34,8 @@ pub fn print_daemon_status(
     println!("uptime_secs:        {}", ping.uptime_secs);
     println!("lifecycle_state:    {}", ping.lifecycle_state);
     println!("shutdown_requested: {}", ping.shutdown_requested);
+    println!("maintenance_mode:   {}", ping.maintenance_mode);
+    println!("incarnation:        {}", ping.incarnation);
     println!("configured_workers: {}", status.configured_workers);
     println!("active_workers:     {}", status.active_workers);
     println!("idle_workers:       {}", status.idle_workers);

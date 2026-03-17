@@ -64,6 +64,10 @@ pub struct DaemonRuntimeSnapshot {
     pub running_tasks: u64,
     /// Total number of worker restarts due to panics.
     pub total_worker_restarts: u64,
+    /// Persistent daemon incarnation counter (incremented on each startup).
+    pub incarnation: u64,
+    /// Whether the daemon is in maintenance mode (blocks new task creation).
+    pub maintenance_mode: bool,
 }
 
 /// Shared atomic runtime counters for the daemon process.
@@ -77,6 +81,8 @@ pub struct DaemonRuntimeState {
     active_workers: AtomicU64,
     running_tasks: AtomicU64,
     total_worker_restarts: AtomicU64,
+    incarnation: AtomicU64,
+    maintenance_mode: AtomicBool,
 }
 
 impl Default for DaemonRuntimeState {
@@ -98,6 +104,8 @@ impl DaemonRuntimeState {
             active_workers: AtomicU64::new(0),
             running_tasks: AtomicU64::new(0),
             total_worker_restarts: AtomicU64::new(0),
+            incarnation: AtomicU64::new(0),
+            maintenance_mode: AtomicBool::new(false),
         }
     }
 
@@ -115,6 +123,8 @@ impl DaemonRuntimeState {
             active_workers: self.active_workers.load(Ordering::SeqCst),
             running_tasks: self.running_tasks.load(Ordering::SeqCst),
             total_worker_restarts: self.total_worker_restarts.load(Ordering::SeqCst),
+            incarnation: self.incarnation.load(Ordering::SeqCst),
+            maintenance_mode: self.maintenance_mode.load(Ordering::SeqCst),
         }
     }
 
@@ -180,6 +190,16 @@ impl DaemonRuntimeState {
     pub fn record_worker_restart(&self) {
         self.total_worker_restarts.fetch_add(1, Ordering::SeqCst);
     }
+
+    /// Sets the persistent incarnation counter loaded from the database.
+    pub fn set_incarnation(&self, value: u64) {
+        self.incarnation.store(value, Ordering::SeqCst);
+    }
+
+    /// Enables or disables maintenance mode.
+    pub fn set_maintenance_mode(&self, enabled: bool) {
+        self.maintenance_mode.store(enabled, Ordering::SeqCst);
+    }
 }
 
 #[cfg(test)]
@@ -204,6 +224,8 @@ mod tests {
         assert_eq!(serving.running_tasks, 1);
         assert!(!serving.shutdown_requested);
         assert_eq!(serving.total_worker_restarts, 0);
+        assert_eq!(serving.incarnation, 0);
+        assert!(!serving.maintenance_mode);
 
         runtime.record_worker_restart();
         runtime.record_worker_restart();
