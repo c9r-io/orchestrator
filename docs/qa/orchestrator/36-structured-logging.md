@@ -19,7 +19,7 @@ This document validates the structured logging bootstrap introduced for the Rust
 - `tracing`-based runtime diagnostics
 - Logging configured via environment variables: `ORCHESTRATOR_LOG` or `RUST_LOG` for level, `ORCHESTRATOR_LOG_FORMAT` for format
 - CLI flag `-v, --verbose` for debug-level override
-- default rolling file logs under `data/logs/system`
+- daemon log file at `data/daemon.log`
 - preservation of human-readable command results on stdout
 
 Entry point: `orchestrator`
@@ -117,7 +117,7 @@ Ensure `ORCHESTRATOR_LOG_FORMAT=json` switches console logging to JSON on stderr
 
 ---
 
-## Scenario 4: Rolling File Logs Are Written
+## Scenario 4: Daemon Log File Is Written
 
 ### Preconditions
 
@@ -125,25 +125,24 @@ Ensure `ORCHESTRATOR_LOG_FORMAT=json` switches console logging to JSON on stderr
 
 ### Goal
 
-Ensure runtime logs are persisted under `data/logs/system`.
+Ensure runtime logs are persisted to the daemon log file.
 
 ### Steps
 
-1. List current system log files:
+1. Verify the daemon log file exists:
    ```bash
-   ls -1 data/logs/system
+   ls -l data/daemon.log
    ```
-2. Inspect the latest log file:
+2. Inspect the latest log entries:
    ```bash
-   LATEST_LOG=$(ls -1t data/logs/system | head -1)
-   tail -n 20 "data/logs/system/${LATEST_LOG}"
+   tail -n 20 data/daemon.log
    ```
 
 ### Expected
 
-- `data/logs/system` exists
-- At least one rolling log file exists
-- The latest file contains the logging bootstrap record or subsequent structured runtime events
+- `data/daemon.log` exists
+- The file contains structured log entries with ISO 8601 timestamps
+- Log entries include the logging bootstrap record or subsequent structured runtime events
 
 ---
 
@@ -178,5 +177,5 @@ Ensure config defaults and CLI override precedence for structured logging remain
 | 1 | Release Build Includes Logging Surface | ☐ | | | Previous result based on non-existent `--log-level`/`--log-format` flags |
 | 2 | `init` Preserves stdout Contract | ✅ | 2026-03-02 | Codex | stdout retained human-readable success line; stderr contained structured log |
 | 3 | JSON Console Logging Works Via Environment Variable | ☐ | | | Previous result based on non-existent `--log-format` flag |
-| 4 | Rolling File Logs Are Written | ☐ | | | Needs re-verification |
+| 4 | Daemon Log File Is Written | ☐ | | | Path corrected: `data/daemon.log` (not `data/logs/system/`) |
 | 5 | Logging Config Resolution Unit Tests Pass | ✅ | 2026-03-02 | Codex | focused `config::observability` and `observability::init` tests passed |

@@ -251,6 +251,17 @@ Validate that project resources are isolated from each other.
 - Validator accepts project-tagged workspaces via `metadata.project`
 - Validator accepts project-tagged agents and workflow capability references
 
+> **Note**: If `two-projects.yaml` uses `root_path: "."` in any workspace, the validator
+> will emit self-referential safety policy warnings. This is **expected behavior** — the
+> safety grading system flags `root_path: "."` because the orchestrator's own files reside
+> in the repo root. The validation still passes (exit 0); the warnings are informational.
+
+### Troubleshooting
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| Self-referential safety warnings on validate | `root_path: "."` points at the orchestrator repo root | Expected behavior — the fixture intentionally uses `"."` for simplicity. Warnings can be ignored for this scenario. |
+
 ---
 
 ## General Scenario: Explicit Project Entry Exists

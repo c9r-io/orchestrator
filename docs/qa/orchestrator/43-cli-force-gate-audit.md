@@ -36,6 +36,8 @@ Entry point: `orchestrator <command>`
 
 ## Scenario 1: Config Backfill-Events Rejected Without --force
 
+> **Skip**: `config backfill-events` is not yet implemented. Skip this scenario until the subcommand is added.
+
 ### Preconditions
 - Orchestrator binary built
 
@@ -62,6 +64,8 @@ Verify `config backfill-events` refuses to run without `--force`.
 ---
 
 ## Scenario 2: Config Backfill-Events Executes With --force
+
+> **Skip**: `config backfill-events` is not yet implemented. Skip this scenario until the subcommand is added.
 
 ### Preconditions
 - Orchestrator binary built
@@ -171,13 +175,14 @@ Verify that pre-existing `--force` gates still function correctly.
    orchestrator task delete --help 2>&1 | grep -c '\-\-force'
    orchestrator task retry --help 2>&1 | grep -c '\-\-force'
    orchestrator delete --help 2>&1 | grep -c '\-\-force'
-   orchestrator config backfill-events --help 2>&1 | grep -c '\-\-force'
+   # Skip: config backfill-events is not yet implemented
+   # orchestrator config backfill-events --help 2>&1 | grep -c '\-\-force'
    ```
 
 ### Expected
 - `task delete` without `--force`: prints confirmation prompt, exit code 0 (no deletion)
 - `delete project/<name>` without `--force`: prints confirmation prompt or error, exit code 1
-- All four `--help` outputs contain `--force` (grep count >= 1 each)
+- Three `--help` outputs contain `--force` (grep count >= 1 each). `config backfill-events` is skipped (not yet implemented).
 
 ---
 
@@ -185,8 +190,8 @@ Verify that pre-existing `--force` gates still function correctly.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Config Backfill-Events Rejected Without --force | ☐ | | | |
-| 2 | Config Backfill-Events Executes With --force | ☐ | | | |
+| 1 | Config Backfill-Events Rejected Without --force | SKIP | | | `config backfill-events` not yet implemented |
+| 2 | Config Backfill-Events Executes With --force | SKIP | | | `config backfill-events` not yet implemented |
 | 3 | Task Retry Rejected Without --force | ☐ | | | |
 | 4 | Task Retry Executes With --force | ☐ | | | |
-| 5 | Existing Force Gates Regression Check | ☐ | | | |
+| 5 | Existing Force Gates Regression Check | ☐ | | | `config backfill-events --help` check skipped (not yet implemented) |

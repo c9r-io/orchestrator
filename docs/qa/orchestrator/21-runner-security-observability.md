@@ -272,6 +272,8 @@ WHERE task_id = '{task_id}';
 
 ## Scenario 5: QA Doctor Exposes Observability Metrics
 
+> **Skip**: `orchestrator qa doctor` command is not yet implemented. This scenario is blocked until the CLI subcommand is added.
+
 ### Preconditions
 
 - `task_execution_metrics` contains records from prior runs.
