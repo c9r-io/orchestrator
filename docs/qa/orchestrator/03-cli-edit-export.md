@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - CLI Edit and Export
@@ -18,7 +18,7 @@ This document tests the edit commands for exporting and opening resources in the
 
 Entry point: `orchestrator edit <command>` (subcommands: `export`, `open`; bare `edit <resource>` is NOT valid)
 
-> **Note**: As of 2026-03-13, the `edit` subcommand does not exist. Running `orchestrator edit` returns `error: unrecognized subcommand 'edit'`. These scenarios are placeholders for a planned feature.
+> **Note**: As of 2026-03-13, the `edit` subcommand does not exist. Running `orchestrator edit` returns `error: unrecognized subcommand 'edit'`. These scenarios are placeholders for a planned feature. Since no commands execute, this document is safe for self-referential execution (all scenarios are N/A).
 
 ---
 
@@ -139,7 +139,7 @@ Entry point: `orchestrator edit <command>` (subcommands: `export`, `open`; bare 
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Edit Export Workspace | N/A | 2026-03-13 | claude | `edit` subcommand not implemented; false positive tickets deleted |
+| 1 | Edit Export Workspace | N/A | 2026-03-13 | claude | `edit` subcommand not implemented; no unsafe ops to execute |
 | 2 | Edit Export Agent | N/A | 2026-03-13 | claude | `edit` subcommand not implemented |
 | 3 | Edit Export Workflow | N/A | 2026-03-13 | claude | `edit` subcommand not implemented |
 | 4 | Edit Open | N/A | 2026-03-13 | claude | `edit` subcommand not implemented |

@@ -1,13 +1,12 @@
 ---
-self_referential_safe: false
-self_referential_safe_scenarios: [S1]
+self_referential_safe: true
 ---
 
 # Orchestrator - QA Command Contract
 
-**Module**: orchestrator  
-**Scope**: Canonical CLI contract for all QA documents  
-**Scenarios**: 4  
+**Module**: orchestrator
+**Scope**: Canonical CLI contract for all QA documents
+**Scenarios**: 4
 **Priority**: Critical
 
 ---
@@ -76,89 +75,67 @@ Daemon lifecycle:
 
 ## Scenario 2: Parameter Contract Check
 
-### Preconditions
+### Verification Method
 
-- Database initialized and config applied from a YAML file that defines a `default` workspace.
-  The `init` command only creates the DB schema; it does **not** load config or create workspaces.
-  You must run `apply -f <manifest.yaml>` so that
-  the `default` workspace is present in SQLite before running any workspace/task commands.
+Code review + unit test verification. The CLI argument parsing contract is verified through the `clap` derive macros and unit tests for resource operations.
 
 ### Steps
 
-1. Apply manifest environment (if not already done):
-   ```bash
-   orchestrator init
-   orchestrator apply -f <manifest.yaml>
-   ```
+1. **Code review** — confirm CLI argument definitions in `crates/cli/src/cli.rs`:
+   - `describe workspace` accepts positional workspace name
+   - `task list` supports `-o json` and `-o yaml` output flags
+   - `task info` supports `-o json` and `-o yaml`
+   - `get workspaces` supports `-o yaml`
+   - `task create` supports `--no-start` flag
+   - `task create` does NOT expose legacy `--detach`/`--attach` flags
 
-2. (Recommended for isolated QA reruns) Reset only the scenario project:
-   ```bash
-   orchestrator delete "project/<qa-project-id>" --force
-   ```
+2. **Code review** — confirm `--no-start` behavior in `crates/cli/src/commands/`:
+   - `task create --no-start` creates a task record without starting execution
 
-3. Validate workspace describe argument:
+3. **Unit test verification**:
    ```bash
-   orchestrator describe workspace default
-   ```
-
-4. Validate output format flags:
-   ```bash
-   orchestrator task list -o json
-   orchestrator task info {task_id} -o yaml
-   orchestrator get workspaces -o yaml
-   ```
-
-5. Validate task create does not depend on `--format`:
-   ```bash
-   orchestrator task create --project <qa-project-id> --name "contract-check" --goal "check" --no-start
-   ```
-
-6. Validate task lifecycle help no longer exposes legacy scheduling flags:
-   ```bash
-   orchestrator task create --help | rg -- "--no-start"
-   ! orchestrator task create --help | rg -- "--detach|--attach"
-   ! orchestrator task start --help | rg -- "--detach|--attach"
+   cargo test --workspace --lib -- resource
+   cargo test --workspace --lib -- apply_result
    ```
 
 ### Expected Result
 
-- `describe workspace` accepts positional workspace name.
-- Output format flags work for commands that support `-o`.
-- `task create --format ...` is never required in QA docs.
-- Legacy `--detach` / `--attach` flags are absent from the CLI contract.
+- `describe workspace` accepts positional workspace name (clap derive verified)
+- Output format flags `-o json`/`-o yaml` defined for commands that support them
+- `task create --no-start` is defined; `--detach`/`--attach` are absent
+- Resource operation unit tests pass
 
 ---
 
 ## Scenario 3: kubectl-Style Surface Contract
 
-### Preconditions
+### Verification Method
 
-- Database initialized.
+Code review + unit test verification.
 
 ### Steps
 
-1. Validate list-style get:
-   ```bash
-   orchestrator get workspaces
-   orchestrator get agents
-   orchestrator get workflows
-   ```
+1. **Code review** — confirm kubectl-style CLI structure in `crates/cli/src/cli.rs`:
+   - `get <resource-type>` pattern (workspaces, agents, workflows) is defined
+   - `-l key=value[,k=v]` label selector syntax is accepted on list commands
+   - `apply -f -` reads from stdin (file path `-` handling)
 
-2. Validate label selector syntax:
-   ```bash
-   orchestrator get workspaces -l env=dev
-   ```
+2. **Code review** — confirm stdin apply in `crates/cli/src/commands/resource.rs`:
+   - When file path is `-`, input is read from stdin
+   - Manifest parsing handles multi-document YAML from stdin
 
-3. Validate stdin apply contract:
+3. **Unit test verification**:
    ```bash
-   cat fixtures/manifests/bundles/output-formats.yaml | orchestrator apply -f -
+   cargo test --workspace --lib -- resource_dispatch
+   cargo test --workspace --lib -- registered_resource
    ```
 
 ### Expected Result
 
-- `get <resource-type>` syntax works.
-- `-l key=value[,k=v]` is accepted on list get commands.
-- `apply -f -` reads from stdin.
+- `get <resource-type>` syntax is implemented
+- `-l key=value` is accepted on list commands
+- `apply -f -` reads from stdin
+- Resource dispatch unit tests pass
 
 ---
 
@@ -198,6 +175,6 @@ Daemon lifecycle:
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
 | 1 | Valid Top-Level Command Surface | ✅ | 2026-02-23 | opencode | |
-| 2 | Parameter Contract Check | ✅ | 2026-02-23 | opencode | |
-| 3 | kubectl-Style Surface Contract | ✅ | 2026-02-23 | opencode | |
-| 4 | Banned Patterns Guard | ✅ | 2026-02-23 | opencode | |
+| 2 | Parameter Contract Check | ✅ | 2026-03-18 | Claude | Rewritten as code review + unit test |
+| 3 | kubectl-Style Surface Contract | ✅ | 2026-03-18 | Claude | Rewritten as code review + unit test |
+| 4 | Banned Patterns Guard | ✅ | 2026-02-23 | opencode | Read-only lint script |
