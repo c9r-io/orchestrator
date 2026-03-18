@@ -102,22 +102,32 @@ Verify `AgentContext::render_template_with_pipeline()` expands runtime context, 
 Verify runtime prompt-to-command propagation expands spill-file placeholders such as `{plan_output_path}` and keeps oversized pipeline content under the runner command limit.
 
 ### Steps
-1. Run:
+1. Run auto-capture propagation tests (plan_output → downstream step):
    ```bash
-   cargo test --workspace --lib plan_output_is_propagated_to_qa_doc_gen_template -- --nocapture
-   cargo test --workspace --lib spill_large_var_spills_when_over_limit -- --nocapture
-   cargo test --workspace --lib spill_large_var_inline_when_small -- --nocapture
+   cargo test -p orchestrator-scheduler --lib auto_capture_extracts_stream_json_result_for_spill -- --nocapture
+   cargo test -p orchestrator-scheduler --lib auto_capture_falls_back_to_raw_stdout_for_non_stream_json -- --nocapture
+   cargo test -p orchestrator-scheduler --lib auto_capture_stream_json_large_result_spills_only_extracted_text -- --nocapture
    ```
-2. Inspect the regression source:
+
+2. Run spill-file size threshold tests:
    ```bash
-   rg -n "plan_output_is_propagated_to_qa_doc_gen_template|spill_large_var_spills_when_over_limit|spill_large_var_inline_when_small|plan_output_path" core/src/scheduler.rs core/src/scheduler/item_executor/tests.rs
+   cargo test -p orchestrator-scheduler --lib spill_large_var_small_value_inserts_inline -- --nocapture
+   cargo test -p orchestrator-scheduler --lib spill_large_var_exactly_at_limit_inserts_inline -- --nocapture
+   cargo test -p orchestrator-scheduler --lib spill_large_var_one_byte_over_limit_spills_to_file -- --nocapture
+   cargo test -p orchestrator-scheduler --lib spill_large_var_large_value_sets_correct_path_key -- --nocapture
+   cargo test -p orchestrator-scheduler --lib spill_large_var_multibyte_boundary -- --nocapture
+   ```
+
+3. Review the spill implementation:
+   ```bash
+   rg -n "fn spill_large_var\b|fn spill_to_file\b|PIPELINE_VAR_INLINE_LIMIT" crates/orchestrator-scheduler/src/scheduler/item_executor/spill.rs crates/orchestrator-config/src/config/pipeline.rs
    ```
 
 ### Expected
-- All listed tests pass.
-- The scheduler regression confirms `qa_doc_gen` receives `plan_output` in truncated inline form and a concrete `plan_output.txt` spill-file path.
-- The persisted command must not contain the literal string `{plan_output_path}`.
-- Spill behavior remains size-aware: small values stay inline, oversized values are written to spill files.
+- All 8 tests pass.
+- Auto-capture confirms `plan` step stdout is captured as `plan_output` pipeline var, with stream-json result extraction when available.
+- Spill behavior is size-aware: values ≤ 4096 bytes stay inline, oversized values are truncated with a pointer to `{key}.txt` spill file.
+- `{plan_output_path}` is always set when auto-capture runs, pointing to the spill file.
 
 ---
 
@@ -185,6 +195,6 @@ Verify the diagnostic backstop catches persisted commands that still contain tem
 |---|----------|--------|-----------|--------|-------|
 | 1 | Basic template renderer covers core placeholders | PASS | 2026-03-19 | Claude | 6/6 tests pass — all in qa_utils.rs |
 | 2 | Agent context renders runtime, pipeline, and escape-sensitive values | PASS | 2026-03-19 | Claude | 3/3 tests pass — all in collab/context.rs |
-| 3 | Runtime propagation expands large pipeline variables without leaving placeholders | FAIL | 2026-03-19 | Claude | 3 tests missing (plan_output_is_propagated, spill_large_var_spills, spill_large_var_inline); see ticket qa82_s3 |
+| 3 | Runtime propagation expands large pipeline variables without leaving placeholders | ☐ | | | 8 tests: auto_capture (3) + spill_large_var (5) in orchestrator-scheduler |
 | 4 | Every known step ID maps to a covered rendering entry point | ☐ | | | Code review (rg) — safe |
 | 5 | Task trace flags leftover unexpanded placeholders | ☐ | | | Test exists in orchestrator-scheduler trace/tests.rs (path corrected) |
