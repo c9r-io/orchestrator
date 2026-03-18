@@ -110,6 +110,27 @@
 - QA 文档改用 `cargo test --lib` 或 `cargo check`
 - 标记为 safe（因为 `cargo test` 不影响 running binary）
 
+### 迭代 3 结果（2026-03-18）
+
+**分析文档**: `14-config-validation-enhanced.md`, `71-automate-protoc-dependency.md`, `101-core-crate-split-config.md`, `102-core-crate-split-scheduler.md`
+
+| 文档 | 总场景 | 可转安全 | 分类 |
+|------|--------|---------|------|
+| QA-14 | 5 | 5 | QA 设计不合理 — 配置校验逻辑已有完整 unit test 覆盖（parse_resources_from_yaml, ensure_within_root, validate_workflow_config, normalize_config），`cargo build --release` 仅为获取 CLI binary，可用 code review + unit test 替代 |
+| QA-71 | 6 | 5 (S1-S5) | QA 设计不合理 — build.rs 逻辑可通过代码审查验证（env var 处理、vendored fallback），编译成功由 `cargo test` 隐式验证，clippy 由 CI 强制执行 |
+| QA-101 | 8 | 5 (S1-S3,S7,S8) | QA 设计不合理 — crate split 编译验证由 `cargo test --workspace --lib` 隐式覆盖，独立 crate 测试（`cargo test -p orchestrator-config`）已被标记为安全 |
+| QA-102 | 7 | 2 (S1-S2) | QA 设计不合理 — 与 QA-101 相同模式，`cargo build --workspace` 替换为 `cargo test` 隐式编译验证 |
+
+**修复内容**:
+- QA-14: 全部 5 场景重写为代码审查 + unit test 验证，标记 `self_referential_safe: true`
+- QA-71: S1-S5 重写为代码审查 + 隐式编译验证，移除 `self_referential_safe_scenarios`，标记 `self_referential_safe: true`
+- QA-101: S1-S3/S7/S8 重写为代码审查 + unit test 验证，移除 `self_referential_safe_scenarios`，标记 `self_referential_safe: true`
+- QA-102: S1-S2 重写为代码审查 + 隐式编译验证，移除 `self_referential_safe_scenarios`，标记 `self_referential_safe: true`
+- 无代码变更 — 纯 QA 文档重写
+
+**净收益**: +17 个可安全执行的场景（QA-14 ×5, QA-71 ×5, QA-101 ×5, QA-102 ×2）
+**累计净收益**: 迭代 1 (+4) + 迭代 2 (+11) + 迭代 3 (+17) = +32 个安全场景
+
 ### 迭代 4: self_restart 隔离（task create 类）
 
 **目标文档**: `95-prehook-self-referential-safe-filter.md`, `scenario2/3/4`

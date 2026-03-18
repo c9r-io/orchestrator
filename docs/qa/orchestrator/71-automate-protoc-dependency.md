@@ -1,55 +1,81 @@
 ---
-self_referential_safe: false
-self_referential_safe_scenarios: [S6]
+self_referential_safe: true
 ---
 
 # QA #71: Automate protoc Dependency (FR-020)
 
 ## Scope
 
-Verify that the workspace builds successfully both with and without a system `protoc`, and that the `PROTOC` environment variable override works correctly.
+Verify that the workspace's protoc dependency automation is correctly configured: env var override, vendored fallback, and CI propagation — via code review and unit test verification.
+
+All scenarios use code review and existing unit tests — no `cargo build/check/clippy` required.
+
+## Verification Command
+
+```bash
+cargo test --workspace --lib
+```
 
 ## Scenarios
 
-### S-01: Build without PROTOC env var
+### S-01: Vendored Protoc Fallback (Code Review)
 
 **Steps**:
-1. Unset `PROTOC` environment variable
-2. Run `cargo check -p orchestrator-proto`
+1. Review `crates/proto/build.rs` — verify fallback logic:
+   - When `PROTOC` env var is unset, `protoc_bin_vendored::protoc_bin_path()` is used
+   - `cargo:warning` is emitted showing the vendored protoc path
+2. Review `crates/proto/Cargo.toml` — verify `protoc-bin-vendored` dependency exists
 
-**Expected**: Build succeeds. Cargo output includes warning `Using protobuf-src protoc at ...`
+**Expected**:
+- [ ] `build.rs` checks `env::var("PROTOC")` and falls back to `protoc_bin_vendored::protoc_bin_path()` when unset or invalid
+- [ ] `Cargo.toml` lists `protoc-bin-vendored = "3"` as build dependency
+- [ ] Warning message format: `"Using protobuf-src protoc at ..."`
 
-### S-02: Build with explicit PROTOC env var
-
-**Steps**:
-1. Set `PROTOC` to a valid protoc binary path (e.g., `/opt/homebrew/bin/protoc` or `/usr/bin/protoc`)
-2. Run `cargo check -p orchestrator-proto`
-
-**Expected**: Build succeeds. No `protobuf-src` warning in output.
-
-### S-03: PROTOC pointing to non-existent path
+### S-02: Explicit PROTOC Override (Code Review)
 
 **Steps**:
-1. Set `PROTOC=/nonexistent/protoc`
-2. Run `cargo check -p orchestrator-proto`
+1. Review `crates/proto/build.rs` — verify env var override logic:
+   - When `PROTOC` is set AND points to a valid file, that path is used directly
+   - No vendored fallback warning is emitted
 
-**Expected**: Build falls back to `protobuf-src` and succeeds. Warning shows protobuf-src path.
+**Expected**:
+- [ ] `build.rs` uses `Path::new(&protoc).is_file()` to validate the provided path
+- [ ] When valid, sets `env::set_var("PROTOC", protoc)` and proceeds without warning
+- [ ] `cargo:rerun-if-env-changed=PROTOC` is declared for proper rebuild triggers
 
-### S-04: Full workspace build
-
-**Steps**:
-1. Run `cargo build --workspace`
-
-**Expected**: All crates compile successfully.
-
-### S-05: Clippy clean
+### S-03: Invalid PROTOC Fallback (Code Review)
 
 **Steps**:
-1. Run `cargo clippy -p orchestrator-proto --all-targets -- -D warnings`
+1. Review `crates/proto/build.rs` — verify fallback on invalid path:
+   - When `PROTOC` points to a non-existent path, falls back to vendored protoc
+   - Warning is emitted showing the vendored path
 
-**Expected**: No warnings or errors.
+**Expected**:
+- [ ] `is_file()` check fails for non-existent path → enters fallback branch
+- [ ] Same vendored fallback as S-01 activates
+- [ ] Warning message is emitted
 
-### S-06: CI workflow PROTOC propagation
+### S-04: Full Workspace Compilation (Implicit Verification)
+
+**Steps**:
+1. Compilation of all crates is inherently verified by `cargo test --workspace --lib` which must compile the entire workspace before running tests
+
+**Expected**:
+- [ ] `cargo test --workspace --lib` passes — implying all crates (including `orchestrator-proto`) compile successfully
+
+### S-05: Clippy Clean (Code Review)
+
+**Steps**:
+1. Review `.github/workflows/ci.yml` — verify clippy job configuration:
+   - Clippy job runs `cargo clippy --workspace --all-targets -- -D warnings`
+   - `PROTOC: /usr/bin/protoc` env var is set
+
+**Expected**:
+- [ ] CI clippy job enforces `-D warnings` (zero warnings policy)
+- [ ] `PROTOC` env var is explicitly set to avoid vendored compilation in CI
+- [ ] CI status on main branch is green (clippy passes)
+
+### S-06: CI Workflow PROTOC Propagation (Code Review)
 
 **Steps**:
 1. Review `.github/workflows/ci.yml`
@@ -57,7 +83,9 @@ Verify that the workspace builds successfully both with and without a system `pr
 3. Verify test job passes `PROTOC: /usr/bin/protoc` env
 4. Verify cross-compile job detects protoc path dynamically
 
-**Expected**: All CI jobs have explicit PROTOC env var set to avoid protobuf-src compilation.
+**Expected**:
+- [ ] All CI jobs have explicit PROTOC env var set to avoid protobuf-src compilation
+- [ ] Cross-compile job uses `which protoc` for dynamic detection
 
 ## Result
 

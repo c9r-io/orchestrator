@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - 增强配置校验系统
@@ -13,39 +13,28 @@ self_referential_safe: false
 
 ## Background
 
-测试新的 manifest 预检与语义校验能力：
+测试 manifest 预检与语义校验能力，通过代码审查和现有 unit test 验证：
 - YAML 语法预检（反序列化前检测）
 - 分层校验（语法 + 资源语义）
 - 错误/警告聚合报告
 - 路径存在性检查（警告 vs 错误）
 - 路径安全检查（逃逸检测）
 
-**Primary Testing Method**: CLI 校验 + 资源单元测试
+所有场景使用代码审查和现有 unit test — 无需 `cargo build` 或 CLI binary。
 
----
-
-## Test Method
-
-### 单元测试 (推荐)
+### Verification Command
 
 ```bash
-cd core
-cargo test cli_types::tests resource::tests --lib
-```
-
-### CLI 配置校验
-
-```bash
-# 构建二进制
-cargo build --release -p orchestrator-cli
-
-# 使用 CLI 校验配置文件
-./target/release/orchestrator manifest validate -f /tmp/test-config.yaml
+cargo test --workspace --lib -- \
+  parse_resources_from_yaml \
+  ensure_within_root \
+  validate_workflow_config \
+  normalize_config
 ```
 
 ---
 
-## Scenario 1: YAML 语法错误预检
+## Scenario 1: YAML 语法错误预检 (Code Review + Unit Test)
 
 ### Goal
 
@@ -53,148 +42,66 @@ cargo build --release -p orchestrator-cli
 
 ### Steps
 
-1. 创建无效 YAML:
+1. Review `core/src/resource/parse.rs` — `parse_resources_from_yaml()` 函数使用 `serde_yml::Deserializer` 逐文档反序列化，无效 YAML 返回错误而非 panic
+2. Run unit tests:
    ```bash
-   cat > /tmp/invalid-yaml.yaml << 'YAML'
-   invalid: yaml: content: [
-   YAML
-   ```
-2. 执行:
-   ```bash
-   ./target/release/orchestrator manifest validate -f /tmp/invalid-yaml.yaml
+   cargo test -p orchestrator-core -- parse_resources_from_yaml
    ```
 
 ### Expected
 
-- 命令返回非零退出码
-- 输出包含 YAML 语法错误
+- [ ] `parse_resources_from_yaml()` 对无效 YAML 返回 `Err`（不 panic、不崩溃）
+- [ ] 单文档解析测试 `parse_resources_from_yaml_single_document` 通过
+- [ ] 多文档解析测试 `parse_resources_from_yaml_multi_document` 通过
+- [ ] 空文档跳过测试 `parse_resources_from_yaml_skips_null_documents` 通过
 
 ---
 
-## Scenario 2: 多错误聚合报告
+## Scenario 2: 多错误聚合报告 (Code Review + Unit Test)
 
 ### Goal
 
 验证配置校验能识别多个资源级错误并逐个报告。
 
-> Note: `manifest validate` requires multi-document YAML with `apiVersion/kind/metadata/spec`.
-> Per-document resource-level errors are aggregated; cross-resource semantic errors
-> (e.g., empty workspaces) are reported as a single error from `build_active_config`.
-
-### Preconditions
-
-```bash
-orchestrator init --force
-QA_PROJECT="qa-config-enhanced-${USER}-$(date +%Y%m%d%H%M%S)"
-orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
-rm -rf "workspace/${QA_PROJECT}"
-```
-
 ### Steps
 
-1. 创建包含多个资源级错误的配置 (每个文档都包含一个校验错误):
+1. Review `core/src/config_load/validate/tests.rs` — 校验函数对重复 step ID、无效 capture 配置等多种错误类型返回结构化错误
+2. Review `core/src/config_load/build.rs` — `build_active_config()` 聚合多文档校验结果
+3. Run unit tests:
    ```bash
-   cat > /tmp/multi-error.yaml << 'YAML'
-   apiVersion: orchestrator.dev/v2
-   kind: Workspace
-   metadata:
-     name: ""
-   spec:
-     root_path: /tmp
-     qa_targets:
-       - docs/qa
-     ticket_dir: fixtures/ticket
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: RuntimePolicy
-   metadata:
-     name: runtime
-   spec:
-     runner:
-       shell: /bin/bash
-       shell_arg: -lc
-       policy: allowlist
-       executor: shell
-       allowed_shells: []
-       allowed_shell_args: []
-     resume:
-       auto: false
-   YAML
-   ```
-2. 执行:
-   ```bash
-   ./target/release/orchestrator manifest validate -f /tmp/multi-error.yaml
+   cargo test -p orchestrator-core -- validate_workflow_config
    ```
 
 ### Expected
 
-- 命令返回非零退出码
-- 输出包含多个校验错误 (e.g., `metadata.name cannot be empty`, `runner.allowed_shells cannot be empty when policy=allowlist`)
-
-### Troubleshooting
-
-| Symptom | Root Cause | Fix |
-|---------|-----------|-----|
-| Error: `missing field apiVersion` | Config uses flat format instead of resource format | Use multi-document YAML with `apiVersion/kind/metadata/spec` |
+- [ ] `validate_workflow_config_rejects_duplicate_step_ids` 通过 — 验证重复 ID 检测
+- [ ] `validate_workflow_config_rejects_json_path_on_exit_code_capture` 通过 — 验证无效 capture 检测
+- [ ] `build_active_config_with_self_heal_*` 测试通过 — 验证多资源聚合构建
 
 ---
 
-## Scenario 3: 路径不存在错误
+## Scenario 3: 路径不存在错误 (Code Review + Unit Test)
 
 ### Goal
 
-验证不存在路径能被识别并返回错误退出码。
+验证不存在路径能被识别并返回错误。
 
 ### Steps
 
-1. 创建包含不存在目录的配置:
+1. Review `core/src/config_load/validate/root_path.rs` — `ensure_within_root()` 使用 `std::fs::canonicalize()` 检测路径存在性
+2. Run unit tests:
    ```bash
-   cat > /tmp/missing-path.yaml << 'YAML'
-   apiVersion: orchestrator.dev/v2
-   kind: Workspace
-   metadata:
-     name: default
-   spec:
-     root_path: /nonexistent/path/xyz123
-     qa_targets:
-       - docs
-     ticket_dir: tickets
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: echo
-   spec:
-     capabilities:
-       - qa
-     command: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Workflow
-   metadata:
-     name: basic
-   spec:
-     steps:
-       - id: qa
-         type: qa
-         enabled: true
-     loop:
-       mode: once
-   YAML
-   ```
-2. 执行:
-   ```bash
-   ./target/release/orchestrator manifest validate -f /tmp/missing-path.yaml
+   cargo test -p orchestrator-core -- ensure_within_root
    ```
 
 ### Expected
 
-- Non-existent path returns an error exit code
-- 输出包含路径检查结果
+- [ ] `ensure_within_root_rejects_nonexistent_path` 通过 — 不存在路径返回错误
+- [ ] 错误信息包含路径相关描述
 
 ---
 
-## Scenario 4: 路径逃逸检测
+## Scenario 4: 路径逃逸检测 (Code Review + Unit Test)
 
 ### Goal
 
@@ -202,54 +109,22 @@ rm -rf "workspace/${QA_PROJECT}"
 
 ### Steps
 
-1. 创建含路径逃逸的配置:
+1. Review `core/src/config_load/validate/root_path.rs` — `ensure_within_root()` 通过 `canonicalize()` 后比较路径前缀，防止 `../` 逃逸
+2. Run unit tests:
    ```bash
-   cat > /tmp/path-escape.yaml << 'YAML'
-   apiVersion: orchestrator.dev/v2
-   kind: Workspace
-   metadata:
-     name: default
-   spec:
-     root_path: .
-     qa_targets:
-       - ../../../etc
-     ticket_dir: tickets
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: echo
-   spec:
-     capabilities:
-       - qa
-     command: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"qa-sample\",\"description\":\"qa sample\",\"severity\":\"info\"}]}]}'"
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Workflow
-   metadata:
-     name: basic
-   spec:
-     steps:
-       - id: qa
-         type: qa
-         enabled: true
-     loop:
-       mode: once
-   YAML
-   ```
-2. 执行:
-   ```bash
-   ./target/release/orchestrator manifest validate -f /tmp/path-escape.yaml
+   cargo test -p orchestrator-core -- ensure_within_root
    ```
 
 ### Expected
 
-- 命令返回非零退出码
-- 输出包含路径越界相关错误
+- [ ] `ensure_within_root_rejects_path_outside_root` 通过 — 目录同级路径被拒绝
+- [ ] `ensure_within_root_rejects_symlink_escaping_root` 通过 — symlink 逃逸被检测
+- [ ] `ensure_within_root_accepts_child_path` 通过 — 合法子路径被接受
+- [ ] `ensure_within_root_accepts_deeply_nested_child` 通过 — 深层嵌套路径被接受
 
 ---
 
-## Scenario 5: 有效配置规范化输出
+## Scenario 5: 有效配置规范化输出 (Code Review + Unit Test)
 
 ### Goal
 
@@ -257,16 +132,18 @@ rm -rf "workspace/${QA_PROJECT}"
 
 ### Steps
 
-1. 使用已有配置:
+1. Review `core/src/config_load/normalize/tests.rs` — 规范化逻辑对有效配置生成默认值、填充 builtin CRD、保持幂等性
+2. Run unit tests:
    ```bash
-   orchestrator manifest export -f /tmp/exported-config.yaml
-   ./target/release/orchestrator manifest validate -f /tmp/exported-config.yaml
+   cargo test -p orchestrator-core -- normalize_config
    ```
 
 ### Expected
 
-- 命令返回 0
-- 输出包含 "Manifest is valid"
+- [ ] `normalize_config_populates_builtin_crds` 通过 — CRD 填充正确
+- [ ] `normalize_config_rebuilds_resource_store_from_config_snapshot` 通过 — 资源 store 重建正确
+- [ ] `normalize_config_idempotent_double_call` 通过 — 规范化幂等
+- [ ] `normalize_config_clears_stale_store` 通过 — 过期状态清理正确
 
 ---
 
