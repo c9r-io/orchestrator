@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Self-Bootstrap - Binary Snapshot Verification & Integration Test
 
 **Module**: self-bootstrap

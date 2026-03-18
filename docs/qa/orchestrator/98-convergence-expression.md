@@ -1,3 +1,8 @@
+---
+self_referential_safe: false
+self_referential_safe_scenarios: [S1]
+---
+
 # QA-98: convergence_expr 收敛条件表达式
 
 ## 关联

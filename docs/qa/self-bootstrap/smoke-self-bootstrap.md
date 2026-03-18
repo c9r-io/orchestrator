@@ -1,3 +1,7 @@
+---
+self_referential_safe: false
+---
+
 # Smoke Test: Self-Bootstrap
 
 **Marker:** SB_SMOKE_20260226

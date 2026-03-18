@@ -246,24 +246,22 @@ Validate that project resources are isolated from each other.
 
 ### Expected
 
-- Validation fails (exit code 1) with `SELF_REF_POLICY_VIOLATION` errors
-- The fixture uses `root_path: "."` which triggers self-referential safety checks
-- The safety policy was strengthened to hard enforcement (FR-058), so missing checkpoint_strategy, auto_rollback, and self_test step cause validation failure
-- The multi-project isolation mechanism itself works correctly — the error is about missing safety configuration in the fixture, not about project namespace isolation
+- Validation passes (exit code 0) — `"Manifest is valid"`
 - Two project-tagged resource groups (project-a, project-b) are correctly parsed and accepted structurally
+- Each project has its own workspace, agent, and workflow — no cross-project leakage
 
-> **Note**: The self-referential safety policy now enforces hard failure (exit 1) when
-> `root_path: "."` is used without proper safety settings (checkpoint_strategy, auto_rollback,
-> self_test step). This is **expected behavior** since FR-058 strengthened safety enforcement.
-> The multi-project isolation feature is not affected — this scenario validates that the
-> validator correctly processes multi-project manifests, and the safety policy violations
-> confirm that per-project workspace safety checks are working as intended.
+> **Note**: The self-referential safety policy is only triggered when `self_referential: true`
+> is explicitly set in the workspace spec. `root_path: "."` alone does **not** trigger the
+> policy. The `two-projects.yaml` fixture does not set `self_referential: true`, so validation
+> passes. This is correct behavior — the scenario validates multi-project structural isolation,
+> not self-referential safety.
 
 ### Troubleshooting
 
 | Symptom | Root Cause | Fix |
 |---------|-----------|-----|
-| SELF_REF_POLICY_VIOLATION on validate | `root_path: "."` points at the orchestrator repo root without safety settings | Expected behavior — the fixture intentionally uses `"."` for simplicity. The safety policy hard-fails without checkpoint_strategy, auto_rollback, and self_test. This confirms safety enforcement works across multi-project manifests. |
+| SELF_REF_POLICY_VIOLATION on validate | Workspace has `self_referential: true` without safety settings | Add `checkpoint_strategy`, `auto_rollback`, and `self_test` step to the workflow, or remove `self_referential: true` if not needed |
+| Validation passes but expected failure | `root_path: "."` does not auto-trigger self-referential policy; only explicit `self_referential: true` does | Set `self_referential: true` in workspace spec if self-referential safety checks are intended |
 
 ---
 

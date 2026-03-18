@@ -95,5 +95,5 @@ Verify that after the item-scoped segment completes, the loop engine runs item s
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | pending_generate_items consumption | ✅ | 2026-03-07 | claude | Code path verified: loop_engine.rs:435-477. take() → extract → create_async → refresh items/paths |
-| 2 | item_select orchestration after item-scoped segment | ✅ | 2026-03-07 | claude | Code path verified: loop_engine.rs:598-655. has_item_select_step → execute → eliminate → promote → retain |
+| 1 | pending_generate_items consumption | ✅ | 2026-03-18 | claude | Runtime verified: task completed, items=2/7 (2 dynamic items created, 5 static replaced), event items_generated emitted with count=3, replace=true |
+| 2 | item_select orchestration after item-scoped segment | ✅ | 2026-03-18 | claude | Runtime verified: task completed, items=1/4 (1 winner, 2 eliminated), event item_selected emitted with winner and eliminated arrays, item_select_winner in pipeline vars |

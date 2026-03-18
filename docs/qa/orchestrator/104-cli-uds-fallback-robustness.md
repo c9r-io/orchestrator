@@ -1,6 +1,6 @@
 ---
 self_referential_safe: false
-self_referential_safe_scenarios: [S1, S3, S5]
+self_referential_safe_scenarios: [S1, S3]
 ---
 
 # QA-104: CLI UDS 连接回退鲁棒性
