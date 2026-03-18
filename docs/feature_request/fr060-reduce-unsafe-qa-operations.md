@@ -226,7 +226,37 @@
 
 **累计净收益**: 迭代 1 (+4) + 迭代 2 (+11) + 迭代 3 (+17) + 迭代 4 (+28) + 迭代 5 (+40) + 迭代 6 (+48) = +148 个安全场景
 
-### 迭代 7+: 逐步处理剩余类别
+### 迭代 7: 部分安全标注文档批量补全 + 编译检查类文档转换
+
+**分析文档**（10 个）:
+- 第一批（已有部分安全标注，仅需补全）: `81-self-evolution-db-schema-alignment.md`, `76-config-load-module-split.md`, `72-audit-reduce-expect-calls.md`, `70-libc-cross-platform-compilation.md`, `75-public-api-doc-comments.md`
+- 第二批（unit test 覆盖充分，可完整重写）: `61-chain-steps-execution.md`, `62-database-persistence-bootstrap-repositories.md`, `78-worker-notify-wakeup.md`, `74-audit-unsafe-blocks.md`, `77-event-table-ttl-archival.md`
+
+### 迭代 7 结果（2026-03-19）
+
+| 文档 | 总场景 | 可转安全 | 分类 |
+|------|--------|---------|------|
+| QA-81 | 8 | 1 (S8) | **元数据修正** — S1-S7 已安全，S8 `cargo test --workspace` 改写为 `cargo test --workspace --lib`（safe） |
+| QA-76 | 5 | 2 (S4,S5) | **元数据修正** — S4 改写为 code review + `cargo test --lib`，S5 改写为 code review + CI clippy gate |
+| QA-75 | 5 | 4 (S1-S4) | **元数据修正** — S1-S4 改写为 code review + deny(missing_docs) 属性 + CI gate，S5 已安全 |
+| QA-72 | 6 | 4 (S3-S6) | **元数据修正** — S3 改写为 code review（deny 属性即是门禁），S4-S6 改写为 code review + CI gate |
+| QA-70 | 5 | 2 (S3,S4) | **元数据修正** — S3 改写为 code review（#[cfg(unix)] guard），S4 改写为 `cargo test --lib` + CI gate |
+| QA-61 | 4 | 3 (S1,S2,S4) | **完整重写** — 5 个 chain-step unit test 覆盖 validation/build/round-trip/trace |
+| QA-62 | 5 | 4 (S1,S3-S5) | **完整重写** — 5 个 persistence unit test 覆盖 schema/session/store/prune |
+| QA-78 | 5 | 3 (S3-S5) | **完整重写** — 3 个 scheduler_service unit test 覆盖 stop/notify/claim |
+| QA-74 | 7 | 3 (S1,S4,S7) | **小幅改写** — S1 改写为 deny 属性验证，S4 改写为 `cargo test --lib -- safety`，S7 改写为 `cargo test --workspace --lib`。S2 保持 unsafe（需临时注入代码） |
+| QA-77 | 5 | 2 (S3,S4) | **小幅改写** — S3 改写为 3 个 event_cleanup unit test，S4 改写为 archive unit test。S5 保持 unsafe（需重启 daemon） |
+
+**修复内容**:
+- 8 个文档完全转为 safe：QA-81, QA-76, QA-75, QA-72, QA-70, QA-61, QA-62, QA-78
+- 2 个文档扩展安全场景列表：QA-74 (S3/S5/S6 → S1/S3/S4/S5/S6/S7), QA-77 (S1/S2 → S1/S2/S3/S4)
+- 无代码变更 — 纯 QA 文档重写
+- 407 个 unit test 全部通过，零回归
+
+**净收益**: +28 个可安全执行的场景（QA-81 ×1, QA-76 ×2, QA-75 ×4, QA-72 ×4, QA-70 ×2, QA-61 ×3, QA-62 ×4, QA-78 ×3, QA-74 ×3, QA-77 ×2）
+**累计净收益**: 迭代 1 (+4) + 迭代 2 (+11) + 迭代 3 (+17) + 迭代 4 (+28) + 迭代 5 (+40) + 迭代 6 (+48) + 迭代 7 (+28) = +176 个安全场景
+
+### 迭代 8+: 逐步处理剩余类别
 
 每次 1-2 个文档，持续推进直到 unsafe 比例从 82% 降到合理水平（目标 < 30%）。
 
