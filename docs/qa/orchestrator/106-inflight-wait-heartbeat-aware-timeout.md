@@ -63,3 +63,5 @@
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
 | 1 | S3/S5 verified via unit test + apply | ☑ | S1/S2/S4 require long-running agents that outlive step execution; echo/mock agents exit immediately so `exit_code != -1` by the time `wait_for_inflight_runs()` runs. Detection logic works (inflight_runs_detected emitted). Fixture redesign needed for timeout-path scenarios. |
+| 2 | S3: Serde defaults — unit tests pass | ☑ | `test_safety_config_default` (300s/60s), `test_safety_config_deserialize_minimal` (300s/60s), `test_fr052_fields_serde_round_trip`, `test_fr052_fields_explicit_json_deserialization` all PASS |
+| 3 | S5: Backward compat — apply fixture + run task | ☑ | Applied `fr052-backward-compat.yaml` to qa106 project; task `146aa069` completed with 126 items, 0 failures — old YAML without safety fields runs normally with defaults |

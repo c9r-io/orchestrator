@@ -151,8 +151,8 @@ Code review + unit test verification.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | `binary_snapshot` Is Warning-Only | ☑ | 2026-03-18 | Claude | Unit test verified |
-| 2 | Fails When `checkpoint_strategy` Is `none` | ☑ | 2026-03-18 | Claude | Unit test verified |
-| 3 | Fails When `auto_rollback` Is Disabled | ☑ | 2026-03-18 | Claude | Unit test verified |
-| 4 | Fails When Builtin `self_test` Is Missing | ☑ | 2026-03-18 | Claude | Unit test verified |
-| 5 | Probe Rejects Non-Self-Referential Workspace | ☑ | 2026-03-18 | Claude | Unit test verified |
+| 1 | `binary_snapshot` Is Warning-Only | PASS | 2026-03-18 | Claude | Code review + 2 unit tests pass |
+| 2 | Fails When `checkpoint_strategy` Is `none` | PASS | 2026-03-18 | Claude | Code review + unit test pass |
+| 3 | Fails When `auto_rollback` Is Disabled | PASS | 2026-03-18 | Claude | Code review + unit test pass |
+| 4 | Fails When Builtin `self_test` Is Missing | PASS | 2026-03-18 | Claude | Code review + unit test pass |
+| 5 | Probe Rejects Non-Self-Referential Workspace | PASS | 2026-03-18 | Claude | Code review + 6 probe unit tests pass |

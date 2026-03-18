@@ -139,7 +139,7 @@ Code review + unit test verification.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | 创建 Workspace (dry-run) | ☑ | 2026-03-18 | Claude | Code review + unit test verified |
-| 2 | 创建 Workspace (实际) | ☑ | 2026-03-18 | Claude | Code review + unit test verified |
-| 3 | 创建完整的最小配置 | ☑ | 2026-03-18 | Claude | Code review + unit test verified |
-| 4 | 资源存在时 apply (更新) | ☑ | 2026-03-18 | Claude | Code review + unit test verified |
+| 1 | 创建 Workspace (dry-run) | ☑ | 2026-03-18 | Claude (re-verified) | Code review + unit test verified |
+| 2 | 创建 Workspace (实际) | ☑ | 2026-03-18 | Claude (re-verified) | Code review + unit test verified |
+| 3 | 创建完整的最小配置 | ☑ | 2026-03-18 | Claude (re-verified) | Code review + unit test verified |
+| 4 | 资源存在时 apply (更新) | ☑ | 2026-03-18 | Claude (re-verified) | Code review + unit test verified |

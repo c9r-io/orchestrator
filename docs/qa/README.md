@@ -110,14 +110,14 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/15-workflow-multi-target-files.md` | 1 | Split from doc 05 |
 | orchestrator | `docs/qa/orchestrator/16-capability-config-view-fields.md` | 1 | Split from doc 07 |
 | orchestrator | `docs/qa/orchestrator/17-dynamic-yaml-integration.md` | 1 | Split from doc 13 |
-| orchestrator | `docs/qa/orchestrator/18-kubectl-style-extensions.md` | 4 | Get list / create / stdin apply / label selector |
+| orchestrator | `docs/qa/orchestrator/18-kubectl-style-extensions.md` | 3 | Get list / create / stdin apply / label selector |
 | orchestrator | `docs/qa/orchestrator/19-scheduler-repository-refactor-regression.md` | 5 | P0/P1 scheduler repository refactor regression and observability checks |
 | orchestrator | `docs/qa/orchestrator/20-structured-output-worker-scheduler.md` | 5 | Structured output validation + queue-only daemon worker scheduling mainline |
 | orchestrator | `docs/qa/orchestrator/21-runner-security-observability.md` | 5 | Runner allowlist boundary, redaction, and task execution metrics observability |
 | orchestrator | `docs/qa/orchestrator/22-performance-io-queue-optimizations.md` | 5 | Transactional phase-result persistence, bounded output reads, true tail, and atomic multi-worker queue checks |
-| orchestrator | `docs/qa/orchestrator/23-dynamic-plan-step-exec-tty.md` | 5 | Dynamic `plan` step insertion, step-level `tty`, and `exec` target contract |
-| orchestrator | `docs/qa/orchestrator/24-exec-interactive-simulation.md` | 5 | Interactive execution simulation via stdin pipe/here-doc and reusable QA script |
-| orchestrator | `docs/qa/orchestrator/25-session-attach-reattach.md` | 5 | Real session lifecycle: task session list/info/close, attach, re-attach, and close rejection checks |
+| orchestrator | `docs/qa/orchestrator/23-dynamic-plan-step-exec-tty.md` | - | Dynamic `plan` step insertion, step-level `tty`, and `exec` target contract |
+| orchestrator | `docs/qa/orchestrator/24-exec-interactive-simulation.md` | - | Interactive execution simulation via stdin pipe/here-doc and reusable QA script |
+| orchestrator | `docs/qa/orchestrator/25-session-attach-reattach.md` | - | Real session lifecycle: task session list/info/close, attach, re-attach, and close rejection checks |
 | orchestrator | `docs/qa/orchestrator/26-self-bootstrap-workflow.md` | 5 | Self-bootstrap workflow: extended steps, pipeline variables, prehook-gated fix, checkpoint/rollback |
 | orchestrator | `docs/qa/orchestrator/27-self-test-step.md` | 5 | Self-test builtin step: cargo check, test --lib, pipeline variables, self-referential safety |
 | orchestrator | `docs/qa/orchestrator/28-self-bootstrap-pipeline.md` | 5 | Self-bootstrap pipeline: full SDLC, ticket fix chain, pipeline variables (Part 2) |
@@ -159,11 +159,11 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/63-database-migration-kernel-and-repository-governance.md` | 5 | FR-009 follow-up governance for migration kernel split, repository expansion boundaries, and DB operations visibility |
 | orchestrator | `docs/qa/orchestrator/64-secretstore-key-lifecycle.md` | 5 | FR-012: SecretStore key lifecycle — legacy migration, rotation, resume, revocation, audit history |
 | orchestrator | `docs/qa/orchestrator/65-grpc-control-plane-protection.md` | 5 | FR-013 closure: protection config bootstrap, secure-TCP rate limits, stream occupancy limit, UDS fallback protection, and repeatable pressure validation |
-| orchestrator | `docs/qa/orchestrator/66-error-semantics-governance.md` | 4 | FR-014: boundary error taxonomy, shared gRPC status mapping, CLI error rendering, and regression verification |
-| orchestrator | `docs/qa/orchestrator/67-clone-reduction-and-shared-ownership.md` | 5 | FR-015 clone reduction: shallow-shared scheduler runtime fields, owned daemon summary mapping, builtin execution cleanup, and trace hotspot regression coverage |
-| orchestrator | `docs/qa/orchestrator/68-clone-reduction-follow-up.md` | 5 | FR-015 follow-up: chain-step/task-fanout cleanup, graph replay ownership tightening, db-write owned fast-paths, export metadata helpers, and secret-key audit assembly |
-| orchestrator | `docs/qa/orchestrator/69-async-lock-model-alignment.md` | 5 | FR-016: config runtime snapshots, async health/metrics locks, governance-gate regression, and documented sync exceptions |
-| orchestrator | `docs/qa/orchestrator/70-libc-cross-platform-compilation.md` | 5 | FR-019: libc workspace dep unification, cfg(unix) gating, SIGXCPU test guard, and 5-target cross-compile CI |
+| orchestrator | `docs/qa/orchestrator/66-error-semantics-governance.md` | - | FR-014: boundary error taxonomy, shared gRPC status mapping, CLI error rendering, and regression verification |
+| orchestrator | `docs/qa/orchestrator/67-clone-reduction-and-shared-ownership.md` | - | FR-015 clone reduction: shallow-shared scheduler runtime fields, owned daemon summary mapping, builtin execution cleanup, and trace hotspot regression coverage |
+| orchestrator | `docs/qa/orchestrator/68-clone-reduction-follow-up.md` | - | FR-015 follow-up: chain-step/task-fanout cleanup, graph replay ownership tightening, db-write owned fast-paths, export metadata helpers, and secret-key audit assembly |
+| orchestrator | `docs/qa/orchestrator/69-async-lock-model-alignment.md` | - | FR-016: config runtime snapshots, async health/metrics locks, governance-gate regression, and documented sync exceptions |
+| orchestrator | `docs/qa/orchestrator/70-libc-cross-platform-compilation.md` | - | FR-019: libc workspace dep unification, cfg(unix) gating, SIGXCPU test guard, and 5-target cross-compile CI |
 | orchestrator | `docs/qa/orchestrator/71-automate-protoc-dependency.md` | - | FR-020: automate protoc dependency, PROTOC env var override, CI enforcement |
 | orchestrator | `docs/qa/orchestrator/72-audit-reduce-expect-calls.md` | - | FR-021: audit and reduce expect() calls, deny-level lint enforcement |
 | orchestrator | `docs/qa/orchestrator/73-integration-test-coverage.md` | 5 | FR-023: integration test coverage for CLI-daemon-core interaction |
@@ -194,25 +194,25 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/93-inflight-step-completion-race.md` | 5 | FR-038: daemon restart in-flight step completion race condition |
 | orchestrator | `docs/qa/orchestrator/94-trigger-resource-cron-event-driven.md` | 5 | FR-039: trigger resource cron & event-driven task creation |
 | orchestrator | `docs/qa/orchestrator/94b-trigger-resource-advanced.md` | 2 | FR-039: trigger suspend/resume and preflight check (split from doc 94) |
-| orchestrator | `docs/qa/orchestrator/95-prehook-self-referential-safe-filter.md` | 3 | Prehook self-referential safe filter for QA doc execution |
+| orchestrator | `docs/qa/orchestrator/95-prehook-self-referential-safe-filter.md` | 1 | Prehook self-referential safe filter for QA doc execution |
 | orchestrator | `docs/qa/orchestrator/96-self-restart-socket-continuity.md` | 5 | Self-restart socket and PID file continuity across exec() lifecycle |
 | orchestrator | `docs/qa/orchestrator/97-follow-task-logs-callback.md` | 3 | FR-042: follow_task_logs callback refactor, gRPC TaskFollow log delivery |
-| orchestrator | `docs/qa/orchestrator/98-convergence-expression.md` | 6 | FR-043: convergence_expr CEL-based loop termination |
+| orchestrator | `docs/qa/orchestrator/98-convergence-expression.md` | - | FR-043: convergence_expr CEL-based loop termination |
 | orchestrator | `docs/qa/orchestrator/99-long-lived-command-guard.md` | 4 | FR-045: task watch --timeout, stall auto-termination, QA agent timeout guidance |
 | orchestrator | `docs/qa/orchestrator/100-agent-subprocess-daemon-pid-guard.md` | 4 | FR-046: agent subprocess daemon PID guard with CLAUDE.md + hooks injection |
-| orchestrator | `docs/qa/orchestrator/101-core-crate-split-config.md` | 8 | FR-047: core crate split phase 1 — orchestrator-config extraction |
-| orchestrator | `docs/qa/orchestrator/102-core-crate-split-scheduler.md` | 7 | FR-048: core crate split phase 2 — orchestrator-scheduler extraction |
-| orchestrator | `docs/qa/orchestrator/103-prehook-pipeline-vars.md` | 10 | FR-049: prehook CEL pipeline variables — type inference, JSON array `in`, truncation skip, builtin precedence |
-| orchestrator | `docs/qa/orchestrator/104-cli-uds-fallback-robustness.md` | 5 | FR-050: CLI UDS fallback robustness — local socket priority, env override, home-dir TCP fallback |
-| orchestrator | `docs/qa/orchestrator/105-workflow-yaml-unknown-field-warning.md` | 6 | FR-051: workflow YAML unknown field warnings and CEL prehook variable cross-check |
-| orchestrator | `docs/qa/orchestrator/106-inflight-wait-heartbeat-aware-timeout.md` | 5 | FR-052: inflight wait heartbeat-aware timeout, configurable grace period, diagnostic events |
-| orchestrator | `docs/qa/orchestrator/107-parallel-dispatch-completeness-guard.md` | 4 | FR-053: parallel dispatch completeness guard, dispatched_count accuracy, error propagation |
-| orchestrator | `docs/qa/orchestrator/108-incremental-item-progress.md` | 5 | FR-054: incremental item progress, real-time step-level counters, batch finalize idempotency |
+| orchestrator | `docs/qa/orchestrator/101-core-crate-split-config.md` | - | FR-047: core crate split phase 1 — orchestrator-config extraction |
+| orchestrator | `docs/qa/orchestrator/102-core-crate-split-scheduler.md` | - | FR-048: core crate split phase 2 — orchestrator-scheduler extraction |
+| orchestrator | `docs/qa/orchestrator/103-prehook-pipeline-vars.md` | - | FR-049: prehook CEL pipeline variables — type inference, JSON array `in`, truncation skip, builtin precedence |
+| orchestrator | `docs/qa/orchestrator/104-cli-uds-fallback-robustness.md` | - | FR-050: CLI UDS fallback robustness — local socket priority, env override, home-dir TCP fallback |
+| orchestrator | `docs/qa/orchestrator/105-workflow-yaml-unknown-field-warning.md` | - | FR-051: workflow YAML unknown field warnings and CEL prehook variable cross-check |
+| orchestrator | `docs/qa/orchestrator/106-inflight-wait-heartbeat-aware-timeout.md` | - | FR-052: inflight wait heartbeat-aware timeout, configurable grace period, diagnostic events |
+| orchestrator | `docs/qa/orchestrator/107-parallel-dispatch-completeness-guard.md` | - | FR-053: parallel dispatch completeness guard, dispatched_count accuracy, error propagation |
+| orchestrator | `docs/qa/orchestrator/108-incremental-item-progress.md` | - | FR-054: incremental item progress, real-time step-level counters, batch finalize idempotency |
 | orchestrator | `docs/qa/orchestrator/109-parallel-spawn-stagger-delay.md` | 5 | FR-055: parallel spawn stagger delay, workflow/step-level config, sequential path bypass |
 | orchestrator | `docs/qa/orchestrator/109b-parallel-spawn-stagger-delay-compat.md` | 1 | FR-055: unknown-field warning compatibility (split from doc 109) |
 | orchestrator | `docs/qa/orchestrator/110-agent-health-policy-configuration.md` | 5 | FR-056: agent health policy configuration, workspace fallback, disease disable, agent override |
 | orchestrator | `docs/qa/orchestrator/110b-agent-health-policy-advanced.md` | 2 | FR-056: capability threshold and check output (split from doc 110) |
-| orchestrator | `docs/qa/orchestrator/111-daemon-proper-daemonize.md` | 8 | FR-057: proper Unix daemonization, SIGHUP survival, daemon stop/status CLI |
+| orchestrator | `docs/qa/orchestrator/111-daemon-proper-daemonize.md` | - | FR-057: proper Unix daemonization, SIGHUP survival, daemon stop/status CLI |
 | orchestrator | `docs/qa/orchestrator/112-scenario-level-self-referential-safety.md` | 5 | Scenario-level self-referential safety: prehook filter, agent isolation, workspace binding |
 | orchestrator | `docs/qa/orchestrator/agent-drain-enabled.md` | - | FR-017: agent drain and enabled switch, selection filtering, in-flight counting |
 | orchestrator | `docs/qa/orchestrator/guide-alignment.md` | - | FR-018: guide-alignment skill, docs/guide EN/ZH documentation verification |

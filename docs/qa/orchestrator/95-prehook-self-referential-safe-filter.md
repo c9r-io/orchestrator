@@ -4,6 +4,7 @@ self_referential_safe: true
 # Prehook Self-Referential Safe Filter
 
 **Module**: orchestrator
+**Verified**: 2026-03-18
 **Scope**: Verify that QA docs marked `self_referential_safe: false` are skipped during self-referential execution
 **Scenarios**: 1
 
@@ -54,4 +55,7 @@ Verify that the prehook evaluation logic correctly distinguishes safe vs unsafe 
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | Safe QA doc runs normally in self-referential mode |
+| 1 | All scenarios verified | ✅ | Safe QA doc runs normally in self-referential mode |
+| 2 | `parse_qa_doc_self_referential_safe()` unit tests pass (7 tests) | ✅ | All pass |
+| 3 | Prehook CEL evaluation exposes `self_referential_safe` flag | ✅ | All pass (7 CEL tests) |
+| 4 | Policy tests pass (57 tests) | ✅ | All pass |

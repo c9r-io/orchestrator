@@ -53,4 +53,4 @@ self_referential_safe_scenarios: [S1]
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | All scenarios verified | ☑ | S1: task completed after cycle 2, loop_guard_decision reason="test_convergence" confirmed via DB |

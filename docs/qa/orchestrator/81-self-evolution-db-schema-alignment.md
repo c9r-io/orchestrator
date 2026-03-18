@@ -98,4 +98,4 @@ Verified on 2026-03-12:
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | All scenarios verified | ☑ | S-01–S-07: PASS (2026-03-18); S-08 skipped (self-referential unsafe) |

@@ -240,8 +240,8 @@ capability-aware strategies when choosing between agents.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Capability Isolation | | | | `test_select_agent_advanced_finds_matching_capability`, `resolve_effective_agents_returns_project_agents_when_capability_matches` |
-| 2 | Multi-Agent Same Capability | | | | `test_select_agent_by_preference_random_fallback`, `test_single_candidate_deterministic` |
-| 3 | Repeatable Step Execution | | | | `infinite_mode_respects_max_cycles`, `once_mode_always_stops`, `build_segments_groups_contiguous_scopes` |
-| 4 | Guard Step Termination | | | | `build_segments_skips_guards`, loop termination tests |
-| 5 | Performance Selection | | | | `test_cost_differential_lower_cost_scores_higher`, `test_selection_strategy_capability_aware` |
+| 1 | Capability Isolation | PASS | 2026-03-18 | Claude | All tests pass. Doc command note: use `cargo test -p agent-orchestrator` instead of `--workspace --lib` |
+| 2 | Multi-Agent Same Capability | PASS | 2026-03-18 | Claude | `test_select_agent_by_preference_random_fallback`, `test_single_candidate_deterministic` pass |
+| 3 | Repeatable Step Execution | PASS | 2026-03-18 | Claude | Loop engine tests in orchestrator-scheduler crate; use `cargo test -p orchestrator-scheduler` |
+| 4 | Guard Step Termination | PASS | 2026-03-18 | Claude | `build_segments_skips_guards` + loop termination tests pass |
+| 5 | Performance Selection | PASS | 2026-03-18 | Claude | Cost-differential and both strategy tests pass |

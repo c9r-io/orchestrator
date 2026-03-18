@@ -92,8 +92,8 @@ Post-loop 判定使用 `effective_unresolved = unresolved + stale_pending`，确
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | S1: Unit tests pass | ✅ PASS | find_inflight, completed_runs_for_pending, stale_pending all pass |
-| 2 | S2: Full test suite | ✅ PASS | 1435 tests pass |
-| 3 | S3: wait_for_inflight_runs code review | ✅ PASS | Found in `crates/orchestrator-scheduler/src/scheduler/loop_engine/mod.rs` (not `core/src/scheduler/`) |
-| 4 | S4: compensate_pending_items code review | ✅ PASS | Found in same file; called at post-loop line ~313 |
-| 5 | S5: effective_unresolved code review | ✅ PASS | `effective_unresolved = unresolved + stale_pending` at lines ~325-327 |
+| 1 | S1: Unit tests pass | ✅ PASS | 9 tests pass: find_inflight (3), completed_runs_for_pending (2), stale_pending (3), find_completed_runs_excludes (1) |
+| 2 | S2: Full test suite | ✅ PASS | 1435 unit + 23 integration + 1 doc test pass |
+| 3 | S3: wait_for_inflight_runs code review | ❌ FAIL | `core/src/scheduler/loop_engine/mod.rs` does not exist; `wait_for_inflight_runs()` not implemented. Ticket: `docs/ticket/qa93_s3_wait_for_inflight_runs_20260318.md` |
+| 4 | S4: compensate_pending_items code review | ❌ FAIL | `compensate_pending_items()` not implemented; DB layer exists but loop engine wiring is missing. Ticket: `docs/ticket/qa93_s4_compensate_pending_items_20260318.md` |
+| 5 | S5: effective_unresolved code review | ❌ FAIL | `effective_unresolved` not implemented; `count_stale_pending_items()` DB query exists but post-loop wiring is missing. Ticket: `docs/ticket/qa93_s5_effective_unresolved_20260318.md` |

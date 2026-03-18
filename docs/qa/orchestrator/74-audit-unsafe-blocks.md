@@ -77,4 +77,4 @@ self_referential_safe_scenarios: [S3, S5, S6]
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | All scenarios verified | ☑ | S3/PASS, S5/PASS, S6/PASS. S1/S2/S4/S7 skipped (unsafe in self-referential mode per frontmatter). |

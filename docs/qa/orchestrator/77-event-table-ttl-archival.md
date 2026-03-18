@@ -88,4 +88,4 @@ self_referential_safe_scenarios: [S1, S2]
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | All scenarios verified | ☑ | S1/S2 executed 2026-03-18. S3-S5 skipped (self-referential unsafe per frontmatter) |

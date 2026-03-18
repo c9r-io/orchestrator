@@ -246,7 +246,7 @@ Expected:
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
 | 1 | Basic Trace Output | ☐ | | | |
-| 2 | JSON Output | ☐ | | | |
-| 3 | Verbose Mode Shows Scope And Binding | ☐ | | | |
+| 2 | JSON Output | PASS | 2026-03-18 | Claude | task-scoped: 4 steps, scope=task, anchor_item_id set; item-scoped: 2 steps, scope=item, item_id set; wall_time_secs=0.079/0.037; no anomalies; exit 0 |
+| 3 | Verbose Mode Shows Scope And Binding | PASS | 2026-03-18 | Claude | verbose=25 events vs non-verbose=9 events; step= and item= fields present; scope binding correct in JSON |
 | 4 | Anomaly Detection - Real Failure vs False Overlap | ☐ | | | |
 | 5 | Trace Works When Active Config Is Not Runnable | ☐ | | | |

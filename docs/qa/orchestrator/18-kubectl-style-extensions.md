@@ -124,6 +124,6 @@ self_referential_safe_scenarios: [S1, S2]
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | List-Style Get | ☐ | | | |
-| 2 | Label Selector on Get List | ☐ | | | |
-| 3 | Stdin Apply (`-f -`) | ☐ | | | |
+| 1 | List-Style Get | ✅ PASS | 2026-03-18 | Claude | `-o table` falls back to JSON (documented); json/yaml produce correct encodings |
+| 2 | Label Selector on Get List | ✅ PASS | 2026-03-18 | Claude | List queries succeed with selectors; single-resource with `-l` exits 1 with clear error |
+| 3 | Stdin Apply (`-f -`) | ☐ | | | SKIPPED — self_referential_safe_scenarios only includes S1, S2 |

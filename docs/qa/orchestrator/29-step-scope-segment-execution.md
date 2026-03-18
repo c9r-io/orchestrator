@@ -247,8 +247,8 @@ cargo test --workspace --lib -- build_segments resolved_scope 2>&1 | grep "test 
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Task-Scoped Steps Run Once With Multiple Items | ☐ | | | Code review + unit test (build_segments, default_scope) |
+| 1 | Task-Scoped Steps Run Once With Multiple Items | ✅ PASS | 2026-03-18 | Claude | Code review: config.rs:349+ correct; loop_engine/mod.rs:500,524 dispatch; unit test: build_segments_groups_contiguous_scopes ok |
 | 2 | Item-Scoped Steps Fan Out Per QA File | ✅ PASS | 2026-03-18 | Claude | DB: task d3df2824, 3 distinct task_item_ids, qa_testing ×3, item statuses qa_passed |
-| 3 | Pipeline Variables Propagate From Task to Item Segments | ☐ | | | Code review + unit test (promote_winner_vars, pipeline_vars) |
-| 4 | Default Scope Classification Matches SDLC Intent | ☐ | | | Unit test (default_scope) |
-| 5 | Segment Grouping With Mixed Scope Steps | ☐ | | | Unit test (build_segments, resolved_scope) |
+| 3 | Pipeline Variables Propagate From Task to Item Segments | ✅ PASS | 2026-03-18 | Claude | Code review: promote_winner_vars, propagate_preserves, pipeline_vars found; unit tests: promote_winner_vars_inserts_into_pipeline, propagate_preserves_existing_item_state, test_pipeline_vars_escaped_in_template all ok |
+| 4 | Default Scope Classification Matches SDLC Intent | ✅ PASS | 2026-03-18 | Claude | Unit test: default_scope in step.rs:352-354 maps qa/qa_testing/ticket_fix/ticket_scan/fix/retest→Item, rest→Task |
+| 5 | Segment Grouping With Mixed Scope Steps | ✅ PASS | 2026-03-18 | Claude | 6 tests pass: resolved_scope_uses_explicit_override, build_segments_empty_when_no_steps, build_segments_groups_contiguous_scopes, build_segments_skips_disabled_steps, build_segments_skips_guards, build_segments_item_select_is_task_scoped |
