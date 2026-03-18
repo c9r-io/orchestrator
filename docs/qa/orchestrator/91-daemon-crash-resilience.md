@@ -63,3 +63,11 @@
 - [ ] `record_worker_restart()` 使用 `fetch_add(1, SeqCst)` 原子递增
 - [ ] `snapshot()` 方法正确读取并返回该计数器
 
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☑ | Worker panic 恢复、supervisor 重生、crash 日志、stale PID 检测、runtime snapshot 计数器 |
+

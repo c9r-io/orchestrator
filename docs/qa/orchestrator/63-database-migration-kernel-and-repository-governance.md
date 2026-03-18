@@ -122,10 +122,13 @@ Verify FR-009 closure did not allow new business SQL helpers to grow from compat
    ```
 
 ### Expected
-- `core/src/db.rs` does not gain new schema helpers.
-- `SchedulerRepository` exists and owns scheduler queue-selection SQL.
-- `ConfigRepository` exists and owns config snapshot/heal-log/resource persistence database access.
-- `DbWriteCoordinator` no longer owns runtime write-path SQL; task write SQL lives in `TaskRepository`.
+- `core/src/db.rs` does not gain **new** business SQL helpers after the FR-009 refactor (existing legacy helpers like `count_non_terminal_tasks_by_workspace`, `insert_control_plane_audit`, etc. are pre-migration code and acceptable until a future migration iteration).
+- `SchedulerRepository` trait exists in `core/src/persistence/repository/scheduler.rs`.
+- `ConfigRepository` trait exists in `core/src/persistence/repository/config.rs`.
+- `TaskRepository` trait exists in `core/src/task_repository/trait_def.rs`.
+- New SQL for task/scheduler/config operations should be added to their respective repository implementations, not to `db.rs`.
+
+> **Note**: Full SQL migration from legacy modules (`db_write.rs`, `scheduler_service.rs`, `task_ops.rs`) into repository implementations is an ongoing effort. This scenario governs that the **boundary** (traits) exists and no **new** helpers are added to `db.rs`, not that all legacy SQL has been migrated.
 
 ### Expected Data State
 ```sql

@@ -30,3 +30,11 @@ self_referential_safe: false
 - Existing prehook CEL evaluation tests in `prehook/context.rs`
 - FR-034 guard tests in `runner::policy::tests`
 
+---
+
+## Checklist
+
+| # | Check | Status | Notes |
+|---|-------|--------|-------|
+| 1 | All scenarios verified | ☑ | Safe QA doc runs normally in self-referential mode |
+

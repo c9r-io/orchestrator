@@ -98,9 +98,9 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/04-cli-config-db.md` | 4 | Manifest apply and DB reset |
 | orchestrator | `docs/qa/orchestrator/05-workflow-execution.md` | 5 | Workflow execution core scenarios |
 | orchestrator | `docs/qa/orchestrator/06-cli-output-formats.md` | 5 | JSON/YAML output validation |
-| orchestrator | `docs/qa/orchestrator/07-capability-orchestration.md` | 10 | Capability-driven orchestration core |
+| orchestrator | `docs/qa/orchestrator/07-capability-orchestration.md` | 5 | Capability-driven orchestration core |
 | orchestrator | `docs/qa/orchestrator/08-project-namespace.md` | 5 | Project namespace behavior |
-| orchestrator | `docs/qa/orchestrator/09-agent-selection-strategy.md` | 8 | Multi-factor selection strategy |
+| orchestrator | `docs/qa/orchestrator/09-agent-selection-strategy.md` | 5 | Multi-factor selection strategy |
 | orchestrator | `docs/qa/orchestrator/10-agent-collaboration.md` | 5 | AgentOutput and MessageBus |
 | orchestrator | `docs/qa/orchestrator/10-config-error-handling.md` | 4 | Config error paths |
 | orchestrator | `docs/qa/orchestrator/11-config-creation-flow.md` | 4 | Apply-based resource creation |
@@ -132,8 +132,8 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/37-envstore-secretstore-resources.md` | 5 | EnvStore/SecretStore resource apply, get, delete, export, and cross-kind isolation |
 | orchestrator | `docs/qa/orchestrator/38-agent-env-resolution.md` | 5 | Agent env resolution: direct value, fromRef, refValue, validation, and secret redaction |
 | orchestrator | `docs/qa/orchestrator/39-prompt-delivery.md` | 5 | PromptDelivery abstraction: default arg, stdin, file, env modes, preflight validation |
-| orchestrator | `docs/qa/orchestrator/40-custom-resource-definitions.md` | 6 | CRD extension system: registration, validation, get/describe/delete, cascade protection, export round-trip |
-| orchestrator | `docs/qa/orchestrator/41-project-scoped-agent-selection.md` | 7 | Project-scoped agent selection: apply --project, strict isolation, ticket cleanup, cross-project isolation |
+| orchestrator | `docs/qa/orchestrator/40-custom-resource-definitions.md` | 5 | CRD extension system: registration, validation, get/describe/delete, cascade protection, export round-trip |
+| orchestrator | `docs/qa/orchestrator/41-project-scoped-agent-selection.md` | 5 | Project-scoped agent selection: apply --project, strict isolation, ticket cleanup, cross-project isolation |
 | orchestrator | `docs/qa/orchestrator/42-crd-unified-resource-store.md` | 5 | Unified CRD ResourceStore: builtin CRD bootstrap, CrdProjectable round-trip, targeted writeback, apply/delete integration, edge cases |
 | orchestrator | `docs/qa/orchestrator/43-cli-force-gate-audit.md` | 5 | CLI force gate audit: backfill-events, task retry, and existing force-gate regression checks |
 | orchestrator | `docs/qa/orchestrator/44-parallel-item-execution.md` | 5 | Parallel item execution: max_parallel config, semaphore-gated JoinSet, RunningTask::fork(), pool size 20 |
@@ -143,9 +143,9 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/48-dynamic-items-selection.md` | 5 | WP03 dynamic items + selection: GenerateItems post-action, item_select builtin, min/max/threshold/weighted strategies |
 | orchestrator | `docs/qa/orchestrator/49-invariant-constraints.md` | 5 | WP04 invariant constraints: command checks, protected files, checkpoint filtering, on_violation actions |
 | orchestrator | `docs/qa/orchestrator/50-engine-wiring-store-invariant-itemselect.md` | 5 | WP01-WP04 engine wiring: store I/O, PostAction::StorePut, invariant checkpoints |
-| orchestrator | `docs/qa/orchestrator/51-primitive-composition.md` | 11 | WP05 primitive composition: Store+Spawning, Store+Items, Invariant+Selection pairwise/triple |
+| orchestrator | `docs/qa/orchestrator/51-primitive-composition.md` | 5 | WP05 primitive composition: Store+Spawning, Store+Items, Invariant+Selection pairwise/triple |
 | orchestrator | `docs/qa/orchestrator/52-engine-wiring-dynamic-items-selection.md` | 2 | Split from doc 50: pending_generate_items consumption, item_select orchestration |
-| orchestrator | `docs/qa/orchestrator/53-client-server-architecture.md` | 6 | C/S architecture: daemon lifecycle, gRPC communication, embedded workers, service layer |
+| orchestrator | `docs/qa/orchestrator/53-client-server-architecture.md` | 5 | C/S architecture: daemon lifecycle, gRPC communication, embedded workers, service layer |
 | orchestrator | `docs/qa/orchestrator/54-step-execution-profiles.md` | 5 | Step-level ExecutionProfile: resource round-trip, validation, mixed host/sandbox routing, compatibility default |
 | orchestrator | `docs/qa/orchestrator/55-sandbox-write-boundaries.md` | 2 | Sandbox file write boundaries: deny workspace-root writes, allow declared writable subtree |
 | orchestrator | `docs/qa/orchestrator/56-sandbox-denial-anomaly-trace.md` | 2 | Sandbox denial anomaly trace and empty-change guard |
@@ -162,7 +162,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/66-error-semantics-governance.md` | 4 | FR-014: boundary error taxonomy, shared gRPC status mapping, CLI error rendering, and regression verification |
 | orchestrator | `docs/qa/orchestrator/67-clone-reduction-and-shared-ownership.md` | 5 | FR-015 clone reduction: shallow-shared scheduler runtime fields, owned daemon summary mapping, builtin execution cleanup, and trace hotspot regression coverage |
 | orchestrator | `docs/qa/orchestrator/68-clone-reduction-follow-up.md` | 5 | FR-015 follow-up: chain-step/task-fanout cleanup, graph replay ownership tightening, db-write owned fast-paths, export metadata helpers, and secret-key audit assembly |
-| orchestrator | `docs/qa/orchestrator/69-async-lock-model-alignment.md` | 6 | FR-016: config runtime snapshots, async health/metrics locks, governance-gate regression, and documented sync exceptions |
+| orchestrator | `docs/qa/orchestrator/69-async-lock-model-alignment.md` | 5 | FR-016: config runtime snapshots, async health/metrics locks, governance-gate regression, and documented sync exceptions |
 | orchestrator | `docs/qa/orchestrator/70-libc-cross-platform-compilation.md` | 5 | FR-019: libc workspace dep unification, cfg(unix) gating, SIGXCPU test guard, and 5-target cross-compile CI |
 | orchestrator | `docs/qa/orchestrator/71-automate-protoc-dependency.md` | - | FR-020: automate protoc dependency, PROTOC env var override, CI enforcement |
 | orchestrator | `docs/qa/orchestrator/72-audit-reduce-expect-calls.md` | - | FR-021: audit and reduce expect() calls, deny-level lint enforcement |
@@ -172,7 +172,7 @@ This checks:
 | orchestrator | `docs/qa/orchestrator/75-public-api-doc-comments.md` | 5 | FR-022: public API doc comment governance and lint enforcement |
 | orchestrator | `docs/qa/orchestrator/75b-public-api-doc-comments-legacy.md` | 1 | FR-022: legacy exemption cleanup (split from doc 75) |
 | orchestrator | `docs/qa/orchestrator/76-config-load-module-split.md` | - | FR-025: config_load module split and responsibility segregation |
-| orchestrator | `docs/qa/orchestrator/77-event-table-ttl-archival.md` | - | Event table TTL and archival: event stats, cleanup, archive to JSONL |
+| orchestrator | `docs/qa/orchestrator/77-event-table-ttl-archival.md` | 5 | Event table TTL and archival: event stats, cleanup, archive to JSONL |
 | orchestrator | `docs/qa/orchestrator/78-worker-notify-wakeup.md` | - | FR-027: worker notify wakeup governance, wake-file removal |
 | orchestrator | `docs/qa/orchestrator/79-benchmark-score-capture.md` | - | FR-028: benchmark score capture, json_path extraction, item_select |
 | orchestrator | `docs/qa/orchestrator/80-item-scoped-git-worktree-isolation.md` | 4 | Item-scoped git worktree isolation: config round-trip, vendored protoc, workspace regression, self-evolution manifest |
