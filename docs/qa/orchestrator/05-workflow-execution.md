@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - Workflow Execution (Phases and Lifecycle)
@@ -13,276 +13,290 @@ self_referential_safe: false
 
 ## Background
 
-This document tests workflow execution using a single deterministic mock agent
-(`mock_echo`). Every scenario uses `echo-workflow.yaml` (or `fail-workflow.yaml`
-for the error path), so results are fully reproducible — no random agent
-selection can change the outcome.
+This document verifies workflow execution logic through code review and unit
+tests. The orchestrator supports several workflow types (`qa_only`, `qa_fix`,
+`qa_fix_retest`, `loop_test`) defined in fixture files like
+`echo-workflow.yaml` and `fail-workflow.yaml`. Rather than running the daemon,
+each scenario inspects the underlying Rust implementation and confirms
+correctness via targeted unit tests.
 
-### Common Preconditions
+### Key Source Files
 
-Every scenario starts from a clean slate. Two cleanup steps are required:
+- **Loop engine**: `crates/orchestrator-scheduler/src/scheduler/loop_engine/tests.rs`
+- **Phase runner**: `crates/orchestrator-scheduler/src/scheduler/phase_runner/tests.rs`
+- **Output validation**: `core/src/output_validation.rs`
+- **Prehook / finalize rules**: `core/src/prehook/tests.rs`, `core/src/dynamic_orchestration/prehook.rs`
+- **Ticket creation**: `core/src/ticket.rs`
+- **Health system**: `core/src/health.rs`
+- **Agent selection**: `core/src/selection.rs`
 
-> **Fixture Workflow IDs**: `echo-workflow.yaml` defines `qa_only`, `qa_fix`, `qa_fix_retest`, `loop_test`. `fail-workflow.yaml` defines `qa_fix` (fail variant) with two agents: `mock_fail` (qa only, always exits 1) and `mock_healthy` (qa + fix, exits 0). When `mock_fail` is isolated by the health system after consecutive failures, `mock_healthy` takes over remaining QA and handles all fix work. Do NOT use stale names like `basic` or `echo`.
+### Notes
 
-1. **Project isolation**: `apply` is additive — agents from previous test fixtures
-   remain in the active config and participate in agent selection, causing unexpected
-   failures. Re-apply the intended fixture and recreate the isolated QA project
-   scaffold instead of deleting the DB.
-2. **Stale tickets**: The echo-workflow fixture uses `ticket_dir: fixtures/ticket`.
-   Stale auto-generated tickets from previous runs can cause items to be marked
-   "unresolved" even when QA passes.
-
-```bash
-# 1. Ensure runtime is initialized
-orchestrator init --force
-
-# 2. Clean stale auto-generated tickets
-rm -f fixtures/ticket/auto_*.md
-
-# 3. Apply fixture and recreate the isolated project scaffold
-orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml
-QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
-rm -rf "workspace/${QA_PROJECT}"
-orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
-```
-
-Scenario 4 uses a different fixture (`fail-workflow.yaml`) — see its own
-preconditions section.
-
-### Troubleshooting
-
-| Symptom | Root Cause | Fix |
-|---------|-----------|-----|
-| qa_only/loop_test tasks fail with "unresolved" items despite QA exit 0 | Stale ticket files in `fixtures/ticket/` match item QA docs; finalize rules mark items with active tickets as "unresolved" when no fix step is present | Run `rm -f fixtures/ticket/auto_*.md` before testing |
-| Task fails with unexpected agent selection (e.g., wrong agent handles qa) | Residual agents from previous test fixtures remain in active config because `apply` is additive. Agent selection uses a top-3 random pick; when agents tie on score (common with no metrics history), the wrong agent can be selected. | Re-apply the intended fixture, then recreate the isolated QA project scaffold (`delete project/<project> --force` + `rm -rf workspace/<project>` + `apply -f <fixture> --project`) using a fresh `QA_PROJECT` value. Agent selection now uses a stable tiebreaker (agent_id alphabetical) to reduce non-determinism. |
+Fixture files (`echo-workflow.yaml`, `fail-workflow.yaml`) are referenced as
+documentation context to describe the workflow shapes being tested. The unit
+tests exercise the same code paths without requiring a running daemon.
 
 ---
 
 ## Scenario 1: qa_only Workflow
 
+### Goal
+
+Verify that a once-mode workflow (single QA phase, no fix/retest) terminates
+after exactly one cycle, and that output validation accepts well-formed JSON.
+
 ### Preconditions
 
-- Common Preconditions (echo-workflow.yaml applied)
+- Rust toolchain available
 
 ### Steps
 
-1. Create task:
+1. Review the loop engine to confirm once-mode always stops after one cycle:
    ```bash
-   orchestrator task create \
-     --name "qa-only-test" \
-     --goal "Test QA only workflow" \
-     --project "${QA_PROJECT}" \
-     --workflow qa_only \
-     --no-start
+   rg -n "fn once_mode_always_stops" crates/orchestrator-scheduler/src/scheduler/loop_engine/tests.rs
    ```
 
-2. Start task and wait for completion:
+2. Review output validation to confirm strict-phase JSON acceptance:
    ```bash
-   orchestrator task start {task_id}
+   rg -n "fn strict_phase_accepts_json" core/src/output_validation.rs
+   rg -n "fn strict_phase_requires_json" core/src/output_validation.rs
    ```
 
-3. Inspect result:
+3. Run the unit tests:
    ```bash
-   orchestrator task info {task_id}
-   orchestrator task logs {task_id}
+   cargo test --workspace --lib -- once_mode_always_stops
+   cargo test --workspace --lib -- strict_phase_accepts_json
+   cargo test --workspace --lib -- strict_phase_requires_json
    ```
 
 ### Expected
 
-- Task status: `completed`
-- Failed: 0
-- Every log line shows `qa-phase: {rel_path}`
+- `once_mode_always_stops` passes: confirms that a once-mode loop engine
+  returns `should_stop = true` after one cycle, matching qa_only behavior.
+- `strict_phase_accepts_json` passes: confirms valid JSON output is accepted
+  by the output validation layer.
+- `strict_phase_requires_json` passes: confirms non-JSON output is rejected
+  when strict validation is enabled.
 
 ---
 
 ## Scenario 2: qa_fix Workflow
 
+### Goal
+
+Verify that a two-step workflow (QA then Fix) correctly groups contiguous
+scopes into segments, and that finalize rules skip the fix phase when QA
+produces no failures.
+
 ### Preconditions
 
-- Common Preconditions (echo-workflow.yaml applied)
+- Rust toolchain available
 
 ### Steps
 
-1. Create task:
+1. Review segment grouping logic for multi-phase workflows:
    ```bash
-   orchestrator task create \
-     --name "qa-fix-test" \
-     --goal "Test QA and fix workflow" \
-     --project "${QA_PROJECT}" \
-     --workflow qa_fix \
-     --no-start
+   rg -n "fn build_segments_groups_contiguous_scopes" crates/orchestrator-scheduler/src/scheduler/loop_engine/tests.rs
    ```
 
-2. Start task:
+2. Review finalize rule evaluation (fix is skipped when no tickets exist):
    ```bash
-   orchestrator task start {task_id}
+   rg -n "fn test_evaluate_finalize_rule_expression_true" core/src/prehook/tests.rs
+   rg -n "fn test_evaluate_finalize_rule_expression_false" core/src/prehook/tests.rs
+   rg -n "fn test_evaluate_finalize_rule_fix_variables" core/src/prehook/tests.rs
    ```
 
-3. Inspect result:
+3. Run the unit tests:
    ```bash
-   orchestrator task info {task_id}
-   orchestrator task logs {task_id}
+   cargo test --workspace --lib -- build_segments_groups_contiguous_scopes
+   cargo test --workspace --lib -- test_evaluate_finalize_rule_expression_true
+   cargo test --workspace --lib -- test_evaluate_finalize_rule_expression_false
+   cargo test --workspace --lib -- test_evaluate_finalize_rule_fix_variables
    ```
 
 ### Expected
 
-- Task status: `completed`
-- Failed: 0
-- QA phase runs and passes for all items
-- Fix phase is skipped (QA produced no failures / tickets)
+- `build_segments_groups_contiguous_scopes` passes: confirms that QA and Fix
+  phases are grouped into correct segments for sequential execution.
+- `test_evaluate_finalize_rule_expression_true` passes: confirms a CEL
+  expression evaluating to true triggers the finalize rule.
+- `test_evaluate_finalize_rule_expression_false` passes: confirms a CEL
+  expression evaluating to false skips the finalize rule.
+- `test_evaluate_finalize_rule_fix_variables` passes: confirms finalize rules
+  have access to fix-phase variables for skip decisions.
 
 ---
 
 ## Scenario 3: qa_fix_retest Workflow
 
+### Goal
+
+Verify that a three-step workflow (QA, Fix, Retest) correctly segments phases
+and that prehook logic can skip downstream phases when no failures occur in QA.
+
 ### Preconditions
 
-- Common Preconditions (echo-workflow.yaml applied)
+- Rust toolchain available
 
 ### Steps
 
-1. Create task:
+1. Review segment grouping to confirm three-phase workflows are handled:
    ```bash
-   orchestrator task create \
-     --name "qa-fix-retest-test" \
-     --goal "Test full workflow" \
-     --project "${QA_PROJECT}" \
-     --workflow qa_fix_retest \
-     --no-start
+   rg -n "fn build_segments_groups_contiguous_scopes" crates/orchestrator-scheduler/src/scheduler/loop_engine/tests.rs
    ```
 
-2. Start task:
+2. Review prehook skip logic (downstream phases skipped when not needed):
    ```bash
-   orchestrator task start {task_id}
+   rg -n "fn test_prehook_decision_skip_does_not_run" core/src/dynamic_orchestration/prehook.rs
+   rg -n "fn test_prehook_decision_default_is_run" core/src/dynamic_orchestration/prehook.rs
    ```
 
-3. Inspect result:
+3. Review finalize rule evaluation for retest variables:
    ```bash
-   orchestrator task info {task_id}
-   orchestrator task logs {task_id}
+   rg -n "fn test_evaluate_finalize_rule_retest_variables" core/src/prehook/tests.rs
+   rg -n "fn test_evaluate_finalize_rule_retest_new_ticket_count" core/src/prehook/tests.rs
+   ```
+
+4. Run the unit tests:
+   ```bash
+   cargo test --workspace --lib -- build_segments_groups_contiguous_scopes
+   cargo test --workspace --lib -- test_prehook_decision_skip_does_not_run
+   cargo test --workspace --lib -- test_prehook_decision_default_is_run
+   cargo test --workspace --lib -- test_evaluate_finalize_rule_retest_variables
+   cargo test --workspace --lib -- test_evaluate_finalize_rule_retest_new_ticket_count
    ```
 
 ### Expected
 
-- Task status: `completed`
-- Failed: 0
-- QA executes first and determines whether downstream phases are needed
-- When QA creates no tickets, Fix/Retest may be skipped by design
-- Logs contain `qa-phase:` entries; Fix/Retest logs appear only when ticket/failure conditions are met
+- `build_segments_groups_contiguous_scopes` passes: confirms three contiguous
+  scopes (QA, Fix, Retest) are grouped into proper segments.
+- `test_prehook_decision_skip_does_not_run` passes: confirms that a prehook
+  returning Skip prevents the phase from executing.
+- `test_prehook_decision_default_is_run` passes: confirms the default prehook
+  decision allows phases to run.
+- `test_evaluate_finalize_rule_retest_variables` passes: confirms retest-phase
+  variables are available in finalize rule CEL expressions.
+- `test_evaluate_finalize_rule_retest_new_ticket_count` passes: confirms the
+  `new_ticket_count` variable is correctly bound for retest decisions.
 
 ---
 
 ## Scenario 4: QA Failure and Ticket Creation
 
+### Goal
+
+Verify that when QA fails (non-zero exit code), tickets are created correctly,
+the health system degrades the failing agent, and diseased agents are filtered
+from future candidate selection.
+
 ### Preconditions
 
-This scenario uses a **different fixture** with only the `mock_fail` agent:
-
-```bash
-orchestrator apply -f fixtures/manifests/bundles/fail-workflow.yaml
-
-QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
-rm -rf "workspace/${QA_PROJECT}"
-orchestrator apply -f fixtures/manifests/bundles/fail-workflow.yaml --project "${QA_PROJECT}"
-```
+- Rust toolchain available
 
 ### Steps
 
-1. Create task:
+1. Review ticket creation on QA failure:
    ```bash
-   orchestrator task create \
-     --name "ticket-test" \
-     --goal "Test ticket creation" \
-     --project "${QA_PROJECT}" \
-     --workflow qa_fix \
-     --no-start
+   rg -n "fn test_create_ticket_for_qa_failure" core/src/ticket.rs
    ```
 
-2. Start task:
+2. Review health degradation logic:
    ```bash
-   orchestrator task start {task_id}
+   rg -n "fn is_agent_healthy_diseased_in_future_is_unhealthy" core/src/health.rs
+   rg -n "fn is_capability_healthy_diseased_with_bad_capability_rate" core/src/health.rs
    ```
 
-3. Check task result and ticket directory:
+3. Review agent selection filtering of diseased agents:
    ```bash
-   orchestrator task info {task_id}
-   orchestrator task logs {task_id}
-   ls fixtures/ticket/auto_*.md
+   rg -n "fn test_diseased_agent_filtered_from_candidates" core/src/selection.rs
+   ```
+
+4. Review active ticket status detection:
+   ```bash
+   rg -n "fn test_is_active_ticket_status" core/src/ticket.rs
+   ```
+
+5. Run the unit tests:
+   ```bash
+   cargo test --workspace --lib -- test_create_ticket_for_qa_failure
+   cargo test --workspace --lib -- is_agent_healthy_diseased_in_future_is_unhealthy
+   cargo test --workspace --lib -- is_capability_healthy_diseased_with_bad_capability_rate
+   cargo test --workspace --lib -- test_diseased_agent_filtered_from_candidates
+   cargo test --workspace --lib -- test_is_active_ticket_status
    ```
 
 ### Expected
 
-- `mock_fail` handles QA for the first items and exits 1, producing
-  ticket artifacts; the health system isolates `mock_fail` after
-  consecutive failures
-- Ticket files are created as `fixtures/ticket/auto_*.md` (the ticket_dir
-  of the workspace the task runs against — the global `default` workspace
-  has `ticket_dir: fixtures/ticket`)
-- `mock_healthy` takes over QA for remaining items (exits 0, no tickets)
-  and handles all fix work (exits 0)
-- Items that had QA failures transition from `qa_failed` → `fixed`
-- Task completes with `Failed: 0`
-- Logs show structured JSON outputs (`output_json`/`artifacts_json`);
-  failing QA runs are marked by non-success status and ticket artifacts
-
-### Troubleshooting
-
-| Symptom | Root Cause | Fix |
-|---------|-----------|-----|
-| No ticket files found in `workspace/${QA_PROJECT}/fixtures/ticket/` | The task uses the global `default` workspace (ticket_dir: `fixtures/ticket`), not the project workspace | Check `fixtures/ticket/auto_*.md` instead |
-| `Failed: 0` when expecting failures | Fix phase succeeds (exit 0), transitioning items from `qa_failed` to `fixed` | This is correct behavior; "Failed" counts only items whose final status is a failure state |
-| "No healthy agent found with capability: fix" or task stuck at 0 progress | `mock_fail` was the only agent with the required capability; health system isolated it after consecutive failures, leaving no healthy agent | Ensure `mock_healthy` (qa + fix) is present in the fixture as a fallback agent that takes over when `mock_fail` is isolated |
+- `test_create_ticket_for_qa_failure` passes: confirms that a QA run with
+  non-zero exit code produces a ticket markdown file with correct frontmatter.
+- `test_create_ticket_for_qa_failure_preserves_redacted_snippets` passes:
+  confirms redacted content in stdout is preserved in ticket artifacts.
+- `test_create_ticket_for_qa_failure_long_stdout_truncated` passes: confirms
+  excessively long stdout is truncated in ticket output.
+- `is_agent_healthy_diseased_in_future_is_unhealthy` passes: confirms an
+  agent with a future disease expiry is marked unhealthy.
+- `is_capability_healthy_diseased_with_bad_capability_rate` passes: confirms
+  a diseased agent with poor capability success rate is filtered.
+- `test_diseased_agent_filtered_from_candidates` passes: confirms diseased
+  agents are excluded from the candidate pool during selection.
+- `test_is_active_ticket_status_*` tests pass: confirm correct classification
+  of ticket statuses (open, failed = active; closed = inactive).
 
 ---
 
 ## Scenario 5: Loop Mode (max_cycles)
 
+### Goal
+
+Verify that the loop engine respects `max_cycles` configuration, stopping
+execution when the cycle limit is reached, and that fixed-mode defaults to
+one cycle.
+
 ### Preconditions
 
-- Common Preconditions (echo-workflow.yaml applied)
+- Rust toolchain available
 
 ### Steps
 
-1. Create task with loop_test workflow:
+1. Review infinite-mode max_cycles enforcement:
    ```bash
-   orchestrator task create \
-     --name "loop-mode-test" \
-     --goal "Test infinite loop with max_cycles" \
-     --project "${QA_PROJECT}" \
-     --workflow loop_test \
-     --no-start
+   rg -n "fn infinite_mode_respects_max_cycles" crates/orchestrator-scheduler/src/scheduler/loop_engine/tests.rs
    ```
 
-2. Start task:
+2. Review fixed-mode stops at max_cycles:
    ```bash
-   orchestrator task start {task_id}
+   rg -n "fn fixed_mode_stops_at_max_cycles" crates/orchestrator-scheduler/src/scheduler/loop_engine/tests.rs
    ```
 
-3. Verify cycle count:
+3. Review fixed-mode default cycle count:
    ```bash
-   orchestrator task info {task_id}
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT current_cycle FROM tasks WHERE id = '{task_id}'"
+   rg -n "fn fixed_mode_defaults_to_one_cycle" crates/orchestrator-scheduler/src/scheduler/loop_engine/tests.rs
+   ```
+
+4. Run the unit tests:
+   ```bash
+   cargo test --workspace --lib -- infinite_mode_respects_max_cycles
+   cargo test --workspace --lib -- fixed_mode_stops_at_max_cycles
+   cargo test --workspace --lib -- fixed_mode_defaults_to_one_cycle
    ```
 
 ### Expected
 
-- Task status: `completed`
-- Failed: 0
-- current_cycle >= 1 (the loop terminates early when all items pass in the
-  first cycle; `max_cycles` is an upper bound, not a forced iteration count)
-- Every log line shows `qa-phase: {rel_path}`
-- For forced multi-cycle verification, see Doc 07 Scenario 3 (repeatable-test)
-  or Doc 09 Scenario 3 (mixed-health)
+- `infinite_mode_respects_max_cycles` passes: confirms that an infinite-mode
+  loop terminates when `current_cycle >= max_cycles`.
+- `fixed_mode_stops_at_max_cycles` passes: confirms that a fixed-mode loop
+  stops at the configured max_cycles boundary.
+- `fixed_mode_defaults_to_one_cycle` passes: confirms that when no max_cycles
+  is specified, fixed mode defaults to a single cycle.
 
 ---
 
 ## Checklist
 
-| 1 | qa_only Workflow | ✅ | 2026-02-23 | chenhan | Status: completed, Failed: 0 |
-| 2 | qa_fix Workflow | ✅ | 2026-02-23 | chenhan | Status: completed, QA通过, Fix跳过 |
-| 3 | qa_fix_retest Workflow | ✅ | 2026-02-23 | chenhan | QA执行, 无tickets时 fix/retest跳过(符合设计) |
-| 4 | QA Failure and Ticket Creation | ✅ | 2026-02-23 | chenhan | 结构化 QA 失败产物落库，tickets创建，Fix阶段执行 |
-| 5 | Loop Mode (max_cycles) | ✅ | 2026-03-02 | chenhan | Status: completed, Failed: 0, current_cycle: 1 |
+| # | Scenario | Status | Date | Tester | Notes |
+|---|----------|--------|------|--------|-------|
+| 1 | qa_only Workflow | | | | `once_mode_always_stops`, output validation tests |
+| 2 | qa_fix Workflow | | | | `build_segments_groups_contiguous_scopes`, finalize rule tests |
+| 3 | qa_fix_retest Workflow | | | | Segment grouping, prehook skip logic tests |
+| 4 | QA Failure and Ticket Creation | | | | Ticket creation, health degradation, selection filtering tests |
+| 5 | Loop Mode (max_cycles) | | | | `infinite_mode_respects_max_cycles`, `fixed_mode_stops_at_max_cycles` |

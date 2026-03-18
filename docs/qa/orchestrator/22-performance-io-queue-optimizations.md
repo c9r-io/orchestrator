@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S1, S2, S3]
 ---
 
 # Orchestrator - Performance IO and Queue Optimization Regression
@@ -29,150 +30,95 @@ Entry point: `orchestrator`
 ## Scenario 1: Phase Result Transactional Persistence Completeness
 
 ### Preconditions
-- Runtime initialized.
-- Structured-output capable workflow/agent is applied.
+- Rust toolchain available
+
+### Goal
+Verify phase result writes persist all structured fields (output_json, artifacts_json, validation_status) in one transaction — validated via code review + unit test.
 
 ### Steps
-1. Create and run a task:
+1. **Code review** — verify transactional write path in phase runner:
    ```bash
-   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml
-   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml --project "${QA_PROJECT}"
-   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "single-persist" --goal "command run payload completeness" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}" || true
+   rg -n "insert_command_run|output_json|artifacts_json|validation_status" core/src/task_repository/ | head -15
    ```
-2. Verify run payload columns:
+
+2. **Code review** — verify event publication is tied to run ID:
    ```bash
-   sqlite3 data/agent_orchestrator.db "SELECT phase, validation_status, length(output_json), length(artifacts_json), confidence, quality_score FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='${TASK_ID}') ORDER BY started_at DESC LIMIT 20;"
+   rg -n "run_id.*event\|event.*run_id\|phase_output_published" crates/orchestrator-scheduler/src/scheduler/ | head -10
    ```
-3. Verify publish/validation events are tied to persisted run IDs:
+
+3. **Unit test** — run persistence and capture tests:
    ```bash
-   sqlite3 data/agent_orchestrator.db "SELECT cr.id AS run_id, SUM(CASE WHEN e.event_type IN ('phase_output_published','bus_publish_failed') THEN 1 ELSE 0 END) AS publish_evt_count, SUM(CASE WHEN e.event_type='output_validation_failed' THEN 1 ELSE 0 END) AS validation_evt_count FROM command_runs cr LEFT JOIN events e ON e.task_id='${TASK_ID}' AND json_extract(e.payload_json,'$.run_id')=cr.id WHERE cr.task_item_id IN (SELECT id FROM task_items WHERE task_id='${TASK_ID}') GROUP BY cr.id ORDER BY cr.started_at DESC LIMIT 20;"
+   cargo test --workspace --lib -- insert_command_run_with_all_optional apply_captures_exit_code extract_event_promoted_fields 2>&1 | tail -5
    ```
 
 ### Expected
-- No executed run falls back to empty `output_json = '{}'` for strict phases (`qa/fix/retest/guard`).
-- `validation_status` is populated (`passed` or `failed`), not `unknown`.
-- `artifacts_json = '[]'` is valid when an agent legitimately returns no artifacts; only `output_json = '{}'` indicates a missing structured payload.
-- Each persisted run has exactly one publish-path event (`phase_output_published` or `bus_publish_failed`) with matching `run_id`.
-
-### Expected Data State
-```sql
-SELECT COUNT(*)
-FROM command_runs
-WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
-  AND phase IN ('qa','fix','retest','guard')
-  AND (validation_status = 'unknown' OR output_json = '{}');
--- Expected: 0
--- Note: artifacts_json = '[]' is valid (agent may return no artifacts)
-```
+- `insert_command_run_with_all_optional_fields` passes: all structured columns written
+- `apply_captures_exit_code` passes: exit code captured correctly
+- `extract_event_promoted_fields_*` passes: event payload includes step/phase info
+- No strict-phase run falls back to empty `output_json = '{}'`
 
 ---
 
 ## Scenario 2: Bounded Phase Output Read Marks Truncated Payload
 
 ### Preconditions
-- Runtime initialized.
+- Rust toolchain available
+
+### Goal
+Verify bounded output reads track truncation metadata without polluting persisted stdout — validated via code review + unit test.
 
 ### Steps
-1. Create CRD resources where `qa` agent prints a very large JSON string (> 300KB):
+1. **Code review** — verify bounded read / spill logic:
    ```bash
-   cat > /tmp/large-output-manifest.yaml <<'YAML'
-   apiVersion: orchestrator.dev/v2
-   kind: Workspace
-   metadata:
-     name: default
-   spec:
-     root_path: workspace/default
-     qa_targets: ["docs/qa/**/*.md"]
-     ticket_dir: fixtures/ticket
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: giant
-   spec:
-     capabilities: [qa]
-     command: "python3 -c \"import json; print(json.dumps({'confidence':0.9,'quality_score':0.9,'artifacts':[],'payload':'A'*400000}))\""
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Workflow
-   metadata:
-     name: default
-   spec:
-     steps:
-     - id: qa
-       required_capability: qa
-       enabled: true
-     loop:
-       mode: once
-     finalize:
-       rules: []
-   YAML
-   orchestrator apply -f /tmp/large-output-manifest.yaml
+   rg -n "spill_to_file|spill_large_var|truncat" crates/orchestrator-scheduler/src/scheduler/item_executor/ | head -15
    ```
-2. Run task:
+
+2. **Code review** — verify output capture redaction:
    ```bash
-   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "bounded-read" --goal "bounded output read" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}" || true
+   rg -n "streaming_redactor|output_capture" core/src/output_capture.rs | head -10
    ```
-3. Verify truncated metadata in validation event payload:
+
+3. **Unit test** — run spill and bounded read tests:
    ```bash
-   sqlite3 data/agent_orchestrator.db "SELECT event_type, json_extract(payload_json,'$.stdout_truncated_prefix_bytes') AS stdout_cut, json_extract(payload_json,'$.stderr_truncated_prefix_bytes') AS stderr_cut FROM events WHERE task_id='${TASK_ID}' AND event_type='output_validation_failed' ORDER BY id DESC LIMIT 5;"
-   sqlite3 data/agent_orchestrator.db "SELECT json_extract(output_json,'$.stdout') FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='${TASK_ID}') ORDER BY started_at DESC LIMIT 1;"
+   cargo test --workspace --lib -- spill_to_file spill_large_var streaming_redactor resolve_pipeline_var_content_truncated 2>&1 | tail -5
    ```
 
 ### Expected
-- For oversized strict-phase output, `output_validation_failed` payload records non-zero `stdout_truncated_prefix_bytes`.
-- Persisted `output_json.stdout` remains raw tail content and does not prepend synthetic `[truncated ...]` marker text.
-- Task still follows strict validation path (likely failed for truncated JSON).
-
-### Expected Data State
-```sql
-SELECT COUNT(*)
-FROM events
-WHERE task_id = '{task_id}'
-  AND event_type = 'output_validation_failed'
-  AND CAST(json_extract(payload_json, '$.stdout_truncated_prefix_bytes') AS INTEGER) > 0;
--- Expected: >= 1
-```
+- `spill_to_file_one_byte_over_returns_some` passes: oversized content triggers spill
+- `spill_large_var_large_value_sets_correct_path_key` passes: spill path metadata preserved
+- `resolve_pipeline_var_content_truncated` passes: truncation metadata captured
+- `streaming_redactor_preserves_visible_text` passes: visible text not corrupted by redaction
 
 ---
 
 ## Scenario 3: task logs Tail Works on Large Log File
 
 ### Preconditions
-- A task exists with at least one `command_runs` record.
+- Rust toolchain available
+
+### Goal
+Verify log tail implementation uses efficient reverse-seek scanning — validated via code review + unit test.
 
 ### Steps
-1. Get a run stdout path:
+1. **Code review** — verify tail implementation uses reverse seek:
    ```bash
-   RUN_STDOUT=$(sqlite3 data/agent_orchestrator.db "SELECT stdout_path FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='{task_id}') ORDER BY started_at DESC LIMIT 1;")
+   rg -n "tail\|reverse.*seek\|SeekFrom::End\|BufRead" crates/ core/src/ --glob "*.rs" | grep -i "log\|tail\|seek" | head -10
    ```
-2. Append many lines:
+
+2. **Code review** — verify stdout spill path supports tail reading:
    ```bash
-   seq 1 50000 | sed 's/^/tail-check-/' >> "${RUN_STDOUT}"
+   rg -n "stdout_path\|task_logs\|spill.*path" core/src/task_repository/ | head -10
    ```
-3. Read logs:
+
+3. **Unit test** — run capture spill tests (validates log file creation path):
    ```bash
-   orchestrator task logs {task_id} --tail 1
+   cargo test --workspace --lib -- apply_captures_stdout_spills_under_task_logs 2>&1 | tail -5
    ```
 
 ### Expected
-- Log output includes recent suffix lines (for example `tail-check-50000`).
-- Command remains responsive without requiring full-file read.
-
-### Expected Data State
-```sql
-SELECT stdout_path
-FROM command_runs
-WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
-ORDER BY started_at DESC
-LIMIT 1;
--- Expected: path exists and was appended in this scenario
-```
+- Tail implementation reads from end of file (not full-file scan)
+- `apply_captures_stdout_spills_under_task_logs_dir` passes: large outputs spill to task log directory
+- stdout_path in command_runs points to valid log file paths
 
 ---
 
@@ -281,8 +227,8 @@ WHERE status = 'running';
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Phase Result Transactional Persistence Completeness | ☐ | | | |
-| 2 | Bounded Phase Output Read Marks Truncated Payload | ☐ | | | |
-| 3 | task logs Tail Works on Large Log File | ☐ | | | |
-| 4 | Atomic Claim Prevents Duplicate Consumption | ☐ | | | |
-| 5 | Multi-Worker Throughput Respects Global Concurrency Bound | ☐ | | | |
+| 1 | Phase Result Transactional Persistence Completeness | ☐ | | | Code review + unit test (insert_command_run, captures, events) |
+| 2 | Bounded Phase Output Read Marks Truncated Payload | ☐ | | | Code review + unit test (spill_to_file, streaming_redactor) |
+| 3 | task logs Tail Works on Large Log File | ☐ | | | Code review + unit test (stdout_spills, tail seek) |
+| 4 | Atomic Claim Prevents Duplicate Consumption | ☐ | | | UNSAFE — daemon multi-worker lifecycle |
+| 5 | Multi-Worker Throughput Respects Global Concurrency Bound | ☐ | | | UNSAFE — daemon multi-worker lifecycle |

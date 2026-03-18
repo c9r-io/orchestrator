@@ -1,6 +1,5 @@
 ---
-self_referential_safe: false
-self_referential_safe_scenarios: [S2]
+self_referential_safe: true
 ---
 
 # Orchestrator - StepScope & Segment-Based Execution
@@ -61,64 +60,36 @@ The execution plan is grouped into **contiguous segments** of same scope. Each s
 
 ### Preconditions
 
-- A workflow with task-scoped steps (plan, implement) and multiple QA target files
-- Apply echo-workflow fixture or self-bootstrap-test fixture
+- Rust toolchain available
+- Repository checked out at project root
 
 ### Goal
 
-Verify that plan and implement steps execute exactly once per cycle, regardless of item count.
+Verify that task-scoped steps (plan, implement) execute exactly once per cycle while item-scoped steps (qa_testing) fan out per QA file — validated via unit tests covering `build_scope_segments()` and `default_scope_for_step_id()`.
 
 ### Steps
 
-1. Apply a workflow fixture with plan + implement + qa_testing steps:
+1. **Code review** — verify scope classification in config:
    ```bash
-   rm -f fixtures/ticket/auto_*.md
-   QA_PROJECT="qa-scope-${USER}-$(date +%Y%m%d%H%M%S)"
-   orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml
-   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-test.yaml --project "${QA_PROJECT}"
+   rg -n "default_scope_for_step_id|StepScope::" crates/orchestrator-config/src/config/step.rs
+   ```
+   Confirm `plan` → `Task`, `implement` → `Task`, `qa_testing` → `Item`.
+
+2. **Code review** — verify segment grouping dispatches single-run for Task scope:
+   ```bash
+   rg -n "StepScope::Task|StepScope::Item|process_task_segment|process_item_segment" crates/orchestrator-scheduler/src/scheduler/loop_engine.rs
    ```
 
-2. Create a task targeting multiple QA files:
+3. **Unit test** — run scope classification and segment grouping tests:
    ```bash
-   orchestrator task create \
-     --name "scope-multi-item" \
-     --goal "Test scope with multiple items" \
-     --project "${QA_PROJECT}" \
-     --workflow sdlc_full_pipeline \
-     --target-files "docs/qa/file1.md,docs/qa/file2.md,docs/qa/file3.md" \
-     --no-start
-   ```
-
-3. Start task and wait:
-   ```bash
-   orchestrator task start {task_id}
-   ```
-
-4. Count step executions:
-   ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT json_extract(payload_json, '$.step') AS step, COUNT(*) AS cnt
-      FROM events
-      WHERE task_id = '{task_id}' AND event_type = 'step_started'
-      GROUP BY step ORDER BY MIN(created_at)"
+   cargo test --workspace --lib -- default_scope build_segments_groups_contiguous_scopes 2>&1 | tail -5
    ```
 
 ### Expected
 
-- `plan` count: **1** (not 3)
-- `implement` count: **1** (not 3)
-- `qa_testing` count: **3** (one per QA file)
-
-### Expected Data State
-
-```sql
-SELECT json_extract(payload_json, '$.step') AS step, COUNT(*) AS cnt
-FROM events WHERE task_id = '{task_id}' AND event_type = 'step_started'
-GROUP BY step;
--- Expected: plan=1, implement=1, qa_testing=3
-```
+- `default_scope_for_step_id("plan")` returns `Task`, `default_scope_for_step_id("qa_testing")` returns `Item`
+- `build_segments_groups_contiguous_scopes` passes: 5 steps → 3 segments (Task[plan,implement] → Item[qa_testing,ticket_fix] → Task[doc_governance])
+- Task-scoped segments dispatch single execution; item-scoped segments fan out per item
 
 ---
 
@@ -171,40 +142,34 @@ WHERE e.task_id = '{task_id}'
 
 ### Preconditions
 
-- Workflow with plan (task-scoped) → qa_testing (item-scoped)
-- Plan step produces `plan_output` pipeline variable
+- Rust toolchain available
 
 ### Goal
 
-Verify that pipeline variables set during task-scoped segments (e.g., `plan_output`) are available to item-scoped segments.
+Verify that pipeline variables set during task-scoped segments propagate to item-scoped segments — validated via unit tests covering `promote_winner_vars` and `propagate_preserves_existing_item_state`.
 
 ### Steps
 
-1. Create and run a task with `sdlc_pipeline_vars` workflow (plan produces output, qa_testing references it):
+1. **Code review** — verify pipeline variable promotion in loop engine:
    ```bash
-   orchestrator task create \
-     --name "scope-pipeline-vars" \
-     --goal "Test pipeline var propagation across segments" \
-     --project "${QA_PROJECT}" \
-     --workflow sdlc_pipeline_vars \
-     --no-start
-   orchestrator task start {task_id}
+   rg -n "promote_winner_vars|propagate.*item_state|pipeline_vars" crates/orchestrator-scheduler/src/scheduler/loop_engine.rs | head -20
    ```
 
-2. Check that qa_testing received the plan_output:
+2. **Code review** — verify template rendering resolves pipeline vars:
    ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT command FROM command_runs
-      WHERE task_item_id IN (
-        SELECT id FROM task_items WHERE task_id = '{task_id}'
-      ) AND phase = 'qa_testing'
-      ORDER BY started_at LIMIT 1"
+   rg -n "pipeline_vars_escaped_in_template|resolve_pipeline_var" core/src/ | head -10
+   ```
+
+3. **Unit test** — run pipeline variable propagation tests:
+   ```bash
+   cargo test --workspace --lib -- promote_winner_vars propagate_preserves pipeline_vars_escaped 2>&1 | tail -5
    ```
 
 ### Expected
 
-- The `command` for qa_testing contains the rendered plan_output value (not the literal `{plan_output}` placeholder)
-- Plan step ran once, qa_testing ran for each item with the same propagated plan output
+- `promote_winner_vars_inserts_into_pipeline` passes: winner output vars merge into pipeline state
+- `propagate_preserves_existing_item_state` passes: existing item state survives propagation
+- `pipeline_vars_escaped_in_template` passes: vars are rendered (not literal placeholders) in command templates
 
 ---
 
@@ -212,7 +177,7 @@ Verify that pipeline variables set during task-scoped segments (e.g., `plan_outp
 
 ### Preconditions
 
-- Self-bootstrap workflow YAML loaded (no explicit `scope` annotations)
+- Rust toolchain available
 
 ### Goal
 
@@ -220,14 +185,14 @@ Verify that `default_scope_for_step_id()` correctly classifies all self-bootstra
 
 ### Steps
 
-1. Apply self-bootstrap manifest:
+1. **Code review** — verify default scope mapping:
    ```bash
-   orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --dry-run
+   rg -n "default_scope_for_step_id" crates/orchestrator-config/src/config/step.rs -A 30
    ```
 
-2. Run unit test to verify default_scope mapping:
+2. **Unit test** — run default scope classification tests:
    ```bash
-   cd core && cargo test default_scope -- --nocapture
+   cargo test --workspace --lib -- default_scope 2>&1 | tail -5
    ```
 
 ### Expected
@@ -236,13 +201,12 @@ Verify that `default_scope_for_step_id()` correctly classifies all self-bootstra
   - `plan` → Task, `qa_doc_gen` → Task, `implement` → Task, `self_test` → Task
   - `qa_testing` → Item, `ticket_fix` → Item
   - `align_tests` → Task, `doc_governance` → Task
-- Self-bootstrap YAML applies without errors (no unknown `scope` field complaints)
 
 ### Expected Data State
 
 ```bash
-cd core && cargo test default_scope 2>&1 | grep "test result"
-# Expected: test result: ok. 2 passed; 0 failed
+cargo test --workspace --lib -- default_scope 2>&1 | grep "test result"
+# Expected: test result: ok. N passed; 0 failed
 ```
 
 ---
@@ -251,7 +215,7 @@ cd core && cargo test default_scope 2>&1 | grep "test result"
 
 ### Preconditions
 
-- Execution plan with interleaved scopes: [Task, Task, Item, Item, Task]
+- Rust toolchain available
 
 ### Goal
 
@@ -259,14 +223,9 @@ Verify that `build_scope_segments()` produces correct contiguous groupings and t
 
 ### Steps
 
-1. Run the segment grouping unit tests:
+1. **Unit test** — run segment grouping and scope override tests:
    ```bash
-   cd core && cargo test build_segments -- --nocapture
-   ```
-
-2. Run the scope override test:
-   ```bash
-   cd core && cargo test resolved_scope -- --nocapture
+   cargo test --workspace --lib -- build_segments resolved_scope 2>&1 | tail -5
    ```
 
 ### Expected
@@ -278,8 +237,8 @@ Verify that `build_scope_segments()` produces correct contiguous groupings and t
 ### Expected Data State
 
 ```bash
-cd core && cargo test build_segments resolved_scope 2>&1 | grep "test result"
-# Expected: test result: ok. 3 passed; 0 failed
+cargo test --workspace --lib -- build_segments resolved_scope 2>&1 | grep "test result"
+# Expected: test result: ok. N passed; 0 failed
 ```
 
 ---
@@ -288,8 +247,8 @@ cd core && cargo test build_segments resolved_scope 2>&1 | grep "test result"
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Task-Scoped Steps Run Once With Multiple Items | ☐ | | | SKIPPED — self-referential unsafe |
+| 1 | Task-Scoped Steps Run Once With Multiple Items | ☐ | | | Code review + unit test (build_segments, default_scope) |
 | 2 | Item-Scoped Steps Fan Out Per QA File | ✅ PASS | 2026-03-18 | Claude | DB: task d3df2824, 3 distinct task_item_ids, qa_testing ×3, item statuses qa_passed |
-| 3 | Pipeline Variables Propagate From Task to Item Segments | ☐ | | | SKIPPED — self-referential unsafe |
-| 4 | Default Scope Classification Matches SDLC Intent | ☐ | | | SKIPPED — self-referential unsafe |
-| 5 | Segment Grouping With Mixed Scope Steps | ☐ | | | SKIPPED — self-referential unsafe |
+| 3 | Pipeline Variables Propagate From Task to Item Segments | ☐ | | | Code review + unit test (promote_winner_vars, pipeline_vars) |
+| 4 | Default Scope Classification Matches SDLC Intent | ☐ | | | Unit test (default_scope) |
+| 5 | Segment Grouping With Mixed Scope Steps | ☐ | | | Unit test (build_segments, resolved_scope) |

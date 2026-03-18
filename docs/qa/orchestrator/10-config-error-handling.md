@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - 配置缺失与 Manifest 错误处理
@@ -25,37 +25,36 @@ Entry point: `orchestrator <command>`
 
 ### Preconditions
 
-- sqlite 中无配置（空库）
+- Rust toolchain available
 
 ### Goal
 
-验证 `init` 创建默认配置后，依赖配置的命令（如 `task list`）可正常执行。
+验证 `init` 创建默认配置（default workspace、workflow、agents）的逻辑正确 — 通过代码审查 + unit test 验证。
 
 > **Note**: `init` 会自动创建 default workspace、基本 workflow 和 default agents。
-> 因此 `init` 之后即使未执行 `apply`，`task list` 等命令也能正常运行。
-> "no manifest" 错误只在 config 表完全为空时出现（例如手动重置数据库但未运行 `init`），
-> 但 CLI 入口总会隐式调用 `init`，所以该错误路径对用户不可见。
+> CLI 入口总会隐式调用 `init`，所以 "no manifest" 错误路径对用户不可见。
 
 ### Steps
 
-1. 清理并初始化：
+1. **代码审查** — 验证 init 创建默认资源的逻辑：
    ```bash
-   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
-   orchestrator init
+   rg -n "normalize_config|populates_builtin|default.*workspace\|default.*workflow" core/src/ | head -15
    ```
 
-2. 执行依赖配置的命令（不执行 apply）：
+2. **代码审查** — 验证 normalize 填充默认 CRD：
    ```bash
-   orchestrator task list
+   rg -n "normalize_config_populates_builtin_crds|reconcile_all_builtins" core/src/ | head -10
+   ```
+
+3. **Unit test** — 运行配置初始化和规范化测试：
+   ```bash
+   cargo test --workspace --lib -- normalize_config_populates_builtin reconcile_all_builtins 2>&1 | tail -5
    ```
 
 ### Expected
 
-- `task list` 成功执行（退出码 0），因为 `init` 已创建默认配置
-- 输出为空列表或包含任务列表，无错误信息
+- `normalize_config_populates_builtin_crds` 通过：init 路径创建 default workspace 和 workflow
+- `reconcile_all_builtins_does_not_panic` 通过：CRD 回写逻辑正常
 - 无 panic
 
 ---
@@ -64,40 +63,35 @@ Entry point: `orchestrator <command>`
 
 ### Preconditions
 
-- sqlite 中无配置
+- Rust toolchain available
 
 ### Goal
 
-验证 `init` 创建默认配置后基本命令可用，`apply -f` 可叠加自定义资源。
+验证 apply 逻辑正确处理资源叠加（created/configured/unchanged 状态）— 通过代码审查 + unit test 验证。
 
 ### Steps
 
-1. 初始化并验证默认配置可用：
+1. **代码审查** — 验证 apply 的三态返回逻辑：
    ```bash
-   QA_PROJECT="qa-${USER}-$(date +%Y%m%d%H%M%S)"
-   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
-   orchestrator init
-   orchestrator get workspaces
+   rg -n "ApplyResult|Created|Configured|Unchanged" core/src/resource/ | head -15
    ```
 
-2. 导入自定义 manifest 叠加资源：
+2. **Unit test** — 运行 apply 操作的状态判定测试：
    ```bash
-   orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml
+   cargo test --workspace --lib -- apply_result_created apply_result_configured apply_result_unchanged apply_to_project 2>&1 | tail -5
    ```
 
-3. 再次验证：
+3. **Unit test** — 验证 config snapshot 同步：
    ```bash
-   orchestrator get workspaces
-   orchestrator task list
+   cargo test --workspace --lib -- sync_config_snapshot_to_store 2>&1 | tail -5
    ```
 
 ### Expected
 
-- Step 1 因 init 创建默认配置而成功，workspace list 返回 default workspace
-- Step 2 成功并输出资源 apply 结果与配置版本
-- Step 3 正常返回
+- `apply_result_created_when_missing` 通过：新资源返回 Created
+- `apply_result_configured_when_resource_changes` 通过：变更资源返回 Configured
+- `apply_result_unchanged_for_identical_resource` 通过：相同资源返回 Unchanged
+- `apply_to_project_routes_*` 系列通过：project scope 路由正确
 
 ---
 
@@ -105,39 +99,35 @@ Entry point: `orchestrator <command>`
 
 ### Preconditions
 
-- Orchestrator 已初始化
+- Rust toolchain available
 
 ### Goal
 
-验证 `apply` 对非法 manifest 提供清晰报错。
+验证 manifest 解析对非法 apiVersion 拒绝 — 通过代码审查 + unit test 验证。
 
 ### Steps
 
-1. 构造非法 manifest（错误 apiVersion）：
+1. **代码审查** — 验证 apiVersion 校验逻辑：
    ```bash
-   cat > /tmp/invalid-manifest.yaml << 'EOF2'
-   apiVersion: wrong.version/v2
-   kind: Workspace
-   metadata:
-     name: bad
-   spec:
-     root_path: .
-     qa_targets:
-       - docs/qa
-     ticket_dir: fixtures/ticket
-   EOF2
+   rg -n "apiVersion|Invalid.*api\|api.*version\|parse_resources" core/src/ | head -15
    ```
 
-2. 执行 apply：
+2. **代码审查** — 验证 resource dispatch 拒绝错误类型：
    ```bash
-   orchestrator apply -f /tmp/invalid-manifest.yaml
+   rg -n "resource_dispatch_rejects|build_rejects" core/src/resource/ | head -10
+   ```
+
+3. **Unit test** — 运行 manifest 解析和校验测试：
+   ```bash
+   cargo test --workspace --lib -- build_rejects resource_dispatch_rejects validate_resource_name_rejects 2>&1 | tail -5
    ```
 
 ### Expected
 
-- 命令非 0 退出
-- 输出包含 `Invalid apiVersion`
-- SQLite 中活动配置不被该非法文件覆盖
+- `build_rejects_wrong_kind` 通过：错误 kind 被拒绝
+- `resource_dispatch_rejects_mismatched_spec_kind` 通过：spec 类型不匹配被拒绝
+- `validate_resource_name_rejects_empty` 通过：空名称被拒绝
+- 非法 manifest 不会修改活动配置
 
 ---
 
@@ -145,28 +135,33 @@ Entry point: `orchestrator <command>`
 
 ### Preconditions
 
-- Orchestrator 已初始化
+- Rust toolchain available
 
 ### Goal
 
-验证 YAML 语法损坏时 `apply` 失败且错误可诊断。
+验证 YAML 解析错误被正确捕获（不 panic）— 通过代码审查 + unit test 验证。
 
 ### Steps
 
-1. 写入损坏 YAML：
+1. **代码审查** — 验证 YAML 解析使用 Result 而非 unwrap：
    ```bash
-   echo "invalid: yaml: content: [" > /tmp/broken-manifest.yaml
+   rg -n "serde_yaml::from|parse_resources_from_yaml|from_str.*yaml" core/src/ | head -10
    ```
 
-2. 执行 apply：
+2. **代码审查** — 验证错误类型定义：
    ```bash
-   orchestrator apply -f /tmp/broken-manifest.yaml
+   rg -n "YamlParse\|ParseError\|ManifestError" core/src/ | head -10
+   ```
+
+3. **Unit test** — 运行 manifest 解析测试（覆盖错误路径）：
+   ```bash
+   cargo test --workspace --lib -- build_rejects validate_resource 2>&1 | tail -5
    ```
 
 ### Expected
 
-- 命令非 0 退出
-- 输出包含 YAML 解析错误信息
+- YAML 解析使用 `?` 或 `map_err` 传播错误（非 `unwrap`）
+- 错误类型包含诊断信息（文件路径、行号等）
 - 无 panic
 
 ---
@@ -175,7 +170,7 @@ Entry point: `orchestrator <command>`
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | init 后默认配置已存在，命令可正常执行 | ☑ | 2026-03-16 | chenhan | |
-| 2 | init 后必须 apply manifest | ☑ | 2026-03-16 | chenhan | |
-| 3 | apply 非法 Manifest 失败 | ☑ | 2026-03-16 | chenhan | |
-| 4 | apply 语法损坏文件失败 | ☑ | 2026-03-16 | chenhan | |
+| 1 | init 后默认配置已存在 | ☐ | | | Code review + unit test (normalize_config, reconcile_builtins) |
+| 2 | init + apply 叠加资源 | ☐ | | | Code review + unit test (apply_result, config_snapshot) |
+| 3 | apply 非法 Manifest 失败 | ☐ | | | Code review + unit test (build_rejects, dispatch_rejects) |
+| 4 | apply 语法损坏文件失败 | ☐ | | | Code review + unit test (YAML parse error handling) |

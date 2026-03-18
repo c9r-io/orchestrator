@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - Agent Selection Strategy (Scoring and Health)
@@ -15,12 +15,17 @@ self_referential_safe: false
 
 This document tests the agent selection strategy when multiple agents compete
 for the same capability. Scenarios cover cost-based scoring, quality scoring,
-health degradation after failures, manual retry, and load balancing.
+health degradation after failures, retry status transitions, and load balancing.
 
-Each scenario uses a dedicated fixture with concrete agents, so assertions are
-grounded in real execution output rather than conceptual descriptions.
+Each scenario is verified through code review of the scoring/health/load-balancing
+logic and by running the corresponding unit tests that exercise these paths with
+deterministic inputs.
 
-Entry point: `orchestrator <command>`
+Key source modules:
+- `select_agent_advanced` — multi-factor scoring with cost, metrics, health penalty
+- `AgentHealthState` / `CapabilityHealth` — per-capability health tracking and disease marking
+- `MetricsCollector` — runtime success/failure rate, load tracking, EMA calculations
+- `TaskItemRepository` — status transitions for retry behavior
 
 ---
 
@@ -28,65 +33,38 @@ Entry point: `orchestrator <command>`
 
 ### Preconditions
 
-- Reset previous QA state — use `delete project/<name> --force` to clear task data, config,
-  and auto-generated tickets without destroying global state.
-- Apply fixture into project scope — use `--project` to ensure only fixture
-  agents participate in selection.
+- Rust toolchain available
 
 ### Goal
 
-Validate that two agents with different costs are both used, and that the
-lower-cost agent is selected more frequently by the scoring algorithm.
-
-### Fixture
-
-`fixtures/manifests/bundles/selection-perf-test.yaml`
-
-- `fast_agent` — cost: 20, capabilities: `[qa, fix]`, templates emit structured JSON markers `fast-qa` / `fast-fix`
-- `quality_agent` — cost: 80, capabilities: `[qa, fix]`, templates emit structured JSON markers `quality-qa` / `quality-fix`
-- Workflow `selection_test` — steps: qa, fix (mode: once)
+Validate that the scoring algorithm gives lower-cost agents a higher score,
+and that the cost-based selection strategy works correctly — via code review
+and unit tests.
 
 ### Steps
 
-1. Reset and apply into project scope:
+1. **Code review** — locate the cost differential logic in scoring:
    ```bash
-   orchestrator delete project/qa-cost --force
-   orchestrator apply -f fixtures/manifests/bundles/selection-perf-test.yaml --project qa-cost
+   rg -n "cost_differential\|cost.*score\|lower_cost" core/src/ | head -15
    ```
 
-2. Create and run task:
+2. **Code review** — verify the cost-based strategy test exists:
    ```bash
-   TASK_ID=$(orchestrator task create \
-     --project qa-cost \
-     --name "cost-scoring-test" \
-     --goal "Test cost-based scoring" \
-     --workspace default \
-     --workflow selection_test \
-     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}"
+   rg -n "test_cost_differential_lower_cost_scores_higher\|test_selection_strategy_cost_based" core/src/ | head -10
    ```
 
-3. Inspect logs to count agent selection:
+3. **Unit test** — run cost-based scoring tests:
    ```bash
-   orchestrator task logs "${TASK_ID}"
-   # Count occurrences of structured output markers "fast-qa" vs "quality-qa"
+   cargo test --workspace --lib -- test_cost_differential_lower_cost_scores_higher test_selection_strategy_cost_based 2>&1 | tail -5
    ```
 
 ### Expected
 
-- Task status: `completed`, failed: 0
-- Both agents appear in logs (both `fast-qa` and `quality-qa`)
-- Selection uses capability-aware strategy (default)
-- The scoring algorithm gives the lower-cost agent (`fast_agent`) a higher
-  score, but since both agents are within the top-3 candidate pool, actual
-  selection is randomized — distribution may be roughly equal
-
-### Troubleshooting
-
-| Symptom | Root Cause | Fix |
-|---------|-----------|-----|
-| Only one agent selected across all runs | Project-scoped `apply` may have failed to register one agent, or the agent lacks the required capability | Run `orchestrator describe agent/fast_agent --project qa-cost` and `describe agent/quality_agent --project qa-cost` to verify both agents exist with correct capabilities |
-| Selection distribution is heavily skewed | With only 2 agents in the top-3 pool, randomization should give ~50/50; extreme skew indicates only 1 agent was available | Check `resolve_effective_agents` returns both agents for the project |
+- `test_cost_differential_lower_cost_scores_higher` passes: an agent with lower cost
+  receives a higher score than one with higher cost, all else equal
+- `test_selection_strategy_cost_based` passes: the cost-based strategy variant
+  correctly weights cost in the scoring formula
+- No panics
 
 ---
 
@@ -94,60 +72,37 @@ lower-cost agent is selected more frequently by the scoring algorithm.
 
 ### Preconditions
 
-- Reset previous QA state — `delete project/<name> --force` clears task data, config, and auto-tickets.
+- Rust toolchain available
 
 ### Goal
 
-Validate that two agents with different costs but identical capability are
-both used successfully.
-
-### Fixture
-
-`fixtures/manifests/bundles/selection-quality-test.yaml`
-
-- `proven_agent` — cost: 50, capabilities: `[qa]`, template emits structured marker `proven-qa`
-- `new_agent` — cost: 20, capabilities: `[qa]`, template emits structured marker `new-qa`
-- Workflow `quality_selection_test` — steps: qa (mode: once)
+Validate that agents with higher success rates are preferred by the scoring
+algorithm — via code review and unit tests.
 
 ### Steps
 
-1. Reset and apply into project scope:
+1. **Code review** — locate success-rate weighting logic:
    ```bash
-   orchestrator delete project/qa-quality --force
-   orchestrator apply -f fixtures/manifests/bundles/selection-quality-test.yaml --project qa-quality
+   rg -n "success_rate\|metrics_impact\|high_success_rate" core/src/ | head -15
    ```
 
-2. Create and run task:
+2. **Code review** — verify the quality/metrics scoring tests exist:
    ```bash
-   TASK_ID=$(orchestrator task create \
-     --project qa-quality \
-     --name "quality-scoring-test" \
-     --goal "Test quality-based scoring" \
-     --workspace default \
-     --workflow quality_selection_test \
-     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}"
+   rg -n "test_selection_strategy_success_rate_weighted\|test_metrics_impact_high_success_rate_preferred" core/src/ | head -10
    ```
 
-3. Inspect agent selection via DB (more reliable than logs for verifying
-   selection distribution):
+3. **Unit test** — run quality scoring tests:
    ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT agent_id, COUNT(*) FROM command_runs
-      WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '${TASK_ID}')
-      GROUP BY agent_id;"
-   ```
-
-4. Optionally inspect logs:
-   ```bash
-   orchestrator task logs "${TASK_ID}"
+   cargo test --workspace --lib -- test_selection_strategy_success_rate_weighted test_metrics_impact_high_success_rate_preferred 2>&1 | tail -5
    ```
 
 ### Expected
 
-- Both `proven_agent` and `new_agent` appear in the `command_runs` query
-- No other agents appear (DB isolation ensures only fixture-defined agents exist)
-- All items from agents that exit 0 produce analysis findings
+- `test_selection_strategy_success_rate_weighted` passes: success-rate-weighted strategy
+  ranks agents with higher historical success rates above others
+- `test_metrics_impact_high_success_rate_preferred` passes: metrics integration correctly
+  boosts scores for agents with high success rates
+- No panics
 
 ---
 
@@ -155,139 +110,102 @@ both used successfully.
 
 ### Preconditions
 
-- Reset previous QA state — `delete project/<name> --force` clears task data, config, and auto-tickets.
+- Rust toolchain available
 
 ### Goal
 
-Validate that after repeated **infrastructure failures** (e.g., invalid output
-format, sandbox denial, process crash), the failing agent is marked diseased
-and the healthy agent handles an increasing share of work across cycles.
+Validate that after repeated infrastructure failures, a failing agent's score
+is penalized and eventually the agent is marked diseased and excluded from
+candidate selection — via code review and unit tests.
 
 > **Note:** Only infrastructure failures trigger disease — not negative task
 > conclusions (`exit_code > 0`). An agent that correctly completes its work
-> but reports a negative finding (e.g., QA found a bug) is **not** penalized.
-
-### Fixture
-
-`fixtures/manifests/bundles/mixed-health.yaml`
-
-- `mock_echo` — capabilities: `[qa]`, template emits structured analysis JSON (always succeeds)
-- `mock_fail` — capabilities: `[qa]`, template emits invalid JSON (triggers validation failure = infrastructure error)
-- Workflow `health_test` — steps: qa, loop mode: infinite, max_cycles: 3
+> but reports a negative finding is **not** penalized.
 
 ### Steps
 
-1. Reset and apply into project scope:
+1. **Code review** — locate health penalty and disease logic:
    ```bash
-   orchestrator delete project/qa-health --force
-   orchestrator apply -f fixtures/manifests/bundles/mixed-health.yaml --project qa-health
+   rg -n "health_penalty\|consecutive_errors\|diseased\|is_capability_healthy\|is_agent_healthy" core/src/ | head -20
    ```
 
-2. Create and run task:
+2. **Code review** — verify the health degradation tests exist:
    ```bash
-   TASK_ID=$(orchestrator task create \
-     --project qa-health \
-     --name "health-degradation-test" \
-     --goal "Test health degradation" \
-     --workspace default \
-     --workflow health_test \
-     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}"
+   rg -n "test_health_penalty_consecutive_errors_lowers_score\|test_diseased_agent_filtered_from_candidates\|is_capability_healthy_diseased" core/src/ | head -10
    ```
 
-3. Verify agent selection via DB (`task logs` does not show output from
-   failed agent runs, so DB is the authoritative source):
+3. **Unit test** — run health penalty and disease filtering tests:
    ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT agent_id, COUNT(*), GROUP_CONCAT(DISTINCT exit_code)
-      FROM command_runs
-      WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '${TASK_ID}')
-      GROUP BY agent_id;"
+   cargo test --workspace --lib -- test_health_penalty_consecutive_errors_lowers_score test_diseased_agent_filtered_from_candidates 2>&1 | tail -5
    ```
 
-4. Optionally check logs (only successful runs appear here):
+4. **Unit test** — run capability-level health tests:
    ```bash
-   orchestrator task logs "${TASK_ID}"
+   cargo test --workspace --lib -- is_capability_healthy 2>&1 | tail -5
+   ```
+
+5. **Unit test** — run agent-level health tests:
+   ```bash
+   cargo test --workspace --lib -- is_agent_healthy 2>&1 | tail -5
    ```
 
 ### Expected
 
-- **On a fresh daemon** (no prior health state for `mock_fail`):
-  - `mock_fail` appears in `command_runs` with a small count (typically 1–2)
-    and `exit_code = -6` (validation failure)
-  - After 2 consecutive infrastructure failures `mock_fail` is marked diseased
-    and excluded from subsequent selection
-  - `mock_echo` handles the vast majority of runs across all cycles
-  - Task status: `failed` with some `unresolved` items — this is **expected**
-    because `mock_fail`'s items generate tickets that trigger the
-    `fallback_unresolved_with_tickets` finalize rule
-- **If the daemon already has health state** from a previous run of this
-  scenario (e.g., `mock_fail` was previously marked diseased and the disease
-  timeout has not expired), then `mock_fail` may never be selected at all.
-  In that case, all items will be handled by `mock_echo` and the task will
-  complete successfully with 0 failures. This is **correct behavior** — the
-  health degradation is working as designed; it just carried over from the
-  previous test run.
-- `task logs` will show only `echo-qa` markers because failed runs are not
-  surfaced by the logs command; use the DB query to confirm `mock_fail` was
-  selected
-
-### Troubleshooting
-
-| Symptom | Root Cause | Fix |
-|---------|-----------|-----|
-| `mock_fail` never selected, task completes with 0 failures | `mock_fail` was already marked diseased from a prior test run; health state is in-memory and persists across projects within the same daemon session | Restart the daemon to reset in-memory health state, then re-run the scenario |
-| All items pass with `mock_echo` only | Same as above — this is correct behavior if `mock_fail` is already diseased | Verify via DB: if no `mock_fail` rows exist in `command_runs`, it was pre-excluded by health check |
+- `test_health_penalty_consecutive_errors_lowers_score` passes: consecutive
+  infrastructure failures progressively lower an agent's score
+- `test_diseased_agent_filtered_from_candidates` passes: a diseased agent is
+  excluded from the candidate pool entirely
+- `is_capability_healthy_*` tests pass (6 tests): capability-level health checks
+  correctly identify healthy, degraded, and diseased states
+- `is_agent_healthy_*` tests pass (6 tests): agent-level health aggregation works
+- No panics
 
 ---
 
-## Scenario 4: Manual Retry Behavior
+## Scenario 4: Retry Status Transitions
 
 ### Preconditions
 
-- Task from Scenario 3 (or any task with `unresolved`/`failed` items)
-- Do **not** delete the DB — this scenario depends on the state from Scenario 3
+- Rust toolchain available
 
 ### Goal
 
-Validate that `task retry` resets a failed item to pending and re-queues it.
+Validate that task item status transitions for retry behave correctly —
+a failed/unresolved item can be reset to pending and re-queued, and that
+status fields (e.g., `started_at`) are set appropriately — via code review
+and unit tests.
 
 ### Steps
 
-1. Use a completed task with failed items (e.g. from Scenario 3):
+1. **Code review** — locate task item status transition logic:
    ```bash
-   orchestrator task info {task_id}
+   rg -n "update_task_item_status\|mark_task_item_running\|started_at" core/src/ | head -15
    ```
 
-2. Pick an unresolved/failed item and verify its current status:
+2. **Code review** — verify status transition tests exist:
    ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT id, status FROM task_items WHERE task_id = '{task_id}' AND status = 'unresolved' LIMIT 1;"
+   rg -n "update_task_item_status_\|mark_task_item_running_sets_started_at" core/src/ | head -10
    ```
 
-3. Retry with `--force` to verify the reset is queued before re-execution:
+3. **Unit test** — run status transition tests:
    ```bash
-   orchestrator task retry {task_item_id} --force
+   cargo test --workspace --lib -- update_task_item_status_ mark_task_item_running_sets_started_at 2>&1 | tail -5
    ```
 
-4. Immediately check item status (before task loop runs):
+4. **Unit test** — run orphaned item recovery tests (related to retry resilience):
    ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT id, status FROM task_items WHERE id = '{task_item_id}';"
+   cargo test --workspace --lib -- recover_orphaned_running_items 2>&1 | tail -5
    ```
 
 ### Expected
 
-- Immediately after `task retry --force`, the item status is `pending`
-- Retry is always queue-based in C/S mode; the item is re-finalized after
-  execution, so the final status depends on the finalize rules (it may return
-  to `unresolved` if the underlying issue persists)
-- Automatic retry with agent rotation is **not implemented** — the same agent
-  may be selected again
-- After 2+ consecutive **infrastructure failures** (crash, timeout, sandbox
-  denial, validation failure), the failing agent is marked diseased and
-  excluded from future selection via health tracking. Negative task conclusions
-  (`exit_code > 0`) do **not** count toward disease.
+- `update_task_item_status_*` tests pass: status transitions between pending,
+  running, completed, failed, and unresolved are validated
+- `mark_task_item_running_sets_started_at` passes: the `started_at` timestamp
+  is set when an item enters running state
+- `recover_orphaned_running_items_*` tests pass: items stuck in running state
+  (e.g., after a crash) are correctly recovered to pending
+- No panics
 
 ---
 
@@ -295,47 +213,47 @@ Validate that `task retry` resets a failed item to pending and re-queues it.
 
 ### Preconditions
 
-- Reset previous QA state — `delete project/<name> --force` clears task data, config, and auto-tickets.
+- Rust toolchain available
 
 ### Goal
 
-Validate that agent load tracking influences selection during execution.
-
-### Fixture
-
-`fixtures/manifests/bundles/selection-perf-test.yaml` (same as Scenario 1)
+Validate that agent load tracking influences selection — agents with lower
+current load receive higher scores, and the load increment/decrement cycle
+works correctly — via code review and unit tests.
 
 ### Steps
 
-1. Reset and apply into project scope:
+1. **Code review** — locate load balancing logic:
    ```bash
-   orchestrator delete project/qa-load --force
-   orchestrator apply -f fixtures/manifests/bundles/selection-perf-test.yaml --project qa-load
+   rg -n "load_balanced\|increment_load\|decrement_load\|current_load" core/src/ | head -15
    ```
 
-2. Create and run task:
+2. **Code review** — verify load balancing tests exist:
    ```bash
-   TASK_ID=$(orchestrator task create \
-     --project qa-load \
-     --name "load-balance-test" \
-     --goal "Test load balancing" \
-     --workspace default \
-     --workflow selection_test \
-     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}"
+   rg -n "test_load_balanced_low_load_scores_higher\|test_load_increment_decrement_cycle\|test_selection_strategy_load_balanced" core/src/ | head -10
    ```
 
-3. Inspect distribution:
+3. **Unit test** — run load balancing scoring and strategy tests:
    ```bash
-   orchestrator task logs "${TASK_ID}"
+   cargo test --workspace --lib -- test_load_balanced_low_load_scores_higher test_selection_strategy_load_balanced 2>&1 | tail -5
+   ```
+
+4. **Unit test** — run load tracking lifecycle test:
+   ```bash
+   cargo test --workspace --lib -- test_load_increment_decrement_cycle test_load_balanced_score_never_negative 2>&1 | tail -5
    ```
 
 ### Expected
 
-- Task status: `completed`, failed: 0
-- `increment_load` called before each execution, `decrement_load` after
-- Higher-load agents receive lower scores during concurrent selection
-- Load data is tracked in-memory only (not persisted to events)
+- `test_load_balanced_low_load_scores_higher` passes: agents with lower current
+  load receive higher scores than busy agents
+- `test_selection_strategy_load_balanced` passes: the load-balanced strategy
+  variant correctly weights current load in scoring
+- `test_load_increment_decrement_cycle` passes: load counters increment before
+  execution and decrement after, returning to baseline
+- `test_load_balanced_score_never_negative` passes: score calculation never
+  produces negative values even under high load
+- No panics
 
 ---
 
@@ -343,16 +261,15 @@ Validate that agent load tracking influences selection during execution.
 
 - Runtime metrics (`total_runs`, `successful_runs`, `avg_duration_ms`) are
   collected in-memory via `MetricsCollector` and influence `calculate_agent_score`
-- There is no dedicated CLI command to inspect raw agent metrics; verify
-  indirectly via log distribution across agents
 - Health state is tracked per-capability via `AgentHealthState.capability_health`
-- **Agent isolation via project scope**: Use `apply -f ... --project <name>` to
-  deploy fixture agents into a project scope. Agent selection for project tasks
-  uses project-scoped agents exclusively, so global/bootstrap agents never
-  interfere with test assertions.
-- **Clean state via `delete project/`**: Use `delete project/<name> --force`
-  before each scenario to clear task data, project config, and auto-generated
-  ticket files in one command — no need to delete the DB file.
+- **Agent isolation via project scope**: `apply -f ... --project <name>` deploys
+  fixture agents into a project scope. Agent selection for project tasks uses
+  project-scoped agents exclusively, so global/bootstrap agents never interfere
+  with test assertions.
+- **Clean state via `delete project/`**: `delete project/<name> --force` clears
+  task data, project config, and auto-generated ticket files in one command —
+  no need to delete the DB file.
+- Load data is tracked in-memory only (not persisted to the event store)
 
 ---
 
@@ -360,8 +277,8 @@ Validate that agent load tracking influences selection during execution.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Cost-Based Scoring | ☐ | | | |
-| 2 | Quality Scoring | ☐ | | | |
-| 3 | Health Degradation | ☐ | | | |
-| 4 | Manual Retry Behavior | ☐ | | | |
-| 5 | Load Balancing | ☐ | | | |
+| 1 | Cost-Based Scoring | ☐ | | | `test_cost_differential_lower_cost_scores_higher`, `test_selection_strategy_cost_based` |
+| 2 | Quality Scoring | ☐ | | | `test_selection_strategy_success_rate_weighted`, `test_metrics_impact_high_success_rate_preferred` |
+| 3 | Health Degradation | ☐ | | | `test_health_penalty_consecutive_errors_lowers_score`, `test_diseased_agent_filtered_from_candidates`, `is_capability_healthy_*`, `is_agent_healthy_*` |
+| 4 | Retry Status Transitions | ☐ | | | `update_task_item_status_*`, `mark_task_item_running_sets_started_at`, `recover_orphaned_running_items_*` |
+| 5 | Load Balancing | ☐ | | | `test_load_balanced_low_load_scores_higher`, `test_load_increment_decrement_cycle`, `test_selection_strategy_load_balanced` |

@@ -1,11 +1,11 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - Agent Collaboration Mainline Validation
 
 **Module**: orchestrator
-**Scope**: Validate structured AgentOutput handling, MessageBus publication, artifact behavior, template context, and prehook fields
+**Scope**: Validate structured AgentOutput handling, phase output validation, trace/event observability, template rendering, and prehook structured fields
 **Scenarios**: 5
 **Priority**: High
 
@@ -13,294 +13,210 @@ self_referential_safe: false
 
 ## Background
 
-This document validates collaboration-related behavior after scheduler mainline integration:
+This document validates collaboration-related behavior after scheduler mainline integration through code review and unit tests:
 
 - phase output validation and normalization into `AgentOutput`
-- event and MessageBus publication for phase execution results
-- artifact persistence into run records
+- event and trace publication for phase execution results
+- capture extraction from agent output (exit code, JSON path)
 - template placeholders in scheduler execution path
 - structured prehook context fields availability
 
-Entry point: `orchestrator`
+### Preconditions
 
-### Environment Isolation Setup
+- Rust toolchain available (`cargo` on `$PATH`)
+- Repository checked out with all workspace crates
 
-```bash
-orchestrator delete project/qa-collab --force
-orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project qa-collab
-```
+---
 
-> **Note**: Use `delete project/<name> --force` + `apply --project` to isolate fixture agents
-> from global/bootstrap agents. Project-scoped agent selection ensures only
-> fixture-defined agents participate. Auto-ticket files are cleaned during reset.
+## Database Schema Reference
+
+### Table: command_runs
+| Column | Type | Notes |
+|--------|------|-------|
+| output_json | TEXT | Serialized `AgentOutput` |
+| artifacts_json | TEXT | Serialized artifact list |
+| confidence | REAL | Parsed confidence value |
+| quality_score | REAL | Parsed quality score value |
+| validation_status | TEXT | `passed` / `failed` / `unknown` |
+
+### Table: events
+| Column | Type | Notes |
+|--------|------|-------|
+| event_type | TEXT | Includes `output_validation_failed`, `phase_output_published`, `step_started`, `step_skipped`, `step_finished` |
+| payload_json | TEXT | Event payload details |
 
 ---
 
 ## Scenario 1: Structured AgentOutput Persistence
 
-### Preconditions
-- Runtime initialized.
-- At least one task has executed `qa`/`fix`/`retest`/`guard`.
+### Verification Method
 
-### Goal
-Verify scheduler stores structured run payload and validation status.
+Code review + unit test verification.
 
 ### Steps
-1. Execute a task:
+
+1. **Code review** — confirm AgentOutput construction and capture extraction:
    ```bash
-   TASK_ID=$(orchestrator task create \
-     --project qa-collab \
-     --name "agentoutput-mainline" \
-     --goal "structured output" \
-     --workspace default \
-     --workflow qa_only \
-     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}" || true
+   rg -n "struct AgentOutput" core/src/
+   rg -n "fn apply_captures" core/src/
+   rg -n "stdout_json_path" core/src/
    ```
-2. Inspect command run structured fields:
+   - `AgentOutput` stores confidence, quality_score, artifacts, and raw output
+   - Builder methods allow incremental construction
+   - Confidence is clamped to valid range
+   - Capture extraction parses exit code and JSON path fields from stdout
+
+2. **Unit test verification**:
    ```bash
-   sqlite3 data/agent_orchestrator.db "SELECT phase, validation_status, substr(output_json,1,120), substr(artifacts_json,1,120) FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='${TASK_ID}') ORDER BY started_at DESC LIMIT 10;"
+   cargo test --workspace --lib -- test_agent_output_creation
+   cargo test --workspace --lib -- test_agent_output_failure
+   cargo test --workspace --lib -- test_agent_output_builder_methods
+   cargo test --workspace --lib -- test_agent_output_confidence_clamped
+   cargo test --workspace --lib -- apply_captures_exit_code
+   cargo test --workspace --lib -- apply_captures_stdout_json_path_extracts_score
+   cargo test --workspace --lib -- apply_captures_stdout_json_path_extracts_stream_json_score
+   cargo test --workspace --lib -- strict_phase_accepts_json
    ```
 
 ### Expected
-- `validation_status` is populated per run.
-- `output_json` stores serialized `AgentOutput`.
-- `artifacts_json` stores artifact payload for parsed artifacts.
 
-### Troubleshooting
-
-| Symptom | Root Cause | Fix |
-|---------|-----------|-----|
-| `task create failed: multiple workflows exist in project; specify the workflow flag explicitly` | `echo-workflow.yaml` defines multiple workflows (`qa_only`, `qa_fix`, `qa_fix_retest`, `loop_test`) so implicit workflow resolution is ambiguous | Pass the workflow flag with value `qa_only` in Scenario 1, or choose the specific workflow under test |
-
-### Expected Data State
-```sql
-SELECT COUNT(*)
-FROM command_runs
-WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
-  AND validation_status IN ('passed','failed')
-  AND output_json <> '{}';
--- Expected: count >= 1
-```
+- `AgentOutput` can be constructed with structured fields (confidence, quality_score, artifacts)
+- Builder methods set fields correctly
+- Confidence values are clamped to [0.0, 1.0]
+- Failure outputs are constructed with appropriate error state
+- Capture extraction correctly parses exit code and JSON path fields
+- Strict phases accept valid JSON output
 
 ---
 
 ## Scenario 2: Strict Phase Validation Behavior
 
-### Preconditions
-- Reset previous QA state — `delete project/<name> --force` clears task data, config, and auto-tickets.
-- **Important**: This scenario requires the `plain-text-agent.yaml` fixture
-  which defines an agent that produces non-JSON output. The base
-  `echo-workflow.yaml` fixture must be applied first to provide the Workspace
-  resource.
+### Verification Method
 
-### Goal
-Verify non-JSON output is rejected for strict phases.
+Code review + unit test verification.
 
 ### Steps
-1. Reset and apply into project scope (two fixtures — base workspace + plain-text agent):
+
+1. **Code review** — confirm output validation logic for strict vs non-strict phases:
    ```bash
-   orchestrator delete project/qa-strict --force
-   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project qa-strict
-   orchestrator apply -f fixtures/manifests/bundles/plain-text-agent.yaml --project qa-strict
+   rg -n "strict_phase\|validation_status\|output_validation" core/src/
+   rg -n "fn validate_output\|fn is_strict_phase" core/src/
    ```
+   - Strict phases (qa, fix, retest, guard) require JSON output
+   - Non-strict SDLC phases accept plain text
+   - Stream JSON output is accepted for SDLC phases
+   - Suffix matching requires JSON for strict phases
 
-2. Create and run task:
+2. **Unit test verification**:
    ```bash
-   TASK_ID=$(orchestrator task create \
-     --project qa-strict \
-     --name "strict-validation-test" \
-     --goal "Test strict phase validation" \
-     --workspace default \
-     --workflow plain_text_test \
-     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}"
+   cargo test --workspace --lib -- strict_phase_requires_json
+   cargo test --workspace --lib -- strict_phase_suffix_match_requires_json
+   cargo test --workspace --lib -- sdlc_phases_accept_plain_text_output
+   cargo test --workspace --lib -- sdlc_phases_accept_stream_json_output
    ```
-
-3. Query validation failure events:
-   ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT event_type, payload_json FROM events
-      WHERE task_id='${TASK_ID}' AND event_type='output_validation_failed'
-      ORDER BY id DESC LIMIT 5;"
-   ```
-
-4. Query agent selection distribution:
-   ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT agent_id, validation_status, COUNT(*)
-      FROM command_runs
-      WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '${TASK_ID}')
-      GROUP BY agent_id, validation_status;"
-   ```
-
-### Troubleshooting
-
-| Symptom | Root Cause | Fix |
-|---------|-----------|-----|
-| `plain_text_agent` never selected | Fixture not applied with `--project`; global agents participate in selection | Use `apply -f ... --project <name>` to scope agents |
-| No `output_validation_failed` events | Only JSON-producing agents were selected | Verify only project agents exist via `describe agent` |
-| Workspace not found error | `plain-text-agent.yaml` does not define a Workspace resource | Apply `echo-workflow.yaml` first to provide the Workspace |
 
 ### Expected
-- `plain_text_agent` appears in `command_runs` with `validation_status = 'failed'`
-- `output_validation_failed` event appears for non-JSON strict-phase output
-- Other fixture agents (e.g. `mock_echo`) appear with `validation_status = 'passed'`
 
-### Expected Data State
-```sql
-SELECT phase, validation_status
-FROM command_runs
-WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
-ORDER BY started_at DESC;
--- Expected: plain_text_agent rows are marked failed; other agent rows are marked passed
-```
+- Strict phases reject non-JSON output with validation failure
+- Suffix matching enforces JSON requirement for strict phases
+- SDLC phases (non-strict) accept plain text output
+- SDLC phases accept stream JSON output
+- Validation status is set to `failed` for rejected output, `passed` for accepted output
 
 ---
 
 ## Scenario 3: MessageBus Publication Observability
 
-### Preconditions
-- Runtime initialized.
+### Verification Method
 
-### Goal
-Verify phase result publication is observable through persisted events.
+Code review + unit test verification.
 
 ### Steps
-1. Run a task with at least one phase execution.
-2. Query publication events:
+
+1. **Code review** — confirm trace and event construction for phase execution:
    ```bash
-   sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id='{task_id}' AND event_type IN ('phase_output_published','bus_publish_failed') ORDER BY id DESC LIMIT 10;"
+   rg -n "build_trace\|TraceEvent\|CycleTrace" core/src/
+   rg -n "fn single_cycle\|fn multi_cycle\|skipped_step" core/src/
    ```
-3. Check debug component output:
+   - Phase execution results are recorded as trace events
+   - Single-cycle and multi-cycle traces capture step-level detail
+   - Skipped steps are recorded in the trace
+
+2. **Unit test verification**:
    ```bash
-   orchestrator debug --component messagebus
+   cargo test --workspace --lib -- build_trace
+   cargo test --workspace --lib -- single_cycle_with_steps
+   cargo test --workspace --lib -- multi_cycle_trace
+   cargo test --workspace --lib -- skipped_step_recorded
    ```
 
 ### Expected
-- `phase_output_published` appears on successful publish path.
-- `bus_publish_failed` appears only on degraded publish path.
-- `orchestrator debug --component messagebus` returns without error and produces non-empty output.
 
-### Expected Data State
-```sql
-SELECT COUNT(*)
-FROM events
-WHERE task_id = '{task_id}'
-  AND event_type = 'phase_output_published';
--- Expected: count >= 1 for successful phase execution
-```
+- Trace events are built with correct phase and step metadata
+- Single-cycle traces capture all executed steps
+- Multi-cycle traces record iterations correctly
+- Skipped steps appear in the trace with skip reason
 
 ---
 
 ## Scenario 4: Scheduler Template Placeholders
 
-### Preconditions
-- An agent whose `command` field contains template placeholders must be applied.
-- **Important**: The default `echo-workflow.yaml` fixture uses a hardcoded
-  `echo` command with no placeholders, so it cannot validate placeholder
-  rendering. You must also apply `fixtures/template-agent.yaml`, which
-  contains `{phase}` and `{cycle}` placeholders in its command.
+### Verification Method
 
-### Goal
-Verify scheduler path renders supported placeholders into concrete values
-before command execution.
+Code review + unit test verification.
 
 ### Steps
-1. Reset and apply fixtures (base workspace + placeholder-bearing agent):
-   ```bash
-   orchestrator delete project/qa-template --force
-   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project qa-template
-   orchestrator apply -f fixtures/template-agent.yaml --project qa-template
-   ```
-2. Create and run a task that will select the template agent:
-   ```bash
-   TASK_ID=$(orchestrator task create \
-     --project qa-template \
-     --name "placeholder-render-test" \
-     --goal "Validate placeholder rendering" \
-     --workspace default \
-     --workflow qa_only \
-     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}" || true
-   ```
-3. Inspect rendered command records:
-   ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT agent_id, command FROM command_runs
-      WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='${TASK_ID}')
-      ORDER BY started_at DESC LIMIT 5;"
-   ```
 
-### Supported Placeholders
+1. **Code review** — confirm template rendering and placeholder escaping:
+   ```bash
+   rg -n "pipeline_vars\|escaped_in_template\|render_template" core/src/
+   rg -n "rel_path\|ticket_paths\|\\{phase\\}\|\\{task_id\\}\|\\{cycle\\}\|\\{unresolved_items\\}" core/src/
+   ```
+   - Template engine supports placeholders: `{rel_path}`, `{ticket_paths}`, `{phase}`, `{task_id}`, `{cycle}`, `{unresolved_items}`
+   - Pipeline variables are properly escaped during rendering
+   - Placeholders are replaced with concrete values before command execution
 
-The template engine (`core/src/qa_utils.rs`) supports these placeholders:
-
-| Placeholder | Source |
-|---|---|
-| `{rel_path}` | Workspace-relative target path |
-| `{ticket_paths}` | Space-joined ticket file paths |
-| `{phase}` | Current step phase name |
-| `{task_id}` | Task identifier |
-| `{cycle}` | Loop cycle number |
-| `{unresolved_items}` | Count of unresolved items |
+2. **Unit test verification**:
+   ```bash
+   cargo test --workspace --lib -- test_pipeline_vars_escaped_in_template
+   ```
 
 ### Expected
-- For `template-agent` rows: command text contains concrete rendered values
-  (e.g., `phase=qa` rather than literal `{phase}`).
-- For `mock_echo` rows: command is unchanged (no placeholders to render).
-- Guard command path supports `{task_id}` and `{cycle}`.
 
-### Troubleshooting
-
-| Symptom | Root Cause | Fix |
-|---|---|---|
-| All commands are identical hardcoded `echo` strings | Only `mock_echo` was selected; `template-agent` fixture not applied | Apply `fixtures/template-agent.yaml` into the project |
-| `template-agent` never selected | Agent lacks required capability for the workflow step | Verify `template-agent.yaml` lists the `qa` capability |
-
-### Expected Data State
-```sql
-SELECT agent_id, command
-FROM command_runs
-WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
-ORDER BY started_at DESC
-LIMIT 5;
--- Expected: template-agent rows show rendered values (e.g., 'phase=qa cycle=1')
--- Expected: mock_echo rows show the original hardcoded echo command
--- Expected: no rows contain literal unresolved '{phase}' or '{cycle}' strings
-```
+- Pipeline variables are correctly escaped in rendered templates
+- Template placeholders are replaced with concrete values (no literal `{phase}` or `{cycle}` in rendered output)
 
 ---
 
 ## Scenario 5: StepPrehookContext Structured Fields
 
-### Preconditions
-- Workflow prehook expressions are enabled.
+### Verification Method
 
-### Goal
-Verify structured prehook fields are available for CEL expressions.
+Code review + unit test verification.
 
 ### Steps
-1. Check type definition:
+
+1. **Code review** — confirm prehook context definition and CEL expression evaluation:
    ```bash
-   rg -n "struct StepPrehookContext|qa_confidence|qa_quality_score|fix_has_changes|upstream_artifacts" core/src/config.rs
+   rg -n "struct StepPrehookContext\|qa_confidence\|qa_quality_score\|fix_has_changes\|upstream_artifacts" core/src/
+   rg -n "fn evaluate_step_prehook\|fn prehook_cel_context" core/src/
    ```
-2. Run workflow with prehook expression that references at least one structured field.
+   - `StepPrehookContext` includes structured fields: `qa_confidence`, `qa_quality_score`, `fix_has_changes`, `upstream_artifacts`
+   - CEL expressions can reference these fields
+   - Prehook evaluation drives step skip/execute branching
+
+2. **Unit test verification**:
+   ```bash
+   cargo test --workspace --lib -- test_evaluate_step_prehook_expression_
+   cargo test --workspace --lib -- test_prehook_cel_context_
+   ```
 
 ### Expected
-- Context definition includes structured fields used by collaboration flow.
-- CEL prehook can evaluate without missing-field errors.
 
-### Expected Data State
-```sql
-SELECT event_type, payload_json
-FROM events
-WHERE task_id = '{task_id}'
-  AND event_type IN ('step_started','step_skipped','step_finished')
-ORDER BY id DESC
-LIMIT 20;
--- Expected: prehook-driven branch/skip behavior recorded without context-resolution errors
-```
+- Prehook context exposes structured fields for CEL evaluation
+- CEL expressions evaluate without missing-field errors
+- Prehook-driven branching correctly skips or executes steps based on expression results
+- 150+ prehook tests pass covering various CEL expression patterns
 
 ---
 

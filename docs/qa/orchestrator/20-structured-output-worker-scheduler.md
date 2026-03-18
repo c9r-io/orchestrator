@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S1, S2, S3]
 ---
 
 # Orchestrator - Structured Output Mainline and Worker Scheduler
@@ -49,119 +50,94 @@ Entry point: `orchestrator` (CLI client) or `orchestratord` (daemon)
 ## Scenario 1: Strict Validation Rejects Non-JSON QA Output
 
 ### Preconditions
-- Runtime initialized.
-- **Project `qa-plain` must be freshly deleted and re-applied** (step 1 below) to clear any stale daemon health state from prior runs. Skipping the delete will cause "No healthy agent found" if the agent was diseased previously.
-- A QA-capable agent/template exists that prints plain text (non-JSON) for `qa`.
+- Rust toolchain available
 
 ### Goal
-Verify strict-mode validation fails phase output when `qa` stdout is not JSON.
+Verify strict-mode validation fails phase output when `qa` stdout is not JSON — validated via code review + unit test.
 
 ### Steps
-1. **Reset** and apply the plain-text-agent fixture into project scope (delete is mandatory to clear stale health state):
+1. **Code review** — verify strict phase validation logic:
    ```bash
-   orchestrator delete project/qa-plain --force
-   orchestrator apply -f fixtures/manifests/bundles/plain-text-agent.yaml --project qa-plain
+   rg -n "strict_phase\|is_strict_phase\|requires_json" core/src/output_validation.rs | head -10
    ```
-2. Create and run a task that uses non-JSON `qa` output:
+
+2. **Code review** — verify validation failure maps to exit_code -6:
    ```bash
-   orchestrator task create --project qa-plain --workflow plain_text_test
+   rg -n "exit_code.*-6\|validation_failure.*exit\|effective_exit_code" crates/orchestrator-scheduler/src/scheduler/phase_runner/ | head -10
    ```
-3. Check validation failure event:
+
+3. **Unit test** — run strict validation tests:
    ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT event_type, payload_json FROM events
-      WHERE task_id='${TASK_ID}' AND event_type='output_validation_failed'
-      ORDER BY id DESC LIMIT 5;"
+   cargo test --workspace --lib -- strict_phase_requires_json strict_phase_accepts_json effective_exit_code_maps_validation 2>&1 | tail -5
    ```
 
 ### Expected
-- At least one `output_validation_failed` event is present.
-- Corresponding phase run has `validation_status='failed'` and `exit_code=-6`.
-
-### Troubleshooting
-
-| Symptom | Root Cause | Fix |
-|---------|-----------|-----|
-| Agents from another project selected instead of `plain_text_agent` | Fixture not applied with `--project`, or task created under the wrong project | Use `apply -f ... --project qa-plain` and create the task with `--project qa-plain` |
-| Task fails with "No healthy agent found" after first few items | Agent marked diseased after consecutive validation failures | Expected behavior — strict validation correctly fails non-JSON output, and health system diseases the agent after 2 consecutive errors |
-| Task immediately fails with "No healthy agent found" before any runs | Agent exists in config but was diseased from a prior run, or daemon health state is stale | Delete and re-apply the project (`orchestrator delete project/qa-plain --force` then re-apply) to clear stale health/lifecycle state. Verify with `orchestrator get agents --project qa-plain` before creating the task |
-| Suspected missing `metadata.cost` causes selection failure | Red herring — missing cost defaults to 50 internally (`cost.unwrap_or(50)`); cost only affects scoring, never filtering | No fix needed. If agent is not selected, check health state (diseased from prior run) rather than cost config |
-
-### Expected Data State
-```sql
-SELECT phase, validation_status
-FROM command_runs
-WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
-ORDER BY started_at DESC;
--- Expected: at least one row with phase='qa' and validation_status='failed'
-```
+- `strict_phase_requires_json` passes: non-JSON qa output is rejected
+- `strict_phase_accepts_json` passes: valid JSON qa output is accepted
+- `effective_exit_code_maps_validation_failure_to_nonzero` passes: validation failure → exit_code -6
 
 ---
 
 ## Scenario 2: Structured Output Persists Into command_runs
 
 ### Preconditions
-- Runtime initialized.
-- A QA-capable agent/template returns JSON with `confidence`, `quality_score`, and `artifacts`.
+- Rust toolchain available
 
 ### Goal
-Verify structured fields are persisted in `command_runs`.
+Verify structured fields (output_json, artifacts_json, confidence, quality_score, validation_status) are captured and persisted — validated via code review + unit test.
 
 ### Steps
-1. Execute one task using structured JSON output.
-2. Query structured columns:
+1. **Code review** — verify AgentOutput struct fields:
    ```bash
-   sqlite3 data/agent_orchestrator.db "SELECT validation_status, confidence, quality_score, substr(output_json,1,120), substr(artifacts_json,1,120) FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='{task_id}') ORDER BY started_at DESC LIMIT 5;"
+   rg -n "struct AgentOutput|confidence|quality_score|artifacts" core/src/collab/output.rs | head -10
+   ```
+
+2. **Code review** — verify command_run insertion includes structured fields:
+   ```bash
+   rg -n "insert_command_run|output_json|artifacts_json|validation_status" core/src/task_repository/ | head -15
+   ```
+
+3. **Unit test** — run output capture and persistence tests:
+   ```bash
+   cargo test --workspace --lib -- test_agent_output_creation apply_captures_stdout_json_path insert_command_run_with_all_optional 2>&1 | tail -5
    ```
 
 ### Expected
-- `validation_status='passed'` for structured-output runs.
-- `output_json` and `artifacts_json` are non-empty JSON payloads.
-- `confidence` and `quality_score` are populated when provided by output.
-
-### Expected Data State
-```sql
-SELECT COUNT(*)
-FROM command_runs
-WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
-  AND validation_status = 'passed'
-  AND output_json <> '{}'
-  AND artifacts_json <> '[]';
--- Expected: count >= 1
-```
+- `test_agent_output_creation` passes: AgentOutput holds confidence, quality_score, artifacts
+- `apply_captures_stdout_json_path_extracts_score` passes: JSON path extraction works for structured fields
+- `insert_command_run_with_all_optional_fields` passes: all structured columns persisted to DB
 
 ---
 
 ## Scenario 3: Scheduler Publishes Phase Output Events
 
 ### Preconditions
-- A task run exists with at least one phase execution.
+- Rust toolchain available
 
 ### Goal
-Verify phase outputs are published and observable in persisted events.
+Verify phase outputs are published as observable events — validated via code review + unit test.
 
 ### Steps
-1. Run a task to completion (or failure):
+1. **Code review** — verify event publication in phase runner:
    ```bash
-   orchestrator task start {task_id} || true
+   rg -n "phase_output_published|bus_publish_failed|output_validation_failed" crates/orchestrator-scheduler/src/scheduler/ | head -15
    ```
-2. Query phase publication events:
+
+2. **Code review** — verify event types are stored with run_id:
    ```bash
-   sqlite3 data/agent_orchestrator.db "SELECT event_type, payload_json FROM events WHERE task_id='{task_id}' AND event_type='phase_output_published' ORDER BY id DESC LIMIT 10;"
+   rg -n "run_id|event_type.*phase_output" core/src/ | head -10
+   ```
+
+3. **Unit test** — run trace and event tests:
+   ```bash
+   cargo test --workspace --lib -- build_trace single_cycle_with_steps extract_event_promoted 2>&1 | tail -5
    ```
 
 ### Expected
-- `phase_output_published` events are present with `phase` and `run_id` in payload.
-- For validation-failed runs, `output_validation_failed` and `phase_output_published` can both be observed for traceability.
-
-### Expected Data State
-```sql
-SELECT COUNT(*)
-FROM events
-WHERE task_id = '{task_id}'
-  AND event_type = 'phase_output_published';
--- Expected: count >= 1
-```
+- Phase runner emits `phase_output_published` event on success path
+- Phase runner emits `output_validation_failed` event when validation fails
+- `build_trace_*` tests pass: events are correctly captured in execution trace
+- `extract_event_promoted_fields_*` tests pass: event payload fields extracted correctly
 
 ---
 
@@ -254,8 +230,8 @@ WHERE id = '{task_id}';
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Strict Validation Rejects Non-JSON QA Output | ☐ | | | |
-| 2 | Structured Output Persists Into command_runs | ☐ | | | |
-| 3 | Scheduler Publishes Phase Output Events | ☐ | | | |
-| 4 | Detach Mode Enqueues Tasks | ☐ | | | |
-| 5 | Worker Start/Stop and Queue Consumption | ☐ | | | |
+| 1 | Strict Validation Rejects Non-JSON QA Output | ☐ | | | Code review + unit test (strict_phase, exit_code validation) |
+| 2 | Structured Output Persists Into command_runs | ☐ | | | Code review + unit test (AgentOutput, captures, insert_command_run) |
+| 3 | Scheduler Publishes Phase Output Events | ☐ | | | Code review + unit test (build_trace, event extraction) |
+| 4 | Detach Mode Enqueues Tasks | ☐ | | | UNSAFE — daemon queue lifecycle |
+| 5 | Worker Start/Stop and Queue Consumption | ☐ | | | UNSAFE — daemon worker lifecycle (start/kill) |

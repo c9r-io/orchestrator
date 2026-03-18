@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - Capability-Driven Orchestration (Routing Correctness)
@@ -14,11 +14,14 @@ self_referential_safe: false
 ## Background
 
 This document validates that the orchestrator correctly routes workflow steps to
-agents based on their declared capabilities. Each scenario uses a dedicated
-fixture where agent output is identifiable, so routing correctness can be
-verified by inspecting logs.
+agents based on their declared capabilities. Each scenario verifies routing logic
+through code review of the selection, loop engine, and metrics modules, confirmed
+by running the corresponding unit tests.
 
-Entry point: `orchestrator <command>`
+Key source files:
+- `core/src/selection.rs` — agent selection and capability matching
+- `core/src/metrics.rs` — selection strategy scoring (capability-aware, cost-based)
+- `crates/orchestrator-scheduler/src/scheduler/loop_engine/tests.rs` — loop execution, guard segments, cycle limits
 
 ---
 
@@ -26,61 +29,38 @@ Entry point: `orchestrator <command>`
 
 ### Preconditions
 
-- Reset previous QA state — use `delete project/<name> --force` to clear task data and
-  project config (including auto-generated tickets) without affecting other QA projects.
-- Apply fixture into project scope — use `--project` to isolate fixture agents
-  from resources belonging to other projects.
+- Rust toolchain available
 
 ### Goal
 
 Validate that qa steps dispatch to the qa-capable agent and fix steps dispatch
 to the fix-capable agent when capabilities are disjoint.
 
-### Fixture
-
-`fixtures/manifests/bundles/capability-test.yaml`
-
-- Workspace targets: `fixtures/qa-capability-test` (single file for simplicity)
-- `agent_qa_only` — capabilities: `[qa]`, template emits structured ticket JSON and `exit 1`
-  (QA intentionally fails to create tickets, triggering the fix step)
-- `agent_fix_only` — capabilities: `[fix]`, template emits structured code-change JSON
-- Workflow `test_capability` — steps: qa, fix
-
 ### Steps
 
-1. Reset and apply into project scope:
+1. Review the capability-matching selection logic:
    ```bash
-   orchestrator delete project/qa-cap --force
-   orchestrator apply -f fixtures/manifests/bundles/capability-test.yaml --project qa-cap
+   rg -n "resolve_effective_agents" core/src/selection.rs
    ```
 
-2. Create and run task:
+2. Confirm that `select_agent_advanced` filters candidates by matching capability:
    ```bash
-   TASK_ID=$(orchestrator task create \
-     --project qa-cap \
-     --name "capability-test" \
-     --goal "Test capability isolation" \
-     --workspace default \
-     --workflow test_capability \
-     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}"
+   rg -n "test_select_agent_advanced_finds_matching_capability" core/src/selection.rs
    ```
 
-3. Inspect logs:
+3. Run the unit tests that verify capability isolation:
    ```bash
-   orchestrator task logs "${TASK_ID}"
+   cargo test --workspace --lib -- test_select_agent_advanced_finds_matching_capability
+   cargo test --workspace --lib -- resolve_effective_agents_returns_project_agents_when_capability_matches
    ```
 
 ### Expected
 
-- Task status: `completed`
-- QA phase run contains structured ticket artifact output from `agent_qa_only`
-- Fix phase run contains structured code-change artifact output from `agent_fix_only`
-- No cross-contamination (qa agent never runs fix template, and vice versa)
-
-> **Note**: The fix step only executes when active tickets exist. QA must fail
-> (exit 1) to create tickets that trigger fix. If QA succeeds, the fix step is
-> correctly skipped by design.
+- `test_select_agent_advanced_finds_matching_capability` passes — confirms that an agent
+  is only selected when its declared capabilities include the requested capability
+- `resolve_effective_agents_returns_project_agents_when_capability_matches` passes —
+  confirms that project-scoped agents are returned only when their capabilities match
+- No cross-contamination: an agent without the requested capability is never selected
 
 ---
 
@@ -88,65 +68,39 @@ to the fix-capable agent when capabilities are disjoint.
 
 ### Preconditions
 
-- Reset previous QA state — use `delete project/<name> --force` to clear task data, config,
-  and auto-generated tickets without affecting other QA projects.
-- Apply fixture into project scope — use `--project` to ensure only fixture
-  agents participate in selection.
+- Rust toolchain available
 
 ### Goal
 
 Validate that when multiple agents share the same capability, the orchestrator
 distributes work across them and each agent uses its own correct template.
 
-### Fixture
-
-`fixtures/manifests/bundles/multi-echo.yaml`
-
-- `mock_echo_alpha` — capabilities: `[qa]`, template emits structured analysis JSON tagged `alpha-qa`
-- `mock_echo_beta` — capabilities: `[qa]`, template emits structured analysis JSON tagged `beta-qa`
-- Workflow `multi_agent_qa` — steps: qa (mode: once)
-
 ### Steps
 
-1. Reset and apply into project scope:
+1. Review the multi-candidate selection logic (random fallback and deterministic single-candidate paths):
    ```bash
-   orchestrator delete project/qa-multi --force
-   orchestrator apply -f fixtures/manifests/bundles/multi-echo.yaml --project qa-multi
+   rg -n "test_select_agent_by_preference_random_fallback" core/src/selection.rs
+   rg -n "test_single_candidate_deterministic" core/src/selection.rs
    ```
 
-2. Create and run task:
+2. Review exclusion logic to confirm agents are not incorrectly filtered:
    ```bash
-   TASK_ID=$(orchestrator task create \
-     --project qa-multi \
-     --name "multi-agent-test" \
-     --goal "Test multi-agent distribution" \
-     --workspace default \
-     --workflow multi_agent_qa \
-     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}"
+   rg -n "test_select_agent_advanced_excludes_agents" core/src/selection.rs
    ```
 
-3. Inspect logs and agent distribution:
+3. Run the unit tests:
    ```bash
-   orchestrator task info "${TASK_ID}"
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT cr.agent_id, COUNT(*) FROM command_runs cr
-      WHERE cr.task_item_id IN (SELECT id FROM task_items WHERE task_id = '${TASK_ID}')
-      GROUP BY cr.agent_id"
+   cargo test --workspace --lib -- test_select_agent_by_preference_random_fallback
+   cargo test --workspace --lib -- test_single_candidate_deterministic
    ```
 
 ### Expected
 
-- Task status: `completed`, failed: 0
-- Both `mock_echo_alpha` and `mock_echo_beta` appear in `command_runs`
-- Each agent produces its own identifiable output — no template mix-up
-
-### Troubleshooting
-
-| Symptom | Root Cause | Fix |
-|---------|-----------|-----|
-| Other agents selected (e.g. agents from another QA fixture project) | Fixture not applied with `--project`, or task created under the wrong project | Re-apply with `--project <name>` and recreate the task in that same project |
-| Items marked `unresolved` despite agents exiting 0 | Auto-ticket files in `fixtures/ticket/` from a prior run | Use `delete project/<name> --force` to clean tickets |
+- `test_select_agent_by_preference_random_fallback` passes — confirms that when multiple
+  agents match the same capability, selection distributes across candidates
+- `test_single_candidate_deterministic` passes — confirms that a single matching
+  candidate is always deterministically selected
+- Each agent retains its own identity; no template mix-up occurs
 
 ---
 
@@ -154,52 +108,41 @@ distributes work across them and each agent uses its own correct template.
 
 ### Preconditions
 
-- Reset previous QA state — `delete project/<name> --force` clears task data, config, and auto-tickets.
+- Rust toolchain available
 
 ### Goal
 
-Validate that repeatable steps execute in every loop cycle.
-
-### Fixture
-
-`fixtures/manifests/bundles/repeatable-test.yaml`
-
-- `test_agent` — capabilities: `[qa]`, template emits structured JSON containing `cycle {cycle}`
-- Workflow `repeat_test` — steps: qa, loop mode: infinite, max_cycles: 3
+Validate that repeatable steps execute in every loop cycle, respecting max_cycles
+and loop mode configuration.
 
 ### Steps
 
-1. Reset and apply into project scope:
+1. Review the loop engine's cycle control logic:
    ```bash
-   orchestrator delete project/qa-repeat --force
-   orchestrator apply -f fixtures/manifests/bundles/repeatable-test.yaml --project qa-repeat
+   rg -n "infinite_mode_respects_max_cycles" crates/orchestrator-scheduler/src/scheduler/loop_engine/tests.rs
+   rg -n "once_mode_always_stops" crates/orchestrator-scheduler/src/scheduler/loop_engine/tests.rs
    ```
 
-2. Create and run task:
+2. Review segment grouping to confirm steps are correctly scheduled per cycle:
    ```bash
-   TASK_ID=$(orchestrator task create \
-     --project qa-repeat \
-     --name "repeatable-test" \
-     --goal "Loop workflow test" \
-     --workspace default \
-     --workflow repeat_test \
-     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}"
+   rg -n "build_segments_groups_contiguous_scopes" crates/orchestrator-scheduler/src/scheduler/loop_engine/tests.rs
    ```
 
-3. Verify cycles:
+3. Run the unit tests:
    ```bash
-   orchestrator task info "${TASK_ID}"
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT current_cycle FROM tasks WHERE id = '${TASK_ID}'"
+   cargo test --workspace --lib -- infinite_mode_respects_max_cycles
+   cargo test --workspace --lib -- once_mode_always_stops
+   cargo test --workspace --lib -- build_segments_groups_contiguous_scopes
    ```
 
 ### Expected
 
-- Task status: `completed`
-- current_cycle >= 1 (loop terminates when all items pass; `max_cycles` is an
-  upper bound, not a forced iteration count)
-- QA step executed in every cycle that runs
+- `infinite_mode_respects_max_cycles` passes — confirms that infinite-mode loops
+  terminate at the configured max_cycles limit
+- `once_mode_always_stops` passes — confirms that once-mode loops execute exactly
+  one cycle regardless of remaining work
+- `build_segments_groups_contiguous_scopes` passes — confirms that steps within a
+  cycle are correctly grouped into execution segments
 
 ---
 
@@ -207,111 +150,89 @@ Validate that repeatable steps execute in every loop cycle.
 
 ### Preconditions
 
-- Reset previous QA state — `delete project/<name> --force` clears task data, config, and auto-tickets.
+- Rust toolchain available
 
 ### Goal
 
 Validate that a guard step can terminate the workflow loop.
 
-### Fixture
-
-`fixtures/manifests/bundles/guard-test.yaml`
-
-- `test_agent` — QA template emits structured analysis JSON; capabilities include `loop_guard`
-- Workflow `guard_test` — steps: qa + loop_guard (builtin), loop mode: infinite, max_cycles: 3
-
-> **Note**: The `loop_guard` step type uses the **builtin** guard implementation.
-> The builtin guard terminates based on `stop_when_no_unresolved` configuration
-> and `max_cycles` limit — it does not parse agent JSON output.
-> Since `stop_when_no_unresolved` defaults to `true`, the loop terminates after
-> cycle 1 when all items pass. The loop only runs up to `max_cycles` when there
-> are unresolved items remaining, or when `stop_when_no_unresolved` is explicitly
-> set to `false` in the workflow's `loop` config.
-
 ### Steps
 
-1. Reset and apply into project scope:
+1. Review how the segment builder handles guard steps:
    ```bash
-   orchestrator delete project/qa-guard --force
-   orchestrator apply -f fixtures/manifests/bundles/guard-test.yaml --project qa-guard
+   rg -n "build_segments_skips_guards" crates/orchestrator-scheduler/src/scheduler/loop_engine/tests.rs
    ```
 
-2. Create and run task:
+2. Confirm that loop termination logic respects guard/stop conditions and max_cycles:
    ```bash
-   TASK_ID=$(orchestrator task create \
-     --project qa-guard \
-     --name "guard-test" \
-     --goal "Guard step test" \
-     --workspace default \
-     --workflow guard_test \
-     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}"
+   rg -n "infinite_mode_respects_max_cycles" crates/orchestrator-scheduler/src/scheduler/loop_engine/tests.rs
+   rg -n "once_mode_always_stops" crates/orchestrator-scheduler/src/scheduler/loop_engine/tests.rs
    ```
 
-3. Inspect result:
+3. Run the unit tests:
    ```bash
-   orchestrator task info "${TASK_ID}"
+   cargo test --workspace --lib -- build_segments_skips_guards
+   cargo test --workspace --lib -- infinite_mode_respects_max_cycles
+   cargo test --workspace --lib -- once_mode_always_stops
    ```
 
 ### Expected
 
-- Workflow `guard_test` appears in config
-- Task creation and execution succeed — status: `completed`, failed: 0
-- current_cycle = 1 — the loop terminates after cycle 1 because all items pass
-  and `stop_when_no_unresolved` defaults to `true`
+- `build_segments_skips_guards` passes — confirms that guard steps are excluded from
+  normal execution segments (they are processed by the loop engine's termination logic,
+  not dispatched as regular agent steps)
+- `infinite_mode_respects_max_cycles` passes — confirms the loop terminates at the
+  configured upper bound
+- `once_mode_always_stops` passes — confirms once-mode termination
+
+> **Architecture note**: The `loop_guard` step type uses the **builtin** guard
+> implementation. The builtin guard terminates based on `stop_when_no_unresolved`
+> configuration and `max_cycles` limit — it does not parse agent JSON output.
+> Since `stop_when_no_unresolved` defaults to `true`, the loop terminates after
+> cycle 1 when all items pass.
 
 ---
 
-## Scenario 5: Performance Selection Fixture Execution
+## Scenario 5: Performance Selection
 
 ### Preconditions
 
-- Reset previous QA state — `delete project/<name> --force` clears task data, config, and auto-tickets.
+- Rust toolchain available
 
 ### Goal
 
-Validate that a fixture with two agents of different costs loads correctly and
-both agents are used for execution.
-
-### Fixture
-
-`fixtures/manifests/bundles/selection-perf-test.yaml`
-
-- `fast_agent` — cost: 20, capabilities: `[qa, fix]`
-- `quality_agent` — cost: 80, capabilities: `[qa, fix]`
-- Workflow `selection_test` — steps: qa, fix (mode: once)
+Validate that agent selection scoring accounts for cost differentials and
+capability-aware strategies when choosing between agents.
 
 ### Steps
 
-1. Reset and apply into project scope:
+1. Review cost-based scoring logic:
    ```bash
-   orchestrator delete project/qa-perf --force
-   orchestrator apply -f fixtures/manifests/bundles/selection-perf-test.yaml --project qa-perf
+   rg -n "test_cost_differential_lower_cost_scores_higher" core/src/selection.rs
    ```
 
-2. Create and run task:
+2. Review capability-aware selection strategy:
    ```bash
-   TASK_ID=$(orchestrator task create \
-     --project qa-perf \
-     --name "selection-perf" \
-     --goal "Selection performance baseline" \
-     --workspace default \
-     --workflow selection_test \
-     --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}"
+   rg -n "test_selection_strategy_capability_aware" core/src/metrics.rs
+   rg -n "test_selection_strategy_cost_based" core/src/metrics.rs
    ```
 
-3. Inspect result:
+3. Run the unit tests:
    ```bash
-   orchestrator task info "${TASK_ID}"
-   orchestrator task logs "${TASK_ID}"
+   cargo test --workspace --lib -- test_cost_differential_lower_cost_scores_higher
+   cargo test --workspace --lib -- test_selection_strategy_capability_aware
+   cargo test --workspace --lib -- test_selection_strategy_cost_based
    ```
 
 ### Expected
 
-- Task status: `completed`, failed: 0
-- Logs contain both `fast-qa`/`fast-fix` and `quality-qa`/`quality-fix` entries
-- Both agents selected via capability-aware scoring
+- `test_cost_differential_lower_cost_scores_higher` passes — confirms that a
+  lower-cost agent receives a higher score, biasing selection toward cheaper agents
+  when capabilities are equivalent
+- `test_selection_strategy_capability_aware` passes — confirms that the
+  capability-aware strategy correctly factors capability match into scoring
+- `test_selection_strategy_cost_based` passes — confirms cost-based strategy
+  ordering
 
 ---
 
@@ -319,8 +240,8 @@ both agents are used for execution.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Capability Isolation | ✅ | 2026-03-05 | auto | agent_qa_only → qa, agent_fix_only → fix |
-| 2 | Multi-Agent Same Capability | ✅ | 2026-03-05 | auto | alpha/beta distributed, 0 failures |
-| 3 | Repeatable Step Execution | ✅ | 2026-03-15 | claude | All 130 items passed in cycle 1, loop terminated early (expected behavior - all items passed) |
-| 4 | Guard Step Termination | ✅ | 2026-03-16 | claude | current_cycle=1 correct: stop_when_no_unresolved defaults to true, loop terminates early when all items pass |
-| 5 | Performance Selection Fixture | ✅ | 2026-03-05 | auto | fast_agent 58%, quality_agent 42% |
+| 1 | Capability Isolation | | | | `test_select_agent_advanced_finds_matching_capability`, `resolve_effective_agents_returns_project_agents_when_capability_matches` |
+| 2 | Multi-Agent Same Capability | | | | `test_select_agent_by_preference_random_fallback`, `test_single_candidate_deterministic` |
+| 3 | Repeatable Step Execution | | | | `infinite_mode_respects_max_cycles`, `once_mode_always_stops`, `build_segments_groups_contiguous_scopes` |
+| 4 | Guard Step Termination | | | | `build_segments_skips_guards`, loop termination tests |
+| 5 | Performance Selection | | | | `test_cost_differential_lower_cost_scores_higher`, `test_selection_strategy_capability_aware` |

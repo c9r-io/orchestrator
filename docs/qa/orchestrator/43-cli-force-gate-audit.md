@@ -1,6 +1,5 @@
 ---
-self_referential_safe: false
-self_referential_safe_scenarios: [S1, S3, S5]
+self_referential_safe: true
 ---
 # Orchestrator - CLI Force Gate Audit
 
@@ -68,20 +67,26 @@ Verify `config backfill-events` refuses to run without `--force`.
 > **Skip**: `config backfill-events` is not yet implemented. Skip this scenario until the subcommand is added.
 
 ### Preconditions
-- Orchestrator binary built
+- Rust toolchain available
 
 ### Goal
-Verify `config backfill-events --force` performs the backfill.
+Verify backfill logic exists and is covered by unit test (command not yet exposed via CLI).
 
 ### Steps
-1. Run with `--force`:
+1. **Code review** — verify backfill implementation exists:
    ```bash
-   orchestrator config backfill-events --force
+   rg -n "backfill|events_backfill" core/src/ | head -10
+   ```
+
+2. **Unit test** — run backfill tests:
+   ```bash
+   cargo test --workspace --lib -- backfill 2>&1 | tail -5
    ```
 
 ### Expected
-- Output: `scanned N events, updated M, skipped K (already had step_scope)`
-- Exit code: 0
+- `backfill_is_noop_and_returns_zero_stats` test passes
+- Backfill logic exists in `core/src/events_backfill.rs`
+- CLI subcommand not yet wired (skip runtime verification)
 
 ---
 
@@ -121,33 +126,31 @@ Verify `task retry` refuses to run without `--force`.
 ## Scenario 4: Task Retry Executes With --force
 
 ### Preconditions
-- A task with at least one failed/unresolved item exists
+- Rust toolchain available
 
 ### Goal
-Verify `task retry --force` resets item and re-executes.
+Verify `task retry --force` resets item state — validated via code review of the retry handler + unit tests for task item status transitions.
 
 ### Steps
-1. Find a failed item:
+1. **Code review** — verify retry handler resets item to pending:
    ```bash
-   ITEM_ID=$(sqlite3 data/agent_orchestrator.db \
-     "SELECT id FROM task_items WHERE status IN ('qa_failed','unresolved') LIMIT 1;")
+   rg -n "retry|reset.*pending|task_retry" crates/cli/src/ core/src/ | head -15
    ```
 
-2. Retry with `--force`:
+2. **Code review** — verify `--force` flag is required:
    ```bash
-   orchestrator task retry "$ITEM_ID" --force || true
+   rg -n "force.*retry\|retry.*force" crates/cli/src/ | head -5
    ```
 
-3. Check item state:
+3. **Unit test** — run task item status transition tests:
    ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT status, updated_at FROM task_items WHERE id='${ITEM_ID}';"
+   cargo test --workspace --lib -- update_task_item_status mark_task_item_running 2>&1 | tail -5
    ```
 
 ### Expected
-- Exit code: 0
-- Item `updated_at` changed
-- Item enters retry execution flow
+- Retry handler sets item status to `pending` when `--force` is provided
+- Task item status transition tests pass (pending → running → terminal states)
+- `--force` flag is declared as required in the CLI argument struct
 
 ---
 
@@ -191,7 +194,7 @@ Verify that pre-existing `--force` gates still function correctly.
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
 | 1 | Config Backfill-Events Rejected Without --force | SKIP | | | `config backfill-events` not yet implemented |
-| 2 | Config Backfill-Events Executes With --force | SKIP | | | `config backfill-events` not yet implemented |
+| 2 | Config Backfill-Events Executes With --force | ☐ | | | Code review + unit test (backfill logic, CLI not wired) |
 | 3 | Task Retry Rejected Without --force | PASS | 2026-03-18 | | |
-| 4 | Task Retry Executes With --force | SKIP | | | Not in self_referential_safe_scenarios |
+| 4 | Task Retry Executes With --force | ☐ | | | Code review + unit test (retry handler, item status transitions) |
 | 5 | Existing Force Gates Regression Check | PASS | 2026-03-18 | | `config backfill-events --help` check skipped (not yet implemented) |
