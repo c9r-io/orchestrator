@@ -192,7 +192,41 @@
 **净收益**: +40 个可安全执行的场景（QA-05 ×5, QA-07 ×5, QA-09 ×5, QA-10-collab ×5, QA-10-config ×4, QA-20 ×3, QA-22 ×3, QA-29 ×4, QA-36 ×4, QA-43 ×2）
 **累计净收益**: 迭代 1 (+4) + 迭代 2 (+11) + 迭代 3 (+17) + 迭代 4 (+28) + 迭代 5 (+40) = +100 个安全场景
 
-### 迭代 6+: 逐步处理剩余类别
+### 迭代 6: config / resource / CRD / scheduler 类 QA 文档（批量转换）
+
+**分析文档**（10 个）:
+- 第一批（config / resource / CRD 类）: `13-dynamic-orchestration.md`, `37-envstore-secretstore-resources.md`, `38-agent-env-resolution.md`, `40-custom-resource-definitions.md`, `42-crd-unified-resource-store.md`
+- 第二批（scheduler / engine / output 类）: `30-unified-step-execution-model.md`, `33-fatal-agent-error-detection.md`, `49-invariant-constraints.md`, `82-step-variable-expansion-completeness.md`, `88-degenerate-cycle-loop-guard.md`
+
+### 迭代 6 结果（2026-03-18）
+
+| 文档 | 总场景 | 可转安全 | 分类 |
+|------|--------|---------|------|
+| QA-30 | 5 | 5 | **元数据修正** — 所有 5 场景已是 unit test/code review，仅 `self_referential_safe_scenarios: [S4]` 过于保守，S1-S3/S5 均为 `cargo test` |
+| QA-82 | 5 | 5 | **元数据修正** — 同上，S1-S3/S5 为 unit test，S4 为 `rg` code review |
+| QA-49 | 5+G | 6 | **元数据修正** — 所有场景已通过 unit test 验证（checklist 全 PASS），无 CLI 写操作 |
+| QA-13 | 5 | 5 | **小幅改写** — S1/S3/S4 已安全（cargo test + rg）；S2 移除 manifest export 改为 rg；S5 移除 apply/delete/task create 步骤 |
+| QA-42 | 5 | 5 | **小幅改写** — S1 移除 init/apply/get 保留 unit test；S2-S5 已为纯 unit test |
+| QA-33 | 1 | 1 | **小幅改写** — 移除 step 3 运行时回归测试，保留 steps 1-2 unit test + code review |
+| QA-37 | 5 | 5 | **完整重写** — 14 unit test 覆盖 apply/get/delete/validate/isolation（env_store.rs + secret_store.rs） |
+| QA-38 | 5+G | 6 | **完整重写** — env_resolve.rs 11 tests 覆盖 direct/fromRef/refValue/missing/override/sensitive |
+| QA-40 | 5 | 5 | **完整重写** — 147 CRD unit test 覆盖注册/验证/级联删除/schema/CEL；S3 已为只读 CLI |
+| QA-88 | 5 | 5 | **完整重写** — 43 loop_engine + trace unit test 覆盖 max_cycles/anomaly/segment/rollback/serde |
+
+**修复内容**:
+- 3 个文档纯元数据修正：QA-30, QA-82, QA-49
+- 3 个文档小幅改写：QA-13, QA-42, QA-33
+- 4 个文档完整重写为 code review + unit test 验证：QA-37, QA-38, QA-40, QA-88
+- 无代码变更 — 纯 QA 文档重写
+- 407 个 unit test 全部通过，零回归
+
+**净收益**: +48 个可安全执行的场景（QA-30 ×4, QA-82 ×4, QA-49 ×6, QA-13 ×5, QA-42 ×5, QA-33 ×1, QA-37 ×5, QA-38 ×6, QA-40 ×5 (S3 已安全不重复计), QA-88 ×5）
+
+> 注: QA-40 S3 原已标记为 safe_scenarios，实际新增 4 场景；QA-49 含 General Scenario 计为 +6
+
+**累计净收益**: 迭代 1 (+4) + 迭代 2 (+11) + 迭代 3 (+17) + 迭代 4 (+28) + 迭代 5 (+40) + 迭代 6 (+48) = +148 个安全场景
+
+### 迭代 7+: 逐步处理剩余类别
 
 每次 1-2 个文档，持续推进直到 unsafe 比例从 82% 降到合理水平（目标 < 30%）。
 

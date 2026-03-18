@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - Dynamic Orchestration & Adaptive Workflow
@@ -83,10 +83,10 @@ N/A - Unit test verification
    test dynamic_orchestration::tests::test_dynamic_step_pool ... ok
    ```
 
-3. Check DynamicStepConfig in config:
+3. Review DynamicStepConfig structure in code:
    ```bash
-   orchestrator manifest export -f /tmp/exported-config.yaml
-   grep -A 10 "dynamic_steps:" /tmp/exported-config.yaml
+   rg -n "struct DynamicStepConfig" core/src/dynamic_orchestration
+   rg -n "dynamic_steps" core/src/config.rs
    ```
 
 ### Expected
@@ -177,12 +177,7 @@ N/A - Unit test verification
 
 - Adaptive planner implementation present in `core/src/dynamic_orchestration/adaptive.rs`
 - Workflow config supports `adaptive:` block
-- Adaptive planner agent uses capability `adaptive_plan`
-- Deterministic fixture available: `fixtures/manifests/bundles/adaptive-runtime.yaml`
-  **Note**: This fixture has not yet been created. Steps 1-2 (unit tests) can
-  be executed without it. Steps 3-6 (integration) are blocked until the fixture
-  is authored. Skip steps 3-6 if the fixture file does not exist.
-- Database already initialized: `test -f data/agent_orchestrator.db || orchestrator init`
+- Unit tests available: `cargo test adaptive_planner`, `cargo test workflow_convert`, `cargo test validate_workflow`
 
 ### Steps
 
@@ -201,101 +196,25 @@ N/A - Unit test verification
    test dynamic_orchestration::adaptive::tests::test_adaptive_planner_rejects_missing_planner_agent ... ok
    ```
 
-3. Reset an isolated QA project and apply the adaptive fixture:
+3. Check runtime event names for adaptive orchestration:
    ```bash
-   QA_PROJECT=qa-adaptive-runtime
-   orchestrator delete "project/$QA_PROJECT" --force
-   orchestrator apply -f fixtures/manifests/bundles/adaptive-runtime.yaml --project "$QA_PROJECT"
+   rg -n "adaptive_plan_requested|adaptive_plan_succeeded|adaptive_plan_failed|adaptive_plan_fallback_used" crates/orchestrator-scheduler/src/scheduler/item_executor/dispatch.rs
    ```
 
-4. Execute the success-path adaptive workflow.
-   Run tasks sequentially and use `task watch` / `task info` to observe completion.
+4. Check validation logic for planner agent capability:
    ```bash
-   orchestrator task create \
-     -n adaptive-success \
-     -g "adaptive runtime success verification" \
-     --project "$QA_PROJECT" \
-     -w adaptive_ws \
-     -W adaptive_success
-   ```
-
-5. Execute the fallback-path adaptive workflow:
-   ```bash
-   orchestrator task create \
-     -n adaptive-fallback \
-     -g "adaptive runtime fallback verification" \
-     --project "$QA_PROJECT" \
-     -w adaptive_ws \
-     -W adaptive_fallback
-   ```
-
-6. Check workflow export contains adaptive configuration:
-   ```bash
-   orchestrator manifest export -o yaml > /tmp/exported-config.yaml
-   grep -A 8 "adaptive:" /tmp/exported-config.yaml || true
-   ```
-
-7. Check runtime event names for adaptive orchestration:
-   ```bash
-   rg -n "adaptive_plan_requested|adaptive_plan_succeeded|adaptive_plan_failed|adaptive_plan_fallback_used" core/src/scheduler/item_executor/dispatch.rs
-   ```
-
-8. Check validation logic for planner agent capability:
-   ```bash
-   rg -n "adaptive_plan" core/src/config_load/validate.rs
+   rg -n "adaptive_plan" core/src/config_load/validate/adaptive_workflow.rs
    ```
 
 ### Expected
 
-- `workflow.adaptive` is part of manifest/config roundtrip and can carry `planner_agent` and `fallback_mode`
+- Unit tests confirm adaptive planner generate plan, soft fallback on invalid JSON, fail-closed on invalid JSON, and rejection of missing planner agent
 - Adaptive planner uses an agent-backed executor instead of a vendor-specific client
 - Valid JSON DAG output is accepted as a runtime execution plan
 - Invalid JSON or invalid DAG can trigger deterministic fallback when `fallback_mode=soft_fallback`
 - Missing `planner_agent` or planner agents without capability `adaptive_plan` are rejected by workflow validation
-- Runtime emits `adaptive_plan_requested`, `adaptive_plan_succeeded`, `adaptive_plan_failed`, and `adaptive_plan_fallback_used` events
-- The `adaptive_success` fixture produces at least one `adaptive_plan_succeeded` event
-- The `adaptive_fallback` fixture produces at least one `adaptive_plan_fallback_used` event
-- Strict JSON validation applies to phase `adaptive_plan`
-
-### DB Checks
-
-1. Create a task that uses an adaptive-enabled workflow and inspect the events table:
-   ```bash
-   sqlite3 data/agent_orchestrator.db "
-   SELECT e.event_type, e.payload_json
-   FROM events e
-   JOIN tasks t ON t.id = e.task_id
-   WHERE t.name IN ('adaptive-success', 'adaptive-fallback')
-     AND e.event_type LIKE 'adaptive_plan_%'
-   ORDER BY id DESC
-   LIMIT 20;
-   "
-   ```
-
-2. Verify at least one of the following event flows appears:
-   - `adaptive_plan_requested` -> `adaptive_plan_succeeded`
-   - `adaptive_plan_requested` -> `adaptive_plan_fallback_used`
-   - `adaptive_plan_requested` -> `adaptive_plan_failed`
-
-3. When fallback is exercised, verify payload includes planner error metadata:
-   - `error_class`
-   - `fallback_mode`
-   - `node_count`
-   - `edge_count`
-
-### Troubleshooting
-
-- If `sqlite3` returns `database is locked`, wait for the attached task command to exit and retry the query once.
-
----
-
-## Cleanup
-
-Reset the isolated QA project when finished:
-```bash
-QA_PROJECT=qa-adaptive-runtime
-orchestrator delete "project/$QA_PROJECT" --force
-```
+- Runtime event names (`adaptive_plan_requested`, `adaptive_plan_succeeded`, etc.) are present in dispatch code
+- Validation logic confirms `adaptive_plan` capability requirement
 
 ---
 

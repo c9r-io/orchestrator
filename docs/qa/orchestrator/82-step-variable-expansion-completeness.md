@@ -1,6 +1,5 @@
 ---
-self_referential_safe: false
-self_referential_safe_scenarios: [S4]
+self_referential_safe: true
 ---
 
 # Orchestrator - Step Variable Expansion Completeness
@@ -184,8 +183,8 @@ Verify the diagnostic backstop catches persisted commands that still contain tem
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Basic template renderer covers core placeholders | ☐ | | | |
-| 2 | Agent context renders runtime, pipeline, and escape-sensitive values | ☐ | | | |
-| 3 | Runtime propagation expands large pipeline variables without leaving placeholders | ☐ | | | |
-| 4 | Every known step ID maps to a covered rendering entry point | ☐ | | | |
-| 5 | Task trace flags leftover unexpanded placeholders | ☐ | | | |
+| 1 | Basic template renderer covers core placeholders | ☐ | | | Unit test only — safe |
+| 2 | Agent context renders runtime, pipeline, and escape-sensitive values | ☐ | | | Unit test only — safe |
+| 3 | Runtime propagation expands large pipeline variables without leaving placeholders | ☐ | | | Unit test only — safe |
+| 4 | Every known step ID maps to a covered rendering entry point | ☐ | | | Code review (rg) — safe |
+| 5 | Task trace flags leftover unexpanded placeholders | ☐ | | | Unit test only — safe |

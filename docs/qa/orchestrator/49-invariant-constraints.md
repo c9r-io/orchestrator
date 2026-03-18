@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - Invariant Constraints (WP04)

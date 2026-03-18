@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Unified CRD Resource Store — Builtin Type Migration
@@ -38,66 +38,34 @@ These were unified into a **single ResourceStore** that acts as the write point 
 ## Scenario 1: Builtin CRD Bootstrap on Normalize
 
 ### Preconditions
-- Orchestrator binary is built
-- A fresh or existing config database
-
-### Local Runner Setup
-
-When running from a repo checkout instead of an installed binary, use an explicit command prefix so the steps are copy-paste-ready:
-
-```bash
-ORCH="cargo run -q -p orchestrator-cli --"
-```
+- Rust toolchain available
+- Unit tests available: `cargo test normalize_config`
 
 ### Goal
 Verify that `normalize_config` ensures builtin CRD definitions exist and that the ResourceStore is populated from the normalized project-scoped config snapshot.
 
 ### Steps
 
-1. Initialize the orchestrator:
+1. Verify via unit tests that all 10 builtin CRDs are registered:
    ```bash
-   ${ORCH:-orchestrator} init
-   ```
-
-2. Apply a simple agent to populate legacy fields:
-   ```bash
-   cat <<'EOF' | ${ORCH:-orchestrator} apply -f -
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: test-bootstrap-agent
-   spec:
-     command: "echo {prompt}"
-   EOF
-   ```
-
-3. Verify the agent exists:
-   ```bash
-   ${ORCH:-orchestrator} get agent/test-bootstrap-agent -o yaml
-   ```
-
-4. Verify via unit tests that all 10 builtin CRDs are registered:
-   ```
    cargo test --lib "config_load::normalize::tests::normalize_config_populates_builtin_crds"
    ```
 
-5. Verify the ResourceStore is populated after normalization:
-   ```
+2. Verify the ResourceStore is populated after normalization:
+   ```bash
    cargo test --lib "config_load::normalize::tests::normalize_config_rebuilds_resource_store_from_config_snapshot"
    ```
 
+3. Review the normalize_config implementation:
+   ```bash
+   rg -n "fn normalize_config" core/src/config_load/normalize.rs
+   rg -n "builtin_crd_definitions" core/src/crd/builtin_defs.rs
+   ```
+
 ### Expected
-- `init` succeeds with exit code 0
-- Agent is created and retrievable
 - 10 builtin CRD definitions are present after normalization
 - ResourceStore contains entries matching the project-scoped config snapshot after normalization
-
-### Troubleshooting
-
-| Symptom | Likely Cause | Action |
-|---|---|---|
-| `orchestrator: command not found` | Binary not installed on `PATH` | Define `ORCH="cargo run -q -p orchestrator-cli --"` and rerun the scenario |
-| CLI steps fail before unit tests run | Local runtime not initialized yet | Re-run step 1, then continue with the unit-test checks in steps 4 and 5 |
+- `normalize_config` calls `ensure_builtin_crds` to bootstrap all 10 builtin kinds
 
 ---
 

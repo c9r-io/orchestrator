@@ -1,6 +1,5 @@
 ---
-self_referential_safe: false
-self_referential_safe_scenarios: [S4]
+self_referential_safe: true
 ---
 
 # Orchestrator - Unified Step Execution Model
@@ -240,8 +239,8 @@ cd core && cargo test --lib 2>&1 | grep "test result"
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Step Type Validation (Known and Unknown IDs) | ⏭ SKIP | | | Unsafe in self-referential mode (self_referential_safe: false) |
-| 2 | Default Scope Classification (Task vs Item) | ⏭ SKIP | | | Unsafe in self-referential mode |
-| 3 | Semantic Normalization And Execution Rehydration | ⏭ SKIP | | | Unsafe in self-referential mode |
-| 4 | WorkflowStepType Fully Removed From Codebase | ✅ PASS | 2026-03-18 | QA | Only S4 executed per self_referential_safe_scenarios; S1/S2/S3/S5 skipped — unsafe in self-referential mode |
-| 5 | Static Checks And Resource Conversion Stay In Sync | ⏭ SKIP | | | Unsafe in self-referential mode |
+| 1 | Step Type Validation (Known and Unknown IDs) | ☐ | | | Unit test only — safe in self-referential mode |
+| 2 | Default Scope Classification (Task vs Item) | ☐ | | | Unit test only — safe |
+| 3 | Semantic Normalization And Execution Rehydration | ☐ | | | Unit test only — safe |
+| 4 | WorkflowStepType Fully Removed From Codebase | ✅ PASS | 2026-03-18 | QA | Code review (grep) — safe |
+| 5 | Static Checks And Resource Conversion Stay In Sync | ☐ | | | Unit test only — safe |

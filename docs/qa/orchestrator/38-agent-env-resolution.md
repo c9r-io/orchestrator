@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - Agent Env Resolution and Runner Injection
@@ -26,236 +26,132 @@ Resolution happens at runtime via `resolve_agent_env()`. Resolved variables are 
 ## Scenario 1: Agent with Direct Value Env Entry
 
 ### Preconditions
-- Orchestrator binary is built
-- A workspace and workflow exist in config
+- Rust toolchain available
+- Unit tests available: `cargo test resolve_direct_value`
 
 ### Goal
-Verify that an agent with a direct `name` + `value` env entry correctly receives the variable in its spawned process environment.
+Verify that an agent with a direct `name` + `value` env entry correctly resolves the variable.
 
 ### Steps
-1. Apply the following manifest:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: env-direct-agent
-   spec:
-     command: printf '%s' "${MY_DIRECT_VAR}"
-     env:
-       - name: MY_DIRECT_VAR
-         value: "hello-direct"
+1. Run the direct value resolution unit test:
+   ```bash
+   cargo test --workspace --lib resolve_direct_value
    ```
-2. Execute a task using `env-direct-agent`
-3. Inspect task stdout output
+
+2. Review the resolve implementation:
+   ```bash
+   rg -n "fn resolve_agent_env\b|Direct.*value" crates/orchestrator-config/src/env_resolve.rs
+   ```
 
 ### Expected
-- Agent process stdout contains `hello-direct`
-- The env var `MY_DIRECT_VAR` is available inside the spawned shell process
+- `resolve_direct_value` passes: direct env entry produces `(name, value)` in resolved map
+- The env var is available for runner injection
 
 ---
 
 ## Scenario 2: Agent with fromRef Importing All Store Keys
 
 ### Preconditions
-- An EnvStore `shared-config` exists with `DATABASE_URL=postgres://localhost/testdb` and `LOG_LEVEL=debug`
-- A workspace and workflow exist in config
+- Unit tests available
 
 ### Goal
 Verify that `fromRef` imports all keys from the referenced store into the agent's environment.
 
 ### Steps
-1. Apply the EnvStore:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: EnvStore
-   metadata:
-     name: shared-config
-   spec:
-     data:
-       DATABASE_URL: "postgres://localhost/testdb"
-       LOG_LEVEL: "debug"
+1. Run the fromRef resolution unit test:
+   ```bash
+   cargo test --workspace --lib resolve_from_ref
    ```
-2. Apply an agent referencing the store:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: env-fromref-agent
-   spec:
-     command: printf '%s|%s' "${DATABASE_URL}" "${LOG_LEVEL}"
-     env:
-       - fromRef: shared-config
-   ```
-3. Execute a task using `env-fromref-agent`
-4. Inspect task stdout output
 
 ### Expected
-- Agent process stdout contains `postgres://localhost/testdb|debug`
-- All keys from `shared-config` are injected into the process environment
+- `resolve_from_ref` passes: all keys from the referenced store appear in the resolved env map
+- Both EnvStore and SecretStore references are supported
 
 ---
 
 ## Scenario 3: Agent with refValue Importing Single Key with Rename
 
 ### Preconditions
-- A SecretStore `api-keys` exists with `OPENAI_API_KEY=sk-test-key-123`
-- A workspace and workflow exist in config
+- Unit tests available
 
 ### Goal
 Verify that `name` + `refValue` imports a single key from the referenced store, and the env var name can differ from the store key name.
 
 ### Steps
-1. Apply the SecretStore:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: SecretStore
-   metadata:
-     name: api-keys
-   spec:
-     data:
-       OPENAI_API_KEY: "sk-test-key-123"
+1. Run the refValue resolution unit test:
+   ```bash
+   cargo test --workspace --lib resolve_ref_value
    ```
-2. Apply an agent with a renamed key:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: env-refvalue-agent
-   spec:
-     command: printf '%s' "${MY_API_KEY}"
-     env:
-       - name: MY_API_KEY
-         refValue:
-           name: api-keys
-           key: OPENAI_API_KEY
-   ```
-3. Execute a task using `env-refvalue-agent`
-4. Inspect task stdout output
 
 ### Expected
-- Agent process stdout contains `sk-test-key-123`
-- The env var is available as `MY_API_KEY` (renamed from `OPENAI_API_KEY`)
+- `resolve_ref_value` passes: single key imported with rename
+- The env var name is the `name` field, not the store's key name
 
 ---
 
 ## Scenario 4: Config Validation Rejects Missing Store References
 
 ### Preconditions
-- No store named `nonexistent-store` exists in config
+- Unit tests available
 
 ### Goal
 Verify that config build-time validation catches agents referencing non-existent stores and produces a clear error message.
 
 ### Steps
-1. Save a manifest referencing a missing store via `fromRef`:
+1. Run the missing store reference unit tests:
    ```bash
-   cat > /tmp/bad-fromref-agent.yaml << 'EOF'
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: bad-fromref-agent
-   spec:
-     command: "echo test"
-     env:
-       - fromRef: nonexistent-store
-   EOF
+   cargo test --workspace --lib resolve_missing_store_errors
+   cargo test --workspace --lib resolve_missing_key_errors
+   cargo test --workspace --lib resolve_invalid_entry_errors
    ```
-2. Apply and observe validation error:
+
+2. Run the config validation unit tests:
    ```bash
-   orchestrator apply -f /tmp/bad-fromref-agent.yaml
-   ```
-3. Save a manifest referencing a missing store via `refValue`:
-   ```bash
-   cat > /tmp/bad-refvalue-agent.yaml << 'EOF'
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: bad-refvalue-agent
-   spec:
-     command: "echo test"
-     env:
-       - name: KEY
-         refValue:
-           name: nonexistent-store
-           key: SOME_KEY
-   EOF
-   ```
-4. Apply and observe validation error:
-   ```bash
-   orchestrator apply -f /tmp/bad-refvalue-agent.yaml
+   cargo test --workspace --lib validate_agent_env_store_refs
    ```
 
 ### Expected
-- Step 2: `apply` fails with error containing `"fromRef 'nonexistent-store' references unknown store"`
-- Step 4: `apply` fails with error containing `"refValue.name 'nonexistent-store' references unknown store"`
-- Neither agent is persisted — validation runs before config is written to the database
+- `resolve_missing_store_errors` passes: references to non-existent stores produce clear errors
+- `resolve_missing_key_errors` passes: references to non-existent keys produce clear errors
+- `resolve_invalid_entry_errors` passes: malformed env entries are rejected
+- Config validation catches missing store references before config is written
 
 ---
 
 ## Scenario 5: SecretStore Values Redacted in Task Logs
 
 ### Preconditions
-- A SecretStore `redact-test` exists with `SECRET_TOKEN=super-secret-value-xyz`
-- An agent references the SecretStore via `fromRef`
-- Runner redaction is active
+- Unit tests available
 
 ### Goal
-Verify that SecretStore values are collected by `collect_sensitive_values()` and redacted in task output logs. EnvStore values should NOT be redacted.
+Verify that SecretStore values are collected by `collect_sensitive_values()` and available for redaction. EnvStore values should NOT be collected.
 
 ### Steps
-1. Apply stores:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: EnvStore
-   metadata:
-     name: public-config
-   spec:
-     data:
-       PUBLIC_VAR: "visible-in-logs"
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: SecretStore
-   metadata:
-     name: redact-test
-   spec:
-     data:
-       SECRET_TOKEN: "super-secret-value-xyz"
+1. Run the sensitive value collection unit tests:
+   ```bash
+   cargo test --workspace --lib collect_sensitive_values_from_secret_store
+   cargo test --workspace --lib collect_sensitive_values_skips_non_sensitive
+   cargo test --workspace --lib test_collect_all_sensitive_store_values
+   cargo test --workspace --lib test_collect_all_sensitive_store_values_empty
    ```
-2. Apply an agent that echoes both values:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: redact-agent
-   spec:
-     command: echo "public=${PUBLIC_VAR} secret=${SECRET_TOKEN}"
-     env:
-       - fromRef: public-config
-       - fromRef: redact-test
-   ```
-3. Execute a task and inspect the captured stdout log
 
 ### Expected
-- Log output contains `visible-in-logs` (EnvStore values are not redacted)
-- Log output contains `[REDACTED]` in place of `super-secret-value-xyz`
-- The literal string `super-secret-value-xyz` does NOT appear anywhere in task logs
+- `collect_sensitive_values_from_secret_store` passes: SecretStore values are collected for redaction
+- `collect_sensitive_values_skips_non_sensitive` passes: EnvStore values are NOT collected
+- Sensitive value collection is used by the runner for log redaction
 
 ---
 
 ## General Scenario: Override Precedence — Later Entries Win
 
 ### Steps
-1. Via unit test or manifest, configure an agent with overlapping env entries:
-   ```yaml
-   env:
-     - fromRef: store-a        # contains KEY=from-a
-     - name: KEY
-       value: "direct-override"
+1. Run the override precedence unit test:
+   ```bash
+   cargo test --workspace --lib resolve_later_entries_override_earlier
    ```
-2. Resolve the agent env
 
 ### Expected
-- `KEY` resolves to `direct-override` (later entry overrides earlier)
+- `resolve_later_entries_override_earlier` passes: when multiple entries define the same key, the last one wins
 
 ---
 
@@ -263,9 +159,9 @@ Verify that SecretStore values are collected by `collect_sensitive_values()` and
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Agent with direct value env entry | ☐ | | | |
-| 2 | Agent with fromRef importing all store keys | ☐ | | | |
-| 3 | Agent with refValue importing single key with rename | ☐ | | | |
-| 4 | Config validation rejects missing store references | ☐ | | | |
-| 5 | SecretStore values redacted in task logs | ☐ | | | |
-| G | Override precedence — later entries win | ☐ | | | |
+| 1 | Agent with direct value env entry | ☐ | | | Unit test — safe |
+| 2 | Agent with fromRef importing all store keys | ☐ | | | Unit test — safe |
+| 3 | Agent with refValue importing single key with rename | ☐ | | | Unit test — safe |
+| 4 | Config validation rejects missing store references | ☐ | | | Unit test — safe |
+| 5 | SecretStore values redacted in task logs | ☐ | | | Unit test — safe |
+| G | Override precedence — later entries win | ☐ | | | Unit test — safe |

@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Orchestrator - EnvStore and SecretStore Resource CRUD
@@ -19,157 +19,134 @@ Both resources use the standard `apply` / `manifest export` / `delete` CLI comma
 
 ---
 
-## Scenario 1: Apply EnvStore and SecretStore via Multi-Document YAML
+## Scenario 1: Apply EnvStore and SecretStore — Created Status
 
 ### Preconditions
-- Orchestrator binary is built and accessible via `orchestrator`
-- A clean project environment exists
+- Rust toolchain available
+- Unit tests available: `cargo test env_store_apply`, `cargo test secret_store_apply`
 
 ### Goal
-Verify that both EnvStore and SecretStore resources can be applied from a single multi-document YAML file, and that they appear in the exported manifest with correct kind labels.
+Verify that both EnvStore and SecretStore resources can be applied and return `Created` status for new entries, with correct sensitive flag.
 
 ### Steps
-1. Create a multi-document YAML file `test-env-stores.yaml`:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: EnvStore
-   metadata:
-     name: shared-config
-   spec:
-     data:
-       DATABASE_URL: "postgres://localhost/testdb"
-       LOG_LEVEL: "debug"
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: SecretStore
-   metadata:
-     name: api-keys
-   spec:
-     data:
-       OPENAI_API_KEY: "sk-test-key-123"
+1. Run the apply unit tests:
+   ```bash
+   cargo test --workspace --lib env_store_apply_and_get
+   cargo test --workspace --lib secret_store_apply_and_get
    ```
-2. Run `orchestrator apply -f test-env-stores.yaml`
-3. Run `orchestrator manifest export`
+
+2. Review the EnvStore apply implementation:
+   ```bash
+   rg -n "fn apply_to\b|fn get_from\b" core/src/resource/env_store.rs
+   rg -n "fn apply_to\b|fn get_from\b" core/src/resource/secret_store.rs
+   ```
 
 ### Expected
-- Apply outputs `Created` for both `shared-config` and `api-keys`
-- Export includes a document with `kind: EnvStore`, `name: shared-config`, and `data` containing `DATABASE_URL` and `LOG_LEVEL`
-- Export includes a document with `kind: SecretStore`, `name: api-keys`, and `data` containing `OPENAI_API_KEY`
-
-### Expected Data State
-```sql
--- Verify env_stores in config (SQLite `resources` table stores per-resource CRs)
--- EnvStore entry should have sensitive=false, SecretStore should have sensitive=true
--- Check via manifest export output rather than direct DB query
-```
+- `env_store_apply_and_get` passes: EnvStore created with `sensitive=false`, data map preserved
+- `secret_store_apply_and_get` passes: SecretStore created with `sensitive=true`, data map preserved
+- Both store types share the `env_stores` config map, distinguished by `sensitive` flag
 
 ---
 
 ## Scenario 2: Apply Idempotency — Unchanged on Re-Apply
 
 ### Preconditions
-- Scenario 1 completed successfully (both stores exist in config)
+- Unit tests available
 
 ### Goal
 Verify that re-applying the same manifest produces `Unchanged` status for both resources (idempotent apply).
 
 ### Steps
-1. Run `orchestrator apply -f test-env-stores.yaml` again (same file from Scenario 1)
+1. Run the idempotency unit tests:
+   ```bash
+   cargo test --workspace --lib env_store_apply_unchanged
+   cargo test --workspace --lib secret_store_apply_unchanged
+   ```
 
 ### Expected
-- Output shows `Unchanged` for `shared-config`
-- Output shows `Unchanged` for `api-keys`
-- No data is modified in the config
+- `env_store_apply_unchanged` passes: second apply returns `Unchanged`
+- `secret_store_apply_unchanged` passes: second apply returns `Unchanged`
+- No data is modified on re-apply
 
 ---
 
-## Scenario 3: Delete EnvStore and SecretStore by Kind Alias
+## Scenario 3: Delete EnvStore and SecretStore
 
 ### Preconditions
-- Both `shared-config` (EnvStore) and `api-keys` (SecretStore) exist in config
+- Unit tests available
 
 ### Goal
-Verify that delete works with all supported kind aliases, and that deleting one kind does not affect the other.
+Verify that delete works correctly for both resource kinds and that deleting one kind does not affect the other.
 
 ### Steps
-1. Run `orchestrator delete env-store shared-config`
-2. Run `orchestrator manifest export` — verify `shared-config` is absent
-3. Re-apply `shared-config` from Scenario 1 YAML
-4. Run `orchestrator delete secret-store api-keys`
-5. Run `orchestrator manifest export` — verify `api-keys` is absent, `shared-config` still present
+1. Run the delete unit tests:
+   ```bash
+   cargo test --workspace --lib env_store_delete
+   cargo test --workspace --lib secret_store_delete
+   ```
+
+2. Review delete implementation:
+   ```bash
+   rg -n "fn delete_from\b" core/src/resource/env_store.rs core/src/resource/secret_store.rs
+   ```
 
 ### Expected
-- Step 1: delete returns success
-- Step 2: export does not contain `shared-config`; `api-keys` still present
-- Step 4: delete returns success
-- Step 5: export does not contain `api-keys`; `shared-config` present
+- `env_store_delete` passes: EnvStore entry removed from config
+- `secret_store_delete` passes: SecretStore entry removed from config
+- Delete returns `true` for existing entries
 
 ---
 
 ## Scenario 4: Validate Rejects Empty Resource Name
 
 ### Preconditions
-- Orchestrator binary is built
+- Unit tests available
 
 ### Goal
 Verify that applying an EnvStore or SecretStore with an empty name produces a validation error.
 
 ### Steps
-1. Create `bad-env-store.yaml`:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: EnvStore
-   metadata:
-     name: ""
-   spec:
-     data:
-       KEY: "value"
+1. Run the validation unit tests:
+   ```bash
+   cargo test --workspace --lib env_store_validate_rejects_empty_name
+   cargo test --workspace --lib secret_store_validate_rejects_empty_name
    ```
-2. Run `orchestrator apply -f bad-env-store.yaml`
 
 ### Expected
-- Apply fails with an error message containing "name" or "empty"
-- No resource is created in config
+- `env_store_validate_rejects_empty_name` passes: empty name rejected with error
+- `secret_store_validate_rejects_empty_name` passes: empty name rejected with error
+- No resource is created when validation fails
 
 ---
 
 ## Scenario 5: EnvStore and SecretStore Isolation — Cross-Kind Get/Delete
 
 ### Preconditions
-- An EnvStore named `cross-test` is applied
-- A SecretStore named `cross-test-secret` is applied
+- Unit tests available
 
 ### Goal
 Verify that `get_from` for EnvStore skips sensitive entries, and `get_from` for SecretStore skips non-sensitive entries. Also verify that `delete` for the wrong kind returns false.
 
 ### Steps
-1. Apply a manifest with:
-   ```yaml
-   apiVersion: orchestrator.dev/v2
-   kind: EnvStore
-   metadata:
-     name: cross-test
-   spec:
-     data:
-       ENV_VAR: "public-value"
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: SecretStore
-   metadata:
-     name: cross-test-secret
-   spec:
-     data:
-       SECRET_VAR: "secret-value"
+1. Run the isolation unit tests:
+   ```bash
+   cargo test --workspace --lib env_store_get_from_skips_sensitive
+   cargo test --workspace --lib secret_store_get_from_skips_non_sensitive
+   cargo test --workspace --lib env_store_get_from_returns_none_for_missing
+   cargo test --workspace --lib secret_store_get_from_returns_none_for_missing
    ```
-2. Verify via unit tests that:
-   - `EnvStoreResource::get_from(config, "cross-test-secret")` returns `None` (sensitive entry)
-   - `SecretStoreResource::get_from(config, "cross-test")` returns `None` (non-sensitive entry)
-   - `EnvStoreResource::delete_from(config, "cross-test-secret")` returns `false`
-   - `SecretStoreResource::delete_from(config, "cross-test")` returns `false`
+
+2. Review the YAML export implementation:
+   ```bash
+   cargo test --workspace --lib env_store_to_yaml
+   cargo test --workspace --lib secret_store_to_yaml
+   ```
 
 ### Expected
+- `env_store_get_from_skips_sensitive` passes: EnvStore ignores SecretStore entries
+- `secret_store_get_from_skips_non_sensitive` passes: SecretStore ignores EnvStore entries
 - Cross-kind access is correctly blocked by the `sensitive` flag
-- Each resource kind only operates on entries matching its sensitivity level
+- YAML serialization preserves kind labels and data maps
 
 ---
 
@@ -177,8 +154,8 @@ Verify that `get_from` for EnvStore skips sensitive entries, and `get_from` for 
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Apply EnvStore and SecretStore via multi-document YAML | ☐ | | | |
-| 2 | Apply idempotency — Unchanged on re-apply | ☐ | | | |
-| 3 | Delete EnvStore and SecretStore by kind alias | ☐ | | | |
-| 4 | Validate rejects empty resource name | ☐ | | | |
-| 5 | EnvStore/SecretStore isolation — cross-kind get/delete | ☐ | | | |
+| 1 | Apply EnvStore and SecretStore — Created Status | ☐ | | | Unit test — safe |
+| 2 | Apply idempotency — Unchanged on re-apply | ☐ | | | Unit test — safe |
+| 3 | Delete EnvStore and SecretStore | ☐ | | | Unit test — safe |
+| 4 | Validate rejects empty resource name | ☐ | | | Unit test — safe |
+| 5 | EnvStore/SecretStore isolation — cross-kind get/delete | ☐ | | | Unit test — safe |
