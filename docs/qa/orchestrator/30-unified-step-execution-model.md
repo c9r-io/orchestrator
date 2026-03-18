@@ -240,8 +240,8 @@ cd core && cargo test --lib 2>&1 | grep "test result"
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Step Type Validation (Known and Unknown IDs) | ☐ | | | |
-| 2 | Default Scope Classification (Task vs Item) | ☐ | | | |
-| 3 | Semantic Normalization And Execution Rehydration | ☐ | | | |
-| 4 | WorkflowStepType Fully Removed From Codebase | ☐ | | | |
-| 5 | Static Checks And Resource Conversion Stay In Sync | ☐ | | | |
+| 1 | Step Type Validation (Known and Unknown IDs) | ⏭ SKIP | | | Unsafe in self-referential mode (self_referential_safe: false) |
+| 2 | Default Scope Classification (Task vs Item) | ⏭ SKIP | | | Unsafe in self-referential mode |
+| 3 | Semantic Normalization And Execution Rehydration | ⏭ SKIP | | | Unsafe in self-referential mode |
+| 4 | WorkflowStepType Fully Removed From Codebase | ✅ PASS | 2026-03-18 | QA | Only S4 executed per self_referential_safe_scenarios |
+| 5 | Static Checks And Resource Conversion Stay In Sync | ⏭ SKIP | | | Unsafe in self-referential mode |

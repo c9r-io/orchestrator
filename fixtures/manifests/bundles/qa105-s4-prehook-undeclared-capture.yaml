@@ -36,5 +36,13 @@ spec:
         engine: cel
         when: "size(regression_target_ids) > 0"
         # References undeclared capture variable
+    - id: self_test
+      type: self_test
+      enabled: true
+      scope: task
   loop:
     mode: once
+  safety:
+    auto_rollback: true
+    checkpoint_strategy: git_tag
+    binary_snapshot: true

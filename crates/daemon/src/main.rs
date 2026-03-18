@@ -457,11 +457,14 @@ fn main() -> Result<()> {
             Server::builder()
                 .layer(protection.clone().layer())
                 .tls_config(secure.tls)?
-                .add_service(OrchestratorServiceServer::new(server::OrchestratorServer::new(
-                    inner.clone(),
-                    shutdown_notify.clone(),
-                    Some(secure.security),
-                )))
+                .add_service(
+                    OrchestratorServiceServer::new(server::OrchestratorServer::new(
+                        inner.clone(),
+                        shutdown_notify.clone(),
+                        Some(secure.security),
+                    ))
+                    .max_encoding_message_size(64 * 1024 * 1024),
+                )
                 .serve_with_shutdown(addr, shutdown_fut)
                 .await
                 .context("gRPC server error")?;
@@ -477,7 +480,10 @@ fn main() -> Result<()> {
                 tracing::warn!("insecure TCP control-plane enabled; use only for local development");
                 Server::builder()
                     .layer(protection.clone().layer())
-                    .add_service(OrchestratorServiceServer::new(service))
+                    .add_service(
+                        OrchestratorServiceServer::new(service)
+                            .max_encoding_message_size(64 * 1024 * 1024),
+                    )
                     .serve_with_shutdown(addr, shutdown_fut)
                     .await
                     .context("gRPC server error")?;
@@ -496,7 +502,10 @@ fn main() -> Result<()> {
                 })).await;
                 Server::builder()
                     .layer(protection.clone().layer())
-                    .add_service(OrchestratorServiceServer::new(service))
+                    .add_service(
+                        OrchestratorServiceServer::new(service)
+                            .max_encoding_message_size(64 * 1024 * 1024),
+                    )
                     .serve_with_incoming_shutdown(uds_stream, shutdown_fut)
                     .await
                     .context("gRPC server error")?;

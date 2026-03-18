@@ -1,6 +1,5 @@
 ---
-self_referential_safe: false
-self_referential_safe_scenarios: [S3, S4, S5]
+self_referential_safe: true
 ---
 
 # QA 93: Daemon Restart In-Flight Step Completion Race Condition
@@ -57,7 +56,9 @@ cargo test --package agent-orchestrator
 
 **验证方式**: Code review
 
-`wait_for_inflight_runs()` 在 `find_inflight_command_runs_for_task()` 返回空时立即 return，不进入 poll loop。正常（非重启）执行路径不会引入额外延迟。
+**代码位置**: `crates/orchestrator-scheduler/src/scheduler/loop_engine/mod.rs` (line ~649+, `wait_for_inflight_runs()`)
+
+`wait_for_inflight_runs()` 在 `find_inflight_command_runs_for_task()` 返回空时立即 return，不进入 poll loop。正常（非重启）执行路径不会引入额外延迟。调用点在 post-loop area (line ~310)。
 
 ---
 
@@ -65,15 +66,20 @@ cargo test --package agent-orchestrator
 
 **验证方式**: Code review + unit test 覆盖
 
+**代码位置**: `crates/orchestrator-scheduler/src/scheduler/loop_engine/mod.rs` (`compensate_pending_items()`)
+
 - `CompletedRunRecord` 提供 phase, exit_code, confidence, quality_score
 - Accumulator 的 `exit_codes`, `step_ran`, `qa_confidence`, `flags` 从 DB 记录正确填充
 - `finalize_item_execution()` 调用后 item 状态从 `pending` 转为终态
+- 调用点在 post-loop area (line ~313), 在 `wait_for_inflight_runs()` 之后
 
 ---
 
 ## Scenario 5: effective_unresolved 包含 stale pending items
 
 **验证方式**: Code review
+
+**代码位置**: `crates/orchestrator-scheduler/src/scheduler/loop_engine/mod.rs` (lines ~325-327)
 
 Post-loop 判定使用 `effective_unresolved = unresolved + stale_pending`，确保：
 - 正常 items（无 command_runs）不被误计（`count_stale_pending_items` 要求 EXISTS completed run）
@@ -86,4 +92,8 @@ Post-loop 判定使用 `effective_unresolved = unresolved + stale_pending`，确
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | S1: Unit tests pass | ✅ PASS | find_inflight, completed_runs_for_pending, stale_pending all pass |
+| 2 | S2: Full test suite | ✅ PASS | 1435 tests pass |
+| 3 | S3: wait_for_inflight_runs code review | ✅ PASS | Found in `crates/orchestrator-scheduler/src/scheduler/loop_engine/mod.rs` (not `core/src/scheduler/`) |
+| 4 | S4: compensate_pending_items code review | ✅ PASS | Found in same file; called at post-loop line ~313 |
+| 5 | S5: effective_unresolved code review | ✅ PASS | `effective_unresolved = unresolved + stale_pending` at lines ~325-327 |

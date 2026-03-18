@@ -177,5 +177,5 @@ Ensure config defaults and CLI override precedence for structured logging remain
 | 1 | Release Build Includes Logging Surface | ☐ | | | Previous result based on non-existent `--log-level`/`--log-format` flags |
 | 2 | `init` Preserves stdout Contract | ✅ | 2026-03-02 | Codex | stdout retained human-readable success line; stderr contained structured log |
 | 3 | JSON Console Logging Works Via Environment Variable | ☐ | | | Previous result based on non-existent `--log-format` flag |
-| 4 | Daemon Log File Is Written | ☐ | | | Path corrected: `data/daemon.log` (not `data/logs/system/`) |
+| 4 | Daemon Log File Is Written | ✅ | 2026-03-18 | Claude | verified data/daemon.log exists with ISO 8601 timestamps and structured runtime events |
 | 5 | Logging Config Resolution Unit Tests Pass | ✅ | 2026-03-02 | Codex | focused `config::observability` and `observability::init` tests passed |

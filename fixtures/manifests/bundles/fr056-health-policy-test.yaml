@@ -82,6 +82,9 @@ kind: Workflow
 metadata:
   name: qa-test
 spec:
+  safety:
+    checkpoint_strategy: git_tag
+    auto_rollback: true
   steps:
     - id: qa
       type: qa

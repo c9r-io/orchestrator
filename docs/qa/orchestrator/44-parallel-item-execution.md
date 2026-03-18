@@ -237,4 +237,4 @@ Verify the database uses a writer+reader connection model with WAL mode and busy
 | 2 | ScopeSegment Resolves max_parallel From Step and Plan | PASS | 2026-03-15 | claude | 5 build_segments tests pass (orchestrator-scheduler --features test-harness) |
 | 3 | RunningTask::fork() Shares Stop Flag | PASS | 2026-03-15 | claude | running_task tests pass; fork method verified in code |
 | 4 | Sequential Path Unchanged When max_parallel Absent | ☐ | | | Requires live task execution |
-| 5 | Database Connection Model and WAL Configuration | PASS | 2026-03-15 | claude | Writer+reader model, WAL enabled, busy_timeout 5000ms |
+| 5 | Database Connection Model and WAL Configuration | PASS | 2026-03-18 | claude | Writer+reader model, WAL enabled, busy_timeout 5000ms |

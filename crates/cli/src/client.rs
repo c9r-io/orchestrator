@@ -5,6 +5,13 @@ use std::path::{Path, PathBuf};
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint, Identity, Uri};
 use tower::service_fn;
 
+/// Maximum gRPC decoding message size (64 MB).
+///
+/// The default tonic limit is 4 MB, which is too small for `manifest export`
+/// on repositories with many resources.  We raise the ceiling here so that the
+/// CLI can receive large payloads without hitting a decoding error.
+const MAX_GRPC_DECODE_SIZE: usize = 64 * 1024 * 1024;
+
 #[derive(Debug, Clone, Deserialize)]
 struct ControlPlaneConfig {
     current_context: String,
@@ -128,7 +135,10 @@ async fn connect_uds() -> Result<OrchestratorServiceClient<Channel>> {
             .await;
 
         match result {
-            Ok(channel) => return Ok(OrchestratorServiceClient::new(channel)),
+            Ok(channel) => {
+                return Ok(OrchestratorServiceClient::new(channel)
+                    .max_decoding_message_size(MAX_GRPC_DECODE_SIZE))
+            }
             Err(e) => {
                 if attempt < max_attempts {
                     eprintln!(
@@ -221,7 +231,7 @@ async fn connect_secure(config_path: &Path) -> Result<OrchestratorServiceClient<
         .connect()
         .await
         .with_context(|| format!("failed to connect to {}", cluster.cluster.server))?;
-    Ok(OrchestratorServiceClient::new(channel))
+    Ok(OrchestratorServiceClient::new(channel).max_decoding_message_size(MAX_GRPC_DECODE_SIZE))
 }
 
 /// Check explicit path and `ORCHESTRATOR_CONTROL_PLANE_CONFIG` env only.
@@ -281,7 +291,7 @@ pub async fn connect_tcp(addr: &str) -> Result<OrchestratorServiceClient<Channel
         .await
         .context("failed to connect to daemon")?;
 
-    Ok(OrchestratorServiceClient::new(channel))
+    Ok(OrchestratorServiceClient::new(channel).max_decoding_message_size(MAX_GRPC_DECODE_SIZE))
 }
 
 #[cfg(test)]

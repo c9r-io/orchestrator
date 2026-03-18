@@ -33,5 +33,13 @@ spec:
           - var: test_var
             source: stdout
             json_path: "$.test"
+    - id: self_test
+      type: self_test
+      enabled: true
+      scope: task
   loop:
     mode: once
+  safety:
+    auto_rollback: true
+    checkpoint_strategy: git_tag
+    binary_snapshot: true

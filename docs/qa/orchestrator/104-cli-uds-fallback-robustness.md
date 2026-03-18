@@ -1,4 +1,16 @@
+---
+self_referential_safe: false
+self_referential_safe_scenarios: [S1, S3, S5]
+---
+
 # QA-104: CLI UDS 连接回退鲁棒性
+
+> **Infrastructure note**: S2 and S4 require a valid TLS certificate chain
+> (`~/.orchestrator/control-plane/config.yaml` pointing to real CA/client certs).
+> These scenarios verify that the CLI **selects** the TCP/TLS path (code-review
+> confirmed via `connect()` priority logic in `crates/cli/src/client.rs`), but
+> the actual TLS handshake will fail unless the test environment provisions
+> certificates.  S1, S3, and S5 are self-contained and fully automatable.
 
 ## 关联
 - FR-050
@@ -37,4 +49,9 @@
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | All scenarios verified | ☐ | S2/S4 require TLS infra; S1/S3/S5 pass |
+| 2 | S1: UDS preferred | ☑ | CLI connects via UDS when socket exists, no env vars |
+| 3 | S2: --control-plane-config priority | ☐ | Code-review confirmed path selection; TLS handshake requires cert provisioning |
+| 4 | S3: ORCHESTRATOR_SOCKET env priority | ☑ | Env var takes highest priority |
+| 5 | S4: Fallback to home-dir config | ☐ | Code-review confirmed path selection; TLS handshake requires cert provisioning |
+| 6 | S5: Error with hint | ☑ | Shows orchestratord startup hint |

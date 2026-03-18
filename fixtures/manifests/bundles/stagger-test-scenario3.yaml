@@ -21,6 +21,7 @@ spec:
     - plan
     - implement
     - qa_testing
+    - loop_guard
   command: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[]}'"
 ---
 apiVersion: orchestrator.dev/v2

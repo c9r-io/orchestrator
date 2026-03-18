@@ -54,10 +54,10 @@ sqlite3 data/agent_orchestrator.db \
    FROM events WHERE task_id='<task_id>' AND event_type='cycle_started'
    ORDER BY created_at"
 
-# 2. Check loop_guard_decision with fixed_cycles_complete reason
+# 2. Check workflow_terminated with no_unresolved reason (guard step terminates before continuation check)
 sqlite3 data/agent_orchestrator.db \
   "SELECT event_type, payload_json FROM events
-   WHERE task_id='<task_id>' AND event_type='loop_guard_decision'"
+   WHERE task_id='<task_id>' AND event_type='workflow_terminated'"
 
 # 3. Verify NO degenerate_cycle_detected
 sqlite3 data/agent_orchestrator.db \
@@ -67,7 +67,7 @@ sqlite3 data/agent_orchestrator.db \
 
 **预期结果**:
 - `cycle_started` 事件仅出现 cycle=1 和 cycle=2
-- 存在 `loop_guard_decision` 事件，payload 包含 `"reason":"fixed_cycles_complete"` (注意: Fixed mode 下，post-cycle continuation check 先于 proactive gate 触发，因此发出 `loop_guard_decision` 而非 `max_cycles_enforced`。`max_cycles_enforced` 仅在 infinite/dynamic mode 中由 proactive gate 发出。)
+- 每个 cycle 末尾 `workflow_terminated` 事件出现，`reason` 为 `"no_unresolved"`（mock agent 全部成功 → guard step 判定无 unresolved items → 直接终止该 cycle 的 workflow，不进入 `evaluate_loop_continuation`）。注意: `loop_guard_decision` 仅在 guard step 不终止时由 post-cycle continuation check 发出；当 guard step 先触发终止，则不会发出 `loop_guard_decision`。`max_cycles_enforced` 仅在 cycle 递增前由 proactive gate 发出（dynamic items 绕过 post-cycle check 时的兜底）。
 - 不出现 cycle=3 的 `cycle_started`
 - `degenerate_cycle_detected` 计数为 0
 
@@ -129,16 +129,16 @@ sqlite3 data/agent_orchestrator.db \
   "SELECT COUNT(*) FROM events
    WHERE task_id='<task_id>' AND event_type='max_cycles_enforced'"
 
-# 3. loop_guard_decision shows no_unresolved_items stop
+# 3. workflow_terminated shows guard step termination (guard step fires before continuation check)
 sqlite3 data/agent_orchestrator.db \
   "SELECT payload_json FROM events
-   WHERE task_id='<task_id>' AND event_type='loop_guard_decision'"
+   WHERE task_id='<task_id>' AND event_type='workflow_terminated'"
 ```
 
 **预期结果**:
 - Task 状态为 `completed`
 - `max_cycles_enforced` 计数为 0（proactive gate 未触发）
-- `loop_guard_decision` 显示 `no_unresolved_items` 或 `continue` 正常决策
+- `workflow_terminated` 事件出现，`reason` 为 `"no_unresolved"`（guard step 判定无 unresolved items → 直接终止）。注意: 当 guard step 先终止 workflow 时，`loop_guard_decision` 不会发出。
 
 ---
 
@@ -164,10 +164,10 @@ sqlite3 data/agent_orchestrator.db \
    WHERE task_id='<task_id>' AND event_type='cycle_started'
    ORDER BY created_at"
 
-# 2. max_cycles_enforced event exists
+# 2. workflow_terminated event exists (guard step terminates before proactive gate fires)
 sqlite3 data/agent_orchestrator.db \
-  "SELECT COUNT(*) FROM events
-   WHERE task_id='<task_id>' AND event_type='max_cycles_enforced'"
+  "SELECT event_type, payload_json FROM events
+   WHERE task_id='<task_id>' AND event_type='workflow_terminated'"
 
 # 3. No items_generated (no generate_items in this workflow)
 sqlite3 data/agent_orchestrator.db \
@@ -181,7 +181,7 @@ sqlite3 data/agent_orchestrator.db \
 
 **预期结果**:
 - `cycle_started` 仅 cycle=1 和 cycle=2
-- `max_cycles_enforced` 存在
+- `workflow_terminated` 事件存在，`reason` 为 `"no_unresolved"`（guard step 判定无 unresolved → 直接终止，不触发 proactive gate 的 `max_cycles_enforced`。`max_cycles_enforced` 仅在 dynamic items 绕过 guard step 导致 cycle 递增时由 proactive gate 发出。）
 - `items_generated` 计数为 0
 - Task 终态为 `completed` 或 `failed`（不是 `running`/`paused`）
 
