@@ -76,10 +76,10 @@
 
 ### Expected
 - 文档级安全 ≥ 25
-- 场景级标注 ≥ 30
+- 场景级标注 ≥ 20
 - 总参与文档 ≥ 55（覆盖率 ≥ 40%）
 
-> **Note**: FR-060 迭代 1-3 将多个文档从 `self_referential_safe: false` 转为 `true`（移除 `self_referential_safe_scenarios`），导致文档级安全数增加、场景级标注数减少，但总参与文档数保持增长。阈值已相应调整。
+> **Note**: FR-060 迭代 1-5 将多个文档从 `self_referential_safe: false` 转为 `true`（移除 `self_referential_safe_scenarios`），导致文档级安全数增加、场景级标注数减少，但总参与文档数保持增长。阈值已相应调整（场景级从 ≥30 降至 ≥20，因为更多文档升级为全文档级安全）。
 
 ---
 

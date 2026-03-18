@@ -69,6 +69,11 @@
 - Agent 使用 Workspace 的 health_policy（disease 已禁用）
 - Agent 始终保持 healthy
 
+> **已知限制**: `orchestrator check` 在多 workspace 项目中无法显示 workspace 继承的 health_policy（显示为 "default"）。
+> 这是 check 命令的显示限制（`check/mod.rs` 仅在单 workspace 时解析继承），不影响运行时行为。
+> 运行时 policy 解析路径（`record.rs:179-199`）正确实现 agent > workspace > default 优先级。
+> 验证方式：通过 unit test (`mark_agent_diseased_zero_duration_is_noop`) + 代码审查确认。
+
 ## 场景 5：Agent 级别覆盖 Workspace 级别
 
 **步骤**

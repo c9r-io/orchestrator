@@ -74,7 +74,7 @@ Code review + unit test verification.
    ```bash
    cargo test --workspace --lib -- validate_workflow_rejects_empty_steps
    cargo test --workspace --lib -- validate_workflow_rejects_no_enabled_steps
-   cargo test --workspace --lib -- validate_workflow_rejects_duplicate_step_ids
+   cargo test --workspace --lib -- validate_workflow_config_rejects_duplicate_step_ids
    cargo test --workspace --lib -- resource_dispatch_rejects_mismatched_spec_kind
    ```
 
