@@ -77,6 +77,26 @@
 - 将 crash 测试改为 unit test + 代码审查验证
 - 或提供安全的 crash simulation API
 
+### 迭代 2 结果（2026-03-18）
+
+**分析文档**: `85-daemon-crash-resilience.md`, `86-orphaned-running-items-recovery.md`, `91b-daemon-crash-resilience-shutdown.md`
+
+| 文档 | 总场景 | 可转安全 | 分类 |
+|------|--------|---------|------|
+| QA-85 | 5 | 5 | QA 设计不合理 — 所有场景的核心逻辑已有 unit test 覆盖（`state_tests.rs` 5 tests, `lifecycle.rs` 3 tests, `runtime.rs` 1 test），kill -9 验证方式可用代码审查 + unit test 替代 |
+| QA-86 | 5 | 5 | QA 设计不合理 — 所有 5 个 recovery 场景已有对应 unit test（`recover_orphaned_running_items` 5 tests, `recover_stalled_running_items` 1 test），daemon 生命周期操作为多余包装 |
+| QA-91b | 2 | 1 (S2) | S1 已安全（代码审查），S2 `cargo test --workspace --lib` 不影响运行中 daemon，可标记安全 |
+
+**修复内容**:
+- QA-85: 全部 5 场景重写为代码审查 + unit test 验证，标记 `self_referential_safe: true`
+- QA-86: 全部 5 场景重写为代码审查 + unit test 验证，标记 `self_referential_safe: true`
+- QA-91b: 移除 `self_referential_safe_scenarios` 限制，标记 `self_referential_safe: true`（S1+S2 均安全）
+- 无代码变更 — 所有 crash recovery 逻辑已有充分 unit test 覆盖
+- 10 个相关 unit test 全部通过（7 in core, 3 in daemon）
+
+**净收益**: +11 个可安全执行的场景（QA-85 ×5, QA-86 ×5, QA-91b S2 ×1）
+**累计净收益**: 迭代 1 (+4) + 迭代 2 (+11) = +15 个安全场景
+
 ### 迭代 3: cargo build 隔离（重编译类）
 
 **目标文档**: `14-config-validation-enhanced.md`, `71-automate-protoc-dependency.md`, `101/102-core-crate-split.md`

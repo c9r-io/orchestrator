@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 # Orchestrator - Orphaned Running Items Auto-Recovery
 
@@ -18,424 +18,143 @@ When the daemon crashes (SIGKILL, OOM, panic) while items are in `running` state
 2. **Stall detection sweep** — Background task (every 5 min) detects items running longer than `--stall-timeout-mins` and recovers them
 3. **CLI `task recover`** — Manual recovery via `orchestrator task recover <task_id>`
 
-Audit events emitted: `orphaned_items_recovered` (startup), `item_stall_recovered` (runtime sweep).
+All scenarios use code review and existing unit tests — no daemon start/kill required.
 
-### Common Preconditions / Setup
+### Verification Command
 
 ```bash
-# 1. Build release binaries
-cargo build --release -p orchestratord -p orchestrator-cli
-
-# 2. Ensure runtime is initialized
-test -f data/agent_orchestrator.db || ./target/release/orchestrator init
-
-# 3. Apply mock fixture and set up isolated QA project
-QA_PROJECT="fr033-qa-${USER}-$(date +%Y%m%d%H%M%S)"
-./target/release/orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
-rm -rf "workspace/${QA_PROJECT}"
-./target/release/orchestrator apply -f fixtures/manifests/bundles/pause-resume-workflow.yaml --project "${QA_PROJECT}"
+cargo test -p orchestrator-core -- recover_orphaned_running_items recover_stalled_running_items
 ```
 
-### Troubleshooting
+### Unit Test Coverage
 
-| Symptom | Root Cause | Fix |
-|---------|-----------|-----|
-| `task recover` returns gRPC error | Daemon not running or CLI binary stale | Rebuild CLI and restart daemon |
-| No `orphaned_items_recovered` event on restart | No items were in `running` state at crash time | Ensure SIGKILL is sent while items are actively running (use `mock_sleep` agent) |
-| Stall detection not triggering | `--stall-timeout-mins` default is 30; items haven't exceeded threshold | Use `--stall-timeout-mins 1` for testing or wait longer |
-| Socket bind error on daemon restart | Stale socket from crashed daemon | `rm -f data/orchestrator.sock` |
+| Test | File | Covers |
+|------|------|--------|
+| `recover_orphaned_running_items_resets_items_and_task` | `state_tests.rs:476` | S1 — running items → pending, task → restart_pending |
+| `recover_orphaned_running_items_returns_empty_when_no_orphans` | `state_tests.rs:531` | S2 — idempotent when no orphans |
+| `recover_orphaned_running_items_for_task_only_affects_target_task` | `state_tests.rs:569` | S3 — task-scoped recovery |
+| `recover_orphaned_running_items_does_not_affect_terminal_items` | `state_tests.rs:541` | S4 — terminal items unchanged |
+| `recover_stalled_running_items_respects_threshold` | `state_tests.rs:631` | S5 — threshold-based stall detection |
+| `recover_orphaned_running_items_skips_paused_task_in_return` | `state_tests.rs:686` | Edge case — paused tasks |
 
 ---
 
-## Scenario 1: Startup Recovery Resets Orphaned Running Items
-
-### Preconditions
-
-- Common Preconditions applied (pause-resume-workflow.yaml with `mock_sleep` agent)
+## Scenario 1: Startup Recovery Resets Orphaned Running Items (Code Review + Unit Test)
 
 ### Goal
 
-Verify that when the daemon crashes with items in `running` state, the next startup automatically resets them to `pending` and the parent task to `restart_pending`, emitting an `orphaned_items_recovered` event.
+Verify that `recover_orphaned_running_items()` resets all running items to `pending` and parent tasks to `restart_pending`.
 
 ### Steps
 
-1. Start daemon and create a slow task:
+1. Review `core/src/task_repository/state.rs` — `recover_orphaned_running_items()` function
+2. Review `crates/daemon/src/main.rs` — startup sequence calling `recover_orphaned_running_items()` before worker spawn
+3. Run unit test:
    ```bash
-   rm -f data/orchestrator.sock
-   ./target/release/orchestratord --foreground --workers 1 >/tmp/fr033-s1-pre.log 2>&1 &
-   DAEMON_PID=$!
-   sleep 2
-
-   TASK_ID=$(./target/release/orchestrator task create \
-     --name "orphan-recovery-test" \
-     --goal "Test startup orphan recovery" \
-     --project "${QA_PROJECT}" \
-     --workflow qa_sleep 2>&1 | grep -oE '[0-9a-f-]{36}' | head -1)
-   echo "TASK_ID=${TASK_ID}"
-   ```
-
-2. Wait for items to enter `running` state, then crash daemon:
-   ```bash
-   sleep 4
-   # Confirm items are running
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT id, status FROM task_items WHERE task_id='${TASK_ID}' AND status='running';"
-   # Kill daemon without cleanup (simulate crash)
-   kill -9 "$DAEMON_PID"
-   wait "$DAEMON_PID" 2>/dev/null || true
-   ```
-
-3. Verify items are stuck in `running`:
-   ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT status, COUNT(*) FROM task_items WHERE task_id='${TASK_ID}' GROUP BY status;"
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT status FROM tasks WHERE id='${TASK_ID}';"
-   ```
-
-4. Restart daemon (recovery happens at startup):
-   ```bash
-   rm -f data/orchestrator.sock
-   ./target/release/orchestratord --foreground --workers 1 >/tmp/fr033-s1-post.log 2>&1 &
-   NEW_DAEMON_PID=$!
-   sleep 3
-   ```
-
-5. Verify recovery:
-   ```bash
-   # Check items are now pending
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT status, COUNT(*) FROM task_items WHERE task_id='${TASK_ID}' GROUP BY status;"
-   # Check task is restart_pending
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT status FROM tasks WHERE id='${TASK_ID}';"
-   # Check recovery event
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT event_type, payload_json FROM events WHERE event_type='orphaned_items_recovered' ORDER BY id DESC LIMIT 1;"
-   # Check daemon log
-   grep "recovered orphaned running items\|startup orphan recovery complete" /tmp/fr033-s1-post.log
-   ```
-
-6. Cleanup:
-   ```bash
-   kill "$NEW_DAEMON_PID"
-   wait "$NEW_DAEMON_PID" 2>/dev/null
+   cargo test -p orchestrator-core -- recover_orphaned_running_items_resets_items_and_task
    ```
 
 ### Expected
 
-- Before crash: items show `running` status
-- After crash (before restart): items remain `running`, task remains `running`
-- After restart: items reset to `pending`, task reset to `restart_pending`
-- Events table contains `orphaned_items_recovered` event with payload including `task_id`, `recovered_item_ids`, `count`
-- Daemon log shows `recovered orphaned running items` and `startup orphan recovery complete`
-
-### Expected Data State
-
-```sql
--- After restart recovery:
-SELECT status FROM task_items WHERE task_id = '{task_id}' AND status = 'running';
--- Expected: 0 rows (no items stuck in running)
-
-SELECT status FROM tasks WHERE id = '{task_id}';
--- Expected: restart_pending
-
-SELECT event_type, payload_json FROM events
-  WHERE event_type = 'orphaned_items_recovered' ORDER BY id DESC LIMIT 1;
--- Expected: orphaned_items_recovered | {"task_id":"...","recovered_item_ids":[...],"count":N}
-```
+- [ ] Function queries all items with `status='running'`
+- [ ] Running items are reset to `status='pending'`, `started_at=NULL`
+- [ ] Parent tasks are set to `status='restart_pending'`
+- [ ] Returns list of `(task_id, [item_ids])` that were recovered
+- [ ] `orphaned_items_recovered` event emitted at startup (code review of `main.rs`)
+- [ ] Unit test passes
 
 ---
 
-## Scenario 2: Startup Recovery Is Idempotent (No Orphans)
-
-### Preconditions
-
-- Common Preconditions applied
-- No tasks in `running` state
+## Scenario 2: Startup Recovery Is Idempotent (Code Review + Unit Test)
 
 ### Goal
 
-Verify that startup recovery does nothing and emits no events when there are no orphaned items.
+Verify that startup recovery does nothing and returns empty when there are no orphaned items.
 
 ### Steps
 
-1. Ensure clean state — no running items:
+1. Review `core/src/task_repository/state.rs` — `recover_orphaned_running_items()` with no running items
+2. Run unit test:
    ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT COUNT(*) FROM task_items WHERE status='running';"
-   ```
-
-2. Record current event count:
-   ```bash
-   PRE_COUNT=$(sqlite3 data/agent_orchestrator.db \
-     "SELECT COUNT(*) FROM events WHERE event_type='orphaned_items_recovered';")
-   echo "PRE_COUNT=${PRE_COUNT}"
-   ```
-
-3. Start and stop daemon:
-   ```bash
-   rm -f data/orchestrator.sock
-   ./target/release/orchestratord --foreground --workers 1 >/tmp/fr033-s2.log 2>&1 &
-   DAEMON_PID=$!
-   sleep 3
-   kill "$DAEMON_PID"
-   wait "$DAEMON_PID" 2>/dev/null
-   ```
-
-4. Verify no new recovery events:
-   ```bash
-   POST_COUNT=$(sqlite3 data/agent_orchestrator.db \
-     "SELECT COUNT(*) FROM events WHERE event_type='orphaned_items_recovered';")
-   echo "POST_COUNT=${POST_COUNT}"
+   cargo test -p orchestrator-core -- recover_orphaned_running_items_returns_empty_when_no_orphans
    ```
 
 ### Expected
 
-- Running items count is 0 before startup
-- No new `orphaned_items_recovered` events emitted (`PRE_COUNT == POST_COUNT`)
-- Daemon log does NOT contain `recovered orphaned running items`
+- [ ] When no items have `status='running'`, function returns empty vec
+- [ ] No events emitted, no status changes
+- [ ] Unit test passes
 
 ---
 
-## Scenario 3: CLI `task recover` Resets Orphaned Items for a Specific Task
-
-### Preconditions
-
-- Common Preconditions applied
-- Daemon running
+## Scenario 3: CLI `task recover` Resets Orphaned Items for a Specific Task (Code Review + Unit Test)
 
 ### Goal
 
-Verify that `orchestrator task recover <task_id>` manually recovers orphaned running items for a specific task without affecting other tasks.
+Verify that `recover_orphaned_running_items_for_task()` only recovers items for the specified task, leaving other tasks' items unchanged.
 
 ### Steps
 
-1. Start daemon:
+1. Review `core/src/task_repository/state.rs` — `recover_orphaned_running_items_for_task()` function
+2. Run unit test:
    ```bash
-   rm -f data/orchestrator.sock
-   ./target/release/orchestratord --foreground --workers 1 >/tmp/fr033-s3.log 2>&1 &
-   DAEMON_PID=$!
-   sleep 2
-   ```
-
-2. Create two tasks and start them both:
-   ```bash
-   TASK_A=$(./target/release/orchestrator task create \
-     --name "recover-target" \
-     --goal "Task to recover" \
-     --project "${QA_PROJECT}" \
-     --workflow qa_sleep 2>&1 | grep -oE '[0-9a-f-]{36}' | head -1)
-   echo "TASK_A=${TASK_A}"
-   sleep 6
-   ```
-
-3. Simulate stuck items by manually updating DB (since we can't easily get both tasks into running at the same time with 1 worker):
-   ```bash
-   # Pause daemon's task first
-   ./target/release/orchestrator task pause "${TASK_A}"
-   sleep 2
-
-   # Manually set items to running (simulating crash leftover)
-   sqlite3 data/agent_orchestrator.db \
-     "UPDATE task_items SET status='running', started_at=datetime('now','-1 hour') WHERE task_id='${TASK_A}';"
-   sqlite3 data/agent_orchestrator.db \
-     "UPDATE tasks SET status='running' WHERE id='${TASK_A}';"
-
-   # Verify items are running
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT id, status FROM task_items WHERE task_id='${TASK_A}';"
-   ```
-
-4. Use CLI to recover the task:
-   ```bash
-   ./target/release/orchestrator task recover "${TASK_A}"
-   ```
-
-5. Verify recovery:
-   ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT status FROM task_items WHERE task_id='${TASK_A}';"
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT status FROM tasks WHERE id='${TASK_A}';"
-   ```
-
-6. Cleanup:
-   ```bash
-   kill "$DAEMON_PID"
-   wait "$DAEMON_PID" 2>/dev/null
+   cargo test -p orchestrator-core -- recover_orphaned_running_items_for_task_only_affects_target_task
    ```
 
 ### Expected
 
-- CLI prints: `Recovered N orphaned running item(s) for task <id>`
-- Items for TASK_A are now `pending`
-- Task TASK_A status is `restart_pending`
+- [ ] Only items belonging to the target `task_id` are reset to `pending`
+- [ ] Other tasks' running items remain in `running` state
+- [ ] Target task status set to `restart_pending`
+- [ ] Unit test passes: task A items reset, task B items still running
 
 ---
 
-## Scenario 4: Terminal Items Are Not Affected by Recovery
-
-### Preconditions
-
-- Common Preconditions applied
-- Daemon running
+## Scenario 4: Terminal Items Are Not Affected by Recovery (Code Review + Unit Test)
 
 ### Goal
 
-Verify that items in terminal states (`qa_passed`, `fixed`, `completed`) are not modified by the recovery mechanism.
+Verify that items in terminal states (`qa_passed`, `fixed`, `completed`) are not modified by recovery.
 
 ### Steps
 
-1. Start daemon:
+1. Review `core/src/task_repository/state.rs` — recovery SQL `WHERE status='running'` filter
+2. Run unit test:
    ```bash
-   rm -f data/orchestrator.sock
-   ./target/release/orchestratord --foreground --workers 1 >/tmp/fr033-s4.log 2>&1 &
-   DAEMON_PID=$!
-   sleep 2
-   ```
-
-2. Create a task and let it complete:
-   ```bash
-   TASK_ID=$(./target/release/orchestrator task create \
-     --name "terminal-test" \
-     --goal "Test terminal items not affected" \
-     --project "${QA_PROJECT}" \
-     --workflow qa_sleep 2>&1 | grep -oE '[0-9a-f-]{36}' | head -1)
-   echo "TASK_ID=${TASK_ID}"
-   sleep 20
-   ```
-
-3. Verify task completed and items are in terminal state:
-   ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT status FROM tasks WHERE id='${TASK_ID}';"
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT status, COUNT(*) FROM task_items WHERE task_id='${TASK_ID}' GROUP BY status;"
-   ```
-
-4. Attempt recovery on the completed task:
-   ```bash
-   ./target/release/orchestrator task recover "${TASK_ID}"
-   ```
-
-5. Verify items unchanged:
-   ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT status, COUNT(*) FROM task_items WHERE task_id='${TASK_ID}' GROUP BY status;"
-   ```
-
-6. Cleanup:
-   ```bash
-   kill "$DAEMON_PID"
-   wait "$DAEMON_PID" 2>/dev/null
+   cargo test -p orchestrator-core -- recover_orphaned_running_items_does_not_affect_terminal_items
    ```
 
 ### Expected
 
-- CLI prints: `No orphaned running items found for task <id>`
-- Item statuses remain in terminal state (unchanged)
+- [ ] Recovery SQL only targets `status='running'` items
+- [ ] Items in `qa_passed`, `fixed`, `completed` states are untouched
+- [ ] Function returns empty vec when only terminal items exist
+- [ ] Unit test passes: `qa_passed` item remains unchanged
 
 ---
 
-## Scenario 5: Stall Detection Sweep Recovers Long-Running Items
-
-### Preconditions
-
-- Common Preconditions applied
+## Scenario 5: Stall Detection Sweep Recovers Long-Running Items (Code Review + Unit Test)
 
 ### Goal
 
-Verify that the background stall detection sweep recovers items that have been running longer than the configured threshold.
+Verify that `recover_stalled_running_items()` correctly uses the time threshold to identify and recover stalled items.
 
 ### Steps
 
-1. Inject a stalled item directly into the database:
+1. Review `core/src/task_repository/state.rs` — `recover_stalled_running_items()` function
+2. Review `crates/daemon/src/main.rs` — background stall sweep loop and `--stall-timeout-mins` CLI flag
+3. Run unit test:
    ```bash
-   # Ensure no daemon is running
-   pkill -f orchestratord 2>/dev/null; sleep 1
-
-   # Create a task via a temporary daemon
-   rm -f data/orchestrator.sock
-   ./target/release/orchestratord --foreground --workers 1 >/tmp/fr033-s5-pre.log 2>&1 &
-   TMP_PID=$!
-   sleep 2
-
-   TASK_ID=$(./target/release/orchestrator task create \
-     --name "stall-detect-test" \
-     --goal "Test stall detection sweep" \
-     --project "${QA_PROJECT}" \
-     --workflow qa_sleep \
-     --no-start 2>&1 | grep -oE '[0-9a-f-]{36}' | head -1)
-   echo "TASK_ID=${TASK_ID}"
-
-   kill "$TMP_PID"
-   wait "$TMP_PID" 2>/dev/null
-   ```
-
-2. Manually set items to stalled state (running with old started_at):
-   ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "UPDATE task_items SET status='running', started_at=datetime('now','-2 hours') WHERE task_id='${TASK_ID}';"
-   sqlite3 data/agent_orchestrator.db \
-     "UPDATE tasks SET status='running' WHERE id='${TASK_ID}';"
-
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT id, status, started_at FROM task_items WHERE task_id='${TASK_ID}';"
-   ```
-
-3. Start daemon with a short stall timeout (1 minute) so it triggers quickly:
-   ```bash
-   rm -f data/orchestrator.sock
-   ./target/release/orchestratord --foreground --workers 1 --stall-timeout-mins 1 >/tmp/fr033-s5-post.log 2>&1 &
-   DAEMON_PID=$!
-   sleep 2
-   ```
-
-4. Note: startup recovery will recover these items immediately (since they are running). The stall sweep runs as a second line of defense. Verify startup recovery worked:
-   ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT status FROM task_items WHERE task_id='${TASK_ID}';"
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT status FROM tasks WHERE id='${TASK_ID}';"
-   ```
-
-5. Check recovery events:
-   ```bash
-   sqlite3 data/agent_orchestrator.db \
-     "SELECT event_type, payload_json FROM events WHERE event_type IN ('orphaned_items_recovered','item_stall_recovered') AND payload_json LIKE '%${TASK_ID}%' ORDER BY id DESC LIMIT 5;"
-   ```
-
-6. Verify stall detection sweep is running:
-   ```bash
-   grep "stall detection sweep started" /tmp/fr033-s5-post.log
-   ```
-
-7. Cleanup:
-   ```bash
-   kill "$DAEMON_PID"
-   wait "$DAEMON_PID" 2>/dev/null
+   cargo test -p orchestrator-core -- recover_stalled_running_items_respects_threshold
    ```
 
 ### Expected
 
-- After daemon restart: items recovered to `pending` by startup recovery
-- `orphaned_items_recovered` event emitted for the stalled task
-- Daemon log shows `stall detection sweep started` with configured timeout
-- `--stall-timeout-mins 1` accepted without error
-
-### Expected Data State
-
-```sql
-SELECT status FROM task_items WHERE task_id = '{task_id}';
--- Expected: pending (recovered from running)
-
-SELECT event_type FROM events
-  WHERE event_type IN ('orphaned_items_recovered','item_stall_recovered')
-    AND payload_json LIKE '%{task_id}%'
-  ORDER BY id DESC LIMIT 1;
--- Expected: orphaned_items_recovered
-```
+- [ ] Items with `started_at` older than threshold are recovered (reset to `pending`)
+- [ ] Items within threshold are NOT recovered (remain `running`)
+- [ ] Threshold comparison uses `started_at` vs `now() - threshold_secs`
+- [ ] Unit test passes: 2h-old item NOT recovered at 3h threshold, IS recovered at 1h threshold
+- [ ] Background sweep configured via `--stall-timeout-mins` flag (code review of `main.rs`)
 
 ---
 
