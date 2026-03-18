@@ -1,0 +1,57 @@
+# QA-107 Scenario 1 fixture: max_parallel=2, 4 items, all succeed
+---
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: qa107
+spec:
+  root_path: "."
+  qa_targets:
+    - fixtures/qa107-items
+  ticket_dir: fixtures/ticket
+  self_referential: false
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: qa107-mock-agent
+spec:
+  capabilities:
+    - plan
+    - implement
+    - qa_testing
+    - loop_guard
+  command: "echo '{\"confidence\":0.95,\"quality_score\":0.9,\"artifacts\":[]}'"
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: qa107-parallel-guard
+spec:
+  max_parallel: 2
+  steps:
+    - id: process
+      type: plan
+      scope: item
+      enabled: true
+      repeatable: false
+      command: "echo '{\"confidence\":0.95}'"
+      behavior:
+        captures:
+          - var: output
+            source: stdout
+
+    - id: loop_guard
+      type: loop_guard
+      enabled: true
+      repeatable: true
+      is_guard: true
+      builtin: loop_guard
+  loop:
+    mode: fixed
+    max_cycles: 1
+    enabled: true
+  safety:
+    max_consecutive_failures: 3
+    auto_rollback: false
+    checkpoint_strategy: none

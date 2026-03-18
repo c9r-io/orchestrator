@@ -177,4 +177,4 @@ Code review + unit test verification.
 | 1 | Valid Top-Level Command Surface | ✅ | 2026-02-23 | opencode | |
 | 2 | Parameter Contract Check | ✅ | 2026-03-18 | Claude | Rewritten as code review + unit test |
 | 3 | kubectl-Style Surface Contract | ✅ | 2026-03-18 | Claude | Rewritten as code review + unit test |
-| 4 | Banned Patterns Guard | ✅ | 2026-02-23 | opencode | Read-only lint script |
+| 4 | Banned Patterns Guard | ✅ | 2026-03-18 | Claude | All sub-checks pass (lint script wrapper has `command -v rg` issue in non-interactive bash; individual checks verified manually) |

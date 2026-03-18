@@ -183,8 +183,8 @@ Verify the diagnostic backstop catches persisted commands that still contain tem
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Basic template renderer covers core placeholders | ☐ | | | Unit test only — safe |
-| 2 | Agent context renders runtime, pipeline, and escape-sensitive values | ☐ | | | Unit test only — safe |
-| 3 | Runtime propagation expands large pipeline variables without leaving placeholders | ☐ | | | Unit test only — safe |
-| 4 | Every known step ID maps to a covered rendering entry point | ☐ | | | Code review (rg) — safe |
-| 5 | Task trace flags leftover unexpanded placeholders | ☐ | | | Unit test only — safe |
+| 1 | Basic template renderer covers core placeholders | PASS | 2026-03-19 | Claude | 6/6 tests pass — all in qa_utils.rs |
+| 2 | Agent context renders runtime, pipeline, and escape-sensitive values | PASS | 2026-03-19 | Claude | 3/3 tests pass — all in collab/context.rs |
+| 3 | Runtime propagation expands large pipeline variables without leaving placeholders | FAIL | 2026-03-19 | Claude | 3 tests missing (plan_output_is_propagated, spill_large_var_spills, spill_large_var_inline); see ticket qa82_s3 |
+| 4 | Every known step ID maps to a covered rendering entry point | PARTIAL | 2026-03-19 | Claude | 21 step IDs verified; phase_runner/item_executor paths in Background table reference non-existent files |
+| 5 | Task trace flags leftover unexpanded placeholders | FAIL | 2026-03-19 | Claude | detect_unexpanded_template_var_anomaly test missing; see ticket qa82_s5 |

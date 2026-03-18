@@ -187,8 +187,8 @@ Ensure config defaults and CLI override precedence for structured logging remain
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Release Build Includes Logging Surface | ☐ | | | Code review + unit test (observability_defaults, implicit compilation) |
-| 2 | `init` Preserves stdout Contract | ☐ | | | Code review (stdout/stderr separation, tracing subscriber) |
-| 3 | JSON Console Logging Works Via Environment Variable | ☐ | | | Code review + unit test (format_parse_accepts_common_variants) |
+| 1 | Release Build Includes Logging Surface | ❌ | 2026-03-19 | Claude | Code review: CLI flag ✅ + env vars ✅; unit test names don't exist in codebase (ticket created) |
+| 2 | `init` Preserves stdout Contract | ❌ | 2026-03-19 | Claude | Code review: println/eprintln ✅ + with_writer(stderr) ✅; unit test missing (same root cause as S1) |
+| 3 | JSON Console Logging Works Via Environment Variable | ❌ | 2026-03-19 | Claude | Code review: format parsing ✅ + env var ✅; test passes but QA doc command wrong (--lib filters out, ticket created) |
 | 4 | Daemon Log File Is Written | ✅ | 2026-03-18 | Claude | verified data/daemon.log exists with ISO 8601 timestamps and structured runtime events |
-| 5 | Logging Config Resolution Unit Tests Pass | ☐ | | | Unit test (observability config tests) |
+| 5 | Logging Config Resolution Unit Tests Pass | ❌ | 2026-03-19 | Claude | 4 tests pass when run correctly (`-p orchestrator-config`); QA doc command wrong (--lib filters out, ticket created) |

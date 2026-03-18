@@ -207,8 +207,8 @@ Verify CRD definition validation rejects invalid kind names, missing versions, b
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | CRD Registration and Custom Resource Creation | ☐ | | | Unit test — safe |
-| 2 | Schema and CEL Validation Rejects Invalid Resources | ☐ | | | Unit test — safe |
-| 3 | Custom Resource Get, Describe, and Label Selector | PASS | 2026-03-15 | claude | Read-only CLI operations — safe |
-| 4 | Custom Resource Delete and CRD Cascade Protection | ☐ | | | Unit test — safe |
-| 5 | CRD Validation Rules — Kind, Schema, and CEL | ☐ | | | Unit test — safe |
+| 1 | CRD Registration and Custom Resource Creation | PASS | 2026-03-19 | claude | 3/3 unit tests passed — apply_crd_creates, apply_custom_resource_creates, validate_crd_valid |
+| 2 | Schema and CEL Validation Rejects Invalid Resources | PASS | 2026-03-19 | claude | 5/5 unit tests passed — schema/CEL/no-crd rejection paths |
+| 3 | Custom Resource Get, Describe, and Label Selector | PASS | 2026-03-19 | claude | Read-only CLI ops — get/describe/list all correct, label selector works |
+| 4 | Custom Resource Delete and CRD Cascade Protection | PASS | 2026-03-19 | claude | 4/4 unit tests passed — delete ok/not-found, cascade protection |
+| 5 | CRD Validation Rules — Kind, Schema, and CEL | PASS | 2026-03-19 | claude | 10/10 unit tests passed — kind/group/version/CEL validation + idempotency |

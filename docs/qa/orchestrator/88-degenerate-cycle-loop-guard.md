@@ -231,8 +231,8 @@ Verify that all FR-035 unit tests pass: safety config serde, anomaly rule defini
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | Rapid Cycle Detection (L2) — Loop Mode and Max Cycles | ☐ | Unit test — safe |
-| 2 | Trace Anomaly — DegenerateLoop Detection | ☐ | Unit test — safe |
-| 3 | Segment Building and Scope Classification | ☐ | Unit test — safe |
-| 4 | Auto-Rollback and Snapshot Safety | ☐ | Unit test — safe |
-| 5 | FR-035 Config Serde and Safety Fields | ☐ | Unit test — safe |
+| 1 | Rapid Cycle Detection (L2) — Loop Mode and Max Cycles | ✅ PASS | Unit test — 10/10 tests passed |
+| 2 | Trace Anomaly — DegenerateLoop Detection | ✅ PASS | Unit test — 6/6 tests passed |
+| 3 | Segment Building and Scope Classification | ✅ PASS | Unit test — 8/8 tests passed |
+| 4 | Auto-Rollback and Snapshot Safety | ✅ PASS | Unit test — 13/13 tests passed |
+| 5 | FR-035 Config Serde and Safety Fields | ✅ PASS | Unit test — 8/8 tests passed |

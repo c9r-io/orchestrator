@@ -68,4 +68,4 @@ Verify that a phase with outer shell exit code `0` but fatal provider stderr tex
 
 | # | Scenario | Status | Date | Tester | Notes |
 |---|----------|--------|------|--------|-------|
-| 1 | Fatal Provider Error Overrides Outer Exit Code 0 | ☐ | | | |
+| 1 | Fatal Provider Error Overrides Outer Exit Code 0 | PASS | 2026-03-19 | QA | All 3 unit tests pass; code review confirms fatal errors checked first |

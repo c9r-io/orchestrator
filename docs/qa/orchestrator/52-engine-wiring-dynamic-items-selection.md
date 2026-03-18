@@ -95,5 +95,5 @@ Verify that after the item-scoped segment completes, the loop engine runs item s
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | pending_generate_items consumption | ✅ | 2026-03-18 | claude | Runtime verified: task completed, items=2/7 (2 dynamic items created, 5 static replaced), event items_generated emitted with count=3, replace=true |
-| 2 | item_select orchestration after item-scoped segment | ✅ | 2026-03-18 | claude | Runtime verified: task completed, items=1/4 (1 winner, 2 eliminated), event item_selected emitted with winner and eliminated arrays, item_select_winner in pipeline vars |
+| 1 | pending_generate_items consumption | ✅ | 2026-03-19 | claude | Runtime verified: task a14a836d, items=2 (2 dynamic items created, 5 static replaced), event items_generated emitted with count=2 replace=true, qa_testing ran 2x item-parallel |
+| 2 | item_select orchestration after item-scoped segment | ✅ | 2026-03-19 | claude | Runtime verified: task d4acd894, items=1/3 (1 winner fast-approach, 2 eliminated), event item_selected emitted, item_select_winner in pipeline, store entry evolution/qa52/winner_latest persisted |

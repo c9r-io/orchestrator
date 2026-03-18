@@ -295,8 +295,8 @@ one cycle.
 
 | # | Scenario | Status | Date | Tester | Notes |
 |---|----------|--------|------|--------|-------|
-| 1 | qa_only Workflow | | | | `once_mode_always_stops`, output validation tests |
-| 2 | qa_fix Workflow | | | | `build_segments_groups_contiguous_scopes`, finalize rule tests |
-| 3 | qa_fix_retest Workflow | | | | Segment grouping, prehook skip logic tests |
-| 4 | QA Failure and Ticket Creation | | | | Ticket creation, health degradation, selection filtering tests |
-| 5 | Loop Mode (max_cycles) | | | | `infinite_mode_respects_max_cycles`, `fixed_mode_stops_at_max_cycles` |
+| 1 | qa_only Workflow | PASS | 2026-03-18 | QA | `once_mode_always_stops`, output validation tests |
+| 2 | qa_fix Workflow | PASS | 2026-03-18 | QA | `build_segments_groups_contiguous_scopes`, finalize rule tests |
+| 3 | qa_fix_retest Workflow | PASS | 2026-03-18 | QA | Segment grouping, prehook skip logic tests |
+| 4 | QA Failure and Ticket Creation | PASS | 2026-03-18 | QA | Ticket creation, health degradation, selection filtering tests |
+| 5 | Loop Mode (max_cycles) | PASS | 2026-03-18 | QA | `infinite_mode_respects_max_cycles`, `fixed_mode_stops_at_max_cycles` |

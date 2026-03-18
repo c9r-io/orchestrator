@@ -91,4 +91,4 @@
 | 2 | Frontmatter 解析 — 无场景白名单 | PASS | 2026-03-18 | | test_parse_qa_doc_safe_scenarios_absent passed |
 | 3 | CEL 变量 — 非空场景列表允许通过 | PASS | 2026-03-18 | | test_self_referential_safe_scenarios_non_empty passed |
 | 4 | CEL 变量 — 空场景列表被跳过 | PASS | 2026-03-18 | | test_self_referential_safe_scenarios_empty passed |
-| 5 | 覆盖率统计验证 | PASS | 2026-03-18 | | Doc-level: 27 ≥ 25; Scenario-level: 32 ≥ 30; Total: 59 ≥ 55. FR-060 iter 1-3 raised counts above thresholds. |
+| 5 | 覆盖率统计验证 | PASS | 2026-03-18 | | Doc-level: 54 ≥ 25; Scenario-level: 25 ≥ 20; Total: 79 ≥ 55; Coverage: 57% ≥ 40% |

@@ -79,4 +79,4 @@ Verified on 2026-03-12:
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | All scenarios verified | ☑ | S-01/S-02/S-03 PASS; S-04/S-05 skipped (self-referential unsafe: cargo) |

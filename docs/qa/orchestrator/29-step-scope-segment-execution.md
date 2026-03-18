@@ -26,9 +26,9 @@ The execution plan is grouped into **contiguous segments** of same scope. Each s
 
 | File | Role |
 |------|------|
-| `core/src/config.rs` | `StepScope` enum, `default_scope_for_step_id()`, `resolved_scope()` |
-| `core/src/scheduler/loop_engine.rs` | `build_scope_segments()`, segment dispatch |
-| `core/src/scheduler/item_executor.rs` | `process_item_filtered()` unified loop with `StepExecutionAccumulator` |
+| `crates/orchestrator-config/src/config/step.rs` | `StepScope` enum, `default_scope_for_step_id()`, `resolved_scope()` |
+| `crates/orchestrator-scheduler/src/scheduler/loop_engine/mod.rs` + `segment.rs` | `build_scope_segments()`, segment dispatch |
+| `crates/orchestrator-scheduler/src/scheduler/item_executor/mod.rs` | `process_item_filtered()` unified loop with `StepExecutionAccumulator` |
 
 ---
 
@@ -77,7 +77,7 @@ Verify that task-scoped steps (plan, implement) execute exactly once per cycle w
 
 2. **Code review** — verify segment grouping dispatches single-run for Task scope:
    ```bash
-   rg -n "StepScope::Task|StepScope::Item|process_task_segment|process_item_segment" crates/orchestrator-scheduler/src/scheduler/loop_engine.rs
+   rg -n "StepScope::Task|StepScope::Item|process_task_segment|process_item_segment" crates/orchestrator-scheduler/src/scheduler/loop_engine/mod.rs
    ```
 
 3. **Unit test** — run scope classification and segment grouping tests:
@@ -152,7 +152,7 @@ Verify that pipeline variables set during task-scoped segments propagate to item
 
 1. **Code review** — verify pipeline variable promotion in loop engine:
    ```bash
-   rg -n "promote_winner_vars|propagate.*item_state|pipeline_vars" crates/orchestrator-scheduler/src/scheduler/loop_engine.rs | head -20
+   rg -n "promote_winner_vars|propagate.*item_state|pipeline_vars" crates/orchestrator-scheduler/src/scheduler/loop_engine/ | head -20
    ```
 
 2. **Code review** — verify template rendering resolves pipeline vars:
@@ -247,8 +247,9 @@ cargo test --workspace --lib -- build_segments resolved_scope 2>&1 | grep "test 
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Task-Scoped Steps Run Once With Multiple Items | ✅ PASS | 2026-03-18 | Claude | Code review: config.rs:349+ correct; loop_engine/mod.rs:500,524 dispatch; unit test: build_segments_groups_contiguous_scopes ok |
-| 2 | Item-Scoped Steps Fan Out Per QA File | ✅ PASS | 2026-03-18 | Claude | DB: task d3df2824, 3 distinct task_item_ids, qa_testing ×3, item statuses qa_passed |
-| 3 | Pipeline Variables Propagate From Task to Item Segments | ✅ PASS | 2026-03-18 | Claude | Code review: promote_winner_vars, propagate_preserves, pipeline_vars found; unit tests: promote_winner_vars_inserts_into_pipeline, propagate_preserves_existing_item_state, test_pipeline_vars_escaped_in_template all ok |
-| 4 | Default Scope Classification Matches SDLC Intent | ✅ PASS | 2026-03-18 | Claude | Unit test: default_scope in step.rs:352-354 maps qa/qa_testing/ticket_fix/ticket_scan/fix/retest→Item, rest→Task |
-| 5 | Segment Grouping With Mixed Scope Steps | ✅ PASS | 2026-03-18 | Claude | 6 tests pass: resolved_scope_uses_explicit_override, build_segments_empty_when_no_steps, build_segments_groups_contiguous_scopes, build_segments_skips_disabled_steps, build_segments_skips_guards, build_segments_item_select_is_task_scoped |
+| 1 | Task-Scoped Steps Run Once With Multiple Items | ✅ PASS | 2026-03-19 | Claude | Code review: step.rs:349 correct scope mapping; loop_engine/mod.rs:500,524 dispatch; unit test ok |
+| 2 | Item-Scoped Steps Fan Out Per QA File | ✅ PASS | 2026-03-19 | Claude | DB task d3df2824[*]: 3 distinct task_item_ids, qa_testing ×3, all qa_passed |
+| 3 | Pipeline Variables Propagate From Task to Item Segments | ✅ PASS | 2026-03-19 | Claude | Code review: promote_winner_vars@segment.rs:670, propagate@tests.rs:1148; 3 unit tests pass |
+| 4 | Default Scope Classification Matches SDLC Intent | ✅ PASS | 2026-03-19 | Claude | Unit tests confirm step.rs:352-354 maps qa/qa_testing/ticket_fix/ticket_scan/fix/retest→Item, rest→Task |
+| 5 | Segment Grouping With Mixed Scope Steps | ✅ PASS | 2026-03-19 | Claude | 6 tests pass: resolved_scope, 5 build_segments variants |
+| * | Doc drift fix: corrected Key Files paths (`core/src/...` → `crates/...`), loop_engine.rs → loop_engine/mod.rs | — | 2026-03-19 | Claude | File paths in Key Files table + S1-S3 step commands updated to match actual layout |
