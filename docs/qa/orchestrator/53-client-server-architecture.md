@@ -1,5 +1,6 @@
 ---
 self_referential_safe: false
+self_referential_safe_scenarios: [S2, S3, S4, S5]
 ---
 
 # Orchestrator - Client/Server Architecture
@@ -119,34 +120,23 @@ Verify daemon starts on UDS, creates PID/socket files, and shuts down cleanly on
 Verify CLI client connects to daemon over UDS and basic RPC round-trips work.
 
 ### Steps
-1. Start daemon:
-   ```bash
-   ./target/release/orchestratord --foreground &
-   DAEMON_PID=$!
-   sleep 2
-   ```
-2. Test version/ping:
+1. Test version/ping:
    ```bash
    ./target/release/orchestrator version
    ```
-3. Test resource listing:
+2. Test resource listing:
    ```bash
    ./target/release/orchestrator get workspaces
    ./target/release/orchestrator get agents -o json
    ./target/release/orchestrator get workflows -o yaml
    ```
-4. Test debug:
+3. Test debug:
    ```bash
    ./target/release/orchestrator debug --component config
    ```
-5. Test preflight check:
+4. Test preflight check:
    ```bash
    ./target/release/orchestrator check -o json
-   ```
-6. Stop daemon:
-   ```bash
-   kill "$DAEMON_PID"
-   wait "$DAEMON_PID" 2>/dev/null
    ```
 
 ### Expected
@@ -169,43 +159,35 @@ Verify CLI client connects to daemon over UDS and basic RPC round-trips work.
 Verify task lifecycle (create, list, info, start, pause, delete) works through gRPC.
 
 ### Steps
-1. Start daemon with embedded workers:
-   ```bash
-   ./target/release/orchestratord --foreground --workers 1 &
-   DAEMON_PID=$!
-   sleep 2
-   ```
-2. Create task (no-start):
+1. Create task (no-start):
    ```bash
    TASK_ID=$(./target/release/orchestrator task create --name "grpc-test" --goal "test" --project cs-qa --no-start 2>&1 | grep -oE '[0-9a-f-]{36}' | head -1)
    echo "Created: $TASK_ID"
    ```
-3. List tasks:
+2. List tasks:
    ```bash
    ./target/release/orchestrator task list -o json
    ```
-4. Get task info:
+3. Get task info:
    ```bash
    ./target/release/orchestrator task info "$TASK_ID" -o json
    ```
-5. Start task (queue it for the embedded worker):
+4. Start task (queue it for the embedded worker):
    ```bash
    ./target/release/orchestrator task start "$TASK_ID"
    ```
-6. Wait for worker to finish, then check status:
+5. Wait for worker to finish, then check status:
    ```bash
    sleep 10
    ./target/release/orchestrator task info "$TASK_ID" -o json
    ```
-7. View logs:
+6. View logs:
    ```bash
    ./target/release/orchestrator task logs "$TASK_ID" --tail 20
    ```
-8. Clean up:
+7. Clean up:
    ```bash
    ./target/release/orchestrator task delete "$TASK_ID" --force
-   kill "$DAEMON_PID"
-   wait "$DAEMON_PID" 2>/dev/null
    ```
 
 ### Expected
@@ -228,46 +210,34 @@ SELECT id, status FROM tasks WHERE id = '{task_id}';
 ## Scenario 4: Embedded Worker Queue Consumption
 
 ### Preconditions
-- Daemon running with multiple workers (`--workers 3`).
+- Daemon running with at least 1 embedded worker.
 - A QA project created for isolation: `./target/release/orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project cs-qa`
 
 ### Goal
 Verify embedded daemon workers consume pending tasks concurrently and atomically.
 
 ### Steps
-1. Start daemon with 3 workers:
-   ```bash
-   ./target/release/orchestratord --foreground --workers 3 &
-   DAEMON_PID=$!
-   sleep 2
-   ```
-2. Create 6 tasks in detach mode:
+1. Create 6 tasks in detach mode:
    ```bash
    for i in $(seq 1 6); do
      ./target/release/orchestrator task create --name "batch-$i" --goal "batch test $i" --project cs-qa
    done
    ```
-3. Monitor worker progress:
+2. Monitor worker progress:
    ```bash
    sleep 5
    ./target/release/orchestrator task list -o json
    ```
-4. Wait for completion and verify all reached terminal status:
+3. Wait for completion and verify all reached terminal status:
    ```bash
    sleep 30
    ./target/release/orchestrator task list -o json | grep -c '"status"'
-   ```
-5. Stop daemon:
-   ```bash
-   kill "$DAEMON_PID"
-   wait "$DAEMON_PID" 2>/dev/null
    ```
 
 ### Expected
 - All 6 tasks transition from `pending` through `running` to `completed` or `failed`.
 - Workers log `claimed task` and `task finished` for each task.
 - No task is executed more than once (atomic claim via `claim_next_pending_task`).
-- Daemon shuts down cleanly after SIGTERM, stops claiming new work, and pauses any still-running task after the daemon drain grace window.
 
 ### Expected Data State
 ```sql
@@ -290,57 +260,46 @@ SELECT COUNT(*) FROM events WHERE event_type = 'scheduler_enqueued';
 Verify resource apply (from file and stdin), store CRUD, and project-scoped resource management work through gRPC.
 
 ### Steps
-1. Start daemon:
-   ```bash
-   ./target/release/orchestratord --foreground &
-   DAEMON_PID=$!
-   sleep 2
-   ```
-2. Apply manifest from file:
+1. Apply manifest from file:
    ```bash
    ./target/release/orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml
    ```
-3. Apply from stdin:
+2. Apply from stdin:
    ```bash
    cat fixtures/manifests/bundles/output-formats.yaml | ./target/release/orchestrator apply -f -
    ```
-4. Dry-run apply:
+3. Dry-run apply:
    ```bash
    ./target/release/orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml --dry-run
    ```
-5. Get and describe resources:
+4. Get and describe resources:
    ```bash
    ./target/release/orchestrator get workspace/default -o yaml
    ./target/release/orchestrator describe workspace/default -o yaml
    ```
-6. Store CRUD:
+5. Store CRUD:
    ```bash
    ./target/release/orchestrator store put qa-store test-key '{"value":42}'
    ./target/release/orchestrator store get qa-store test-key
    ./target/release/orchestrator store list qa-store -o json
    ./target/release/orchestrator store delete qa-store test-key
    ```
-7. Apply manifest to project scope and verify isolation:
+6. Apply manifest to project scope and verify isolation:
    ```bash
    ./target/release/orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project iso-test
    ./target/release/orchestrator get agents --project iso-test
    ./target/release/orchestrator describe agent/mock_echo --project iso-test
    ```
-8. Create and list tasks in project scope:
+7. Create and list tasks in project scope:
    ```bash
    ./target/release/orchestrator task create --name "iso-task" --goal "isolation test" --project iso-test --workflow qa_only --no-start
    ./target/release/orchestrator task list --project iso-test -o json
    ```
-9. Delete project resource and reset project:
+8. Delete project resource and reset project:
    ```bash
    ./target/release/orchestrator delete agent/mock_echo --force --project iso-test
    ./target/release/orchestrator delete project/iso-test --force
    ```
-10. Stop daemon:
-    ```bash
-    kill "$DAEMON_PID"
-    wait "$DAEMON_PID" 2>/dev/null
-    ```
 
 ### Expected
 - `apply` creates/updates resources and prints `kind/name created|updated|unchanged`.
@@ -362,5 +321,5 @@ Verify resource apply (from file and stdin), store CRUD, and project-scoped reso
 | 1 | Daemon Startup and Shutdown | ✅ | 2026-03-09 | Claude | PID/socket create+cleanup, startup/shutdown logs |
 | 2 | CLI-to-Daemon gRPC Communication | ✅ | 2026-03-09 | Claude | version, get, check all pass via gRPC |
 | 3 | Task Lifecycle via gRPC | ✅ | 2026-03-09 | Claude | create→list→info→start(detach)→logs→delete |
-| 4 | Embedded Worker Queue Consumption | ✅ | 2026-03-09 | Claude | 3 workers consumed 6 tasks concurrently; shutdown wording superseded by doc 60 for FR-005 drain semantics |
+| 4 | Embedded Worker Queue Consumption | ✅ | 2026-03-09 | Claude | Workers consumed 6 tasks concurrently; shutdown wording superseded by doc 60 for FR-005 drain semantics |
 | 5 | Resource Management and Project Isolation via gRPC | ✅ | 2026-03-09 | Claude | apply file/stdin/dry-run + store CRUD + --project isolation + delete project |
