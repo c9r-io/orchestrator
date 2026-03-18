@@ -65,8 +65,11 @@ Code review + unit test verification.
 
 2. **Unit test verification**:
    ```bash
-   cargo test --workspace --lib -- task_detail_value_includes_item_run_and_event_details
+   cargo test --workspace --lib -- load_task_detail_rows_returns_items_runs_and_events
+   cargo test --workspace --lib -- load_task_detail_rows_includes_events
+   cargo test --workspace --lib -- load_task_detail_rows_includes_command_runs
    ```
+   > **Note**: The original test name `task_detail_value_includes_item_run_and_event_details` no longer exists in the codebase. The behavior is verified by the three tests above (all pass).
 
 ### Expected
 
@@ -166,7 +169,7 @@ Code review + unit test verification.
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
 | 1 | Task List JSON/YAML | PASS | 2026-03-18 | Claude | JSON valid & parseable by jq; YAML valid; all fields present |
-| 2 | Task Info JSON/YAML | ☑ | 2026-03-18 | Claude | Code review + unit test verified |
-| 3 | Workspace List JSON/YAML | ☑ | 2026-03-18 | Claude | Code review + unit test verified |
-| 4 | Manifest Export JSON/YAML | ☑ | 2026-03-18 | Claude | Code review + unit test verified |
-| 5 | Workflow/Agent List JSON/YAML | ☑ | 2026-03-18 | Claude | Code review + unit test verified |
+| 2 | Task Info JSON/YAML | PASS | 2026-03-18 | Claude | Tests: load_task_detail_rows_returns_items_runs_and_events, load_task_detail_rows_includes_events, load_task_detail_rows_includes_command_runs |
+| 3 | Workspace List JSON/YAML | PASS | 2026-03-18 | Claude | All 3 tests pass: resource_to_yaml, project_resource_to_yaml, registered_resource_to_yaml_delegates |
+| 4 | Manifest Export JSON/YAML | PASS | 2026-03-18 | Claude | All 5 tests pass: resource_trait_to_yaml, execution_profile_to_yaml, env_store, secret_store, step_template |
+| 5 | Workflow/Agent List JSON/YAML | PASS | 2026-03-18 | Claude | All 2 tests pass: registered_resource_to_yaml_delegates, registered_resource_kind_name_for_all_variants |

@@ -295,5 +295,5 @@ Validate that project-scoped commands operate against an explicit project entry.
 | 2 | Project Fallback - Global Workflow | ☐ | | | |
 | 3 | Project-Level Workspace Resolution | ☐ | | | |
 | 4 | CLI Project Flag | ☐ | | | |
-| 5 | Multi-Project Isolation | ☐ | | | |
+| 5 | Multi-Project Isolation | ✅ PASS | 2026-03-18 | Claude | `two-projects.yaml` validates with exit 0; project-a and project-b each have own workspace/agent/workflow |
 | G1 | Config Defaults Project Field | ☐ | | | |

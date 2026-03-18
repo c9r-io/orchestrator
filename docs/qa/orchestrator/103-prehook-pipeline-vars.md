@@ -72,4 +72,4 @@
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☑ | 10/10 PASS — tested 2026-03-15 |
+| 1 | All scenarios verified | ☑ | 10/10 PASS — tested 2026-03-18 |

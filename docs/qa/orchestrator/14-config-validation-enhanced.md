@@ -22,6 +22,8 @@ self_referential_safe: true
 
 所有场景使用代码审查和现有 unit test — 无需 `cargo build` 或 CLI binary。
 
+> **Note**: The package name in this document is `orchestrator-core` but the actual workspace package is `agent-orchestrator`. All test commands should use `-p agent-orchestrator` instead of `-p orchestrator-core`.
+
 ### Verification Command
 
 ```bash
@@ -31,6 +33,8 @@ cargo test --workspace --lib -- \
   validate_workflow_config \
   normalize_config
 ```
+
+> **Note**: The `--workspace` verification command above uses `orchestrator-core` as the package filter name, which doesn't match the actual package. Use the per-scenario commands below instead, which correctly reference `-p agent-orchestrator`.
 
 ---
 
@@ -45,7 +49,7 @@ cargo test --workspace --lib -- \
 1. Review `core/src/resource/parse.rs` — `parse_resources_from_yaml()` 函数使用 `serde_yml::Deserializer` 逐文档反序列化，无效 YAML 返回错误而非 panic
 2. Run unit tests:
    ```bash
-   cargo test -p orchestrator-core -- parse_resources_from_yaml
+   cargo test -p agent-orchestrator -- parse_resources_from_yaml
    ```
 
 ### Expected
@@ -69,7 +73,7 @@ cargo test --workspace --lib -- \
 2. Review `core/src/config_load/build.rs` — `build_active_config()` 聚合多文档校验结果
 3. Run unit tests:
    ```bash
-   cargo test -p orchestrator-core -- validate_workflow_config
+   cargo test -p agent-orchestrator -- validate_workflow_config
    ```
 
 ### Expected
@@ -91,7 +95,7 @@ cargo test --workspace --lib -- \
 1. Review `core/src/config_load/validate/root_path.rs` — `ensure_within_root()` 使用 `std::fs::canonicalize()` 检测路径存在性
 2. Run unit tests:
    ```bash
-   cargo test -p orchestrator-core -- ensure_within_root
+   cargo test -p agent-orchestrator -- ensure_within_root
    ```
 
 ### Expected
@@ -112,7 +116,7 @@ cargo test --workspace --lib -- \
 1. Review `core/src/config_load/validate/root_path.rs` — `ensure_within_root()` 通过 `canonicalize()` 后比较路径前缀，防止 `../` 逃逸
 2. Run unit tests:
    ```bash
-   cargo test -p orchestrator-core -- ensure_within_root
+   cargo test -p agent-orchestrator -- ensure_within_root
    ```
 
 ### Expected
@@ -135,7 +139,7 @@ cargo test --workspace --lib -- \
 1. Review `core/src/config_load/normalize/tests.rs` — 规范化逻辑对有效配置生成默认值、填充 builtin CRD、保持幂等性
 2. Run unit tests:
    ```bash
-   cargo test -p orchestrator-core -- normalize_config
+   cargo test -p agent-orchestrator -- normalize_config
    ```
 
 ### Expected
