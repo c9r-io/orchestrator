@@ -186,8 +186,8 @@ Verify that `check_invariants()` in `loop_engine.rs` correctly halts execution a
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | store_inputs injects pipeline variables | ✅ | 2026-03-07 | claude | Code path verified: dispatch.rs:839-912. StoreOp::Get → pipeline_vars injection. Optional keys silently skipped |
-| 2 | store_inputs required key missing — step fails | ✅ | 2026-03-07 | claude | Code path verified: dispatch.rs:877-882. bail! with store name + key in message |
-| 3 | store_outputs writes pipeline variables | ✅ | 2026-03-07 | claude | Code path verified: apply.rs:315-342. Non-critical: warns on failure, doesn't propagate |
-| 4 | PostAction::StorePut writes to store | ✅ | 2026-03-07 | claude | Code path verified: apply.rs:172-186, apply.rs:283-312. Tests: test_post_action_store_put_serde_round_trip |
-| 5 | Invariant checkpoints halt execution | ✅ | 2026-03-07 | claude | Code path verified: loop_engine.rs:340 (before_cycle), 412 (after_implement), 158 (before_complete), dispatch.rs:350 (before_restart). Tests: check_invariants_returns_none_for_empty_invariants |
+| 1 | store_inputs injects pipeline variables | ❌ N/A | 2026-03-19 | claude | Feature gap: `resolve_store_inputs()`, `StoreInputConfig` not implemented. Referenced code paths (dispatch.rs:839) do not exist |
+| 2 | store_inputs required key missing — step fails | ❌ N/A | 2026-03-19 | claude | Feature gap: same as S1 |
+| 3 | store_outputs writes pipeline variables | ❌ N/A | 2026-03-19 | claude | Feature gap: `process_store_outputs()`, `StoreOutputConfig` not implemented |
+| 4 | PostAction::StorePut writes to store | ❌ N/A | 2026-03-19 | claude | Feature gap: `PostAction::StorePut` not implemented |
+| 5 | Invariant checkpoints halt execution | ☐ | | | Invariant runtime exists in `crates/orchestrator-scheduler/src/scheduler/invariant.rs`; `check_invariants_returns_none_for_empty_invariants` passes |

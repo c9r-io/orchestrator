@@ -277,8 +277,8 @@ works correctly — via code review and unit tests.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Cost-Based Scoring | PASS | 2026-03-18 | Claude | `test_cost_differential_lower_cost_scores_higher`, `test_selection_strategy_cost_based` |
-| 2 | Quality Scoring | PASS | 2026-03-18 | Claude | `test_selection_strategy_success_rate_weighted`, `test_metrics_impact_high_success_rate_preferred` |
-| 3 | Health Degradation | PASS | 2026-03-18 | Claude | `test_health_penalty_consecutive_errors_lowers_score`, `test_diseased_agent_filtered_from_candidates`, `is_capability_healthy_*` (6 tests), `is_agent_healthy_*` (4 tests) |
-| 4 | Retry Status Transitions | PASS | 2026-03-18 | Claude | `update_task_item_status_*` (3 tests), `mark_task_item_running_*` (3 tests), `recover_orphaned_running_items_*` (5 tests) |
-| 5 | Load Balancing | PASS | 2026-03-18 | Claude | `test_load_balanced_low_load_scores_higher`, `test_load_increment_decrement_cycle`, `test_selection_strategy_load_balanced`, `test_load_balanced_score_never_negative` |
+| 1 | Cost-Based Scoring | ☐ | | | `test_cost_differential_lower_cost_scores_higher` — code review + unit test |
+| 2 | Quality Scoring | ☐ | | | `test_metrics_impact_high_success_rate_preferred` — code review + unit test |
+| 3 | Health Degradation | ☐ | | | `test_health_penalty_*`, `test_diseased_*`, `is_capability_healthy_*` (10), `is_agent_healthy_*` (4) |
+| 4 | Retry Status Transitions | ☐ | | | `update_task_item_status_*` (3), `mark_task_item_running_*` (3), `recover_orphaned_*` (5) |
+| 5 | Load Balancing | ☐ | | | `test_load_balanced_*` (3), `test_load_increment_decrement_cycle` |

@@ -55,7 +55,7 @@ Verify that `validate_step_type()` accepts all 20 known step IDs and rejects unk
 
 1. Run validation unit tests:
    ```bash
-   cd core && cargo test --lib test_validate_step_type -- --nocapture
+   cargo test -p orchestrator-config test_validate_step_type -- --nocapture
    ```
 
 ### Expected
@@ -66,7 +66,7 @@ Verify that `validate_step_type()` accepts all 20 known step IDs and rejects unk
 ### Expected Data State
 
 ```bash
-cd core && cargo test --lib test_validate_step_type 2>&1 | grep "test result"
+cargo test -p orchestrator-config test_validate_step_type 2>&1 | grep "test result"
 # Expected: test result: ok. 2 passed; 0 failed
 ```
 
@@ -86,7 +86,7 @@ Verify that `default_scope_for_step_id()` correctly classifies all known step ID
 
 1. Run scope classification unit tests:
    ```bash
-   cd core && cargo test --lib test_default_scope -- --nocapture
+   cargo test -p orchestrator-config test_default_scope -- --nocapture
    ```
 
 ### Expected
@@ -99,7 +99,7 @@ Verify that `default_scope_for_step_id()` correctly classifies all known step ID
 ### Expected Data State
 
 ```bash
-cd core && cargo test --lib test_default_scope test_resolved_scope 2>&1 | grep "test result"
+cargo test -p orchestrator-config test_default_scope test_resolved_scope 2>&1 | grep "test result"
 # Expected: test result: ok. 5 passed; 0 failed
 ```
 
@@ -119,17 +119,17 @@ Verify normalization and execution-plan building keep declarative step semantics
 
 1. Run normalization-focused tests:
    ```bash
-   cd core && cargo test --lib normalize_workflow_ -- --nocapture
+   cargo test -p agent-orchestrator --lib normalize_workflow_ -- --nocapture
    ```
 
 2. Run execution-plan-focused tests:
    ```bash
-   cd core && cargo test --lib build_execution_plan_ -- --nocapture
+   cargo test -p agent-orchestrator --lib build_execution_plan_ -- --nocapture
    ```
 
 3. Run the full lib test suite to confirm no regressions:
    ```bash
-   cd core && cargo test --lib 2>&1 | grep "test result"
+   cargo test --workspace --lib 2>&1 | grep "test result"
    ```
 
 ### Expected
@@ -144,8 +144,8 @@ Verify normalization and execution-plan building keep declarative step semantics
 ### Expected Data State
 
 ```bash
-cd core && cargo test --lib 2>&1 | grep "test result"
-# Expected: test result: ok. 719 passed; 0 failed
+cargo test --workspace --lib 2>&1 | grep "test result"
+# Expected: all workspace lib tests pass
 ```
 
 ---
@@ -164,18 +164,18 @@ Verify that no references to `WorkflowStepType` enum or `step_type` field on `Wo
 
 1. Search for any remaining `WorkflowStepType` references:
    ```bash
-   cd core && grep -r "WorkflowStepType" src/ tests/ --include="*.rs"
+   grep -r "WorkflowStepType" src/ tests/ --include="*.rs"
    ```
 
 2. Search for `step_type` on config/execution step structs (excluding dynamic orchestration `DynamicStepConfig.step_type` which is a legitimate string field):
    ```bash
-   cd core && grep -rn "\.step_type" src/config.rs src/config_load.rs src/scheduler/loop_engine.rs
+   grep -rn "\.step_type" src/config.rs src/config_load.rs src/scheduler/loop_engine.rs
    ```
    > **Note**: `src/scheduler/item_executor.rs` uses `ds.step_type` on `DynamicStepConfig` instances from the dynamic orchestration step pool — this is intentional and unrelated to the removed `WorkflowStepType` enum.
 
 3. Verify no `step()` method calls remain on `TaskExecutionPlan`:
    ```bash
-   cd core && grep -rn "execution_plan\.step(" src/ --include="*.rs"
+   grep -rn "execution_plan\.step(" src/ --include="*.rs"
    ```
 
 ### Expected
@@ -200,20 +200,20 @@ Verify resource conversion and static checks share the same step semantic rules 
 
 1. Run workflow resource conversion tests:
    ```bash
-   cd core && cargo test --lib workflow_spec_to_config_ -- --nocapture
+   cargo test -p agent-orchestrator --lib workflow_spec_to_config_ -- --nocapture
    ```
 
 2. Run targeted static-check tests:
    ```bash
-   cd core && cargo test --lib step_semantic_conflict -- --nocapture
-   cd core && cargo test --lib execution_mode_mismatch -- --nocapture
-   cd core && cargo test --lib command_steps_skip_capability_requirement -- --nocapture
-   cd core && cargo test --lib clean_config_no_errors -- --nocapture
+   cargo test -p orchestrator-scheduler --lib step_semantic_conflict -- --nocapture
+   cargo test -p orchestrator-scheduler --lib execution_mode_mismatch -- --nocapture
+   cargo test -p orchestrator-scheduler --lib command_steps_skip_capability_requirement -- --nocapture
+   cargo test -p orchestrator-scheduler --lib clean_config_no_errors -- --nocapture
    ```
 
 3. Run the full lib test suite:
    ```bash
-   cd core && cargo test --lib
+   cargo test --workspace --lib
    ```
 
 ### Expected
@@ -229,8 +229,8 @@ Verify resource conversion and static checks share the same step semantic rules 
 ### Expected Data State
 
 ```bash
-cd core && cargo test --lib 2>&1 | grep "test result"
-# Expected: test result: ok. 719 passed; 0 failed
+cargo test --workspace --lib 2>&1 | grep "test result"
+# Expected: all workspace lib tests pass
 ```
 
 ---

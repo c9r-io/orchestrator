@@ -49,7 +49,7 @@ Verify the logging configuration surface exists (env vars, `-v` flag) — valida
 
 3. **Unit test** — implicit compilation verifies binary builds without error:
    ```bash
-   cargo test --workspace --lib -- observability_defaults 2>&1 | tail -5
+   cargo test -p orchestrator-config -- observability_defaults 2>&1 | tail -5
    ```
 
 ### Expected
@@ -84,7 +84,7 @@ Verify that CLI commands write human-readable results to stdout and structured l
 
 3. **Unit test** — verify observability config defaults:
    ```bash
-   cargo test --workspace --lib -- observability_serde_defaults 2>&1 | tail -5
+   cargo test -p orchestrator-config -- observability_serde_defaults 2>&1 | tail -5
    ```
 
 ### Expected
@@ -119,7 +119,7 @@ Verify that `ORCHESTRATOR_LOG_FORMAT=json` is accepted and switches console logg
 
 3. **Unit test** — run format parsing tests:
    ```bash
-   cargo test --workspace --lib -- format_parse_accepts_common_variants 2>&1 | tail -5
+   cargo test -p orchestrator-config -- format_parse_accepts_common_variants 2>&1 | tail -5
    ```
 
 ### Expected
@@ -173,7 +173,7 @@ Ensure config defaults and CLI override precedence for structured logging remain
 
 1. **Unit test** — run observability config tests:
    ```bash
-   cargo test --workspace --lib -- observability 2>&1 | tail -5
+   cargo test -p orchestrator-config -- observability 2>&1 | tail -5
    ```
 
 ### Expected
@@ -187,8 +187,8 @@ Ensure config defaults and CLI override precedence for structured logging remain
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Release Build Includes Logging Surface | ❌ | 2026-03-19 | Claude | Code review: CLI flag ✅ + env vars ✅; unit test names don't exist in codebase (ticket created) |
-| 2 | `init` Preserves stdout Contract | ❌ | 2026-03-19 | Claude | Code review: println/eprintln ✅ + with_writer(stderr) ✅; unit test missing (same root cause as S1) |
-| 3 | JSON Console Logging Works Via Environment Variable | ❌ | 2026-03-19 | Claude | Code review: format parsing ✅ + env var ✅; test passes but QA doc command wrong (--lib filters out, ticket created) |
-| 4 | Daemon Log File Is Written | ✅ | 2026-03-18 | Claude | verified data/daemon.log exists with ISO 8601 timestamps and structured runtime events |
-| 5 | Logging Config Resolution Unit Tests Pass | ❌ | 2026-03-19 | Claude | 4 tests pass when run correctly (`-p orchestrator-config`); QA doc command wrong (--lib filters out, ticket created) |
+| 1 | Release Build Includes Logging Surface | ☐ | | | Code review + unit test (`-p orchestrator-config`) |
+| 2 | `init` Preserves stdout Contract | ☐ | | | Code review + unit test (`-p orchestrator-config`) |
+| 3 | JSON Console Logging Works Via Environment Variable | ☐ | | | Code review + unit test (`-p orchestrator-config`) |
+| 4 | Daemon Log File Is Written | ✅ | 2026-03-18 | Claude | verified data/daemon.log exists with ISO 8601 timestamps |
+| 5 | Logging Config Resolution Unit Tests Pass | ☐ | | | 4 tests in `orchestrator-config` crate |

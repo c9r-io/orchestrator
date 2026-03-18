@@ -46,12 +46,12 @@ Verify the low-level template helpers fully replace basic placeholders and prese
 ### Steps
 1. Run:
    ```bash
-   cd core && cargo test render_template_replaces_placeholders -- --nocapture
-   cd core && cargo test render_template_handles_empty_ticket_paths -- --nocapture
-   cd core && cargo test basic_template_context_all_fields -- --nocapture
-   cd core && cargo test advanced_template_context_with_upstream -- --nocapture
-   cd core && cargo test advanced_template_context_supports_quality_score_replacement -- --nocapture
-   cd core && cargo test render_template_with_context_replaces_phase_upstream_and_shared_state -- --nocapture
+   cargo test --workspace --lib render_template_replaces_placeholders -- --nocapture
+   cargo test --workspace --lib render_template_handles_empty_ticket_paths -- --nocapture
+   cargo test --workspace --lib basic_template_context_all_fields -- --nocapture
+   cargo test --workspace --lib advanced_template_context_with_upstream -- --nocapture
+   cargo test --workspace --lib advanced_template_context_supports_quality_score_replacement -- --nocapture
+   cargo test --workspace --lib render_template_with_context_replaces_phase_upstream_and_shared_state -- --nocapture
    ```
 2. Review the tested source:
    ```bash
@@ -76,9 +76,9 @@ Verify `AgentContext::render_template_with_pipeline()` expands runtime context, 
 ### Steps
 1. Run:
    ```bash
-   cd core && cargo test test_agent_context_template -- --nocapture
-   cd core && cargo test test_agent_context_render_source_tree_alias -- --nocapture
-   cd core && cargo test test_pipeline_vars_escaped_in_template -- --nocapture
+   cargo test --workspace --lib test_agent_context_template -- --nocapture
+   cargo test --workspace --lib test_agent_context_render_source_tree_alias -- --nocapture
+   cargo test --workspace --lib test_pipeline_vars_escaped_in_template -- --nocapture
    ```
 2. Inspect the implementation and tests:
    ```bash
@@ -104,9 +104,9 @@ Verify runtime prompt-to-command propagation expands spill-file placeholders suc
 ### Steps
 1. Run:
    ```bash
-   cd core && cargo test plan_output_is_propagated_to_qa_doc_gen_template -- --nocapture
-   cd core && cargo test spill_large_var_spills_when_over_limit -- --nocapture
-   cd core && cargo test spill_large_var_inline_when_small -- --nocapture
+   cargo test --workspace --lib plan_output_is_propagated_to_qa_doc_gen_template -- --nocapture
+   cargo test --workspace --lib spill_large_var_spills_when_over_limit -- --nocapture
+   cargo test --workspace --lib spill_large_var_inline_when_small -- --nocapture
    ```
 2. Inspect the regression source:
    ```bash
@@ -165,11 +165,11 @@ Verify the diagnostic backstop catches persisted commands that still contain tem
 ### Steps
 1. Run:
    ```bash
-   cd core && cargo test detect_unexpanded_template_var_anomaly -- --nocapture
+   cargo test --workspace --lib detect_unexpanded_template_var_anomaly -- --nocapture
    ```
 2. Inspect the anomaly rule implementation:
    ```bash
-   rg -n "detect_unexpanded_template_var|UnexpandedTemplateVar" core/src/scheduler/trace/anomaly.rs core/src/scheduler/trace/tests.rs core/src/anomaly.rs
+   rg -n "detect_unexpanded_template_var|UnexpandedTemplateVar" core/src/anomaly.rs crates/orchestrator-scheduler/src/scheduler/trace/tests.rs
    ```
 
 ### Expected
@@ -186,5 +186,5 @@ Verify the diagnostic backstop catches persisted commands that still contain tem
 | 1 | Basic template renderer covers core placeholders | PASS | 2026-03-19 | Claude | 6/6 tests pass — all in qa_utils.rs |
 | 2 | Agent context renders runtime, pipeline, and escape-sensitive values | PASS | 2026-03-19 | Claude | 3/3 tests pass — all in collab/context.rs |
 | 3 | Runtime propagation expands large pipeline variables without leaving placeholders | FAIL | 2026-03-19 | Claude | 3 tests missing (plan_output_is_propagated, spill_large_var_spills, spill_large_var_inline); see ticket qa82_s3 |
-| 4 | Every known step ID maps to a covered rendering entry point | PARTIAL | 2026-03-19 | Claude | 21 step IDs verified; phase_runner/item_executor paths in Background table reference non-existent files |
-| 5 | Task trace flags leftover unexpanded placeholders | FAIL | 2026-03-19 | Claude | detect_unexpanded_template_var_anomaly test missing; see ticket qa82_s5 |
+| 4 | Every known step ID maps to a covered rendering entry point | ☐ | | | Code review (rg) — safe |
+| 5 | Task trace flags leftover unexpanded placeholders | ☐ | | | Test exists in orchestrator-scheduler trace/tests.rs (path corrected) |
