@@ -215,7 +215,7 @@ Regression test added:
 Self-bootstrap model/runtime config:
 - file: `docs/workflow/self-bootstrap.yaml`
 - switched from `claude -p` to `opencode run`
-- model unified to `minimax-coding-plan/MiniMax-M2.5-highspeed`
+- model unified to `minimax-coding-plan/MiniMax-M2.7-highspeed`
 
 ---
 

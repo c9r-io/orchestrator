@@ -181,7 +181,7 @@ spec:
       5. Do not run cargo check or cargo test yourself
 
       Return a short confirmation describing the repair you made."
-      --model minimax-coding-plan/MiniMax-M2.5-highspeed
+      --model minimax-coding-plan/MiniMax-M2.7-highspeed
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow

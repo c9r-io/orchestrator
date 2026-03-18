@@ -138,7 +138,7 @@ spec:
       4. Stop after the single append succeeds
 
       Return a short confirmation describing the edit you made."
-      --model minimax-coding-plan/MiniMax-M2.5-highspeed
+      --model minimax-coding-plan/MiniMax-M2.7-highspeed
 ---
 apiVersion: orchestrator.dev/v2
 kind: Workflow
