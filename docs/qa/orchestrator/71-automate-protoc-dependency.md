@@ -29,7 +29,7 @@ cargo test --workspace --lib
 **Expected**:
 - [ ] `build.rs` checks `env::var("PROTOC")` and falls back to `protoc_bin_vendored::protoc_bin_path()` when unset or invalid
 - [ ] `Cargo.toml` lists `protoc-bin-vendored = "3"` as build dependency
-- [ ] Warning message format: `"Using protobuf-src protoc at ..."`
+- [ ] Warning message format: `"Using vendored protoc at ..."`
 
 ### S-02: Explicit PROTOC Override (Code Review)
 
@@ -89,7 +89,16 @@ cargo test --workspace --lib
 
 ## Result
 
-All scenarios verified locally on 2026-03-12.
+All scenarios verified locally on 2026-03-18.
+
+| Scenario | Status | Notes |
+|----------|--------|-------|
+| S-01 | PASS (doc drift) | Code works correctly; warning message is "vendored" not "protobuf-src" — ticket created |
+| S-02 | PASS | `is_file()` validation, env var set, `cargo:rerun-if-env-changed=PROTOC` confirmed |
+| S-03 | PASS | Invalid path triggers fallback via `exists()` check |
+| S-04 | PASS | `cargo test --workspace --lib` — 407 tests pass |
+| S-05 | PASS | Clippy job uses `-D warnings` and `PROTOC: /usr/bin/protoc` at step level |
+| S-06 | PASS | Clippy, test, miri jobs set PROTOC at step level; cross-compile uses `which protoc` |
 
 ---
 
@@ -97,4 +106,9 @@ All scenarios verified locally on 2026-03-12.
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | S-01 Vendored fallback logic | ☑ | `build.rs` fallback + `protoc-bin-vendored` dep confirmed; warning msg is "vendored" not "protobuf-src" — ticket |
+| 2 | S-02 Explicit override | ☑ | `is_file()` validation, env set, `cargo:rerun-if-env-changed=PROTOC` confirmed |
+| 3 | S-03 Invalid path fallback | ☑ | `exists()` check triggers fallback correctly |
+| 4 | S-04 Workspace compilation | ☑ | `cargo test --workspace --lib` — 407 tests pass |
+| 5 | S-05 Clippy clean | ☑ | `-D warnings` + PROTOC at step level confirmed |
+| 6 | S-06 CI PROTOC propagation | ☑ | All jobs set PROTOC; cross-compile uses `which protoc` |

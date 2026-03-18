@@ -69,4 +69,4 @@ Expected:
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | All scenarios verified | ⚠ S4 FAIL | ticket: `docs/ticket/80-item-scoped-git-worktree-isolation_s4_20260318.md` |

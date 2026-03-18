@@ -20,9 +20,9 @@ Coverage model:
 
 | Step family | Known step IDs | Rendering path |
 |--------|------|-------|
-| Builtin or builtin-command steps | `init_once`, `loop_guard`, `self_test` | `core/src/scheduler/item_executor/dispatch.rs` + `AgentContext::render_template_with_pipeline()` |
-| Task-scoped capability/template steps | `plan`, `build`, `test`, `lint`, `implement`, `review`, `git_ops`, `qa_doc_gen`, `align_tests`, `doc_governance`, `smoke_chain` | `core/src/scheduler/phase_runner/mod.rs` + `AgentContext::render_template_with_pipeline()` |
-| Item-scoped capability/template steps | `qa`, `ticket_scan`, `fix`, `retest`, `qa_testing`, `ticket_fix` | `core/src/scheduler/phase_runner/mod.rs` basic placeholders + pipeline context |
+| Builtin or builtin-command steps | `init_once`, `loop_guard`, `self_test` | `crates/orchestrator-scheduler/src/scheduler/item_executor/dispatch.rs` + `AgentContext::render_template_with_pipeline()` |
+| Task-scoped capability/template steps | `plan`, `build`, `test`, `lint`, `implement`, `review`, `git_ops`, `qa_doc_gen`, `align_tests`, `doc_governance`, `smoke_chain` | `crates/orchestrator-scheduler/src/scheduler/phase_runner/mod.rs` + `AgentContext::render_template_with_pipeline()` |
+| Item-scoped capability/template steps | `qa`, `ticket_scan`, `fix`, `retest`, `qa_testing`, `ticket_fix` | `crates/orchestrator-scheduler/src/scheduler/phase_runner/mod.rs` basic placeholders + pipeline context |
 
 Placeholder families covered by this document:
 
@@ -135,11 +135,11 @@ Verify that no known step type bypasses the documented rendering paths and that 
 1. Verify the canonical known-step inventory:
    ```bash
    rg -n "known IDs|Task-scoped|Item-scoped" docs/qa/orchestrator/30-unified-step-execution-model.md
-   rg -n '"(init_once|plan|qa|ticket_scan|fix|retest|loop_guard|build|test|lint|implement|review|git_ops|qa_doc_gen|qa_testing|ticket_fix|doc_governance|align_tests|self_test|smoke_chain)"' core/src/config/step.rs
+   rg -n '"(init_once|plan|qa|ticket_scan|fix|retest|loop_guard|build|test|lint|implement|review|git_ops|qa_doc_gen|qa_testing|ticket_fix|doc_governance|align_tests|self_test|smoke_chain)"' crates/orchestrator-config/src/config/step.rs
    ```
 2. Verify task-scoped and item-scoped runtime rendering funnels:
    ```bash
-   rg -n "render_template_with_pipeline\\(|step_template_prompt|replace\\(\"\\{prompt\\}\"|replace\\(\"\\{rel_path\\}\"|replace\\(\"\\{ticket_paths\\}\"" core/src/scheduler/phase_runner/mod.rs core/src/scheduler/item_executor/dispatch.rs
+   rg -n "render_template_with_pipeline\\(|step_template_prompt|replace\\(\"\\{prompt\\}\"|replace\\(\"\\{rel_path\\}\"|replace\\(\"\\{ticket_paths\\}\"" crates/orchestrator-scheduler/src/scheduler/phase_runner/mod.rs crates/orchestrator-scheduler/src/scheduler/item_executor/dispatch.rs
    ```
 3. Verify the mock fixture still contains representative template-driven steps and placeholder-bearing prompts:
    ```bash
@@ -148,7 +148,7 @@ Verify that no known step type bypasses the documented rendering paths and that 
    ```
 
 ### Expected
-- The known-step inventory contains all 20 standard step IDs with no undocumented extra step family.
+- The known-step inventory contains all 21 standard step IDs with no undocumented extra step family.
 - Rendering code inspection shows builtin-command steps and capability/template steps both pass through `render_template_with_pipeline()` or the phase-runner placeholder replacement path before spawn.
 - The self-bootstrap mock fixture continues to exercise template-driven placeholders for representative task-scoped and item-scoped steps.
 - Reviewers can map every known step ID to one of the three coverage rows in this document's Background table.

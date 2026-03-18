@@ -87,4 +87,4 @@
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | All scenarios verified | ✅ | S1–S6 all PASS |

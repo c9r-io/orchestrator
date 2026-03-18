@@ -75,9 +75,11 @@
    ```
 
 ### Expected
-- 文档级安全 ≥ 23
-- 场景级标注 ≥ 32
+- 文档级安全 ≥ 25
+- 场景级标注 ≥ 30
 - 总参与文档 ≥ 55（覆盖率 ≥ 40%）
+
+> **Note**: FR-060 迭代 1-3 将多个文档从 `self_referential_safe: false` 转为 `true`（移除 `self_referential_safe_scenarios`），导致文档级安全数增加、场景级标注数减少，但总参与文档数保持增长。阈值已相应调整。
 
 ---
 
@@ -85,8 +87,8 @@
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Frontmatter 解析 — 有场景白名单 | ☐ | | | |
-| 2 | Frontmatter 解析 — 无场景白名单 | ☐ | | | |
-| 3 | CEL 变量 — 非空场景列表允许通过 | ☐ | | | |
-| 4 | CEL 变量 — 空场景列表被跳过 | ☐ | | | |
-| 5 | 覆盖率统计验证 | ☐ | | | |
+| 1 | Frontmatter 解析 — 有场景白名单 | PASS | 2026-03-18 | | Function `parse_qa_doc_safe_scenarios` found at line 56; 5 tests passed |
+| 2 | Frontmatter 解析 — 无场景白名单 | PASS | 2026-03-18 | | test_parse_qa_doc_safe_scenarios_absent passed |
+| 3 | CEL 变量 — 非空场景列表允许通过 | PASS | 2026-03-18 | | test_self_referential_safe_scenarios_non_empty passed |
+| 4 | CEL 变量 — 空场景列表被跳过 | PASS | 2026-03-18 | | test_self_referential_safe_scenarios_empty passed |
+| 5 | 覆盖率统计验证 | PASS | 2026-03-18 | | Doc-level: 27 ≥ 25; Scenario-level: 32 ≥ 30; Total: 59 ≥ 55. FR-060 iter 1-3 raised counts above thresholds. |

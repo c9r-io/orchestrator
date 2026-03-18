@@ -192,6 +192,6 @@ Verify that pre-existing `--force` gates still function correctly.
 |---|----------|--------|-----------|--------|-------|
 | 1 | Config Backfill-Events Rejected Without --force | SKIP | | | `config backfill-events` not yet implemented |
 | 2 | Config Backfill-Events Executes With --force | SKIP | | | `config backfill-events` not yet implemented |
-| 3 | Task Retry Rejected Without --force | ☐ | | | |
-| 4 | Task Retry Executes With --force | ☐ | | | |
-| 5 | Existing Force Gates Regression Check | ☐ | | | `config backfill-events --help` check skipped (not yet implemented) |
+| 3 | Task Retry Rejected Without --force | PASS | 2026-03-18 | | |
+| 4 | Task Retry Executes With --force | SKIP | | | Not in self_referential_safe_scenarios |
+| 5 | Existing Force Gates Regression Check | PASS | 2026-03-18 | | `config backfill-events --help` check skipped (not yet implemented) |

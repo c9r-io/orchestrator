@@ -101,4 +101,4 @@ All scenarios verified. FR-047 is closed.
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | All scenarios verified | ☐ | |
+| 1 | All scenarios verified | ☑ | 2026-03-18: S-01–S-08 all PASS |

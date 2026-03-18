@@ -6,9 +6,9 @@ kind: Workspace
 metadata:
   name: stagger-test
 spec:
-  root_path: "fixtures/qa-items"
+  root_path: "."
   qa_targets:
-    - docs/qa
+    - fixtures/qa-items
   ticket_dir: fixtures/ticket
   self_referential: false
 ---

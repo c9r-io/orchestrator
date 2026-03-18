@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Check ripgrep dependency
+if ! command -v rg &>/dev/null; then
+  echo "[qa-doc-lint] ERROR: ripgrep (rg) is not installed." >&2
+  echo "[qa-doc-lint] Install with: brew install ripgrep" >&2
+  exit 1
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 

@@ -18,6 +18,17 @@
    - Standalone scenario stub docs (e.g. `scenario*.md`) must either inline the full precondition commands or cross-reference the parent doc with an unambiguous path.
    - Violation severity: **P0** — using real agents in QA can exhaust API budgets in seconds.
 
+## Unit-Test-Only Doc Convention
+
+QA docs that use `## Scenarios` with `### S-01`…`### S-NN` subsections and verify via `cargo test` (unit-test-only) are marked with `-` in `docs/qa/README.md`. The scenario cap (`<=5`) is advisory for these docs; they are not enforced by the lint script.
+
+Lint script pattern limitations:
+- Counts `## Scenario N` and `## 场景 N` headings only.
+- Does NOT count plain numbered lists (`1.`, `2.`…) under `## Scenarios`.
+- Does NOT count `### S-NN` subsections.
+
+When writing new QA docs, prefer `## Scenario N` / `## 场景 N` headings so the lint script can enforce the cap automatically.
+
 ## Recommended Split Strategy For Long Docs
 
 1. Base + advanced split.

@@ -178,4 +178,4 @@ Full interruption-resume testing requires simulating a mid-rotation crash, which
 | 2 | Key Rotation Forward Path | ☐ | | | |
 | 3 | Resume and No-op Resume Guard | ☐ | | | |
 | 4 | Key Revocation Safety | ☐ | | | |
-| 5 | Audit History Query | ☐ | | | |
+| 5 | Audit History Query | ☑ PASS | 2026-03-18 | QA-S5-only (self-referential-safe) | Only S5 executed per frontmatter `self_referential_safe_scenarios: [S5]`; CLI filtering/pagination verified |

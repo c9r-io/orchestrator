@@ -179,7 +179,7 @@ orchestrator apply -f fixtures/manifests/bundles/output-formats.yaml --project "
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Task List JSON/YAML | ☐ | | | |
+| 1 | Task List JSON/YAML | PASS | 2026-03-18 | Claude | JSON valid & parseable by jq; YAML valid; all fields present (id, name, goal, status, total_items, finished_items, failed_items) |
 | 2 | Task Info JSON/YAML | ☐ | | | |
 | 3 | Workspace List JSON/YAML | ☐ | | | |
 | 4 | Manifest Export JSON/YAML | ☐ | | | |

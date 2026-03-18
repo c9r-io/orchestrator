@@ -288,8 +288,8 @@ cd core && cargo test build_segments resolved_scope 2>&1 | grep "test result"
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Task-Scoped Steps Run Once With Multiple Items | ☐ | | | |
-| 2 | Item-Scoped Steps Fan Out Per QA File | ☐ | | | |
-| 3 | Pipeline Variables Propagate From Task to Item Segments | ☐ | | | |
-| 4 | Default Scope Classification Matches SDLC Intent | ☐ | | | |
-| 5 | Segment Grouping With Mixed Scope Steps | ☐ | | | |
+| 1 | Task-Scoped Steps Run Once With Multiple Items | ☐ | | | SKIPPED — self-referential unsafe |
+| 2 | Item-Scoped Steps Fan Out Per QA File | ✅ PASS | 2026-03-18 | Claude | DB: task d3df2824, 3 distinct task_item_ids, qa_testing ×3, item statuses qa_passed |
+| 3 | Pipeline Variables Propagate From Task to Item Segments | ☐ | | | SKIPPED — self-referential unsafe |
+| 4 | Default Scope Classification Matches SDLC Intent | ☐ | | | SKIPPED — self-referential unsafe |
+| 5 | Segment Grouping With Mixed Scope Steps | ☐ | | | SKIPPED — self-referential unsafe |

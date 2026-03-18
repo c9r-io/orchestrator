@@ -95,6 +95,8 @@ spec:
     - Diff is focused (< 200 lines changed): +15
     - Code clarity (subjective): +10
 
+    Do not run git checkout, git branch, or git worktree commands.
+
     Output a JSON object with these keys:
     - candidate (string): the candidate name
     - compilation (boolean): whether cargo check passed

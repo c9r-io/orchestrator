@@ -138,7 +138,7 @@ This doc validates the contract introduced by FR-008 governance:
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Runtime Execution Preserves Chain Shape | ☐ | | | |
-| 2 | Chain Children Are Valid Self-Contained Steps | ☐ | | | |
-| 3 | Guide Contract Matches Runtime Semantics | ☐ | | | |
-| 4 | Chain Event Names Remain Trace-Compatible | ☐ | | | |
+| 1 | Runtime Execution Preserves Chain Shape | ☐ | | | Skipped: self-referential unsafe (cargo test) |
+| 2 | Chain Children Are Valid Self-Contained Steps | ☐ | | | Skipped: self-referential unsafe (cargo test) |
+| 3 | Guide Contract Matches Runtime Semantics | ✅ PASS | 2026-03-18 | Claude | |
+| 4 | Chain Event Names Remain Trace-Compatible | ☐ | | | Skipped: self-referential unsafe (cargo test) |
