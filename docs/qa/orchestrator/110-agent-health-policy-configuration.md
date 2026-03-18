@@ -89,7 +89,9 @@
 
 | # | Check | Status |
 |---|-------|--------|
-| 1 | All scenarios verified against implementation | ☑ |
+| 1 | All scenarios verified against implementation | ☐ BLOCKED |
+
+> **Known issue**: All 5 runtime scenarios are blocked because fixture agents use `exit -1` which bash converts to exit code 255 (positive). The `agent_infra_failed` check requires `exit_code < 0` (internal orchestrator signal) or `validation_status == "failed"`. Unit tests (23/23 health tests) confirm the code logic is correct. Fixtures need updating to use the validation failure path instead of negative exit codes.
 
 ## Runtime Integration
 
