@@ -1,0 +1,31 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: qa-ws-s1
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa/orchestrator
+  ticket_dir: "docs/ticket"
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: default-agent-fail
+spec:
+  command: "echo 'authentication failed: simulated infra failure' >&2"
+  capabilities:
+    - qa_testing
+  # No health_policy - uses default (threshold=2, duration=5h)
+  # Note: command outputs a fatal provider error pattern to stderr,
+  # triggering validation_status="failed" → agent_infra_failed=true
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: qa-test-s1
+spec:
+  steps:
+    - id: qa
+      type: qa
+      required_capability: qa_testing

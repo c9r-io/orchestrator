@@ -9,7 +9,7 @@
 
 **步骤**
 1. 使用不包含 `health_policy` 的 Agent YAML 注册 agent
-2. 触发 agent 连续 2 次基础设施失败（exit_code < 0）
+2. 触发 agent 连续 2 次基础设施失败（validation_status == "failed"）
 3. 检查 agent 健康状态
 
 **预期**
@@ -89,9 +89,13 @@
 
 | # | Check | Status |
 |---|-------|--------|
-| 1 | All scenarios verified against implementation | ☐ BLOCKED |
+| 1 | All scenarios verified against implementation | ☑ |
 
-> **Known issue**: All 5 runtime scenarios are blocked because fixture agents use `exit -1` which bash converts to exit code 255 (positive). The `agent_infra_failed` check requires `exit_code < 0` (internal orchestrator signal) or `validation_status == "failed"`. Unit tests (23/23 health tests) confirm the code logic is correct. Fixtures need updating to use the validation failure path instead of negative exit codes.
+> **Fixed (2026-03-19)**: Fixtures updated from `exit -1` (bash → 255 positive) to
+> `echo 'authentication failed: simulated infra failure' >&2` which triggers the
+> `validation_status == "failed"` path in output validation. This correctly sets
+> `agent_infra_failed = true` via the fatal provider error detection in `output_validation.rs`.
+> 23/23 health unit tests confirm code logic is correct.
 
 ## Runtime Integration
 

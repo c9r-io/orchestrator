@@ -1,0 +1,32 @@
+apiVersion: orchestrator.dev/v2
+kind: Workspace
+metadata:
+  name: qa-ws-s4
+spec:
+  root_path: "."
+  qa_targets:
+    - docs/qa/orchestrator
+  ticket_dir: "docs/ticket"
+  health_policy:
+    disease_duration_hours: 0
+    disease_threshold: 10
+---
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: ws-default-fail
+spec:
+  command: "echo 'authentication failed: simulated infra failure' >&2"
+  capabilities:
+    - qa_testing
+  # No health_policy - should inherit from workspace
+---
+apiVersion: orchestrator.dev/v2
+kind: Workflow
+metadata:
+  name: qa-test-s4
+spec:
+  steps:
+    - id: qa
+      type: qa
+      required_capability: qa_testing
