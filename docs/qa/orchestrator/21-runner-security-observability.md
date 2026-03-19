@@ -80,7 +80,7 @@ Verify runner policy enforcement logic denies disallowed shells before process s
 
 2. Code review: verify allowlist check occurs before spawn:
    ```bash
-   rg -n "allowed_shells\|is_shell_allowed\|policy.*deny\|not in runner" core/src/runner/ crates/orchestrator-config/src/config/runner.rs
+   rg -n "allowed_shells|is_shell_allowed|policy.*deny|not in runner" crates/orchestrator-config/src/config/runner.rs
    ```
 
 3. Run validation tests for runtime policy resource:
@@ -126,7 +126,7 @@ Verify redaction logic correctly replaces sensitive tokens in text output, via u
 
 4. Code review: verify redaction is applied before persistence:
    ```bash
-   rg -n "redact_text\|pipe_and_redact\|redaction_patterns" core/src/runner/ core/src/output_capture.rs
+   rg -n "redact_text|pipe_and_redact|redaction_patterns" core/src/runner/redact.rs core/src/runner/mod.rs core/src/output_capture.rs
    ```
 
 ### Expected
@@ -153,12 +153,12 @@ Verify the scheduler terminal path includes metrics persistence logic, via code 
 
 1. Code review: verify `task_execution_metrics` INSERT exists in the terminal path:
    ```bash
-   rg -n "task_execution_metrics\|INSERT INTO task_execution_metrics" core/src/
+   rg -rn "task_execution_metrics|INSERT INTO task_execution_metrics" core/src/
    ```
 
 2. Verify the metrics table schema is created by migration:
    ```bash
-   rg -n "task_execution_metrics" core/src/persistence/migration*.rs core/src/migration.rs
+   rg -rn "task_execution_metrics" core/src/persistence/ core/src/migration.rs
    ```
 
 3. Run scheduler terminal path unit tests:
