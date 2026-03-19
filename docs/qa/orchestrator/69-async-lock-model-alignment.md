@@ -28,8 +28,9 @@ governance script only; no scenario requires daemon restart, task creation, or m
 2. Run health and phase-runner regressions:
 
    ```bash
-   cargo test -p agent-orchestrator health::tests scheduler::phase_runner::tests -- --nocapture
-   cargo test -p agent-orchestrator scheduler::item_executor::tests -- --nocapture
+   cargo test -p agent-orchestrator health::tests -- --nocapture
+   cargo test -p orchestrator-scheduler scheduler::phase_runner::tests -- --nocapture
+   cargo test -p orchestrator-scheduler scheduler::item_executor::tests -- --nocapture
    ```
 
    Expected:
@@ -40,7 +41,9 @@ governance script only; no scenario requires daemon restart, task creation, or m
 3. Run scheduler/runtime and store/log regressions:
 
    ```bash
-   cargo test -p agent-orchestrator scheduler::runtime::tests service::store::tests scheduler::query::log_stream::tests -- --nocapture
+   cargo test -p orchestrator-scheduler scheduler::runtime::tests -- --nocapture
+   cargo test -p agent-orchestrator service::store::tests -- --nocapture
+   cargo test -p orchestrator-scheduler scheduler::query::log_stream::tests -- --nocapture
    ```
 
    Expected:
@@ -89,9 +92,13 @@ governance script only; no scenario requires daemon restart, task creation, or m
 
 ## Failure Notes
 
+> **Note**: Scheduler modules moved into the `orchestrator-scheduler` crate. QA
+> commands that still target `-p agent-orchestrator` for `scheduler::*` modules are
+> stale and will report zero tests even when the real coverage exists.
+
 - If config snapshot reads fail, inspect `core/src/state.rs` and `core/src/config_load/state.rs`
-- If telemetry behavior regresses, inspect `core/src/health.rs` and `core/src/scheduler/phase_runner/record.rs`
-- If store or log paths regress, inspect `core/src/service/store.rs`, `core/src/scheduler/item_executor/apply.rs`, and `core/src/scheduler/query/log_stream.rs`
+- If telemetry behavior regresses, inspect `core/src/health.rs` and `crates/orchestrator-scheduler/src/scheduler/phase_runner/record.rs`
+- If store or log paths regress, inspect `core/src/service/store.rs`, `crates/orchestrator-scheduler/src/scheduler/item_executor/apply.rs`, and `crates/orchestrator-scheduler/src/scheduler/query/log_stream.rs`
 - If control-plane protection regresses, inspect `crates/daemon/src/protection.rs`
 - If the governance gate fails, inspect `scripts/check-async-lock-governance.sh` and the reported sync-lock call sites
 

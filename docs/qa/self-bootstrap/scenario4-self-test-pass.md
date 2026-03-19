@@ -2,10 +2,10 @@
 self_referential_safe: true
 ---
 
-# Self-Bootstrap Tests - Scenario 4: Self-Test Step Passes (All Three Phases)
+# Self-Bootstrap Tests - Scenario 4: Self-Test Step Passes
 
 **Module**: self-bootstrap
-**Scenario**: Self-Test Step Passes (All Three Phases)
+**Scenario**: Self-Test Step Passes
 **Status**: REWRITTEN — code review + unit test verification
 **Test Date**: 2026-03-18
 **Tester**: Claude
@@ -13,7 +13,7 @@ self_referential_safe: true
 ---
 
 ## Goal
-Verify that the `self_test` builtin step executes all three phases successfully and sets pipeline variables correctly.
+Verify that the `self_test` builtin step executes all phases successfully and sets pipeline variables correctly.
 
 ---
 
@@ -24,9 +24,10 @@ Code review + unit test verification. The self_test step execution is fully cove
 ### Steps
 
 1. **Code review** — confirm self_test step implementation in `scheduler/safety/` module:
-   - Phase 1: `cargo_check` — runs `cargo check` to verify compilation
-   - Phase 2: `cargo_test_lib` — runs `cargo test --workspace --lib` to verify unit tests
-   - Phase 3: `manifest_validate` — runs manifest validation script (if configured)
+   - Phase 1: `empty_change_check` — aborts when no code changes are present
+   - Phase 2: `cargo_check` — runs `cargo check` to verify compilation
+   - Phase 3: `cargo_test_lib` — runs `cargo test --lib -p agent-orchestrator -- --skip self_test_survives_smoke_test`
+   - Phase 4: `manifest_validate` — runs manifest validation script (if configured)
    - Each phase emits a `self_test_phase` in-memory event with `{"phase": "<name>", "passed": true/false}`
    - On success: `step_finished` event with `exit_code: 0, success: true`
    - Pipeline variables set: `self_test_passed = "true"`, `self_test_exit_code = "0"`
@@ -49,7 +50,7 @@ Code review + unit test verification. The self_test step execution is fully cove
 ### Expected Results
 
 - All 5 self_test unit tests pass
-- Three phases execute in order: `cargo_check` → `cargo_test_lib` → `manifest_validate`
+- Four phases execute in order: `empty_change_check` → `cargo_check` → `cargo_test_lib` → `manifest_validate`
 - Pipeline variables are correctly set on success
 - Failure in any phase returns non-zero exit code
 - Missing manifest script does not block step completion
@@ -58,8 +59,8 @@ Code review + unit test verification. The self_test step execution is fully cove
 
 ## Checklist
 
-- [x] `self_test` step executes three phases in order (unit test verified)
-- [x] All three phases pass on valid code: `cargo_check`, `cargo_test_lib`, `manifest_validate` (unit test verified)
+- [x] `self_test` step executes four phases in order (unit test verified)
+- [x] Phase set matches implementation: `empty_change_check`, `cargo_check`, `cargo_test_lib`, `manifest_validate` (code review + unit test verified)
 - [x] `step_finished` event with `exit_code=0, success=true` on success (unit test verified)
 - [x] Pipeline variable `self_test_passed` = `"true"` (unit test verified)
 - [x] Pipeline variable `self_test_exit_code` = `"0"` (unit test verified)

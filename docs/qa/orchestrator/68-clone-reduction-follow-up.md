@@ -16,8 +16,9 @@ clippy, fmt, or code-review gate and does not rely on daemon control-plane inter
 1. Run scheduler chain-step and fan-out regressions:
 
    ```bash
-   cargo test -p agent-orchestrator scheduler::item_executor::tests -- --nocapture
-   cargo test -p agent-orchestrator scheduler::loop_engine::tests -- --nocapture
+   cargo test -p orchestrator-scheduler scheduler::item_executor::tests -- --nocapture
+   cargo test -p agent-orchestrator dynamic_orchestration::step_pool::tests -- --nocapture
+   cargo test -p agent-orchestrator dynamic_orchestration::adaptive::tests -- --nocapture
    ```
 
    Expected:
@@ -28,8 +29,9 @@ clippy, fmt, or code-review gate and does not rely on daemon control-plane inter
 2. Run graph materialization and replay regressions:
 
    ```bash
-   cargo test -p agent-orchestrator scheduler::loop_engine::tests -- --nocapture
-   cargo test -p agent-orchestrator scheduler::trace::tests -- --nocapture
+   cargo test -p agent-orchestrator dynamic_orchestration::dag::tests -- --nocapture
+   cargo test -p agent-orchestrator dynamic_orchestration::graph::tests -- --nocapture
+   cargo test -p orchestrator-scheduler scheduler::trace::tests -- --nocapture
    ```
 
    Expected:
@@ -75,9 +77,14 @@ clippy, fmt, or code-review gate and does not rely on daemon control-plane inter
 
 ## Failure Notes
 
-- If chain-step execution regresses, inspect `core/src/scheduler/item_executor/dispatch.rs`
-- If graph replay or materialization regresses, inspect `core/src/scheduler/loop_engine/graph.rs` and `core/src/dynamic_orchestration/graph.rs`
-- If item fan-out state propagation regresses, inspect `core/src/scheduler/loop_engine/segment.rs`
+> **Note**: Scheduler unit tests were split across `orchestrator-scheduler` and
+> `agent-orchestrator` during the FR-015 follow-up. Older `-p agent-orchestrator`
+> paths for `scheduler::item_executor` / `scheduler::loop_engine` now return zero
+> tests and should not be used.
+
+- If chain-step execution regresses, inspect `crates/orchestrator-scheduler/src/scheduler/item_executor/dispatch.rs`
+- If graph replay or materialization regresses, inspect `core/src/dynamic_orchestration/{dag,graph}.rs` and `crates/orchestrator-scheduler/src/scheduler/trace.rs`
+- If item fan-out state propagation regresses, inspect `core/src/dynamic_orchestration/{adaptive,step_pool}.rs`
 - If command-run/event persistence regresses, inspect `core/src/db_write.rs` and `core/src/scheduler/phase_runner/{setup,record}.rs`
 - If manifest export or secret-key audit output regresses, inspect `core/src/resource/export.rs` and `core/src/secret_key_lifecycle.rs`
 

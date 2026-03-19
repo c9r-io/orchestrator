@@ -748,9 +748,7 @@ impl OrchestratorService for TestOrchestratorServer {
         request: Request<MaintenanceModeRequest>,
     ) -> Result<Response<MaintenanceModeResponse>, Status> {
         let req = request.into_inner();
-        self.state
-            .daemon_runtime
-            .set_maintenance_mode(req.enable);
+        self.state.daemon_runtime.set_maintenance_mode(req.enable);
         let state_str = if req.enable { "enabled" } else { "disabled" };
         Ok(Response::new(MaintenanceModeResponse {
             maintenance_mode: req.enable,

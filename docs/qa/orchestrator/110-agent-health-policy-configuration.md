@@ -10,12 +10,18 @@
 **步骤**
 1. 使用不包含 `health_policy` 的 Agent YAML 注册 agent
 2. 触发 agent 连续 2 次基础设施失败（validation_status == "failed"）
-3. 检查 agent 健康状态
+3. 通过 unit test + 代码审查确认 disease 判定路径
 
 **预期**
-- 连续 2 次失败后 agent 被标记为 diseased
-- Disease 冷却时长为 5 小时
+- 连续 2 次失败后运行时会调用 `mark_agent_diseased`
+- 默认 Disease 冷却时长为 5 小时
 - 行为与配置化之前完全一致
+
+> **验证说明**: 当前 CLI 只能展示 health policy 配置，不能直接读取内存中的
+> `agent_health` disease 状态；因此 S1 的最终验证应以
+> `core/src/health.rs` 的 unit tests、`record_phase_results()` 调用链代码审查、
+> 以及 `output_validation_failed` 触发路径为准，而不是要求 `orchestrator check`
+> 直接显示 diseased 状态。
 
 ## 场景 2：Agent YAML 声明 health_policy
 

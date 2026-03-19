@@ -40,10 +40,7 @@ pub(crate) async fn maintenance_mode(
 ) -> Result<Response<MaintenanceModeResponse>, Status> {
     super::authorize(server, &request, "MaintenanceMode").map_err(Status::from)?;
     let req = request.into_inner();
-    server
-        .state
-        .daemon_runtime
-        .set_maintenance_mode(req.enable);
+    server.state.daemon_runtime.set_maintenance_mode(req.enable);
     let state_str = if req.enable { "enabled" } else { "disabled" };
     tracing::info!(enable = req.enable, "maintenance mode {state_str}");
     Ok(Response::new(MaintenanceModeResponse {

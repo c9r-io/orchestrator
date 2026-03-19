@@ -148,11 +148,9 @@ pub(crate) async fn dispatch(
         } => {
             if task_ids.len() == 1 && !all {
                 // Single-task delete — use original RPC for backward compat
+                let task_id = task_ids[0].clone();
                 let resp = client
-                    .task_delete(orchestrator_proto::TaskDeleteRequest {
-                        task_id: task_ids.into_iter().next().unwrap(),
-                        force,
-                    })
+                    .task_delete(orchestrator_proto::TaskDeleteRequest { task_id, force })
                     .await?
                     .into_inner();
                 println!("{}", resp.message);
