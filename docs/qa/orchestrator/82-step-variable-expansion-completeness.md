@@ -195,6 +195,6 @@ Verify the diagnostic backstop catches persisted commands that still contain tem
 |---|----------|--------|-----------|--------|-------|
 | 1 | Basic template renderer covers core placeholders | PASS | 2026-03-19 | Claude | 6/6 tests pass — all in qa_utils.rs |
 | 2 | Agent context renders runtime, pipeline, and escape-sensitive values | PASS | 2026-03-19 | Claude | 3/3 tests pass — all in collab/context.rs |
-| 3 | Runtime propagation expands large pipeline variables without leaving placeholders | ☐ | | | 8 tests: auto_capture (3) + spill_large_var (5) in orchestrator-scheduler |
-| 4 | Every known step ID maps to a covered rendering entry point | ☐ | | | Code review (rg) — safe |
-| 5 | Task trace flags leftover unexpanded placeholders | ☐ | | | Test exists in orchestrator-scheduler trace/tests.rs (path corrected) |
+| 3 | Runtime propagation expands large pipeline variables without leaving placeholders | PASS | 2026-03-19 | Claude | 8/8 tests pass — auto_capture (3) + spill_large_var (5) in orchestrator-scheduler |
+| 4 | Every known step ID maps to a covered rendering entry point | PASS | 2026-03-19 | Claude | Code review — all 21 step IDs verified, rendering paths confirmed |
+| 5 | Task trace flags leftover unexpanded placeholders | PASS | 2026-03-19 | Claude | detect_unexpanded_template_var_anomaly test passes in trace/tests.rs |

@@ -240,8 +240,8 @@ capability-aware strategies when choosing between agents.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Capability Isolation | PASS | 2026-03-18 | Claude | All tests pass. Doc command note: use `cargo test -p agent-orchestrator` instead of `--workspace --lib` |
-| 2 | Multi-Agent Same Capability | PASS | 2026-03-18 | Claude | `test_select_agent_by_preference_random_fallback`, `test_single_candidate_deterministic` pass |
-| 3 | Repeatable Step Execution | PASS | 2026-03-18 | Claude | Loop engine tests in orchestrator-scheduler crate; use `cargo test -p orchestrator-scheduler` |
-| 4 | Guard Step Termination | PASS | 2026-03-18 | Claude | `build_segments_skips_guards` + loop termination tests pass |
-| 5 | Performance Selection | PASS | 2026-03-18 | Claude | Cost-differential and both strategy tests pass |
+| 1 | Capability Isolation | PASS | 2026-03-19 | Claude | All tests pass. Doc command note: use `cargo test -p agent-orchestrator` instead of `--workspace --lib` |
+| 2 | Multi-Agent Same Capability | PASS | 2026-03-19 | Claude | `test_select_agent_by_preference_random_fallback`, `test_single_candidate_deterministic` pass |
+| 3 | Repeatable Step Execution | PASS | 2026-03-19 | Claude | Loop engine tests in orchestrator-scheduler crate; use `cargo test -p orchestrator-scheduler` |
+| 4 | Guard Step Termination | PASS | 2026-03-19 | Claude | `build_segments_skips_guards` + loop termination tests pass |
+| 5 | Performance Selection | PASS | 2026-03-19 | Claude | Cost-differential and both strategy tests pass |

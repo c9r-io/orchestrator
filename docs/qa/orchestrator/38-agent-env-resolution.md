@@ -159,9 +159,9 @@ Verify that SecretStore values are collected by `collect_sensitive_values()` and
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Agent with direct value env entry | PASS | 2026-03-19 | Claude | All 3 sub-tests passed |
-| 2 | Agent with fromRef importing all store keys | PASS | 2026-03-19 | Claude | |
-| 3 | Agent with refValue importing single key with rename | PASS | 2026-03-19 | Claude | |
+| 1 | Agent with direct value env entry | PASS | 2026-03-19 | Claude | `resolve_direct_value` passed |
+| 2 | Agent with fromRef importing all store keys | PASS | 2026-03-19 | Claude | `resolve_from_ref` passed |
+| 3 | Agent with refValue importing single key with rename | PASS | 2026-03-19 | Claude | `resolve_ref_value` passed |
 | 4 | Config validation rejects missing store references | PASS | 2026-03-19 | Claude | 6 sub-tests passed |
 | 5 | SecretStore values redacted in task logs | PASS | 2026-03-19 | Claude | 5 sub-tests passed |
-| G | Override precedence — later entries win | PASS | 2026-03-19 | Claude | |
+| G | Override precedence — later entries win | PASS | 2026-03-19 | Claude | `resolve_later_entries_override_earlier` passed |

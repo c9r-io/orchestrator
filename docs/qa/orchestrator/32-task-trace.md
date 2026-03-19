@@ -246,7 +246,7 @@ Expected:
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
 | 1 | Basic Trace Output | ☐ | | | |
-| 2 | JSON Output | PASS | 2026-03-19 | Claude | task-scoped: 4 steps, scope=task, anchor_item_id=158eb22e; item-scoped: 2 steps, scope=item, item_id set; wall_time_secs=0.085/0.042; no anomalies; exit 0; no overlapping_cycles |
-| 3 | Verbose Mode Shows Scope And Binding | PASS | 2026-03-19 | Claude | verbose=25 events vs non-verbose=9 events; step_id= and item= fields present; scope binding correct in JSON |
+| 2 | JSON Output | PASS | 2026-03-19 | Claude | Re-verified: task-scoped (1f136876): 4 steps, scope=task with anchor_item_id, wall_time_secs=0.115, no anomalies; item-scoped (9f1713ad): 2 steps, scope=item with item_id, wall_time_secs=0.042, no anomalies; top-level keys verified: task_id, status, cycles, graph_runs, anomalies, summary; no overlapping_cycles; all cycles have non-null ended_at |
+| 3 | Verbose Mode Shows Scope And Binding | PASS | 2026-03-19 | Claude | Re-verified: verbose=29 events vs non-verbose=9 events; text format uses same timestamp/event_type/step=/item= format; JSON scope bindings verified: task-scoped shows scope=task with anchor_item_id, item-scoped shows scope=item with item_id |
 | 4 | Anomaly Detection - Real Failure vs False Overlap | ☐ | | | |
 | 5 | Trace Works When Active Config Is Not Runnable | ☐ | | | |
