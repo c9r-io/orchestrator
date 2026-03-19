@@ -122,6 +122,7 @@ const BUILTIN_CEL_VARS: &[&str] = &[
     "test_exit_code",
     "self_test_exit_code",
     "self_referential_safe",
+    "self_referential_safe_scenarios",
     "steps",
 ];
 
@@ -160,7 +161,34 @@ const CEL_KEYWORDS: &[&str] = &[
 fn extract_cel_identifiers(expr: &str) -> HashSet<String> {
     let mut ids = HashSet::new();
     let mut chars = expr.chars().peekable();
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+    let mut escaped = false;
     while let Some(&ch) = chars.peek() {
+        if escaped {
+            escaped = false;
+            chars.next();
+            continue;
+        }
+        if ch == '\\' && (in_single_quote || in_double_quote) {
+            escaped = true;
+            chars.next();
+            continue;
+        }
+        if ch == '\'' && !in_double_quote {
+            in_single_quote = !in_single_quote;
+            chars.next();
+            continue;
+        }
+        if ch == '"' && !in_single_quote {
+            in_double_quote = !in_double_quote;
+            chars.next();
+            continue;
+        }
+        if in_single_quote || in_double_quote {
+            chars.next();
+            continue;
+        }
         if ch.is_ascii_alphabetic() || ch == '_' {
             let mut ident = String::new();
             while let Some(&c) = chars.peek() {
@@ -270,6 +298,40 @@ mod tests {
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("did you mean 'behavior.captures'"));
         assert!(warnings[0].contains("workflow 'test-wf'"));
+    }
+
+    #[test]
+    fn extract_cel_identifiers_ignores_string_literals() {
+        let ids = extract_cel_identifiers(
+            r#"qa_file_path.startsWith("docs/qa/") && qa_file_path.endsWith('.md')"#,
+        );
+        assert!(ids.contains("qa_file_path"));
+        assert!(ids.contains("startsWith"));
+        assert!(ids.contains("endsWith"));
+        assert!(!ids.contains("docs"));
+        assert!(!ids.contains("qa"));
+        assert!(!ids.contains("md"));
+    }
+
+    #[test]
+    fn collect_step_warnings_accepts_full_qa_self_referential_vars() {
+        let step = WorkflowStepSpec {
+            id: "qa_testing".to_string(),
+            step_type: "qa_testing".to_string(),
+            prehook: Some(crate::cli_types::WorkflowPrehookSpec {
+                when: r#"qa_file_path.startsWith("docs/qa/") && qa_file_path.endsWith(".md") && (self_referential_safe || size(self_referential_safe_scenarios) > 0)"#.to_string(),
+                reason: Some("safe qa docs only".to_string()),
+                engine: "cel".to_string(),
+                ui: None,
+                extended: false,
+            }),
+            ..default_step_spec()
+        };
+        let warnings = collect_step_warnings(&[step], "full-qa");
+        assert!(
+            warnings.is_empty(),
+            "full-qa prehook should not warn, got: {warnings:?}"
+        );
     }
 
     #[test]

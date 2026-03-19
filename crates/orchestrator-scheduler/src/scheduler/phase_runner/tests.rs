@@ -2,6 +2,8 @@
 mod cases {
     use crate::scheduler::phase_runner::types::*;
     use crate::scheduler::phase_runner::util::*;
+    use crate::scheduler::phase_runner::{apply_prompt_delivery, render_step_template_prompt};
+    use agent_orchestrator::config::PromptDelivery;
     use agent_orchestrator::config::StepScope;
     use agent_orchestrator::config::{ExecutionFsMode, ExecutionNetworkMode, ExecutionProfileMode};
     use agent_orchestrator::runner::ResolvedExecutionProfile;
@@ -528,6 +530,42 @@ mod cases {
     #[test]
     fn shell_escape_only_single_quote() {
         assert_eq!(shell_escape("'"), "''\\'''");
+    }
+
+    #[test]
+    fn render_step_template_prompt_keeps_rel_path_human_readable() {
+        let rendered = render_step_template_prompt(
+            "/qa-testing {rel_path}",
+            "docs/qa/orchestrator/00-command-contract.md",
+            "qa_testing",
+            1,
+            &[],
+            "task-1",
+            "item-1",
+            std::path::Path::new("."),
+            "ws-1",
+            None,
+        );
+        assert_eq!(
+            rendered,
+            "/qa-testing docs/qa/orchestrator/00-command-contract.md"
+        );
+    }
+
+    #[test]
+    fn apply_prompt_delivery_arg_shell_escapes_full_prompt() {
+        let prompt = "IMPORTANT: `self_referential_safe_scenarios` and `--timeout`";
+        let (command, payload) = apply_prompt_delivery(
+            "claude -p {prompt} --verbose",
+            Some(prompt),
+            PromptDelivery::Arg,
+            "agent-1",
+        );
+        assert!(payload.is_none());
+        assert_eq!(
+            command,
+            "claude -p 'IMPORTANT: `self_referential_safe_scenarios` and `--timeout`' --verbose"
+        );
     }
 
     #[test]

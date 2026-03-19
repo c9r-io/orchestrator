@@ -31,6 +31,71 @@ use util::detect_sandbox_violation;
 use validate::validate_phase_output_stage;
 use wait::wait_for_process;
 
+fn render_step_template_prompt(
+    prompt: &str,
+    rel_path: &str,
+    phase: &str,
+    cycle: u32,
+    ticket_paths: &[String],
+    task_id: &str,
+    item_id: &str,
+    workspace_root: &std::path::Path,
+    workspace_id: &str,
+    pipeline_vars: Option<&agent_orchestrator::config::PipelineVariables>,
+) -> String {
+    let mut rendered = prompt
+        .replace("{rel_path}", rel_path)
+        .replace("{phase}", phase)
+        .replace("{cycle}", &cycle.to_string());
+    rendered = rendered.replace("{ticket_paths}", &ticket_paths.join(" "));
+    if pipeline_vars.is_some()
+        || rendered.contains("{source_tree}")
+        || rendered.contains("{workspace_root}")
+    {
+        let ctx = agent_orchestrator::collab::AgentContext::new(
+            task_id.to_string(),
+            item_id.to_string(),
+            cycle,
+            phase.to_string(),
+            workspace_root.to_path_buf(),
+            workspace_id.to_string(),
+        );
+        rendered = ctx.render_template_with_pipeline(&rendered, pipeline_vars);
+    }
+    rendered
+}
+
+fn apply_prompt_delivery(
+    command_template: &str,
+    rendered_prompt: Option<&str>,
+    prompt_delivery: PromptDelivery,
+    agent_id: &str,
+) -> (String, Option<String>) {
+    match prompt_delivery {
+        PromptDelivery::Arg => {
+            let cmd = if let Some(prompt) = rendered_prompt {
+                command_template.replace("{prompt}", &shell_escape(prompt))
+            } else {
+                command_template.to_string()
+            };
+            (cmd, None)
+        }
+        _ => {
+            if command_template.contains("{prompt}") {
+                tracing::warn!(
+                    agent_id = %agent_id,
+                    "command contains {{prompt}} but prompt_delivery={:?}; placeholder ignored",
+                    prompt_delivery
+                );
+            }
+            (
+                command_template.to_string(),
+                rendered_prompt.map(ToOwned::to_owned),
+            )
+        }
+    }
+}
+
 /// Orchestrator: runs a single phase with timeout by calling the 5 extracted stages in sequence.
 async fn run_phase_with_timeout(
     state: &Arc<InnerState>,
@@ -507,50 +572,27 @@ pub async fn run_phase_with_selected_agent(
 
     // Render template variables into the step template prompt, then inject into agent command
     let rendered_prompt = step_template_prompt.map(|prompt| {
-        let mut rendered = prompt
-            .replace("{rel_path}", &shell_escape(rel_path))
-            .replace("{phase}", phase)
-            .replace("{cycle}", &cycle.to_string());
-        let escaped_paths: Vec<String> = ticket_paths.iter().map(|p| shell_escape(p)).collect();
-        rendered = rendered.replace("{ticket_paths}", &escaped_paths.join(" "));
-        if pipeline_vars.is_some()
-            || rendered.contains("{source_tree}")
-            || rendered.contains("{workspace_root}")
-        {
-            let ctx = agent_orchestrator::collab::AgentContext::new(
-                task_id.to_string(),
-                item_id.to_string(),
-                cycle,
-                phase.to_string(),
-                workspace_root.to_path_buf(),
-                workspace_id.to_string(),
-            );
-            rendered = ctx.render_template_with_pipeline(&rendered, pipeline_vars);
-        }
-        rendered
+        render_step_template_prompt(
+            prompt,
+            rel_path,
+            phase,
+            cycle,
+            ticket_paths,
+            task_id,
+            item_id,
+            workspace_root,
+            workspace_id,
+            pipeline_vars,
+        )
     });
 
     // Dispatch prompt into command based on delivery mode
-    let (mut command, prompt_payload) = match prompt_delivery {
-        PromptDelivery::Arg => {
-            let cmd = if let Some(ref prompt) = rendered_prompt {
-                command_template.replace("{prompt}", prompt)
-            } else {
-                command_template.to_string()
-            };
-            (cmd, None)
-        }
-        _ => {
-            if command_template.contains("{prompt}") {
-                tracing::warn!(
-                    agent_id = %agent_id,
-                    "command contains {{prompt}} but prompt_delivery={:?}; placeholder ignored",
-                    prompt_delivery
-                );
-            }
-            (command_template.to_string(), rendered_prompt)
-        }
-    };
+    let (mut command, prompt_payload) = apply_prompt_delivery(
+        command_template,
+        rendered_prompt.as_deref(),
+        prompt_delivery,
+        agent_id,
+    );
 
     let escaped_paths: Vec<String> = ticket_paths.iter().map(|p| shell_escape(p)).collect();
     command = command
