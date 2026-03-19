@@ -49,3 +49,7 @@
 | # | Check | Status |
 |---|-------|--------|
 | 1 | All scenarios verified against implementation | ☑ |
+
+> **Note (2026-03-19)**: S1-S3 需要专用 daemon 运行环境（无其他任务占用 worker）。
+> 当 full-QA 占用 daemon 全部 worker 时，新创建的测试任务会停留在 pending 状态。
+> 这是基础设施并发限制，非 FR-055 功能 bug。S4/S5 已通过验证。

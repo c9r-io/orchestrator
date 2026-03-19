@@ -34,3 +34,9 @@ Split from doc 110: capability threshold and check output.
 | # | Check | Status |
 |---|-------|--------|
 | 1 | All scenarios verified against implementation | ☑ |
+
+> **Note (2026-03-19)**: 场景 2 中 `default-agent-fail` 的 `health_policy` 未出现在 DB spec_json 中
+> 属于正常行为。系统在 spec→config→spec 转换时，值与全局默认相同的字段会被
+> `skip_serializing_if = "is_default"` 优化省略。`orchestrator check` 仍正确显示
+> `default (duration=5h, threshold=2, cap_success=0.5)`，因为运行时从 HealthPolicyConfig::default()
+> 填充。仅当值与默认不同时（如 `custom-agent` 和 `nodisease-agent`）才会持久化。

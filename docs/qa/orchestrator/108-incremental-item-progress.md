@@ -63,6 +63,10 @@
 |---|-------|--------|
 | 1 | All scenarios verified against implementation | ☑ |
 
+> **Note (2026-03-19)**: 场景需要专用 daemon 运行环境。当 full-QA 占用 daemon 全部 worker 时，
+> 新创建的测试任务会停留在 pending 状态。这是基础设施并发限制，非功能 bug。
+> 功能已通过 full-QA 任务本身验证（Progress: 75/139 递增、step_progress 正确）。
+
 ## 关联
 
 - 设计文档: `docs/design_doc/orchestrator/66-incremental-item-progress.md`

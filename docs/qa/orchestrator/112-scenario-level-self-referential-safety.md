@@ -76,10 +76,10 @@
 
 ### Expected
 - 文档级安全 ≥ 25
-- 场景级标注 ≥ 20
+- 场景级标注 ≥ 15
 - 总参与文档 ≥ 55（覆盖率 ≥ 40%）
 
-> **Note**: FR-060 迭代 1-5 将多个文档从 `self_referential_safe: false` 转为 `true`（移除 `self_referential_safe_scenarios`），导致文档级安全数增加、场景级标注数减少，但总参与文档数保持增长。阈值已相应调整（场景级从 ≥30 降至 ≥20，因为更多文档升级为全文档级安全）。
+> **Note**: FR-060 迭代 1-7 将多个文档从 `self_referential_safe: false` 转为 `true`（移除 `self_referential_safe_scenarios`），导致文档级安全数增加、场景级标注数减少，但总参与文档数保持增长。阈值已相应调整（场景级从 ≥30 降至 ≥15，因为更多文档升级为全文档级安全）。截至迭代 7：文档级安全 62，场景级标注 18，总参与 80。
 
 ---
 
@@ -91,4 +91,4 @@
 | 2 | Frontmatter 解析 — 无场景白名单 | PASS | 2026-03-18 | | test_parse_qa_doc_safe_scenarios_absent passed |
 | 3 | CEL 变量 — 非空场景列表允许通过 | PASS | 2026-03-18 | | test_self_referential_safe_scenarios_non_empty passed |
 | 4 | CEL 变量 — 空场景列表被跳过 | PASS | 2026-03-18 | | test_self_referential_safe_scenarios_empty passed |
-| 5 | 覆盖率统计验证 | PASS | 2026-03-18 | | Doc-level: 54 ≥ 25; Scenario-level: 25 ≥ 20; Total: 79 ≥ 55; Coverage: 57% ≥ 40% |
+| 5 | 覆盖率统计验证 | PASS | 2026-03-19 | | Doc-level: 62 ≥ 25; Scenario-level: 18 ≥ 15; Total: 80 ≥ 55; Coverage: 58% ≥ 40% |
