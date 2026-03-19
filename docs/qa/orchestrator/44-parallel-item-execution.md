@@ -1,6 +1,6 @@
 ---
 self_referential_safe: false
-self_referential_safe_scenarios: [S5]
+self_referential_safe_scenarios: [S1, S2, S3, S5]
 ---
 
 # Orchestrator - Parallel Item-Scoped Step Execution
@@ -40,7 +40,8 @@ When `max_parallel <= 1`, the existing sequential loop runs unchanged. When `> 1
 ## Scenario 1: max_parallel Config Round-Trip via YAML and Serde
 
 ### Preconditions
-- Orchestrator binary built
+- Repository root is the current working directory.
+- Rust toolchain is available.
 
 ### Goal
 Verify `max_parallel` field is accepted in workflow YAML, propagated through the execution plan, and round-trips through serde.
@@ -53,20 +54,20 @@ Verify `max_parallel` field is accepted in workflow YAML, propagated through the
    grep -n "max_parallel" core/src/config/execution.rs
    ```
 
-2. Verify the self-bootstrap YAML parses without errors:
+2. Run workflow config serde round-trip tests:
    ```bash
-   orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --dry-run 2>&1
+   cargo test -p orchestrator-config --lib -- workflow --nocapture
    ```
 
-3. Check that the workflow-level `max_parallel: 4` and step-level `max_parallel: 2` (ticket_fix) are present in the dry-run output:
+3. Verify `max_parallel` propagation through execution plan in code:
    ```bash
-   orchestrator apply -f fixtures/manifests/bundles/self-bootstrap-mock.yaml --dry-run 2>&1 | grep -i "max_parallel" || echo "field not in dry-run text output"
+   rg -n "max_parallel" crates/orchestrator-config/src/config/workflow.rs core/src/config/execution.rs
    ```
 
 ### Expected
-- All `max_parallel` unit tests pass
-- `--dry-run` output shows no validation errors for `max_parallel` field
-- YAML with `max_parallel` at both workflow-level and step-level is accepted
+- `max_parallel` field is defined in both `WorkflowConfig` and `WorkflowStepConfig`
+- Workflow config unit tests pass (serde round-trip preserves `max_parallel`)
+- `max_parallel` propagates from config through execution plan
 
 ---
 
@@ -233,8 +234,8 @@ Verify the database uses a writer+reader connection model with WAL mode and busy
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | max_parallel Config Round-Trip via YAML and Serde | SKIP | 2026-03-18 | | Unsafe in self-referential mode (self_referential_safe=false) |
-| 2 | ScopeSegment Resolves max_parallel From Step and Plan | SKIP | 2026-03-18 | | Unsafe in self-referential mode (cargo test runs orchestrator tasks) |
-| 3 | RunningTask::fork() Shares Stop Flag | SKIP | 2026-03-18 | | Unsafe in self-referential mode (cargo test runs orchestrator tasks) |
-| 4 | Sequential Path Unchanged When max_parallel Absent | SKIP | 2026-03-18 | | Requires live task execution (unsafe in self-referential mode — S4 uses orchestrator task create/start) |
+| 1 | max_parallel Config Round-Trip via YAML and Serde | ☐ | | | Rewritten for safe mode: grep + cargo test (no --dry-run) |
+| 2 | ScopeSegment Resolves max_parallel From Step and Plan | ☐ | | | Safe: pure cargo test -p orchestrator-scheduler |
+| 3 | RunningTask::fork() Shares Stop Flag | ☐ | | | Safe: pure cargo test -p agent-orchestrator --lib |
+| 4 | Sequential Path Unchanged When max_parallel Absent | SKIP | 2026-03-18 | | Unsafe: requires live task execution (orchestrator task create/start) |
 | 5 | Database Connection Model and WAL Configuration | PASS | 2026-03-18 | claude | Writer+reader model confirmed in code, busy_timeout 5000ms, WAL mode wal |

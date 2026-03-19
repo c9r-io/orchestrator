@@ -1,6 +1,5 @@
 ---
-self_referential_safe: false
-self_referential_safe_scenarios: [S4]
+self_referential_safe: true
 ---
 
 # Item-Scoped Git Worktree Isolation
@@ -38,7 +37,7 @@ Expected:
 
 1. Run:
    ```bash
-   cargo test --workspace
+   cargo test --workspace --lib
    ```
 2. Run:
    ```bash
@@ -47,7 +46,7 @@ Expected:
 
 Expected:
 
-- all tests pass
+- all unit tests pass (integration tests excluded via `--lib` for safety)
 - clippy reports no warnings
 
 ## Scenario 4: Self-Evolution Manifest Uses Worktree Isolation

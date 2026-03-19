@@ -1,6 +1,5 @@
 ---
-self_referential_safe: false
-self_referential_safe_scenarios: [S5]
+self_referential_safe: true
 ---
 
 # Orchestrator - Runner Security Boundary and Observability
@@ -33,44 +32,31 @@ Entry point: `orchestrator`
 
 ### Preconditions
 
-- CLI built from latest source.
+- Repository root is the current working directory.
+- Rust toolchain is available.
 
 ### Goal
 
-Ensure `policy=allowlist` is rejected when `allowed_shells` or `allowed_shell_args` is empty.
+Ensure `policy=allowlist` is rejected when `allowed_shells` or `allowed_shell_args` is empty, via unit tests.
 
 ### Steps
 
-1. Create invalid config:
+1. Run allowlist validation unit tests:
    ```bash
-   cat > /tmp/runner-allowlist-invalid.yaml << 'YAML'
-   apiVersion: orchestrator.dev/v2
-   kind: RuntimePolicy
-   metadata:
-     name: runtime
-   spec:
-     runner:
-       policy: allowlist
-       executor: shell
-       shell: /bin/bash
-       shell_arg: -lc
-       allowed_shells: []
-       allowed_shell_args: []
-     resume:
-       auto: false
-   YAML
+   cargo test -p agent-orchestrator --lib -- validate_rejects_allowlist_with_empty_shells --nocapture
+   cargo test -p agent-orchestrator --lib -- validate_rejects_allowlist_with_empty_shell_args --nocapture
    ```
-2. Validate config:
+
+2. Run safety config tests:
    ```bash
-   orchestrator manifest validate -f /tmp/runner-allowlist-invalid.yaml
+   cargo test -p orchestrator-config --lib -- safety --nocapture
    ```
 
 ### Expected
 
-- Command exits non-zero.
-- Output includes validation errors for:
-  - `runner.allowed_shells cannot be empty when policy=allowlist`
-  - `runner.allowed_shell_args cannot be empty when policy=allowlist`
+- `validate_rejects_allowlist_with_empty_shells` passes — empty `allowed_shells` rejected
+- `validate_rejects_allowlist_with_empty_shell_args` passes — empty `allowed_shell_args` rejected
+- All 3 safety config tests pass (default, serde round-trip, deserialize minimal)
 
 ---
 
@@ -78,58 +64,35 @@ Ensure `policy=allowlist` is rejected when `allowed_shells` or `allowed_shell_ar
 
 ### Preconditions
 
-- Runtime initialized.
-- A project-scoped config is applied where:
-  - `runner.policy=allowlist`
-  - `runner.shell=/bin/sh`
-  - `runner.allowed_shells=[/bin/bash]`
-  - `runner.allowed_shell_args=[-lc]`
+- Repository root is the current working directory.
+- Rust toolchain is available.
 
 ### Goal
 
-Ensure run-phase command execution is denied by runner policy before process spawn.
+Verify runner policy enforcement logic denies disallowed shells before process spawn, via unit tests and code review.
 
 ### Steps
 
-1. Prepare isolated project and apply policy config:
+1. Run runner config unit tests covering policy enforcement:
    ```bash
-   QA_PROJECT="qa-runner-deny"
-   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   cat > /tmp/runner-policy-deny.yaml << 'YAML'
-   apiVersion: orchestrator.dev/v2
-   kind: RuntimePolicy
-   metadata:
-     name: runtime
-   spec:
-   runner:
-     policy: allowlist
-     executor: shell
-     shell: /bin/sh
-     shell_arg: -lc
-     allowed_shells: [/bin/bash]
-     allowed_shell_args: [-lc]
-     redaction_patterns: [SECRET_TOKEN_ABC]
-    resume:
-      auto: false
-   YAML
-   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
-   orchestrator apply --project "${QA_PROJECT}" -f /tmp/runner-policy-deny.yaml
+   cargo test -p orchestrator-config --lib -- runner --nocapture
    ```
-2. Create and start task:
+
+2. Code review: verify allowlist check occurs before spawn:
    ```bash
-   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "runner-policy-deny" --goal "policy deny" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}" || true
+   rg -n "allowed_shells\|is_shell_allowed\|policy.*deny\|not in runner" core/src/runner/ crates/orchestrator-config/src/config/runner.rs
    ```
-3. Inspect result:
+
+3. Run validation tests for runtime policy resource:
    ```bash
-   orchestrator task info "${TASK_ID}" -o json
+   cargo test -p agent-orchestrator --lib -- runtime_policy --nocapture
    ```
 
 ### Expected
 
-- Task does not complete successfully.
-- Failure details include runner policy deny message (`runner.shell ... is not in runner.allowed_shells`).
+- All 6 runner config tests pass (serde, defaults, policy model)
+- Code review confirms allowlist check occurs in `spawn_with_runner` before `Command::new()`
+- Runtime policy validation tests pass
 
 ---
 
@@ -137,97 +100,41 @@ Ensure run-phase command execution is denied by runner policy before process spa
 
 ### Preconditions
 
-- Runtime initialized.
-- Config has `runner.redaction_patterns` containing `SECRET_TOKEN_ABC`.
-- QA template emits `SECRET_TOKEN_ABC` in command output.
+- Repository root is the current working directory.
+- Rust toolchain is available.
 
 ### Goal
 
-Ensure sensitive token is redacted in persisted structured output and in `task logs` output.
+Verify redaction logic correctly replaces sensitive tokens in text output, via unit tests and code review.
 
 ### Steps
 
-1. Apply redaction-enabled config and run task:
+1. Run redaction unit tests:
    ```bash
-   cat > /tmp/runner-redaction-config.yaml << 'YAML'
-   apiVersion: orchestrator.dev/v2
-   kind: RuntimePolicy
-   metadata:
-     name: runtime
-   spec:
-     runner:
-       policy: unsafe
-       executor: shell
-       shell: /bin/bash
-       shell_arg: -lc
-       redaction_patterns: [SECRET_TOKEN_ABC]
-     resume:
-       auto: false
-   YAML
-   QA_PROJECT="runner-redaction"
-   orchestrator delete "project/${QA_PROJECT}" --force 2>/dev/null || true
-   rm -rf "workspace/${QA_PROJECT}"
-   orchestrator apply -f /tmp/runner-redaction-config.yaml
-   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project "${QA_PROJECT}"
-
-   cat > /tmp/runner-redaction-resources.yaml << 'YAML'
-   apiVersion: orchestrator.dev/v2
-   kind: Workspace
-   metadata:
-     name: default
-   spec:
-     root_path: "."
-     qa_targets: [docs/qa]
-     ticket_dir: fixtures/ticket
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: mock
-   spec:
-     capabilities: [qa]
-     command: "echo '{\"confidence\":0.9,\"quality_score\":0.86,\"artifacts\":[],\"message\":\"SECRET_TOKEN_ABC\"}'"
-   ---
-   apiVersion: orchestrator.dev/v2
-   kind: Workflow
-   metadata:
-     name: qa_only
-   spec:
-     steps:
-       - id: qa
-         required_capability: qa
-         enabled: true
-     loop:
-       mode: once
-     finalize:
-       rules: []
-   YAML
-   orchestrator apply --project "${QA_PROJECT}" -f /tmp/runner-redaction-resources.yaml
-
-   TASK_ID=$(orchestrator task create --project "${QA_PROJECT}" --name "runner-redaction" --goal "redaction" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}" || true
+   cargo test -p agent-orchestrator --lib -- redact_text --nocapture
    ```
-2. Verify redaction in logs and DB:
+
+2. Run streaming redactor tests:
    ```bash
-   orchestrator task logs "${TASK_ID}" | rg "SECRET_TOKEN_ABC|REDACTED" -n
-   sqlite3 data/agent_orchestrator.db "SELECT output_json FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='${TASK_ID}') ORDER BY started_at DESC LIMIT 1;"
+   cargo test -p agent-orchestrator --lib -- streaming_redactor --nocapture
+   ```
+
+3. Run spawn-with-redaction integration test:
+   ```bash
+   cargo test -p agent-orchestrator --lib -- spawn_with_runner_and_capture_redacts_persisted_output --nocapture
+   ```
+
+4. Code review: verify redaction is applied before persistence:
+   ```bash
+   rg -n "redact_text\|pipe_and_redact\|redaction_patterns" core/src/runner/ core/src/output_capture.rs
    ```
 
 ### Expected
 
-- Raw token `SECRET_TOKEN_ABC` is not visible in `task logs`.
-- Persisted `output_json` contains `[REDACTED]` where token appeared in stdout/stderr payload.
-
-### Expected Data State
-
-```sql
-SELECT output_json
-FROM command_runs
-WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = '{task_id}')
-ORDER BY started_at DESC
-LIMIT 1;
--- Expected: output_json does not contain SECRET_TOKEN_ABC and contains [REDACTED]
-```
+- 6 `redact_text` tests pass (pattern matching, case insensitive, multiple variants, secret values, empty patterns)
+- 2 `streaming_redactor` tests pass (cross-chunk secrets, preserve visible text)
+- `spawn_with_runner_and_capture_redacts_persisted_output` passes — end-to-end redaction verified
+- Code review confirms redaction applied in `pipe_and_redact` before output persistence
 
 ---
 
@@ -235,38 +142,35 @@ LIMIT 1;
 
 ### Preconditions
 
-- At least one task run reaches terminal status.
+- Repository root is the current working directory.
+- Rust toolchain is available.
 
 ### Goal
 
-Ensure scheduler terminal path persists execution metrics.
+Verify the scheduler terminal path includes metrics persistence logic, via code review and related unit tests.
 
 ### Steps
 
-1. Create and run task:
+1. Code review: verify `task_execution_metrics` INSERT exists in the terminal path:
    ```bash
-   TASK_ID=$(orchestrator task create --project default --name "metrics-persist" --goal "metrics persist" --no-start | grep -oE '[0-9a-f-]{36}' | head -1)
-   orchestrator task start "${TASK_ID}" || true
+   rg -n "task_execution_metrics\|INSERT INTO task_execution_metrics" core/src/
    ```
-2. Query metrics table:
+
+2. Verify the metrics table schema is created by migration:
    ```bash
-   sqlite3 data/agent_orchestrator.db "SELECT task_id, status, current_cycle, unresolved_items, total_items, failed_items, command_runs FROM task_execution_metrics WHERE task_id='${TASK_ID}' ORDER BY created_at DESC LIMIT 1;"
+   rg -n "task_execution_metrics" core/src/persistence/migration*.rs core/src/migration.rs
+   ```
+
+3. Run scheduler terminal path unit tests:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib -- loop_engine --nocapture
    ```
 
 ### Expected
 
-- At least one row exists in `task_execution_metrics` for the task.
-- `status` is terminal (`completed` or `failed`).
-- `command_runs` is non-negative and reflects executed runs.
-
-### Expected Data State
-
-```sql
-SELECT COUNT(*)
-FROM task_execution_metrics
-WHERE task_id = '{task_id}';
--- Expected: >= 1
-```
+- Code review confirms `INSERT INTO task_execution_metrics` in scheduler terminal path
+- Migration creates `task_execution_metrics` table with expected columns (task_id, status, current_cycle, unresolved_items, total_items, failed_items, command_runs)
+- Loop engine unit tests pass (terminal path coverage)
 
 ---
 
@@ -307,8 +211,8 @@ Ensure `qa doctor` exposes new metrics fields in JSON and table outputs.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Allowlist Policy Schema Validation | ✅ | 2026-03-02 | cursor | validate returns runner allowlist empty errors |
-| 2 | Runtime Policy Blocks Disallowed Shell | ✅ | 2026-03-02 | cursor | `runner.shell '/bin/sh' is not in runner.allowed_shells`; task transitions to `failed` |
-| 3 | Structured Output and Log Redaction | ✅ | 2026-03-02 | cursor | `policy: unsafe` + redaction: logs/output_json contain `[REDACTED]`, secret token absent |
-| 4 | task_execution_metrics Persistence | ✅ | 2026-03-02 | cursor | row persisted with terminal status and command_runs count |
+| 1 | Allowlist Policy Schema Validation | ☐ | | | Rewritten for safe mode: unit test validation |
+| 2 | Runtime Policy Blocks Disallowed Shell | ☐ | | | Rewritten for safe mode: unit test + code review |
+| 3 | Structured Output and Log Redaction | ☐ | | | Rewritten for safe mode: 9 redaction unit tests + code review |
+| 4 | task_execution_metrics Persistence | ☐ | | | Rewritten for safe mode: code review + loop engine tests |
 | 5 | QA Doctor Exposes Observability Metrics | ❌ | 2026-03-18 | claude | `orchestrator qa` subcommand does not exist (unrecognized subcommand); data preconditions met (514 rows in task_execution_metrics); ticket: qa21_s5_doctor_subcommand_20260318 |

@@ -256,7 +256,39 @@
 **净收益**: +28 个可安全执行的场景（QA-81 ×1, QA-76 ×2, QA-75 ×4, QA-72 ×4, QA-70 ×2, QA-61 ×3, QA-62 ×4, QA-78 ×3, QA-74 ×3, QA-77 ×2）
 **累计净收益**: 迭代 1 (+4) + 迭代 2 (+11) + 迭代 3 (+17) + 迭代 4 (+28) + 迭代 5 (+40) + 迭代 6 (+48) + 迭代 7 (+28) = +176 个安全场景
 
-### 迭代 8+: 逐步处理剩余类别
+### 迭代 8: 部分安全标注文档批量补全（高优先级候选）
+
+**分析文档**（10 个）:
+- Tier 1（元数据修正 + 小幅改写）: `80-item-scoped-git-worktree-isolation.md`, `63-database-migration-kernel-and-repository-governance.md`, `18-kubectl-style-extensions.md`
+- Tier 2（中等改写）: `44-parallel-item-execution.md`, `32-task-trace.md`, `104-cli-uds-fallback-robustness.md`, `21-runner-security-observability.md`
+- Tier 3（完整重写）: `08-project-namespace.md`, `92-dynamic-items-cycle-overflow.md`, `98-convergence-expression.md`
+
+### 迭代 8 结果（2026-03-19）
+
+| 文档 | 总场景 | 可转安全 | 分类 |
+|------|--------|---------|------|
+| QA-80 | 4 | 3 (S1-S3) | **元数据修正** — S1-S3 均为 `cargo test`/`cargo check`/`cargo clippy`（安全操作），仅 S3 需修正 `--workspace` → `--workspace --lib` |
+| QA-63 | 5 | 4 (S1,S2,S4,S5) | **小幅改写** — S1/S2/S5 已为纯 `cargo test`；S4 移除 `orchestrator db status`/`db migrations list`（gRPC 需 daemon）保留 4 个 unit test |
+| QA-18 | 3 | 1 (S3) | **完整重写** — S3 移除 `orchestrator apply -f -` 改为 `parse_manifests_from_yaml` 5 tests + `apply_to_project` 6 tests |
+| QA-44 | 5 | 3 (S1-S3) | **小幅改写** — S1 移除 `--dry-run` 改为 `cargo test`; S2/S3 已为纯 `cargo test`; S4 保持 unsafe（live task execution） |
+| QA-32 | 5 | 3 (S1,S4,S5) | **完整重写** — 63 trace unit test（58 tests.rs + 5 anomaly.rs）覆盖 timeline reconstruction + anomaly detection |
+| QA-104 | 5 | 3 (S2,S4,S5) | **完整重写** — 3 个 `client.rs` unit test 覆盖连接优先级链；S2/S4/S5 改为 code review + unit test |
+| QA-21 | 5 | 4 (S1-S4) | **完整重写** — S1: 2 allowlist validation tests; S2: 6 runner config tests; S3: 9 redaction tests; S4: metrics code review + loop engine tests |
+| QA-08 | 6 | 5 (S1-S4,G1) | **完整重写** — 6 `apply_to_project` tests + 3 `crd_scope` tests 覆盖项目路由/自动创建/幂等/CLI flag |
+| QA-92 | 4 | 3 (S1,S3,S4) | **完整重写** — 5 `proactive_max_cycles` tests + 3 loop continuation tests 覆盖 fixed/infinite/once mode |
+| QA-98 | 6 | 5 (S2-S6) | **完整重写** — S2/S6: loop_engine tests; S3: code review 短路求值; S4: 3 CEL validation tests; S5: code review pipeline variables |
+
+**修复内容**:
+- 9 个文档完全转为 safe：QA-80, QA-63, QA-18, QA-32, QA-104, QA-21, QA-08, QA-92, QA-98
+- 1 个文档扩展安全场景列表：QA-44 (S5 → S1/S2/S3/S5)
+- 无代码变更 — 纯 QA 文档重写
+- 407 个 unit test 全部通过，零回归
+
+**净收益**: +34 个可安全执行的场景（QA-80 ×3, QA-63 ×4, QA-18 ×1, QA-44 ×3, QA-32 ×3, QA-104 ×3, QA-21 ×4, QA-08 ×5, QA-92 ×3, QA-98 ×5）
+**累计净收益**: 迭代 1 (+4) + 迭代 2 (+11) + 迭代 3 (+17) + 迭代 4 (+28) + 迭代 5 (+40) + 迭代 6 (+48) + 迭代 7 (+28) + 迭代 8 (+34) = +210 个安全场景
+**Unsafe 文档数**: 77 → 68（含 self-bootstrap 子目录）
+
+### 迭代 9+: 逐步处理剩余类别
 
 每次 1-2 个文档，持续推进直到 unsafe 比例从 82% 降到合理水平（目标 < 30%）。
 

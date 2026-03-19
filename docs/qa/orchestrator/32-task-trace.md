@@ -1,6 +1,5 @@
 ---
-self_referential_safe: false
-self_referential_safe_scenarios: [S2, S3]
+self_referential_safe: true
 ---
 
 # Orchestrator - Task Trace Post-Mortem Diagnostics
@@ -52,32 +51,31 @@ orchestrator apply -f fixtures/manifests/bundles/cli-probe-fixtures.yaml --proje
 
 ### Preconditions
 
-- Orchestrator binary built and available
-- At least one task completed or failed
+- Repository root is the current working directory.
+- Rust toolchain is available.
 
 ### Goal
 
-Verify `task trace` renders a readable timeline with cycle/step structure and closed cycle boundaries for completed tasks
+Verify trace timeline reconstruction produces correct cycle/step structure and closed cycle boundaries, via unit tests.
 
 ### Steps
 
-1. Create and run a task to completion:
+1. Run the core trace reconstruction unit tests:
    ```bash
-   orchestrator task create --goal "trace test" --project "${QA_PROJECT}" --workspace cli_probe_ws --workflow probe_task_scoped
+   cargo test -p orchestrator-scheduler --lib -- trace::tests::single_cycle_with_steps --nocapture
+   cargo test -p orchestrator-scheduler --lib -- trace::tests::multi_cycle_trace --nocapture
    ```
-2. Note the `{task_id}` from output
-3. Run trace:
+
+2. Verify trace output structure via code review:
    ```bash
-   orchestrator task trace {task_id}
+   rg -n "TRACE TIMELINE\|ANOMALIES.*detected\|cycle_started\|step_started" crates/orchestrator-scheduler/src/scheduler/trace/
    ```
 
 ### Expected
 
-- Output begins with `TRACE TIMELINE (N events)` header followed by a separator line
-- Each event line shows: timestamp, event_type, step={id} (if applicable), item={truncated_id} (if applicable)
-- Events include `cycle_started`, `step_started`, `step_finished`, etc.
-- If anomalies are detected, an `ANOMALIES (N detected)` section appears with `[SEVERITY] rule: message` lines
-- Exit code 0
+- `single_cycle_with_steps` passes — verifies cycle/step structure for single-cycle tasks
+- `multi_cycle_trace` passes — verifies multi-cycle timeline with closed boundaries
+- Code review confirms output format: `TRACE TIMELINE (N events)` header, `timestamp event_type step={id}` lines
 
 ---
 
@@ -148,30 +146,27 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 
 ### Preconditions
 
-- Orchestrator binary built and available
-- A workflow fixture that produces a failing step
-- A normal completed task with two cycles (or the unit-level regression suite as fallback)
-- Prefer completed tasks from `probe_low_output` and `probe_active_output` when validating low-output anomaly presence vs absence
+- Repository root is the current working directory.
+- Rust toolchain is available.
+
+### Goal
+
+Verify anomaly detection correctly identifies nonzero_exit, low_output, and overlapping_cycles via unit tests.
 
 ### Steps
 
-1. Run the unit-level trace regression suite:
+1. Run the full trace anomaly regression suite:
    ```bash
-   cd core && cargo test --lib scheduler::trace -- --nocapture
+   cargo test -p orchestrator-scheduler --lib -- trace --nocapture
    ```
-2. Run the focused nonzero-exit regression:
+
+2. Run focused anomaly detection tests:
    ```bash
-   cd core && cargo test --lib scheduler::trace::tests::detect_nonzero_exit_anomaly -- --nocapture
-   ```
-3. If the current config is runnable and you have a known failing task with a non-zero step exit, run:
-   ```bash
-   orchestrator task trace {task_id}
-   orchestrator task trace {task_id} --json | jq '.anomalies[] | select(.rule == "nonzero_exit")'
+   cargo test -p orchestrator-scheduler --lib -- anomaly --nocapture
    ```
 
 ### Expected
 
-- `cargo test --lib scheduler::trace` passes
 - `detect_nonzero_exit_anomaly` passes
 - `two_cycle_completed_task_closes_first_cycle_without_overlap` passes
 - `completed_task_wall_time_uses_task_meta_when_events_are_sparse` passes
@@ -179,65 +174,47 @@ Verify `task trace` renders a readable timeline with cycle/step structure and cl
 - `detect_low_output_step_anomaly` passes
 - `quiet_heartbeat_does_not_create_low_output_anomaly` passes
 - `multiple_low_output_heartbeats_for_same_step_deduplicate` passes
-- When a real failing task with non-zero exit is available, anomaly section shows `WARN nonzero_exit` with the phase and exit code
-- When a real failing task with non-zero exit is available, JSON output includes `rule: "nonzero_exit"`, `severity: "warning"`, and a message containing the exit code
+- All 63 trace + anomaly unit tests pass (58 in trace/tests.rs + 5 in trace/anomaly.rs)
 - Normal completed multi-cycle traces do not report `overlapping_cycles`
-- Completed traces expose non-null `summary.wall_time_secs`
-- A trace built from low-output heartbeats reports `low_output` exactly once per affected step
-- Each anomaly in JSON output includes `rule`, `severity`, `escalation`, `message`, and `at` fields
+- Each anomaly includes `rule`, `severity`, `escalation`, `message`, and `at` fields
 
 ---
 
-## Scenario 5: Trace Works When Active Config Is Not Runnable
+## Scenario 5: Trace Availability and Config Independence
 
 ### Preconditions
 
-- Orchestrator binary built and available
-- At least one historical task exists in the local database
-- Current active config is intentionally invalid (for example, a workflow step defines both `builtin` and `required_capability`)
+- Repository root is the current working directory.
+- Rust toolchain is available.
+
+### Goal
+
+Verify trace reconstruction is independent of the active config validity — the trace module reconstructs from persisted events without requiring a runnable config.
 
 ### Steps
 
-1. Confirm the current config is invalid with a command that requires a runnable config:
+1. Verify trace module builds and reconstructs from raw events (no config dependency):
    ```bash
-   orchestrator check
+   cargo test -p orchestrator-scheduler --lib -- trace::tests --nocapture
    ```
-2. Run trace for a historical task:
+
+2. Code review: confirm trace reconstruction reads from events table only, not from active config:
    ```bash
-   orchestrator task trace {task_id} --json | jq '.summary'
+   rg -n "fn build_trace\|fn reconstruct\|events.*task_id" crates/orchestrator-scheduler/src/scheduler/trace/
+   ```
+
+3. Verify low-output anomaly detection distinguishes probe types via unit test:
+   ```bash
+   cargo test -p orchestrator-scheduler --lib -- detect_low_output_step_anomaly --nocapture
+   cargo test -p orchestrator-scheduler --lib -- quiet_heartbeat_does_not_create_low_output_anomaly --nocapture
    ```
 
 ### Expected
 
-- `check` reports the active config is not runnable
-- `task trace` still returns trace output instead of failing during startup
-- JSON output remains valid and includes `summary.total_cycles`
-- Exit code 0
-
-### Self-Referential Probe Trace Checks
-
-These checks use the official self-referential probe fixtures directly, not
-`apply --project`.
-
-Do not use `delete project/<name> --force` here; these probe checks rely on direct
-runtime fixtures, not control-plane reinitialization.
-
-1. Apply the self-referential probe fixtures:
-   ```bash
-   orchestrator apply -f fixtures/manifests/bundles/self-referential-probe-fixtures.yaml
-   ```
-2. Run a low-output self-referential probe task to completion.
-3. Run an active-output self-referential probe task to completion.
-4. Inspect both traces:
-   ```bash
-   orchestrator task trace {low_output_task_id} --json | jq '.anomalies'
-   orchestrator task trace {active_output_task_id} --json | jq '.anomalies'
-   ```
-
-Expected:
-- `self_ref_probe_low_output` emits `low_output` anomaly with `escalation: "intervene"`
-- `self_ref_probe_active_output` does not emit `low_output`
-- Both probe workflows include an enabled `self_test` builtin step (required by the self-referential safety policy for all workflows targeting self-referential workspaces)
+- All trace unit tests pass — reconstruction works from events alone
+- Code review confirms trace module reads events/command_runs tables, not active config
+- `detect_low_output_step_anomaly` passes — low-output correctly identified
+- `quiet_heartbeat_does_not_create_low_output_anomaly` passes — no false positives
 
 ---
 
@@ -245,8 +222,8 @@ Expected:
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Basic Trace Output | ☐ | | | |
+| 1 | Basic Trace Output | ☐ | | | Rewritten for safe mode: unit test verification |
 | 2 | JSON Output | PASS | 2026-03-19 | Claude | Re-verified: task-scoped (1f136876): 4 steps, scope=task with anchor_item_id, wall_time_secs=0.115, no anomalies; item-scoped (9f1713ad): 2 steps, scope=item with item_id, wall_time_secs=0.042, no anomalies; top-level keys verified: task_id, status, cycles, graph_runs, anomalies, summary; no overlapping_cycles; all cycles have non-null ended_at |
 | 3 | Verbose Mode Shows Scope And Binding | PASS | 2026-03-19 | Claude | Re-verified: verbose=29 events vs non-verbose=9 events; text format uses same timestamp/event_type/step=/item= format; JSON scope bindings verified: task-scoped shows scope=task with anchor_item_id, item-scoped shows scope=item with item_id |
-| 4 | Anomaly Detection - Real Failure vs False Overlap | ☐ | | | |
-| 5 | Trace Works When Active Config Is Not Runnable | ☐ | | | |
+| 4 | Anomaly Detection - Real Failure vs False Overlap | ☐ | | | Rewritten for safe mode: 63 trace + anomaly unit tests |
+| 5 | Trace Availability and Config Independence | ☐ | | | Rewritten for safe mode: unit test + code review |

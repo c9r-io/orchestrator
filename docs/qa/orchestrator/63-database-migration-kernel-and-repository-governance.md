@@ -1,6 +1,5 @@
 ---
-self_referential_safe: false
-self_referential_safe_scenarios: [S3]
+self_referential_safe: true
 ---
 
 # Orchestrator - Database Migration Kernel and Repository Governance
@@ -140,22 +139,18 @@ Verify FR-009 closure did not allow new business SQL helpers to grow from compat
 ## Scenario 4: CLI Exposes Read-Only Schema And Migration Status
 
 ### Preconditions
-- A runnable `orchestrator` binary is available.
-- Test database path is available or the default local DB exists.
+- Repository root is the current working directory.
+- Rust toolchain is available.
 
 ### Goal
-Verify operators can inspect schema state without mutating the database.
+Verify the `db status` and `db migrations list` CLI commands are implemented correctly as read-only operations, via unit tests and code review.
 
 ### Steps
-1. Run:
+1. Verify the service-layer implementations are read-only via code review:
    ```bash
-   orchestrator db status
+   rg -n "fn db_status\b|fn db_migrations_list\b" core/src/service/system.rs
    ```
-2. Run:
-   ```bash
-   orchestrator db migrations list
-   ```
-3. Run focused regression coverage:
+2. Run focused regression coverage:
    ```bash
    cargo test -p agent-orchestrator service::system::tests::db_status_reports_current_schema -- --exact
    cargo test -p agent-orchestrator service::system::tests::db_migrations_list_marks_all_migrations_applied_on_seeded_state -- --exact
@@ -164,15 +159,12 @@ Verify operators can inspect schema state without mutating the database.
    ```
 
 ### Expected
-- `db status` prints current version, target version, and pending state clearly.
-- `db migrations list` shows applied and/or pending migration descriptors in a readable form.
-- Neither command mutates application state.
-- Focused core and CLI regressions for the DB commands pass.
+- `db_status` and `db_migrations_list` are read-only functions (no INSERT/UPDATE/DELETE).
+- All 4 focused unit tests pass.
 
 ### Expected Data State
 ```sql
-SELECT COALESCE(MAX(version), 0) AS current_version FROM schema_migrations;
--- Read-only inspection should match the CLI-reported current version.
+-- N/A: unit test and code review validation.
 ```
 
 ---

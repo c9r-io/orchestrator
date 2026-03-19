@@ -1,6 +1,5 @@
 ---
-self_referential_safe: false
-self_referential_safe_scenarios: [S1, S2]
+self_referential_safe: true
 ---
 
 # Orchestrator - kubectl-Style Extensions
@@ -78,38 +77,39 @@ self_referential_safe_scenarios: [S1, S2]
 
 ---
 
-## Scenario 3: Stdin Apply (`-f -`)
+## Scenario 3: Stdin Apply (`-f -`) — Parsing and Routing Verification
 
 ### Preconditions
 
-- Database initialized.
+- Repository root is the current working directory.
+- Rust toolchain is available.
+
+### Goal
+
+Verify that YAML content piped via stdin is correctly parsed into typed manifests and routed through the `apply_to_project` resource path, using unit tests and code review.
 
 ### Steps
 
-1. Apply manifest from stdin:
+1. Verify YAML parsing handles multi-document stdin content correctly:
    ```bash
-   cat <<'YAML' | orchestrator apply -f -
-   apiVersion: orchestrator.dev/v2
-   kind: Agent
-   metadata:
-     name: stdin-agent
-     labels:
-       source: stdin
-   spec:
-     templates:
-       qa: "echo '{\"confidence\":0.91,\"quality_score\":0.87,\"artifacts\":[{\"kind\":\"analysis\",\"findings\":[{\"title\":\"stdin-qa\",\"description\":\"qa from stdin\",\"severity\":\"info\"}]}]}'"
-   YAML
+   cargo test -p agent-orchestrator --lib -- parse_manifests_from_yaml --nocapture
    ```
 
-2. Verify resource exists and label selector works:
+2. Verify resource routing preserves labels/annotations through `apply_to_project`:
    ```bash
-   orchestrator get agents -l source=stdin -o table
+   cargo test -p agent-orchestrator --lib -- apply_to_project --nocapture
+   ```
+
+3. Code review: confirm stdin path uses the same `parse_manifests_from_yaml` function:
+   ```bash
+   rg -n "parse_manifests_from_yaml\|read_to_string\|stdin" core/src/resource/parse.rs crates/cli/src/commands/apply.rs
    ```
 
 ### Expected Result
 
-- `apply -f -` reads from stdin and applies successfully.
-- Applied resource can be queried by label selector.
+- 5 `parse_manifests_from_yaml` tests pass (builtin kind, CRD kind, custom resource, null documents, no-kind fallback)
+- 6 `apply_to_project` tests pass (agent/workspace/workflow routing, auto-create, unchanged, runtime policy)
+- Code review confirms stdin apply shares the same YAML parsing path as file-based apply
 
 ### Troubleshooting
 
@@ -126,4 +126,4 @@ self_referential_safe_scenarios: [S1, S2]
 |---|----------|--------|-----------|--------|-------|
 | 1 | List-Style Get | ✅ PASS | 2026-03-18 | Claude | `-o table` falls back to JSON (documented); json/yaml produce correct encodings |
 | 2 | Label Selector on Get List | ✅ PASS | 2026-03-18 | Claude | List queries succeed with selectors; single-resource with `-l` exits 1 with clear error |
-| 3 | Stdin Apply (`-f -`) | ☐ | | | SKIPPED — self_referential_safe_scenarios only includes S1, S2 |
+| 3 | Stdin Apply Parsing and Routing | ☐ | | | Rewritten for safe mode: unit test + code review |

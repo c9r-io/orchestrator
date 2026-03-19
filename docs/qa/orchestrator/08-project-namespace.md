@@ -1,6 +1,5 @@
 ---
-self_referential_safe: false
-self_referential_safe_scenarios: [S5]
+self_referential_safe: true
 ---
 
 # Orchestrator - Project Namespace
@@ -50,48 +49,32 @@ Resource resolution:
 
 ### Preconditions
 
-- Orchestrator binary built at `./target/release/orchestrator`
-- A project with workspace and workflow must exist. The `default` project is only
-  a naming convention — it must be explicitly created via `orchestrator apply`.
-  Use a dedicated QA project to avoid depending on pre-existing global state:
-  ```bash
-  orchestrator init
-  orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project qa-scenario1
-  ```
-- Use `orchestrator` CLI for all commands
+- Repository root is the current working directory.
+- Rust toolchain is available.
 
 ### Goal
 
-Validate task creation with explicit project specification stores project_id in database.
+Verify that `apply_to_project` correctly routes resources into project scope and stores project_id, via unit tests and code review.
 
 ### Steps
 
-1. Create task with explicit project:
+1. Run apply_to_project unit tests covering project routing:
    ```bash
-   ./target/release/orchestrator task create \
-     --name "test-project-task" \
-     --goal "Test project namespace" \
-     --project qa-scenario1 \
-     --workspace default \
-     --workflow qa_fix_retest \
-     --no-start
+   cargo test -p agent-orchestrator --lib -- apply_to_project --nocapture
    ```
 
-2. Get task details to verify project_id:
+2. Verify project_id is stored in task creation path:
    ```bash
-   ./target/release/orchestrator task info {task_id}
-   ```
-
-3. Query database for project_id:
-   ```bash
-   sqlite3 data/agent_orchestrator.db "SELECT id, project_id, workspace_id, workflow_id FROM tasks WHERE name = 'test-project-task';"
+   rg -n "project_id\|project_name" core/src/task_repository/ core/src/service/task.rs
    ```
 
 ### Expected
 
-- Task created successfully
-- Task details show project_id = "qa-scenario1"
-- Database query returns project_id column with value "qa-scenario1"
+- `apply_to_project_auto_creates_project_entry` passes — project created on first apply
+- `apply_to_project_routes_agent_to_project_scope` passes — agents routed correctly
+- `apply_to_project_routes_workspace_to_project_scope` passes — workspaces routed correctly
+- `apply_to_project_routes_workflow_to_project_scope` passes — workflows routed correctly
+- Code review confirms `project_id` is persisted in tasks table
 
 ---
 
@@ -99,40 +82,35 @@ Validate task creation with explicit project specification stores project_id in 
 
 ### Preconditions
 
-- A project exists in `config.projects`
-- The project defines at least one workflow
-- Use `orchestrator` CLI for all commands
+- Repository root is the current working directory.
+- Rust toolchain is available.
 
 ### Goal
 
-Validate that task creation resolves workflows from the selected project scope.
+Verify workflows are resolved from project scope (no fallback to global), via unit tests and code review.
 
 ### Steps
 
-1. Check project workflows:
+1. Run apply_to_project tests covering workflow routing:
    ```bash
-   orchestrator get workflows --project default
+   cargo test -p agent-orchestrator --lib -- apply_to_project_routes_workflow --nocapture
    ```
 
-2. Create task with explicit workflow in that project:
+2. Code review: confirm project-scoped workflow resolution has no global fallback:
    ```bash
-   orchestrator task create \
-     --name "test-fallback-workflow" \
-     --goal "Test project workflow resolution" \
-     --project default \
-     --workflow qa_only \
-     --no-start
+   rg -n "project.*workflow\|resolve.*workflow\|no fallback" core/src/resource/apply.rs core/src/service/task.rs
    ```
 
-3. Verify task uses the selected project workflow:
+3. Run CRD scope serde tests:
    ```bash
-   sqlite3 data/agent_orchestrator.db "SELECT workflow_id FROM tasks WHERE name = 'test-fallback-workflow';"
+   cargo test -p orchestrator-config --lib -- crd_scope --nocapture
    ```
 
 ### Expected
 
-- Task created successfully
-- workflow_id matches the workflow selected in the project-scoped command (for example `qa_only`)
+- `apply_to_project_routes_workflow_to_project_scope` passes — workflow routed to project
+- Code review confirms no global fallback for project-scoped commands
+- 3 CRD scope tests pass (default_is_cluster, serde_round_trip, deserializes_from_snake_case)
 
 ---
 
@@ -140,52 +118,35 @@ Validate that task creation resolves workflows from the selected project scope.
 
 ### Preconditions
 
-- An explicit project has been created via `apply --project` (the project must exist in `config.projects`).
-- Use `orchestrator` CLI for all commands.
+- Repository root is the current working directory.
+- Rust toolchain is available.
 
 ### Goal
 
-Validate workspace resolution within an explicitly-created project context, and that referencing a non-existent project returns a clear error.
+Verify workspace is routed to project scope and that non-existent projects produce clear errors, via unit tests and code review.
 
 ### Steps
 
-1. Create project resources:
+1. Run workspace routing unit test:
    ```bash
-   orchestrator apply -f fixtures/manifests/bundles/echo-workflow.yaml --project ws-test
+   cargo test -p agent-orchestrator --lib -- apply_to_project_routes_workspace --nocapture
    ```
 
-2. List workspaces scoped to the project:
+2. Code review: verify project-not-found error handling:
    ```bash
-   orchestrator get workspaces --project ws-test
+   rg -n "project not found\|project.*not.*exist\|ProjectNotFound" core/src/resource/ core/src/service/
    ```
 
-3. Verify non-existent project returns clear error:
+3. Run unchanged detection test (ensures identical re-apply is idempotent):
    ```bash
-   orchestrator get workspaces --project nonexistent-project
-   ```
-
-4. Create task in the project without explicit workspace:
-   ```bash
-   orchestrator task create \
-     --name "test-project-workspace-resolution" \
-     --goal "verify project workspace resolution" \
-     --project ws-test \
-     --workflow qa_only \
-     --no-start
+   cargo test -p agent-orchestrator --lib -- apply_to_project_returns_unchanged --nocapture
    ```
 
 ### Expected
 
-- Step 2: workspace list returns only the project's workspaces.
-- Step 3: command fails with `"project not found: nonexistent-project"`.
-- Step 4: task is created successfully; workspace is resolved from project config.
-
-### Troubleshooting
-
-| Symptom | Root Cause | Fix |
-|---------|-----------|-----|
-| `project not found: default` | "default" project was never explicitly created via `apply --project default` | Apply resources with `--project default` first, or use a project name that has been applied |
-| Empty workspace list | Resources were applied globally (without `--project`) | Re-apply manifests with `--project <name>` |
+- `apply_to_project_routes_workspace_to_project_scope` passes
+- Code review confirms `"project not found"` error for non-existent projects
+- `apply_to_project_returns_unchanged_for_identical` passes — idempotent apply
 
 ---
 
@@ -193,37 +154,35 @@ Validate workspace resolution within an explicitly-created project context, and 
 
 ### Preconditions
 
-- Orchestrator CLI available
-- Use `orchestrator` CLI for all commands
+- Repository root is the current working directory.
+- Rust toolchain is available.
 
 ### Goal
 
-Validate CLI --project flag is recognized and passed correctly.
+Verify `--project` flag is defined in CLI and routed through to apply/task commands, via code review and unit tests.
 
 ### Steps
 
-1. Test project flag with help:
+1. Code review: verify `--project` flag is defined in CLI argument parsing:
    ```bash
-   ./target/release/orchestrator task create --help
+   rg -n "project\|--project" crates/cli/src/commands/task.rs crates/cli/src/commands/apply.rs | head -20
    ```
 
-2. Create task with project flag:
+2. Run apply_to_project routing test for runtime policy:
    ```bash
-   ./target/release/orchestrator task create \
-     --project default \
-     --name "test-cli-project-flag" \
-     --goal "Test CLI flag"
+   cargo test -p agent-orchestrator --lib -- apply_to_project_routes_runtime_policy --nocapture
    ```
 
-3. Verify project was stored:
+3. Verify all 6 apply_to_project tests pass:
    ```bash
-   sqlite3 data/agent_orchestrator.db "SELECT project_id FROM tasks WHERE name = 'test-cli-project-flag';"
+   cargo test -p agent-orchestrator --lib -- apply_to_project --nocapture
    ```
 
 ### Expected
 
-- --project flag is recognized (no "unknown argument" error)
-- project_id = "default" in database
+- Code review confirms `--project` is a recognized CLI argument
+- `apply_to_project_routes_runtime_policy_through_generic_path` passes
+- All 6 apply_to_project tests pass
 
 ---
 
@@ -269,21 +228,24 @@ Validate that project resources are isolated from each other.
 
 ### Goal
 
-Validate that project-scoped commands operate against an explicit project entry.
+Validate that `apply_to_project` auto-creates project entries when they don't exist.
 
 ### Steps
 
-1. Check current config:
+1. Run the auto-create unit test:
    ```bash
-   ./target/release/orchestrator manifest export | grep -A8 "^projects:"
+   cargo test -p agent-orchestrator --lib -- apply_to_project_auto_creates_project_entry --nocapture
    ```
 
-2. Verify the target project exists under `projects:`
+2. Code review: verify project auto-creation in apply path:
+   ```bash
+   rg -n "auto.*create.*project\|ensure.*project\|create_project" core/src/resource/apply.rs
+   ```
 
 ### Expected
 
-- The exported manifest contains a concrete project entry under `projects:`
-- Project-scoped commands should target that explicit project entry
+- `apply_to_project_auto_creates_project_entry` passes — project created on first `--project` use
+- Code review confirms projects are created lazily via apply
 
 ---
 
@@ -291,9 +253,9 @@ Validate that project-scoped commands operate against an explicit project entry.
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Task Creation with Project | ☐ | | | |
-| 2 | Project Fallback - Global Workflow | ☐ | | | |
-| 3 | Project-Level Workspace Resolution | ☐ | | | |
-| 4 | CLI Project Flag | ☐ | | | |
+| 1 | Task Creation with Project | ☐ | | | Rewritten for safe mode: apply_to_project unit tests |
+| 2 | Explicit Workflow Resolution | ☐ | | | Rewritten for safe mode: routing unit tests + code review |
+| 3 | Project-Level Workspace Resolution | ☐ | | | Rewritten for safe mode: routing unit tests + code review |
+| 4 | CLI Project Flag | ☐ | | | Rewritten for safe mode: code review + unit tests |
 | 5 | Multi-Project Isolation | ✅ PASS | 2026-03-18 | Claude | `two-projects.yaml` validates with exit 0; project-a and project-b each have own workspace/agent/workflow |
-| G1 | Config Defaults Project Field | ☐ | | | |
+| G1 | Explicit Project Entry Exists | ☐ | | | Rewritten for safe mode: auto-create unit test |
