@@ -298,5 +298,5 @@ one cycle.
 | 1 | qa_only Workflow | PASS | 2026-03-19 | QA | `once_mode_always_stops`, output validation tests |
 | 2 | qa_fix Workflow | PASS | 2026-03-19 | QA | `build_segments_groups_contiguous_scopes`, finalize rule tests |
 | 3 | qa_fix_retest Workflow | PASS | 2026-03-19 | QA | Segment grouping, prehook skip logic tests |
-| 4 | QA Failure and Ticket Creation | PASS | 2026-03-19 | QA | Ticket creation, health degradation, selection filtering tests |
-| 5 | Loop Mode (max_cycles) | PASS | 2026-03-19 | QA | `infinite_mode_respects_max_cycles`, `fixed_mode_stops_at_max_cycles` |
+| 4 | QA Failure and Ticket Creation | PASS | 2026-03-19 | QA | 5 ticket tests + 2 health tests + 1 selection filter + 7 ticket status tests |
+| 5 | Loop Mode (max_cycles) | PASS | 2026-03-19 | QA | `infinite_mode_respects_max_cycles`, `fixed_mode_stops_at_max_cycles`, `fixed_mode_defaults_to_one_cycle` |

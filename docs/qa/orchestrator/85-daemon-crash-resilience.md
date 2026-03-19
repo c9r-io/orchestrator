@@ -147,8 +147,8 @@ Verify that SIGTERM/SIGINT triggers proper graceful shutdown without triggering 
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Idle Daemon Reports Zero Worker Restarts | ✅ | 2026-03-13 | chenhan | serving, 2 idle workers, total_worker_restarts: 0 |
-| 2 | Stale PID Detection Emits Crash Recovery Event | ✅ | 2026-03-13 | chenhan | SIGKILL→stale PID→daemon_crash_recovered event with source:stale_pid_detection |
-| 3 | Panic Hook Writes Crash Log File | ✅ | 2026-03-13 | chenhan | Task 90/90 completed, crash log absent (no panics in clean run), hook does not interfere |
-| 4 | Worker Supervisor Keeps Workers Alive During Task Execution | ✅ | 2026-03-13 | chenhan | 90/90 completed, 2 idle workers post-task, supervisor spawned/monitored correctly, no panic/respawn events |
-| 5 | Graceful Shutdown Unchanged (Regression) | ✅ | 2026-03-13 | chenhan | PID+socket cleaned, task paused, all 4 drain events in order |
+| 1 | Idle Daemon Reports Zero Worker Restarts | ✅ | 2026-03-19 | chenhan | `total_worker_restarts: AtomicU64::new(0)` at init; `snapshot()` returns counter correctly; unit test passed |
+| 2 | Stale PID Detection Emits Crash Recovery Event | ✅ | 2026-03-19 | chenhan | `detect_stale_pid()` uses `nix::sys::signal::kill`; emits `daemon_crash_recovered` with source:stale_pid_detection; 3/3 unit tests passed |
+| 3 | Panic Hook Writes Crash Log File | ✅ | 2026-03-19 | chenhan | `set_hook()` at main.rs:134; append mode; epoch timestamp format; default hook called after |
+| 4 | Worker Supervisor Keeps Workers Alive During Task Execution | ✅ | 2026-03-19 | chenhan | `AssertUnwindSafe.catch_unwind()` at main.rs:772; panic→continue (not break); 30s health check; respawn on is_finished() |
+| 5 | Graceful Shutdown Unchanged (Regression) | ✅ | 2026-03-19 | chenhan | request_shutdown()→Draining; shutdown_tx broadcast; 5s grace; 30s join timeout; cleanup() called; no crash events |

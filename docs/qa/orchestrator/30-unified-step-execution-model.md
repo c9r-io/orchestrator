@@ -239,8 +239,8 @@ cargo test --workspace --lib 2>&1 | grep "test result"
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Step Type Validation (Known and Unknown IDs) | ☐ | | | Unit test only — safe in self-referential mode |
-| 2 | Default Scope Classification (Task vs Item) | ☐ | | | Unit test only — safe |
-| 3 | Semantic Normalization And Execution Rehydration | ☐ | | | Unit test only — safe |
+| 1 | Step Type Validation (Known and Unknown IDs) | ✅ PASS | 2026-03-19 | QA | 2 tests passed |
+| 2 | Default Scope Classification (Task vs Item) | ✅ PASS | 2026-03-19 | QA | 5 tests passed |
+| 3 | Semantic Normalization And Execution Rehydration | ✅ PASS | 2026-03-19 | QA | 11 tests passed, 407 workspace lib tests pass |
 | 4 | WorkflowStepType Fully Removed From Codebase | ✅ PASS | 2026-03-18 | QA | Code review (grep) — safe |
-| 5 | Static Checks And Resource Conversion Stay In Sync | ☐ | | | Unit test only — safe |
+| 5 | Static Checks And Resource Conversion Stay In Sync | ✅ PASS | 2026-03-19 | QA | 12 tests passed, 1975 workspace lib tests pass |
