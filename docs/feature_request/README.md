@@ -46,6 +46,7 @@
 | FR-056 | Agent Health Policy 可配置化 — Disease 策略按 Agent/Workspace 设定 | P1 | Closed |
 | FR-057 | orchestratord 真正 Daemon 化 | P1 | Closed |
 | FR-058 | QA 自引用测试覆盖率恢复 — 场景级安全分级治理 | P1 | Closed |
+| FR-060 | 减少 QA 场景中的不安全操作 | P1 | In Progress |
 
 ## 说明
 

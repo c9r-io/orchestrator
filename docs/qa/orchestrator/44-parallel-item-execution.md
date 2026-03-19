@@ -210,23 +210,23 @@ Verify the database uses a writer+reader connection model with WAL mode and busy
 
 1. Verify the connection model in source:
    ```bash
-   grep -A5 "pub struct AsyncDatabase" core/src/async_database.rs
+   sed -n '1,40p' core/src/async_database.rs
    ```
 
-2. Verify busy_timeout is configured:
+2. Verify busy_timeout is configured in code:
    ```bash
-   grep "SQLITE_BUSY_TIMEOUT_MS" core/src/persistence/sqlite.rs
+   rg -n "SQLITE_BUSY_TIMEOUT_MS" core/src/persistence/sqlite.rs
    ```
 
-3. Verify WAL mode is enabled:
+3. Run unit tests that validate database bootstrap and paired-connection configuration:
    ```bash
-   sqlite3 data/agent_orchestrator.db "PRAGMA journal_mode;"
+   cargo test --workspace --lib -- async_database_open_and_configure bootstrap_creates_latest_schema_and_reports_current_status
    ```
 
 ### Expected
 - `AsyncDatabase` uses 2 named connections: `writer` (all writes) and `reader` (read-only queries)
 - `SQLITE_BUSY_TIMEOUT_MS` is `5000` (5 seconds)
-- WAL mode is `wal`
+- schema bootstrap enables WAL mode and the async database tests confirm the paired connection configuration
 
 ---
 
@@ -238,4 +238,4 @@ Verify the database uses a writer+reader connection model with WAL mode and busy
 | 2 | ScopeSegment Resolves max_parallel From Step and Plan | ☐ | | | Safe: pure cargo test -p orchestrator-scheduler |
 | 3 | RunningTask::fork() Shares Stop Flag | ☐ | | | Safe: pure cargo test -p agent-orchestrator --lib |
 | 4 | Sequential Path Unchanged When max_parallel Absent | SKIP | 2026-03-18 | | Unsafe: requires live task execution (orchestrator task create/start) |
-| 5 | Database Connection Model and WAL Configuration | PASS | 2026-03-18 | claude | Writer+reader model confirmed in code, busy_timeout 5000ms, WAL mode wal |
+| 5 | Database Connection Model and WAL Configuration | ☐ | | | Safe: code review + `async_database_open_and_configure` + schema bootstrap unit test |

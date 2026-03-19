@@ -1,5 +1,7 @@
 # FR-060: 减少 QA 场景中的不安全操作
 
+**状态**: In Progress
+
 ## 背景
 
 当前 139 个 QA 文档中有 114 个标记为 `self_referential_safe: false`，无法在 full-QA
@@ -288,7 +290,38 @@
 **累计净收益**: 迭代 1 (+4) + 迭代 2 (+11) + 迭代 3 (+17) + 迭代 4 (+28) + 迭代 5 (+40) + 迭代 6 (+48) + 迭代 7 (+28) + 迭代 8 (+34) = +210 个安全场景
 **Unsafe 文档数**: 77 → 68（含 self-bootstrap 子目录）
 
-### 迭代 9+: 逐步处理剩余类别
+### 迭代 9: cargo test / in-process harness / partial-safe 文档再收敛（2026-03-19）
+
+**分析文档**（10 个）:
+- Tier 1（fully safe 候选）: `66-error-semantics-governance.md`, `67-clone-reduction-and-shared-ownership.md`, `68-clone-reduction-follow-up.md`, `69-async-lock-model-alignment.md`, `73-integration-test-coverage.md`, `73b-integration-test-coverage-advanced.md`, `79-benchmark-score-capture.md`
+- Tier 2（partial-safe 复核）: `20-structured-output-worker-scheduler.md`, `22-performance-io-queue-optimizations.md`, `44-parallel-item-execution.md`
+
+### 迭代 9 结果（2026-03-19）
+
+| 文档 | 总场景 | 可转安全 | 分类 |
+|------|--------|---------|------|
+| QA-66 | 4 | 4 | **元数据修正** — 全部场景均为 `cargo test --lib` / `clippy` 门禁，无 live daemon 交互 |
+| QA-67 | 5 | 5 | **元数据修正** — 全部场景均为 scheduler/daemon/trace 单元测试与 workspace gate |
+| QA-68 | 5 | 5 | **元数据修正** — 全部场景均为 cargo test / clippy / fmt，无运行态副作用 |
+| QA-69 | 6 | 6 | **元数据修正** — async lock 治理仅依赖 unit test 与 `check-async-lock-governance.sh` |
+| QA-73 | 5 | 5 | **分类修正** — integration tests 使用 `TestHarness` in-process gRPC server + 临时 SQLite，不触碰 live daemon |
+| QA-73b | 3 | 3 | **分类修正** — advanced integration tests 同样基于 in-process harness；`cargo test --workspace` 在该上下文中可视为安全 |
+| QA-79 | 7 | 7 | **小幅改写** — workspace gate 改为环境无关的 `cargo test --workspace --lib` + `cargo clippy`，移除硬编码 `PROTOC` 路径 |
+| QA-20 | 5 | 0 新增 | **文档修正** — 保持 partial-safe；S1-S3 已安全，仅修正 `rg` 命令为具体文件路径与 `|` alternation |
+| QA-22 | 5 | 0 新增 | **文档修正** — 保持 partial-safe；S1-S3 已安全，仅修正 `rg` 命令为具体文件路径与 `|` alternation |
+| QA-44 | 5 | 0 新增 | **安全步骤改写** — 保持 partial-safe；S5 改为 code review + unit test，不再读取 live DB，S4 仍天然不安全 |
+
+**修复内容**:
+- 7 个文档完全转为 safe：QA-66, QA-67, QA-68, QA-69, QA-73, QA-73b, QA-79
+- 3 个 partial-safe 文档补齐安全写法：QA-20, QA-22, QA-44
+- 无代码变更 — 纯 QA 文档与 FR 文档重写
+- `cargo test --workspace --lib` 作为本轮统一安全回归门禁
+
+**净收益**: +35 个可安全执行的场景（QA-66 ×4, QA-67 ×5, QA-68 ×5, QA-69 ×6, QA-73 ×5, QA-73b ×3, QA-79 ×7）
+**累计净收益**: 迭代 1 (+4) + 迭代 2 (+11) + 迭代 3 (+17) + 迭代 4 (+28) + 迭代 5 (+40) + 迭代 6 (+48) + 迭代 7 (+28) + 迭代 8 (+34) + 迭代 9 (+35) = +245 个安全场景
+**Unsafe 文档数**: 68 → 61（含 self-bootstrap 子目录）
+
+### 迭代 10+: 逐步处理剩余类别
 
 每次 1-2 个文档，持续推进直到 unsafe 比例从 82% 降到合理水平（目标 < 30%）。
 

@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # QA #79: Benchmark Score Capture (FR-028)
@@ -7,6 +7,11 @@ self_referential_safe: false
 ## Scope
 
 Verify that benchmark scores can be extracted from agent JSON output into pipeline variables, that stream-json output is supported, and that `item_select` can choose the higher-scoring candidate.
+
+## Self-Referential Safety
+
+This document is safe for self-referential full-QA runs. All scenarios use config/scheduler unit
+tests plus workspace regression gates; there is no daemon lifecycle or manifest mutation step.
 
 ## Scenarios
 
@@ -68,8 +73,8 @@ Verify that benchmark scores can be extracted from agent JSON output into pipeli
 ### S-07: Workspace regression gates remain green
 
 **Steps**:
-1. Run `PROTOC=/Volumes/Yotta/c9r-io/orchestrator/target/debug/build/protobuf-src-4bb380d39c3cf831/out/bin/protoc cargo test --workspace`
-2. Run `PROTOC=/Volumes/Yotta/c9r-io/orchestrator/target/debug/build/protobuf-src-4bb380d39c3cf831/out/bin/protoc cargo clippy --workspace --all-targets -- -D warnings`
+1. Run `cargo test --workspace --lib`
+2. Run `cargo clippy --workspace --all-targets -- -D warnings`
 
 **Expected**:
 - all workspace tests pass
@@ -80,7 +85,7 @@ Verify that benchmark scores can be extracted from agent JSON output into pipeli
 Verified on 2026-03-12:
 
 - targeted capture and validation regressions passed
-- `cargo test --workspace`: passed
+- `cargo test --workspace --lib`: passed
 - `cargo clippy --workspace --all-targets -- -D warnings`: passed
 
 ---

@@ -1,10 +1,16 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # QA: Integration Test Coverage — Advanced (FR-023)
 
 **Split from**: `docs/qa/orchestrator/73-integration-test-coverage.md`
+
+## Self-Referential Safety
+
+This document is safe for self-referential full-QA runs. The `orchestrator-integration-tests`
+crate drives an in-process gRPC server plus isolated temp SQLite state; it does not control the
+live daemon used by the surrounding QA workflow.
 
 ## 前置条件
 

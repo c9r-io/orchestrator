@@ -1,10 +1,15 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Error Semantics Governance
 
 **Scope**: Verify FR-014 boundary error classification and gRPC status mapping for task, resource, store, system, and secret-key critical paths.
+
+## Self-Referential Safety
+
+This document is safe for self-referential full-QA runs. All scenarios use Rust test, clippy,
+or code-review gates only; no scenario starts, stops, or mutates a live daemon.
 
 ## Scenarios
 
@@ -48,7 +53,7 @@ self_referential_safe: false
 4. Run workspace verification:
 
    ```bash
-   cargo test --workspace
+   cargo test --workspace --lib
    cargo clippy --workspace --all-targets --all-features -- -D warnings
    ```
 

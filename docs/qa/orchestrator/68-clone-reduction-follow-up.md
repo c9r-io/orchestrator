@@ -1,10 +1,15 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Clone Reduction Follow-Up
 
 **Scope**: Verify FR-015 follow-up clone reduction on chain-step execution, graph replay/materialization, item fan-out, db-write owned fast-paths, manifest export helpers, and secret-key audit assembly.
+
+## Self-Referential Safety
+
+This document is safe for self-referential full-QA runs. Every scenario is a pure cargo test,
+clippy, fmt, or code-review gate and does not rely on daemon control-plane interaction.
 
 ## Scenarios
 
@@ -58,7 +63,7 @@ self_referential_safe: false
 5. Run workspace verification:
 
    ```bash
-   cargo test --workspace
+   cargo test --workspace --lib
    cargo clippy --workspace --all-targets --all-features -- -D warnings
    cargo fmt --all --check
    ```

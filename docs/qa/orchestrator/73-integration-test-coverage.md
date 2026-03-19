@@ -1,5 +1,5 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # QA: Integration Test Coverage (FR-023)
@@ -7,6 +7,12 @@ self_referential_safe: false
 ## 验证范围
 
 验证集成测试框架正确覆盖 CLI → daemon → core 的 7 个核心交互场景。
+
+## Self-Referential Safety
+
+This document is safe for self-referential full-QA runs. The integration tests use the in-process
+`TestHarness` from `crates/integration-tests/src/lib.rs`, which spins up a temporary gRPC server
+backed by isolated `TestState` instead of talking to or restarting the user's live daemon.
 
 ## 前置条件
 

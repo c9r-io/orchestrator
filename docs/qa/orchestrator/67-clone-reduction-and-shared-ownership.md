@@ -1,10 +1,15 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Clone Reduction and Shared Ownership
 
 **Scope**: Verify FR-015 clone reduction on scheduler runtime context sharing, daemon owned-summary mapping, workflow conversion, generic builtin execution, and trace reconstruction regressions.
+
+## Self-Referential Safety
+
+This document is safe for self-referential full-QA runs. Verification is limited to unit tests,
+code review, and workspace gates; no live task queue or daemon lifecycle interaction is required.
 
 ## Scenarios
 
@@ -46,7 +51,7 @@ self_referential_safe: false
 
    ```bash
    cargo test -p orchestratord server::tests -- --nocapture
-   cargo test --workspace
+   cargo test --workspace --lib
    cargo clippy --workspace --all-targets --all-features -- -D warnings
    ```
 

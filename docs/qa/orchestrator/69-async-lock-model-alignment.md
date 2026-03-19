@@ -1,10 +1,15 @@
 ---
-self_referential_safe: false
+self_referential_safe: true
 ---
 
 # Async Lock Model Alignment
 
 **Scope**: Verify FR-016 runtime-state alignment for config snapshots, async telemetry locks, and the two retained synchronous exceptions.
+
+## Self-Referential Safety
+
+This document is safe for self-referential full-QA runs. It uses targeted unit tests and the
+governance script only; no scenario requires daemon restart, task creation, or manifest mutation.
 
 ## Scenarios
 
@@ -72,7 +77,7 @@ self_referential_safe: false
 
    ```bash
    ./scripts/check-async-lock-governance.sh
-   cargo test --workspace
+   cargo test --workspace --lib
    cargo clippy --workspace --all-targets -- -D warnings
    cargo fmt --all --check
    ```

@@ -58,12 +58,15 @@ Verify strict-mode validation fails phase output when `qa` stdout is not JSON �
 ### Steps
 1. **Code review** — verify strict phase validation logic:
    ```bash
-   rg -n "strict_phase\|is_strict_phase\|requires_json" core/src/output_validation.rs | head -10
+   rg -n "strict_phase|is_strict_phase|requires_json" core/src/output_validation.rs
    ```
 
 2. **Code review** — verify validation failure maps to exit_code -6:
    ```bash
-   rg -n "exit_code.*-6\|validation_failure.*exit\|effective_exit_code" crates/orchestrator-scheduler/src/scheduler/phase_runner/ | head -10
+   rg -n "exit_code.*-6|validation_failure.*exit|effective_exit_code" \
+     crates/orchestrator-scheduler/src/scheduler/phase_runner/tests.rs \
+     crates/orchestrator-scheduler/src/scheduler/phase_runner/util.rs \
+     crates/orchestrator-scheduler/src/scheduler/phase_runner/validate.rs
    ```
 
 3. **Unit test** — run strict validation tests:
@@ -89,12 +92,14 @@ Verify structured fields (output_json, artifacts_json, confidence, quality_score
 ### Steps
 1. **Code review** — verify AgentOutput struct fields:
    ```bash
-   rg -n "struct AgentOutput|confidence|quality_score|artifacts" core/src/collab/output.rs | head -10
+   rg -n "struct AgentOutput|confidence|quality_score|artifacts" core/src/collab/output.rs
    ```
 
 2. **Code review** — verify command_run insertion includes structured fields:
    ```bash
-   rg -n "insert_command_run|output_json|artifacts_json|validation_status" core/src/task_repository/ | head -15
+   rg -n "insert_command_run|output_json|artifacts_json|validation_status" \
+     core/src/task_repository/mod.rs \
+     core/src/task_repository/write_ops.rs
    ```
 
 3. **Unit test** — run output capture and persistence tests:
@@ -120,12 +125,15 @@ Verify phase outputs are published as observable events — validated via code r
 ### Steps
 1. **Code review** — verify event publication in phase runner:
    ```bash
-   rg -n "phase_output_published|bus_publish_failed|output_validation_failed" crates/orchestrator-scheduler/src/scheduler/ | head -15
+   rg -n "phase_output_published|bus_publish_failed|output_validation_failed" \
+     crates/orchestrator-scheduler/src/scheduler/phase_runner/record.rs
    ```
 
 2. **Code review** — verify event types are stored with run_id:
    ```bash
-   rg -n "run_id|event_type.*phase_output" core/src/ | head -10
+   rg -n "run_id|event_type.*phase_output" \
+     core/src/db_write.rs \
+     core/src/task_repository/write_ops.rs
    ```
 
 3. **Unit test** — run trace and event tests:

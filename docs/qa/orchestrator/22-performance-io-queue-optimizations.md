@@ -38,12 +38,16 @@ Verify phase result writes persist all structured fields (output_json, artifacts
 ### Steps
 1. **Code review** — verify transactional write path in phase runner:
    ```bash
-   rg -n "insert_command_run|output_json|artifacts_json|validation_status" core/src/task_repository/ | head -15
+   rg -n "insert_command_run|output_json|artifacts_json|validation_status" \
+     core/src/task_repository/mod.rs \
+     core/src/task_repository/write_ops.rs
    ```
 
 2. **Code review** — verify event publication is tied to run ID:
    ```bash
-   rg -n "run_id.*event\|event.*run_id\|phase_output_published" crates/orchestrator-scheduler/src/scheduler/ | head -10
+   rg -n "run_id.*event|event.*run_id|phase_output_published" \
+     crates/orchestrator-scheduler/src/scheduler/phase_runner/record.rs \
+     crates/orchestrator-scheduler/src/scheduler/phase_runner/validate.rs
    ```
 
 3. **Unit test** — run persistence and capture tests:
@@ -70,7 +74,9 @@ Verify bounded output reads track truncation metadata without polluting persiste
 ### Steps
 1. **Code review** — verify bounded read / spill logic:
    ```bash
-   rg -n "spill_to_file|spill_large_var|truncat" crates/orchestrator-scheduler/src/scheduler/item_executor/ | head -15
+   rg -n "spill_to_file|spill_large_var|truncat" \
+     crates/orchestrator-scheduler/src/scheduler/item_executor/spill.rs \
+     crates/orchestrator-scheduler/src/scheduler/item_executor/tests.rs
    ```
 
 2. **Code review** — verify output capture redaction:
@@ -102,12 +108,16 @@ Verify log tail implementation uses efficient reverse-seek scanning — validate
 ### Steps
 1. **Code review** — verify tail implementation uses reverse seek:
    ```bash
-   rg -n "tail\|reverse.*seek\|SeekFrom::End\|BufRead" crates/ core/src/ --glob "*.rs" | grep -i "log\|tail\|seek" | head -10
+   rg -n "tail|reverse.*seek|SeekFrom::End|BufRead" \
+     crates/orchestrator-scheduler/src/scheduler/query/log_stream.rs
    ```
 
 2. **Code review** — verify stdout spill path supports tail reading:
    ```bash
-   rg -n "stdout_path\|task_logs\|spill.*path" core/src/task_repository/ | head -10
+   rg -n "stdout_path|task_logs|spill.*path" \
+     core/src/task_repository/mod.rs \
+     core/src/task_repository/write_ops.rs \
+     crates/orchestrator-scheduler/src/scheduler/item_executor/tests.rs
    ```
 
 3. **Unit test** — run capture spill tests (validates log file creation path):
