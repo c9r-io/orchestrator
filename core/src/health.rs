@@ -4,6 +4,25 @@ use crate::state::InnerState;
 use chrono::Utc;
 use std::collections::HashMap;
 
+/// Returns a snapshot of an agent's health state for CLI/API display.
+/// `diseased_until` is `Some(rfc3339)` only if the agent is currently diseased.
+pub fn agent_health_summary(
+    health_map: &HashMap<String, AgentHealthState>,
+    agent_id: &str,
+) -> (bool, Option<String>, u32) {
+    let is_healthy = is_agent_healthy(health_map, agent_id);
+    match health_map.get(agent_id) {
+        None => (true, None, 0),
+        Some(state) => {
+            let until = state
+                .diseased_until
+                .filter(|dt| *dt > Utc::now())
+                .map(|dt| dt.to_rfc3339());
+            (is_healthy, until, state.consecutive_errors)
+        }
+    }
+}
+
 /// Returns whether an agent is currently considered healthy.
 pub fn is_agent_healthy(health_map: &HashMap<String, AgentHealthState>, agent_id: &str) -> bool {
     match health_map.get(agent_id) {

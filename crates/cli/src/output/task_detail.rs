@@ -105,16 +105,22 @@ pub(super) fn print(resp: &TaskInfoResponse, format: OutputFormat) {
             if !resp.agent_states.is_empty() {
                 println!("  Agents:");
                 println!(
-                    "    {:<20} {:<8} {:<10} {:<10} CAPABILITIES",
-                    "NAME", "ENABLED", "STATE", "IN-FLIGHT"
+                    "    {:<20} {:<8} {:<10} {:<10} {:<10} CAPABILITIES",
+                    "NAME", "ENABLED", "STATE", "IN-FLIGHT", "HEALTH"
                 );
                 for a in &resp.agent_states {
+                    let health = if a.is_healthy {
+                        "healthy".to_string()
+                    } else {
+                        "diseased".to_string()
+                    };
                     println!(
-                        "    {:<20} {:<8} {:<10} {:<10} {}",
+                        "    {:<20} {:<8} {:<10} {:<10} {:<10} {}",
                         a.name,
                         a.enabled,
                         a.lifecycle_state,
                         a.in_flight_items,
+                        health,
                         a.capabilities.join(", ")
                     );
                 }

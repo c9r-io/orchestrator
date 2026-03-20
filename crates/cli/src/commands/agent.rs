@@ -80,6 +80,9 @@ fn print_agent_list(agents: &[orchestrator_proto::AgentStatus], format: OutputFo
                         "in_flight_items": a.in_flight_items,
                         "capabilities": a.capabilities,
                         "drain_requested_at": a.drain_requested_at,
+                        "is_healthy": a.is_healthy,
+                        "diseased_until": a.diseased_until,
+                        "consecutive_errors": a.consecutive_errors,
                     })
                 })
                 .collect();
@@ -98,20 +101,36 @@ fn print_agent_list(agents: &[orchestrator_proto::AgentStatus], format: OutputFo
                 if let Some(ref dt) = a.drain_requested_at {
                     println!("  drain_requested_at: {}", dt);
                 }
+                println!("  is_healthy: {}", a.is_healthy);
+                if let Some(ref dt) = a.diseased_until {
+                    println!("  diseased_until: {}", dt);
+                }
+                if a.consecutive_errors > 0 {
+                    println!("  consecutive_errors: {}", a.consecutive_errors);
+                }
             }
         }
         OutputFormat::Table => {
             println!(
-                "{:<20} {:<8} {:<10} {:<10} CAPABILITIES",
-                "NAME", "ENABLED", "STATE", "IN-FLIGHT"
+                "{:<20} {:<8} {:<10} {:<10} {:<10} CAPABILITIES",
+                "NAME", "ENABLED", "STATE", "IN-FLIGHT", "HEALTH"
             );
             for a in agents {
+                let health = if a.is_healthy {
+                    "healthy".to_string()
+                } else {
+                    match &a.diseased_until {
+                        Some(dt) => format!("diseased({})", &dt[11..16]),
+                        None => "diseased".to_string(),
+                    }
+                };
                 println!(
-                    "{:<20} {:<8} {:<10} {:<10} {}",
+                    "{:<20} {:<8} {:<10} {:<10} {:<10} {}",
                     a.name,
                     a.enabled,
                     a.lifecycle_state,
                     a.in_flight_items,
+                    health,
                     a.capabilities.join(", ")
                 );
             }

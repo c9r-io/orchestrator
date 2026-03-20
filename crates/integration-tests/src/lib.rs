@@ -413,9 +413,12 @@ impl OrchestratorService for TestOrchestratorServer {
             if let Ok(active) = read_active_config(&self.state) {
                 let agents = resolve_effective_agents(pid, &active.config, None);
                 let lifecycle_map = self.state.agent_lifecycle.read().await;
+                let health_map = self.state.agent_health.read().await;
                 for (id, cfg) in agents.iter() {
                     let runtime: agent_orchestrator::metrics::AgentRuntimeState =
                         lifecycle_map.get(id.as_str()).cloned().unwrap_or_default();
+                    let (is_healthy, diseased_until, consecutive_errors) =
+                        agent_orchestrator::health::agent_health_summary(&health_map, id);
                     statuses.push(AgentStatus {
                         name: id.clone(),
                         enabled: cfg.enabled,
@@ -423,6 +426,9 @@ impl OrchestratorService for TestOrchestratorServer {
                         in_flight_items: runtime.in_flight_items as i32,
                         capabilities: cfg.capabilities.clone(),
                         drain_requested_at: runtime.drain_requested_at.map(|dt| dt.to_rfc3339()),
+                        is_healthy,
+                        diseased_until,
+                        consecutive_errors: consecutive_errors as i32,
                     });
                 }
                 statuses.sort_by(|a, b| a.name.cmp(&b.name));
@@ -975,11 +981,14 @@ impl OrchestratorService for TestOrchestratorServer {
             None,
         );
         let lifecycle_map = self.state.agent_lifecycle.read().await;
+        let health_map = self.state.agent_health.read().await;
 
         let mut statuses: Vec<AgentStatus> = agents
             .iter()
             .map(|(id, cfg)| {
                 let runtime = lifecycle_map.get(id).cloned().unwrap_or_default();
+                let (is_healthy, diseased_until, consecutive_errors) =
+                    agent_orchestrator::health::agent_health_summary(&health_map, id);
                 AgentStatus {
                     name: id.clone(),
                     enabled: cfg.enabled,
@@ -987,6 +996,9 @@ impl OrchestratorService for TestOrchestratorServer {
                     in_flight_items: runtime.in_flight_items as i32,
                     capabilities: cfg.capabilities.clone(),
                     drain_requested_at: runtime.drain_requested_at.map(|dt| dt.to_rfc3339()),
+                    is_healthy,
+                    diseased_until,
+                    consecutive_errors: consecutive_errors as i32,
                 }
             })
             .collect();

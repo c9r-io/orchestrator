@@ -122,6 +122,9 @@ pub(super) fn agent_status_value(a: &AgentStatus) -> Value {
         "in_flight_items": a.in_flight_items,
         "capabilities": a.capabilities,
         "drain_requested_at": a.drain_requested_at,
+        "is_healthy": a.is_healthy,
+        "diseased_until": a.diseased_until,
+        "consecutive_errors": a.consecutive_errors,
     })
 }
 

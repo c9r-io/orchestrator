@@ -663,6 +663,9 @@ message AgentStatus {
   int32 in_flight_items = 4;
   repeated string capabilities = 5;
   optional string drain_requested_at = 6;
+  bool is_healthy = 7;
+  optional string diseased_until = 8;
+  int32 consecutive_errors = 9;
 }
 
 message AgentListRequest {

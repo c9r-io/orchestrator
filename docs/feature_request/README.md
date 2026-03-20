@@ -48,7 +48,7 @@
 | FR-058 | QA 自引用测试覆盖率恢复 — 场景级安全分级治理 | P1 | Closed |
 | FR-060 | 减少 QA 场景中的不安全操作 | P1 | In Progress |
 | FR-061 | Daemon 日志环境变量覆盖 | P2 | Closed |
-| FR-062 | Agent Health 状态可观测性 | P2 | Proposed |
+| FR-062 | Agent Health 状态可观测性 | P2 | Closed |
 
 ## 说明
 
@@ -115,3 +115,4 @@
 - FR-057 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/69-daemon-proper-daemonize.md` 与 `docs/qa/orchestrator/111-daemon-proper-daemonize.md` 承载
 - FR-058 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/70-scenario-level-self-referential-safety.md` 与 `docs/qa/orchestrator/112-scenario-level-self-referential-safety.md` 承载
 - FR-061 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/71-logging-env-var-override.md` 与 `docs/qa/orchestrator/113-logging-env-var-override.md` 承载
+- FR-062 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/72-agent-health-state-observability.md` 与 `docs/qa/orchestrator/114-agent-health-state-observability.md` 承载
