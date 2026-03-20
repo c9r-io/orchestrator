@@ -47,6 +47,8 @@
 | FR-057 | orchestratord 真正 Daemon 化 | P1 | Closed |
 | FR-058 | QA 自引用测试覆盖率恢复 — 场景级安全分级治理 | P1 | Closed |
 | FR-060 | 减少 QA 场景中的不安全操作 | P1 | In Progress |
+| FR-061 | Daemon 日志环境变量覆盖 | P2 | Proposed |
+| FR-062 | Agent Health 状态可观测性 | P2 | Proposed |
 
 ## 说明
 

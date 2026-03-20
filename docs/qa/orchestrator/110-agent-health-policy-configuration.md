@@ -40,7 +40,10 @@
 **预期**
 - `orchestrator check` 输出显示 `health policy = custom (duration=1h, threshold=5, cap_success=0.3)`
 - 4 次失败后 agent 仍然 healthy（阈值为 5）
-- 第 5 次失败后 agent 被标记 diseased，冷却 1 小时
+- 第 5 次失败后 `mark_agent_diseased` 被调用（通过 unit test 验证），冷却 1 小时
+
+> **验证说明**: Disease 状态为内存态（`InnerState.agent_health`），不持久化到 DB，CLI `agent list` 不显示。
+> 验证方式：`mark_agent_diseased_custom_duration` unit test + `record_phase_results` 代码审查。
 
 ## 场景 3：disease_duration_hours: 0 禁用 disease
 
@@ -89,7 +92,9 @@
 
 **预期**
 - Agent 使用自身的 health_policy（非 Workspace 的）
-- 第 3 次失败后 agent 被标记 diseased，冷却 2 小时
+- 第 3 次失败后 `mark_agent_diseased` 被调用（通过 unit test 验证），冷却 2 小时
+
+> **验证说明**: 同 S2 — disease 状态为内存态，验证方式为 unit test + 代码审查。
 
 ## Checklist
 
